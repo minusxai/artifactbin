@@ -16,6 +16,7 @@
  * is at most one flush interval old, and silently keeping it would mean
  * showing the user a document nobody else has.
  */
+import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** How long a burst of typing coalesces before it is persisted. */
@@ -108,7 +109,8 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
 
     const run = (async () => {
     try {
-      const res = await fetch(endpoint, {
+      const metadata=change.title!==undefined||change.theme!==undefined||change.colorMode!==undefined;
+      const res = metadata ? await writeBrowserArtifact(id,{...change},editIdRef.current) : await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -174,7 +176,7 @@ export function useLiveEdits({ id, initialEditId, initialVersion, onRemoteDocume
     })();
     inFlightRef.current = run;
     return run;
-  }, [endpoint, onRemoteDocument]);
+  }, [endpoint, id, onRemoteDocument]);
 
   /** Queue a change; it persists on its own within one debounce window. */
   const queue = useCallback((change: PendingChange) => {

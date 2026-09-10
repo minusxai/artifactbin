@@ -1,3 +1,7 @@
+import type {RefLoader} from '@/lib/story/refs';
+import {creationOperation,lookupCreation,CreationReplay} from '@/lib/creation-ledger';
+import {artifactState} from '@/lib/artifact-state';
+import {prepareContentInput,applyPreparedContent,type PreparedContent} from '@/lib/story/prepare-content';
 import { notifyRemoteComment } from './remote/mentions';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 import {DatasetError} from '@/lib/datasets/errors';
@@ -13,7 +17,7 @@ import {DatasetError} from '@/lib/datasets/errors';
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, findDependentsFor, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
@@ -29,7 +33,7 @@ import { json, readJson } from '@/lib/http';
 import { ID_RE } from '@/lib/ids-shape';
 import { PARENT_REFUSED, isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
-import { CONTENT_FIELDS, parseContentInput, type StoredContent } from '@/lib/story/input';
+import { CONTENT_FIELDS } from '@/lib/story/input';
 import { collectExternalAssetUrls } from '@/lib/story/external-images';
 import type { AssetWarning } from '@/lib/web-assets';
 import { refreshWebAssets, type WebAssetImporter } from '@/lib/web-assets';
@@ -170,6 +174,7 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
   const isDoc = format === 'markup' || format === 'folder';
   return {
     ...rest,
+    state: artifactState(row),
     format,
     url: `${base}/a/${row.id}`,
     // The trail rides in `...rest`; the parent is derived from it, and it is
@@ -214,16 +219,15 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
   };
 }
 
-/**
- * Optional optimistic-concurrency guard on PUT bodies: absent ⇒ last-write-
- * wins (the curl-friendly default), a number ⇒ apply only at that head
- * version, anything else ⇒ 400 (never a silent overwrite).
- */
-function parseExpectedVersion(body: Record<string, unknown>): ReplaceOpts | Response {
+/** Every conditional HTTP write carries the observed state; replacements also carry its version. */
+export function parseExpectedVersion(body: Record<string, unknown>, requireVersion=true): ReplaceOpts | Response {
   const v = body.expectedVersion;
-  if (v === undefined || v === null) return {};
-  if (typeof v === 'number' && Number.isInteger(v) && v > 0) return { expectedVersion: v };
-  return json({ error: 'invalid_expected_version' }, 400);
+  const state = body.expectedState;
+  if (v !== undefined && !(typeof v === 'number' && Number.isSafeInteger(v) && v > 0)) return json({error:'invalid_expected_version'},400);
+  if (state !== undefined && (typeof state !== 'string' || !/^[a-f0-9]{64}$/.test(state))) return json({error:'invalid_expected_state'},400);
+  if (requireVersion && v === undefined) return json({error:'version_required',hint:'Read the artifact and send its version as expectedVersion.'},400);
+  if (state === undefined) return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
+  return {...(v !== undefined ? {expectedVersion:v as number} : {}),expectedState:state as string};
 }
 
 /**
@@ -369,6 +373,7 @@ export async function replaceArtifactWithBody(
   actor: TokenActor,
   id: string,
   base: string,
+  options: {dryRun?:boolean; loadRef?:RefLoader} = {},
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   // The row FIRST: refs and imports resolve as the DOCUMENT's owner, never as
@@ -397,11 +402,13 @@ export async function replaceArtifactWithBody(
    * markup half-applied under a 403 nobody can interpret. One ownership read,
    * shared with the placement check below, and only when something asked for it.
    */
-  const governs = 'visibility' in body || 'access' in body;
+  const governs = 'visibility' in body || 'access' in body || 'linkRole' in body;
   const owned = governs || body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   if (governs && !owned) return json({ error: 'owner_only' }, 403);
   const owner = writerFor(current);
   const sentMarkup = body.markup;
+  const expected = parseExpectedVersion(body);
+  if (expected instanceof Response) return expected;
   let normalizeMarkup: ((source: string) => string) | undefined;
   if(typeof body.markup==='string') {
     if(hasAmbiguousLegacyAliases(body.markup)) return json({error:'ambiguous_node_alias'},409);
@@ -435,17 +442,16 @@ export async function replaceArtifactWithBody(
       return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Send title, visibility or parent_id instead'] }, 400);
     }
   }
-  const parsed: StoredContent | Response = current.format === 'folder'
-    ? { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }
-    : await parseContentInput(body, {
-      prepareDataset: input => prepareCatalog(input,actor,current),
+  const prepared: PreparedContent | Response = current.format === 'folder'
+    ? {content: { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }, objects: []}
+    : await prepareContentInput({theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
+      prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
       normalizeMarkup,
-      loadRef: refLoaderForActor(owner),
-      importAsset: assetImporterFor(owner.tokenId, owner.userId),
-      resolveFont: fontResolver(),
+      loadRef: options.loadRef ?? refLoaderForActor(owner),
       overByteQuota: byteQuotaFor(owner.tokenId),
-    });
-  if (parsed instanceof Response) return parsed;
+    }, {allowRemoteInputs:!options.dryRun});
+  if (prepared instanceof Response) return prepared;
+  let parsed = prepared.content;
 
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
@@ -454,8 +460,8 @@ export async function replaceArtifactWithBody(
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
   if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
-  const expected = parseExpectedVersion(body);
-  if (expected instanceof Response) return expected;
+  if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
+  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   /*
    * PLACEMENT IS RESOLVED HERE, AFTER the scope answered `current` above — a
    * row this caller cannot reach is the uniform 404 whatever the body says,
@@ -483,13 +489,22 @@ export async function replaceArtifactWithBody(
       : PARENT_REFUSED;
   if (placement && isParentRefusal(placement)) return json(placement, 400);
 
+  if (expected.expectedVersion !== undefined && expected.expectedVersion !== current.version || expected.expectedState !== undefined && expected.expectedState !== artifactState(current)) {
+    return json({error:expected.expectedVersion !== undefined && expected.expectedVersion !== current.version?'version_conflict':'state_conflict',currentVersion:current.version,currentState:artifactState(current)},409);
+  }
+  if (options.dryRun) return preflightReply(prepared);
+
+  const applied = await applyPreparedContent(prepared, {importAsset: assetImporterFor(owner.tokenId, owner.userId), resolveFont: fontResolver()});
+  if (applied instanceof Response) return applied;
+  parsed = applied;
   const input: ArtifactInput = {
     ...parsed,
-    ...(typeof body.title === 'string' ? { title: body.title } : {}),
-    ...(typeof body.description === 'string' ? { description: body.description } : {}),
+    ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
+    ...(body.description===null || typeof body.description === 'string' ? { description: body.description } : {}),
     ...(visibility ? { visibility } : {}),
     ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     ...(access ? { access } : {}),
+    ...(link ? {link_role:link} : {}),
   };
   /*
    * A FOLDER'S WRITE IS THE METADATA WRITE — the PATCH door's, not a replace.
@@ -511,26 +526,29 @@ export async function replaceArtifactWithBody(
   }
   const row = current.format === 'folder'
     ? await setMetadataFor(actor, id, {
-      ...(typeof body.title === 'string' ? { title: body.title } : {}),
+      ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
-    })
+    }, expected)
     : await replaceArtifactFor(actor, id, input, expected);
-  if (isVersionConflict(row)) return json({ error: 'version_conflict', currentVersion: row.currentVersion }, 409);
+  if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
   // Dataset/viz refresh: warn about dependents whose bindings no longer
   // resolve (warnings, never blocks). A DIFFERENT shape from the asset
   // warnings below, which is exactly why it is a different key.
   const warnings = await refreshWarningsFor(actor, row);
+  const affected = ['dataset','image','pdf','file'].includes(row.format) ? await findDependentsFor(actor,row.id) : null;
   return json({
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
+    ...(affected?{affected_dependents:affected.map(dependent=>({id:dependent.id,title:dependent.title}))}:{}),
     // A replace moves the head pointer — hand back the new one so the caller
     // can keep editing without a re-read. A FOLDER's metadata write moves
     // neither the version nor this pointer, so what comes back is the head the
     // caller already had: still the answer to "what do I quote next", which is
     // the only thing it is for.
-    edit_id: row.edit_id,
+    edit_id: row.edit_id, state: artifactState(row),
+    title:row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',parent_id:parentOf(row),format:row.format,
     ...markupEcho(sentMarkup, row.source),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
     // have to re-read to see what it got.
@@ -554,19 +572,27 @@ export async function createArtifactFromBody(
   body: Record<string, unknown>,
   actor: TokenActor,
   base: string,
+  request?: Request,
+  options: {dryRun?:boolean; loadRef?:RefLoader} = {},
 ): Promise<Response> {
+  let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup);
+  let operation;
+  try {operation = creationOperation(actor,base,request?.headers.get('Idempotency-Key'),body,row=>({status:201,body:responseBody(row)}));}
+  catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
+  if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return json(replay.body,replay.status);}
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
+  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   const sentMarkup=body.markup;
-  const parsed = await parseContentInput(body, {
+  const prepared = await prepareContentInput(body, {
     normalizeMarkup: source => stampNodeIds(source,{retireLegacyAliases:true}).source,
     creating: true,
-    prepareDataset: input => prepareCatalog(input,actor),
-    loadRef: refLoaderForActor(actor),
-    importAsset: assetImporterFor(actor.tokenId, actor.userId),
-    resolveFont: fontResolver(),
+    prepareDataset: (input,objects) => prepareCatalog(input,actor,undefined,objects),
+    loadRef: options.loadRef ?? refLoaderForActor(actor),
     overByteQuota: byteQuotaFor(actor.tokenId),
-  });
-  if (parsed instanceof Response) return parsed;
+  }, {allowRemoteInputs:!options.dryRun});
+  if (prepared instanceof Response) return prepared;
+  let parsed = prepared.content;
   const visibility = parseVisibility(body, !!actor.userId);
   if (visibility instanceof Response) return visibility;
   const access = parseAccessField(body, parsed.format);
@@ -580,20 +606,22 @@ export async function createArtifactFromBody(
   const placement = parent === undefined ? { ancestor_ids: [] } : await resolveParent(actor, parent, null);
   if (isParentRefusal(placement)) return json(placement, 400);
 
+  if (options.dryRun) return preflightReply(prepared);
+
+  const applied = await applyPreparedContent(prepared, {importAsset: assetImporterFor(actor.tokenId, actor.userId), resolveFont: fontResolver()});
+  if (applied instanceof Response) return applied;
+  parsed = applied;
+  responseBody = row => ({...createdArtifactWire(row,base,sentMarkup),...assetWarningsEcho(parsed.warnings),...sourceRepairsEcho(parsed.repairs)});
   let row;
   try{row = await createArtifact(actor.tokenId, actor.userId, {
     ...parsed,
-    title: typeof body.title === 'string' ? body.title : parsed.derivedTitle,
-    description: typeof body.description === 'string' ? body.description : null,
+    title: body.title===null || typeof body.title === 'string' ? body.title : parsed.derivedTitle,
+    description: body.description===null || typeof body.description === 'string' ? body.description : null,
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
-  });}catch(error){if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
-  return json({
-    ...createdArtifactWire(row, base, sentMarkup),
-    ...assetWarningsEcho(parsed.warnings),
-    ...sourceRepairsEcho(parsed.repairs),
-  }, 201);
+  }, {operation,...(link?{linkRole:link}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  return json(responseBody(row), 201);
 }
 
 /**
@@ -610,8 +638,8 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
-    edit_id: row.edit_id,
-    format: row.format, title: row.title,
+    edit_id: row.edit_id, state: artifactState(row),
+    format: row.format, title: row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',
     // Where it landed. `parent_id` is what a caller writes back, so the create
     // reply hands it straight into the next call.
     parent_id: parentOf(row), ancestor_ids: row.ancestor_ids,
@@ -654,16 +682,8 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
         ? { edits: (body.edits as Array<Record<string, string>>).map((edit) => ({ oldString: edit.old_string, newString: edit.new_string })) }
         : undefined;
 
-  // Document-level attributes; each optional, each only when well-typed.
-  const meta: NonNullable<EditInput['meta']> = {};
-  if (body.title === null || typeof body.title === 'string') meta.title = body.title;
-  if (body.theme === null || typeof body.theme === 'string') meta.theme = body.theme;
-  // null is an explicit CLEAR (back to the theme's declared default) — distinct from absent.
-  if (body.colorMode === 'light' || body.colorMode === 'dark' || body.colorMode === null) meta.colorMode = body.colorMode;
-  const hasMeta = Object.keys(meta).length > 0;
-
-  if (!change && !hasMeta) return null; // an edit that changes nothing is malformed
-  return { baseEditId: editId, ...(change ? { change } : {}), ...(hasMeta ? { meta } : {}) };
+  if (!change) return null;
+  return {baseEditId: editId, change};
 }
 
 /**
@@ -678,6 +698,7 @@ export async function respondToEdit(
   apply: (input: EditInput) => Promise<EditOutcome | Response | null>,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
+  if (['meta','title','theme','colorMode','template','description','visibility','linkRole','parent_id','access'].some(key=>Object.hasOwn(body,key))) return json({error:'metadata_requires_patch',hint:'Use PATCH with expectedState for metadata only, or PUT with expectedVersion and expectedState for mixed content and metadata.'},400);
   const input = parseEditBody(body);
   if (!input) return json({ error: 'invalid_edit_body' }, 400);
 
@@ -767,7 +788,7 @@ export async function respondToMutate(
 
   if (!body) return json({ error: 'invalid_json' }, 400);
   if (typeof body.sql !== 'string' || body.sql.trim() === '') {
-    return json({ error: 'sql_required', details: [`one INSERT, UPDATE or DELETE naming this dataset as ref_${id}`] }, 400);
+    return json({ error: 'sql_required', details: [`one INSERT, UPDATE or DELETE naming a catalog table, for example public.rows`] }, 400);
   }
   const values: Record<string, Scalar> = {};
   if (body.values !== undefined) {
@@ -832,4 +853,10 @@ export async function refreshAssetsFor(
     urls = [url!];
   }
   return json(await refreshWebAssets(urls, by));
+}
+
+function preflightReply(prepared:PreparedContent):Response {
+  return json({valid:true,dry_run:true,markup:prepared.content.source,format:prepared.content.format,
+    planned:{objects:prepared.objects.length,imports:prepared.markup?.imports??[],fonts:prepared.markup?.fonts??[]},
+    commit_checks:['authorization','quota','references','observed_state'],...sourceRepairsEcho(prepared.content.repairs)});
 }

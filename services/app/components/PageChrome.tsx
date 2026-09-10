@@ -4,6 +4,7 @@
  * Shared page chrome. The app topbar holds Home, repository stars and page
  * controls; document chrome uses the same panels through its existing bridge.
  */
+import {CLI_SKILLS_DOWNLOAD} from '@/lib/cli-release';
 import {
   BookOpen, CircleUser, Braces, ChevronRight, FileText, LogIn, LogOut, Menu, Moon,
   SlidersVertical, Sun, User, X,
@@ -168,7 +169,7 @@ export function PageMenu({
         {link('/chat', 'Remote sessions', <User size={15} strokeWidth={1.5} />, pathname === '/chat')}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
         {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}
-        {link('/docs/artifactbin/SKILL.md', 'Agent docs', <Braces size={15} strokeWidth={1.5} />, pathname === '/docs/artifactbin/SKILL.md')}
+        {link(CLI_SKILLS_DOWNLOAD, 'Download local skills', <Braces size={15} strokeWidth={1.5} />, false)}
 
         <a
           href={REPO_URL}

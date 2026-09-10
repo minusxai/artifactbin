@@ -48,7 +48,7 @@ export function unauthorized(request: Request): Response {
   return json(
     {
       error: 'unauthorized',
-      docs: `${base}/docs`,
+      help: `afbin setup --server ${base}`,
       tokens: `${base}/tokens/new${source ? `?source=${source}` : ''}`,
     },
     401,

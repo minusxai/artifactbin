@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './fixture-http.mjs';
 /** Short-table fit, height cap and virtualized tail, measured in Chromium. */
 import { startDocument } from './start-doc.mjs';
 
@@ -24,8 +25,8 @@ export async function checkTableGeometry(BASE, browser, check) {
   check(!!short.id && !!long.id, `both datasets published (${short.id}, ${long.id})`);
 
   const markup = `<Helmet><title>DataTable height gate</title>
-  <Query name="few">{\`select label, n from ref_${short.id} order by n\`}</Query>
-  <Query name="many">{\`select label, n from ref_${long.id} order by n\`}</Query>
+  <Query name="few" source="ref:${short.id}">{\`select label, n from public.rows order by n\`}</Query>
+  <Query name="many" source="ref:${long.id}">{\`select label, n from public.rows order by n\`}</Query>
   </Helmet><div data-design="tw" className="p-8"><h1 className="text-2xl font-bold">Table height</h1>
   <div id="short"><DataTable data="$few" /></div>
   <div id="long"><DataTable data="$many" height={${CAP}} /></div></div>`;

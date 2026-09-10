@@ -1,69 +1,20 @@
-/**
- * WHAT WE TELL THE LLM — ONE canonical "agent contract", the SAME words everywhere (tok-p3, plan §4b).
- *
- * lib/agent-contract exports `agentContract(base, surface)`: a markdown block that names where the token lives
- * (~/.artifactbin.env), that tokens expire (6 h default; expiresInHours 1–720 at mint), what to do on
- * 401/expired (ask the human, save, resume — never a blind retry), and header-only auth. The `'http'`
- * rendering is VERBATIM the skill reference publishing-auth.md (= llms.txt's auth section; the file uses the
- * `[[ base ]]` placeholder) and the start-link brief.
- *
- * The header used to say "make it green without changing an expectation" — m2 changed one, deliberately: the
- * MCP initialize instructions no longer carry these words. See the case below and lib/agent-contract's ladder.
- */
-import { describe, expect, it } from 'vitest';
-import { agentContract } from '@/lib/agent-contract';
-import { buildMcpInstructions, renderDoc } from '@/lib/skills';
-import { startBrief } from '@/lib/start-links';
-
-const B = 'https://x.test';
-const contract = () => agentContract(B);
-const publishingAuth = () => renderDoc('artifactbin/references/publishing-auth.md', B);
-
-describe('the contract itself — the HTTP surface', () => {
-  it('names the token file, and says to check it first', () => {
-    expect(contract()).toContain('~/.artifactbin.env');
-    expect(contract()).toContain('ARTIFACTBIN_TOKEN=');
-    expect(contract()).toMatch(/check it first/i);
-    expect(contract()).toContain('~/.config/artifact-bin/config.json');
-  });
-  it('names both ways to get a token, on this base', () => {
-    expect(contract()).toContain(`${B}/tokens/new`);
-    expect(contract()).toMatch(/start link/i);
-  });
-  it('recognizes an inline token in the human paste', () => {
-    expect(contract()).toContain("If your user's paste says `using this token: mx_…`, that IS your token: save it to `~/.artifactbin.env` and use it.");
-  });
-  it('says tokens expire, with the default and the knob', () => {
-    expect(contract()).toMatch(/6 ?h/i);
-    expect(contract()).toContain('expiresInHours');
-    expect(contract()).toContain('expiresAt');
-  });
-  it('on 401 or expiry: /tokens/new, save, resume — never a blind retry', () => {
-    expect(contract()).toMatch(/401/);
-    expect(contract()).toMatch(/do not retry|never retry/i);
-  });
-  it('header auth only; the token never rides a URL', () => {
-    expect(contract()).toContain('Authorization: Bearer');
-    expect(contract()).not.toMatch(/[?&]token=/);
-  });
-  it('is deterministic for a base', () => {
-    expect(agentContract(B)).toBe(agentContract(B));
-    expect(agentContract('https://y.test')).not.toBe(agentContract(B));
-  });
+import {expect,it} from 'vitest';
+import {agentContract} from '../agent-contract';
+import {existingPaste} from '../agent-copy';
+import {startBrief} from '../start-links';
+it('teaches local help, origin-scoped browser setup and the current private config directory',()=>{
+ const contract=agentContract('https://example.test');
+ expect(contract).toContain('afbin setup --server https://example.test');
+ expect(contract).toContain('~/.artifactbin/.env');
+ expect(contract).toContain('--yes --json');
+ expect(contract).toContain('browser approval');
+ expect(contract).not.toMatch(/MCP|plugin|~\/\.artifactbin\.env|\/docs\//);
 });
-
-describe('the same words, everywhere', () => {
-  it('publishing-auth.md carries the contract with the [[ base ]] placeholder', () => {
-    expect(publishingAuth()).toContain(contract());
-    expect(publishingAuth()).not.toContain('[[');
-  });
-  // m2: the MCP surface is a DIFFERENT rendering, not the same words. A client that authenticated over
-  // OAuth holds no token and can acquire none, so it is told it is connected and given no ladder at all.
-  it('the MCP initialize instructions carry the MCP rendering, not the HTTP one', () => {
-    expect(buildMcpInstructions(B)).toContain(agentContract(B, 'mcp'));
-    expect(buildMcpInstructions(B)).not.toContain(contract());
-  });
-  it('the start-link brief carries it', () => {
-    expect(startBrief(B, 'ab3cd9', 'k123')).toContain(contract());
-  });
+it('document handoff and one-use links teach pull, edit, validate and push with local references',()=>{
+ for(const text of [existingPaste('https://example.test','abc123'),startBrief('https://example.test','abc123','one-use')]){
+  expect(text).toContain('afbin');expect(text).not.toMatch(/MCP|\/docs\/|No local SDK or CLI/);
+ }
+ const brief=startBrief('https://example.test','abc123','one-use');
+ expect(brief).toContain('curl -X POST');
+ expect(brief).toContain('afbin pull');expect(brief).toContain('afbin validate');expect(brief).toContain('afbin push');
 });

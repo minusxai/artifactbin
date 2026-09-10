@@ -13,6 +13,7 @@
  *
  * usage: node scripts/gate-shell-seo.mjs [base]   (default :3040)
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
@@ -102,7 +103,7 @@ const docFrame = page.mainFrame();
 check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="menu"]').count()) === 1, 'the protected reader chrome carries the menu control');
 check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="controls"]').count()) === 1, 'and the artifact controls');
 await openMenu(page);
-for (const item of ['Artifacts', 'Account', 'Human Docs', 'Agent docs']) {
+for (const item of ['Artifacts', 'Account', 'Human Docs', 'Download local skills']) {
   check(await page.isVisible(`[aria-label="${item}"]`), `the menu carries ${item}`);
 }
 check((await docFrame.locator('.mx-reader-title').first().textContent())?.includes('Crawlable'), 'the document bar names the document');

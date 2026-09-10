@@ -17,6 +17,7 @@
  * jsdom cannot model the browser focus/blur behavior of the mounted story runtime, so this browser gate is
  * the only place these contracts can be checked. Exits non-zero on failure.
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { expect } from 'playwright/test';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
@@ -47,8 +48,8 @@ const dataset = await api('/api/artifacts', {
 }, token);
 const markup = `<Helmet>
 <Value name="region" type="string" />
-<Query name="regions">{\`select distinct region from ref_${dataset.id} order by 1\`}</Query>
-<Query name="sales">{\`select * from ref_${dataset.id} where $region is null or region = $region\`}</Query>
+<Query name="regions" source="ref:${dataset.id}">{\`select distinct region from public.rows order by 1\`}</Query>
+<Query name="sales" source="ref:${dataset.id}">{\`select * from public.rows where $region is null or region = $region\`}</Query>
 </Helmet><div data-design="tw" className="@container p-10">
 <h1 className="text-4xl font-bold tracking-tight">Editor gate</h1>
 <div className="mt-4"><select aria-label="Region" value="$region" options="$regions" /></div>

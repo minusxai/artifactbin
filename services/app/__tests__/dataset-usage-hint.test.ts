@@ -34,7 +34,7 @@ describe('creating a dataset returns how to USE it', () => {
     const usage = body.usage as string;
     // The exact prop names the agent got wrong, bound to this dataset's columns —
     // through a <Query> over the dataset's SQL table, which is how a document reads one.
-    expect(usage).toContain(`<Query name="rows" source="${body.id}">`);
+    expect(usage).toContain(`<Query name="rows" source="ref:${body.id}">`);
     expect(usage).toContain('FROM "public"."rows"');
     expect(usage).not.toContain(`ref_${body.id}`);
     expect(usage).toContain('data="$rows"');

@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE FOLDER PAGE IS APP CHROME, and a folder has NO CONTENT.
  *
@@ -72,8 +73,8 @@ describe('a folder has no content', () => {
     const o = await owner('nowrite');
     const f = await create(o.token, { format: 'folder', title: 'Reports' });
     for (const [door, run] of [
-      ['bearer', () => putRoute(request(`/api/artifacts/${f.id}`, { method: 'PUT', json: { markup: '<p>hi</p>' }, token: o.token }), params(f.id))],
-      ['session', () => putMineRoute(request(`/api/my/artifacts/${f.id}`, { method: 'PUT', json: { markup: '<p>hi</p>' }, cookie: o.cookie, origin: 'same' }), params(f.id))],
+      ['bearer', async () => putRoute(await observedRequest(`/api/artifacts/${f.id}`, { method: 'PUT', json: { markup: '<p>hi</p>' }, token: o.token }), params(f.id))],
+      ['session', async () => putMineRoute(await observedRequest(`/api/my/artifacts/${f.id}`, { method: 'PUT', json: { markup: '<p>hi</p>' }, cookie: o.cookie, origin: 'same' }), params(f.id))],
     ] as const) {
       const r = await j(await run());
       expect(r.status, `${door}: ${JSON.stringify(r.body)}`).toBe(400);
@@ -104,7 +105,7 @@ describe('a folder has no content', () => {
     const o = await owner('meta');
     const parent = await create(o.token, { format: 'folder', title: 'Parent' });
     const f = await create(o.token, { format: 'folder', title: 'Reports' });
-    const r = await j(await putRoute(request(`/api/artifacts/${f.id}`, {
+    const r = await j(await putRoute(await observedRequest(`/api/artifacts/${f.id}`, {
       method: 'PUT', token: o.token, json: { title: 'Renamed', visibility: 'unlisted', parent_id: parent.id },
     }), params(f.id)));
     expect(r.status, JSON.stringify(r.body)).toBe(200);
@@ -126,7 +127,7 @@ describe('a folder has no content', () => {
     const o = await owner('rename');
     const f = await create(o.token, { format: 'folder', title: 'Reports' });
     const before = (await getArtifactById(f.id))!;
-    const r = await j(await patchMineRoute(request(`/api/my/artifacts/${f.id}`, {
+    const r = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${f.id}`, {
       method: 'PATCH', json: { title: 'Quarterly' }, cookie: o.cookie, origin: 'same',
     }), params(f.id)));
     expect(r.status, JSON.stringify(r.body)).toBe(200);
@@ -136,7 +137,7 @@ describe('a folder has no content', () => {
     expect(after.version).toBe(before.version);
     // A rename is a rename of a DOCUMENT too — the door is not folder-only.
     const doc = await create(o.token, { markup: '<h1>x</h1>', title: 'Doc' });
-    const d = await j(await patchMineRoute(request(`/api/my/artifacts/${doc.id}`, {
+    const d = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, {
       method: 'PATCH', json: { title: 'Doc renamed' }, cookie: o.cookie, origin: 'same',
     }), params(doc.id)));
     expect(d.status, JSON.stringify(d.body)).toBe(200);
@@ -154,7 +155,7 @@ describe('a folder has no content', () => {
   it('never turns a document INTO a folder — format is the row\'s, whatever the body says', async () => {
     const o = await owner('nodemote');
     const doc = await create(o.token, { markup: '<h1>Real work</h1>', title: 'Doc' });
-    const r = await j(await putRoute(request(`/api/artifacts/${doc.id}`, {
+    const r = await j(await putRoute(await observedRequest(`/api/artifacts/${doc.id}`, {
       method: 'PUT', token: o.token, json: { format: 'folder' },
     }), params(doc.id)));
     const row = (await getArtifactById(doc.id))!;

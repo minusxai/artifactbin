@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkTableGeometry } from './lib/table-geometry.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /** Full served-document test: real cell writes, two readers, conflict, portals and virtual rows. */
@@ -131,7 +132,7 @@ try {
 
   // Sorting and virtual unmount happen while a draft exists. Scrolling alone must never commit it.
   await a.getByLabel('Item 1',{exact:true}).fill('survives scroll');
-  const box='[data-slot="data-table"] > div';
+  const box='[data-slot="data-table"] > div.overflow-auto';
   await a.locator(box).evaluate(el=>{el.scrollTop=el.scrollHeight;});
   await a.getByLabel('Item 500',{exact:true}).waitFor();
   assert.ok(await a.locator('tbody tr').count()<500);
@@ -149,6 +150,10 @@ try {
   assert.deepEqual(JSON.parse(saved.rows.find(row=>row.id===1).tags),['design,ux']);
   assert.deepEqual(JSON.parse(saved.rows.find(row=>row.id===1).depends_on),['2']);
   check('draft survives virtual unmount and sorting preserves record identity');
+
+  // A refreshed query resets its window; find the saved row in that window.
+  await a.waitForFunction(() => document.querySelector('[aria-label="DataTable embed"]')?.getAttribute('aria-busy') === 'false');
+  await a.locator(box).evaluate(el=>{el.scrollTop=el.scrollHeight;});
 
   // A menu near the scroll edge must portal out of the table's overflow container.
   await a.getByLabel('Status 500',{exact:true}).click();

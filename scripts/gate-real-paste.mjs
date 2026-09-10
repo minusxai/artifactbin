@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: a REAL ⌘V, not a synthetic ClipboardEvent.

@@ -49,20 +49,29 @@ const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';
  * documents an ordinary write rather than a refusal to be forced past.
  *
  * The owner predicate is in the same WHERE as the containment, so the subtree
- * this takes is only ever the caller's own; false means the NAMED row was
- * unknown, foreign, or already in the trash.
+ * this takes is only ever the caller's own; null means the NAMED row is unknown or foreign. Repeating an owned delete
+ * returns its still-deleted identities without stamping another deletion.
  */
-export async function trashArtifactFor(actor: TokenActor, id: string): Promise<boolean> {
+export async function trashArtifactFor(actor: TokenActor, id: string): Promise<string[] | null> {
   const db = await getDb();
   const scope = ownerPredicate(actor);
-  const r = await db.query<{ id: string; format: string; ancestor_ids: string[] }>(
-    `UPDATE artifacts SET deleted_at = now()
+  const r = await db.query<{id:string;format:string;ancestor_ids:string[];newly_deleted:boolean}>(
+    `WITH target AS (
+      SELECT deleted_at AS stamp FROM artifacts WHERE id=$1 AND (${scope.where('$2')})
+    ), removed AS (
+      UPDATE artifacts SET deleted_at=now()
       WHERE ${SUBTREE} AND ${LIVE_ARTIFACT_SQL} AND (${scope.where('$2')})
-      RETURNING id, format, ancestor_ids`,
-    [id, scope.val],
+        AND EXISTS (SELECT 1 FROM target WHERE stamp IS NULL)
+      RETURNING id,format,ancestor_ids
+    )
+    SELECT id,format,ancestor_ids,true AS newly_deleted FROM removed
+    UNION ALL
+    SELECT id,format,ancestor_ids,false AS newly_deleted FROM artifacts,target
+    WHERE ${SUBTREE} AND (${scope.where('$2')}) AND target.stamp IS NOT NULL AND deleted_at=target.stamp`,
+    [id,scope.val],
   );
   const named = r.rows.find((row) => row.id === id);
-  if (!named) return false;
+  if (!named) return null;
   /*
    * `deleted`, said HERE, because this is the only delete there is. The count
    * is what the statement above actually took, so a folder's sentence says how
@@ -72,9 +81,11 @@ export async function trashArtifactFor(actor: TokenActor, id: string): Promise<b
    *
    * Fire-and-forget, and never inside a transaction (PGLite deadlock).
    */
-  void trackEvent('delete', id, { userId: actor.userId, format: named.format, subtree: r.rows.length - 1 });
-  await notifyParent(parentOf(named));
-  return true;
+  if(named.newly_deleted){
+    void trackEvent('delete', id, { userId: actor.userId, format: named.format, subtree: r.rows.length - 1 });
+    await notifyParent(parentOf(named));
+  }
+  return r.rows.map(row=>row.id);
 }
 
 /**

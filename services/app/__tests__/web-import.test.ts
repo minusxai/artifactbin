@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Importing assets FROM THE WEB, through the real doors: ingest-and-own.
  *
@@ -204,7 +205,7 @@ describe('the agent door — external <img src> is imported and the URL is KEPT'
   it('PUT imports too — the shared pipeline, not just create', async () => {
     const t = await mintToken('t');
     const made = await (await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>v1</p>' } }))).json();
-    const put = await putArtifact(request(`/api/artifacts/${made.id}`, { method: 'PUT', token: t.token, json: {
+    const put = await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: t.token, json: {
       markup: `<div><img src="${web}/photo.jpg" /></div>`,
     } }), params({ id: made.id }));
     expect(put.status).toBe(200);

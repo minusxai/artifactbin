@@ -38,4 +38,4 @@ const artifactUrl = (base: string, artifactId: string): string =>
   `${base.replace(/\/$/, '')}/a/${artifactId}`;
 
 const docsHint = (base: string): string =>
-  `Read ${base.replace(/\/$/, '')}/docs/artifactbin/SKILL.md for the HTTP API. No local SDK or CLI is needed.`;
+  `Use afbin: pull, edit local JSX, validate, push. Read afbin help and the local skill. Connect with afbin setup --server ${base.replace(/\/$/, '')} for browser approval.`;

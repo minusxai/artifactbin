@@ -11,6 +11,7 @@
  *
  *   usage: node scripts/gate-simpler-start.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
@@ -42,7 +43,7 @@ const paste = /\/a\/([A-Za-z0-9]+) using this token: (mx_[A-Za-z0-9_-]+)/.exec(p
 ok(!!paste, 'the copied paste carries the bearer token inline');
 ok(!/\/start\?k=/.test(prompt), 'and carries no start link');
 ok(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
-ok(prompt.includes(`${B}/docs/artifactbin/SKILL.md`), 'the paste points to the exact HTTP API instructions');
+ok(prompt.includes(`afbin setup --server ${B}`), 'the paste points to local CLI setup and guidance');
 if (!paste) { console.log('cannot continue without the inline token'); process.exit(1); }
 const [, id, pasteToken] = paste;
 
@@ -64,7 +65,7 @@ const unfurl2 = await fetch(startUrl);
 const briefText = await unfurl1.text();
 ok(unfurl1.status === 200 && unfurl2.status === 200, 'GET is non-consuming (two reads, both 200)');
 ok(!/mx_[A-Za-z0-9_-]{20,}/.test(briefText), 'the brief contains no real token');
-ok(briefText.includes('/docs') && /POST/.test(briefText), 'the brief teaches the claim and the docs');
+ok(briefText.includes('afbin') && /POST/.test(briefText), 'the brief teaches the claim and local CLI guidance');
 
 // ── 3. the agent's leg: claim, then edit; the human's page updates live ────
 await page.goto(`${B}/a/${id}`, { waitUntil: 'load' });

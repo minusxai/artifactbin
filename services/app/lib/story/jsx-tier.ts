@@ -16,25 +16,23 @@
  * component allowlist + STORY_HTML_TAGS + `no-inline-style` style policy, then
  * the banned-css sanitizer as belt, then the compile.
  */
-import { syntaxErrorDetail } from '@/lib/jsx/syntax-error';
+import { validateMarkupStructure } from './local-validation';
 import { repairJsxSource } from '@/lib/jsx/repair';
-import { parseJsx, serializeJsx, validateJsx } from '@/lib/jsx';
-import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/helmet';
-import { fixHtmlNesting } from '@/lib/story/nesting';
-import { analyzeRowScopes } from './row-scope';
-import { collectRefNameUses, validateDataflow } from '@/lib/story/dataflow';
+import { canonicalizeMarkup } from './canonical-source';
+export {canonicalizeMarkup} from './canonical-source';
+import { parseJsx } from '@/lib/jsx';
+import { splitHelmet } from '@/lib/story/helmet';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { sanitizeStoryMarkupCss } from '@/lib/data/story/banned-css';
 import { RETIRED_STORY_THEMES } from '@/lib/data/story/story-themes';
-import { managedIframeSourceErrors, remapMarkupStyleViewportUnits, transformOutsideManagedIframes } from '@/lib/story/managed-iframe-source';
+import { remapMarkupStyleViewportUnits, transformOutsideManagedIframes } from '@/lib/story/managed-iframe-source';
 import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
 import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import { json } from '../http';
 import { MAX_CONTENT_BYTES, type ContentInputCtx, type StoredContent } from './input';
-import { findBrokenEmbeds, findExternalSubresources } from './refs';
 import { collectExternalAssetUrls } from './external-images';
-import type { AssetWarning } from '@/lib/web-assets';
+import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
 import { documentFonts, invalidFontFamilies } from './document-fonts';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
 import { checkDocumentData } from './data-checks';
@@ -44,51 +42,14 @@ export const JSX_TIER_COMPONENTS = JSX_STORY_COMPONENT_NAMES;
 
 const COLOR_MODES = ['light', 'dark'] as const;
 
-/**
- * Store markup in the serializer's canonical form — the invariant the edit
- * protocol rests on (concurrent-artifacts-edits.md). `serializeJsx` normalizes
- * expression values to JSON (`{{kind:"x"}}` → `{{"kind":"x"}}`), so a
- * non-canonical stored doc would make the WYSIWYG's first whole-tree
- * re-serialize differ far outside the edited node, and every derived splice
- * would swallow the document. Canonical form is a FIXPOINT, so after this the
- * editor's output differs only where the human actually edited.
- *
- * Source that cannot re-parse is returned untouched: publish validation has
- * already run and would have rejected it, and silently mangling text is worse
- * than a non-canonical row (the protocol degrades to whole-doc conflicts).
- */
-export function canonicalizeMarkup(source: string): string {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) return source;
-  /*
-   * Normalizing may MOVE a Helmet; it may never delete one. `hoistHelmet`
-   * keeps the first and drops the rest, which is only correct for a document
-   * the grammar already admits — and this runs on unvalidated source in the
-   * edit path (applyEditScoped derives its splice against canonical form).
-   * There, a second Helmet stopped being the author error it is and became
-   * silent destruction of everything the surviving one did not carry: the
-   * stylesheet, the meta pairs, the script. The editor's code mode reported
-   * "saved" over it.
-   *
-   * So an invalid document goes through untouched, exactly as the unparseable
-   * case does, and `validateHelmet` gets to say what is wrong with it.
-   */
-  if (validateHelmet(parsed.nodes).length > 0) return source;
-  // Canonical placement is part of canonical FORM: the Helmet (if any) is
-  // hoisted to first top-level node here, so agents see the move in the write
-  // echo and every stored document reads document = [Helmet?, ...body].
-  //
-  // …and so is nesting the HTML parser will not undo. A `<p>` holding block
-  // content serializes to markup that parses back as a DIFFERENT tree, which
-  // is a hydration mismatch and a visible repaint on every read
-  // (lib/story/nesting.ts). Canonical form is the right door precisely because
-  // it is re-derived on every write: the editor's re-serialization, the edit
-  // protocol's base, publish and preview all pass through here, so none of
-  // them can reintroduce it.
-  return serializeJsx(fixHtmlNesting(hoistHelmet(parsed.nodes)));
+export interface PreparedMarkup {
+  content: StoredContent;
+  imports: Array<{url: string; kind: WebAssetKind}>;
+  fonts: string[];
 }
 
-export async function publishJsx(body: Record<string, unknown>, sourceIn: string, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
+/** Validation and compilation have no import or persistence capability. */
+export async function prepareJsx(body: Record<string, unknown>, sourceIn: string, ctx: Pick<ContentInputCtx, 'loadRef' | 'normalizeMarkup'> = {}): Promise<PreparedMarkup | Response> {
   /*
    * REPAIR FIRST, above everything that reads the source. The one fault we fix
    * rather than refuse is the shell-escaped backtick (lib/jsx/repair — it costs
@@ -165,12 +126,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
     url,
     fix: `this document names ${wanted.length} external assets; the cap is ${MAX_EXTERNAL_ASSETS_PER_PUBLISH} — this one was not imported, so upload it as an image artifact or drop it`,
   }));
-  if (ctx.importAsset) {
-    for (const { url, kind } of wanted.slice(0, MAX_EXTERNAL_ASSETS_PER_PUBLISH)) {
-      const refused = await ctx.importAsset(url, kind);
-      if (refused) warnings.push(refused);
-    }
-  }
+
 
   // Gate 1: the ported three-gate pipeline (registry, handlers, URL schemes).
   // Gate 2 (artifactbin's own): every subresource must be self-contained —
@@ -178,12 +134,9 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   // The Helmet subtree is validated by ITS grammar (lib/story/helmet.ts) and
   // split out before the generic gate — lib/jsx never learns Helmet exists,
   // and body nodes keep their original spans so diagnostics stay precise.
-  const parsed = parseJsx(source);
-  if (!parsed.ok) {
-    return json({ error: 'invalid_jsx', details: [syntaxErrorDetail(source, parsed)] }, 400);
-  }
-  const split = splitHelmet(parsed.nodes);
-  const helmetErrors = validateHelmet(parsed.nodes);
+  const structural = validateMarkupStructure(source);
+  const split = structural.split;
+  if (!split) return json({error:'invalid_jsx',details:structural.errors},400);
 
   // FONTS the document asks for (Helmet <meta name="font-display" …>),
   // resolved at PUBLISH so a reader never waits on — or is exposed to — an
@@ -196,31 +149,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   if (badFamilies.length > 0) {
     return json({ error: 'unknown_font', details: badFamilies.map((f) => `"${f}" is not a font family name`) }, 400);
   }
-  if (ctx.resolveFont) {
-    for (const family of fonts.families) {
-      const failure = await ctx.resolveFont(family);
-      if (failure) return failure;
-    }
-  }
-  const errors = [
-    ...helmetErrors,
-    ...analyzeRowScopes(split.body).errors.map((message) => ({ message })),
-    ...validateJsx(split.body, {
-      components: JSX_TIER_COMPONENTS,
-      allowedHtmlTags: STORY_HTML_TAGS,
-      stylePolicy: 'no-inline-style',
-    }),
-    ...managedIframeSourceErrors(split.body),
-    ...findExternalSubresources(source),
-    // An embed with no data prop publishes fine and renders empty — reject it.
-    ...findBrokenEmbeds(source),
-    // The dataflow graph: every `$name` names a declaration of the right kind,
-    // every SQL $param a scalar, no cycles. Structural, so it runs on EVERY
-    // write including /api/preview (which has no ref loader) — a draft that
-    // previews must publish. Skipped only when the Helmet itself is malformed
-    // (its declarations are then unreliable, and those errors are already listed).
-    ...(helmetErrors.length ? [] : validateDataflow({ values: split.content.values, queries: split.content.queries, mutations: split.content.mutations }, collectRefNameUses(split.body))),
-  ];
+  const errors = structural.errors;
   if (errors.length > 0) {
     // An agent's only route out of a tag rejection is knowing the set. It rides
     // ONCE on the response — not inside each offending tag's message, which is
@@ -265,7 +194,7 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
   const canonical = parseJsx(sanitized);
   const helmetTitle = canonical.ok ? splitHelmet(canonical.nodes).content.title : null;
 
-  return {
+  const content: StoredContent = {
     format: 'markup',
     content: '',
     source: sanitized,
@@ -282,4 +211,24 @@ export async function publishJsx(body: Record<string, unknown>, sourceIn: string
     ...(warnings.length ? { warnings } : {}),
     ...repairsEcho,
   };
+  return {content, imports: wanted.slice(0, MAX_EXTERNAL_ASSETS_PER_PUBLISH), fonts: fonts.families};
+}
+
+/** Apply only a successfully prepared document, retaining publication warnings. */
+export async function applyPreparedJsx(prepared: PreparedMarkup, effects: Pick<ContentInputCtx, 'importAsset' | 'resolveFont'>): Promise<StoredContent | Response> {
+  if (effects.resolveFont) for (const family of prepared.fonts) {
+    const failure = await effects.resolveFont(family);
+    if (failure) return failure;
+  }
+  const warnings = [...(prepared.content.warnings ?? [])];
+  if (effects.importAsset) for (const asset of prepared.imports) {
+    const warning = await effects.importAsset(asset.url, asset.kind);
+    if (warning) warnings.push(warning);
+  }
+  return {...prepared.content, ...(warnings.length ? {warnings} : {})};
+}
+
+export async function publishJsx(body: Record<string, unknown>, source: string, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
+  const prepared = await prepareJsx(body, source, ctx);
+  return prepared instanceof Response ? prepared : applyPreparedJsx(prepared, ctx);
 }

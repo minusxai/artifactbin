@@ -15,13 +15,12 @@ import type { Leg } from '../lib/leg';
 
 const leg: Leg = {
   harness: 'pi', model: 'm', envVar: 'SOME_API_KEY', apiKey: 'k', label: 'pi',
-  price: null, vision: true, mode: planMode('pi', 'fetched_skill+api_action'),
+  price: null, vision: true, mode: planMode('pi', 'cli'),
 };
 
 /** A harness that answers instantly, so the probe's own plumbing is what is under test. */
 const fake = (stdout: string): HarnessAdapter => ({
   harness: 'pi',
-  supportsMcp: false,
   async prepare() {},
   invocation() { return { argv: ['node', '-e', `process.stdout.write(${JSON.stringify(stdout)})`], env: {}, unsetEnv: [] }; },
   reduce() {

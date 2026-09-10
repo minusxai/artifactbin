@@ -1,3 +1,5 @@
+import {patchMetadata} from '@/__tests__/conditional-request';
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The ACL must SURVIVE every write path.
  *
@@ -80,10 +82,7 @@ describe('a private document stays private through every write', () => {
   it('survives a metadata-only edit (title/theme), which takes a different branch', async () => {
     const { token } = await fixtures();
     const doc = await create(token, { title: 'Secret', markup: '<section><p>alpha</p></section>' });
-    const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, title: 'Renamed' } }),
-      params({ id: doc.id }),
-    );
+    const res = await patchMetadata(token,doc.id,{title:'Renamed'});
     expect(res.status).toBe(200);
     expect((await stateOf(doc.id)).visibility).toBe('private');
   });
@@ -93,7 +92,7 @@ describe('a private document stays private through every write', () => {
     const q3 = await folder(token, 'q3');
     const doc = await create(token, { title: 'Secret', markup: '<h1>a</h1>', parent_id: q3 });
     const res = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>b</h1>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>b</h1>' } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);
@@ -106,13 +105,13 @@ describe('a private document stays private through every write', () => {
     // v1 public, then flipped private — reverting CONTENT must not revert the ACL.
     const doc = await create(token, { title: 'Secret', markup: '<h1>v1</h1>', visibility: 'public' });
     await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>v2</h1>', visibility: 'private', parent_id: vault } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<h1>v2</h1>', visibility: 'private', parent_id: vault } }),
       params({ id: doc.id }),
     );
     expect(await stateOf(doc.id)).toEqual({ visibility: 'private', ancestor_ids: [vault] });
 
     const reverted = await revertRoute(
-      request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: token, json: { version: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: token, json: { version: 1 } }),
       params({ id: doc.id }),
     );
     expect(reverted.status).toBe(200);
@@ -129,7 +128,7 @@ describe('a private document stays private through every write', () => {
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     const res = await patchMineRoute(
-      request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: moved } }),
+      await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: moved } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(200);

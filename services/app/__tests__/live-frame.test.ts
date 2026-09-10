@@ -35,7 +35,7 @@ vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: ses
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const jreq = (path: string, method = 'GET', body?: unknown, token?: string) =>
   new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
-const DOC = (ds: string) => `<div><Helmet><Query name="q">{\`select count(*) as n from ref_${ds}\`}</Query></Helmet><p>hello</p><Number data="$q" /></div>`;
+const DOC = (ds: string) => `<div><Helmet><Query name="q" source="ref:${ds}">{\`select count(*) as n from public.rows\`}</Query></Helmet><p>hello</p><Number data="$q" /></div>`;
 
 async function firstEvent(body: ReadableStream<Uint8Array>): Promise<Record<string, unknown>> {
   const reader = body.getReader();

@@ -1,4 +1,5 @@
 "use client"
+import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { pageDataChanged } from '@/web/page-data-events';
 /**
  * THE MOVE PICKER — the account's folders as an indented tree built from
@@ -226,11 +227,7 @@ export function MoveMenu({ row, folders, onMoved, onClose }: {
   }, [folders.length]);
 
   const move = async (parentId: string | null): Promise<void> => {
-    const res = await fetch(`/api/my/artifacts/${row.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ parent_id: parentId }),
-    }).catch(() => null);
+    const res = await writeBrowserArtifact(row.id, { parent_id: parentId }).catch(() => null);
     // A refusal (invalid_parent, and every reason it covers) leaves the picker
     // open on the choice that was refused rather than closing over a move that
     // did not happen.

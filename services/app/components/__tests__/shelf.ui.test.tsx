@@ -226,6 +226,7 @@ describe('Shelf — data and capabilities', () => {
   it('moves a grid item through its overflow menu', async () => {
     const patches: Array<{ url: string; body: unknown }> = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if(!init?.method)return Response.json({state:'a'.repeat(64),version:1});
       const body = JSON.parse(String(init?.body));
       patches.push({ url, body });
       return new Response(JSON.stringify({ parent_id: body.parent_id }), { status: 200 });
@@ -258,7 +259,7 @@ describe('Shelf — data and capabilities', () => {
     expect(screen.getByLabelText('Move to Drafts').getAttribute('aria-current')).toBe('location');
     fireEvent.click(screen.getByLabelText('Move to Archive'));
     await waitFor(() => expect(patches).toEqual([
-      { url: '/api/my/artifacts/b', body: { parent_id: 'Ar4Ch1' } },
+      { url: '/api/my/artifacts/b', body: { parent_id: 'Ar4Ch1', expectedState:'a'.repeat(64) } },
     ]));
   });
 

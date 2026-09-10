@@ -516,6 +516,22 @@ const DATASET_RESULT_CACHE: Table = {
   primaryKey: ['cache_key'],
 };
 
+/** Durable create identity; the response expires while the key-to-id mapping remains. */
+const ARTIFACT_CREATION_OPERATIONS: Table = {
+  name: 'artifact_creation_operations',
+  columns: [
+    {name:'scope',type:'TEXT',notNull:true},
+    {name:'operation_key',type:'TEXT',notNull:true},
+    {name:'request_hash',type:'TEXT',notNull:true},
+    {name:'artifact_id',type:'TEXT'},
+    {name:'response',type:'JSONB'},
+    {name:'response_status',type:'INTEGER'},
+    {name:'response_until',type:'TIMESTAMPTZ',notNull:true},
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  ],
+  primaryKey:['scope','operation_key'],
+};
+
 /**
  * The app's tables, in the order boot applies them — and the shape
  * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
@@ -524,7 +540,7 @@ const DATASET_RESULT_CACHE: Table = {
  * re-qualify (a rename's DO block names its own schema twice) is exactly what
  * that indirection could not survive.
  */
-export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE];
+export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

@@ -16,48 +16,12 @@ import type { LedgerEntry } from './contracts';
 import { settleWithin, TEARDOWN_MS } from './shutdown';
 
 const BODY_CAP = 512 * 1024;
-const ARTIFACT_WRITE = /^\/(api\/artifacts(\/[A-Za-z0-9]+(\/edits)?)?|mcp|echo)(\?.*)?$/;
+const ARTIFACT_WRITE = /^\/(api\/artifacts(\/[A-Za-z0-9]+(\/edits)?)?|echo)(\?.*)?$/;
 /** `lib/story/input.ts` — a write declares exactly one of these. */
-const CONTENT_TIERS = ['markup', 'dataset', 'viz', 'image'] as const;
+const CONTENT_TIERS = ['markup', 'dataset', 'viz', 'image','pdf','file'] as const;
 
 /** `lib/ids.ts` — 6-12 of `[a-zA-Z0-9]`. */
 const ID_RE = /^[A-Za-z0-9]{6,12}$/;
-
-const objectValue = (value: unknown): Record<string, unknown> | null =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : null;
-
-/**
- * REST sends an operation's input as the request body. MCP wraps that same
- * input in JSON-RPC's `params.arguments`; normalize both transports before
- * extracting the content tier and markup. Without this, a real MCP dataset
- * create is recorded as an untyped POST and the eval falsely fails
- * `dataset_created`.
- */
-function operationInput(body: Record<string, unknown> | null, url: string): Record<string, unknown> | null {
-  if (!body || url.split('?')[0] !== '/mcp') return body;
-  const params = objectValue(body.params);
-  return objectValue(params?.arguments);
-}
-
-/** MCP returns an operation's JSON body as text inside `result.content`. */
-function operationOutput(body: Record<string, unknown> | null, url: string): Record<string, unknown> | null {
-  if (!body || url.split('?')[0] !== '/mcp') return body;
-  const result = objectValue(body.result);
-  const content = Array.isArray(result?.content) ? result.content : [];
-  for (const part of content) {
-    const item = objectValue(part);
-    if (typeof item?.text !== 'string') continue;
-    try {
-      const output = objectValue(JSON.parse(item.text));
-      if (output) return output;
-    } catch {
-      // A non-JSON text result carries no artifact metadata.
-    }
-  }
-  return null;
-}
 
 /** The artifact a write names in its URL, if any. */
 function idFromPath(url: string): string | null {
@@ -65,24 +29,9 @@ function idFromPath(url: string): string | null {
   return m ? m[1] : null;
 }
 
-/**
- * The artifact a response names. `POST /api/artifacts` answers `{id}` directly;
- * an MCP tool result carries the same JSON as TEXT inside `result.content[]`.
- */
-function idFromBody(body: Record<string, unknown> | null): string | null {
-  if (!body) return null;
-  if (typeof body.id === 'string' && ID_RE.test(body.id)) return body.id;
-  const content = (body.result as { content?: Array<{ text?: string }> } | undefined)?.content;
-  for (const part of content ?? []) {
-    if (typeof part.text !== 'string') continue;
-    try {
-      const inner = JSON.parse(part.text) as { id?: unknown };
-      if (typeof inner.id === 'string' && ID_RE.test(inner.id)) return inner.id;
-    } catch {
-      // a tool result that is not JSON
-    }
-  }
-  return null;
+/** The artifact identity in a successful HTTP response. */
+function idFromBody(body:Record<string,unknown>|null):string|null{
+ return typeof body?.id==='string'&&ID_RE.test(body.id)?body.id:null;
 }
 
 export interface RunningProxy { url: string; port: number; stop(): Promise<void> }
@@ -127,9 +76,7 @@ export function forwardExchange(
     (up) => {
       res.writeHead(up.statusCode ?? 502, up.headers);
       // A response body is retained for a failure (its `error` code) or a write (its echo + the artifact id).
-      const isMcp = url.split('?')[0] === '/mcp';
-      const isSse = String(up.headers['content-type'] ?? '').includes('text/event-stream');
-      const keepRes = (isJson(up.headers) || (isMcp && isSse)) && ((up.statusCode ?? 0) >= 400 || keepReq);
+      const keepRes = isJson(up.headers) && ((up.statusCode ?? 0) >= 400 || keepReq);
       const resChunks: Buffer[] = [];
       let resSize = 0;
       // Counted for EVERY response (the docs-cost metric reads it); retained only per keepRes.
@@ -152,11 +99,8 @@ export function forwardExchange(
         if (pathId) entry.artifactId = pathId;
         if (keepRes) {
           const bytes = Buffer.concat(resChunks);
-          const body = isSse ? bytes.toString().split(/\r?\n/).filter((l) => l.startsWith('data:')).map((l) => parseJson(Buffer.from(l.slice(5).trim()))).find((v) => v && ('result' in v || 'error' in v)) ?? null : parseJson(bytes);
-          const output = operationOutput(body, url);
-          if (isMcp && (objectValue(body?.result)?.isError === true || objectValue(body?.error))) {
-            entry.mcpError = typeof output?.error === 'string' ? output.error : objectValue(body?.error) ? 'mcp_protocol_error' : 'mcp_tool_error';
-          }
+          const body = parseJson(bytes);
+          const output = body;
           if (status >= 400 && body && typeof body.error === 'string') entry.error = body.error;
           if (keepReq && output && typeof output.markup === 'string') entry.resMarkup = output.markup;
           if (keepReq && output && typeof output.markup_changed === 'boolean') entry.markupUnchanged = !output.markup_changed;
@@ -167,15 +111,10 @@ export function forwardExchange(
         }
         if (keepReq) {
           const body = parseJson(Buffer.concat(reqChunks));
-          const input = operationInput(body, url);
-          if (isMcp && body) {
-            entry.mcpMethod = typeof body.method === 'string' ? body.method : 'unknown';
-            const params = objectValue(body.params);
-            if (typeof params?.name === 'string') entry.mcpTool = params.name;
-          }
-          if (input && typeof input.markup === 'string') entry.reqMarkup = input.markup;
+          const input = body;
+          if(input){const source=input.markup??input.source;if(typeof source==='string')entry.reqMarkup=source;}
           const format = CONTENT_TIERS.find((k) => input && input[k] !== undefined);
-          if (format) entry.reqFormat = format;
+          if (format) entry.reqFormat = format;else if(typeof input?.source==='string')entry.reqFormat='markup';
         }
         record(entry);
       });

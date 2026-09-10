@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: A WRITE BY ONE READER REACHES EVERY OTHER, LIVE.
@@ -42,8 +43,8 @@ const poll = (ds) =>
   '<Helmet>'
   + '<Value name="choice" type="string" default="ramen" />'
   + '<Value name="who" type="string" default="anon" />'
-  + `<Query name="tally">{\`select choice, count(*)::int votes from ref_${ds} group by 1 order by 1\`}</Query>`
-  + `<Mutation name="vote">{\`insert into ref_${ds} (choice, who) values ($choice, $who)\`}</Mutation>`
+  + `<Query name="tally" source="ref:${ds}">{\`select choice, count(*)::int votes from public.rows group by 1 order by 1\`}</Query>`
+  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice, who) values ($choice, $who)\`}</Mutation>`
   + '</Helmet>'
   + '<div data-design="tw" className="p-10">'
   + '<h1 id="h">Lunch</h1>'
@@ -55,7 +56,7 @@ const poll = (ds) =>
 
 /** A second, READ-ONLY document over the same dataset — the owner's dashboard. */
 const dashboard = (ds) =>
-  `<Helmet><Query name="all">{\`select count(*)::int n from ref_${ds}\`}</Query></Helmet>`
+  `<Helmet><Query name="all" source="ref:${ds}">{\`select count(*)::int n from public.rows\`}</Query></Helmet>`
   + '<div data-design="tw" className="p-10"><h1>Total</h1>'
   + '<p>rows: <Number data="$all" col="n" agg="sum" /></p></div>';
 

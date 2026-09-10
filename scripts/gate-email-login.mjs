@@ -15,6 +15,7 @@
 
  *     node scripts/gate-email-login.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink } from './lib/mail-login.mjs';
 
@@ -101,7 +102,7 @@ const registration = await (await fetch(`${BASE}/oauth/register`, {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ client_name: 'Email login gate', redirect_uris: [redirectUri] }),
 })).json();
-check(/^mcp_/.test(registration.client_id ?? ''), 'the login gate dynamically registered its client');
+check(/^afbin_/.test(registration.client_id ?? ''), 'the login gate dynamically registered its client');
 const consentQuery = new URLSearchParams({
   client_id: registration.client_id,
   response_type: 'code',

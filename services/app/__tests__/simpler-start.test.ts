@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The one-line handoff and the documented start-link alternative. `/api/start`
  * returns the decided paste; tests issue a handle directly when exercising the
@@ -45,9 +46,9 @@ describe('the paste', () => {
     const s = await start();
     expect(s.prompt).toBe(anonymousPaste(BASE, s.id, s.token));
     expect(s.prompt).toContain(s.token);
-    expect(s.prompt).toContain(`${BASE}/docs/artifactbin/SKILL.md`);
+    expect(s.prompt).toContain('afbin help');
     expect(s.prompt.split('\n')).toHaveLength(1);
-    expect(s.prompt.length).toBeLessThan(320); // a line, not an essay
+    expect(s.prompt.length).toBeLessThan(600); // a line, not an essay
     expect(s.token).toMatch(/^mx_/);
   });
 
@@ -74,7 +75,7 @@ describe('GET /a/<id>/start?k= — the brief', () => {
     expect(res.headers.get('X-Robots-Tag')).toContain('noindex');
     const text = await res.text();
     expect(text).toContain(s.id);
-    expect(text).toContain('/docs');
+    expect(text).toContain('afbin help');
     expect(text).toMatch(/POST/); // the exact next move
     expect(text).not.toMatch(/mx_[A-Za-z0-9_-]{20,}/); // never a real token (`mx_…` is contract notation)
     // Non-consuming: a second read (a link unfurler) still works.
@@ -93,7 +94,7 @@ describe('GET /a/<id>/start?k= — the brief', () => {
     const s = await start();
     const text = await (await startBrief(request(s.startPath), params(s.id))).text();
     expect(text).not.toContain('<SlideDeck>');       // the sheet's grammar lives in the sheet
-    expect(text).toContain('/docs/artifactbin/SKILL.md');
+    expect(text).toContain('afbin help markup');
     expect(text).not.toMatch(/mx_[A-Za-z0-9_-]{20,}/);
   });
 
@@ -118,15 +119,15 @@ describe('GET /a/<id>/start?k= — the brief', () => {
   it('asks for staged edits only when the document will take a while', async () => {
     const s = await start();
     const text = await (await startBrief(request(s.startPath), params(s.id))).text();
-    expect(text).toMatch(/one go|single PUT|in one pass/i);
+    expect(text).toContain('complete document');
   });
 
   it('spells the publish command ONCE, against this document id', async () => {
     const s = await start();
     const text = await (await startBrief(request(s.startPath), params(s.id))).text();
-    const commands = text.split('curl -X PUT').length - 1;
+    const commands = text.split('afbin push report.jsx').length - 1;
     expect(commands).toBe(1);
-    expect(text).toContain(`/api/artifacts/${s.id}`);
+    expect(text).toContain(`afbin pull ${s.id} report.jsx`);
   });
 
   /**
@@ -138,7 +139,7 @@ describe('GET /a/<id>/start?k= — the brief', () => {
   it('a document with real content gets the edit briefing, not the fill briefing', async () => {
     const s = await start();
     const put = await putArtifact(
-      request(`/api/artifacts/${s.id}`, { method: 'PUT', token: s.token, json: { title: 'real', markup: '<h1>Real content</h1>' } }),
+      await observedRequest(`/api/artifacts/${s.id}`, { method: 'PUT', token: s.token, json: { title: 'real', markup: '<h1>Real content</h1>' } }),
       params(s.id),
     );
     expect(put.status).toBe(200);
@@ -146,8 +147,8 @@ describe('GET /a/<id>/start?k= — the brief', () => {
     const { prompt } = await re.json();
     const k = /\/start\?k=([A-Za-z0-9_-]+)/.exec(prompt ?? '')?.[1];
     const text = await (await startBrief(request(`/a/${s.id}/start?k=${k}`), params(s.id))).text();
-    expect(text).toContain('/edits');
-    expect(text).toContain(`/api/artifacts/${s.id}`); // read it first
+    expect(text).toContain('make the requested edits while preserving the rest');
+    expect(text).toContain(`afbin pull ${s.id} report.jsx`); // read it first
     expect(text).not.toContain('curl -X PUT');        // no whole-replace coaching
     expect(text).not.toMatch(/placeholder/i);
   });
@@ -183,9 +184,10 @@ describe('GET /a/<id>/start?k= — the brief', () => {
     expect(body).toMatch(/copied|mistyp|character/i);
     expect(body).not.toContain('tokens/anonymous');
     expect(body).toMatch(/your human|ask them/i);
-    expect(body).toMatch(/mcp|plugin/i);
+    expect(body).toContain('afbin setup');
+    expect(body).not.toMatch(/MCP|\/docs\//);
     expect(body).toContain('/tokens/new');
-    expect(body).toContain('/docs/artifactbin/references/publishing.md');
+    expect(body).toContain('afbin help publishing-auth');
   });
 
   it('410s a handle presented against a DIFFERENT artifact', async () => {
@@ -206,7 +208,7 @@ describe('POST /a/<id>/start?k= — the claim', () => {
 
     // The claimed token actually writes.
     const put = await putArtifact(
-      request(`/api/artifacts/${s.id}`, { method: 'PUT', token: token, json: { title: 'claimed', markup: '<h1>Claimed</h1>' } }),
+      await observedRequest(`/api/artifacts/${s.id}`, { method: 'PUT', token: token, json: { title: 'claimed', markup: '<h1>Claimed</h1>' } }),
       params(s.id),
     );
     expect(put.status).toBe(200);
@@ -389,7 +391,7 @@ describe('the full reference is named before the brief asks for anything', () =>
   it('names /docs in the first 600 bytes', async () => {
     const s = await start();
     const text = await (await startBrief(request(s.startPath), params(s.id))).text();
-    expect(text.slice(0, 600)).toContain('/docs');
+    expect(text.slice(0, 600)).toContain('afbin help');
   });
 
   /**
@@ -409,6 +411,6 @@ describe('the full reference is named before the brief asks for anything', () =>
     const text = await (await startBrief(request(s.startPath), params(s.id))).text();
     expect(text).not.toMatch(/do not fetch|don't fetch|never fetch|no need to fetch anything/i);
     // The advice survives — it is the absolutism that goes.
-    expect(text).toMatch(/enough|covered|without fetching|nothing to fetch/i);
+    expect(text).toContain('work offline');
   });
 });

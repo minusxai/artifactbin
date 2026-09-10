@@ -14,14 +14,13 @@
  * file joins the set by existing.
  */
 import { describe, expect, it } from 'vitest';
-import { buildMcpInstructions, buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
+import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
 import { startBrief } from '@/lib/start-links';
 
 const BASE = 'https://example.test';
 
 describe.each([
   ...renderTree(skillTree(), BASE).map(({ file, text }) => [`skills/${file.path}`, text] as [string, string]),
-  ['the MCP instructions', buildMcpInstructions(BASE)],
   ['the brief', buildQuickSheet(BASE)],
   ['the start brief (fill)', startBrief(BASE, 'Ab3xK9', 'secret', 'fill')],
   ['the start brief (edit)', startBrief(BASE, 'Ab3xK9', 'secret', 'edit')],
@@ -34,7 +33,7 @@ describe.each([
 describe('the publishing skill', () => {
   it('still teaches the one public address, and the binding that replaces the raw URL', () => {
     const corpus = renderTree(skillTree(), BASE).map((x) => x.text).join('\n');
-    expect(corpus).toContain('https://example.test/a/<id>');
+    expect(corpus).toContain('Share its returned URL');
     expect(corpus).toContain('ref:');
   });
 });

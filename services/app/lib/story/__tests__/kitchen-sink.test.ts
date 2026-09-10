@@ -38,7 +38,7 @@ describe('kitchen-sink doc', () => {
       expect(SRC).toMatch(new RegExp(`<${embed}[\\s/>]`));
     }
     expect(SRC).toContain('value="$region"');
-    expect(SRC).toContain('ref_ksdataset01');
+    expect(SRC).toContain('ref:ksdataset01');
     expect(SRC).toContain('ref:ksrecipe01');
     expect(SRC).toContain('ref:ksimage01');
   });

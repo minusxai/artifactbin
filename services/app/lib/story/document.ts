@@ -23,6 +23,7 @@
  * somehow carries `</script` is DROPPED — emitting it would let text escape the
  * script element, and mutating code silently is worse than omitting it.
  */
+import {agentDiscoveryHead,type AgentDiscovery} from '../agent-discovery';
 import { prepareStoryParts } from './prepare-runtime.server';
 import { loadStorySsr } from './ssr.server';
 import type { WebAssetBox } from '@/lib/story/asset-url';
@@ -89,7 +90,7 @@ export interface StoryDocumentInput {
    * `<link rel="help" href={docs} title="…">` and `<meta name="artifactbin:agent" content="To edit this artifact with an agent,
    * read {docs} — tokens at {tokens}">` in <head>, right after the platform's social tags. Null/absent ⇒ nothing.
    */
-  help?: { docs: string; tokens: string } | null;
+  help?: AgentDiscovery | null;
   /**
    * The document's own query endpoint (lib/story-runtime/contract
    * StoryIslandData.queryUrl) — set by the serving route; absent for renders
@@ -524,8 +525,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
         + '<meta name="twitter:card" content="summary_large_image">'
       : '') +
     (help
-      ? `<link rel="help" href="${escapeHtml(help.docs)}" title="Agents: read this first to edit any artifact here">`
-        + `<meta name="artifactbin:agent" content="To edit this artifact with an agent, read ${escapeHtml(help.docs)} — tokens at ${escapeHtml(help.tokens)}">`
+      ? agentDiscoveryHead(help)
       : '') +
     // First script in the document: the author's runs at the end of <body>,
     // and anything that could hand the URL bar away must already be closed.

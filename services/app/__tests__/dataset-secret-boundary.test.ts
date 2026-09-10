@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 import { expect, it, vi } from 'vitest';
 vi.mock('@/lib/datasets/postgres', () => ({
   discoverPostgres: vi.fn(async () => [{ schema: 'sales', name: 'orders', columns: [{name:'id',type:'number'},{name:'private_note',type:'string'}] }]),
@@ -43,9 +44,9 @@ it('gives dataset editors exposure control but rejects credential redirection an
   const friend = await actor('editor'); const db = await harness.db();
   await db.query("INSERT INTO artifact_shares(artifact_id,email,role) VALUES($1,$2,'editor')",[id,friend.user.email]);
   const expanded = {...dataset,tables:[{...dataset.tables[0],columns:['id','private_note']}]};
-  const edited = await replaceArtifact(request(`/api/artifacts/${id}`,{method:'PUT',token:friend.token.token,json:{dataset:expanded,expectedVersion:1}}),ctx(id));
+  const edited = await replaceArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:friend.token.token,json:{dataset:expanded,expectedVersion:1}}),ctx(id));
   expect(edited.status,await edited.clone().text()).toBe(200);
-  const redirect = await replaceArtifact(request(`/api/artifacts/${id}`,{method:'PUT',token:friend.token.token,json:{dataset:{...expanded,connection:{...dataset.connection,host:'attacker.example.com'}},expectedVersion:2}}),ctx(id));
+  const redirect = await replaceArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:friend.token.token,json:{dataset:{...expanded,connection:{...dataset.connection,host:'attacker.example.com'}},expectedVersion:2}}),ctx(id));
   expect(redirect.status).toBe(403);
   const forged = await createArtifact(request('/api/artifacts',{method:'POST',token:friend.token.token,json:{dataset:expanded,visibility:'private'}}));
   expect(forged.status).toBe(403);
@@ -65,9 +66,9 @@ it('never returns connection, notebook, or secret material through public datase
 });
 it('returns a graceful refusal when a retained version has corrupt credentials',async()=>{
  const {owner,dataset}=await fixture();const published=await createArtifact(request('/api/artifacts',{method:'POST',token:owner.token.token,json:{dataset,visibility:'private'}}));expect(published.status).toBe(201);const {id}=await published.json();
- const edited=await replaceArtifact(request(`/api/artifacts/${id}`,{method:'PUT',token:owner.token.token,json:{dataset:{...dataset,refreshSeconds:1},expectedVersion:1}}),ctx(id));expect(edited.status).toBe(200);
+ const edited=await replaceArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:owner.token.token,json:{dataset:{...dataset,refreshSeconds:1},expectedVersion:1}}),ctx(id));expect(edited.status).toBe(200);
  const db=await harness.db();await db.query('UPDATE dataset_secrets SET ciphertext=$2 WHERE dataset_id=$1',[id,'corrupt']);
- const response=await revertArtifact(request(`/api/artifacts/${id}/revert`,{method:'POST',token:owner.token.token,json:{version:1}}),ctx(id));expect(response.status).toBe(503);expect(await response.json()).toMatchObject({error:'dataset_error'});
+ const response=await revertArtifact(await observedRequest(`/api/artifacts/${id}/revert`,{method:'POST',token:owner.token.token,json:{version:1}}),ctx(id));expect(response.status).toBe(503);expect(await response.json()).toMatchObject({error:'dataset_error'});
 });
 
 it('keeps the editable definition available to editors while public readers receive only the exposed catalog', async () => {

@@ -24,7 +24,6 @@ function usageOf(u: Record<string, unknown> | undefined): TokenUsage | null {
 
 export const claudeCode: HarnessAdapter = {
   harness: 'claude-code',
-  supportsMcp: true,
 
   /** `stream-json` interleaves per-token `stream_event` deltas; `reduce` reads only whole `assistant` and `result` lines. */
   keepLine(line: string): boolean {
@@ -37,26 +36,7 @@ export const claudeCode: HarnessAdapter = {
 
   invocation(ctx: HarnessRunContext) {
     const env: Record<string, string> = { CLAUDE_CONFIG_DIR: ctx.homeDir, ANTHROPIC_API_KEY: ctx.apiKey };
-    // `--strict-mcp-config` so ONLY this server is loaded: bare mode already skips discovery,
-    // and an eval must not inherit whatever MCP servers the machine happens to have configured.
-    const mcpArgs = ctx.mcp
-      ? ['--mcp-config', JSON.stringify({ mcpServers: { [ctx.mcp.name]: { type: 'http', url: ctx.mcp.url, headers: { Authorization: `Bearer ${ctx.mcp.token}` } } } }), '--strict-mcp-config']
-      : [];
-    // `--bare` is GONE, and its absence is the same in every mode — which is the point.
-    //
-    // It skips CLAUDE.md, hooks, plugins and MCP discovery, and it is also the reason a plugin
-    // cannot load: with `--bare`, "list your skills" answers with the TOOLS; without it, the
-    // three artifactbin skills are there. So plugin mode had to drop it — and making the flag
-    // depend on the mode silently made the modes incomparable. Measured on a one-word prompt:
-    // `--bare` is 1,735 tokens of base context, without it 20,189, and adding the plugin on top
-    // is 20,206. The PLUGIN costs 17 tokens. The FLAG costs 18,454, on every turn.
-    //
-    // A whole production matrix misread that difference as "installed skill is 3.4× fetched skill"
-    // when the plugin was very nearly free and the harness configuration was the entire gap.
-    // Holding it constant is also the more honest baseline: nobody runs Claude Code `--bare`,
-    // so the cheap column was measuring a setting no user has. Isolation now comes from what
-    // does not vary with mode — a per-run `CLAUDE_CONFIG_DIR`, `--strict-mcp-config`, and a cwd
-    // outside any repository.
+    // Empty strict config prevents inheriting unrelated servers from the user's machine.
     const pluginArgs = ctx.plugin ? ['--plugin-dir', ctx.plugin.pluginDir] : [];
     return {
       argv: [
@@ -66,7 +46,7 @@ export const claudeCode: HarnessAdapter = {
         '--max-turns', String(ctx.maxTurns),
         '--max-budget-usd', String(ctx.maxBudgetUsd),
         '--dangerously-skip-permissions',
-        ...mcpArgs,
+        '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
         ctx.prompt,
       ],
       env,

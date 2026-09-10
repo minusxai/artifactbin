@@ -1,3 +1,4 @@
+import type {ContentObjects} from '@/lib/story/prepared-objects';
 /**
  * URL → stored PDF content: the guarded fetcher composed with the SAME
  * storePdfContent the upload door runs, exactly as lib/web-ingest/image.ts
@@ -16,7 +17,7 @@ import { WebIngestError } from './guard';
  * url and the reason: the caller is a publish door, and an agent can act on
  * "404" or "not a PDF" where it cannot act on silence.
  */
-export async function ingestPdfFromUrl(url: string): Promise<StoredContent | Response> {
+export async function ingestPdfFromUrl(url: string, objects?: ContentObjects): Promise<StoredContent | Response> {
   let bytes: Buffer;
   let finalUrl: string;
   try {
@@ -29,7 +30,7 @@ export async function ingestPdfFromUrl(url: string): Promise<StoredContent | Res
     }
     throw error;
   }
-  const stored = await storePdfContent(bytes);
+  const stored = await storePdfContent(bytes, objects);
   if (stored instanceof Response) {
     // The store's own refusal, re-labelled as what it is from out here: the
     // URL is what the caller can act on, and `invalid_pdf` on a fetch reads as

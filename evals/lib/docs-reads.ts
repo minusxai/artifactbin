@@ -69,7 +69,7 @@ export function countDocsReads(calls: ToolInvocation[]): number {
     const t = invocationText(call.input);
     if (!t) continue;
     if (IS_WRITE.test(t)) continue;
-    const fetchesDocs = DOCS_URL.test(t) || SKILL_FILE.test(t) || SKILLS_DIR_SEARCH.test(t) || SKILL_TOOL.test(call.name);
+    const fetchesDocs = /\bafbin\s+(?:help\b|[^\n;&|]*(?:--help|(?:^|\s)-h)(?:\s|$))/.test(t) || DOCS_URL.test(t) || SKILL_FILE.test(t) || SKILLS_DIR_SEARCH.test(t) || SKILL_TOOL.test(call.name);
     const readsSaved = [...saved].some((f) => new RegExp(`(?:^|[\\s/'"=])${f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[\\s'";|&)])`).test(t));
     if (fetchesDocs) {
       for (const m of t.matchAll(SAVE_TARGET)) saved.add(basename(m[2]));

@@ -14,12 +14,13 @@
  * So this gate clicks the button like a person does, and requires the code to
  * arrive at a real listener on the client side.
  *
- * Connecting the MCP now requires an ACCOUNT, so the gate also logs in the way
+ * Connecting the CLI now requires an ACCOUNT, so the gate also logs in the way
  * a user does: email → one-time code, read from the development mail outbox:
  *
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
 
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { createServer } from 'http';
 import { createHash, randomBytes } from 'crypto';
 import { chromium } from 'playwright';
@@ -45,7 +46,7 @@ const registration = await (await fetch(`${BASE}/oauth/register`, {
   body: JSON.stringify({ client_name: 'OAuth browser gate', redirect_uris: [REDIRECT] }),
 })).json();
 const clientId = registration.client_id;
-check(/^mcp_/.test(clientId ?? ''), 'the browser gate dynamically registered its client');
+check(/^afbin_/.test(clientId ?? ''), 'the browser gate dynamically registered its client');
 const authorizeUrl = `${BASE}/oauth/authorize?${new URLSearchParams({
   response_type: 'code', client_id: clientId, redirect_uri: REDIRECT,
   code_challenge: challenge, code_challenge_method: 'S256', state: 'gate-state',
@@ -116,12 +117,9 @@ check(cspViolations.length === 0, `no CSP violation blocks the submission${cspVi
     })).json();
     check(/^mx_/.test(tok2.access_token ?? ''), 'the account-bound grant exchanges for a token');
 
-    const mcp = await fetch(`${BASE}/mcp`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${tok2.access_token}` },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-    });
-    check(mcp.status === 200 && (await mcp.text()).includes('create_artifact'), 'and that token opens a real MCP session');
+    const artifacts = await fetch(`${BASE}/api/artifacts`, {headers:{Authorization:`Bearer ${tok2.access_token}`}});
+    check(artifacts.status===200 && Array.isArray((await artifacts.json()).artifacts),'the account grant reads the real HTTP API');
+
   }
 }
 

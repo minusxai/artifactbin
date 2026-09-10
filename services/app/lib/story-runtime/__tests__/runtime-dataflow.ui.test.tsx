@@ -22,9 +22,9 @@ const HELMET =
   '<Value name="region" type="string" />' +
   '<Value name="min_rev" type="number" default={100} />' +
   '<Value name="flag" type="boolean" default={false} />' +
-  '<Query name="sales">{`select region, sum(revenue) revenue from ref_abc123 where $region is null or region = $region group by 1`}</Query>' +
-  '<Query name="regions">{`select distinct region, region || \'!\' label from ref_abc123`}</Query>' +
-  '<Query name="broken">{`select nope from ref_abc123`}</Query>' +
+  '<Query name="sales" source="ref:abc123">{`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1`}</Query>' +
+  '<Query name="regions" source="ref:abc123">{`select distinct region, region || \'!\' label from public.rows`}</Query>' +
+  '<Query name="broken" source="ref:abc123">{`select nope from public.rows`}</Query>' +
   '</Helmet>';
 
 const STATE: DataflowState = {

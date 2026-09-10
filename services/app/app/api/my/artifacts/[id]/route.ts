@@ -8,9 +8,9 @@
  * authenticated, so a browser is by definition the caller and Origin is
  * present and unforgeable.
  */
-import { artifactToWireWithAnnotations, parseAccessValue, parseParentField, replaceArtifactFromRequest } from '@/lib/artifact-wire';
-import { getArtifactFor, setMetadataFor, writerFor, type MetadataPatch } from '@/lib/artifacts';
-import { isParentRefusal, parentOf, resolveParent } from '@/lib/folders';
+import { artifactToWireWithAnnotations, replaceArtifactFromRequest } from '@/lib/artifact-wire';
+import { getArtifactFor } from '@/lib/artifacts';
+import {updateMetadataFromBody} from '@/lib/metadata-wire';
 import { browserActor } from '@/lib/auth';
 import { trashArtifactFor } from '@/lib/trash';
 import { actorForArtifacts } from '@/lib/viewer';
@@ -45,62 +45,14 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   return replaceArtifactFromRequest(request, scoped, id, baseUrl(request));
 }
 
-/**
- * PATCH /api/my/artifacts/:id — metadata-only changes: `{ title }`,
- * `{ parent_id }` and `{ access }`. Deliberately NOT the PUT: renaming a row,
- * filing it under a folder and opening a dataset for writes should none of them
- * require resending content or bump the version — they are policy about the
- * artifact, not an edit of it.
- *
- * `title` is here because a FOLDER has nothing else: it has no content, so a
- * rename is the only thing a person ever changes about one, and sending it
- * through the replace door would archive a version and write an edit-log row
- * for a string. It is the same act on a document, where the editor's Title
- * field has always meant exactly this.
- *
- * THE ROW IS RESOLVED FIRST, and that ordering is the point. `parent_id` is
- * checked against the caller's own folders, which is a DATABASE READ — so a
- * row this caller cannot reach must answer the uniform 404 before any of it
- * runs, or "your parent is invalid" tells a stranger the document exists. The
- * shape check (a string or null) may run early; the lookup may not.
- */
+/** Browser metadata shares the same state condition and validation as the CLI. */
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const scoped = await scopeFor(request);
   if (scoped instanceof Response) return scoped;
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
-  // Shape only: the retired `folder` field named, and `parent_id` typed.
-  const parent = parseParentField(body);
-  if (parent instanceof Response) return parent;
   const { id } = await ctx.params;
-  const hasAccess = body.access !== undefined && body.access !== null;
-  // Shape only, like `parent_id` above: a title is a string, and an empty one
-  // is the untitled row every listing already knows how to draw. The TRIM is
-  // the metadata path's (lib/artifacts setMetadataFor), so the replace door
-  // writing the same field cannot disagree about what the name is.
-  if (body.title !== undefined && typeof body.title !== 'string') return json({ error: 'invalid_title' }, 400);
-  const title = typeof body.title === 'string' ? body.title : undefined;
-  if (!hasAccess && parent === undefined && title === undefined) return json({ error: 'nothing_to_change' }, 400);
-
-  const current = await getArtifactFor(scoped, id);
-  if (!current) return json({ error: 'not_found' }, 404);
-
-  const patch: MetadataPatch = { ...(title !== undefined ? { title } : {}) };
-  if (hasAccess) {
-    const access = parseAccessValue(body.access, current.format);
-    if (access instanceof Response) return access;
-    if (access) patch.access = access;
-  }
-  if (parent !== undefined) {
-    const placement = await resolveParent(writerFor(current), parent, { id: current.id, format: current.format });
-    if (isParentRefusal(placement)) return json(placement, 400);
-    patch.ancestor_ids = placement.ancestor_ids;
-  }
-  // ONE metadata write, shared with the replace door's folder branch — which is
-  // what keeps `PUT {title}` on a folder and this rename the same act.
-  const row = await setMetadataFor(scoped, id, patch);
-  if (!row) return json({ error: 'not_found' }, 404);
-  return json({ id: row.id, title: row.title, parent_id: parentOf(row), ancestor_ids: row.ancestor_ids, ...(row.format === 'dataset' ? { access: row.access } : {}) });
+  return updateMetadataFromBody(scoped,id,body,baseUrl(request));
 }
 
 /**

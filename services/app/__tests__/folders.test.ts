@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * P1 (seeded RED by the orchestrator) — folders are artifacts: the doors.
  * Over the real routes in-process. Plan: ~/projects/artifactbin-folders.md.
@@ -30,7 +31,7 @@ async function owner(name = 'owner') {
 const create = async (token: string, body: Record<string, unknown>) => j(await createRoute(request('/api/artifacts', { method: 'POST', json: body, token })));
 const readBack = async (token: string, id: string) => j(await getRoute(request(`/api/artifacts/${id}`, { token }), params(id)));
 const move = async (cookie: string, id: string, parent_id: string | null) =>
-  j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, cookie, origin: 'same' }), params(id)));
+  j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { parent_id }, cookie, origin: 'same' }), params(id)));
 
 describe('creating a folder', () => {
   it('is an artifact of format folder, at root, with NO content of any kind', async () => {
@@ -219,7 +220,7 @@ describe('a folder is not a document', () => {
     const o = await owner();
     const folder = (await create(o.token, { format: 'folder', title: 'Before' })).body;
     const refusedFolder = await j(await editRoute(
-      request(`/api/artifacts/${folder.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: folder.edit_id, title: 'After' } }),
+      request(`/api/artifacts/${folder.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: folder.edit_id, source: '<p>After</p>' } }),
       params(folder.id),
     ));
     expect(refusedFolder.status).toBe(400);
@@ -227,7 +228,7 @@ describe('a folder is not a document', () => {
     expect((await getArtifactById(folder.id))!.title, 'the title is unchanged').toBe('Before');
     const ds = (await create(o.token, { dataset: [{ a: 1 }] })).body;
     const refused = await j(await editRoute(
-      request(`/api/artifacts/${ds.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: ds.edit_id, title: 'nope' } }),
+      request(`/api/artifacts/${ds.id}/edits`, { method: 'POST', token: o.token, json: { edit_id: ds.edit_id, source: '<p>No</p>' } }),
       params(ds.id),
     ));
     expect(refused.status).toBe(400);
@@ -273,9 +274,9 @@ describe("a folder's PUT is a metadata edit", () => {
     return { versions: v.rows[0].n, edits: e.rows[0].n };
   };
   const putBearer = async (token: string, id: string, body: Record<string, unknown>) =>
-    j(await putRoute(request(`/api/artifacts/${id}`, { method: 'PUT', json: body, token }), params(id)));
+    j(await putRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', json: body, token }), params(id)));
   const putSession = async (cookie: string, id: string, body: Record<string, unknown>) =>
-    j(await putMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PUT', json: body, cookie, origin: 'same' }), params(id)));
+    j(await putMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PUT', json: body, cookie, origin: 'same' }), params(id)));
 
   it('renames through PUT with no version, no archived copy and no edit-log row — at either door', async () => {
     const o = await owner();
@@ -364,7 +365,7 @@ describe("a folder's PUT is a metadata edit", () => {
       return keep;
     };
     const doors = [
-      ['PATCH', async (id: string) => j(await patchMineRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { title: '  Quarterly  ' }, cookie: o.cookie, origin: 'same' }), params(id)))],
+      ['PATCH', async (id: string) => j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', json: { title: '  Quarterly  ' }, cookie: o.cookie, origin: 'same' }), params(id)))],
       ['PUT', async (id: string) => putBearer(o.token, id, { title: '  Quarterly  ' })],
     ] as const;
     for (const [door, run] of doors) {

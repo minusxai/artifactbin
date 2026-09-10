@@ -1,4 +1,5 @@
 /** Route boundaries, not timing benchmarks: one browser document across app and artifact navigation. */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';

@@ -11,7 +11,7 @@
  * the vitest `ui` project includes.)
  */
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 
 vi.mock('@/auth', () => ({ auth: async () => ({ user: { id: 'usr_docs', email: 'v@minusx.ai' } }) }));
 
@@ -44,13 +44,12 @@ describe('/docs-human', () => {
     }
   });
 
-  it('tells you how to install the plugin into a coding agent', async () => {
+  it('teaches CLI installation, browser setup and local skills', () => {
     render(DocsHuman());
-    // Getting-started leads with the path that needs no setup; the
-    // nine-surface picker and its install commands are one fold deeper.
-    fireEvent.click(screen.getByLabelText('Install for my agent'));
-    expect(text()).toContain('/plugin marketplace add minusxai/artifactbin-plugins');
-    expect(text()).toContain('/plugin install artifactbin@artifactbin');
+    expect(screen.getByLabelText('Copy the CLI install command')).toBeTruthy();
+    expect(screen.getByLabelText('Copy the setup command')).toBeTruthy();
+    expect(text()).toContain('afbin setup');
+    expect(text()).not.toContain('/plugin');
   });
 
   it('uses no em dashes', async () => {

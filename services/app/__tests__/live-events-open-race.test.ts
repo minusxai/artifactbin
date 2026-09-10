@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The opening frame must be a read taken AFTER the subscription exists.
  *
@@ -89,7 +90,7 @@ describe('a write that commits while the stream is opening', () => {
     let newEditId = '';
     duringSetup = async () => {
       const put = await putArtifact(
-        request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p id="status">after</p>' } }),
+        await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p id="status">after</p>' } }),
         params({ id: doc.id }),
       );
       expect(put.status).toBe(200);

@@ -40,6 +40,7 @@ export function DatasetEditorPage() {
   const [defaultSchema, setDefaultSchema] = useState('');
   const [refreshSeconds, setRefreshSeconds] = useState(0);
   const [version, setVersion] = useState<number>();
+  const [state, setState] = useState<string>();
   const [loading, setLoading] = useState(Boolean(id));
   const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState('');
@@ -78,11 +79,11 @@ export function DatasetEditorPage() {
   useEffect(() => {
     if (!id) return;
     let alive = true;
-    void request<{ title: string; version: number; meta: { catalog?: DatasetCatalog }; source?: string }>(`/api/my/artifacts/${encodeURIComponent(id)}`).then(data => {
+    void request<{ title: string; version: number; state: string; meta: { catalog?: DatasetCatalog }; source?: string }>(`/api/my/artifacts/${encodeURIComponent(id)}`).then(data => {
       if (!alive) return;
       const catalog = data.meta.catalog;
       if (!catalog) throw new Error('This artifact does not have a dataset catalog.');
-      setTitle(data.title ?? ''); setVersion(data.version);
+      setTitle(data.title ?? ''); setVersion(data.version); setState(data.state);
       loadDefinition({ ...catalog, tables: catalog.tables.map(({ objectKey: _, ...table }) => ({ ...table, columns: table.columns.map(c => c.name) })) }, catalog);
     }).catch(err => { if (alive) { setError(err.message); setLoadFailed(true); } }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
@@ -245,7 +246,7 @@ export function DatasetEditorPage() {
       <div className="flex items-center gap-4"><Button aria-label="Save dataset" disabled={Boolean(busy) || sourceText !== null} onClick={() => void run('save', async () => {
         const configured = kind === 'postgres' ? await ensureConnection() : connection;
         const dataset = serializeDatasetDefinition(buildCatalog(configured));
-        const data = await request<{ id: string }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : '/api/my/artifacts', { dataset, title, ...(id ? { expectedVersion: version } : { visibility: session?.user ? 'private' : 'unlisted' }) }, id ? 'PUT' : 'POST');
+        const data = await request<{ id: string }>(id ? `/api/my/artifacts/${encodeURIComponent(id)}` : '/api/my/artifacts', { dataset, title, ...(id ? { expectedVersion: version, expectedState: state } : { visibility: session?.user ? 'private' : 'unlisted' }) }, id ? 'PUT' : 'POST');
         router.push(`/a/${data.id}`);
       })}>{busy === 'save' ? 'Saving…' : id ? 'Save changes' : 'Create dataset'}</Button>{busy && <span role="status" className="text-sm text-muted">Working…</span>}</div>
     </>}

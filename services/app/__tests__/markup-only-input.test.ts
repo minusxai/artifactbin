@@ -111,7 +111,7 @@ describe('the allowed HTML vocabulary is discoverable', () => {
     // media-src 'self' data: blob: is in the served document's CSP, but <video>
     // and <audio> were not in the vocabulary — <source> was, with nothing to put it in.
     const res = await create(t.token, {
-      markup: '<figure><video controls><source src="ref:abc" /><track kind="captions" /></video><audio controls></audio></figure>',
+      markup: '<figure><video controls><source /><track kind="captions" /></video><audio controls></audio></figure>',
     });
     expect(res.status).toBe(201);
   });

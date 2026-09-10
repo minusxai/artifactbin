@@ -23,6 +23,7 @@
  *
  *   usage: node scripts/gate-pdf.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { samplePdf } from './lib/sample-pdf.mjs';
 import { startDocument } from './lib/start-doc.mjs';

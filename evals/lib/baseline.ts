@@ -17,6 +17,7 @@
  * the estimate — base context is only ROUGHLY constant across a run — from
  * being dressed up as a measurement.
  */
+import {materializeCli} from './cli-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { HarnessAdapter, HarnessRunContext } from './contracts';
@@ -76,7 +77,7 @@ export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> 
   await opts.adapter.prepare(ctx);
   const spawned = await runInvocation({ ...opts.adapter.invocation(ctx), redact: [opts.apiKey] }, {
     cwd,
-    baseEnv: { ...process.env },
+    baseEnv: { ...process.env, PATH:[materializeCli(path.join(ctx.homeDir,'bin')),process.env.PATH??''].join(path.delimiter) },
     timeoutMs: opts.timeoutMs,
     stdoutPath: path.join(opts.dir, 'transcript.jsonl'),
     stderrPath: path.join(opts.dir, 'stderr.log'),

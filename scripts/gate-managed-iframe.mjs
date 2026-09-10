@@ -1,4 +1,5 @@
 /** Actual publish/read/asset-host acceptance; deterministic CDN, no third-party dependency. */
+import {fixtureFetch as fetch, observeFixtureWrite} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {once} from 'node:events';
@@ -48,11 +49,12 @@ const tls=httpsServer({key:readFileSync(join(scratch,'key.pem')),cert:readFileSy
   const upstream=httpRequest(backend+req.url,{method:req.method,headers:{...req.headers,'x-forwarded-host':req.headers.host,'x-forwarded-proto':'https'}},answer=>{res.writeHead(answer.statusCode,answer.headers);answer.pipe(res);});
   upstream.on('error',()=>{res.writeHead(502);res.end();});req.pipe(upstream);
 });
-const mainFetch=(url,init={})=>new Promise((resolve,reject)=>{
+const rawMainFetch=(url,init={})=>new Promise((resolve,reject)=>{
   const req=httpRequest(url,{method:init.method??'GET',headers:{...init.headers,host:new URL(base).host}},res=>{
     const chunks=[];res.on('data',chunk=>chunks.push(chunk));res.on('error',reject);res.on('end',()=>resolve(new Response([204,304].includes(res.statusCode)?null:Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));
   });req.on('error',reject);req.end(init.body);
 });
+const mainFetch=(url,init)=>observeFixtureWrite(rawMainFetch,url,init);
 let server,browser;
 try {
   await new Promise(resolve=>fixture.listen(cdnPort,'127.0.0.1',resolve));
@@ -75,7 +77,7 @@ try {
   const refImage=new Image();const publicRef=imageReady(refImage);refImage.src='ref:${refId}';document.body.append(refImage);
   const script=document.createElement('script');const dynamicScript=new Promise((resolve,reject)=>{script.onload=resolve;script.onerror=reject;});script.setAttribute('src','${cdn}/dynamic.js');document.body.append(script);
   Promise.all([fetch('${cdn}/data.json').then(r=>r.json()),imageReady(document.querySelector('img')),dynamicImage,dynamicScript,publicRef]).then(([data])=>document.getElementById('result').textContent=window.bundleOrder+':'+data.answer+':'+window.dynamicLoaded);`;
-  const markup='<Helmet><Value name="count" type="number" default={0}/><Value name="item" type="string" default="changed"/><Mutation name="rename" expectedAffected={1}>{`update ref_'+datasetId+' set item=$item where id=1`}</Mutation></Helmet><p>Managed parent</p><Iframe title="Managed demo" height={200}><button id="increment">Increment</button><button id="write">Write dataset</button><p id="mutation">waiting</p><p id="result">waiting</p><canvas width="30" height="30"/><img src="'+cdn+'/image.png"/><script src="'+cdn+'/one.js"/><script type="module" src="'+cdn+'/two.js"/><script>{`'+author+'`}</script></Iframe><Iframe title="Second" height={100}><p>Second isolated region</p></Iframe>';
+  const markup='<Helmet><Value name="count" type="number" default={0}/><Value name="item" type="string" default="changed"/><Mutation name="rename" source="ref:'+datasetId+'" expectedAffected={1}>{`update public.rows set item=$item where id=1`}</Mutation></Helmet><p>Managed parent</p><Iframe title="Managed demo" height={200}><button id="increment">Increment</button><button id="write">Write dataset</button><p id="mutation">waiting</p><p id="result">waiting</p><canvas width="30" height="30"/><img src="'+cdn+'/image.png"/><script src="'+cdn+'/one.js"/><script type="module" src="'+cdn+'/two.js"/><script>{`'+author+'`}</script></Iframe><Iframe title="Second" height={100}><p>Second isolated region</p></Iframe>';
   const hostile='<Iframe title="Navigation refusal" height={100}><script>{`location.href="'+controls+'/managed-denied"`}</script></Iframe>';
   const published=await mainFetch(`${backend}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({markup:markup+hostile,expectedVersion:1})});assert(published.ok,await published.text());
   browser=await engine.launch({headless:true,...(engineName==='chromium'?{args:['--host-resolver-rules=MAP artifactbin.test 127.0.0.1, MAP i.artifactbin.test 127.0.0.1, MAP assets.artifactbin.test 127.0.0.1','--proxy-bypass-list=*']}:{})});

@@ -27,8 +27,8 @@ const create = async (token: string, body: Record<string, unknown>) =>
 const ROWS = [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }];
 const DOC = (ds: string) =>
   '<Helmet><Value name="region" type="string" /><Value name="min" type="number" default={0} />' +
-  `<Query name="sales">{\`select region, sum(revenue) revenue from ref_${ds} where ($region is null or region = $region) and revenue >= $min group by 1 order by 1\`}</Query>` +
-  `<Query name="regions">{\`select distinct region from ref_${ds} order by 1\`}</Query>` +
+  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where ($region is null or region = $region) and revenue >= $min group by 1 order by 1\`}</Query>` +
+  `<Query name="regions" source="ref:${ds}">{\`select distinct region from public.rows order by 1\`}</Query>` +
   '</Helmet><div><select value="$region" options="$regions" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
 describe('POST /a/<id>/query (reader path)', () => {
@@ -168,7 +168,7 @@ describe('POST /api/query (owner path — a draft)', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { tables: Record<string, unknown>; errors: Record<string, string> };
     expect(body.tables.sales).toBeUndefined();
-    expect(body.errors.sales).toMatch(new RegExp(`ref_${foreign}`));
+    expect(body.errors.sales).toMatch(new RegExp(`ref:${foreign}`));
   });
 
   it('requires a credential and a markup body', async () => {

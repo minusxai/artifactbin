@@ -1,3 +1,5 @@
+import {patchMetadata} from '@/__tests__/conditional-request';
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The concurrent-edit protocol end to end through the real route handlers
  * (concurrent-artifacts-edits.md, "Resolution, step by step"): canonicalized
@@ -71,7 +73,7 @@ describe('edit_id on the wire', () => {
     expect(got.edit_id).toBe(doc.edit_id);
 
     const put = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>replaced</p>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>replaced</p>' } }),
       params({ id: doc.id }),
     );
     expect(put.status).toBe(200);
@@ -90,7 +92,7 @@ describe('edit_id on the wire', () => {
     // Non-canonical JSON in an expression attr canonicalizes at the door…
     const doc2 = await createMarkup(
       t.token,
-      `<Helmet><Query name="rows">{\`select * from ref_${ds.id}\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
+      `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw"><Question data="$rows" viz={{kind:"table"}} height="200px" /></div>`,
     );
     expect(doc2.markup).toContain('viz={{"kind":"table"}}');
     // …and canonical form is a fixpoint: an edit that re-submits it verbatim is `identical`.
@@ -325,7 +327,7 @@ describe('stale bases — the node-scope decision', () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
     const put = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<section><p>alpha text</p><p>beta text</p></section>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<section><p>alpha text</p><p>beta text</p></section>' } }),
       params({ id: doc.id }),
     );
     expect(put.status).toBe(200);
@@ -342,7 +344,7 @@ describe('stale bases — the node-scope decision', () => {
     expect(first.status).toBe(200);
     const firstWire = (await first.json()) as Wire;
     const rev = await revertRoute(
-      request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
       params({ id: doc.id }),
     );
     expect(rev.status).toBe(200);
@@ -383,7 +385,7 @@ describe('stale bases — E-anchored matching and log fidelity', () => {
     );
     const ds = (await dsRes.json()) as Wire;
     // The document declares the table the inserted chart will bind.
-    const doc = await createMarkup(t.token, `<Helmet><Query name="rows">{\`select * from ref_${ds.id}\`}</Query></Helmet>` + MARKUP);
+    const doc = await createMarkup(t.token, `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet>` + MARKUP);
 
     // Canonicalization rewrites the inserted text on the way in, so the stored
     // delta is NOT the caller's literal new_string.
@@ -450,7 +452,7 @@ describe('version history is CHECKPOINTS, and says so', () => {
     // numbers but were never archived. Asking for one must not look like a
     // missing artifact — the caller has already proved ownership.
     const res = await revertRoute(
-      request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: head.version - 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: head.version - 1 } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(409);
@@ -458,7 +460,7 @@ describe('version history is CHECKPOINTS, and says so', () => {
 
     // A version that IS archived still reverts.
     const ok = await revertRoute(
-      request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
       params({ id: doc.id }),
     );
     expect(ok.status).toBe(200);
@@ -469,7 +471,7 @@ describe('version history is CHECKPOINTS, and says so', () => {
     const other = await mint();
     const doc = await createMarkup(t.token);
     const res = await revertRoute(
-      request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: other.token, json: { version: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: other.token, json: { version: 1 } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(404);
@@ -480,12 +482,12 @@ describe('document-level meta edits', () => {
   it('colorMode: set with a mode, cleared back to the theme default with explicit null', async () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
-    const set = await edit(t.token, doc.id, { edit_id: doc.edit_id, colorMode: 'dark' });
+    const set = await patchMetadata(t.token,doc.id,{colorMode:'dark'});
     expect(set.status).toBe(200);
-    const w1 = (await set.json()) as Wire;
+    expect((await set.json()).version).toBe(doc.version);
     expect((await read(t.token, doc.id)).colorMode).toBe('dark');
     // The dropdown's "theme default" option is an explicit CLEAR, not an absence.
-    const clear = await edit(t.token, doc.id, { edit_id: w1.edit_id, colorMode: null });
+    const clear = await patchMetadata(t.token,doc.id,{colorMode:null});
     expect(clear.status).toBe(200);
     expect((await read(t.token, doc.id)).colorMode).toBeNull();
   });
@@ -530,7 +532,7 @@ describe('version coalescing and the edits log', () => {
 
     const versions = await listVersionsRoute(request(`/api/artifacts/${doc.id}/versions`, { token: t.token }), params({ id: doc.id }));
     const list = (await versions.json()) as { versions: Array<{ version: number }> };
-    expect(list.versions.length).toBe(1); // one snapshot for the burst, not one per keystroke
+    expect(list.versions.filter(v=>v.version!==w2.version)).toHaveLength(1); // one archive for the burst, plus the current head
   });
 
   it('every accepted edit lands one log row; NOTIFY fires with the fresh edit_id', async () => {

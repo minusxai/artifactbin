@@ -34,6 +34,7 @@
 import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
+import {readAnnotationPages} from '@/lib/annotation-pages';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
@@ -900,12 +901,11 @@ export default function AnnotationLayer({
 
   // Seed from the session's own read; the live stream replaces it wholesale.
   useEffect(() => {
-    let gone = false;
-    void fetch(`/api/my/artifacts/${id}/annotations`)
-      .then(async (res) => (res.ok ? ((await res.json()) as { annotations: AnnotationWire[] }).annotations : []))
+    let gone = false;const abort=new AbortController();
+    void readAnnotationPages(`/api/my/artifacts/${id}/annotations`,{signal:abort.signal})
       .then((list) => { if (!gone) setAnnotations(list); })
       .catch(() => {});
-    return () => { gone = true; };
+    return () => { gone = true;abort.abort(); };
   }, [id]);
   useEffect(() => {
     if (liveAnnotations) setAnnotations(liveAnnotations);
@@ -915,12 +915,11 @@ export default function AnnotationLayer({
   // one is clicked, so seeing history does not compete with open work.
   useEffect(() => {
     if (!railOpen) return;
-    let gone = false;
-    void fetch(`/api/my/artifacts/${id}/annotations?status=resolved`)
-      .then(async (res) => (res.ok ? ((await res.json()) as { annotations: AnnotationWire[] }).annotations : []))
+    let gone = false;const abort=new AbortController();
+    void readAnnotationPages(`/api/my/artifacts/${id}/annotations?status=resolved`,{signal:abort.signal})
       .then((list) => { if (!gone) setResolvedList(list); })
       .catch(() => {});
-    return () => { gone = true; };
+    return () => { gone = true;abort.abort(); };
   }, [id, railOpen, annotations]);
 
   /*

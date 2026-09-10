@@ -1,3 +1,4 @@
+import type {ContentObjects} from '@/lib/story/prepared-objects';
 /**
  * URL → stored image content: the guarded fetcher composed with the SAME
  * storeImageContent every upload path runs, so the size cap and the type
@@ -18,7 +19,7 @@ import { sniffImageType } from './sniff';
  * the url and the reason — the caller is a publish door, and an agent can act
  * on "404" where it cannot act on silence.
  */
-export async function ingestImageFromUrl(url: string): Promise<StoredContent | Response> {
+export async function ingestImageFromUrl(url: string, objects?: ContentObjects): Promise<StoredContent | Response> {
   let bytes: Buffer;
   let finalUrl: string;
   try {
@@ -38,7 +39,7 @@ export async function ingestImageFromUrl(url: string): Promise<StoredContent | R
       details: [`${url}: the response is not an image (png|jpeg|webp|gif|svg) — a dead link often serves an html error page`],
     }, 400);
   }
-  const stored = await storeImageContent(bytes, contentType);
+  const stored = await storeImageContent(bytes, contentType, objects);
   if (stored instanceof Response) return stored;
   // Provenance: where the copy came from. The document references OUR copy —
   // an import is a snapshot, deliberately — but the origin stays answerable.

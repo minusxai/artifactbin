@@ -1,22 +1,4 @@
-/**
- * What an agent is told at the moment it authors — the MCP tool schema.
- *
- * An MCP client never fetches the docs. It connects over the protocol, so the
- * tool schema is the ONLY instruction surface it sees. Guidance that lives in a
- * docs page is guidance an MCP agent has no reason to go and read.
- *
- * That is not hypothetical: told only "Tailwind classes via className", ChatGPT
- * reached for its own built-in slide skill and published a deck of bare
- * <section>/<h1>/<ul> with zero className attributes. We rendered exactly what
- * it wrote — a wall of unstyled text. Nothing in the schema told it that bare
- * HTML was a mistake, or what the alternative looked like.
- *
- * So the non-negotiables live here, inline, and the reference is named by a
- * path the agent can actually fetch. Kept deliberately terse: a description
- * nobody skims is worth as much as one nobody can reach.
- */
-import { PUBLIC_BASE_URL } from './config';
-
+/** Shared field guidance for HTTP validation and bundled local help. */
 /** The single rule whose absence produced an unstyled document. */
 export const MARKUP_STYLE_RULE =
   'EVERY element needs Tailwind utilities in className — bare HTML renders completely unstyled.';
@@ -41,7 +23,7 @@ export const COMPUTED_FIGURE_RULE =
 
 /**
  * Agents discover the CSV/sheet forms here or not at all — the schema is the
- * only surface an MCP client reads (the lesson from the styling bug).
+ * concise description carried by the local operation reference.
  */
 export const DATASET_FIELD_GUIDANCE =
   'dataset tier: one flat table. Accepts a JSON array of flat objects, OR raw CSV text ' +
@@ -99,8 +81,8 @@ export const MARKUP_FIELD_GUIDANCE = [
   MARKUP_STYLE_RULE,
   'Start with <div data-design="tw" className="@container …">. Use theme tokens, e.g. bg-muted.',
   'Inline style=/onClick= rejected. ONE <Helmet> holds <style>; its <script> runs without parent DOM access.',
-  `Read ${PUBLIC_BASE_URL}/docs/artifactbin/references/markup.md first.`,
-  'Data: <Query name="q">{`select … from ref_<id>`}</Query> in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
+  'Read `afbin help markup` or the installed references/markup.md first.',
+  'Data: <Query name="q" source="ref:<id>">{`select … from public.rows`}</Query> in Helmet, then <Question data="$q" viz={{kind:"vega-lite",spec:{…}}} />.',
   'Filters: <Value name="x" /> in Helmet, <select value="$x" options="$q" /> in the body; $x in SQL.',
   COMPUTED_FIGURE_RULE,
 ].join(' ');

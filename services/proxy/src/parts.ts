@@ -6,7 +6,7 @@
  * verdict on every request, the browser-only refusal included (it is asked
  * BEFORE anything is counted, because a refusal must not spend the per-IP
  * budget its own advice sends the human back to use); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
- * the MCP OAuth provider; `forwardedHeaders` owns the forwarding headers
+ * the CLI OAuth provider; `forwardedHeaders` owns the forwarding headers
  * (x-mx-actor and x-real-ip dropped inbound, x-forwarded-{for,host,proto}
  * ours); `forward` is LAST — everything not matched above reaches the app
  * through the ONE upstream seam, the Request the app receives being the one
@@ -28,6 +28,7 @@ import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits
 import { loadPolicyFile, resolvePolicyFilePath } from './rate-limits';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
 import { say, type ProxySubject } from './events';
+import { createDevicePairing } from './identity/device-pairing';
 import { createOAuthStore } from './identity/oauth';
 import { readEnv } from './env';
 import { createAgentBrowserSessions } from './auth/agent-browser-session';
@@ -116,19 +117,7 @@ const hostOf = (value: string): string | null => {
   try { return new URL(value).host.toLowerCase(); } catch { return null; }
 };
 
-/**
- * THE REFUSAL THAT TEACHES. An agent at this door is mid-mistake and it is the best teaching moment we get,
- * so the body IS the ladder rather than a bare "no": the plugin/MCP first, then the human's own door — SOURCE-
- * TAGGED from `Artifactbin-Agent` when it names a harness we know, so the person who is asked for a token
- * lands on a page that knows who sent them.
- *
- * THIS IS THE `browser_only` BODY, and it stays in OSS code verbatim: the policy file only says WHICH routes
- * carry the flag, never what the refusal says.
- *
- * 403, deliberately. The request is well formed and understood, and no credential the caller could add would
- * change the answer — which is exactly what 401 would invite it to go and try (and trying is the failure).
- * 404 would lie about a route the browser uses, and 429 would claim a rate limit that has not been hit.
- */
+/** Browser-only policy refuses before counting and teaches the CLI recovery path. */
 export function anonMintRefusal(origin: string, agentHeader: string | null): Response {
   const source = declaredAgentSlug(agentHeader);
   const tokens = `${origin}/tokens/new${source ? `?source=${source}` : ''}`;
@@ -136,12 +125,12 @@ export function anonMintRefusal(origin: string, agentHeader: string | null): Res
     error: 'browser_only',
     reason: 'This endpoint is the web page\'s own mint. An agent that mints its own token publishes documents its human cannot reach.',
     ladder: [
-      'If the artifactbin plugin or MCP server is available, use it — that connection is already authenticated and needs no token.',
-      `Otherwise check ~/.artifactbin.env for ARTIFACTBIN_TOKEN.`,
-      `Otherwise STOP and ask your human for a token at ${tokens} — do not mint one yourself.`,
+      `Run afbin setup --server ${origin} to connect your account.`,
+      `The CLI reads origin-scoped credentials from ~/.artifactbin/.env or the process environment.`,
+      `Agents can add --yes --json; browser approval is still required. Never mint an anonymous token yourself.`,
     ],
     tokens,
-    docs: `${origin}/docs/artifactbin/references/publishing-auth.md`,
+    help: 'afbin help publishing-auth',
   }), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 }
 
@@ -347,7 +336,7 @@ export function loginRoutes(o: ProxyOptions): Part<ProxyEnv> {
   };
 }
 
-/** THE MCP OAUTH PROVIDER — /oauth/* and /.well-known/*, over the proxy's own `auth` schema; mounted only when identityDb is given. */
+/** THE CLI OAUTH PROVIDER — /oauth/* and /.well-known/*, over the proxy's own `auth` schema; mounted only when identityDb is given. */
 export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
   return {
     name: 'oauthRoutes',
@@ -357,6 +346,7 @@ export function oauthRoutes(o: ProxyOptions): Part<ProxyEnv> {
       const appSchema = o.appSchema ?? readEnv(o.env, 'APP__SCHEMA');
       mountOAuthRoutes(app, {
         oauth: createOAuthStore(o.identityDb, schema, appSchema),
+        pairing: createDevicePairing(o.identityDb, schema),
         upstream: o.upstream,
         trustedHops: trustedHopsOf(o.env),
         publicBaseUrl: readEnv(o.env, 'APP__PUBLIC_BASE_URL'),
@@ -427,12 +417,12 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   return ANONYMOUS;
 }
 
-/** OAuth access tokens are capabilities for one exact MCP resource and scope. */
+/** OAuth access tokens are capabilities for one API origin and scope. */
 function tokenFitsRequest(token: { audience?: string; scope?: string }, request: Request, o: ProxyOptions): boolean {
   if (!token.audience) return true;
   const origin = baseUrlOf(request, trustedHopsOf(o.env), readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
-  const target = `${origin}${new URL(request.url).pathname}`;
-  return token.audience === target && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
+  const path = new URL(request.url).pathname;
+  return (path === '/api' || path.startsWith('/api/')) && token.audience === `${origin}/api` && (token.scope?.split(/\s+/).includes('artifacts') ?? false);
 }
 
 /**

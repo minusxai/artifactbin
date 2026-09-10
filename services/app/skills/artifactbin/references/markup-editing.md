@@ -8,8 +8,7 @@ order: 2
 
 Use `<DataTable>` with `<Column>` children to render one template per row.
 A control's `run="$mutation"` saves its cell. Upload your dataset with `access: readwrite`
-([datasets](publishing-datasets.md)); queries and ordinary controls follow
-[data](markup-data.md). No per-row Values or JavaScript required.
+([datasets](publishing-datasets.md)); see [data](markup-data.md) for queries and controls.
 
 ## Contents
 
@@ -17,28 +16,27 @@ Example · Scope and identity · Committing · References and authorization.
 
 ## Seven roadmap editors
 
-Replace `TASKS_ID` / `SPRINTS_ID` with dataset IDs. Tasks have
+Replace `abc123` / `def456` with task/sprint dataset IDs. Tasks have
 `id` (integer), `item`, `owner`, `hours` (nullable number), `depends_on`,
 `tags`, `status`, and `sprint`; the sprints dataset has `name`.
-Store tags and dependency IDs as **JSON-array strings**, for example
-`["design,ux","feature"]` and `["12","19"]`, initially `[]`.
-Use `''` for an unscheduled sprint. Migrate legacy comma-separated data
-explicitly first; embedded commas cannot be recovered by blindly splitting.
+Store tags/dependencies as **JSON-array strings**: `["design,ux","feature"]`,
+`["12","19"]`, initially `[]`. An unscheduled sprint is `''`.
+Do not split comma-separated data blindly: embedded commas are ambiguous.
 
 ```jsx
 <Helmet>
   <title>Editable roadmap</title>
-  <Query name="roadmap">{`select * from ref_TASKS_ID order by id`}</Query>
-  <Query name="task_options">{`select cast(cast(id as bigint) as varchar) as value, cast(cast(id as bigint) as varchar) || ' · ' || item as label from ref_TASKS_ID order by id`}</Query>
-  <Query name="sprint_options">{`select '' as value, 'Unscheduled' as label union all select name as value, name as label from ref_SPRINTS_ID`}</Query>
-  <Query name="all_tags">{`select distinct unnest(cast(tags as varchar[])) as tag from ref_TASKS_ID order by tag`}</Query>
-  <Mutation name="set_item" expectedAffected={1}>{`update ref_TASKS_ID set item = $_value where id = $_row.id and item is not distinct from $_row.item`}</Mutation>
-  <Mutation name="set_owner" expectedAffected={1}>{`update ref_TASKS_ID set owner = $_value where id = $_row.id and owner is not distinct from $_row.owner`}</Mutation>
-  <Mutation name="set_hours" expectedAffected={1}>{`update ref_TASKS_ID set hours = $_value where id = $_row.id and hours is not distinct from $_row.hours`}</Mutation>
-  <Mutation name="set_depends_on" expectedAffected={1}>{`update ref_TASKS_ID set depends_on = $_value where id = $_row.id and depends_on is not distinct from $_row.depends_on and not list_contains(cast($_value as varchar[]), cast(cast($_row.id as bigint) as varchar))`}</Mutation>
-  <Mutation name="set_tags" expectedAffected={1}>{`update ref_TASKS_ID set tags = $_value where id = $_row.id and tags is not distinct from $_row.tags`}</Mutation>
-  <Mutation name="set_status" expectedAffected={1}>{`update ref_TASKS_ID set status = $_value where id = $_row.id and status is not distinct from $_row.status`}</Mutation>
-  <Mutation name="set_sprint" expectedAffected={1}>{`update ref_TASKS_ID set sprint = $_value where id = $_row.id and sprint is not distinct from $_row.sprint`}</Mutation>
+  <Query name="roadmap" source="ref:abc123">{`select * from public.rows order by id`}</Query>
+  <Query name="task_options" source="ref:abc123">{`select cast(cast(id as bigint) as varchar) as value, cast(cast(id as bigint) as varchar) || ' · ' || item as label from public.rows order by id`}</Query>
+  <Query name="sprint_options" source="ref:def456">{`select '' as value, 'Unscheduled' as label union all select name as value, name as label from public.rows`}</Query>
+  <Query name="all_tags" source="ref:abc123">{`select distinct unnest(cast(tags as varchar[])) as tag from public.rows order by tag`}</Query>
+  <Mutation name="set_item" expectedAffected={1} source="ref:abc123">{`update public.rows set item = $_value where id = $_row.id and item is not distinct from $_row.item`}</Mutation>
+  <Mutation name="set_owner" expectedAffected={1} source="ref:abc123">{`update public.rows set owner = $_value where id = $_row.id and owner is not distinct from $_row.owner`}</Mutation>
+  <Mutation name="set_hours" expectedAffected={1} source="ref:abc123">{`update public.rows set hours = $_value where id = $_row.id and hours is not distinct from $_row.hours`}</Mutation>
+  <Mutation name="set_depends_on" expectedAffected={1} source="ref:abc123">{`update public.rows set depends_on = $_value where id = $_row.id and depends_on is not distinct from $_row.depends_on and not list_contains(cast($_value as varchar[]), cast(cast($_row.id as bigint) as varchar))`}</Mutation>
+  <Mutation name="set_tags" expectedAffected={1} source="ref:abc123">{`update public.rows set tags = $_value where id = $_row.id and tags is not distinct from $_row.tags`}</Mutation>
+  <Mutation name="set_status" expectedAffected={1} source="ref:abc123">{`update public.rows set status = $_value where id = $_row.id and status is not distinct from $_row.status`}</Mutation>
+  <Mutation name="set_sprint" expectedAffected={1} source="ref:abc123">{`update public.rows set sprint = $_value where id = $_row.id and sprint is not distinct from $_row.sprint`}</Mutation>
 </Helmet>
 <DataTable data="$roadmap" rowKey="id">
   <Column col="id" title="ID" />

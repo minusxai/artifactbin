@@ -1,0 +1,100 @@
+import {CliError} from './commands';
+/** Browser consent and bounded polling, independent of terminal prompts and command dispatch. */
+import {loopbackAuthenticate} from './loopback-auth';
+import { execFile } from 'node:child_process';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { unlink } from 'node:fs/promises';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { atomicWrite, digest, privateDirectory, readOptional } from './files';
+import { normalizeServer, saveConnection, type Connection } from './config';
+
+interface Pending { server: string; deviceCode: string; userCode: string; verificationUrl: string; expiresAt: number; interval: number }
+export class ApprovalRequired extends Error {
+  readonly code = 'approval_required';
+  constructor(readonly verificationUrl: string, readonly userCode: string, readonly expiresAt: number) {
+    super(`Approve code ${userCode} at ${verificationUrl}, then run afbin setup again.`);
+  }
+}
+interface AuthOptions {
+  home?: string;
+  interactive: boolean;
+  fetch?: typeof fetch;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<unknown>;
+  open?: (url: string) => Promise<void>;
+  notify?: (message: string) => void;
+}
+export async function openBrowser(url: string): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    execFile(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], {timeout:10000}, error => error ? reject(new Error('Could not open the browser; use the displayed approval URL.')) : resolve());
+  });
+}
+export async function browserAuthenticate(origin:string,options:AuthOptions):Promise<Connection>{
+ const server=normalizeServer(origin);
+ const pending=await readOptional(join(options.home??homedir(),'.artifactbin',`pairing-${digest(server).slice(0,16)}.json`));
+ if(options.interactive&&!pending)return loopbackAuthenticate(server,{...options,open:options.open??openBrowser});
+ return deviceAuthenticate(server,options);
+}
+export async function deviceAuthenticate(origin: string, options: AuthOptions): Promise<Connection> {
+  const server = normalizeServer(origin);
+  const home = options.home ?? homedir();
+  const clock = options.now ?? Date.now;
+  const request = options.fetch ?? fetch;
+  const file = join(home, '.artifactbin', `pairing-${digest(server).slice(0,16)}.json`);
+  const post = async (path: string, body?: unknown) => {
+    const response = await request(`${server}${path}`, {method:'POST', redirect:'error', signal:AbortSignal.timeout(15000),
+      headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
+    const data = await response.json().catch(()=>null);
+    if (!data || typeof data !== 'object') throw new CliError('invalid_response','Authentication server returned an invalid response.');
+    return {response,data};
+  };
+  let pending: Pending | undefined;
+  const raw = await readOptional(file);
+  if (raw) {
+    const value = JSON.parse(raw.toString()) as Pending;
+    if (validPending(value, server) && value.expiresAt > clock()) pending = value;
+  }
+  if (!pending) {
+    const {response,data} = await post('/oauth/device');
+    if (!response.ok) throw new CliError('auth_failed',`Could not start browser authentication (HTTP ${response.status}).`);
+    pending = {server, deviceCode:data.device_code,userCode:data.user_code,verificationUrl:data.verification_uri_complete,
+      expiresAt:clock()+Math.min(300, data.expires_in)*1000,interval:Math.max(5,data.interval)*1000};
+    if (!validPending(pending,server)) throw new CliError('invalid_response','Authentication server returned invalid pairing details.');
+    await privateDirectory(join(home,'.artifactbin'));
+    await atomicWrite(file,JSON.stringify(pending));
+  }
+  const approval = new ApprovalRequired(pending.verificationUrl,pending.userCode,pending.expiresAt);
+  if (options.interactive) {
+    (options.notify ?? (message=>process.stderr.write(`${message}\n`)))(approval.message);
+    try { await (options.open ?? openBrowser)(pending.verificationUrl); }
+    catch (error) { options.notify?.(error instanceof Error ? error.message : 'Open the approval URL in your browser.'); }
+  }
+  do {
+    const {response,data} = await post('/oauth/device/token', {device_code:pending.deviceCode});
+    if (response.ok) {
+      if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string' || typeof data.client_id !== 'string'
+        || !Number.isFinite(data.expires_in) || data.expires_in <= 0) throw new CliError('invalid_response','Authentication server returned invalid credentials.');
+      const connection: Connection = {server,token:data.access_token,refreshToken:data.refresh_token,clientId:data.client_id,expiresAt:clock()+data.expires_in*1000};
+      await saveConnection(connection,home);
+      await unlink(file);
+      return connection;
+    }
+    if (data.error !== 'authorization_pending') {
+      if (data.error === 'expired_token' || data.error === 'access_denied') await unlink(file);
+      const code=data.error==='access_denied'?'access_denied':data.error==='expired_token'?'approval_expired':'auth_failed';
+      throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.','Run afbin setup again.');
+    }
+    if (!options.interactive) throw approval;
+    await (options.sleep ?? sleep)(Math.min(pending.interval,Math.max(0,pending.expiresAt-clock())));
+  } while (clock() < pending.expiresAt);
+  await unlink(file);
+  throw new CliError('approval_expired','Browser approval expired.','Run afbin setup again.');
+}
+function validPending(value: Pending, server: string): boolean {
+  if (!value || value.server !== server || typeof value.deviceCode !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.deviceCode)
+    || typeof value.userCode !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(value.userCode)
+    || !Number.isFinite(value.expiresAt) || !Number.isFinite(value.interval) || value.interval < 5000 || value.interval > 300000) return false;
+  try { const url = new URL(value.verificationUrl); return url.origin === server && url.pathname === '/oauth/device' && !url.username && !url.password && !url.hash; }
+  catch {return false;}
+}

@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkViewportGeometry } from './lib/viewport-geometry.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**

@@ -15,12 +15,12 @@
  * rejects. Add a builder here when you add one.
  */
 import { describe, it, expect } from 'vitest';
-import { buildMcpInstructions, buildQuickSheet, renderDoc, renderTree, skillTree } from '../skills';
+import { buildQuickSheet, renderDoc, renderTree, skillTree } from '../skills';
 
 const BASE = 'https://example.test';
 const files = (...paths: string[]) => (base: string) => paths.map((p) => renderDoc(p, base)).join('\n');
 /** The publishing skill as one text (what /docs/llm used to be). */
-const buildSkillDoc = files('artifactbin/references/publishing.md', 'artifactbin/references/publishing-auth.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-versions.md', 'artifactbin/references/publishing-mcp.md');
+const buildSkillDoc = files('artifactbin/references/publishing.md', 'artifactbin/references/publishing-auth.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-versions.md');
 const buildMarkupDoc = files('artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-video.md', 'artifactbin/references/markup-svg.md');
 const buildDesignDoc = files('artifactbin/references/design.md');
 const buildThemesDoc = files('artifactbin/references/themes.md');
@@ -40,8 +40,7 @@ const SURFACES: Array<[string, string]> = [
   ['/docs/themes/<name>', buildThemeDoc('modernist', BASE)],
   ['/docs/templates', buildTemplatesDoc(BASE)],
   ['/docs/templates/<name>', buildTemplateDoc('editorial', BASE)],
-  ['mcp instructions', buildMcpInstructions(BASE)],
-  ['mcp markup field', MARKUP_FIELD_GUIDANCE],
+  ['shared markup field', MARKUP_FIELD_GUIDANCE],
   ['markup style rule', MARKUP_STYLE_RULE],
 ];
 
@@ -155,11 +154,10 @@ describe('the export section says WHEN to look', () => {
  * The echo is skipped when storing changed nothing — an agent told only "the
  * response echoes the stored markup" would read an absent field as data loss.
  */
-describe('the write echo is documented as conditional', () => {
-  it('names markup_changed and says when markup is present', () => {
+describe('the write echo is documented as canonical', () => {
+  it('explains canonical source and identity in successful replies', () => {
     const doc = buildSkillDoc(BASE);
-    expect(doc).toContain('markup_changed');
-    expect(doc).toMatch(/only when|unchanged/i);
+    expect(doc).toContain('canonical source and identity');
   });
 });
 
@@ -208,8 +206,8 @@ describe('the data vocabulary survives a truncating reader', () => {
    */
   it('teaches the publish call and the document rules in the same budget', () => {
     const head = buildQuickSheet(BASE).slice(0, HEAD);
-    expect(head).toMatch(/POST .*\/api\/artifacts/);
-    expect(head).toContain('Authorization: Bearer');
+    expect(head).toContain('afbin push');
+    expect(head).toContain('afbin setup');
     expect(head).toMatch(/self-contained/i);
     expect(head).toMatch(/No CDN/i);
     expect(head).toContain('<Helmet>');
@@ -256,7 +254,7 @@ describe('the data vocabulary survives a truncating reader', () => {
 describe('the addresses agents guess', () => {
   it('tells an agent its datasets are in the artifact listing, so it stops hunting for an endpoint', () => {
     const doc = buildSkillDoc(BASE);
-    const section = doc.slice(doc.indexOf('### List your artifacts'));
+    const section = doc.slice(doc.indexOf('## List your artifacts'));
     expect(section).toMatch(/datasets/i);
     expect(section).toMatch(/no separate datasets endpoint|not only documents/i);
     expect(section).toContain('format');
@@ -305,6 +303,6 @@ describe('no agent-facing surface forbids a look or claims to be complete', () =
 
   /** And the escape hatch has to be present, not merely un-forbidden. */
   it('the quick sheet names the full reference', () => {
-    expect(buildQuickSheet(BASE)).toContain(`${BASE}/docs`);
+    expect(buildQuickSheet(BASE)).toContain('references/api.md');
   });
 });

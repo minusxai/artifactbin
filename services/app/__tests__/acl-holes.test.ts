@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Holes an adversarial review found in the ACL. Each of these passed the
  * whole suite while being wrong, so they are pinned here by the PROPERTY
@@ -152,11 +153,11 @@ describe('revocation reaches an open stream', () => {
 
     // The owner locks it, then writes something new.
     await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<section><p>alpha text</p></section>', visibility: 'private' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<section><p>alpha text</p></section>', visibility: 'private' } }),
       params({ id: doc.id }),
     );
     await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<section><p>TOPSECRET after revoke</p></section>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<section><p>TOPSECRET after revoke</p></section>' } }),
       params({ id: doc.id }),
     );
 

@@ -152,7 +152,8 @@ describe('the children table', () => {
     const doc = await create(o.token, {
       title: 'Index',
       visibility: 'public',
-      markup: `<Helmet><Query name="kids">{\`select id, title from ref_${f.id} order by title\`}</Query></Helmet>\n<Files data="$kids" />`,
+      markup: `<Helmet><Query name="kids" source="ref:${f.id}">{\`select id, title from public.rows order by title\`}</Query></Helmet>
+<Files data="$kids" />`,
     });
     const q = JSON.stringify({ values: {}, only: ['kids'] });
     const r = await j(await queryGet(request(`/a/${doc.id}/query?q=${encodeURIComponent(q)}`), params(doc.id)));

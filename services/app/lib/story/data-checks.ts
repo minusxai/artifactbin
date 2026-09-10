@@ -50,14 +50,6 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
   if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};
   const mutations = mutationsOf(flow);
-  for (const id of new Set([...flow.queries.flatMap((q) => q.refs), ...mutations.filter(m => m.scope !== 'local').map((m) => m.target)])) {
-    const r = await load(id);
-    // A folder registers the FIXED shape of its children table (lib/folders
-    // CHILDREN_COLUMNS), which `rowToResolvedRef` already put on the ref — so
-    // the dry run judges a folder's <Query> against the same columns the run
-    // will really see.
-    if (r?.format === 'dataset' || r?.format === 'folder') tables[`ref_${id}`] = { columns: r.columns ?? [] };
-  }
   const paramNames = flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name);
   const order = queryOrder(flow) ?? [];
   const queries = order.map((n) => flow.queries.find((q) => q.name === n)!);
@@ -96,8 +88,8 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
       const inputTables={...tables};const prepared=[];
       for(const m of group){
         let sql=m.sql;
-        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,`ref_${m.target}`);sql=compiled.sql;inputTables[`ref_${m.target}`]={columns:compiled.table.columns};}catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
-        prepared.push({...m,sql,...(m.scope === 'local' ? {tableName: m.target} : {}),...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
+        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,'dataset_rows');sql=compiled.sql;inputTables.dataset_rows={columns:compiled.table.columns};}catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
+        prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
       }
       if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
     }

@@ -12,17 +12,12 @@ import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, loc
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
-  it('copy-text mode keeps the paste line', () => {
-    expect(credentialSourceFor('fetched_skill+api_action', inbox)).toBe('paste');
-  });
-  it('the other three modes log in through the inbox when it is configured', () => {
-    for (const m of ['installed_skill+api_action', 'fetched_skill+mcp_action', 'installed_skill+mcp_action'] as const) {
-      expect(credentialSourceFor(m, inbox), m).toBe('inbox-oauth');
-    }
+  it('uses the inbox when configured', () => {
+    expect(credentialSourceFor('cli', inbox)).toBe('inbox-oauth');
   });
   it('a pre-provisioned account token is the fallback, and no source at all is an error that names the env', () => {
-    expect(credentialSourceFor('installed_skill+mcp_action', { EVAL_ACCOUNT_TOKEN: 'mx_abc' })).toBe('secret');
-    expect(() => credentialSourceFor('installed_skill+mcp_action', {})).toThrow(/RESEND_EVAL_API_KEY|EVAL_ACCOUNT_TOKEN/);
+    expect(credentialSourceFor('cli', { EVAL_ACCOUNT_TOKEN: 'mx_abc' })).toBe('secret');
+    expect(() => credentialSourceFor('cli', {})).toThrow(/RESEND_EVAL_API_KEY|EVAL_ACCOUNT_TOKEN/);
   });
 });
 
@@ -320,7 +315,7 @@ describe('writeArtifactbinEnv', () => {
   it('writes the skill’s own connection file into the harness home, readable only by its owner', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-cred-'));
     writeArtifactbinEnv(home, 'https://x.test', 'mx_secret');
-    const file = path.join(home, '.artifactbin.env');
+    const file = path.join(home, '.artifactbin', '.env');
     expect(fs.readFileSync(file, 'utf8')).toBe('ARTIFACTBIN_URL=https://x.test\nARTIFACTBIN_TOKEN=mx_secret\n');
     expect(fs.statSync(file).mode & 0o077).toBe(0);
     fs.rmSync(home, { recursive: true, force: true });
@@ -334,11 +329,10 @@ describe('writeArtifactbinEnv', () => {
 describe('a local server logs in through its dev outbox', () => {
   it('the account modes pick outbox-oauth when the driver booted the server, before any inbox or secret', () => {
     const local = { localOutbox: '/tmp/x/dev-mail.jsonl' };
-    for (const m of ['installed_skill+api_action', 'fetched_skill+mcp_action', 'installed_skill+mcp_action'] as const) {
+    for (const m of ['cli'] as const) {
       expect(credentialSourceFor(m, {}, local), m).toBe('outbox-oauth');
       expect(credentialSourceFor(m, { EVAL_ACCOUNT_TOKEN: 'mx_abc' }, local), m).toBe('outbox-oauth');
     }
-    expect(credentialSourceFor('fetched_skill+api_action', {}, local)).toBe('paste');
   });
   it('reads the newest code addressed to the eval account that landed after the request', () => {
     const since = Date.parse('2026-09-03T13:00:00Z');

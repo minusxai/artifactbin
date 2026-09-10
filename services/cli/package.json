@@ -1,9 +1,9 @@
 {
   "name": "@artifactbin/cli",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "type": "module",
   "license": "Apache-2.0",
-  "description": "Run a local terminal with artifactbin remote access",
+  "description": "Local files, published artifacts and agent authoring",
   "bin": {
     "afbin": "dist/afbin.mjs"
   },
@@ -17,25 +17,36 @@
     "dist/afbin.mjs",
     "dist/index.mjs",
     "dist/types",
-    "scripts/prepare-pty.mjs"
+    "scripts/prepare-pty.mjs",
+    "dist/skills",
+    "dist/share"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.13"
   },
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --import tsx --test test/*.test.ts",
     "build:binary": "node scripts/binary.mjs",
     "postinstall": "node scripts/prepare-pty.mjs",
-    "test:binary": "node scripts/test-binary.mjs"
+    "test:binary": "node scripts/test-local-binary.mjs && node scripts/test-binary.mjs",
+    "generate:teaching": "node scripts/generate-teaching.mjs"
   },
   "dependencies": {
     "@xterm/addon-serialize": "0.14.0",
     "@xterm/headless": "6.0.0",
-    "node-pty": "1.1.0"
+    "diff": "^8.0.4",
+    "marked": "18.0.12",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "postject": "1.0.0-alpha.6"
   },
-  "types": "./dist/types/cli/src/index.d.ts"
+  "types": "./dist/types/cli/src/index.d.ts",
+  "optionalDependencies": {
+    "node-pty": "1.1.0"
+  },
+  "man": [
+    "dist/share/man/man1/afbin.1"
+  ]
 }

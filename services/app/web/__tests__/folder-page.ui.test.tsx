@@ -71,7 +71,7 @@ const accountWorkspace = (): AccountWorkspace => ({
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
-  fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'fold01', title: 'Quarterly' }), { status: 200 }));
+  fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 'fold01', title: 'Quarterly',state:'a'.repeat(64),version:1 }), { status: 200 }));
   vi.stubGlobal('fetch', fetchMock);
   // jsdom ships no EventSource. The live path has its own coverage in the
   // browser gate, where a real agent write has to reach a real open page.
@@ -143,11 +143,11 @@ describe('renaming happens on the name', () => {
     const field = screen.getByLabelText('Folder name') as HTMLInputElement;
     fireEvent.change(field, { target: { value: 'Quarterly' } });
     fireEvent.keyDown(field, { key: 'Enter' });
-    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(url).toBe('/api/my/artifacts/fold01');
     expect(init.method).toBe('PATCH');
-    expect(JSON.parse(String(init.body))).toEqual({ title: 'Quarterly' });
+    expect(JSON.parse(String(init.body))).toEqual({ title: 'Quarterly',expectedState:'a'.repeat(64) });
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Quarterly'));
   });
 

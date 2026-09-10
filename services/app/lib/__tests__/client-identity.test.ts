@@ -49,49 +49,14 @@ describe('User-Agent — what it can and cannot tell us', () => {
   });
 });
 
-describe('clientInfo — the channel that actually names the agent', () => {
-  it('identifies Claude Code, which the User-Agent cannot', () => {
-    const id = identifyClient({ userAgent: 'node', clientInfo: { name: 'claude-code', version: '2.1.0' } });
-    expect(id.harness).toBe('claude-code');
-    expect(id.version).toBe('2.1.0');
-    expect(id.source).toBe('clientInfo');
-  });
-
-  it('OVERRIDES the user-agent, because a runtime UA cannot separate agents', () => {
-    // The exact case: both Claude Code and a random script send `node`.
-    expect(identifyClient({ userAgent: 'node', clientInfo: { name: 'cursor-vscode' } }).harness).toBe('cursor');
-    expect(byUa('node').harness).toBe('script');
-  });
-
-  it('keeps an unrecognised clientInfo name as the label, still preferring it', () => {
-    const id = identifyClient({ userAgent: 'node', clientInfo: { name: 'some-new-agent', version: '9' } });
-    expect(id.harness).toBe('unknown');
-    expect(id.label).toBe('some-new-agent'); // the client named itself; keep it for logs
-    expect(id.source).toBe('clientInfo');
-  });
-
-  it('recognises the other common MCP clients', () => {
-    const of = (name: string) => identifyClient({ clientInfo: { name } }).harness;
-    expect(of('ChatGPT')).toBe('chatgpt');
-    expect(of('Visual Studio Code')).toBe('vscode');
-    expect(of('Windsurf')).toBe('windsurf');
-    expect(of('claude-ai')).toBe('claude-web');
-  });
-
-  it('ignores non-string junk instead of throwing', () => {
-    expect(identifyClient({ clientInfo: { name: 42 as unknown as string } }).source).toBe('none');
-    expect(identifyClient({ clientInfo: null, userAgent: null }).harness).toBe('unknown');
-  });
-});
-
 describe('logging', () => {
   it('emits one readable line and returns the identity', () => {
     const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const id = logClientIdentity('mcp:initialize', { userAgent: 'node', clientInfo: { name: 'claude-code', version: '2.1.0' } });
+    const id = logClientIdentity('api:request', { userAgent: 'node', agentHeader: 'claude-code' });
     expect(id.harness).toBe('claude-code');
     expect(spy).toHaveBeenCalledTimes(1);
     expect(String(spy.mock.calls[0][0])).toContain('claude-code');
-    expect(String(spy.mock.calls[0][0])).toContain('mcp:initialize');
+    expect(String(spy.mock.calls[0][0])).toContain('api:request');
   });
 
   it('describes compactly', () => {

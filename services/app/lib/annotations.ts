@@ -114,6 +114,7 @@ export interface CreateAnnotationInput {
 export type CreateAnnotationRefusal =
   | { refused: 'not_markup' }
   | { refused: 'bad_path' }
+  | { refused: 'quote_not_found' | 'ambiguous_quote' }
   /** The document moved under the click — retry with fresh coords (the page is live). */
   | { refused: 'stale'; head: { editId: string; version: number } };
 
@@ -318,7 +319,17 @@ export async function createAnnotationFor(
     const source = row.source ?? '';
     const parsed = parseJsx(source);
     if (!parsed.ok) return { refused: 'bad_path' };
-    const node = input.nodeId ? anchorIndex(source).get(input.nodeId)?.node : resolveJsxNodeAtPath(parsed.nodes, bodyPathToSourcePath(source, input.bodyPath!));
+    let node: JsxNode | undefined;
+    if (input.nodeId) node = anchorIndex(source).get(input.nodeId)?.node;
+    else if (input.bodyPath) node = resolveJsxNodeAtPath(parsed.nodes, bodyPathToSourcePath(source, input.bodyPath)) ?? undefined;
+    else if (quote) {
+      const matches = [...anchorIndex(source).values()].filter(entry => canonicalTextOf(entry.node).includes(quote));
+      // Choose the smallest containing element, avoiding ambiguity from its ancestors.
+      const leaves = matches.filter(entry => !matches.some(other => other !== entry && other.path.startsWith(entry.path + '.')));
+      if (!leaves.length) return {refused: 'quote_not_found'};
+      if (leaves.length !== 1 || canonicalTextOf(leaves[0].node).split(quote).length !== 2) return {refused: 'ambiguous_quote'};
+      node = leaves[0].node;
+    }
     if (!node || node.type !== 'element') return { refused: 'bad_path' };
     const anchorKey = anchorKeyOf(node);
     if (!anchorKey) return { refused: 'bad_path' };
@@ -406,6 +417,21 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
  * lists open only — the inline-on-GET shape; `status: 'all'` includes
  * resolved history.
  */
+/** Page only roots; replies for these roots remain one coherent conversation. */
+export async function listAnnotationPageFor(actor: TokenActor, artifactId: string,
+  opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
+  const db = await getDb();
+  const row = await scopedRow(db, annotationScope(actor), artifactId);
+  if (!row) return null;
+  const roots = await db.query<AnnotationRowDb>(
+    `SELECT * FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
+      AND ($2::text='all' OR status=$2) AND ($3::bigint IS NULL OR seq>$3)
+      ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1]);
+  const selected = roots.rows.slice(0, opts.limit);
+  return {annotations: await wireFor(db, row, selected),
+    ...(roots.rows.length > opts.limit ? {next: String(selected.at(-1)!.seq)} : {})};
+}
+
 export async function listAnnotationsFor(
   actor: TokenActor,
   artifactId: string,

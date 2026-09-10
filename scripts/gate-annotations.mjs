@@ -17,6 +17,7 @@
  *
  *   usage: node scripts/gate-annotations.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';

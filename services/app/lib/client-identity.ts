@@ -1,26 +1,4 @@
-/**
- * WHICH agent is talking to us — one module, every caller.
- *
- * Three channels, and they are not equal:
- *
- *  - MCP `initialize` carries `params.clientInfo: {name, version}`. This is the
- *    protocol's own answer, every spec-compliant client sends it, and it is the
- *    only channel that names an agent rather than a runtime.
- *  - The User-Agent header, which is all a plain HTTP caller (an agent fetching
- *    /docs, or hitting the REST API) gives us by default.
- *  - Raw HTTP agents can explicitly send `Artifactbin-Agent`. Unlike a runtime
- *    UA it answers which harness is making the call, so it wins when recognized.
- *
- * The difference is not academic. Measured against real traffic, OpenAI's
- * harnesses brand their UA (`openai-mcp`, `codex-mcp-client`) while Node-based
- * clients — Claude Code among them — send bare `node`, which is the default UA
- * for Node's fetch and identifies a RUNTIME, not an agent. So UA alone cannot
- * tell Claude Code from any other Node script; an explicit agent header or
- * MCP clientInfo can, and does. Those naming channels win over a runtime UA.
- *
- * Deliberately non-authenticating: all three channels are self-reported and
- * trivially forged. Nothing may gate access on them.
- */
+/** HTTP display attribution from an explicit harness header or User-Agent. Never authorization. */
 
 import { AGENT_HEADER, declaredAgentSlug, type DeclaredAgentSlug } from '@artifactbin/contracts';
 
@@ -42,37 +20,12 @@ export type Harness =
 export interface ClientIdentity {
   /** Best guess at the harness. 'unknown' when nothing matched. */
   harness: Harness;
-  /** The raw name we matched on, for logs — declaration, clientInfo.name, or UA. */
+  /** The raw name we matched on, for logs — declaration or UA. */
   label: string;
   version: string | null;
   /** Which channel decided it. All are descriptive and self-reported, never authorization. */
-  source: 'agent-header' | 'clientInfo' | 'user-agent' | 'none';
+  source: 'agent-header' | 'user-agent' | 'none';
 }
-
-export interface ClientInfo {
-  name?: unknown;
-  version?: unknown;
-}
-
-/**
- * MCP client names, matched against `clientInfo.name` (lowercased, substring).
- * Order matters: the first match wins, so put specific before generic.
- */
-const CLIENT_INFO_HARNESSES: ReadonlyArray<readonly [pattern: string, harness: Harness]> = [
-  ['claude-code', 'claude-code'],
-  ['claude code', 'claude-code'],
-  ['claude-ai', 'claude-web'],
-  ['claude.ai', 'claude-web'],
-  ['chatgpt', 'chatgpt'],
-  ['openai-mcp', 'chatgpt'],
-  ['codex', 'codex'],
-  ['cursor', 'cursor'],
-  ['windsurf', 'windsurf'],
-  ['cline', 'cline'],
-  ['zed', 'zed'],
-  ['visual studio code', 'vscode'],
-  ['vscode', 'vscode'],
-];
 
 /** User-Agent patterns. Only brands that actually identify themselves land here. */
 const USER_AGENT_HARNESSES: ReadonlyArray<readonly [pattern: string, harness: Harness]> = [
@@ -127,7 +80,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? 
 
 /**
  * Identify the caller. An explicit supported declaration wins, then
- * `clientInfo`, then UA. A runtime UA cannot distinguish agents sharing it.
+ * UA. A runtime UA cannot distinguish agents sharing it.
  */
 /** The header's name, re-exported under this module's older name — contracts spells it once. */
 export const ARTIFACTBIN_AGENT_HEADER = AGENT_HEADER;
@@ -143,21 +96,13 @@ export function declaredAgentHarness(value: unknown): Harness | null {
 export function identifyClient(input: {
   agentHeader?: string | null;
   userAgent?: string | null;
-  clientInfo?: ClientInfo | null;
 }): ClientIdentity {
   const declared = str(input.agentHeader);
   const declaredHarness = declaredAgentHarness(declared);
-  const name = str(input.clientInfo?.name);
-  const version = str(input.clientInfo?.version);
   const ua = str(input.userAgent);
 
   if (declared && declaredHarness) {
     return { harness: declaredHarness, label: declared, version: null, source: 'agent-header' };
-  }
-  if (name) {
-    const harness = matchIn(name.toLowerCase(), CLIENT_INFO_HARNESSES);
-    // Even unmatched, a clientInfo name beats a UA: the client named ITSELF.
-    return { harness: harness ?? 'unknown', label: name, version, source: 'clientInfo' };
   }
   if (ua) {
     return { harness: matchIn(ua.toLowerCase(), USER_AGENT_HARNESSES) ?? 'unknown', label: ua, version: null, source: 'user-agent' };
@@ -174,7 +119,6 @@ export function describeClient(id: ClientIdentity): string {
 export function logClientIdentity(context: string, input: {
   agentHeader?: string | null;
   userAgent?: string | null;
-  clientInfo?: ClientInfo | null;
 }): ClientIdentity {
   const id = identifyClient(input);
   console.log(`[client] ${context}: ${describeClient(id)}`);

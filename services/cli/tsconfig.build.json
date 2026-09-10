@@ -10,7 +10,11 @@
     "emitDeclarationOnly": true,
     "rootDir": "..",
     "outDir": "dist/types",
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/index.ts"
+  ]
 }

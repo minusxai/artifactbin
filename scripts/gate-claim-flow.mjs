@@ -17,6 +17,7 @@
  *
  *   usage: node scripts/gate-claim-flow.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';

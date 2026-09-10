@@ -35,13 +35,15 @@ import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } fr
 import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
 import { localWriteTarget, SIGNALS_TABLE } from './local-target';
 import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
+import { removedSqlReferenceTokens } from './sql-reference-tokens';
+import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 
 // ── declarations ────────────────────────────────────────────────────────────
 
 export const VALUE_TAG = 'Value';
 export const QUERY_TAG = 'Query';
 /**
- * `<Mutation name>{`insert into ref_<id> … values ($a)`}</Mutation>` — a
+ * `<Mutation name>{`insert into public.rows … values ($a)`}</Mutation>` — a
  * Query that WRITES. Same SQL dialect, same `$param` binding, same
  * `ref_<id>` table naming; the differences are exactly three: the statement
  * is INSERT/UPDATE/DELETE (judged by type, lib/sql/engine write mode), it
@@ -152,7 +154,6 @@ const REF_NAME_RE = /^\$([A-Za-z_]\w*)$/;
 /** A SQL parameter: `$region` (not `$$…` dollar-quoting, not `$1`). */
 const SQL_PARAM_RE = /(?<![\w$])\$([A-Za-z_]\w*)/g;
 /** A dataset table inside SQL: `ref_<id>` (ids are 6–12 alnum, lib/ids.ts). */
-const SQL_DATASET_REF_RE = /(?<![\w$.])ref_([A-Za-z0-9]{6,12})\b/g;
 /** A declared name: an identifier that is not shaped like a dataset table. */
 export const DECL_NAME_RE = /^[A-Za-z_]\w*$/;
 
@@ -442,14 +443,17 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
  * as `<style>`); the SQL is non-empty.
  */
 function sourceAttribute(el:JsxElement,sql:string,errors:ValidationError[]):string|undefined {
+  const removed = removedSqlReferenceTokens(sql).tokens[0];
+  if (removed) errors.push(err(`Implicit SQL artifact references are unsupported. Use source="ref:${removed.id}" and query public.rows; use separate named queries to join sources.`, el, el.tag, 'source'));
   const attribute=el.attributes.find(a=>a.name==='source');
   if(!attribute)return;
   const source=attribute.value.static?attribute.value.json:undefined;
-  if(typeof source!=='string'||!/^([A-Za-z0-9]{6,12})$/.test(source)){
-    errors.push(err('source must be a literal dataset id',attribute,el.tag,'source'));return;
+  const id = typeof source === 'string' ? ARTIFACT_REFERENCE_PATTERN.exec(source)?.[1] : undefined;
+  if(!id){
+    const example = typeof source === 'string' && ARTIFACT_ID_PATTERN.test(source) ? `ref:${source}` : 'ref:<id>';
+    errors.push(err(`source must be a literal artifact reference: source="${example}"`,attribute,el.tag,'source'));return;
   }
-  if(datasetRefsInSql(sql).length)errors.push(err('Use schema.table with source; do not mix source with ref_<id> SQL references',el,el.tag,'source'));
-  return source;
+  return id;
 }
 
 export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
@@ -470,7 +474,7 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
   if (sql.trim() === '') return { ok: false, errors: [err(`<Query name="${name}"> has empty SQL`, el, tag)] };
   const source = sourceAttribute(el, sql, errors);
   if (errors.length) return {ok:false,errors};
-  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), refs: source ? [source] : datasetRefsInSql(sql), start: el.start, end: el.end } };
+  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), refs: source ? [source] : [], start: el.start, end: el.end } };
 }
 
 /**
@@ -486,7 +490,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const tag = MUTATION_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name=, source= and expectedAffected= — the SQL is its child: <Mutation name="…" source="<datasetId>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name=, source= and expectedAffected= — the SQL is its child: <Mutation name="…" source="ref:<id>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
@@ -495,12 +499,12 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const kid = kids.length === 1 ? kids[0] : null;
   const sql = kid && kid.type === 'expression' && kid.value.static && typeof kid.value.json === 'string' ? kid.value.json : null;
   if (sql === null) {
-    return { ok: false, errors: [err(`<Mutation name="${name}"> holds a single template-literal child with the SQL: <Mutation name="${name}">{\`insert into ref_<id> …\`}</Mutation>`, el, tag)] };
+    return { ok: false, errors: [err(`<Mutation name="${name}"> holds a single template-literal child with the SQL: <Mutation name="${name}">{\`insert into public.rows …\`}</Mutation>`, el, tag)] };
   }
   if (sql.trim() === '') return { ok: false, errors: [err(`<Mutation name="${name}"> has empty SQL`, el, tag)] };
   const source = sourceAttribute(el, sql, errors);
   if (errors.length) return {ok:false,errors};
-  const refs = source ? [source] : datasetRefsInSql(sql);
+  const refs = source ? [source] : [];
   const direct = source ? null : localWriteTarget(sql);
   const local = direct && !direct.name.startsWith('ref_');
   if (local && refs.length) {
@@ -510,7 +514,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
     return { ok: false, errors: [err('_signals allows only UPDATE; it must remain a single row', el, tag)] };
   }
   if (!local && refs.length !== 1) {
-    return { ok: false, errors: [err(`<Mutation name="${name}"> must write exactly one dataset table (ref_<id>) — found ${refs.length === 0 ? 'none' : refs.map((r) => `ref_${r}`).join(', ')}`, el, tag)] };
+    return { ok: false, errors: [err(`<Mutation name="${name}"> must declare source="ref:<id>" or write a local table — found ${refs.length === 0 ? 'none' : refs.map((r) => `ref_${r}`).join(', ')}`, el, tag)] };
   }
   const expected = staticAttr(el, 'expectedAffected');
   if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
@@ -559,11 +563,6 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
 }
 
 const dedupe = (xs: string[]): string[] => [...new Set(xs)];
-
-/** Dataset ids a piece of SQL reads (`ref_<id>`), deduped, in order. */
-export function datasetRefsInSql(sql: string): string[] {
-  return dedupe([...sql.matchAll(SQL_DATASET_REF_RE)].map((m) => m[1]));
-}
 
 /** `$name` parameters a piece of SQL binds, deduped, in order. */
 export function sqlParams(sql: string): string[] {
@@ -656,7 +655,7 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
   for (const u of uses) {
     const kind = kinds.get(u.name);
     if (!kind) {
-      errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into ref_<id> …`}</Mutation>' : hint}`, u, u.tag, u.attr));
+      errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into public.rows …`}</Mutation>' : hint}`, u, u.tag, u.attr));
     } else if (kind !== u.expects) {
       errors.push(err(
         u.expects === 'table'

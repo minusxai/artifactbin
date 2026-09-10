@@ -9,7 +9,7 @@ describe('admin dataset catalog migration door',()=>{
     expect((await POST(request(endpoint,{method:'POST',headers:{'x-shared-secret':'wrong'},json:{batchSize:1}}))).status).toBe(404);
   });
   it('rejects unbounded and executable input',async()=>{
-    for(const body of [{batchSize:0},{batchSize:101},{batchSize:1.5},{batchSize:1,failBeforeCommit:true},{batchSize:1,dryRun:'false'},{batchSize:1,maxHistoricalVersionsPerArtifact:10001},null,[]]){
+    for(const body of [{batchSize:1,dryRun:false},{batchSize:1,after:'bad cursor'},{batchSize:1,dryRun:false,expected:{aaaaaa:'bad'}},{batchSize:0},{batchSize:101},{batchSize:1.5},{batchSize:1,failBeforeCommit:true},{batchSize:1,dryRun:'false'},{batchSize:1,maxHistoricalVersionsPerArtifact:10001},null,[]]){
       expect((await POST(request(endpoint,{method:'POST',headers:{'x-shared-secret':'test-secret'},json:body}))).status).toBe(400);
     }
   });

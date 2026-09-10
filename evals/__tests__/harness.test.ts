@@ -20,7 +20,7 @@ const fx = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', na
 
 function ctx(leg: Partial<Leg> & Pick<Leg, 'harness' | 'model'>): HarnessRunContext {
   return {
-    leg: { envVar: 'SOME_API_KEY', apiKey: 'the-secret', label: leg.harness, price: null, vision: true, mode: planMode(leg.harness, 'fetched_skill+api_action'), ...leg },
+    leg: { envVar: 'SOME_API_KEY', apiKey: 'the-secret', label: leg.harness, price: null, vision: true, mode: planMode(leg.harness, 'cli'), ...leg },
     prompt: 'Do the thing.\n\nHelp me create an artifact. Follow instructions at http://127.0.0.1:3101/a/abc123/start?k=s',
     cwd: '/tmp/run/cwd',
     homeDir: '/tmp/run/home',
@@ -308,41 +308,10 @@ describe('stream filtering (a transcript must not grow without bound)', () => {
   });
 });
 
-describe('MCP transport support', () => {
-  const mcp = { name: 'artifactbin', url: 'http://127.0.0.1:3101/mcp', token: 'mx_secret' };
-
-  it('says which harnesses can speak MCP at all — Pi ships none', () => {
-    expect(claudeCode.supportsMcp).toBe(true);
-    expect(codex.supportsMcp).toBe(true);
-    expect(opencode.supportsMcp).toBe(true);
-    // Pi is a minimal harness: no MCP in its CLI, its docs, or its settings.
-    expect(pi.supportsMcp).toBe(false);
-  });
-
-  it('claude-code passes the server inline and refuses any other one', () => {
-    const inv = claudeCode.invocation({ ...ctx({ harness: 'claude-code', model: 'claude-opus-5' }), mcp });
-    const i = inv.argv.indexOf('--mcp-config');
-    expect(i).toBeGreaterThan(-1);
-    expect(JSON.parse(inv.argv[i + 1])).toEqual({
-      mcpServers: { 'artifactbin': { type: 'http', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } },
-    });
-    expect(inv.argv).toContain('--strict-mcp-config');
-  });
-
-  it('claude-code passes no MCP flags for a REST task', () => {
-    expect(claudeCode.invocation(ctx({ harness: 'claude-code', model: 'claude-opus-5' })).argv).not.toContain('--mcp-config');
-  });
-
-  it('codex reads the bearer token from an env var, so it never lands in config.toml', () => {
-    const inv = codex.invocation({ ...ctx({ harness: 'codex', model: 'gpt-5.6-terra' }), mcp });
-    expect(inv.env.ARTIFACTBIN_MCP_TOKEN).toBe('mx_secret');
-  });
-
-  it('opencode writes the remote-server block the CLI itself writes', () => {
-    expect(opencode.mcpConfig(mcp)).toEqual({
-      mcp: { 'artifactbin': { type: 'remote', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } },
-    });
-  });
+it('isolates Claude from unrelated server configurations',()=>{
+ const inv=claudeCode.invocation(ctx({harness:'claude-code',model:'claude-opus-5'}));
+ expect(inv.argv).toContain('--strict-mcp-config');
+ expect(JSON.parse(inv.argv[inv.argv.indexOf('--mcp-config')+1])).toEqual({mcpServers:{}});
 });
 
 describe('working directory', () => {

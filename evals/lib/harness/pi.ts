@@ -25,8 +25,6 @@ interface PiAssistant {
 
 export const pi: HarnessAdapter = {
   harness: 'pi',
-  /** Pi ships no MCP client — mode planning preserves skill delivery and substitutes API actions. */
-  supportsMcp: false,
 
   keepLine(line: string): boolean {
     return !line.startsWith('{"type":"message_update"');

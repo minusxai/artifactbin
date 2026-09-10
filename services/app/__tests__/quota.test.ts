@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Per-token quota: creation stops with 403 quota_exceeded
  * at ARTIFACT_QUOTA_PER_TOKEN artifacts; updates/deletes are never blocked
@@ -57,7 +58,7 @@ describe('per-token artifact quota', () => {
 
     // A full token can still edit what it has.
     const put = await putArtifact(
-      request(`/api/artifacts/${first.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>1b</p>' } }),
+      await observedRequest(`/api/artifacts/${first.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>1b</p>' } }),
       params({ id: first.id }),
     );
     expect(put.status).toBe(200);

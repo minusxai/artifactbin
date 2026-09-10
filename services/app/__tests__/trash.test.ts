@@ -93,3 +93,9 @@ describe('the trash', () => {
     expect(await getArtifactById(ancient.id)).not.toBeNull();
   });
 });
+it('returns the deleted subtree identities and safely repeats an owned deletion',async()=>{
+ const o=await owner();const folder=await create(o.token,{format:'folder',title:'Repeatable'});const child=await create(o.token,{markup:'<p>Child</p>',parent_id:folder.id});
+ const first=await j(await del(o.token,folder.id));expect(first.status).toBe(200);expect(first.body.deleted_ids.sort()).toEqual([folder.id,child.id].sort());
+ const repeated=await j(await del(o.token,folder.id));expect(repeated.status).toBe(200);expect(repeated.body.deleted_ids.sort()).toEqual(first.body.deleted_ids.sort());
+ const other=await mintToken('foreign-delete');expect((await del(other.token,folder.id)).status).toBe(404);
+});

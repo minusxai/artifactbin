@@ -17,6 +17,7 @@
  * Partitioning and recency order live in `lib/shelf` (pure). This file owns
  * the grid/list presentation and hands list mode to `ArtifactTable`.
  */
+import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';
@@ -230,11 +231,7 @@ function FolderTile({ row, count, level, folders, onDeleted, documents, gallery,
     setRenaming(false);
     if (!next || next === title) return;
     setTitle(next);
-    void fetch(`/api/my/artifacts/${row.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: next }),
-    }).then((response) => { if (response.ok) pageDataChanged(); }).catch(() => { /* the next load reads the server's answer */ });
+    void writeBrowserArtifact(row.id, { title: next }).then((response) => { if (response.ok) pageDataChanged(); }).catch(() => { /* the next load reads the server's answer */ });
   };
   if (renaming) {
     return (

@@ -22,11 +22,11 @@ SKELETON (adapt cols/rows to the data; 12 columns × 86px rows):
 
   <Helmet>
     <Value name="region" type="string" /><Value name="grain" type="string" default="week" /><Value name="min_rev" type="number" default={0} />
-    <Query name="regions">{`select distinct region from ref_<datasetId> order by 1`}</Query>
-    <Query name="rev_by_week">{`select date_trunc($grain, day) period, sum(revenue) revenue from ref_<datasetId> where ($region is null or region = $region) and revenue >= $min_rev group by 1 order by 1`}</Query>
-    <Query name="orders_by_week">{`select date_trunc($grain, day) period, count(*) orders from ref_<datasetId> where $region is null or region = $region group by 1 order by 1`}</Query>
-    <Query name="kpi_aov">{`select sum(revenue) / count(*) aov from ref_<datasetId> where $region is null or region = $region`}</Query>
-    <Query name="by_region">{`select region, sum(revenue) revenue from ref_<datasetId> group by 1 order by 2 desc`}</Query>
+    <Query name="regions" source="ref:abc123">{`select distinct region from public.rows order by 1`}</Query>
+    <Query name="rev_by_week" source="ref:abc123">{`select date_trunc($grain, day) period, sum(revenue) revenue from public.rows where ($region is null or region = $region) and revenue >= $min_rev group by 1 order by 1`}</Query>
+    <Query name="orders_by_week" source="ref:abc123">{`select date_trunc($grain, day) period, count(*) orders from public.rows where $region is null or region = $region group by 1 order by 1`}</Query>
+    <Query name="kpi_aov" source="ref:abc123">{`select sum(revenue) / count(*) aov from public.rows where $region is null or region = $region`}</Query>
+    <Query name="by_region" source="ref:abc123">{`select region, sum(revenue) revenue from public.rows group by 1 order by 2 desc`}</Query>
   </Helmet>
   <div data-design="tw" className="@container min-h-screen bg-background px-4 py-4 @2xl:px-6 text-foreground">
     <header className="border-b-2 border-foreground pb-3">

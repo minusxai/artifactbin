@@ -83,5 +83,25 @@ export function compileStoredMutation(catalog: DatasetCatalog, sql: string, targ
   const next = parts[index];
   const hasAlias = next && (next.kind === 'quoted' || (next.kind === 'identifier' && !['set', 'where', 'using', 'returning'].includes(next.value)));
   const alias = operation !== 'insert' && !hasAlias ? ` AS ${quote(name)}` : '';
-  return { sql: sql.slice(0, first.start) + quote(targetName) + alias + sql.slice(last.end), table };
+  const replacements = [{ start: first.start, end: last.end, text: quote(targetName) + alias }];
+  // Self-reads use the same isolated physical table as the write. Preserve
+  // expression tokens, strings and comments; only FROM/JOIN relations resolve.
+  for (let i = index; i < parts.length - 1; i++) {
+    if (parts[i].kind !== 'identifier' || !['from', 'join'].includes(parts[i].value)) continue;
+    const head = parts[i + 1];
+    if (!['identifier', 'quoted'].includes(head.kind)) continue;
+    let tail = head;
+    let readSchema = catalog.defaultSchema; let readName = head.value;
+    if (parts[i + 2]?.value === '.' && ['identifier', 'quoted'].includes(parts[i + 3]?.kind)) {
+      tail = parts[i + 3]; readSchema = head.value; readName = tail.value;
+    }
+    if (readSchema === schema && readName === name) {
+      replacements.push({ start: head.start, end: tail.end, text: quote(targetName) });
+    }
+  }
+  let compiled = sql;
+  for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
+    compiled = compiled.slice(0, replacement.start) + replacement.text + compiled.slice(replacement.end);
+  }
+  return { sql: compiled, table };
 }

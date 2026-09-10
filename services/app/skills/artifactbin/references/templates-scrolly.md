@@ -26,7 +26,7 @@ body stays in short bursts.
 
 Skeleton (one pass of the beats; the costume here is a traffic monitor — wear your own):
 
-  <Helmet><Query name="daily">{`select day, transits from ref_<datasetId> order by 1`}</Query></Helmet>
+  <Helmet><Query name="daily" source="ref:abc123">{`select day, transits from public.rows order by 1`}</Query></Helmet>
   <div data-design="tw" className="@container bg-background px-6 text-foreground @2xl:px-12">
     <div className="-mx-6 flex justify-between border-b-2 border-foreground bg-foreground px-6 py-3 font-mono text-xs uppercase tracking-widest text-background @2xl:-mx-12 @2xl:px-12">
       <span>Strait Watch · Traffic Monitor</span><span>● Closed · as of 17 Jun 00:00Z</span>

@@ -24,8 +24,8 @@ import type { DataflowState } from '@/lib/story/dataflow';
 
 const HELMET =
   '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + '<Query name="tally">{`select choice, count(*) votes from ref_abc123 group by 1`}</Query>'
-  + '<Mutation name="vote">{`insert into ref_abc123 (choice) values ($choice)`}</Mutation></Helmet>';
+  + '<Query name="tally" source="ref:abc123">{`select choice, count(*) votes from public.rows group by 1`}</Query>'
+  + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation></Helmet>';
 const BODY = '<div><Button run="$vote">Vote</Button></div>';
 const STATE: DataflowState = { values: { choice: 'ramen' }, tables: { tally: { rows: [], columns: [] } }, errors: {}, mutationAccess:{vote:null} };
 

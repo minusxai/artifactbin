@@ -59,7 +59,7 @@
     "@types/d3-format": "^3.0.4",
     "@types/geojson": "^7946.0.16",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^20",
+    "@types/node": "^22.13.0",
     "@types/nunjucks": "^3.2.6",
     "@types/pg": "^8.16.0",
     "@types/react": "^19",

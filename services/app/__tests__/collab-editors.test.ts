@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Multi-user editing: a share carries a ROLE.
  *
@@ -36,7 +37,6 @@ import { canReadArtifact, effectiveRole as roleFor, getArtifactById } from '@/li
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
 
-const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
 const sessionUser = { id: '', email: '' };
 vi.mock('@/auth', () => ({
@@ -44,14 +44,9 @@ vi.mock('@/auth', () => ({
 }));
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
-const jreq = (path: string, method: string, body?: unknown, token?: string) =>
-  new Request(`${BASE}${path}`, {
-    method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+const jreq = (path: string, method: string, body?: unknown, token?: string) => observedRequest(path,{method,json:body,token});
 const create = async (token: string, body: Record<string, unknown>) => {
-  const res = await createArtifactRoute(jreq('/api/artifacts', 'POST', body, token));
+  const res = await createArtifactRoute(await jreq('/api/artifacts', 'POST', body, token));
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string; edit_id: string; version: number };
 };
@@ -63,7 +58,7 @@ const PROSE2 = '<div><p>hello again</p></div>';
 const ROWS = [{ choice: 'ramen' }];
 const MUTATING = (ds: string) =>
   '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + `<Mutation name="vote">{\`insert into ref_${ds} (choice) values ($choice)\`}</Mutation></Helmet>`
+  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ($choice)\`}</Mutation></Helmet>`
   + '<div><Button run="$vote">Vote</Button></div>';
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
@@ -89,7 +84,7 @@ async function world(markup = PROSE, visibility: 'public' | 'private' = 'public'
 }
 
 const share = async (id: string, shares: unknown) => {
-  const res = await putSharingRoute(jreq(`/api/my/artifacts/${id}/sharing`, 'PUT', { shares }), params({ id }));
+  const res = await putSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'PUT', { shares }), params({ id }));
   return res;
 };
 const inviteEditor = async (w: Awaited<ReturnType<typeof world>>, email = 'bob@x.com') => {
@@ -107,12 +102,12 @@ describe('a viewer share is read-only, exactly as before', () => {
     expect((await share(w.doc.id, ['bob@x.com'])).status).toBe(200);
     asSession({ id: w.bob.id, email: w.bob.email });
     const id = w.doc.id;
-    expect((await getMineRoute(jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
-    expect((await editsMineRoute(jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(404);
-    expect((await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
-    expect((await versionsMineRoute(jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }))).status).toBe(404);
+    expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
+    expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(404);
+    expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+    expect((await versionsMineRoute(await jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }))).status).toBe(404);
     // …and the same through B's claimed bearer token.
-    expect((await getArtifactRoute(jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(404);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(404);
   });
 });
 
@@ -123,30 +118,29 @@ describe('an editor edits through every write door, and nothing else', () => {
     asSession({ id: w.bob.id, email: w.bob.email });
     const id = w.doc.id;
 
-    expect((await getMineRoute(jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(200);
+    expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(200);
 
-    const edited = await editsMineRoute(jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }));
+    const edited = await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }));
     expect(edited.status, await edited.clone().text()).toBe(200);
     expect((await head(id)).source).toContain('hello again');
 
-    const put = await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE }), params({ id }));
+    const put = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE }), params({ id }));
     expect(put.status, await put.clone().text()).toBe(200);
 
-    const versions = await versionsMineRoute(jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }));
+    const versions = await versionsMineRoute(await jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }));
     expect(versions.status).toBe(200);
     const listed = (await versions.json()) as { versions: Array<{ version: number; by: string | null }> };
     expect(listed.versions.length).toBeGreaterThan(0);
 
-    const revert = await revertMineRoute(jreq(`/api/my/artifacts/${id}/revert`, 'POST', { version: 1 }), params({ id }));
+    const revert = await revertMineRoute(await jreq(`/api/my/artifacts/${id}/revert`, 'POST', { version: 1 }), params({ id }));
     expect(revert.status, await revert.clone().text()).toBe(200);
 
     // Owner-only surfaces: the uniform 404, never "exists but not yours".
-    expect((await deleteMineRoute(jreq(`/api/my/artifacts/${id}`, 'DELETE'), params({ id }))).status).toBe(404);
-    expect((await getSharingRoute(jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).status).toBe(404);
+    expect((await deleteMineRoute(await jreq(`/api/my/artifacts/${id}`, 'DELETE'), params({ id }))).status).toBe(404);
+    expect((await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).status).toBe(404);
     expect((await share(id, [{ email: 'carol@x.com', role: 'editor' }])).status).toBe(404);
-    // The PATCH is OWNER-scoped, so an editor meets the uniform 404 before the
-    // parent is ever looked at — which is also the ordering rule itself.
-    expect((await patchMineRoute(jreq(`/api/my/artifacts/${id}`, 'PATCH', { parent_id: null }), params({ id }))).status).toBe(404);
+    // An editor can patch content metadata, but receives owner_only for placement.
+    expect((await patchMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PATCH', { parent_id: null }), params({ id }))).status).toBe(403);
     expect(await head(id)).toBeTruthy();
 
     /*
@@ -165,7 +159,7 @@ describe('an editor edits through every write door, and nothing else', () => {
     asSession({ id: w.bob.id, email: w.bob.email });
     const before = (await head(id)).version;
     for (const parent_id of [box.id, null]) {
-      const moved = await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, parent_id }), params({ id }));
+      const moved = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, parent_id }), params({ id }));
       expect(moved.status, await moved.clone().text()).toBe(400);
       expect(await moved.json()).toMatchObject({ error: 'invalid_parent' });
     }
@@ -193,12 +187,12 @@ describe('an editor edits through every write door, and nothing else', () => {
     const before = (await head(id)).version;
     asSession({ id: w.bob.id, email: w.bob.email });
     for (const governing of [{ visibility: 'unlisted' }, { access: 'readwrite' }]) {
-      const refused = await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, ...governing }), params({ id }));
+      const refused = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, ...governing }), params({ id }));
       expect(refused.status, await refused.clone().text()).toBe(403);
       expect(await refused.json()).toMatchObject({ error: 'owner_only' });
     }
     noSession();
-    const refusedBearer = await putArtifactRoute(jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2, visibility: 'unlisted' }, w.tb.token), params({ id }));
+    const refusedBearer = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2, visibility: 'unlisted' }, w.tb.token), params({ id }));
     expect(refusedBearer.status, await refusedBearer.clone().text()).toBe(403);
     expect(await refusedBearer.json()).toMatchObject({ error: 'owner_only' });
     // Nothing took: not the visibility it asked for, and not the markup it rode in on.
@@ -208,7 +202,7 @@ describe('an editor edits through every write door, and nothing else', () => {
     expect(row.source).not.toContain('again');
     // The same body from the OWNER is the ordinary write it always was.
     asSession({ id: w.owner.id, email: w.owner.email });
-    const mine = await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, visibility: 'unlisted' }), params({ id }));
+    const mine = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, visibility: 'unlisted' }), params({ id }));
     expect(mine.status, await mine.clone().text()).toBe(200);
     expect((await getArtifactById(id))!.visibility).toBe('unlisted');
   });
@@ -217,17 +211,17 @@ describe('an editor edits through every write door, and nothing else', () => {
     const w = await world();
     await inviteEditor(w);
     const id = w.doc.id;
-    const read = await getArtifactRoute(jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }));
+    const read = await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }));
     expect(read.status).toBe(200);
-    const edited = await editsRoute(jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }, w.tb.token), params({ id }));
+    const edited = await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }, w.tb.token), params({ id }));
     expect(edited.status, await edited.clone().text()).toBe(200);
-    const put = await putArtifactRoute(jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE }, w.tb.token), params({ id }));
+    const put = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE }, w.tb.token), params({ id }));
     expect(put.status, await put.clone().text()).toBe(200);
 
-    expect((await getArtifactRoute(jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(404);
-    expect((await getArtifactRoute(jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tc.token), params({ id }))).status).toBe(404);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(404);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tc.token), params({ id }))).status).toBe(404);
     const h = await head(id);
-    expect((await editsRoute(jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: h.edit_id, source: PROSE2 }, w.tc.token), params({ id }))).status).toBe(404);
+    expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: h.edit_id, source: PROSE2 }, w.tc.token), params({ id }))).status).toBe(404);
   });
 
   it('an editor\'s write resolves refs as the DOCUMENT\'s owner: a <Mutation> on the owner\'s dataset and a private image both publish', async () => {
@@ -238,14 +232,14 @@ describe('an editor edits through every write door, and nothing else', () => {
     asSession({ id: w.bob.id, email: w.bob.email });
     const id = w.doc.id;
 
-    const withMutation = await editsMineRoute(jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: MUTATING(ds) }), params({ id }));
+    const withMutation = await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: MUTATING(ds) }), params({ id }));
     expect(withMutation.status, await withMutation.clone().text()).toBe(200);
 
-    const withImage = await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: `<div><img src="ref:${img}" alt="x" /></div>` }), params({ id }));
+    const withImage = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: `<div><img src="ref:${img}" alt="x" /></div>` }), params({ id }));
     expect(withImage.status, await withImage.clone().text()).toBe(200);
 
     // The bearer door too — it parses before it loads the row.
-    const bearerPut = await putArtifactRoute(jreq(`/api/artifacts/${id}`, 'PUT', { markup: MUTATING(ds) }, w.tb.token), params({ id }));
+    const bearerPut = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: MUTATING(ds) }, w.tb.token), params({ id }));
     expect(bearerPut.status, await bearerPut.clone().text()).toBe(200);
   });
 
@@ -255,7 +249,7 @@ describe('an editor edits through every write door, and nothing else', () => {
     asSession({ id: w.bob.id, email: w.bob.email });
     const id = w.doc.id;
     const img = await create(w.tb.token, { image: PNG }); // B's own upload (born unlisted) …
-    const put = await putMineRoute(jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: `<div><img src="ref:${img.id}" alt="x" /></div>` }), params({ id }));
+    const put = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: `<div><img src="ref:${img.id}" alt="x" /></div>` }), params({ id }));
     expect(put.status, await put.clone().text()).toBe(200); // … is link-readable to the owner's loader.
   });
 });
@@ -266,20 +260,20 @@ describe('an editor on a PRIVATE document', () => {
     await inviteEditor(w);
     const id = w.doc.id;
     asSession({ id: w.bob.id, email: w.bob.email });
-    expect((await getMineRoute(jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(200);
-    expect((await editsMineRoute(jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(200);
-    const one = await versionMineRoute(jreq(`/api/my/artifacts/${id}/versions/1`, 'GET'), params({ id, version: '1' }));
+    expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(200);
+    expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(200);
+    const one = await versionMineRoute(await jreq(`/api/my/artifacts/${id}/versions/1`, 'GET'), params({ id, version: '1' }));
     expect(one.status).toBe(200);
     expect(await one.json()).toMatchObject({ version: 1 });
-    const prompt = await agentPromptRoute(jreq(`/api/my/artifacts/${id}/agent-prompt`, 'POST', {}), params({ id }));
+    const prompt = await agentPromptRoute(await jreq(`/api/my/artifacts/${id}/agent-prompt`, 'POST', {}), params({ id }));
     expect(prompt.status, await prompt.clone().text()).toBe(201); // it mints a token for the editor's own agent
     // The stranger and the anonymous token still see nothing.
     asSession({ id: w.carol.id, email: w.carol.email });
-    expect((await getMineRoute(jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
-    expect((await versionMineRoute(jreq(`/api/my/artifacts/${id}/versions/1`, 'GET'), params({ id, version: '1' }))).status).toBe(404);
+    expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
+    expect((await versionMineRoute(await jreq(`/api/my/artifacts/${id}/versions/1`, 'GET'), params({ id, version: '1' }))).status).toBe(404);
     noSession();
-    expect((await getArtifactRoute(jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(200);
-    expect((await getArtifactRoute(jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(404);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(200);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(404);
   });
 
   it('naming the OWNER\'s own email changes nothing — they stay the owner', async () => {
@@ -287,7 +281,7 @@ describe('an editor on a PRIVATE document', () => {
     asSession({ id: w.owner.id, email: w.owner.email });
     expect((await share(w.doc.id, [{ email: w.owner.email, role: 'viewer' }])).status).toBe(200);
     expect(await roleFor(await head(w.doc.id), { userId: w.owner.id, tokenId: null })).toBe('owner');
-    expect((await getSharingRoute(jreq(`/api/my/artifacts/${w.doc.id}/sharing`, 'GET'), params({ id: w.doc.id }))).status).toBe(200);
+    expect((await getSharingRoute(await jreq(`/api/my/artifacts/${w.doc.id}/sharing`, 'GET'), params({ id: w.doc.id }))).status).toBe(200);
   });
 
   it('lib/viewer wraps the same decision for a request actor (session, agent cookie, nobody)', async () => {
@@ -308,7 +302,7 @@ describe('who wrote: edits, versions and the head carry the actor', () => {
     await inviteEditor(w);
     asSession({ id: w.bob.id, email: w.bob.email });
     const id = w.doc.id;
-    const edited = await editsMineRoute(jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }));
+    const edited = await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }));
     expect(edited.status).toBe(200);
     const db = await harness.db();
     const log = await db.query<{ actor_user_id: string | null }>('SELECT actor_user_id FROM artifact_edits WHERE artifact_id = $1 ORDER BY seq DESC LIMIT 1', [id]);
@@ -316,7 +310,7 @@ describe('who wrote: edits, versions and the head carry the actor', () => {
     expect((await head(id)).actor_user_id).toBe(w.bob.id);
 
     // The version archived by that edit is v1, whose author was the OWNER.
-    const versions = await versionsMineRoute(jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }));
+    const versions = await versionsMineRoute(await jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }));
     const listed = (await versions.json()) as { versions: Array<{ version: number; by: string | null }> };
     expect(listed.versions[0].version).toBe(1);
     expect(listed.versions[0].by).toBeNull(); // the owner has no username yet — by is a handle, never an email
@@ -329,9 +323,9 @@ describe('the live stream says who moved the document', () => {
     await inviteEditor(w);
     asSession({ id: w.bob.id, email: w.bob.email });
     const id = w.doc.id;
-    expect((await editsMineRoute(jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(200);
+    expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(200);
     noSession();
-    const res = await eventsRoute(jreq(`/a/${id}/events`, 'GET'), params({ id }));
+    const res = await eventsRoute(await jreq(`/a/${id}/events`, 'GET'), params({ id }));
     expect(res.status).toBe(200);
     const reader = res.body!.getReader();
     const { value } = await reader.read();
@@ -347,7 +341,7 @@ describe('the share list carries roles', () => {
     asSession({ id: w.owner.id, email: w.owner.email });
     const id = w.doc.id;
     expect((await share(id, ['Bob@X.com', { email: 'carol@x.com', role: 'editor' }])).status).toBe(200);
-    const got = await getSharingRoute(jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }));
+    const got = await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }));
     expect(await got.json()).toMatchObject({
       visibility: 'public',
       shares: [{ email: 'bob@x.com', role: 'viewer' }, { email: 'carol@x.com', role: 'editor' }],
@@ -357,7 +351,7 @@ describe('the share list carries roles', () => {
     expect((await share(id, [{ role: 'editor' }])).status).toBe(400);
     // Duplicates collapse to ONE row, the last role given wins.
     expect((await share(id, ['bob@x.com', { email: 'BOB@x.com', role: 'editor' }])).status).toBe(200);
-    const again = (await (await getSharingRoute(jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).json()) as { shares: unknown[] };
+    const again = (await (await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).json()) as { shares: unknown[] };
     expect(again.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
   });
 
@@ -368,11 +362,11 @@ describe('the share list carries roles', () => {
     asSession({ id: w.owner.id, email: w.owner.email });
     expect((await share(id, [{ email: 'bob@x.com', role: 'viewer' }])).status).toBe(200);
     asSession({ id: w.bob.id, email: w.bob.email });
-    expect((await editsMineRoute(jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(404);
+    expect((await editsMineRoute(await jreq(`/api/my/artifacts/${id}/edits`, 'POST', { edit_id: w.doc.edit_id, source: PROSE2 }), params({ id }))).status).toBe(404);
     asSession({ id: w.owner.id, email: w.owner.email });
     expect((await share(id, [])).status).toBe(200);
     asSession({ id: w.bob.id, email: w.bob.email });
-    expect((await getMineRoute(jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
+    expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
   });
 
   it('an anonymous owner may name an editor (the row is email-keyed; nothing needs the owner\'s account)', async () => {
@@ -387,7 +381,7 @@ describe('the share list carries roles', () => {
     const state = await updateSharingFor({ tokenId: anon.id, userId: null }, doc.id, { shares: [{ email: 'bob@x.com', role: 'editor' }] });
     expect(state?.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
     const id = doc.id;
-    expect((await editsRoute(jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: doc.edit_id, source: PROSE2 }, tb.token), params({ id }))).status).toBe(200);
+    expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: doc.edit_id, source: PROSE2 }, tb.token), params({ id }))).status).toBe(200);
   });
 });
 
@@ -398,8 +392,8 @@ describe('the share list carries roles', () => {
  * session met the uniform 404 on the way in.
  */
 describe('a named editor may comment; deletion stays narrower', () => {
-  const annotate = (id: string, body: unknown) =>
-    createAnnotationRoute(jreq(`/api/my/artifacts/${id}/annotations`, 'POST', body), params({ id }));
+  const annotate = async (id: string, body: unknown) =>
+    createAnnotationRoute(await jreq(`/api/my/artifacts/${id}/annotations`, 'POST', body), params({ id }));
 
   it('an editor creates and replies; a viewer and a stranger get the uniform 404', async () => {
     const w = await world();
@@ -416,7 +410,7 @@ describe('a named editor may comment; deletion stays narrower', () => {
 
     // …and replies to it.
     const replied = await actOnAnnotationRoute(
-      jreq(`/api/my/artifacts/${id}/annotations/${ann.id}`, 'POST', { reply: 'checked, it is' }),
+      await jreq(`/api/my/artifacts/${id}/annotations/${ann.id}`, 'POST', { reply: 'checked, it is' }),
       params({ id, annId: ann.id }),
     );
     expect(replied.status, await replied.clone().text()).toBe(200);
@@ -445,20 +439,20 @@ describe('a named editor may comment; deletion stays narrower', () => {
 
     // The editor may not erase the owner's words…
     const refused = await deleteAnnotationRoute(
-      jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'DELETE'), params({ id, annId: byOwner.id }),
+      await jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'DELETE'), params({ id, annId: byOwner.id }),
     );
     expect(refused.status).toBe(404);
 
     // …but may take back their own.
     const own = await deleteAnnotationRoute(
-      jreq(`/api/my/artifacts/${id}/annotations/${byEditor.id}`, 'DELETE'), params({ id, annId: byEditor.id }),
+      await jreq(`/api/my/artifacts/${id}/annotations/${byEditor.id}`, 'DELETE'), params({ id, annId: byEditor.id }),
     );
     expect(own.status, await own.clone().text()).toBe(200);
 
     // The owner erases anything on their document.
     asSession({ id: w.owner.id, email: w.owner.email });
     const ownerDeletes = await deleteAnnotationRoute(
-      jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'DELETE'), params({ id, annId: byOwner.id }),
+      await jreq(`/api/my/artifacts/${id}/annotations/${byOwner.id}`, 'DELETE'), params({ id, annId: byOwner.id }),
     );
     expect(ownerDeletes.status, await ownerDeletes.clone().text()).toBe(200);
   });

@@ -33,8 +33,8 @@ const create = async (token: string, body: Record<string, unknown>) => {
 };
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) =>
-  `<Helmet><Query name="q">{\`select * from ref_${ds}\`}</Query>`
-  + `<Mutation name="vote">{\`insert into ref_${ds} (choice) values ('x')\`}</Mutation></Helmet>`
+  `<Helmet><Query name="q" source="ref:${ds}">{\`select * from public.rows\`}</Query>`
+  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ('x')\`}</Mutation></Helmet>`
   + '<div><Button run="$vote">Vote</Button><Question data="$q" viz={{"kind":"table"}} /></div>';
 
 beforeEach(async () => {
@@ -80,7 +80,7 @@ describe('contention', () => {
     const ds = (await create(t.token, { dataset: ROWS, columns: [{ name: 'choice', type: 'string' }], access: 'readwrite' })).id;
     await alwaysContended(ds);
     const res = await mutateDatasetRoute(
-      request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into ref_${ds} (choice) values ('y')` } }),
+      request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into public.rows (choice) values ('y')` } }),
       params({ id: ds }),
     );
     expect(res.status).toBe(503);

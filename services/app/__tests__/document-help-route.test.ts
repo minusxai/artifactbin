@@ -1,5 +1,5 @@
 /**
- * DISCOVER: the REAL reader route serves the help pointer — as an HTTP `Link: <…/docs>; rel="help"` header (for
+ * DISCOVER: the REAL reader route serves the help pointer — as an HTTP `Link: <…/llms.txt>; rel="help"` header (for
  * agents that read headers or strip HTML) and in <head> — built on the request's own base URL. Seeded RED.
  */
 import { describe, expect, it } from 'vitest';
@@ -23,27 +23,27 @@ describe('GET /a/:id (the document itself)', () => {
       const res = await app.request(`${BASE}/api/artifacts/zzzzzz/query`, { method });
       expect(res.status).toBe(404);
       expect(await res.json()).toMatchObject({
-        error: 'not_found', docs: `${BASE}/docs/artifactbin/references/publishing-query.md`,
+        error: 'not_found', help: 'afbin help publishing-query',
         details: [expect.stringContaining('/a/<documentId>/query')],
       });
     }
   });
 
-  it('carries Link: <base>/docs; rel="help" and the head pointer, on the request base', async () => {
+  it('carries Link: <base>/llms.txt; rel="help" and the head pointer, on the request base', async () => {
     const t = await mintToken('t');
     const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`), params(row.id));
     expect(res.status).toBe(200);
-    expect(res.headers.get('link')).toBe(`<${BASE}/docs>; rel="help"`);
+    expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/docs" title="Agents: read this first to edit any artifact here">`);
-    expect(html).toContain(`tokens at ${BASE}/tokens/new`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Install the artifactbin CLI and local skills">`);
+    expect(html).toContain(`afbin setup --server ${BASE}`);
   });
   it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
     const t = await mintToken('t');
     const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artefactbin.dev' } }), params(row.id));
-    expect(res.headers.get('link')).toBe('<https://artefactbin.dev/docs>; rel="help"');
+    expect(res.headers.get('link')).toBe('<https://artefactbin.dev/llms.txt>; rel="help"');
   });
   it('carries the same header and head pointer at an owned artifact pretty URL', async () => {
     const owner = await ensureUsername(await createUser({ email: 'pretty-help@example.com' }));
@@ -52,9 +52,9 @@ describe('GET /a/:id (the document itself)', () => {
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const res = await app.request(`${BASE}/@${owner.username}/${row.id}-pretty-help`);
     expect(res.status).toBe(200);
-    expect(res.headers.get('link')).toBe(`<${BASE}/docs>; rel="help"`);
+    expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
     const html = await res.text();
-    expect(html).toContain(`<link rel="help" href="${BASE}/docs" title="Agents: read this first to edit any artifact here">`);
-    expect(html).toContain(`read ${BASE}/docs — tokens at ${BASE}/tokens/new`);
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Install the artifactbin CLI and local skills">`);
+    expect(html).toContain(`afbin setup --server ${BASE}`);
   });
 });

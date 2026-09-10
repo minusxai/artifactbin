@@ -1,3 +1,6 @@
+import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
+import {artifactState} from './artifact-state';
+import {channelFor} from './story/live';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {executeCatalog} from '@/lib/datasets/execute';
 import {claimPendingDatasetSecret,resolveDatasetConnection} from '@/lib/datasets/secrets';
@@ -18,7 +21,7 @@ import { getDb, type Queryable } from './db';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
 import { isDocumentFormat, parseContentInput, type ArtifactFormat } from './story/input';
-import { canonicalizeMarkup, publishJsx } from './story/jsx-tier';
+import { canonicalizeMarkup, publishJsx, prepareJsx } from './story/jsx-tier';
 import { imageRawUrl, imageVariantUrl, pdfRawUrl } from './story/ref-data';
 import { displayTitle } from './story/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
@@ -40,6 +43,7 @@ import { dryRunDataflow } from '@/lib/story/data-checks';
 import { mutationUsesRow } from '@/lib/story/row-scope';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
+import { queryRows } from '@/lib/datasets/query-rows';
 import { runMutation } from '@/lib/sql/engine';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
 import { localTableOverrides } from '@/lib/story/local-tables';
@@ -296,6 +300,7 @@ export interface ArtifactInput {
    * Absent on replace = leave it where it is.
    */
   ancestor_ids?: string[];
+  link_role?: ShareRole;
 }
 
 const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, access, ancestor_ids, created_at, updated_at';
@@ -342,7 +347,7 @@ export async function createArtifact(
    *                and access — the same axis, and carrying the tier while
    *                resetting the role would be incoherent.
    */
-  atCreation: { forkedFrom?: string; linkRole?: ShareRole | null } = {},
+  atCreation: { forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null } = {},
 ): Promise<ArtifactRow> {
   const db = await getDb();
   if (input.format === 'markup' && input.source) {
@@ -360,9 +365,10 @@ export async function createArtifact(
     const id = generateFileId();
     try {
       const r = await db.transaction(async tx=>{
+        if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
         const catalog=catalogOf(input);
         if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
-        return tx.query<ArtifactRow>(
+        const created = await tx.query<ArtifactRow>(
         // The genesis edit row makes the creation's edit_id resolvable like any
         // other: an agent that creates and then edits against that id is on an
         // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
@@ -409,6 +415,8 @@ export async function createArtifact(
           JSON.stringify(sourceIds),
         ],
         );
+        if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
+        return created;
       });
       void trackEvent('create', r.rows[0].id, { userId, parentId: parentOf(r.rows[0]) });
       // A child arriving wakes the folder it landed in, so an open listing
@@ -864,11 +872,17 @@ export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived)
   return r !== null && 'notArchived' in r;
 }
 
-async function revertScoped(actor: TokenActor, id: string, version: number): Promise<ArtifactRow | null | VersionNotArchived> {
+async function revertScoped(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
   const db = await getDb();
   const scope = editorScope(actor);
   const initial = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
   if (!initial) return null;
+  const condition = (row: ArtifactRow): Response | null => {
+    if (opts.expectedVersion !== undefined && row.version !== opts.expectedVersion) return json({error:'version_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
+    if (opts.expectedState !== undefined && artifactState(row) !== opts.expectedState) return json({error:'state_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
+    return null;
+  };
+  const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
   const target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
   const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'',target.meta) : null;
@@ -880,7 +894,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
-    if(current.edit_id!==initial.edit_id) return {notArchived:true,conflictVersion:current.version};
+    const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
+    if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
     const targetCatalog=catalogOf(target);
     if(targetCatalog?.kind==='postgres'&&targetCatalog.connection){
@@ -923,6 +938,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
  * 404, and report the head version so the caller can read → merge → replay.
  */
 export interface VersionConflict {
+  reason?: 'state_conflict';
+  currentState?: string;
   conflict: true;
   currentVersion: number;
 }
@@ -931,6 +948,7 @@ export function isVersionConflict(r: ArtifactRow | null | VersionConflict): r is
 }
 
 export interface ReplaceOpts {
+  expectedState?: string;
   /** When set, the replace applies only if it still names the head version. */
   expectedVersion?: number;
 }
@@ -951,6 +969,7 @@ async function replaceScoped(
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
+    if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
@@ -979,7 +998,7 @@ async function replaceScoped(
       `UPDATE artifacts
        SET format = $3, content = $4, source = $5, meta = $6, title = $7, description = $8,
            visibility = COALESCE($10, visibility), ancestor_ids = COALESCE($11::text[], ancestor_ids),
-           access = COALESCE($12, access),
+           access = COALESCE($12, access), link_role = COALESCE($15, link_role),
            version = version + 1, edit_id = $9, actor_user_id = $13, actor_token_id = $14, updated_at = now()
        WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
       [
@@ -996,6 +1015,7 @@ async function replaceScoped(
         input.ancestor_ids ?? null,
         input.access ?? null,
         ...actorStamp(actor),
+        input.link_role ?? null,
       ],
     );
     // A replace may also FILE the row. When the row is a folder, its whole
@@ -1144,8 +1164,12 @@ const headOf = (row: ArtifactRow) => ({ editId: row.edit_id, source: row.source 
  * (post-sanitize), never the caller's literal diff, so reconstruction from any
  * still-logged base is exact.
  */
-export async function applyEditScoped(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope } = {}): Promise<EditOutcome | Response | null> {
+export async function applyEditScoped(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean; loadRef?:RefLoader } = {}): Promise<EditOutcome | Response | null> {
   const db = await getDb();
+  const publishCandidate: typeof publishJsx = opts.dryRun ? async(fields,source,ctx={})=>{
+    const prepared=await prepareJsx(fields,source,{loadRef:opts.loadRef??ctx.loadRef,normalizeMarkup:ctx.normalizeMarkup});
+    return prepared instanceof Response?prepared:prepared.content;
+  } : publishJsx;
   // Who may reach the row: editors by default; an annotation anchor stamp
   // (lib/annotations) widens it to commenters, whose only "edit" this is.
   const scope = opts.scope ?? editorScope(actor);
@@ -1202,7 +1226,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         if (!derived) {
           // No text change. Fine when metadata is also being set; otherwise
           // there is nothing to do.
-          if (!input.meta) return { applied: false, reason: 'bad_diff', detail: 'identical' };
+          if (!input.meta) return opts.dryRun?json({valid:true,dry_run:true,changed:false,markup:headSource}):{ applied: false, reason: 'bad_diff', detail: 'identical' };
           splice = { start: 0, removed: '', inserted: '' };
         } else {
           splice = derived;
@@ -1232,7 +1256,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
     //    so it runs with no lock held (a concurrent landing just loses the CAS).
     //    Theme/colorMode ride along because they change the compiled stylesheet.
     const meta = head.meta as { theme?: unknown; template?: unknown; colorMode?: unknown };
-    let published = await publishJsx(
+    let published = await publishCandidate(
       {
         theme: input.meta?.theme !== undefined ? input.meta.theme : meta.theme ?? null,
         template: meta.template ?? null,
@@ -1263,7 +1287,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       });
     }
     if (input.change && identity.source !== published.source) {
-      published = await publishJsx(
+      published = await publishCandidate(
         {
           theme: input.meta?.theme !== undefined ? input.meta.theme : meta.theme ?? null,
           template: meta.template ?? null,
@@ -1281,6 +1305,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       aliasTargets.set(alias.legacyKey, alias.nodeId);
     }
     const storedText = input.change ? published.source ?? '' : headSource;
+    if(opts.dryRun)return json({valid:true,dry_run:true,changed:storedText!==headSource,markup:storedText,edit_id:head.edit_id,version:head.version,state:artifactState(head),commit_checks:['authorization','references','edit_base']});
 
     // 5. Log what actually LANDED (the sanitizer may have rewritten the text),
     //    normalized for the same reason: the logged span is what every future
@@ -1304,6 +1329,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
          UPDATE artifacts SET content = $3, source = $4, meta = $5, version = version + 1,
                 edit_id = $6, title = $21, actor_user_id = $22, actor_token_id = $23, updated_at = now()
          WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $7
+           AND meta = $14::jsonb AND title IS NOT DISTINCT FROM $9 AND description IS NOT DISTINCT FROM $10
          RETURNING *
        ), archived AS (
          INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta, actor_user_id, actor_token_id)
@@ -1388,25 +1414,6 @@ async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess):
   const r = await db.query<ArtifactRow>(
     `UPDATE artifacts SET access = $3 WHERE id = $1 AND ${scope.where('$2')} AND format = 'dataset' AND ($3 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres') RETURNING *, pg_notify('artifact_' || lower(id), edit_id)`,
     [id, scope.val, access],
-  );
-  return r.rows[0] ?? null;
-}
-
-/**
- * Set the read TIER — metadata, exactly like the access setter above: no
- * version bump, no archive, no edit-log row, and the row is otherwise
- * untouched.
- *
- * DELIBERATELY SILENT. `sharing_changed` belongs to the SHARING door, which is
- * where an ACL is managed and where that emit lives; the replace door this
- * serves has never said it, and a metadata write is not the place to give a
- * door a verb it never had.
- */
-async function setVisibilityScoped(scope: Scope, id: string, visibility: Visibility): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  const r = await db.query<ArtifactRow>(
-    `UPDATE artifacts SET visibility = $3 WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
-    [id, scope.val, visibility],
   );
   return r.rows[0] ?? null;
 }
@@ -1693,6 +1700,21 @@ export function getOwnedArtifactFor(actor: TokenActor, id: string): Promise<Arti
   return getArtifactScoped(ownerScope(actor), id);
 }
 
+/** Stable keyset pagination; creation timestamps never move when content is edited. */
+export async function listArtifactPageFor(actor: TokenActor, limit: number, cursor?: {created: string; id: string}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
+  const scope = ownerScope(actor);
+  const db = await getDb();
+  const values: unknown[] = [scope.val, limit + 1];
+  if (cursor) values.push(cursor.created, cursor.id);
+  const result = await db.query<ArtifactSummary & {page_created: string}>(
+    `SELECT ${SUMMARY_COLS}, created_at::text AS page_created FROM artifacts WHERE ${scope.where('$1')}
+      ${cursor ? 'AND (created_at, id) < ($3::timestamptz, $4)' : ''}
+      ORDER BY created_at DESC, id DESC LIMIT $2`, values);
+  const rows = result.rows.slice(0, limit);
+  const last = rows.at(-1);
+  return {rows, ...(result.rows.length > limit && last ? {next: {created: last.page_created, id: last.id}} : {})};
+}
+
 export function listArtifactsFor(actor: TokenActor): Promise<ArtifactSummary[]> {
   return listArtifactsScoped(ownerScope(actor));
 }
@@ -1701,8 +1723,32 @@ export function replaceArtifactFor(actor: TokenActor, id: string, input: Artifac
   return replaceScoped(actor, id, input, opts);
 }
 
-export function applyEditFor(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope } = {}): Promise<EditOutcome | Response | null> {
+export function applyEditFor(actor: TokenActor, id: string, input: EditInput, opts: { scope?: Scope; dryRun?:boolean; loadRef?:RefLoader } = {}): Promise<EditOutcome | Response | null> {
   return applyEditScoped(actor, id, input, opts);
+}
+
+export async function listVersionPageFor(actor: TokenActor, id: string, limit: number, before?: number, through?:number): Promise<{rows: VersionSummary[]; next?: number} | null> {
+  const scope = editorScope(actor);
+  const db = await getDb();
+  // Keep authorization and the head/history snapshot in one statement.
+  const result = await db.query<VersionSummary & {visible: boolean}>(`
+    WITH head AS (SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}),
+    history AS (
+      SELECT version,title,description,format,actor_user_id,updated_at AS created_at FROM head
+      UNION ALL
+      SELECT v.version,v.title,v.description,v.format,v.actor_user_id,v.created_at
+      FROM artifact_versions v WHERE v.artifact_id=$1 AND EXISTS (SELECT 1 FROM head)
+    )
+    SELECT h.version,h.title,h.description,h.format,u.username AS by,h.created_at,true AS visible
+    FROM history h LEFT JOIN users u ON u.id=h.actor_user_id
+    WHERE ($4::bigint IS NULL OR h.version < $4) AND ($5::bigint IS NULL OR h.version <= $5) ORDER BY h.version DESC LIMIT $3`,
+    [id, scope.val, limit + 1, before ?? null,through??null]);
+  if (!result.rows.length) {
+    const visible = await db.query(`SELECT 1 FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id, scope.val]);
+    if (!visible.rows.length) return null;
+  }
+  const rows = result.rows.slice(0, limit).map(({visible: _visible, ...row}) => row);
+  return {rows, ...(result.rows.length > limit ? {next: rows.at(-1)!.version} : {})};
 }
 
 export function listVersionsFor(actor: TokenActor, id: string): Promise<VersionSummary[] | null> {
@@ -1713,8 +1759,8 @@ export function getVersionFor(actor: TokenActor, id: string, version: number): P
   return getVersionScoped(editorScope(actor), id, version);
 }
 
-export function revertArtifactFor(actor: TokenActor, id: string, version: number): Promise<ArtifactRow | null | VersionNotArchived> {
-  return revertScoped(actor, id, version);
+export function revertArtifactFor(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
+  return revertScoped(actor, id, version, opts);
 }
 
 /** File a row the actor OWNS under `next` (the resolved trail; `[]` is the root). */
@@ -1750,49 +1796,54 @@ export async function setTitleFor(actor: TokenActor, id: string, title: string):
 
 /** What a METADATA write may change: policy ABOUT a row, never its content. */
 export interface MetadataPatch {
-  /** The name. Trimmed HERE, so two doors cannot write two different strings. */
-  title?: string;
+  title?: string | null;
+  description?: string | null;
   visibility?: Visibility;
   access?: DatasetAccess;
-  /** The RESOLVED trail (lib/folders resolveParent); `[]` is the root. */
   ancestor_ids?: string[];
+  link_role?: ShareRole;
+  theme?: string | null;
+  template?: string | null;
+  colorMode?: 'light' | 'dark' | null;
 }
 
-/**
- * THE METADATA WRITE — the one code path for the fields that are policy about
- * a row rather than an edit of it: its name, who may read it, whether its rows
- * are open, and where it is filed. No version bump, no archived copy, no
- * edit-log row, no `edit_id` rotation — none of which a rename has any business
- * buying.
- *
- * It exists because a FOLDER has nothing else. A folder has no content, so
- * `title`, `visibility` and `parent_id` are the entire body it takes, and the
- * REPLACE door was writing them the way it writes a document — archiving the
- * empty state and moving the version number, which is the one thing a caller
- * diffs to learn that a document changed. Both doors now run this, so the
- * browser's PATCH and an agent's PUT are the same act with the same effects.
- *
- * OWNER-SCOPED throughout, through the setters it composes: placement, tier and
- * dataset access are on ownerScope's list already, and a name is the same kind
- * of fact about a row. Null is the uniform 404, answered BEFORE anything is
- * written — a caller who cannot reach the row learns nothing else about it.
- *
- * Composition, not one statement, and the honest cost is stated: a multi-field
- * patch is two or three statements rather than one transaction, so a crash
- * between them leaves a rename applied and a move not. That is exactly the
- * property the PATCH door has always had, and each setter is the one place its
- * own wakeups and events live (`setParentFor` NOTIFYs both ends of a move and
- * emits `moved`); collapsing them into a single UPDATE would mean writing those
- * a second time.
- */
-export async function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch): Promise<ArtifactRow | null> {
-  let row = await getOwnedArtifactFor(actor, id);
-  if (!row) return null;
-  if (patch.title !== undefined) row = await setTitleFor(actor, id, patch.title.trim());
-  if (row && patch.access) row = await setAccessFor(actor, id, patch.access);
-  if (row && patch.visibility) row = await setVisibilityScoped(ownerScope(actor), id, patch.visibility);
-  if (row && patch.ancestor_ids) row = await setParentFor(actor, id, patch.ancestor_ids);
-  return row;
+/** Metadata commits as one observed-state transaction, without a content version. */
+export function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch): Promise<ArtifactRow | null>;
+export function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch, opts: ReplaceOpts & {allowEditor?:boolean;dryRun?:boolean}): Promise<ArtifactRow | VersionConflict | null>;
+export async function setMetadataFor(actor: TokenActor, id: string, patch: MetadataPatch, opts: ReplaceOpts & {allowEditor?:boolean;dryRun?:boolean} = {}): Promise<ArtifactRow | VersionConflict | null> {
+  const db = await getDb();
+  const scope = opts.allowEditor?editorScope(actor):ownerScope(actor);
+  let moved: {from: string | null; to: string | null} | null = null;
+  const result = await db.transaction<ArtifactRow | VersionConflict | null>(async tx => {
+    const current = (await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')} FOR UPDATE`, [id,scope.val])).rows[0];
+    if (!current) return null;
+    if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
+    if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
+    if (patch.access && (current.format !== 'dataset' || (patch.access === 'readwrite' && catalogOf(current)?.kind === 'postgres'))) return null;
+    const meta = {...current.meta};
+    for (const key of ['theme','template','colorMode'] as const) if (patch[key] !== undefined) meta[key] = patch[key];
+    if(opts.dryRun)return {...current,...patch,meta};
+    const updated = (await tx.query<ArtifactRow>(`UPDATE artifacts SET title=$3,description=$4,meta=$5::jsonb,
+      visibility=$6,access=$7,ancestor_ids=$8::text[],link_role=$9,updated_at=now(),actor_user_id=$10,actor_token_id=$11
+      WHERE id=$1 AND ${scope.where('$2')} RETURNING *`, [id,scope.val,
+      patch.title === undefined ? current.title : patch.title?.trim() ?? null,
+      patch.description === undefined ? current.description : patch.description,
+      JSON.stringify(meta),patch.visibility ?? current.visibility,patch.access ?? current.access,
+      patch.ancestor_ids ?? current.ancestor_ids,patch.link_role ?? current.link_role,...actorStamp(actor),
+    ])).rows[0];
+    if (patch.ancestor_ids && current.format === 'folder') {
+      const swap = ancestorsForMove(current,patch.ancestor_ids);
+      await tx.query(swap.sql,swap.params);
+    }
+    if (patch.ancestor_ids) moved = {from:parentOf(current),to:parentOf(updated)};
+    return updated;
+  });
+  if (result && !isVersionConflict(result) && !opts.dryRun) {
+    if (moved) {await wakeParents(moved);sayMoved(actor,id,moved);}
+    else await notifyParent(parentOf(result));
+    if (patch.access || patch.visibility || patch.link_role) await db.query('SELECT pg_notify($1,$2)',[channelFor(id),result.edit_id]);
+  }
+  return result;
 }
 
 export function refLoaderForActor(actor: TokenActor): RefLoader {
@@ -1808,7 +1859,7 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
     ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalogOf(row)??undefined, query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => executeCatalog(catalogOf(row)!,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes}) } : {}),
     // A folder's shape is FIXED and computed, never stored — the publish door
     // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
-    ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS } : {}),
+    ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS, query: (sql: string, params: Record<string, Scalar>) => queryRows({columns: CHILDREN_COLUMNS, rows: []}, sql, params) } : {}),
     ...(row.format === 'viz' ? { recipe: JSON.parse(row.content) } : {}),
   };
 }
@@ -1903,7 +1954,7 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source });
+  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
@@ -2125,8 +2176,13 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
   const usedSources = new Map<string, string>();
   const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceQuery:async(q,values,page)=>{
-      const catalog=(datasets[q.source!] as RefTable|undefined)?.catalog;
-      if(!catalog)throw new Error('Dataset source is unavailable');
+      const table = datasets[q.source!] as RefTable | undefined;
+      if (!table) throw new Error(`Source ref:${q.source} is unavailable`);
+      const catalog = table.catalog;
+      if (!catalog) {
+        usedSources.set(q.source!, JSON.stringify(table));
+        return queryRows(table, q.sql, values, page);
+      }
       usedSources.set(q.source!, JSON.stringify(catalog));
       return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),authorize:async()=>{
         await opts.authorize?.();
@@ -2140,7 +2196,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
   // waits. Recheck every used source, not merely the last query to finish.
   for (const [id, snapshot] of usedSources) {
     const current = await resolve(id);
-    if (!current || JSON.stringify((current as RefTable).catalog) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
+    if (!current || JSON.stringify(current.catalog ?? current) !== snapshot) throw new DatasetError('Dataset source is unavailable',404);
   }
   await opts.authorize?.();
   return { flow, state };
@@ -2224,6 +2280,8 @@ export async function refDataForRow(
         ? { smallUrl: imageVariantUrl(r.id, r.version, im.smallWidth), smallWidth: im.smallWidth }
         : {};
       out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur, ...widths };
+    } else if (r.format === 'file') {
+      out[r.id]={kind:'file',url:imageRawUrl(r.id,r.version)};
     } else if (r.format === 'pdf') {
       // What the CARD says: where the file is, what it is called, how big it is
       // and how long. The name is the artifact's title (the author's, or the

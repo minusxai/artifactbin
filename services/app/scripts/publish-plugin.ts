@@ -38,7 +38,7 @@ try {
   for (const entry of readdirSync(work)) {
     if (entry !== '.git') rmSync(path.join(work, entry), { recursive: true, force: true });
   }
-  for (const [rel, content] of Object.entries(buildMirrorFiles(identity.baseUrl, 'mcp', channel, sourceSha))) {
+  for (const [rel, content] of Object.entries(buildMirrorFiles(identity.baseUrl, channel, sourceSha))) {
     const target = path.join(work, rel);
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target, content);

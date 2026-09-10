@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Dataflow browser gate: publish diagnostics; signal/query subscriptions;
@@ -22,8 +23,8 @@ const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, b
 const ds = await j(await api('/api/artifacts', { dataset: [{ region: 'EU', revenue: 837 }, { region: 'NA', revenue: 1200 }, { region: 'EU', revenue: 3 }] }));
 ok(!!ds.id, 'the dataset published');
 const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" type="string" />
-<Query name="regions">{\`select distinct region from ref_${ds_} order by 1\`}</Query>
-<Query name="sales">{\`select region, sum(revenue) revenue from ref_${ds_} where $region is null or region = $region group by 1 order by 1\`}</Query>
+<Query name="regions" source="ref:${ds_}">{\`select distinct region from public.rows order by 1\`}</Query>
+<Query name="sales" source="ref:${ds_}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
 <select aria-label="Region" value="$region" options="$regions" />
 <Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`var out = document.getElementById('out'); var changed = false; function show() { if (changed) return; var t = mx.data.get('sales'); out.textContent = 'mx:' + (typeof mx) + ' rows=' + (t ? t.rows.length : 0); } show(); mx.data.subscribe(['sales'], show); mx.params.subscribe(['region'], function (v) { changed = true; out.textContent = 'changed:' + v.region; });\`}</script></Iframe>
@@ -37,7 +38,7 @@ ok(bad.status === 400 && badBody.error === 'invalid_sql' && /revenu.*Candidate.*
   'a bad column is refused at publish with the engine diagnostic naming candidates');
 const retired = await api('/api/artifacts', { markup: `<Question data="ref:${ds.id}" />` });
 const retiredBody = await j(retired);
-ok(retired.status === 400 && /<Query name="rows">/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Query> replacement');
+ok(retired.status === 400 && /<Query name="rows"[^>]*source="ref:/.test(retiredBody.details?.[0]?.message ?? ''), 'data="ref:" is retired and the 400 names the <Query> replacement');
 
 // ── 2 + 3. inline document and scoped authenticated transport ──────────────
 const b = await chromium.launch();
@@ -126,12 +127,12 @@ ok(reach.violations.length >= reach.targetCount && blockedOrigins.has(new URL(B)
 // ── 4. <DataTable> past the cap, through scoped POST windows ───────────────
 // A dataset can never exceed the ingest cap (MAX_ROWS_LIMIT), and the query cap
 // defaults to the same number — so a result past the cap comes from the QUERY:
-// a cross join of a 200-row dataset is 40,000 rows, 10,000 of which the island
+// a cross join of a 200-row dataset is 40,000 rows, 1,000 of which the island
 // carries, and the rest are read as engine windows.
 const rows = Array.from({ length: 200 }, (_, i) => ({ id: i, region: ['EU', 'NA', 'APAC'][i % 3], revenue: (i * 7919) % 10007 }));
 const big = await j(await api('/api/artifacts', { dataset: rows }));
 const expectedMax = Math.max(...rows.flatMap((a) => rows.map((b_) => (a.revenue + b_.revenue) % 10007)));
-const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Query name="all">{\`select a.id * 200 + b.id as id, a.region, (a.revenue + b.revenue) % 10007 as revenue from ref_${big.id} a cross join ref_${big.id} b order by 1\`}</Query></Helmet>
+const tdoc = await j(await api('/api/artifacts', { markup: `<Helmet><Query name="all" source="ref:${big.id}">{\`select a.id * 200 + b.id as id, a.region, (a.revenue + b.revenue) % 10007 as revenue from public.rows a cross join public.rows b order by 1\`}</Query></Helmet>
 <div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Big table</h1>
 <DataTable data="$all" height="360px" columns={[{"col":"id","title":"ID"},{"col":"region","title":"Region"},{"col":"revenue","title":"Revenue","fmt":"$,.0f","bar":true}]} /></div>` }));
 ok(!!tdoc.id, 'the DataTable document published');
@@ -143,8 +144,8 @@ const f2 = p.mainFrame();
 await f2.locator('[aria-label="Data grid"] tbody tr').first().waitFor({ timeout: 20000 });
 await f2.waitForTimeout(600);
 const domRows = await f2.$$eval('[aria-label="Data grid"] tbody tr', (trs) => trs.length);
-ok(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 10,000 loaded)`);
-ok(/10,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), 'and honest about holding a sample of the result');
+ok(domRows > 0 && domRows < 200, `the table is virtualised (${domRows} DOM rows for 1,000 loaded)`);
+ok(/1,000 of 40,000/.test(await f2.textContent('[aria-label="Row count"]')), `and honest about holding a sample of the result (${await f2.textContent('[aria-label="Row count"]')})`);
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.click('[aria-label="Sort by Revenue"]');
 await f2.waitForFunction(() => document.querySelector('[aria-label="Row count"]')?.textContent?.startsWith('500 of'), null, { timeout: 20000 }).catch(() => {});
@@ -207,8 +208,8 @@ ok(readerRelay.length >= 1 && readerDirect.length === 0, `…as the relay POST w
 // the reader through the runtime's URL state synchronization.
 const uds = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ dataset: [{ region: 'west', revenue: 10 }, { region: 'east', revenue: 25 }] }) }));
 const udocSrc = `<Helmet><title>URL values gate</title><Value name="region" type="string" />
-<Query name="regions">{\`select distinct region from ref_${uds.id} order by 1\`}</Query>
-<Query name="sales">{\`select region, sum(revenue) revenue from ref_${uds.id} where $region is null or region = $region group by 1 order by 1\`}</Query>
+<Query name="regions" source="ref:${uds.id}">{\`select distinct region from public.rows order by 1\`}</Query>
+<Query name="sales" source="ref:${uds.id}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Regions</h1>
 <select aria-label="Region" value="$region" options="$regions" />
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p></div>`;

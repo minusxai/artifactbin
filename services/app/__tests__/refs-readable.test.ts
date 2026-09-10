@@ -34,7 +34,7 @@ const create = async (token: string, body: Record<string, unknown>) =>
   createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
 
 const queryDoc = (ds: string) =>
-  `<Helmet><Query name="sales">{\`select * from ref_${ds}\`}</Query></Helmet><Question data="$sales" viz={{"kind":"table"}} />`;
+  `<Helmet><Query name="sales" source="ref:${ds}">{\`select * from public.rows\`}</Query></Helmet><Question data="$sales" viz={{"kind":"table"}} />`;
 
 describe('link-readable refs', () => {
   it('a PUBLIC image published by one token is referenceable by another, and renders', async () => {
