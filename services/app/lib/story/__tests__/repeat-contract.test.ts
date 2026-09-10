@@ -16,6 +16,9 @@ it.each([
  '<For each={$orders.map(x=>x)} keyBy="id"/>',
  '<For each={$orders} keyBy="id"><For each={$orders} keyBy="id"/></For>',
  '<For each={$orders} keyBy="id"><button onClick="bad"/></For>',
+ '<For each={$orders} keyBy="id"><input value="$shared"/></For>',
+ '<For each={$orders} keyBy="id"><Button run="$mutate"/></For>',
+ '<For each={$orders} keyBy="id"><DataTable data="$orders"/></For>',
  '<For each={$orders} keyBy="id"><a href="javascript:alert(1)"/></For>',
 ])('rejects malformed or active repeat markup %s',(source)=>{expect(validateJsx(nodes(source),{components:['For']})).not.toEqual([])});
 

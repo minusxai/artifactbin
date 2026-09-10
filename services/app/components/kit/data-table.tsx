@@ -1,5 +1,6 @@
-import { keyedRowsError, commentMetadata } from '@/lib/story/repeat-identity';
 "use client"
+
+import { keyedRowsError, commentMetadata } from '@/lib/story/repeat-identity';
 
 /**
  * `<DataTable>` — the data-bound table of the story kit, and the ONE way to
@@ -70,7 +71,7 @@ export interface DataTableProps {
   resolveSrc?: (url: string) => string | null
   rowKey?: string
   templates?: ColumnTemplate[]
-  renderCell?: (template: ColumnTemplate, row: Row) => React.ReactNode
+  renderCell?: (template: ColumnTemplate, row: Row, index?: number) => React.ReactNode
   className?: string
   /**
    * Unknown props reach the root div, like every other kit component — the
@@ -257,7 +258,7 @@ function DataRow({ commentOwner, commentRowKey, row, columns, style, measure, in
   index: number
   resolveSrc?: (url: string) => string | null
   templates: ColumnTemplate[]
-  renderCell?: (template: ColumnTemplate, row: Row) => React.ReactNode
+  renderCell?: (template: ColumnTemplate, row: Row, index?: number) => React.ReactNode
 }) {
   return (
     <tr {...(commentRowKey !== undefined ? commentMetadata(commentOwner,{kind:'table',rowKey:commentRowKey}) : {})} ref={measure} data-index={index} className="border-b border-border/50 transition-colors hover:bg-muted/30" style={style}>
@@ -280,7 +281,7 @@ function DataRow({ commentOwner, commentRowKey, row, columns, style, measure, in
                 style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
               />
             )}
-            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row) : imageCell(value, c, resolveSrc) ?? formatCell(value, c); })()}</span>
+            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? formatCell(value, c); })()}</span>
           </td>
         )
       })}

@@ -80,7 +80,7 @@ export interface StoryInterpreterOptions {
   values?: Record<string, unknown>;
   tables?: Record<string, { rows: Record<string, unknown>[] }>;
   repeatScope?: { owner: string; key: string | number; ids: Set<string> };
-  tableCommentScope?: { owner: string; rowKey: string | number; columnKey: string; ids: Set<string> };
+  tableCommentScope?: { owner: string; rowKey?: string | number; index: number; columnKey: string; ids: Set<string> };
   /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
   components: Record<string, React.ComponentType<Record<string, unknown>>>;
   /**
@@ -213,11 +213,13 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     if (error) return React.createElement('div', {role:'alert', key:path}, error);
     const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
     const ids = templateIds(node.children);
-    return React.createElement('div', {id: ownerId || undefined, [AST_PATH_ATTR]: path, key:options.keyFor?.(path) ?? path, style:{display:'contents'}}, ...source.map(row => {
+    const wrapper = buildProps(node.attributes.filter(a=>a.name !== 'each' && a.name !== 'keyBy'),true,node.tag,path,undefined,options.values);
+    return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...source.map(row => {
       const key = row[keyBy.json as string] as string | number;
       return React.createElement(React.Fragment, {key:JSON.stringify([typeof key,key])}, ...node.children.map((child,i) => renderNode(child, {...options,row,repeatScope:{owner:ownerId,key,ids}}, `${path}.${i}`)));
     }));
   }
+  if (options.repeatScope && node.attributes.some(a=>['run','value','checked','options'].includes(a.name) && a.value.static && refName(a.value.json))) return React.createElement('div', {role:'alert',key:path}, 'Bound controls inside For are not supported; use editable DataTable columns');
   if (options.repeatScope && ['DataTable', 'Iframe'].includes(node.tag)) return React.createElement('div', {role:'alert',key:path}, 'DataTable and Iframe must be outside For templates');
   const isComponent = node.isComponent;
   const Component = isComponent ? options.components[node.tag] : null;
@@ -239,10 +241,10 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
       const cp = buildProps(child.attributes, true, child.tag, `${path}.${index}`, options.row, options.values);
       return typeof cp.col === 'string' ? [{ col: cp.col, title: typeof cp.title === 'string' ? cp.title : undefined, props: cp, nodes: child.children, path: `${path}.${index}` }] : [];
     });
-    const renderCell = (template: ColumnTemplate, row: Record<string, unknown>) => template.nodes.map((child, i) => renderNode(child, {
-      ...options, row, tableCommentScope: typeof props.id === 'string' && validRowKey(row[String(props.rowKey)]) ? {owner: props.id, rowKey: row[String(props.rowKey)] as string | number, columnKey:template.col, ids:templateIds(template.nodes)} : undefined, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col, tableName: refName(props.data) ?? undefined },
+    const renderCell = (template: ColumnTemplate, row: Record<string, unknown>, index = 0) => template.nodes.map((child, i) => renderNode(child, {
+      ...options, row, tableCommentScope: typeof props.id === 'string' ? {owner: props.id, index, rowKey: validRowKey(row[String(props.rowKey)]) ? row[String(props.rowKey)] as string | number : undefined, columnKey:template.col, ids:templateIds(template.nodes)} : undefined, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col, tableName: refName(props.data) ?? undefined },
     }, `${template.path}.${i}`));
-    const element = React.createElement(Component, { ...props, templates, renderCell, key: options.keyFor?.(path) ?? path });
+    const element = React.createElement(Component, { ...props, commentOwner: props.id, templates, renderCell, key: options.keyFor?.(path) ?? path });
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
   }
 
@@ -363,7 +365,7 @@ function rawBuildProps(
     }
 
     let name = HTML_ATTR_TO_REACT[a.name] ?? SVG_ATTR_CASE[lower] ?? a.name;
-    let value = row ? substituteRow(a.value.json, row) : a.value.json;
+    let value = row && lower !== 'id' ? substituteRow(a.value.json, row) : a.value.json;
 
     // Dangerous URL schemes dropped (browser-normalized check — see lib/jsx/validate.ts).
     if (typeof value === 'string') {
@@ -444,12 +446,12 @@ function scopeProps(props: Record<string,unknown>, options: StoryInterpreterOpti
   const repeat = options.repeatScope, table = options.tableCommentScope;
   if (!repeat && !table) return props;
   const owner = repeat?.owner ?? table!.owner;
-  const scope = repeat ? ['repeat',owner,typeof repeat.key,repeat.key] : ['table',owner,typeof table!.rowKey,table!.rowKey,table!.columnKey];
+  const scope = repeat ? ['repeat',owner,typeof repeat.key,repeat.key] : ['table',owner,typeof table!.rowKey,table!.rowKey ?? ['index',table!.index],table!.columnKey];
   const ids = repeat?.ids ?? table!.ids;
   const sourceId = typeof props.id === 'string' ? props.id : undefined;
   if(sourceId) {
-    const target: CommentTarget = repeat ? {kind:'repeat',scopes:[{nodeId:owner,key:repeat.key}],templateNodeId:sourceId} : {kind:'table',rowKey:table!.rowKey,columnKey:table!.columnKey,templateNodeId:sourceId};
-    Object.assign(props, commentMetadata(owner,target));
+    const target: CommentTarget = repeat ? {kind:'repeat',scopes:[{nodeId:owner,key:repeat.key}],templateNodeId:sourceId} : {kind:'table',rowKey:table!.rowKey ?? table!.index,columnKey:table!.columnKey,templateNodeId:sourceId};
+    if (repeat || table?.rowKey !== undefined) Object.assign(props, commentMetadata(owner,target));
     props.id = instanceDomId(scope,sourceId);
   }
   for(const attr of ['htmlFor','aria-labelledby','aria-describedby','aria-controls','aria-owns','aria-activedescendant','aria-details','aria-errormessage','aria-flowto','headers','list','form']) if(typeof props[attr] === 'string') props[attr] = (props[attr] as string).split(/\s+/).map(id=>ids.has(id)?instanceDomId(scope,id):id).join(' ');

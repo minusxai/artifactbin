@@ -161,8 +161,9 @@ string `"1"` are distinct keys. The template updates with query results and
 preserves item identity when rows move. Empty results render no items. There
 is a limit of 1,000 rows and 50,000 expanded template nodes. Nested For loops,
 DataTable, and Iframe inside For templates are not supported. Use DataTable for
-large virtualized tabular results, sorting, and paging. For has a wrapper with
-`display: contents`; style template elements themselves.
+large virtualized tabular results, sorting, and paging. For renders a block wrapper accepting class and style, providing an owner
+surface for comments even when a row disappears. Bound controls and mutation
+buttons inside For are not supported; use editable DataTable columns.
 
 Template source IDs are persisted once, and rendered instance IDs are scoped
 by the owner and typed row key. Local label, ARIA, and fragment references

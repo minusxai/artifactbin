@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { parseJsx } from '@/lib/jsx';
+import { DataTable } from '@/components/kit/data-table';
 import { renderStoryNodes } from '../interpreter';
 
 it('repeats keyed signal rows and keeps instance identity on reorder', () => {
@@ -38,4 +39,21 @@ it('rewrites labels and ARIA references per instance while refusing injected han
   labels.forEach((label,i)=>{expect(label.htmlFor).toBe(fields[i].id);expect(fields[i].getAttribute('aria-labelledby')).toBe(label.id)});
   const links=view.container.querySelectorAll('a');expect(links[0].getAttribute('href')).toBeNull();expect(links[0].getAttribute('onclick')).toBeNull();
   expect(links[1].getAttribute('href')).toBe('https://example.com');
+});
+
+it('scopes unkeyed DataTable template DOM IDs without inventing durable row targets',()=>{
+ const parsed=parseJsx('<DataTable id="table" rows={[{name:"Alice"},{name:"Bob"}]} columns={[{name:"name",type:"string"}]}><Column col="name"><p id="person">{$_row.name}</p></Column></DataTable>');
+ if(!parsed.ok)throw new Error(parsed.error);
+ const view=render(<>{renderStoryNodes(parsed.nodes,{components:{DataTable:DataTable as React.ComponentType<Record<string,unknown>>}})}</>);
+ expect(screen.getByText('Alice').id).not.toBe(screen.getByText('Bob').id);
+ expect(view.container.querySelector('[data-mx-comment-target]')).toBeNull();
+});
+
+it('gives a missing-item fallback a real owner surface and refuses shared bindings',()=>{
+ const parsed=parseJsx('<For id="orders" each={$orders} keyBy="id"><input value="$shared"/></For>');
+ if(!parsed.ok)throw new Error(parsed.error);
+ const view=render(<>{renderStoryNodes(parsed.nodes,{components:{},tables:{orders:{rows:[{id:'a'}]}}})}</>);
+ expect(screen.getByRole('alert').textContent).toContain('Bound controls');
+ expect((view.container.querySelector('#orders') as HTMLElement).style.display).not.toBe('contents');
+ expect((view.container.querySelector('#orders') as HTMLElement).style.minHeight).toBe('1px');
 });

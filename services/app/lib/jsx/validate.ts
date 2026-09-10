@@ -105,6 +105,7 @@ function walk(
     for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, inSvg, inColumn, parent, inFor);
     return;
   }
+  if (inFor && node.attributes.some(a=>['run','value','checked','options'].includes(a.name) && a.value.static && typeof a.value.json === 'string' && /^\$[A-Za-z_]\w*$/.test(a.value.json))) errors.push({message:'Bound controls inside For are not supported; use editable DataTable columns',start:node.start,end:node.end});
   if (inFor && ['DataTable', 'Iframe'].includes(node.tag)) errors.push({message:'DataTable and Iframe must be outside For templates',start:node.start,end:node.end});
   if (node.tag === 'For') {
     const key = node.attributes.find(a => a.name === 'keyBy')?.value;
