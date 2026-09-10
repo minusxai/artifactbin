@@ -40,8 +40,8 @@ const schema = JSON.stringify({
 const markup = `<Helmet><Value name="move" default="slow path" />
 <Query name="nodes">{\`select * from ref_${dataset.id}\`}</Query>
 <Mutation name="step">{\`insert into ref_${dataset.id}
-with narration as materialized (select llm('default', $move, '${schema}', '{"temperature":0.9}') as result)
-select case when (result::json->>'score')::double > 8 then llm('default', 'Judge decisive outcome: ' || result, '${schema}', '{"temperature":0.3}') else result end from narration\`}</Mutation></Helmet>
+with narration as materialized (select llm($move, 'Narrate the next moment.', '${JSON.stringify({model:'default',schema:JSON.parse(schema),temperature:0.9})}') as result)
+select case when (result::json->>'score')::double > 8 then llm('Judge decisive outcome: ' || result, 'Judge the outcome.', '${JSON.stringify({model:'default',schema:JSON.parse(schema),temperature:0.3})}') else result end from narration\`}</Mutation></Helmet>
 <h1>Counterfactual mutation probe</h1>
 <Iframe title="Branch composer" height={180}>
 <style>{\`body {font:16px system-ui;padding:20px} button,input{font:inherit;padding:8px} #status{margin-top:12px}\`}</style>

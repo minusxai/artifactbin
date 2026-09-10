@@ -172,7 +172,7 @@ async function bootServer(index, mailOutbox, authSecret) {
       ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GENERATION__'))),
       NODE_ENV: 'production',
       // Fixture credentials are always isolated from operator model settings.
-      GENERATION__MODELS_FILE: generationFixture?.modelsFile ?? '',
+      GENERATION__MODELS: generationFixture?.models ?? '',
       GENERATION__FIXTURE_KEY: generationFixture ? 'fixture-only-key' : '',
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,

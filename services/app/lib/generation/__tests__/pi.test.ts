@@ -54,7 +54,8 @@ it("uses the real Pi transport with explicit configured credentials and normaliz
     {
       key: "fixture",
       model: "narrator",
-      prompt: "Go left",
+      text: "Go left",
+      system: "You are a storyteller.",
       schema: '{"type":"object"}',
     },
     new AbortController().signal,
@@ -70,11 +71,21 @@ it("uses the real Pi transport with explicit configured credentials and normaliz
     stream: true,
     messages: expect.arrayContaining([
       expect.objectContaining({ role: "user", content: "Go left" }),
+      expect.objectContaining({
+        role: "system",
+        content: expect.stringContaining("You are a storyteller."),
+      }),
     ]),
   });
   await expect(
     svc.generate(
-      { key: "bad", model: "unconfigured", prompt: "hi", schema: "{}" },
+      {
+        key: "bad",
+        model: "unconfigured",
+        text: "hi",
+        system: "",
+        schema: "{}",
+      },
       new AbortController().signal,
     ),
   ).rejects.toThrow("not configured");
@@ -98,7 +109,7 @@ it("rejects invalid configuration without echoing secret values", () => {
         JSON.stringify({ narrator: config }),
         () => "fixture-only-key",
       ),
-    ).toThrow("GENERATION__MODELS_FILE");
+    ).toThrow("GENERATION__MODELS");
     try {
       parseGenerationModels(
         JSON.stringify({ narrator: config }),
@@ -130,7 +141,8 @@ it("uses one connection for calls with different sampling options", async () => 
       {
         key: String(temperature),
         model: "default",
-        prompt: "role prompt",
+        text: "role prompt",
+        system: "Apply the supplied rubric.",
         schema: '{"type":"object"}',
         options: { temperature, maxTokens: 8192 },
       },

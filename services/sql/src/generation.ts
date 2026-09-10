@@ -1,4 +1,4 @@
-import { generationOptions } from "@artifactbin/utils";
+import { generationCallConfig } from "@artifactbin/utils";
 import { createHash } from "node:crypto";
 import type { DuckDBConnection } from "@duckdb/node-api";
 import {
@@ -20,7 +20,6 @@ export function registerGeneration(
   const fn = native.DuckDBScalarFunction.create({
     name: "llm",
     parameterTypes: [native.VARCHAR, native.VARCHAR, native.VARCHAR],
-    varArgsType: native.VARCHAR,
     returnType: native.VARCHAR,
     volatile: true,
     specialHandling: true,
@@ -30,56 +29,44 @@ export function registerGeneration(
         return;
       }
       for (let i = 0; i < chunk.rowCount; i++) {
-        const args = chunk.getRowValues(i);
-        if (args.length < 3 || args.length > 4) {
-          info.setError(
-            "llm expects three arguments and optional JSON options",
-          );
-          return;
-        }
         // Publish validates SQL types using a NULL VARCHAR stub. It never
         // requests generation, even for a constant INSERT against no rows.
         if (dryRun) {
           output.setItem(i, null);
           continue;
         }
-        const [model, prompt, schema, rawOptions] = args;
+        const [text, system, rawConfig] = chunk.getRowValues(i);
         if (
-          typeof model !== "string" ||
-          !/^[a-zA-Z][\w-]{0,63}$/.test(model) ||
-          typeof prompt !== "string" ||
-          !prompt.trim() ||
-          Buffer.byteLength(prompt) > GENERATION_LIMITS.promptBytes ||
-          typeof schema !== "string" ||
-          Buffer.byteLength(schema) > GENERATION_LIMITS.schemaBytes
+          typeof text !== "string" ||
+          !text.trim() ||
+          typeof system !== "string" ||
+          Buffer.byteLength(text) + Buffer.byteLength(system) >
+            GENERATION_LIMITS.promptBytes ||
+          typeof rawConfig !== "string" ||
+          Buffer.byteLength(rawConfig) > GENERATION_LIMITS.configBytes
         ) {
           info.setError(
-            "llm expects a configured model alias, a nonempty prompt (64 KB maximum), and a JSON schema (8 KB maximum)",
+            "llm expects text, system (64 KB combined maximum), and a JSON config (10 KB maximum)",
           );
           return;
         }
-        let options;
+        let config;
         try {
-          if (
-            args.length === 4 &&
-            (typeof rawOptions !== "string" ||
-              Buffer.byteLength(rawOptions) > GENERATION_LIMITS.optionsBytes)
-          )
-            throw new Error("Invalid options");
-          options = generationOptions(
-            args.length === 4 ? JSON.parse(rawOptions as string) : {},
-          );
+          config = generationCallConfig(JSON.parse(rawConfig));
+          if (Buffer.byteLength(config.schema) > GENERATION_LIMITS.schemaBytes)
+            throw Error("Schema too large");
         } catch {
           info.setError(
-            "llm options must contain only temperature (0–2) and maxTokens (1–16384)",
+            "llm config requires model and schema (8 KB maximum), with optional temperature (0–2) and maxTokens (1–16384)",
           );
           return;
         }
+        const { model, schema, options } = config;
         const key = createHash("sha256")
-          .update(JSON.stringify([model, prompt, schema, options]))
+          .update(JSON.stringify([model, text, system, schema, options]))
           .digest("hex");
         if (!Object.hasOwn(results, key)) {
-          pending ??= { key, model, prompt, schema, options };
+          pending ??= { key, model, text, system, schema, options };
           info.setError("Model result required");
           return;
         }

@@ -1,7 +1,7 @@
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
-import { loadGenerationModels } from './generation/configuration';
+import { parseGenerationModels } from './generation/configuration';
 
 /**
  * The ONLY file that reads process.env (minusx convention — keeps runtime
@@ -38,7 +38,7 @@ export function env(module: string, name: string): string | undefined {
 }
 
 /** Operator-owned model destinations and credentials, never document data. */
-export const GENERATION_MODELS = loadGenerationModels(env('GENERATION', 'MODELS_FILE'), (name) => {
+export const GENERATION_MODELS = parseGenerationModels(env('GENERATION', 'MODELS'), (name) => {
   const separator = name.indexOf('__');
   return env(name.slice(0, separator), name.slice(separator + 2));
 });
@@ -50,7 +50,6 @@ export const GENERATION_MODELS = loadGenerationModels(env('GENERATION', 'MODELS_
  * once no deployment predates it.
  */
 export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
-  GENERATION__MODELS: 'GENERATION__MODELS_FILE (connection JSON file with apiKeyEnv references)',
   ADMIN_SECRET: 'ADMIN__SECRET',
   ANON_MINT_MAX: 'PROXY__RATE_LIMIT_CONFIG_FILE (a policy file, not a knob)',
   ARTIFACT_QUOTA_PER_TOKEN: 'QUOTA__ARTIFACTS_PER_TOKEN',

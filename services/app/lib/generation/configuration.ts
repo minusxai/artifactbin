@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { z } from "zod";
 
 const configuredModel = z
@@ -37,20 +36,8 @@ export type GenerationModels = Record<
 type ReadSecret = (name: string) => string | undefined;
 const configError = () =>
   new Error(
-    "Invalid model configuration: use GENERATION__MODELS_FILE with {api, baseUrl, model, apiKeyEnv}; referenced secrets must be set.",
+    "Invalid model configuration: use GENERATION__MODELS with {api, baseUrl, model, apiKeyEnv}; referenced secrets must be set.",
   );
-
-export function loadGenerationModels(
-  path: string | undefined,
-  readSecret: ReadSecret,
-): GenerationModels {
-  if (!path?.trim()) return {};
-  try {
-    return parseGenerationModels(readFileSync(path, "utf8"), readSecret);
-  } catch {
-    throw configError();
-  }
-}
 
 export function parseGenerationModels(
   source: string | undefined,

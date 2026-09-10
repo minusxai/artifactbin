@@ -1,6 +1,3 @@
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createServer } from "node:http";
 
 /** Deterministic OpenAI-compatible stream. Only disposable tests configure it. */
@@ -68,26 +65,20 @@ export async function startGenerationFixture() {
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
-  const directory = mkdtempSync(join(tmpdir(), "artifact-generation-fixture-"));
-  const modelsFile = join(directory, "models.json");
-  writeFileSync(
-    modelsFile,
-    JSON.stringify({
-      default: {
-        api: "openai-completions",
-        baseUrl: `${url}/v1`,
-        model: "fixture-model",
-        apiKeyEnv: "GENERATION__FIXTURE_KEY",
-      },
-    }),
-  );
+  const models = JSON.stringify({
+    default: {
+      api: "openai-completions",
+      baseUrl: `${url}/v1`,
+      model: "fixture-model",
+      apiKeyEnv: "GENERATION__FIXTURE_KEY",
+    },
+  });
   return {
     url,
-    modelsFile,
+    models,
     close: () =>
       new Promise((resolve) => {
         server.close(() => {
-          rmSync(directory, { recursive: true, force: true });
           resolve();
         });
         server.closeAllConnections();

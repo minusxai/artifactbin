@@ -14,8 +14,11 @@ const input = {
     rows: [],
     columns: [{ name: "result", type: "string" as const }],
   },
-  sql: "insert into nodes select llm('narrator', $prompt, $schema)",
-  params: { prompt: "hello", schema },
+  sql: "insert into nodes select llm($text, 'Narrate.', $config)",
+  params: {
+    text: "hello",
+    config: JSON.stringify({ model: "default", schema: JSON.parse(schema) }),
+  },
 };
 const engine = createSql();
 const result = (json = '{"score":6}') => ({
@@ -65,7 +68,10 @@ describe("generation invocation", () => {
           ...input,
           params: {
             ...input.params,
-            schema: '{"$ref":"https://example.com/schema"}',
+            config: JSON.stringify({
+              model: "default",
+              schema: { $ref: "https://example.com/schema" },
+            }),
           },
         },
         engine,
@@ -87,7 +93,7 @@ describe("generation invocation", () => {
     const generate = vi.fn(async () => result());
     const many = {
       ...input,
-      sql: "insert into nodes select llm('narrator', 'prompt ' || n, $schema) from range(8) r(n)",
+      sql: "insert into nodes select llm('prompt ' || n, 'Narrate.', $config) from range(8) r(n)",
     };
     await expect(
       createGenerationInvocation({ generate }).run(many, engine),

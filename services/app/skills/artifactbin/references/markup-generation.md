@@ -5,8 +5,8 @@ description: Model-backed mutations.
 
 ## Read first
 
-`llm(modelAlias, prompt, schemaJson, optionsJson?)` returns a JSON **string** inside a stored
-dataset Mutation. The operator must configure the alias. Credentials and model
+`llm(text, system, configJson)` returns a JSON **string** inside a stored
+dataset Mutation. Config selects an operator-configured model and output schema. Credentials and model
 endpoints never belong in markup. Ordinary Queries cannot call it. Local table
 mutations do not generate; use a writable stored dataset and dataset edit access.
 
@@ -22,8 +22,8 @@ Example · Conditional calls · Schema and execution guarantees · Operator setu
   <Query name="nodes" source="abc123">{`select * from public.nodes`}</Query>
   <Mutation name="step" source="abc123">{`
     insert into public.nodes (result)
-    select llm('default', $move,
-      '{"type":"object","properties":{"title":{"type":"string"},"score":{"type":"number","minimum":0,"maximum":10}},"required":["title","score"],"additionalProperties":false}')
+    select llm($move, 'Narrate what happens next.',
+      '{"model":"default","schema":{"type":"object","properties":{"title":{"type":"string"},"score":{"type":"number","minimum":0,"maximum":10}},"required":["title","score"],"additionalProperties":false}}')
   `}</Mutation>
 </Helmet>
 <input aria-label="Next move" value="$move" />
@@ -46,19 +46,21 @@ For a single-column legacy dataset, a narrator/judge mutation can use:
 ```sql
 insert into ref_abc123
 with narration as materialized (
-  select llm('default', $prompt, $schema, '{"temperature":0.9}') as result
+  select llm($text, 'Narrate the next moment.',
+    json_object('model','default','schema',$schema::json,'temperature',0.9)) as result
 )
 select case
   when (result::json->>'score')::double > 8
     or (result::json->>'score')::double < 2
     or $last_move
-  then llm('default', 'Judge this story: ' || $prompt || result, $schema, '{"temperature":0.3}')
+  then llm($text || '\nOutcome: ' || result, 'Judge the outcome.',
+    json_object('model','default','schema',$schema::json,'temperature',0.3))
   else result
 end
 from narration
 ```
 
-Declare `prompt`, `schema`, and boolean `last_move` Values before using them.
+Declare `text`, `schema`, and boolean `last_move` Values before using them.
 Use additional projections to retain narration fields while taking the final
 score/verdict from the judge. The example replaces the whole result for brevity.
 Mutations see only their target table and bound scalars, not other Queries or
@@ -78,10 +80,10 @@ unknown keywords are refused. Validation does not coerce model output.
 - Publish-time SQL checks use a NULL VARCHAR stub and make **zero model calls**.
   Model aliases, dynamic schemas and runtime output are checked at invocation.
 - Up to four distinct calls per mutation and 180 seconds of wall time from the
-  first generation, including subsequent SQL work. Prompts are bounded to 64 KB,
-  schemas to 8 KB, and generated JSON to 64 KB. Each app process admits at most
+  first generation, including subsequent SQL work. Text and system instructions
+  together are bounded to 64 KB, schemas to 8 KB, and generated JSON to 64 KB. Each app process admits at most
   four simultaneous provider requests.
-- Identical alias/prompt/schema/normalized-options arguments reuse one validated result throughout
+- Identical model/text/system/schema/normalized-options arguments reuse one validated result throughout
   the server invocation, including dataset compare-and-swap retries. Supply stable
   IDs as signals; avoid random/time-dependent generation arguments.
 - Failed/invalid/timed-out generation does not save partial dataset rows. A model
@@ -92,22 +94,27 @@ unknown keywords are refused. Validation does not coerce model output.
 
 ## Operator setup
 
-Set `GENERATION__MODELS_FILE` to a JSON file path (relative paths resolve from the
-app process working directory). Copy `generation.models.example.json`:
+Keep model connections in `GENERATION__MODELS` in the app environment:
 
-```json
-{"default":{"api":"openai-completions","baseUrl":"https://api.fireworks.ai/inference/v1","model":"your-model-id","apiKeyEnv":"GENERATION__FIREWORKS_API_KEY"}}
+```sh
+GENERATION__MODELS='{"default":{"api":"openai-completions","baseUrl":"https://api.fireworks.ai/inference/v1","model":"your-model-id","apiKeyEnv":"GENERATION__FIREWORKS_API_KEY"}}'
 ```
 
-Set the referenced namespaced environment variable separately. The file contains
-connections, not prompts, roles, sampling settings or inline secrets. Narrator and
-judge calls can use the same `default` connection with different prompts/options.
-Missing files, invalid config and unset referenced keys fail startup.
+Set the referenced namespaced key separately. Each entry is one model connection,
+not a prompt or use case. Narrator and judge reuse `default`. No separate config
+file is needed; missing referenced keys or malformed configuration fail startup.
 
-The optional fourth argument is JSON containing `temperature` (0–2) and/or
-`maxTokens` (integer 1–16384). Defaults are 0.7 and 4096. Options are limited to 1 KB;
-unknown fields, endpoints and credentials are rejected. Equivalent option objects
-share a result within an invocation; different sampling settings do not.
+`llm(text, system, configJson)` preserves user input and system instructions as
+separate messages. The third argument requires `model` (connection name) and
+`schema` (a JSON Schema object); it optionally accepts `temperature` (0–2) and
+`maxTokens` (integer 1–16384), defaulting to 0.7 and 4096. The config is limited to
+10 KB. Unknown fields, endpoints and credentials are rejected. Schemas remain
+validated by the app before generation and against the response before saving.
+
+Keep stable role instructions, scenario background and scoring criteria in `system`;
+put selected branch history and the new move in `text`. The runtime adds JSON-output
+instructions to the system message. Different instructions or sampling settings
+produce distinct invocation keys.
 
 Supported APIs: `openai-completions`, `openai-responses`, `anthropic-messages`,
 `google-generative-ai`. The Pi model library handles provider transport; output

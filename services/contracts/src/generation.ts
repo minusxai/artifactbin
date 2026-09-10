@@ -4,11 +4,18 @@ export interface GenerationOptions {
   maxTokens?: number;
 }
 
+/** The third argument to llm(text, system, config). */
+export interface GenerationCallConfig extends GenerationOptions {
+  model: string;
+  schema: Record<string, unknown>;
+}
+
 /** Model effects are requested by SQL and fulfilled by the app, never by DuckDB. */
 export interface GenerationRequest {
   key: string;
   model: string;
-  prompt: string;
+  text: string;
+  system: string;
   schema: string;
   options?: GenerationOptions;
 }
@@ -35,7 +42,7 @@ export interface GenerationService {
 
 export const GENERATION_LIMITS = {
   calls: 4,
-  optionsBytes: 1024,
+  configBytes: 10_000,
   maxTokens: 16_384,
   promptBytes: 64_000,
   schemaBytes: 8_000,

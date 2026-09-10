@@ -35,9 +35,9 @@ export function createPiGeneration(
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       } satisfies Model<typeof config.api>;
       const context: Context = {
-        systemPrompt: `Return JSON only, without markdown or commentary. Your output must satisfy this JSON schema:\n${request.schema}`,
+        systemPrompt: `${request.system}\n\nReturn JSON only, without markdown or commentary. Your output must satisfy this JSON schema:\n${request.schema}`,
         messages: [
-          { role: "user", content: request.prompt, timestamp: Date.now() },
+          { role: "user", content: request.text, timestamp: Date.now() },
         ],
       };
       const options = {

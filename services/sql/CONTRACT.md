@@ -16,9 +16,9 @@ one write on `/mutate`), params bound never spliced, a row cap and a per-query i
 may lower the caps, never raise them), a 64 MiB body. A document's dependent queries MUST travel in one `run`.
 No credentials, no storage, no request identity, no network from inside the engine. Private network only.
 
-Mutation-only `llm(alias,prompt,schemaJson)` is a volatile VARCHAR scalar function.
+Mutation-only `llm(text,system,configJson)` is a volatile VARCHAR scalar function.
 On a missing result the statement aborts and returns a QueryFailure with
-`generation: {key,model,prompt,schema,options}` and no changed rows. The app supplies
+`generation: {key,model,text,system,schema,options}` and no changed rows. The app supplies
 `generationResults: {[key]: jsonString}` when replaying the same invocation.
 The key hashes the argument tuple; identical calls reuse a result within that
 invocation. SQL never contacts a provider. Reads do not register this function;
@@ -46,4 +46,4 @@ rows: `row_changed` when fewer rows changed, `row_not_unique` when more changed.
 then discarded, so the caller has nothing to persist. Omitting this field preserves generic mutation behavior.
 `__tests__/editable-row.test.ts` exercises these rules through both local and HTTP transports.
 
-Model call options are normalized temperature/maxTokens values; they cross the demand/replay seam and participate in the invocation key. SQL never resolves model config files or API-key references.
+Model call options are normalized temperature/maxTokens values; they cross the demand/replay seam and participate in the invocation key. SQL never resolves operator configuration or API-key references.

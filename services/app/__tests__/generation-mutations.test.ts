@@ -49,7 +49,7 @@ async function fixture() {
     access: "readwrite",
   });
   const doc = await publish({
-    markup: `<Helmet><Value name="move" default="Go left" /><Query name="nodes">{\`select * from ref_${ds}\`}</Query><Mutation name="step">{\`insert into ref_${ds} select llm('narrator', $move, '${schema}')\`}</Mutation></Helmet><Button run="$step">Do it</Button><DataTable data="$nodes" />`,
+    markup: `<Helmet><Value name="move" default="Go left" /><Query name="nodes">{\`select * from ref_${ds}\`}</Query><Mutation name="step">{\`insert into ref_${ds} select llm($move, 'Narrate.', '${JSON.stringify({ model: "default", schema: JSON.parse(schema) })}')\`}</Mutation></Helmet><Button run="$step">Do it</Button><DataTable data="$nodes" />`,
   });
   const cookie = await agentCookie([owner.id]);
   const write = (auth: string | undefined = cookie) =>
@@ -77,8 +77,9 @@ it("publishes without spending, then an authorized mutation generates and saves 
   expect(response.status, await response.clone().text()).toBe(200);
   expect(generate).toHaveBeenCalledTimes(1);
   expect(generate.mock.calls[0][0]).toMatchObject({
-    model: "narrator",
-    prompt: "Go right",
+    model: "default",
+    text: "Go right",
+    system: "Narrate.",
   });
   expect(await f.read()).toEqual([
     { result: "seed" },

@@ -33,3 +33,30 @@ export function generationOptions(
     throw new Error("Invalid generation options");
   return { temperature, maxTokens };
 }
+
+/** Split connection selection and output schema from bounded sampling options. */
+export function generationCallConfig(value: unknown) {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.keys(value).some(
+      (key) => !["model", "schema", "temperature", "maxTokens"].includes(key),
+    )
+  )
+    throw new Error("Invalid generation config");
+  const { model, schema, ...options } = value as Record<string, unknown>;
+  if (
+    typeof model !== "string" ||
+    !/^[a-zA-Z][\w-]{0,63}$/.test(model) ||
+    !schema ||
+    typeof schema !== "object" ||
+    Array.isArray(schema)
+  )
+    throw new Error("Generation config requires a model and output schema");
+  return {
+    model,
+    schema: JSON.stringify(schema),
+    options: generationOptions(options),
+  };
+}
