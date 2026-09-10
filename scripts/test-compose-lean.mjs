@@ -178,9 +178,12 @@ async function main() {
   const id = startBody.id;
   const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
 
+  const observed=await json(`/api/artifacts/${id}`,{headers:auth});
+  if(!observed.res.ok||!observed.body?.state||!observed.body?.version)throw new Error('Cannot observe the document before conditional replacement');
+
   // 3. Publish data — the dry run crosses the app→sql seam at publish.
   {
-    const { res, body } = await json(`/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ title: TITLE, markup: MARKUP }) });
+    const { res, body } = await json(`/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ title: TITLE, markup: MARKUP, expectedVersion:observed.body.version, expectedState:observed.body.state }) });
     say('PUT the document (its <Query> dry-run ran in the sql container)', res.status === 200 || res.status === 201, `${res.status}${body?.error ? ` ${body.error}` : ''}`);
   }
 

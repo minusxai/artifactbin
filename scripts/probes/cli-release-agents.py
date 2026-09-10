@@ -3,6 +3,7 @@ Outputs and provider credentials stay outside the checkout. Run only with an aut
 """
 import argparse,concurrent.futures,http.server,json,os,pathlib,re,shutil,signal,socket,subprocess,tempfile,threading,time,urllib.request,urllib.error
 from cli_release_fixture import ReleaseFixture
+from cli_release_checks import anchored_comment
 p=argparse.ArgumentParser();p.add_argument('--base-url',required=True);p.add_argument('--env-file',required=True);p.add_argument('--previous-binary',required=True);p.add_argument('--repetitions',type=int,default=2);p.add_argument('--harness',choices=['pi','opencode','both'],default='both');p.add_argument('--seed-only',action='store_true');args=p.parse_args()
 ROOT=pathlib.Path.cwd();BASE=args.base_url.rstrip('/');DEST=pathlib.Path(tempfile.mkdtemp(prefix='afbin-release-agent-evidence-'));os.chmod(DEST,0o700)
 key=next(re.match(r'^\s*(?:export\s+)?FIREWORKS_API_KEY\s*=\s*(.*?)\s*$',line)[1].strip('\"\'') for line in pathlib.Path(args.env_file).read_text().splitlines() if re.match(r'^\s*(?:export\s+)?FIREWORKS_API_KEY\s*=',line))
@@ -107,7 +108,7 @@ def run(leg):
   def markup(name):return heads.get(name,{}).get('markup') or ''
   comments=api('/api/artifacts/'+states['discussion.jsx']['id']+'/annotations?status=all',token)['annotations']
   report_comments=api('/api/artifacts/'+states['report.jsx']['id']+'/annotations?status=all',token)['annotations'] if 'report.jsx' in states else []
-  checks={'create':'Revenue: 42.' in markup('report.jsx') and 'style=' not in markup('report.jsx'),'body_edit':'Reviewed release.' in markup('edit.jsx'),'historical_restore':'Original release.' in markup('restore.jsx') and heads['restore.jsx']['version']>=3,'conflict_preserved':'Owner: Bob; budget: 20.' in markup('conflict.jsx'),'metadata_only':heads['metadata.jsx']['title']=='After' and heads['metadata.jsx']['version']==1,'dependency':bool(re.search(r'source="ref:[A-Za-z0-9]+"',markup('dashboard.jsx'))) and '<Table' in markup('dashboard.jsx') and 'sales.csv' in (work/'dashboard.jsx').read_text() if (work/'dashboard.jsx').exists() else False,'fork':bool(states.get('fork.jsx')) and states['fork.jsx']['id']!=states['original.jsx']['id'] and 'Keep this original.' in markup('fork.jsx') and (work/'original.jsx').read_text()==original and heads['original.jsx']['version']==1,'reply_resolve':any(c.get('status')=='resolved' and 'Verified.' in json.dumps(c.get('thread',[])) for c in comments),'anchored_comment':any('Checked.' in json.dumps(c) for c in report_comments),'lost_response_recovered':'Recover this publication.' in markup('lost.jsx') and not proxy.drop,'markdown':'Imported report' in markup('draft.jsx') and (work/'draft.md').read_text()=='# Imported report\n\nKeep the Markdown original.\n','history_page':any('/versions?limit=' in x['path'] for x in requests),'artifact_page':any(x['path'].startswith('/api/artifacts?limit=') for x in requests)}
+  checks={'create':'Revenue: 42.' in markup('report.jsx') and 'style=' not in markup('report.jsx'),'body_edit':'Reviewed release.' in markup('edit.jsx'),'historical_restore':'Original release.' in markup('restore.jsx') and heads['restore.jsx']['version']>=3,'conflict_preserved':'Owner: Bob; budget: 20.' in markup('conflict.jsx'),'metadata_only':heads['metadata.jsx']['title']=='After' and heads['metadata.jsx']['version']==1,'dependency':bool(re.search(r'source="ref:[A-Za-z0-9]+"',markup('dashboard.jsx'))) and '<Table' in markup('dashboard.jsx') and 'sales.csv' in (work/'dashboard.jsx').read_text() if (work/'dashboard.jsx').exists() else False,'fork':bool(states.get('fork.jsx')) and states['fork.jsx']['id']!=states['original.jsx']['id'] and 'Keep this original.' in markup('fork.jsx') and (work/'original.jsx').read_text()==original and heads['original.jsx']['version']==1,'reply_resolve':any(c.get('status')=='resolved' and 'Verified.' in json.dumps(c.get('thread',[])) for c in comments),'anchored_comment':anchored_comment(report_comments,'Revenue: 42.','Checked.'),'lost_response_recovered':'Recover this publication.' in markup('lost.jsx') and not proxy.drop,'markdown':'Imported report' in markup('draft.jsx') and (work/'draft.md').read_text()=='# Imported report\n\nKeep the Markdown original.\n','history_page':any('/versions?limit=' in x['path'] for x in requests),'artifact_page':any(x['path'].startswith('/api/artifacts?limit=') for x in requests)}
   all_artifacts=api('/api/artifacts?limit=100',token)['artifacts'];checks['no_duplicate_create']=sum('Recover this publication.' in (api('/api/artifacts/'+x['id'],token).get('markup') or '') for x in all_artifacts)==1 and sum(x.get('lost_response',False) for x in requests)==1
   checks['updated_binary']=cli('--version')['version']==release.version
   for name,path in [('pi',work/'pi-state/skills/artifactbin'),('opencode',work/'opencode-config/skills/artifactbin')]:
@@ -127,6 +128,7 @@ def run(leg):
   text=json.dumps(result,indent=2).replace(key,'[REDACTED]').replace(token,'[REDACTED]');(DEST/f'{harness}-{rep}.json').write_text(text)
   return{k:v for k,v in result.items() if k not in ['events','stderr','requests']}
  finally:proxy.close()
+failed=False
 print('Evidence: '+str(DEST),flush=True)
 try:
  selected=list(MODELS) if args.harness=='both' else [args.harness]
@@ -134,6 +136,11 @@ try:
   with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
    futures={pool.submit(run,(harness,repetition)):harness for harness in selected}
    for future in concurrent.futures.as_completed(futures):
-    try:print(json.dumps(future.result()),flush=True)
-    except Exception as error:print(json.dumps({'harness':futures[future],'repetition':repetition,'error':str(error).replace(key,'[REDACTED]')}),flush=True)
+    try:
+     result=future.result();print(json.dumps(result),flush=True)
+     failed=failed or result.get('timed_out',False) or result.get('exit',0)!=0 or not all(result.get('checks',{}).values())
+    except Exception as error:
+     failed=True;print(json.dumps({'harness':futures[future],'repetition':repetition,'error':str(error).replace(key,'[REDACTED]')}),flush=True)
 finally:release.close()
+
+raise SystemExit(1 if failed else 0)

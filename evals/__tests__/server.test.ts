@@ -138,3 +138,15 @@ describe('the local server can send login mail to a file', () => {
     expect(env.OBJECT_STORE__LOCAL_DIR).toBe('/tmp/leg/server/objects');
   });
 });
+
+it('boots against health when runtime remote-skill routes are absent',async()=>{
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'eval-health-'));
+ fs.mkdirSync(path.join(root,'dist'));fs.mkdirSync(path.join(root,'services/app'),{recursive:true});
+ const probe=net.createServer();await new Promise<void>(resolve=>probe.listen(0,'127.0.0.1',resolve));
+ const port=(probe.address() as net.AddressInfo).port;await new Promise<void>(resolve=>probe.close(()=>resolve()));
+ fs.writeFileSync(path.join(root,'dist/proxy-server.mjs'),`import http from 'node:http';http.createServer((req,res)=>{res.writeHead(req.url==='/health'?200:404);res.end('{}');}).listen(Number(process.env.APP__PORT),'127.0.0.1');`);
+ try{
+  const running=await startServer({repoRoot:root,env:{APP__PORT:String(port),PATH:process.env.PATH!},logPath:path.join(root,'log'),readyTimeoutMs:1500});
+  try{expect((await fetch(running.url+'/docs')).status).toBe(404);}finally{await running.stop();}
+ }finally{fs.rmSync(root,{recursive:true,force:true});}
+});
