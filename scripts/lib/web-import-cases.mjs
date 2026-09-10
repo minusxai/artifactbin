@@ -6,7 +6,7 @@ export async function checkWebImport(B, browser, WEB, ok) {
   // ── a Google font names a family; the reader must never reach gstatic ───────
   const gstatic = [];
   page.on('request', (r) => { if (/gstatic|googleapis/.test(r.url())) gstatic.push(r.url()); });
-  
+
   const fontDoc = await startDocument(B);
   const fontPut = await fetch(`${B}/api/artifacts/${fontDoc.id}`, {
     method: 'PUT',
@@ -33,7 +33,7 @@ export async function checkWebImport(B, browser, WEB, ok) {
     // say so rather than failing a gate about OUR behaviour.
     console.log(`   (skipped the font leg: the deployment could not resolve the family — ${fontPut.status})`);
   }
-  
+
   // ── the HUMAN door: the editor's insert-image popover takes a URL ───────────
   // jsdom proves the wiring; only a browser proves the control is reachable,
   // the popover opens, and the inserted image actually paints in the document.
@@ -75,6 +75,6 @@ export async function checkWebImport(B, browser, WEB, ok) {
       ok(!!inserted && !/^https?:/.test(inserted.src ?? ''), `from this origin, not the source host (${inserted?.src})`);
     }
   }
-  
+
   await page.close();
 }

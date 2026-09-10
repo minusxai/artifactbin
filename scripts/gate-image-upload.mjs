@@ -63,7 +63,7 @@ async function paintedImages(page) {
       // ONLY artifact images. Every served document carries the credits-footer
       // logo (/logo-128.png), and counting it made this check pass while a
       // freshly inserted image rendered its literal `ref:<id>` — which is
-      // exactly the bug that hid here until gate-web-import measured properly.
+      // exactly the bug that hid here until gate-web-assets measured properly.
       return own
         .filter((i) => /\/a\/[A-Za-z0-9]+\/raw/.test(i.getAttribute('src') ?? ''))
         .filter((i) => i.complete && i.naturalWidth > 0).length;

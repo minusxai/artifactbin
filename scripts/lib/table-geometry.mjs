@@ -6,7 +6,7 @@ export async function checkTableGeometry(BASE, browser, check) {
   const SHORT_ROWS = 3;
   const LONG_ROWS = 500;
   const LAST_LABEL = `row-${LONG_ROWS - 1}`;
-  
+
   const start = await startDocument(BASE);
   const H = { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' };
   const api = async (path, body, method = 'POST') => {
@@ -17,12 +17,12 @@ export async function checkTableGeometry(BASE, browser, check) {
     if (!res.ok) throw new Error(`${path} → ${res.status} ${text}`);
     return parsed;
   };
-  
+
   const rows = (n) => Array.from({ length: n }, (_, i) => ({ label: `row-${i}`, n: i }));
   const short = await api('/api/artifacts', { dataset: rows(SHORT_ROWS) });
   const long = await api('/api/artifacts', { dataset: rows(LONG_ROWS) });
   check(!!short.id && !!long.id, `both datasets published (${short.id}, ${long.id})`);
-  
+
   const markup = `<Helmet><title>DataTable height gate</title>
   <Query name="few">{\`select label, n from ref_${short.id} order by n\`}</Query>
   <Query name="many">{\`select label, n from ref_${long.id} order by n\`}</Query>
@@ -30,7 +30,7 @@ export async function checkTableGeometry(BASE, browser, check) {
   <div id="short"><DataTable data="$few" /></div>
   <div id="long"><DataTable data="$many" height={${CAP}} /></div></div>`;
   await api(`/api/artifacts/${start.id}`, { title: 'DataTable height gate', markup }, 'PUT');
-  
+
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const pageErrors = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
@@ -46,7 +46,7 @@ export async function checkTableGeometry(BASE, browser, check) {
     LAST_LABEL,
     { timeout: 20000 },
   ).catch(() => {});
-  
+
   const box = (id) => `#${id} [data-slot="data-table"] > div`;
   const measured = await page.evaluate((sel) => {
     const read = (q) => {
@@ -56,7 +56,7 @@ export async function checkTableGeometry(BASE, browser, check) {
     return { short: read(sel.short), long: read(sel.long) };
   }, { short: box('short'), long: box('long') });
   console.log(JSON.stringify(measured, null, 1));
-  
+
   check(measured.short !== null && measured.long !== null, 'both scroll boxes are in the document');
   check(
     measured.short.clientHeight > 0 && measured.short.clientHeight < 200,
@@ -74,7 +74,7 @@ export async function checkTableGeometry(BASE, browser, check) {
     measured.long.scrollHeight > CAP,
     `…and scrolls inside it (scrollHeight=${measured.long.scrollHeight} > ${CAP})`,
   );
-  
+
   // The cap-only box must still be the virtualizer's scroll element: scroll to
   // the end and the window must follow, all the way to the dataset's last row.
   await page.evaluate((q) => { const el = document.querySelector(q); el.scrollTop = el.scrollHeight; }, box('long'));
@@ -96,7 +96,7 @@ export async function checkTableGeometry(BASE, browser, check) {
     };
   }, box('long'));
   console.log(JSON.stringify(tail, null, 1));
-  
+
   check(tail.rendered > 0, `rows are still rendered at the bottom of a cap-only box (${tail.rendered} <tr>)`);
   check(
     tail.rendered < LONG_ROWS,
@@ -108,6 +108,6 @@ export async function checkTableGeometry(BASE, browser, check) {
   );
   check(tail.clientHeight === CAP, `the cap held through the scroll (clientHeight=${tail.clientHeight})`);
   check(pageErrors.length === 0, `no page errors (${pageErrors.length}${pageErrors.length ? `: ${pageErrors[0]}` : ''})`);
-  
+
   await page.close();
 }
