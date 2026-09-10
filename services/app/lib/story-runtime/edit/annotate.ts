@@ -477,6 +477,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     if (!el) return;
     const selection = describeSelection(el, nodes);
     if (!selection) return;
+    const previous = state.selected;
+    if (previous?.nodeId && previous.nodeId === selection.nodeId) {
+      if (previous.quote !== undefined) selection.quote = previous.quote;
+      if (previous.range) selection.range = previous.range;
+    }
     post({ type: STORY_SELECTION_MESSAGE, selection });
   };
 

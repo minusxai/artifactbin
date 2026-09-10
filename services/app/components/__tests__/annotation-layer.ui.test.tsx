@@ -1070,3 +1070,13 @@ describe('the rail under the bar', () => {
     expect(rail.style.right).toBe('15px');
   });
 });
+
+it('does not replay unchanged area state in response to a geometry-only echo', async () => {
+  const {frame,contentWindow,postMessage}=makeFrame();
+  const selected={kind:'element' as const,path:'1',nodeId:'node-1',tag:'section',rect:{x:5,y:6,width:200,height:40},className:'',style:'',ancestors:[],range:{v:1 as const,kind:'area' as const,box:{x:0.1,y:0.1,w:0.5,h:0.5}}};
+  render(layer(frame,{railOpen:true,initialSelection:selected}));await flush();
+  postMessage.mockClear();
+  const {range: _range,...geometry}=selected;
+  await fromFrame(contentWindow,{type:STORY_SELECTION_MESSAGE,nonce:NONCE,selection:geometry});await flush();
+  expect(postMessage.mock.calls.filter(([message])=>message.type===STORY_ANNOTATIONS_MESSAGE)).toHaveLength(0);
+});

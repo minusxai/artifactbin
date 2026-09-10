@@ -686,3 +686,13 @@ it('delegates exact iframe pin paint to the child and restores owner paint when 
   expect(owner).toHaveAttribute('data-mx-annotation-hover');
   host.dispose();
 });
+
+it('retains ordinary area refinement in geometry reports for the same owner', () => {
+  document.body.innerHTML='<section id="section" data-mx-ast="0"></section>';
+  const owner=document.getElementById('section')!;
+  rectOf(owner,{x:20,y:40,width:200,height:100});
+  const parsed=parseJsx('<section id="section" />');if(!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const range={v:1 as const,kind:'area' as const,box:{x:0.1,y:0.2,w:0.5,h:0.4}};
+  session.update({...state('on'),pins:[],selectedPath:'0',selected:{kind:'element',path:'0',nodeId:'section',tag:'section',rect:{x:0,y:0,width:200,height:100},className:'',style:'',ancestors:[],range}});
+  expect(posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{nodeId:'section',range,rect:{x:20,y:40}}});
+});

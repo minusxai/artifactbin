@@ -1062,11 +1062,14 @@ export default function AnnotationLayer({
           const sameIdentity = reported?.nodeId && previous?.nodeId && reported.nodeId === previous.nodeId;
           if (!sameIdentity || reported?.range) return reported;
           // The words, or the drawn area — whichever this comment is about.
-          return {
+          const merged = {
             ...reported,
             ...(previous.quote ? { quote: previous.quote } : {}),
             ...(previous.range ? { range: previous.range } : {}),
           };
+          // Geometry echoes omit refinements on older runtimes. Compare the
+          // restored value so an unchanged echo cannot start a replay loop.
+          return JSON.stringify(previous) === JSON.stringify(merged) ? previous : merged;
         });
         setFailure(null);
         if (reported) setOpenId(null);
