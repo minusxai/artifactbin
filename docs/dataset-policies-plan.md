@@ -71,3 +71,14 @@ existing skipped test; UI 177 files / 1,341 tests; CLI 25 tests. Type checks and
 production build passed. The full-suite Node run intentionally overlapped the
 mixed-case regression's red phase; the subsequent complete Node run passed.
 Browser validation uses deterministic generation fixtures, with no paid calls.
+
+After merging main: the complete npm test command passed (API 1,369; Node 4,010
+plus one existing skip; UI 1,385; CLI 25), as did validate and build. All six
+focused production gates passed: dataset policies, generation mutations,
+mutation permissions, managed iframe, author-script isolation and local SQL state.
+The extended public-policy gate needed two fixture corrections: a supported
+iframe height and traversal through the existing nested sandbox. Its final run
+passed in nine seconds, including live grant/revocation in the managed script.
+The broader local browser run was interrupted to merge main; GitHub CI checks
+its complete browser matrix. BrowserOS also verified an owner saving public
+insert permissions through the running app's sharing dialog.
