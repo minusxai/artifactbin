@@ -53,3 +53,11 @@ jobs. See [evals.md](evals.md) for selection, paid-run isolation and reporting r
 The font-family browser case retains its existing live-provider limitation: it reports a skip if
 Google cannot resolve the family. The deterministic local font-asset checks and API font tests still
 run. No claim about live-provider availability follows from a unit-suite pass.
+
+## Stable measurements
+
+The version-coalescing test includes an explicit short-string collision and targets the paragraph
+text with context, so generated IDs or unrelated attributes cannot make its edit ambiguous.
+The editor gate reacquires a live fallback textarea if React replaces it during locator evaluation;
+it still requires the same exact foreground/background colors. Empty computed styles from a detached
+node are not measurements of the displayed editor.
