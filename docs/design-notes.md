@@ -82,3 +82,29 @@ A retry is reported evidence of an intermittent failure, not proof that the orig
 Do not adopt remote document updates while local typing is uncommitted; an empty edit buffer is not
 proof that the document is clean. Reader URL choices seed island `values`, not precomputed `state`,
 so seeding the link does not suppress the initial query run.
+
+## Dynamic comment identity and interaction
+
+`lib/story/comment-target.ts` defines refinements under an independently validated
+source owner. DataTable targets retain the table node ID plus typed `rowKey` and
+column identity. For targets retain the source owner, typed item key and template
+node ID. `keyBy` is required; nested For, DataTable and Iframe inside For templates
+are currently rejected even though the target format can represent nested scopes.
+
+Managed Iframe targets use a static source ID, hierarchical `data-comment-key`
+path, or generation-scoped session handle. Missing or ambiguous targets retain
+the owner and refinement for fallback/reconnection; never choose an arbitrary
+matching node or claim an automatic session handle survives replacement/reload.
+
+The managed child owns internal selection and geometry; the parent owns permissions,
+composer and persistence. Layout updates must match the active draft target and
+frame generation. Sidebar block picking and explicit Select are separate states:
+only explicit Select suppresses native text selection/touch scrolling. Snapshot
+both user-select property spellings before changing either: Chromium aliases them.
+
+`lib/story-runtime/comment-presentation.ts` supplies inert shared icons and styles
+across the realm boundary. Existing threads open from parent markers/sidebar entries;
+content clicks remain native, including the first click of a word selection. Child
+highlights do not intercept input or add separate dot buttons. The annotations and
+comment-targets browser gates cover these interactions, repeated text/node/area
+comments, keyed lifecycles, and mobile tap/long-press selection.

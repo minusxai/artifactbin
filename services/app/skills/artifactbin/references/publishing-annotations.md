@@ -62,6 +62,14 @@ read `snippet` for what it covers. An
 `"orphaned": true` annotation's node is not in the current version — the
 snippet still says what it pointed at.
 
+## Selecting content with existing comments
+
+Saved comments do not turn the underlying text into a thread-opening button.
+Click and drag, or double-click a word, to select new text in an already-commented
+node. Open an existing conversation through its comment marker or sidebar entry.
+The explicit Select tool picks a block or dragged area; native text selection
+remains available after the pick ends. This applies to markup and managed Iframes.
+
 ## Comments on dynamic content
 
 A comment on a DataTable cell, a repeated For instance, or an Iframe internal

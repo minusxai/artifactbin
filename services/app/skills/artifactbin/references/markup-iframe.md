@@ -99,6 +99,10 @@ The platform supplies comment selection and highlighting inside managed frames.
 Authors do not install a second comment UI or message listener. The parent sends
 Select mode and active comment state; the child captures blocks, words and areas,
 paints highlights, and reports geometry. The comment composer stays in the app.
+The controls and highlight styles are shared with markup. Existing comments open
+from the app's markers or sidebar, leaving content clicks and text selection native.
+Explicit Select mode supports block picking and area dragging; ending it restores
+native selection and touch scrolling. Touch long-press exposes the Select action.
 This bridge grants no new data-write or account permissions.
 
 Static JSX elements already receive persistent source IDs. Preserve those IDs
