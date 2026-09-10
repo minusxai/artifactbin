@@ -125,3 +125,16 @@ describe('DataTable', () => {
     expect(box.className).toMatch(/overflow-auto/);
   });
 });
+
+it('keeps durable cell addresses through sorting and omits targets for unkeyed tables',()=>{
+ const view=render(<DataTable commentOwner="sales" rowKey="region" rows={ROWS} columns={COLUMNS}/>);
+ const cell=[...view.container.querySelectorAll('td')].find(el=>el.textContent==='EU')!;
+ const target=cell.getAttribute('data-mx-comment-target');
+ expect(JSON.parse(target!)).toEqual({kind:'table',rowKey:'EU',columnKey:'region'});
+ expect(cell.getAttribute('data-mx-comment-owner')).toBe('sales');
+ fireEvent.click(view.getByRole('columnheader',{name:'Sort by region'}));
+ expect([...view.container.querySelectorAll('td')].find(el=>el.textContent==='EU')).toBe(cell);
+ expect(cell.getAttribute('data-mx-comment-target')).toBe(target);
+ view.rerender(<DataTable commentOwner="sales" rows={ROWS} columns={COLUMNS}/>);
+ expect(view.container.querySelector('[data-mx-comment-target]')).toBeNull();
+});

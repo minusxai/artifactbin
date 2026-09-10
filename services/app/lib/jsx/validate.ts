@@ -81,6 +81,7 @@ function walk(
   inSvg: boolean,
   inColumn = false,
   parent?: string,
+  inFor = false,
 ): void {
   if (node.type === 'expression') {
     if (!node.value.static && isReactiveExpression(node.value.reactive)) {
@@ -101,8 +102,16 @@ function walk(
       return;
     }
     if (node.control.kind !== 'fragment' && !inColumn && reactiveNames(node.control.test).fields.length) errors.push({message: 'Row conditions belong inside a DataTable Column', start: node.start, end: node.end});
-    for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, inSvg, inColumn, parent);
+    for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, inSvg, inColumn, parent, inFor);
     return;
+  }
+  if (inFor && ['DataTable', 'Iframe'].includes(node.tag)) errors.push({message:'DataTable and Iframe must be outside For templates',start:node.start,end:node.end});
+  if (node.tag === 'For') {
+    const key = node.attributes.find(a => a.name === 'keyBy')?.value;
+    const eachValue = node.attributes.find(a => a.name === 'each')?.value;
+    const each = eachValue && !eachValue.static ? eachValue.reactive : undefined;
+    if (inColumn) errors.push({message:'Nested For is not supported',start:node.start,end:node.end});
+    if (!key?.static || typeof key.json !== 'string' || !key.json || each?.kind !== 'signal') errors.push({message:'For requires each={$table} and a nonempty keyBy',start:node.start,end:node.end});
   }
   validateElement(node, components, allowedHtml, stylePolicy, errors, inSvg);
   for (const attr of node.attributes) if (!inColumn && !attr.value.static && isReactiveExpression(attr.value.reactive) && reactiveNames(attr.value.reactive).fields.length) {
@@ -114,7 +123,7 @@ function walk(
     return;
   }
   const childrenInSvg = inSvg || (!node.isComponent && node.tag.toLowerCase() === 'svg');
-  for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag);
+  for (const child of node.children) walk(child, components, allowedHtml, stylePolicy, errors, childrenInSvg, node.tag === 'For' ? true : node.tag === 'Column' ? parent === 'DataTable' : node.tag === 'DataTable' ? false : inColumn, node.tag, inFor || node.tag === 'For');
 }
 
 function validateElement(
@@ -216,6 +225,7 @@ function validateElement(
   for (const a of el.attributes) {
     // Spread / non-static attribute values.
     if (!a.value.static) {
+      if (el.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') continue;
       if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) continue;
       errors.push({
         message: `Attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`,

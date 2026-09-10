@@ -532,7 +532,10 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
       if (n.type === 'expression' && !n.value.static) expressionUses(n.value.reactive, n, 'expression', 'value');
       if (n.type !== 'element') continue;
       if (n.control && n.control.kind !== 'fragment') expressionUses(n.control.test, n, 'condition', 'test');
-      for (const a of n.attributes) if (!a.value.static) expressionUses(a.value.reactive, a, n.tag, a.name);
+      for (const a of n.attributes) if (!a.value.static) {
+        if(n.tag === 'For' && a.name === 'each' && a.value.reactive?.kind === 'signal') out.push({name:a.value.reactive.name,tag:n.tag,attr:a.name,expects:'table',start:a.start,end:a.end});
+        else expressionUses(a.value.reactive, a, n.tag, a.name);
+      }
       const table = n.isComponent ? REF_ATTRS.components[n.tag] : REF_ATTRS.html[n.tag.toLowerCase()];
       if (table) {
         for (const a of n.attributes) {

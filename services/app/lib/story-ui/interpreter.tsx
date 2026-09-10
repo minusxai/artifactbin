@@ -12,6 +12,8 @@
  * stamped DOM is render output only; new-format stories persist JSX source, never DOM.
  */
 import React from 'react';
+import { keyedRowsError, validRowKey, commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
+import type { CommentTarget } from '@/lib/story/comment-target';
 import { DENIED_JSX_ATTRS } from '@/lib/jsx/denied-attrs';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
@@ -76,6 +78,9 @@ export interface BoundSourceProps {
 
 export interface StoryInterpreterOptions {
   values?: Record<string, unknown>;
+  tables?: Record<string, { rows: Record<string, unknown>[] }>;
+  repeatScope?: { owner: string; key: string | number; ids: Set<string> };
+  tableCommentScope?: { owner: string; rowKey: string | number; columnKey: string; ids: Set<string> };
   /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
   components: Record<string, React.ComponentType<Record<string, unknown>>>;
   /**
@@ -193,6 +198,27 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     return renderNode(node.children[index], options, `${path}.${index}`);
   }
 
+  const buildProps = (...args: Parameters<typeof rawBuildProps>) => scopeProps(rawBuildProps(...args), options);
+  if (node.tag === 'For') {
+    if (options.row) return React.createElement('div', {role: 'alert', key: path}, 'Nested For is not supported');
+    const each = node.attributes.find(a => a.name === 'each');
+    const keyBy = node.attributes.find(a => a.name === 'keyBy')?.value;
+    const owner = node.attributes.find(a => a.name === 'id')?.value;
+    const expr = each && !each.value.static ? each.value.reactive : undefined;
+    const name = expr?.kind === 'signal' ? expr.name : null;
+    if (!name || !keyBy?.static || typeof keyBy.json !== 'string' || !keyBy.json) return React.createElement('div', {role: 'alert', key:path}, 'For requires each={$table} and keyBy');
+    const source = options.tables?.[name]?.rows ?? options.values?.[name] ?? [];
+    if (!Array.isArray(source) || source.some(row => !row || typeof row !== 'object' || Array.isArray(row))) return React.createElement('div', {role:'alert', key:path}, 'For requires table rows');
+    const error = source.length > 1000 ? 'For supports at most 1000 rows' : source.length * templateSize(node.children) > 50000 ? 'For expansion exceeds 50000 nodes' : keyedRowsError(source, keyBy.json, 'keyBy');
+    if (error) return React.createElement('div', {role:'alert', key:path}, error);
+    const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
+    const ids = templateIds(node.children);
+    return React.createElement('div', {id: ownerId || undefined, [AST_PATH_ATTR]: path, key:options.keyFor?.(path) ?? path, style:{display:'contents'}}, ...source.map(row => {
+      const key = row[keyBy.json as string] as string | number;
+      return React.createElement(React.Fragment, {key:JSON.stringify([typeof key,key])}, ...node.children.map((child,i) => renderNode(child, {...options,row,repeatScope:{owner:ownerId,key,ids}}, `${path}.${i}`)));
+    }));
+  }
+  if (options.repeatScope && ['DataTable', 'Iframe'].includes(node.tag)) return React.createElement('div', {role:'alert',key:path}, 'DataTable and Iframe must be outside For templates');
   const isComponent = node.isComponent;
   const Component = isComponent ? options.components[node.tag] : null;
   if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
@@ -214,7 +240,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
       return typeof cp.col === 'string' ? [{ col: cp.col, title: typeof cp.title === 'string' ? cp.title : undefined, props: cp, nodes: child.children, path: `${path}.${index}` }] : [];
     });
     const renderCell = (template: ColumnTemplate, row: Record<string, unknown>) => template.nodes.map((child, i) => renderNode(child, {
-      ...options, row, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col, tableName: refName(props.data) ?? undefined },
+      ...options, row, tableCommentScope: typeof props.id === 'string' && validRowKey(row[String(props.rowKey)]) ? {owner: props.id, rowKey: row[String(props.rowKey)] as string | number, columnKey:template.col, ids:templateIds(template.nodes)} : undefined, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col, tableName: refName(props.data) ?? undefined },
     }, `${template.path}.${i}`));
     const element = React.createElement(Component, { ...props, templates, renderCell, key: options.keyFor?.(path) ?? path });
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
@@ -317,7 +343,7 @@ function StaticBoundControl({ tag, props, bind, children }: BoundControlProps) {
   return React.createElement(tag, { ...props, disabled: true, 'data-mx-bound': bindings }, ...(React.Children.toArray(children)));
 }
 
-function buildProps(
+function rawBuildProps(
   attributes: JsxAttribute[],
   isComponent: boolean,
   tag: string,
@@ -404,4 +430,32 @@ function sanitizeStyleObject(value: unknown): Record<string, string | number> | 
     if (typeof v === 'string' || typeof v === 'number') out[k] = v;
   }
   return Object.keys(out).length > 0 ? out : null;
+}
+
+function templateSize(nodes: JsxNode[]): number {
+  return nodes.reduce((sum,node)=>sum+1+(node.type==='element'?templateSize(node.children):0),0);
+}
+function templateIds(nodes: JsxNode[]): Set<string> {
+  const ids = new Set<string>();
+  const visit = (nodes: JsxNode[]) => nodes.forEach(node => { if(node.type === 'element') { const id = node.attributes.find(a=>a.name==='id')?.value; if(id?.static && typeof id.json==='string') ids.add(id.json); visit(node.children); } });
+  visit(nodes); return ids;
+}
+function scopeProps(props: Record<string,unknown>, options: StoryInterpreterOptions): Record<string,unknown> {
+  const repeat = options.repeatScope, table = options.tableCommentScope;
+  if (!repeat && !table) return props;
+  const owner = repeat?.owner ?? table!.owner;
+  const scope = repeat ? ['repeat',owner,typeof repeat.key,repeat.key] : ['table',owner,typeof table!.rowKey,table!.rowKey,table!.columnKey];
+  const ids = repeat?.ids ?? table!.ids;
+  const sourceId = typeof props.id === 'string' ? props.id : undefined;
+  if(sourceId) {
+    const target: CommentTarget = repeat ? {kind:'repeat',scopes:[{nodeId:owner,key:repeat.key}],templateNodeId:sourceId} : {kind:'table',rowKey:table!.rowKey,columnKey:table!.columnKey,templateNodeId:sourceId};
+    Object.assign(props, commentMetadata(owner,target));
+    props.id = instanceDomId(scope,sourceId);
+  }
+  for(const attr of ['htmlFor','aria-labelledby','aria-describedby','aria-controls','aria-owns','aria-activedescendant','aria-details','aria-errormessage','aria-flowto','headers','list','form']) if(typeof props[attr] === 'string') props[attr] = (props[attr] as string).split(/\s+/).map(id=>ids.has(id)?instanceDomId(scope,id):id).join(' ');
+  for(const [attr,value] of Object.entries(props)) if(typeof value==='string') {
+    if(attr==='href' && value.startsWith('#') && ids.has(value.slice(1))) props[attr] = '#'+instanceDomId(scope,value.slice(1));
+    else if(/^url\(#[^)]+\)$/.test(value) && ids.has(value.slice(5,-1))) props[attr] = 'url(#'+instanceDomId(scope,value.slice(5,-1))+')';
+  }
+  return props;
 }
