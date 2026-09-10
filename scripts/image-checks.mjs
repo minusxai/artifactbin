@@ -68,15 +68,14 @@ const KINDS = {
     containerPort: 3000,
     mustResolve: ['react'],
     mustCarry: ['node_modules/@artifactbin/utils', 'node_modules/@artifactbin/contracts'],
-    mustThrow: ['playwright', '@duckdb/node-api', '@tailwindcss/postcss', 'tailwindcss', 'lightningcss', 'vite', 'three'],
+    mustThrow: ['playwright', '@duckdb/node-api', '@tailwindcss/postcss', 'tailwindcss', 'lightningcss', 'vite', 'three', 'monaco-editor/package.json'],
     probe: { path: '/health', check: (status, body) => status === 200 && body?.ok === true },
     /** The lean entry's own rule, proved the refusing way too (below). */
     env: { DATABASE_URL: 'pglite://memory', SQL__SERVICE_URL: 'http://127.0.0.1:9', BROWSER__SERVICE_URL: 'http://127.0.0.1:9' },
     /** The entry's own assert, proved the refusing way (main's 2b): what a bare
      *  `docker run` must NAME on its way out. */
     refusesWithoutEnv: /SQL__SERVICE_URL and BROWSER__SERVICE_URL/,
-    /** 414 MB measured on arm64 after the runtime CSS compiler was bundled,
-     *  its toolchain left, and the unused Kysely dialect was removed. */
+    /** Keep the runtime below this limit on both amd64 and arm64. */
     budgetMB: 520,
   },
   /** The lean PROXY — identity over Postgres, the doors, one forwarder. */
