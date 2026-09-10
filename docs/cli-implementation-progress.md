@@ -16,7 +16,8 @@ The pre-production breaking-design instruction supersedes historical compatibili
 7. [x] One-time Markdown conversion to adjacent editable JSX, preserving the original.
 8. [x] Four native release targets, npm packaging and compatible binary/skill update recovery.
 9. [x] Release agent regression: two pi/DeepSeek runs and two OpenCode/GLM runs.
-10. [ ] PR CI verification. The final full browser run passed. Runtime MCP and remote skills are removed;
+10. [x] Product release gates: full browser, unit, native, image and compose checks passed.
+    Each head’s final PR checks remain the review gate. Runtime MCP and remote skills are removed;
     the production content migration is deliberately an operator action after review.
 
 ## Boundaries
@@ -37,7 +38,7 @@ an older proposal. Empty dry-run pushes remain local and do not initiate authent
 
 - Full merged suite: 186 API files / 1,385 tests; 382 Node files / 3,772 passed and one skipped;
   185 UI files / 1,363 tests. The final CLI suite passes 97 tests. Later evaluator changes pass
-  all 44 evaluator files / 497 tests, including browser-first authorization and health readiness.
+  all 45 evaluator files / 499 tests, including browser-first authorization and health readiness.
 - TypeScript, residual-name guard, lockfile dry-run and production build passed.
 - Migration: 22 focused checks cover all preview pages before writes, fingerprint refusal, retained
   history/deleted artifacts, backup records, final audit, joined query meaning and anchored comments.
@@ -102,7 +103,7 @@ binaries are ad-hoc signed; public notarization requires the publisher's signing
 
 The full browser shards, split-stack compose walk, image, build, type checks, all unit-test shards,
 and four native targets passed in [CI run 34536577027](https://github.com/minusxai/artifactbin/actions/runs/34536577027).
-The compose fixture now supplies the same observed version/state guards required of every replacement;
+Compose and agent seed fixtures now supply the same observed version/state guards required of every replacement;
 the evaluator probes `/health`, because runtime remote-skill routes are gone. The npm package also
 installed and validated JSX in a fresh Node 22 container without Python or a compiler, creating no
 credential state. The final branch checks, including CodeQL and paid agent smoke, are attached to
