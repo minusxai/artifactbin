@@ -50,6 +50,7 @@ import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
 import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
+import { seedDocument } from './lib/seed';
 import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
@@ -84,16 +85,6 @@ const log = (msg: string) => console.log(`[eval] ${msg}`);
 async function servedDocument(url: string): Promise<ServedDocument> {
   const res = await fetch(url);
   return { status: res.status, html: res.ok ? await res.text() : '' };
-}
-
-/** Publish the document a task asks the agent to EDIT, as the agent's own token would have. */
-async function seedDocument(base: string, id: string, token: string, markup: string): Promise<void> {
-  const res = await fetch(`${base}/api/artifacts/${id}`, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, [DRIVER_HEADER]: '1' },
-    body: JSON.stringify({ markup }),
-  });
-  if (!res.ok) throw new Error(`seeding document ${id} → ${res.status} ${await res.text()}`);
 }
 
 /** A task's outcome for one leg. `null` = skipped: this harness cannot run it at all. */
