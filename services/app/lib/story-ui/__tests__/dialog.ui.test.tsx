@@ -78,3 +78,17 @@ it('keeps artifact dialogs out of the global modal layer, with keyboard and back
     expect(screen.getByText('Open scoped')).toHaveFocus();
   } finally {show.mockRestore(); modal.mockRestore();}
 });
+
+
+it('preserves the field focus chosen by native show for an artifact dialog', () => {
+  const show = vi.spyOn(HTMLDialogElement.prototype, 'show').mockImplementation(function(this: HTMLDialogElement) {
+    this.open = true;
+    this.querySelector<HTMLInputElement>('input')?.focus();
+  });
+  try {
+    render(<ArtifactDialogScope><Dialog><DialogTrigger>Open focused</DialogTrigger><DialogContent aria-label="Focused"><input aria-label="Draft" autoFocus /><DialogClose>Close focused</DialogClose></DialogContent></Dialog></ArtifactDialogScope>);
+    fireEvent.click(screen.getByText('Open focused'));
+    expect(screen.getByLabelText('Draft')).not.toHaveAttribute('autofocus');
+    expect(screen.getByLabelText('Draft')).toHaveFocus();
+  } finally {show.mockRestore();}
+});

@@ -495,6 +495,11 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-home img { width: 30px !important; height: 30px !important; filter: none !important; }
   /* Editing on a phone: the page's toolbar takes the top, and the tile would sit under it. */
   .mx-reader-chrome--pinned .mx-reader-home { display: none !important; }
+  /* The editor owns the top edge, including Done at the right. Keep GitHub
+     available in the action rail instead of covering that toolbar. */
+  .mx-reader-chrome--pinned .mx-reader-github {
+    position: static !important; order: -1 !important;
+  }
   /* Two lines: the title first, clipped with an ellipsis; then the handle with
      Follow beside it. Flex order does the swap so the markup (and the desktop
      bar, which reads handle · title · follow) stays as it is. */
