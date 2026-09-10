@@ -1,7 +1,7 @@
 /**
  * THE TOKEN LIFECYCLE (tok-p1) — through the REAL handlers and the real module, no proxy, no mocks.
  *
- *   mint      → expires_at = now + 6 h by default; the mint answers expiresAt; a caller may ask for 1–720 h
+ *   mint      → expires_at = now + 6 h by default; the mint answers expiresAt; a caller may ask for 1–8760 h
  *   status    → derived from the row, never stored twice: revoked > expired > active; NULL expires_at never expires
  *   resolve   → an expired token is NOTHING on both paths (bearer + cookie id), exactly like a revoked one
  *   claim     → an expired token's artifacts transfer; the token is NOT reactivated (a test, not an implication)
@@ -54,12 +54,16 @@ describe('mint: expiry is a property of every token', () => {
     expect(Math.abs(Date.parse(stored.expires_at!) - at)).toBeLessThan(1_000);
   });
 
-  it('expiresInHours is honoured inside [1, 720] and refused outside it', async () => {
+  it('expiresInHours is honoured inside [1, 8760] and refused outside it', async () => {
     const one = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: 1 } })));
     expect(Math.abs(Date.parse(one.expiresAt as string) - (Date.now() + HOUR))).toBeLessThan(5_000);
     const month = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: 720 } })));
     expect(Math.abs(Date.parse(month.expiresAt as string) - (Date.now() + 720 * HOUR))).toBeLessThan(5_000);
-    for (const bad of [0.5, 721, -1, 'soon']) {
+    const yearResponse = await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: 8760 } }));
+    expect(yearResponse.status).toBe(201);
+    const year = await json(yearResponse);
+    expect(Math.abs(Date.parse(year.expiresAt as string) - (Date.now() + 8760 * HOUR))).toBeLessThan(5_000);
+    for (const bad of [0.5, 8761, -1, 'soon']) {
       const res = await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: bad } }));
       expect(res.status, `expiresInHours=${bad}`).toBe(400);
     }
@@ -69,7 +73,7 @@ describe('mint: expiry is a property of every token', () => {
     const t = await mintToken('t');
     expect(Math.abs(Date.parse(t.expiresAt!) - (Date.now() + DEFAULT_TOKEN_TTL_MS))).toBeLessThan(5_000);
     await expect(mintToken('t', null, undefined, { expiresInMs: HOUR / 2 })).rejects.toThrow(RangeError);
-    await expect(mintToken('t', null, undefined, { expiresInMs: 31 * 24 * HOUR })).rejects.toThrow(RangeError);
+    await expect(mintToken('t', null, undefined, { expiresInMs: 366 * 24 * HOUR })).rejects.toThrow(RangeError);
     const never = await mintToken('t', null, undefined, { expiresInMs: null });
     expect(never.expiresAt).toBeNull();
   });

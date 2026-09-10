@@ -98,6 +98,7 @@
     "esbuild": "0.28.2",
     "jsdom": "30.0.1",
     "lucide-react": "1.30.0",
+    "mermaid": "12.0.0",
     "mixpanel-browser": "2.82.0",
     "monaco-editor": "0.53.0",
     "prettier": "3.9.6",

@@ -131,6 +131,13 @@ input.mx-rail-title { min-width: 0; width: 100%; background: transparent; border
  * gone when presenting, where the document is alone on the screen.
  */
 .mx-reading { display: flex; align-items: flex-start; }
+/* Plans have a bounded drawing column. A matching right gutter keeps the
+   document centered on wide displays while the contents sit alongside it. */
+.mx-reading--plan { max-width: 1536px; margin-inline: auto; }
+.mx-reading--plan > .mx-doc { width: 100%; max-width: 1120px; margin-inline: auto; }
+@media (min-width: 1600px) {
+  .mx-reading--plan::after { content: ''; flex: 0 0 208px; }
+}
 .mx-outline {
   position: sticky; top: 0; flex: 0 0 208px; width: 208px; max-height: 100vh;
   overflow-y: auto; overflow-x: hidden; box-sizing: border-box;

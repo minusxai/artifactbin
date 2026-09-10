@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-`markup` is **static JSX data**, interpreted over a fixed component registry.
+`markup` is **static JSX data**, interpreted over the component registry.
 Prefer native JSX and kit interactions. Reserve Iframe for isolated widgets
 requiring DOM scripts or canvas APIs; keep surrounding content native.
 

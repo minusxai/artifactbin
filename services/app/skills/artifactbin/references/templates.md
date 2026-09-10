@@ -1,7 +1,7 @@
 ---
 name: templates
 description: >-
-  How to choose a genre when the ask does not name one. The brief already carries a usable grammar for all four — read this only to compare genres; then only the chosen genre's file, if at all.
+  Genre comparison when the brief leaves the choice unclear; then read only the chosen genre.
 ---
 ## Read first
 
@@ -13,7 +13,8 @@ grammar — details about a genre you didn't pick are noise:
 [% endfor %]
 
 Choosing: when the ask clearly names a genre (slides → `deck`, operating
-view → `dashboard`, board report / long-read → `editorial`), pick it. When
+view → `dashboard`, UI/implementation/rollout plan → `plan`,
+board report / long-read → `editorial`), pick it. When
 it is NOT obvious from the user's instructions, **default to `scrolly`** —
 its conceit-led, designed treatment (at whatever register the subject can
 carry, deadpan included) is the strongest default for an unspecified ask.
