@@ -21,6 +21,7 @@ const PAGE = `<html><head><style>
 <div data-mx-slide style="height:100px;background:#33c">three</div></main></body></html>`;
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
 const NEVER_READY_PAGE = `<html><body><main><div data-mx-managed-frame><iframe></iframe></div></main></body></html>`;
+const DIAGRAM_PAGE = `<html><body style="margin:0"><main data-mx-mermaid-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{document.querySelector('main').dataset.mxMermaidState='ready';document.querySelector('main').style.background='#3c3'},400)</script></body></html>`;
 let pages: RunningServer;
 let url: string;
 
@@ -29,7 +30,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -44,6 +45,13 @@ it('matches allowed request origins exactly, never by prefix',()=>{
 });
 
 describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', remote]])('%s', (_name, svc) => {
+  it('waits for a lazy diagram before capturing export pixels', async () => {
+    const r = await svc.render({ ...base(), url: `${pages.base}/diagram`, settleMs: 0 });
+    if (!r.ok) throw new Error(JSON.stringify(r));
+    const { data, info } = await sharp(Buffer.from(r.bytes)).raw().toBuffer({ resolveWithObject: true });
+    const at = (50 * info.width + 50) * info.channels;
+    expect([...data.subarray(at, at + 3)]).toEqual([51, 204, 51]);
+  });
   it('shoots the selected element as png, with the cross-origin request aborted', async () => {
     const r = await svc.render(base());
     if (!r.ok) throw new Error(JSON.stringify(r));

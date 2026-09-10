@@ -95,5 +95,5 @@ templates:
       - Visual proposal (UI wireframes or process/dependency diagrams)
       - Flows and states (actions, branches, failures and recovery)
       - Decisions (tradeoffs, open questions and acceptance criteria)
-      - Execution ledger (owners, dependencies, checkboxes and completion)
+      - Execution ledger (owners, dependencies, status and struck-through completed tasks)
 themes: {}

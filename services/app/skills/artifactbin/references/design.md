@@ -30,8 +30,8 @@ Helmet CSS adds, you carry yourself:
   keyboard focus a visible state.
 
 **Plans:** UI plans use [templates-plan.md](templates-plan.md); other workflows use
-useful visuals. Todos need checkboxes or tables. Check completed items
-and strike labels (`<s>`), preserving context. Save by editing; reader-local toggles do not persist.
+useful visuals. Todos use plain lists or tables, without checkboxes. Strike
+completed labels (`<s>`), preserving context. Save progress by editing.
 
 ## Contents
 

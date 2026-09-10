@@ -88,6 +88,12 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       if (req.injectCss) await page.addStyleTag({ content: req.injectCss }).catch(() => {});
       const surface = page.locator(req.selector).first();
       await surface.waitFor({ timeout });
+      // SSR emits pending diagram markers before hydration. Wait through the
+      // lazy engine and image decode; a handled syntax error is also settled.
+      await page.waitForFunction(selector => {
+        const root = document.querySelector(selector);
+        return !!root && !root.matches('[data-mx-mermaid-state="pending"]') && !root.querySelector('[data-mx-mermaid-state="pending"]');
+      }, req.selector, { timeout });
       if(req.waitForManagedFrames)await page.waitForFunction(selector=>{
         const root=document.querySelector(selector);if(!root)return false;
         return [...root.querySelectorAll('[data-mx-managed-frame]')].every(host=>host.querySelector('iframe[data-mx-author-ready]'));

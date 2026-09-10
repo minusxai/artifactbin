@@ -1,10 +1,31 @@
 ---
 name: markup-svg
 description: >-
-  The inline SVG subset for motifs and small diagrams. Read only when drawing SVG.
+  Mermaid diagrams and the inline SVG drawing subset.
 order: 4
 ---
 ## Read first
+
+For flowcharts, state machines and sequence diagrams, prefer the first-class
+`<Mermaid>` component. It handles layout, the document theme and exports;
+its static `code` string stays editable through ordinary document edits.
+
+```jsx
+<Mermaid title="Shift workflow" code={`flowchart TD
+  A[Draft shift] -->|Assign| B{Conflict?}
+  B -->|No| C[Saved]
+  B -->|Yes| D[Resolve conflict]
+  D -->|Retry| B
+`} />
+```
+
+Use `stateDiagram-v2` or `sequenceDiagram` for those diagram types. Code is
+limited to 20,000 characters; diagram configuration/frontmatter is refused.
+The app owns strict rendering, theme and resource limits; click callbacks
+are disabled. Syntax errors show a readable error and preserve the source.
+Do not draw UI wireframes in Mermaid: use spatial HTML/CSS screen panels.
+
+## Inline SVG
 
 A minimal drawing subset renders inline for motifs and small diagrams — a
 frame ruler, a route map, a sparkline decoration:

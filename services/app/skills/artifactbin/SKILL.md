@@ -129,7 +129,7 @@ More under `references/` ([[ docsIndexHint ]]):
 | editable cells, tags and reference pickers | `markup-editing.md` |
 | scroll reveals and ambient motion classes | `markup-motion.md` |
 | Video embeds | `markup-video.md` |
-| SVG motifs and allowed tags | `markup-svg.md` |
+| Mermaid diagrams and SVG | `markup-svg.md` |
 | Libraries, GLBs, files | `markup-libraries.md` |
 | genre structure and full skeleton | `templates-<name>.md` (index: `templates.md`) |
 | theme tokens, accents, chart palette | `themes-<name>.md` (index: `themes.md`) |

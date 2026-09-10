@@ -221,6 +221,7 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
 
 <section>
   <h2 className="text-2xl font-semibold tracking-tight">06 · Video</h2>
+  <Mermaid title="Document workflow" code="flowchart LR; Draft --> Review; Review --> Published" />
   <Video className="mt-6 max-w-2xl" src="https://www.youtube.com/watch?v=aqz-KE-bpKQ" poster="${img}" title="Big Buck Bunny" />
   <File className="mt-6 max-w-2xl" src="${pdf}" />
 </section>

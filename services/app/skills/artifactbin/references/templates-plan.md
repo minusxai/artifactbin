@@ -48,8 +48,8 @@ mobile adaptation, and an error variant; expand it to the requested journey.
   </header>
   <h2 className="mt-8 text-xl font-semibold">01 · The proposed screens</h2>
   <figure className="mt-6">
-    <div className="grid gap-6 @3xl:grid-cols-2">
-      <div className="border border-border p-4">
+    <div className="grid min-w-0 grid-cols-1 gap-6 @3xl:grid-cols-2">
+      <div className="min-w-0 border border-border p-4">
         <p className="text-xs font-mono">S1 · Desktop · Choose a time</p>
         <div className="mt-3 border-b border-border pb-2">Clinic / Appointments / New</div>
         <div className="mt-3 grid grid-cols-3 gap-3">
@@ -86,11 +86,18 @@ mobile adaptation, and an error variant; expand it to the requested journey.
 
 ## Rules
 
+Plans with at least three h2 sections get the same side contents rail as
+editorial documents on wide screens. Author semantic h2/h3 headings; the
+platform supplies navigation. The rail is omitted from captures.
+
 Compose a working board: wide drawing areas, quiet margins, short adjacent
 annotations, and a compact milestone ledger. Use one accent for screen IDs,
 arrows and active status; use text and shape as well as color. Align drawings
 on a shared grid and vary their size by importance. On narrow containers,
-stack screens in journey order with readable labels. Keep prose to decisions
+use `grid-cols-1` before wider column variants and `min-w-0` on panels.
+Stack screens in journey order with readable labels. Wide desktop drawings
+need a bounded `overflow-x-auto` region and a visible scroll hint. Check
+the document surface itself for clipping, not just the page scroll width. Keep prose to decisions
 and explanations that the drawings cannot carry.
 
 Do
@@ -103,8 +110,8 @@ Don't
 
 ## Transitions and completion
 
-Draw the screen flow with inline SVG (see [markup-svg.md](markup-svg.md))
-or connected HTML screen panels. Label arrows with the triggering action;
+Draw screen flows with `<Mermaid>` (see [markup-svg.md](markup-svg.md));
+inline SVG or connected HTML panels suit bespoke diagrams. Label arrows with the triggering action;
 include back/cancel and relevant error/retry branches. For this example:
 S1 — Continue → S2 Review — Confirm → S3 Confirmation;
 S2 — Slot taken / choose another → S1; S2 — Back → S1 with selection retained.
@@ -115,8 +122,8 @@ Use a table for states: screen | trigger | visible change | next action |
 data retained. Distinguish saving from saved, and a recoverable error from
 an empty result. Animations are optional; explaining navigation is essential.
 
-Milestones use checkboxes or tables. Example completed cell:
-`<td>☑ <s>Review booking wireframes</s></td>`; pending:
-`<td>☐ Implement slot selection</td>`. Preserve owners, dependencies and
-acceptance criteria when updating. Persist changes through document edits;
-reader-local checkbox toggles do not save progress.
+Milestones use plain lists or tables, without checkboxes. Strike completed
+task labels: `<td><s>Review booking wireframes</s></td>`; leave pending labels
+unstruck. Status text may distinguish Pending, In progress and Done. Preserve
+owners, dependencies and acceptance criteria. Only mark work complete when
+the user reports it or you have verified it. Persist progress through document edits.
