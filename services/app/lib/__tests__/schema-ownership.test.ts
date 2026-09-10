@@ -36,6 +36,7 @@ const DECLARED_SET = [
   'app.artifacts',
   'app.analytics_events',
   'app.codes', 'app.dataset_secrets', 'app.dataset_result_cache',
+  'app.dataset_policy_audit', 'app.dataset_usage',
   'app.node_identity_migration_jobs',
   'app.relations',
   'app.tokens',

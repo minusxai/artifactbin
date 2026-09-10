@@ -108,7 +108,7 @@ A dataset carries a write ACL beside its visibility: `"access": "read"` (the
 default — documents may only read it) or `"access": "readwrite"`. Set it on
 create or PUT with your bearer token, or your user flips it from the
 document's share menu in the browser (`/api/my/*` is a browser-session
-surface and answers a bearer token 401). A mutation requires the reader to hold dataset edit permission. Share the dataset
+surface and answers a bearer token 401). Mutations require dataset edit permission or explicit public delegation. Share the dataset
 with an editor, as you would any artifact; document editing grants no dataset access.
 
 A document writes it by declaring a `<Mutation>` in `<Helmet>` — a `<Query>`
@@ -129,6 +129,8 @@ An agent writes rows without a document through
 `400 not_a_dataset` (the id is another tier), `403 dataset_read_only` (set
 `access: readwrite` and dataset edit permission are required), `400 invalid_sql` (the detail says why), and
 `503 dataset_busy` (concurrent writes contended — retry after a moment).
+
+[Write policies](publishing-auth.md).
 
 ## Viz recipes
 

@@ -12,3 +12,4 @@ export * from './deny';
 export * from './routes';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';
 export type { Column, Index, Table } from './schema';
+export * from './dataset-policy';

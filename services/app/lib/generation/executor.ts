@@ -3,6 +3,7 @@ import {
   GENERATION_LIMITS,
   isQueryFailure,
   type GenerationResults,
+  type GenerationRequest,
   type GenerationService,
   type MutationInput,
   type MutationOutcome,
@@ -12,7 +13,7 @@ import { generationSchema, validatedGeneration } from "./schema";
 
 export function createGenerationInvocation(
   service: GenerationService,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; beforeCall?: (request: GenerationRequest) => Promise<void> } = {},
 ): {
   run(
     input: MutationInput,
@@ -41,6 +42,7 @@ export function createGenerationInvocation(
           throw new Error("Generation call limit exceeded (4 per mutation)");
         const schema = generationSchema(request.schema);
         const sampling = generationOptions(request.options);
+        await options.beforeCall?.(request);
         calls++;
         generationDeadline ??= Date.now() + timeoutMs;
         const remaining = generationDeadline - Date.now();

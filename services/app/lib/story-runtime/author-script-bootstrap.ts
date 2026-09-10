@@ -21,7 +21,7 @@ ${AUTHOR_REALM_LOCKDOWN}
     const port = event.ports[0];
     const send = port.postMessage.bind(port);
     let comments = null, commentState = null;
-    let state = { values: {}, tables: {}, errors: {} }, pending = [], sequence = 0, started = false;
+    let state = { values: {}, tables: {}, errors: {}, mutationAccess: {} }, pending = [], sequence = 0, started = false;
     const waiting = new Map(), valuesListeners = new Set(), dataListeners = new Set();
     const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
     const copy = value => structuredClone(value);
@@ -64,6 +64,8 @@ ${AUTHOR_REALM_LOCKDOWN}
         subscribe: subscribe(dataListeners)
       },
       refresh: names => { void request({ op: 'refresh', ...(names === undefined ? {} : { names }) }).catch(report); },
+      canMutate: name => own(state.mutationAccess, name) === null,
+      mutationReason: name => own(state.mutationAccess, name) ?? (Object.prototype.hasOwnProperty.call(state.mutationAccess, name) ? null : 'Checking edit access…'),
       mutate: (name, values) => request({ op: 'mutate', name, ...(values === undefined ? {} : { values }) })
     };
     Object.defineProperty(window, 'mx', { value: mx, writable: false, configurable: false });
@@ -72,9 +74,9 @@ ${AUTHOR_REALM_LOCKDOWN}
       if (message.type === 'comment-state') {
         commentState = message; comments?.update(message);
       } else if (message.type === 'state') {
-        if (message.reset) state = { values: {}, tables: {}, errors: {} };
-        const changed = { values: [], tables: [], errors: [] };
-        for (const field of ['values', 'tables', 'errors']) {
+        if (message.reset) state = { values: {}, tables: {}, errors: {}, mutationAccess: {} };
+        const changed = { values: [], tables: [], errors: [], mutationAccess: [] };
+        for (const field of ['values', 'tables', 'errors', 'mutationAccess']) {
           for (const [name, value] of Object.entries(message.state[field] || {})) {
             if (value === undefined) {
               if (Object.prototype.hasOwnProperty.call(state[field], name)) { delete state[field][name]; changed[field].push(name); }
@@ -93,7 +95,7 @@ ${AUTHOR_REALM_LOCKDOWN}
         }
         for (const {names, listener} of dataListeners) {
           const dataChanges = [...changed.tables, ...changed.errors, ...pendingChanges];
-          if (!relevant(names, names === null ? [...dataChanges, ...changed.values] : dataChanges)) continue;
+          if (!relevant(names, names === null ? [...dataChanges, ...changed.values, ...changed.mutationAccess] : dataChanges)) continue;
           const selected = names === null ? state : { values: {}, tables: select(state.tables, names), errors: select(state.errors, names) };
           try { listener(copy(selected), names === null ? [...pending] : pending.filter(name => names.includes(name))); } catch (error) { report(error); }
         }

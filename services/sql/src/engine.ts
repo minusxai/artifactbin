@@ -41,6 +41,7 @@ import type { DuckDBConnection, DuckDBInstance, DuckDBPreparedStatement, DuckDBV
 import type { SqlCaps } from './caps';
 import { queryBounds } from './bounds';
 import { inferColumns } from './dataset-shape';
+import { runPolicyMutation, DatasetPolicyDenied } from './policy';
 import { registerGeneration } from './generation';
 import { isQueryFailure } from '@artifactbin/contracts';
 import type { ColumnType, DatasetColumn, DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, QueryPage, Row, RunInput, Scalar, SqlQuery } from '@artifactbin/contracts';
@@ -409,8 +410,10 @@ export async function runMutation(input: MutationInput, caps: SqlCaps): Promise<
     // but the bound belongs where the resource is taken, so no future caller
     // can reach this line around it (and CodeQL can see it here).
     timer = setTimeout(() => { timedOut = true; conn.interrupt(); }, Math.min(timeoutMs, caps.timeoutMs));
-    const result = await guarded.prepared.run();
-    const affected = result.rowsChanged;
+    const applied = input.policy
+      ? await runPolicyMutation(conn,input,(statement,params)=>bindMutationParams(conn,statement,params,input.row))
+      : {affected:(await guarded.prepared.run()).rowsChanged};
+    const {affected}=applied;
     if (input.expectedAffected !== undefined && affected !== input.expectedAffected) {
       if (affected === 0) return { error: 'the row changed since it was read', code: 'row_changed' };
       if (affected > input.expectedAffected) return { error: `the mutation matched ${affected} rows; expected ${input.expectedAffected}`, code: 'row_not_unique' };
@@ -432,9 +435,10 @@ export async function runMutation(input: MutationInput, caps: SqlCaps): Promise<
       for (const c of columns) o[c.name] = jsonValue(row[c.name], c.type);
       return o;
     });
-    return { rows, columns, affected };
+    return { rows, columns, ...applied };
   } catch (e) {
     if (timedOut) return { error: `the mutation ran too long and was stopped (limit ${timeoutMs}ms)`, timedOut: true };
+    if(e instanceof DatasetPolicyDenied)return {error:e.message,code:'policy_denied'};
     const request = generation();
     if (request) return {error:'Model result required',generation:request};
     return { error: message(e) };

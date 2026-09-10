@@ -8,6 +8,7 @@
  * a bad query with a 400 instead of a blank chart at render; leaving them
  * in-process made a DuckDB-less image crash on every write.
  */
+import type { DatasetMutationPolicy, MutationAnalysis } from './dataset-policy';
 import type { GenerationRequest, GenerationResults } from './generation';
 
 export type Scalar = string | number | boolean | null;
@@ -30,7 +31,7 @@ export interface QueryFailure {
   /** A suspended mutation; no rows are returned or persisted until resolved. */
   generation?: GenerationRequest;
   /** Stable machine-readable reason for a guarded edit cardinality failure. */
-  code?: 'row_changed' | 'row_not_unique';
+  code?: 'row_changed' | 'row_not_unique' | 'policy_denied';
   /** Set when the failure was our timeout rather than the author's SQL. */
   timedOut?: boolean;
   /** Set when a WRITE would have taken the table past the row cap (nothing was stored). */
@@ -65,6 +66,9 @@ export interface RunInput {
 }
 
 export interface MutationInput {
+  policy?: DatasetMutationPolicy;
+  /** Internal capability preview: analyze only, never execute effects. */
+  policyPreview?: boolean;
   /** Resolved model effects for this invocation. No keys or network capabilities. */
   generationResults?: GenerationResults;
   /** The ONE table the statement may touch — the dataset, under its `ref_<id>` name. */
@@ -80,7 +84,7 @@ export interface MutationInput {
   timeoutMs?: number;
 }
 /** A write that ran: the table's new rows and how many rows the statement touched. */
-export interface MutationResult extends TableResult { affected: number }
+export interface MutationResult extends TableResult { affected: number; analysis?: MutationAnalysis }
 export type MutationOutcome = MutationResult | QueryFailure;
 
 export interface DryRunInput {

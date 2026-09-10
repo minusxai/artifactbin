@@ -34,6 +34,9 @@ bridge plus anonymous cached assets.
   Subscribers receive `(selectedState, pendingNames)`. `.pending()` returns pending names.
   Both subscription APIs retain broad `.subscribe(fn)` compatibility.
 - `mx.refresh(names?)`: refresh all queries or the named declared queries.
+- `mx.canMutate(name)` and `mx.mutationReason(name)`: current permission and denial
+  reason (null when allowed). Permissions arrive asynchronously and can be revoked;
+  use `mx.data.subscribe(fn)` to update action controls.
 - `await mx.mutate(name, values?)`: run a declared mutation with optional scalar
   signal overrides. Store and server permissions still apply; failures reject.
 

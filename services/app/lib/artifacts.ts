@@ -38,6 +38,9 @@ import { splitHelmet } from '@/lib/story/helmet';
 import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { dryRunDataflow } from '@/lib/story/data-checks';
 import { mutationUsesRow } from '@/lib/story/row-scope';
+import {generationUnavailable} from '@/lib/datasets/policy/usage';
+import { compileStoredMutation } from '@/lib/datasets/stored-mutation';
+import { publicMutationGrant, mutationPolicy } from '@/lib/datasets/policy';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
 import { runMutation } from '@/lib/sql/engine';
@@ -98,6 +101,9 @@ export interface ArtifactRow {
   visibility: Visibility;
   /** The write ACL — datasets only; every other format carries the 'read' default and nothing reads it. */
   access: DatasetAccess;
+  dataset_policy?: unknown;
+  policy_revision?: number;
+  generation_calls?: number;
   /**
    * GENERAL ACCESS: what the LINK grants whoever holds the address. NULL on
    * every row written before the column existed, and NULL means `viewer` —
@@ -868,7 +874,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
   const db = await getDb();
   const scope = editorScope(actor);
   const initial = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
-  if (!initial) return null;
+  if (!initial || initial.dataset_policy) return null;
   const target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
   const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'',target.meta) : null;
@@ -879,7 +885,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number): Pro
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
-    if (!current) return null;
+    if (!current || current.dataset_policy) return null;
     if(current.edit_id!==initial.edit_id) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
     const targetCatalog=catalogOf(target);
@@ -950,7 +956,7 @@ async function replaceScoped(
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
-    if (!current) return null;
+    if (!current || current.dataset_policy) return null;
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
@@ -1820,13 +1826,13 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
 export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
 /** The dataset must allow writes AND the current actor must hold its editor role. */
-export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor): Promise<WriteRefusal | null> {
+export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, declared = false): Promise<WriteRefusal | null> {
   if (dataset.format !== 'dataset') return 'not_a_dataset';
   if(catalogOf(dataset)?.kind==='postgres')return 'dataset_read_only';
   // An unreachable dataset is reported as read-only, never as "not yours":
   // the caller answers a uniform 404 for anything it could not resolve, and
   // this one it could — the document names it, so its existence is not news.
-  if (!canEdit(await effectiveRole(dataset, actor))) return 'dataset_read_only';
+  if (!canEdit(await effectiveRole(dataset, actor)) && !(declared && publicMutationGrant(dataset))) return 'dataset_read_only';
   return dataset.access === 'readwrite' ? null : 'dataset_read_only';
 }
 
@@ -1841,7 +1847,7 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
 export type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
   | { ok: true; local: LocalMutationResult }
-  | { ok: false; reason: 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
+  | { ok: false; reason: 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
 
 export async function runDocumentMutation(
   doc: ArtifactRow,
@@ -1865,7 +1871,7 @@ export async function runDocumentMutation(
   const dataset = decl.scope === 'local' ? null : await getArtifactFor(writer, decl.target);
   if (decl.scope !== 'local') {
     if (!dataset) return { ok: false, reason: 'dataset_read_only' };
-    const refusal = await canWriteDataset(dataset, actor);
+    const refusal = await canWriteDataset(dataset, actor, true);
     if (refusal) return { ok: false, reason: refusal };
     if (localTables !== undefined) return {ok: false, reason: 'invalid_sql', detail: 'Persistent mutations do not accept local table overrides'};
   }
@@ -1903,7 +1909,7 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source });
+  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id} });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
@@ -1992,14 +1998,22 @@ export async function dataflowForRow(
 
 /** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions. */
 async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
-  const targets = [...new Set((flow.mutations ?? []).filter(m=>m.scope !== 'local').map(m=>m.target))];
-  const access = new Map(await Promise.all(targets.map(async target => {
-    const dataset = await getArtifactFor(writerFor(doc), target);
-    const reason = dataset && !await canWriteDataset(dataset, viewer ?? {userId:null,tokenId:null})
-      ? null : 'You need edit access to a writable dataset to make this change.';
-    return [target,reason] as const;
+  return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
+    if(m.scope==='local')return [m.name,null];
+    const actor=viewer??{userId:null,tokenId:null};
+    const dataset=await getArtifactFor(writerFor(doc),m.target);
+    if(!dataset||await canWriteDataset(dataset,actor,true))return [m.name,'You need edit access or public mutation permission on a writable dataset.'];
+    if(!dataset.dataset_policy)return [m.name,null];
+    try {
+      const name=`ref_${dataset.id}`,catalog=catalogOf(dataset);
+      const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name):null;
+      const columns=compiled?.table.columns??dataset.meta.columns as DatasetColumn[];
+      const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},true);
+      const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:initialValues(flow),policy,policyPreview:true,
+        ...(mutationUsesRow(m.sql)?{row:{columns,values:Object.fromEntries(columns.map(c=>[c.name,null]))}}:{})});
+      return [m.name,'error' in out?out.error:out.analysis?.functions.includes('llm')?await generationUnavailable(dataset,doc.id):null];
+    }catch(error){return [m.name,error instanceof Error?error.message:'Dataset policy does not permit this action.'];}
   })));
-  return Object.fromEntries((flow.mutations ?? []).map(m=>[m.name,m.scope === 'local' ? null : access.get(m.target)!]));
 }
 
 /**

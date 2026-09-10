@@ -1,18 +1,19 @@
 import type {DataflowState} from '@/lib/story/dataflow';
 
 export type AuthorStateDelta = {
-  [Field in 'values' | 'tables' | 'errors']?: Record<string, DataflowState[Field][string] | undefined>;
+  [Field in 'values' | 'tables' | 'errors' | 'mutationAccess']?: Record<string, NonNullable<DataflowState[Field]>[string] | undefined>;
 };
 
 /** Select changed fields by identity; undefined tombstones remove own keys.
  * Optional projection is for named consumers. The host sends all deltas so
  * synchronous getters stay current, while the child filters listener payloads.
- * Account/mutation authority is deliberately not part of the author state.
+ * Only viewer-visible mutation capabilities are included; account identity stays in the host.
  */
 export function authorStateDelta(previous: DataflowState | null, next: DataflowState, names?: {values: readonly string[]; tables: readonly string[]}): AuthorStateDelta | null {
   const result: AuthorStateDelta = {};
-  for (const field of ['values','tables','errors'] as const) {
-    const before=previous?.[field], after=next[field];
+  for (const field of ['values','tables','errors','mutationAccess'] as const) {
+    if(names && field==='mutationAccess') continue;
+    const before=previous?.[field], after=next[field] ?? {};
     if(before===after) continue;
     const keys=names ? names[field==='values'?'values':'tables'] : new Set([...Object.keys(before??{}),...Object.keys(after)]);
     const entries=[...keys].filter(key=>{

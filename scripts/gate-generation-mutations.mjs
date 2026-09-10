@@ -75,8 +75,9 @@ try {
     await page.waitForTimeout(100);
   }
   assert(inner, "managed composer frame mounted");
+  await inner.waitForFunction(() => window.mx.canMutate('step'), null, {timeout: 15000}).catch(async error => { throw new Error(`${error.message}; capability: ${await inner.evaluate(() => window.mx.mutationReason('step'))}`); });
   await inner.getByRole("button", { name: "Do it", exact: true }).click();
-  await inner.getByText("Saved", { exact: true }).waitFor({ timeout: 40_000 });
+  await inner.getByText("Saved", { exact: true }).waitFor({ timeout: 40_000 }).catch(async error => { throw new Error(`${error.message}; composer status: ${await inner.locator("#status").textContent()}`); });
   assert.equal(await count(), before + 1, "slow narration should run once");
   const read = async () => {
     const r = await page.request.post(`${base}/a/${doc.id}/query`, {

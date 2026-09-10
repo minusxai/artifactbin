@@ -57,3 +57,16 @@ export function parseGenerationModels(
     throw configError();
   }
 }
+
+/** Operator permission is separate from the dataset owner's policy. Each pool
+ * caps dispatches per UTC day and tokens per call; it is not a dollar estimate. */
+export interface PublicGenerationPool {models:string[];callsPerDay:number;maxTokens:number}
+export function parsePublicGenerationPools(source:string|undefined):Record<string,PublicGenerationPool>{
+ if(!source?.trim())return {};
+ const value:unknown=JSON.parse(source);
+ if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('Invalid GENERATION__PUBLIC_POOLS');
+ for(const [id,pool] of Object.entries(value)){
+  const p=pool as PublicGenerationPool;
+  if(!/^[a-zA-Z0-9]+$/.test(id)||!p||Object.keys(p).some(k=>!['models','callsPerDay','maxTokens'].includes(k))||!Array.isArray(p.models)||p.models.some(m=>typeof m!=='string')||!Number.isSafeInteger(p.callsPerDay)||p.callsPerDay<1||!Number.isSafeInteger(p.maxTokens)||p.maxTokens<1||p.maxTokens>16384)throw new Error('Invalid GENERATION__PUBLIC_POOLS');
+ }return value as Record<string,PublicGenerationPool>;
+}

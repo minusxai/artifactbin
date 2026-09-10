@@ -25,6 +25,7 @@
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
   { name: 'comment-targets', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'dataset-policies', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'generation-mutations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'public-home-stars', start: 'shared', needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 90_000 },
   { name: 'seamless-navigation', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },

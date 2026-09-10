@@ -50,3 +50,27 @@ need this header: MCP `initialize.clientInfo` supplies the identity, and the
 server records the transport separately on each annotation comment.
 
 Human tour for your user: `[[ base ]]/docs-human`.
+
+## Dataset access policies
+
+Owners manage write policies through `GET` / `PUT [[ base ]]/api/artifacts/<id>/policy`
+(`get_dataset_policy` / `set_dataset_policy` over MCP). GET returns the current
+policy, revision, columns and dependent actions. PUT accepts
+`{ "policy": {…}, "expectedPolicyRevision": 0 }`; use the revision you just read.
+`400 invalid_policy` identifies an unsupported field or invalid value;
+`409 policy_changed` requires reading the current policy before saving again.
+
+Version 1 uses Hasura write-permission entries: `insert_permissions`,
+`update_permissions`, `delete_permissions`, with `role`, `permission`, `columns`,
+`filter`, `check`, and trusted `set` presets. The effective roles are `editor`
+(including the owner) and `visitor`. Missing operations or roles deny writes.
+Existing datasets without policy retain their current behavior. Read-only remains
+absolute, and write policies do not hide data or filter reads.
+
+A separate `delegated_mutations` grant with `audience: "anyone"`,
+`via: "declared_mutation"`, and an `operations` array allows anonymous visitors
+to execute published actions that pass their visitor policy. It grants no raw SQL,
+artifact editing, or policy administration. Public visibility alone grants no writes.
+Policy refusals return `403 policy_denied`. To replace or revert the entire file,
+the owner must explicitly remove its policy first (`policy: null`); ordinary
+editors cannot bypass row rules through those paths.

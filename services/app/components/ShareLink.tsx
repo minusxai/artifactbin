@@ -16,6 +16,7 @@
  * address explicitly. The ACL
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
+import {DatasetPolicies} from '@/components/DatasetPolicies';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';
@@ -297,7 +298,7 @@ export default function ShareLink({
                   </div>
                   <p className="mt-2 leading-relaxed text-muted">
                     {writable
-                      ? 'Any document you publish with a <Mutation> on this dataset can add, change and remove rows — for everyone who can read that document. Every write is a version you can revert.'
+                      ? 'Dataset editors can write rows. Visitors need an explicit public mutation grant. Access policies constrain both, and each saved write creates a version.'
                       : 'Documents can only read this dataset. A <Mutation> naming it is refused when you publish.'}
                   </p>
                   {writers.length > 0 && (
@@ -337,6 +338,7 @@ export default function ShareLink({
                   )}
                 </div>
               )}
+              {format === 'dataset' && !postgres && artifactId && <DatasetPolicies artifactId={artifactId} />}
               {/* PEOPLE — under every visibility. `can view` on a public
                   document grants nothing the link does not, and says so;
                   `can edit` is the whole reason the list is here at all. */}
