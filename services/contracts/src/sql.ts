@@ -8,6 +8,8 @@
  * a bad query with a 400 instead of a blank chart at render; leaving them
  * in-process made a DuckDB-less image crash on every write.
  */
+import type { GenerationRequest, GenerationResults } from './generation';
+
 export type Scalar = string | number | boolean | null;
 export type Row = Record<string, unknown>;
 export type ColumnType = 'string' | 'number' | 'boolean' | 'date';
@@ -25,6 +27,8 @@ export interface TableResult {
 /** A query that could not run: the engine's own message, for the author. */
 export interface QueryFailure {
   error: string;
+  /** A suspended mutation; no rows are returned or persisted until resolved. */
+  generation?: GenerationRequest;
   /** Stable machine-readable reason for a guarded edit cardinality failure. */
   code?: 'row_changed' | 'row_not_unique';
   /** Set when the failure was our timeout rather than the author's SQL. */
@@ -61,6 +65,8 @@ export interface RunInput {
 }
 
 export interface MutationInput {
+  /** Resolved model effects for this invocation. No keys or network capabilities. */
+  generationResults?: GenerationResults;
   /** The ONE table the statement may touch — the dataset, under its `ref_<id>` name. */
   table: { name: string; rows: Row[]; columns: DatasetColumn[] };
   sql: string;

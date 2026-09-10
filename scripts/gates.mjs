@@ -64,6 +64,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GATE_SPECS, checkManifest, specFor } from './gates.manifest.mjs';
+import {startGenerationFixture} from './lib/generation-fixture.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -168,8 +169,11 @@ async function bootServer(index, mailOutbox, authSecret) {
     cwd: path.join(ROOT, 'services/app'),
     stdio: ['ignore', 'ignore', 'inherit'],
     env: {
-      ...process.env,
+      ...Object.fromEntries(Object.entries(process.env).filter(([name]) => !name.startsWith('GENERATION__'))),
       NODE_ENV: 'production',
+      // Fixture credentials are always isolated from operator model settings.
+      GENERATION__MODELS_FILE: generationFixture?.modelsFile ?? '',
+      GENERATION__FIXTURE_KEY: generationFixture ? 'fixture-only-key' : '',
       APP__PORT: String(port),
       APP__PUBLIC_BASE_URL: base,
       // Managed iframe assets are served by the same disposable app through a
@@ -217,6 +221,7 @@ process.on('exit', () => { stopAll(); try { rmSync(scratch, { recursive: true, f
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stopAll(); process.exit(130); });
 
 let targets = bases;
+const generationFixture=servers>0&&selected.some(gate=>gate.name==='generation-mutations')?await startGenerationFixture():null;
 const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
 const mailOutbox = needsMail && servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
 if (servers > 0) {
@@ -248,7 +253,7 @@ const run = (gate, base, timeoutMs) => new Promise((resolve) => {
   const started_at = Date.now();
   const child = spawn(process.execPath, [path.join(HERE, gate.file), base], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) },
+    env: { ...process.env, ...(generationFixture ? {GENERATION_FIXTURE_URL:generationFixture.url} : {}), ...(mailOutbox ? { EMAIL__DEV_OUTBOX_PATH: mailOutbox } : {}) },
   });
   let output = '';
   let settled = false;
@@ -336,6 +341,7 @@ if (failed.length > 0 && targets.length > 1) {
 // The servers are OURS and they outlive the last gate: node keeps running
 // while a spawned child is attached, so the set would finish and then hang.
 stopAll();
+await generationFixture?.close();
 
 console.log('════════ gates ════════');
 console.log(`${selected.length - failed.length}/${selected.length} passed in ${((Date.now() - wall) / 1000).toFixed(0)}s wall-clock across ${targets.length} server(s)`);

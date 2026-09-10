@@ -80,6 +80,8 @@ datasets or permissions. Dataset Mutations require
 
 First read [chart authoring](markup-data-authoring.md).
 
+See [LLM mutations](markup-generation.md).
+
 ## Bindings: embeds (body)
 
 - `<Button run="$add">Add</Button>` — runs the named `<Mutation>`; busy while

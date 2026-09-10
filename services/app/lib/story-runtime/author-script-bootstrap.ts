@@ -2,6 +2,7 @@ import { COMMENT_PRESENTATION } from './comment-presentation';
 import {createManagedCommentRuntime} from './managed-comment-runtime';
 import {MANAGED_FETCH_BOOTSTRAP} from './managed-fetch-bootstrap';
 import {AUTHOR_REALM_LOCKDOWN} from './author-realm-lockdown';
+import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
 /**
  * A deliberately self-contained classic-script bootstrap. It runs ONLY in
  * the opaque child; no bundler closure or parent globals may be referenced.
@@ -27,7 +28,7 @@ ${AUTHOR_REALM_LOCKDOWN}
     const request = payload => new Promise((resolve, reject) => {
       if (waiting.size >= 128) { reject(new Error('Too many pending script requests')); return; }
       const id = ++sequence;
-      const timer = setTimeout(() => { waiting.delete(id); reject(new Error('Script request timed out')); }, 15000);
+      const timer = setTimeout(() => { waiting.delete(id); reject(new Error('Script request timed out')); }, payload.op === 'mutate' ? ${MUTATION_REPLY_TIMEOUT_MS} : 15000);
       waiting.set(id, { resolve, reject, timer });
       send({ id, ...payload });
     });

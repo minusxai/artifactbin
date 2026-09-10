@@ -1,6 +1,6 @@
 ---
 name: databases
-description: Dataset-bound Postgres credentials, notebook models, whitelisting, queries and migration.
+description: Postgres credentials, models, catalogs and queries.
 ---
 
 ## Read first

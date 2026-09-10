@@ -41,6 +41,7 @@ import type { DuckDBConnection, DuckDBInstance, DuckDBPreparedStatement, DuckDBV
 import type { SqlCaps } from './caps';
 import { queryBounds } from './bounds';
 import { inferColumns } from './dataset-shape';
+import { registerGeneration } from './generation';
 import { isQueryFailure } from '@artifactbin/contracts';
 import type { ColumnType, DatasetColumn, DryRunInput, DryRunMutationsInput, DryRunMutationsResult, DryRunResult, MutationInput, MutationOutcome, QueryOutcome, QueryPage, Row, RunInput, Scalar, SqlQuery } from '@artifactbin/contracts';
 
@@ -398,6 +399,7 @@ export async function runMutation(input: MutationInput, caps: SqlCaps): Promise<
   const conn = await instance.connect();
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  const generation = registerGeneration(conn, await duckdb(), input.generationResults);
   try {
     await registerTable(conn, input.table.name, input.table);
     const guarded = await prepareGuarded(conn, input.sql, 'write');
@@ -433,6 +435,8 @@ export async function runMutation(input: MutationInput, caps: SqlCaps): Promise<
     return { rows, columns, affected };
   } catch (e) {
     if (timedOut) return { error: `the mutation ran too long and was stopped (limit ${timeoutMs}ms)`, timedOut: true };
+    const request = generation();
+    if (request) return {error:'Model result required',generation:request};
     return { error: message(e) };
   } finally {
     if (timer) clearTimeout(timer);
@@ -453,6 +457,7 @@ export async function dryRunMutations(input: DryRunMutationsInput): Promise<DryR
     const instance = await createInstance();
     const conn = await instance.connect();
     try {
+      registerGeneration(conn, await duckdb(), {}, true);
       const tableName = m.tableName ?? `ref_${m.target}`;
       const target = input.tables[tableName];
       if (target) await registerTable(conn, tableName, { rows: [], columns: target.columns });

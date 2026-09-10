@@ -36,6 +36,9 @@ import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
 import type { Scalar } from './dataflow';
 import { newEditId } from './splice';
+import {createGenerationInvocation} from '@/lib/generation/executor';
+import {services} from '@/lib/services';
+import type {MutationOutcome} from '@artifactbin/contracts';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
 const WRITE_SNAPSHOT_WINDOW_MS = 120_000;
@@ -90,6 +93,9 @@ export async function mutateDataset(
   const db = await getDb();
   const table = `ref_${dataset.id}`;
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
+  // One result cache per invocation, outside the CAS loop: replaying storage
+  // must not generate a different answer or charge for the same prompt again.
+  const generation=createGenerationInvocation(services().generation);
 
   for (let attempt = 0; ; attempt++) {
     // Re-read on every attempt: attempt 0 uses the row we were handed, and a
@@ -112,7 +118,10 @@ export async function mutateDataset(
     const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
     const rows = await loadDatasetRows(selected?{content:'',meta:{objectKey:selected.objectKey}}:current);
     const {source:_,...mutationGuard}=guard;
-    const out = await runMutation({ table: { name: table, rows, columns }, sql:executedSql, params, ...mutationGuard, limit: datasetRowCap() });
+    let out:MutationOutcome;
+    try{
+      out = await generation.run({ table: { name: table, rows, columns }, sql:executedSql, params, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
+    }catch(error){return {reason:'invalid_sql',detail:error instanceof Error?error.message:'Model generation failed'};}
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
     }
@@ -147,7 +156,7 @@ export async function mutateDataset(
       `WITH updated AS (
          UPDATE artifacts
             SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14
-          WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${scope.where('$15')}
+          WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${LIVE_ARTIFACT_SQL} AND ${scope.where('$15')}
           RETURNING *
        ), archived AS (
          INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta)

@@ -1,0 +1,8 @@
+{
+  "default": {
+    "api": "openai-completions",
+    "baseUrl": "https://api.fireworks.ai/inference/v1",
+    "model": "your-model-id",
+    "apiKeyEnv": "GENERATION__FIREWORKS_API_KEY"
+  }
+}

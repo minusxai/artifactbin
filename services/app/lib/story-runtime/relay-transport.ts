@@ -20,8 +20,9 @@ import {
   type StoryMutateRequest, type StoryMutateResult, type StoryQueryRequest, type StoryQueryResult,
 } from './contract';
 import type { QueryTransport } from './store';
+import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
 
-export function createRelayTransport(target: Window, appOrigin: string, source: Window = window, timeoutMs = 20_000): QueryTransport {
+export function createRelayTransport(target: Window, appOrigin: string, source: Window = window, timeoutMs = 20_000, writeTimeoutMs = MUTATION_REPLY_TIMEOUT_MS): QueryTransport {
   let seq = 0;
   // `clear` rather than a bare timer handle: a request owns its timeout AND its
   // retries, and every path that finishes it has to drop all of them.
@@ -130,7 +131,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     },
     mutate: (values, mutation, row, localTables) => new Promise<import('./store').MutationAnswer>((resolve, reject) => {
       const id = ++writeSeq;
-      const timer = setTimeout(() => { writers.delete(id); reject(new Error('the page did not answer the write')); }, timeoutMs);
+      const timer = setTimeout(() => { writers.delete(id); reject(new Error('the page did not answer the write')); }, writeTimeoutMs);
       writers.set(id, { resolve, reject, timer });
       target.postMessage({ type: STORY_MUTATE_MESSAGE, id, mutation, values, ...(row ? { row } : {}), ...(localTables ? { localTables } : {}) } satisfies StoryMutateRequest, appOrigin);
     }),
