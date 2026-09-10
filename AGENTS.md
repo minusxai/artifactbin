@@ -16,6 +16,7 @@ when working on the relevant subsystem. Historical rollout narratives remain in 
   Rank implementation milestones by the risks that could change the plan. Finish with runnable checks.
 - Run the full suite, commit and push to the PR, and verify the affected user flow on the running app.
   Keep PR bodies empty unless the user explicitly requests a description. Do not add descriptive PR comments.
+- After a merge, update the local main branch to the latest origin/main.
 - Use top-level imports. Preserve intentional lazy browser chunks and engine-selecting imports;
   document new exceptions at the boundary and verify the resulting bundle.
 - Read environment variables through the owning service's audited config/env module. CLI scripts and
