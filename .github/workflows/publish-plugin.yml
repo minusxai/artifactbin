@@ -16,6 +16,16 @@ on:
         description: Full artifactbin OSS commit SHA deployed to the channel
         required: true
         type: string
+  # The CLI release workflow publishes the canary channel for the release it just
+  # created, so the plugin always carries the skill bundle of a published CLI.
+  workflow_call:
+    inputs:
+      channel:
+        required: true
+        type: string
+      source_sha:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -36,7 +46,14 @@ jobs:
       - name: Verify and check out an exact commit from trusted main
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          CHANNEL: ${{ inputs.channel }}
+          EVENT: ${{ github.event_name }}
         run: |
+          [[ "$CHANNEL" = staging || "$CHANNEL" = production ]] || { echo 'channel must be staging or production' >&2; exit 1; }
+          # Production follows a deployment's own smoke checks; only a person dispatches it.
+          if [ "$CHANNEL" = production ] && [ "$EVENT" != workflow_dispatch ]; then
+            echo 'production publication must be dispatched explicitly' >&2; exit 1
+          fi
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'source_sha must be a full lowercase commit SHA' >&2; exit 1; }
           git cat-file -e "$SOURCE_SHA^{commit}"
           git merge-base --is-ancestor "$SOURCE_SHA" origin/main || { echo 'source_sha must be an ancestor of origin/main' >&2; exit 1; }

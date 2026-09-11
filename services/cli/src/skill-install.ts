@@ -1,5 +1,5 @@
 /** Local integration boundary: selection never writes; installation owns managed files only. */
-import {cp,lstat,mkdir,realpath,rm} from 'node:fs/promises';
+import {cp,lstat,mkdir,readdir,realpath,rm} from 'node:fs/promises';
 import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {emitKeypressEvents,type Key} from 'node:readline';
@@ -8,6 +8,7 @@ import {withProcessLock} from './process-lock';
 import {installedHarnesses} from './launcher';
 import {localSkillFiles} from './teaching';
 import {CLI_VERSION} from './version';
+import {PLUGIN_CHANNELS} from '../../app/lib/plugin-id';
 import {CliError} from './commands';
 export const skillHarnesses=['claude','codex','pi','opencode'] as const;
 export type SkillHarness=typeof skillHarnesses[number];
@@ -61,8 +62,60 @@ async function physicalPath(path:string):Promise<string>{
  try{return await realpath(path);}catch(error){if(!isMissing(error))throw error;const parent=dirname(path);if(parent===path)throw error;return join(await physicalPath(parent),relative(parent,path));}
 }
 export function safeSkillPath(path:string):boolean{return !!path&&!isAbsolute(path)&&!path.includes('\\')&&path.split('/').every(x=>!!x&&x!=='.'&&x!=='..')&&path!=='.afbin-skill.json';}
-interface Manifest {version:string;files:Record<string,string>}
-export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged';backup?:string}
+interface Manifest {version:string;source?:string;files:Record<string,string>}
+/** Managed copies record their provenance so status, update and the harness agree on who owns them. */
+export const SKILL_SOURCE='afbin-cli';
+export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged';source:string;version:string;backup?:string}
+export interface SkillPlan {harness:SkillHarness;path:string;status:'install'|'update'|'unchanged';source:string;installed?:string;version:string}
+export interface PluginSkillCopy {harness:SkillHarness;plugin:string;path:string;version?:string;refresh:string}
+async function readManifest(path:string):Promise<Manifest|undefined>{
+ const bytes=await readOptional(join(path,'.afbin-skill.json'));if(!bytes)return;
+ try{const value=JSON.parse(bytes.toString());if(!value||typeof value.files!=='object')throw new Error();return value;}catch{return undefined;}
+}
+/** Read-only projection of installSkills: what each selected destination would become. */
+export async function planSkills(selected:readonly SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;version?:string}):Promise<SkillPlan[]>{
+ const targets=skillTargets(options.home,options.env);const version=options.version??CLI_VERSION;const plans:SkillPlan[]=[];
+ for(const harness of [...new Set(selected)]){
+  const path=targets[harness];const manifest=await readManifest(path);
+  const exists=manifest!==undefined||await readOptional(join(path,'SKILL.md'))!==null;
+  plans.push({harness,path,version,
+   status:!exists?'install':manifest?.version===version?'unchanged':'update',
+   source:manifest?.source??(exists?'unmanaged':SKILL_SOURCE),
+   ...(manifest?.version?{installed:manifest.version}:{})});
+ }
+ return plans;
+}
+/** Plugin caches belong to their harness. Report them and their refresh command; never write there. */
+export async function pluginSkillCopies(home:string,env:NodeJS.ProcessEnv=process.env):Promise<PluginSkillCopy[]>{
+ const names=new Map<string,typeof PLUGIN_CHANNELS[keyof typeof PLUGIN_CHANNELS]>(Object.values(PLUGIN_CHANNELS).map(channel=>[channel.name,channel]));
+ const found:PluginSkillCopy[]=[];
+ for(const harness of skillHarnesses){
+  const root=join(dirname(dirname(skillTargets(home,env)[harness])),'plugins');
+  const walk=async(directory:string,depth:number):Promise<void>=>{
+   if(depth>6)return;
+   let entries;try{entries=await readdir(directory,{withFileTypes:true});}catch(error){if(isMissing(error))return;throw error;}
+   for(const entry of entries.slice(0,200)){
+    if(!entry.isDirectory()||entry.isSymbolicLink())continue;
+    const path=join(directory,entry.name);const channel=names.get(entry.name);
+    if(channel){
+     const manifest=await readOptional(join(path,'.claude-plugin','plugin.json'))??await readOptional(join(path,'.codex-plugin','plugin.json'));
+     const skill=await readOptional(join(path,'SKILL.md'));
+     if(manifest||skill){
+      let version:unknown;try{version=manifest?JSON.parse(manifest.toString()).version:undefined;}catch{version=undefined;}
+      found.push({harness,plugin:entry.name,path,...(typeof version==='string'?{version}:{}),
+       refresh:harness==='claude'
+        ?`Refresh it in Claude Code: /plugin marketplace update ${channel.marketplace} then /plugin install ${channel.name}@${channel.marketplace}.`
+        :`Refresh it with ${harness}; afbin never edits a harness-owned plugin cache.`});
+      continue;
+     }
+    }
+    await walk(path,depth+1);
+   }
+  };
+  await walk(root,0);
+ }
+ return found;
+}
 export async function installSkills(selected:SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;files?:Readonly<Record<string,string>>;version?:string;alreadyLocked?:boolean}):Promise<{installations:SkillInstallation[];harnesses:SkillHarness[]}>{
  const files=options.files??localSkillFiles,version=options.version??CLI_VERSION;
  if(!files['SKILL.md']||Object.keys(files).some(path=>!safeSkillPath(path)))throw new CliError('invalid_skill_bundle','Invalid skill bundle path or missing SKILL.md.');
@@ -85,7 +138,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
     if(current&&digest(current)!==previous?.files[file])modified=true;
     if(file in files?current?.toString()!==files[file]:current!==null)changed=true;
    }
-   if(!changed){installations.push({path,harnesses,status:'unchanged'});continue;}
+   if(!changed){installations.push({path,harnesses,status:'unchanged',source:previous?.source??SKILL_SOURCE,version:previous?.version??version});continue;}
    let backup:string|undefined;
    if(existed&&(!previous||modified)){
     const backupRoot=join(options.home,'.artifactbin','skill-backups');await privateDirectory(backupRoot);
@@ -94,8 +147,8 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
    await mkdir(path,{recursive:true});
    for(const [file,content] of Object.entries(files)){await mkdir(dirname(join(path,file)),{recursive:true});await atomicWrite(join(path,file),content);}
    for(const file of Object.keys(previous?.files??{}))if(!(file in files))await rm(join(path,file),{force:true});
-   await atomicWrite(join(path,'.afbin-skill.json'),JSON.stringify({version,files:Object.fromEntries(Object.entries(files).map(([file,content])=>[file,digest(content)]))}));
-   installations.push({path,harnesses,status:existed?'updated':'installed',...(backup?{backup}:{})});
+   await atomicWrite(join(path,'.afbin-skill.json'),JSON.stringify({version,source:SKILL_SOURCE,files:Object.fromEntries(Object.entries(files).map(([file,content])=>[file,digest(content)]))}));
+   installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{})});
   }
   // Preserve other settings when adding the selected integrations.
   await atomicWrite(join(options.home,'.artifactbin','settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');

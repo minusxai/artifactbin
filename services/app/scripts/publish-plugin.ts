@@ -6,10 +6,10 @@
  *     --channel <production|staging> --sha <40-char commit> [--token <token>]
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { buildMirrorFiles, PLUGIN_VERSION, type PluginChannel, pluginChannel } from '../lib/plugin-package';
+import { assertMonotonicVersion, buildMirrorFiles, PLUGIN_VERSION, type PluginChannel, pluginChannel } from '../lib/plugin-package';
 
 const arg = (flag: string): string | undefined => {
   const index = process.argv.indexOf(flag);
@@ -35,6 +35,9 @@ const git = (...args: string[]): string => execFileSync('git', ['-C', work, ...a
 
 try {
   execFileSync('git', ['clone', '--branch', identity.branch, '--single-branch', remote, work], { stdio: ['ignore', 'pipe', 'pipe'] });
+  // The channel's own last release record decides whether this version may replace it.
+  const record = path.join(work, '.artifactbin-release.json');
+  assertMonotonicVersion(existsSync(record) ? JSON.parse(readFileSync(record, 'utf8')).version : undefined);
   for (const entry of readdirSync(work)) {
     if (entry !== '.git') rmSync(path.join(work, entry), { recursive: true, force: true });
   }

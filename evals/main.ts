@@ -57,7 +57,7 @@ import { exportDocument, inspectDocument, screenshotDocument } from './lib/score
 import { askedForAuthorization, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
 import { prepareTask, runChecks, scorerFor } from './lib/score/kinds';
 import { credentialEnv, readDotEnv } from './lib/env';
-import { parseArgs } from './lib/args';
+import { parseArgs, USAGE } from './lib/args';
 import { registerSecret, scrubRegistered } from './lib/secrets';
 import { createWorkspace } from './lib/workspace';
 import { collectRun, mergeRuns, renderSummaryMarkdown, writeReport } from './lib/report';
@@ -574,6 +574,10 @@ async function runTask(r: TaskRun): Promise<Outcome> {
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    console.log(USAGE);
+    return;
+  }
   const parsed = loadJson(path.join(EVALS_DIR, 'config.json'), (v) => EvalConfigSchema.parse(v));
   const config: EvalConfig = {
     ...parsed,

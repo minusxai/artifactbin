@@ -18,13 +18,13 @@ import {readOptional} from './files';
 import {recoverFiles} from './journal';
 import {withProcessLock} from './process-lock';
 import {homedir} from 'node:os';
-import {parseCommand,commandHelp,commands,CliError,type ParsedCommand} from './commands';
+import {parseCommand,CliError,type ParsedCommand} from './commands';
 import {loadWorkspace} from './workspace';
 import {validateFiles} from './validation';
 import {deleteArtifact,deleteComments} from './delete';
 import {compare,remoteStatus} from './comparison';
 import {localStatus,localDiff} from './local';
-import {helpTopics} from './teaching';
+import {helpDocument,writeHelp} from './teaching';
 import {loadConnection} from './config';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
@@ -44,9 +44,9 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':JSON.stringify(value,null,2)+'\n');};
   if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`afbin ${CLI_VERSION} (protocol ${CLI_PROTOCOL_VERSION})`);return 0;}
   if(flags.help||command==='help'){
-   const topic=command==='help'?positionals[0]:command;
-   const text=!topic||commands.some(c=>c.name===topic||c.aliases?.includes(topic))?commandHelp(topic):helpTopics[topic];
-   if(text===undefined)throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,'Run afbin help.');
+   const bundled=command==='help'?flags:{};
+   const text=helpDocument(command==='help'?positionals[0]:command,typeof bundled.format==='string'?bundled.format:'text');
+   if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    emit(json?{help:text}:text);return 0;
   }
   pendingIntegration(parsed);
@@ -100,7 +100,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
   if(command==='update'){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   emit(await updateCli({home,server:server??'https://artifactbin.dev',env:context.env,harnesses:selected,fetch:context.fetch}));return 0;
+   emit(await updateCli({home,server:server??'https://artifactbin.dev',env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch}));return 0;
   }
   let connection=await loadConnection(server,home,context.env);
   const firstAuthentication=!connection;
@@ -168,7 +168,6 @@ function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  if(command==='diff'&&(flags.output!==undefined||positionals.length>1))pending('diff --output and multiple targets');
  if(command==='log'&&flags.filter!==undefined)pending('log --filter');
  if(command==='delete'&&positionals.length>1)pending('delete with multiple targets');
- if(['query','update'].includes(command)&&flags['dry-run'])pending(`${command} --dry-run`);
- if(command==='help'&&(flags.format!==undefined||flags.output!==undefined))pending('help --format and --output');
+ if(command==='query'&&flags['dry-run'])pending('query --dry-run');
 }
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}

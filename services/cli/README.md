@@ -5,15 +5,20 @@ Publish and edit artifacts through local files, with offline help and validation
 ## Install and authenticate
 
 ```sh
-npm install -g @artifactbin/cli
+curl -fsSL https://artifactbin.dev/chat/install.sh | sh
 afbin setup
 ```
+
+The installer needs only `curl` and a POSIX shell: it downloads the standalone executable for this
+platform, verifies its published SHA-256 and installs it in `~/.local/bin` (`--dir` and `--version`
+select another destination or release). A failed verification leaves an existing installation
+untouched. Self-hosted servers serve the same script, pinned to the release they were built with;
+`/install.sh` is the separate self-hosted **server** installer.
 
 Setup opens browser authentication automatically and saves credentials privately in
 `~/.artifactbin/.env`. It offers a preselected checklist of detected Claude Code, Codex, pi and
 OpenCode skills; uncheck integrations you do not want. Choices are remembered. Standalone executables
 for macOS/Linux arm64/x64 and versioned local skill bundles are published in GitHub releases.
-The `/chat/install.sh` installer verifies SHA-256; `/install.sh` installs the self-hosted server.
 
 ```sh
 afbin pull <artifact-url> report.jsx
@@ -36,9 +41,14 @@ For automation, use `setup --yes --json --harness pi --harness opencode`, or `--
 A pending browser approval returns its URL and expiry; approve it and rerun setup. `--yes` does not
 approve the browser or imply `--force`. No noninteractive prompt waits for input.
 
-`afbin update` explicitly updates a compatible standalone binary and selected local skills, with
-checksums and backups. npm-managed installs use npm for binary updates. Ordinary commands never
-poll releases. Use `afbin update -h` for selection and recovery options.
+`afbin update` explicitly updates the standalone executable and the selected local skills, with
+checksums and recoverable backups. It asks the selected server for the release it speaks
+(`/chat/release.json`) and takes the bytes from that published release. `afbin update --dry-run`
+resolves the release and reports the binary, skill and plugin changes without installing anything.
+Plugin-managed skill copies are reported with the command their harness uses to refresh them; afbin
+never edits a harness-owned plugin cache. An installation that did not come from the verified
+installer is reported, never overwritten. Ordinary commands never poll releases. Use
+`afbin update -h` for selection and recovery options.
 
 ## Local development
 
