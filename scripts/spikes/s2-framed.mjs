@@ -1,8 +1,8 @@
 // SPIKE S2, the leg the brief did not scope: an OWNER is served the SHELL, so
 // their document is FRAMED — and `location` inside it is the frame's, not the
 // address bar's. Measures which URL `__mxValues` actually rewrote.
-import { chromium } from '/Users/ppsreejith/projects/artifactbin-spikes/node_modules/playwright/index.mjs';
-import { becomeOwner, startDocument } from '/Users/ppsreejith/projects/artifactbin-spikes/scripts/lib/start-doc.mjs';
+import { chromium } from 'playwright';
+import { becomeOwner, startDocument } from '../lib/start-doc.mjs';
 const BASE = 'http://localhost:5201';
 const SCRIPT = "try{window.__mxValues({x:'1'})}catch(e){}document.body.setAttribute('data-spike',location.href);";
 const { id, token } = await startDocument(BASE);

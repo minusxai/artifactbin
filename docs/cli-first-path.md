@@ -86,7 +86,7 @@ Paths in the table without a service prefix are under `services/app`.
    Command-selection smoke attempts are recorded below; they do not count as end-to-end evidence.
 10. **Cutover.** After parity and agent gates pass, remove MCP routes and remote-skill runtime
     dependencies. Keep local installed skills, CLI help/man pages and bundle downloads. Land OSS changes
-    before advancing the production pin, then walk composed login/publish/read/revoke.
+    before downstream pins advance.
 
 ## Failure cases that must be red before implementation
 
@@ -108,7 +108,7 @@ Paths in the table without a service prefix are under `services/app`.
 There is no claim that dry-run, durable idempotency, metadata CAS, new commands, native
 distribution changes or the agent gate are already implemented. The probes remove uncertain
 architectural assumptions and expose the required work. Full type/build/test checks and the
-running user-flow walk belong to each implementation slice. No production deployment changed.
+running user-flow walk belong to each implementation slice. No deployment changed.
 
 
 ## Risk-first proposal update

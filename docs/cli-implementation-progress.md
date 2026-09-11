@@ -92,7 +92,7 @@ pending approval across shutdown and issuing another afterwards. Reproduce with
 
 MCP and runtime remote-skill routes are absent. Versioned downloadable skill bundles remain. Release
 CI builds/tests four targets and publishes only assets from the successful main CI run. This PR does
-not publish a release, merge, advance a production submodule pin or migrate production data.
+not publish a release, merge, advance a downstream pin or migrate production data.
 
 Follow `cli-reference-cutover.md`: rehearse on a backup, stop writers, inventory all heads/history,
 back up every proposal, apply with fingerprint checks, require a clean final audit, and verify rendered

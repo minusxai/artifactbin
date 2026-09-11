@@ -43,8 +43,8 @@ solely because their names overlap. Each exercises a different failure boundary.
 
 `node-identity` remains scheduled by the gate runner despite using HTTP: moving it to another runner
 would change categorization without reducing execution, and the built-server boundary must remain.
-`export-slice` exercises the server's browser exporter. Production composition checks belong to their
-own repository; generic OSS service tests do not establish deployment policy.
+`export-slice` exercises the server's browser exporter. Deployment composition checks belong to the
+deploying repository; generic OSS service tests do not establish deployment policy.
 
 The agent smoke uses the built CLI and installed local skills. Creative evals and documented manual
 probes remain separate from CI jobs. See [evals.md](evals.md) for paid-run isolation and reporting.
