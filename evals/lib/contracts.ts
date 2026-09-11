@@ -16,7 +16,7 @@ import type { ToolInvocation } from './docs-reads';
 import { IMAGE_RENDERERS, IMAGE_SIZES, type ImageVariant } from './image-variants';
 import { STORY_TEMPLATE_NAMES } from '../../services/app/lib/validation/atlas-schemas';
 import type { Leg } from './leg';
-import type { PluginKit } from './plugin-kit';
+import type { SkillKit } from './skill-kit';
 import type { EvalMode } from './mode';
 import { KIND_CHECK_NAMES, TASK_KINDS, checkNamesFor, scorerFor } from './score/kinds';
 
@@ -320,12 +320,8 @@ export interface HarnessRunContext {
   apiKey: string;
   maxTurns: number;
   maxBudgetUsd: number;
-  /**
-   * Set when skills are installed: the materialized marketplace holding this
-   * deployment's skills. Each harness installs it its own way — there is no
-   * common command — so the adapter, not the driver, decides what to do with it.
-   */
-  plugin?: PluginKit;
+  /** Set in the `installed` treatment: the skill bundle the CLI's installer put under the run home. */
+  skills?: SkillKit;
 }
 
 export interface HarnessInvocation {

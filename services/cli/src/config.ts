@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { atomicWrite, privateDirectory } from "./files";
+import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
 import { join } from "node:path";
 export interface Connection {
@@ -8,6 +8,27 @@ export interface Connection {
   refreshToken?: string;
   clientId?: string;
   expiresAt?: number;
+}
+/** The CLI's private state directory: `~/.artifactbin`, or `ARTIFACTBIN_HOME` when set. Skills never live here. */
+export function configDir(home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+  return env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin");
+}
+/** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
+export function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+  return join(configDir(home, env), "servers", `${digest(server).slice(0, 16)}.env`);
+}
+const CREDENTIAL_KEYS = /^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT)\s*=\s*(.*?)\s*$/;
+async function readEnvFile(path: string): Promise<Record<string, string>> {
+  const saved: Record<string, string> = {};
+  try {
+    for (const line of (await readFile(path, "utf8")).split(/\r?\n/)) {
+      const match = line.match(CREDENTIAL_KEYS);
+      if (match) saved[match[1]] = match[2].replace(/^(['"])(.*)\1$/, "$2");
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return saved;
 }
 export function normalizeServer(value: string): string {
   const url = new URL(value);
@@ -30,29 +51,20 @@ export async function loadConnection(
   home = homedir(),
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Connection | null> {
-  let saved: Record<string, string> = {};
-  try {
-    const raw = await readFile(join(home, ".artifactbin", ".env"), "utf8");
-    for (const line of raw.split(/\r?\n/)) {
-      const match = line.match(
-        /^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT)\s*=\s*(.*?)\s*$/,
-      );
-      if (match) saved[match[1]] = match[2].replace(/^(['"])(.*)\1$/, "$2");
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  const dir = configDir(home, env);
+  // `.env` names the default origin and holds its credentials; every other origin has its own file.
+  const primary = await readEnvFile(join(dir, ".env"));
+  const defaultServer = normalizeServer(env.ARTIFACTBIN_URL ?? primary.ARTIFACTBIN_URL ?? "https://artifactbin.dev");
+  const selected = normalizeServer(server ?? defaultServer);
+  if (env.ARTIFACTBIN_TOKEN) {
+    // An explicit token is scoped to the explicit origin (or the default) and never inherits refresh credentials.
+    const explicitServer = normalizeServer(env.ARTIFACTBIN_URL ?? "https://artifactbin.dev");
+    return explicitServer === selected ? { server: selected, token: env.ARTIFACTBIN_TOKEN } : null;
   }
-  const storedServer = normalizeServer(
-    env.ARTIFACTBIN_TOKEN
-      ? (env.ARTIFACTBIN_URL ?? "https://artifactbin.dev")
-      : (saved.ARTIFACTBIN_URL ?? "https://artifactbin.dev"),
-  );
-  const selected = normalizeServer(
-    server ?? env.ARTIFACTBIN_URL ?? storedServer,
-  );
-  const token = env.ARTIFACTBIN_TOKEN ?? saved.ARTIFACTBIN_TOKEN;
-  if (!token || storedServer !== selected) return null;
-  const refreshed = !env.ARTIFACTBIN_TOKEN && saved.ARTIFACTBIN_REFRESH_TOKEN && saved.ARTIFACTBIN_CLIENT_ID;
+  const saved = primary.ARTIFACTBIN_URL && normalizeServer(primary.ARTIFACTBIN_URL) === selected ? primary : await readEnvFile(credentialPath(selected, home, env));
+  const token = saved.ARTIFACTBIN_TOKEN;
+  if (!token) return null;
+  const refreshed = saved.ARTIFACTBIN_REFRESH_TOKEN && saved.ARTIFACTBIN_CLIENT_ID;
   const expiresAt = Number(saved.ARTIFACTBIN_EXPIRES_AT);
   return { server: selected, token, ...(refreshed ? {
     refreshToken: saved.ARTIFACTBIN_REFRESH_TOKEN, clientId: saved.ARTIFACTBIN_CLIENT_ID,
@@ -62,6 +74,7 @@ export async function loadConnection(
 export async function saveConnection(
   connection: Connection,
   home = homedir(),
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
   const server = normalizeServer(connection.server);
   if (!/^[A-Za-z0-9_-]+$/.test(connection.token))
@@ -70,8 +83,13 @@ export async function saveConnection(
     if (value !== undefined && !/^[A-Za-z0-9_-]+$/.test(value)) throw new Error("Invalid refresh credential format");
   }
   if (connection.expiresAt !== undefined && (!Number.isSafeInteger(connection.expiresAt) || connection.expiresAt <= 0)) throw new Error("Invalid credential expiry");
-  const path = join(home, ".artifactbin", ".env");
-  await privateDirectory(join(home, ".artifactbin"));
+  const dir = configDir(home, env);
+  await privateDirectory(dir);
+  const primary = await readEnvFile(join(dir, ".env"));
+  // The first origin ever saved becomes the default; later origins are stored beside it, never over it.
+  const isDefault = !primary.ARTIFACTBIN_URL || normalizeServer(primary.ARTIFACTBIN_URL) === server;
+  const path = isDefault ? join(dir, ".env") : credentialPath(server, home, env);
+  if (!isDefault) await privateDirectory(join(dir, "servers"));
   const values = { ARTIFACTBIN_URL: server, ARTIFACTBIN_TOKEN: connection.token,
     ARTIFACTBIN_REFRESH_TOKEN: connection.refreshToken, ARTIFACTBIN_CLIENT_ID: connection.clientId, ARTIFACTBIN_EXPIRES_AT: connection.expiresAt };
   await atomicWrite(path, Object.entries(values).filter(([,value]) => value !== undefined).map(([key,value]) => `${key}=${value}\n`).join(''));

@@ -1,3 +1,5 @@
+import {artifactState} from '@/lib/artifact-state';
+import {completeMutationReceipt,type MutationReceipt} from '@/lib/mutation-receipt';
 import {generationAuthorization,throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
 import {catalogOf} from '@/lib/datasets/catalog';
@@ -40,7 +42,7 @@ import type { Scalar } from './dataflow';
 import { newEditId } from './splice';
 import {createGenerationInvocation} from '@/lib/generation/executor';
 import {services} from '@/lib/services';
-import type {MutationOutcome,DatasetMutationPolicy} from '@artifactbin/contracts';
+import type {MutationOutcome,DatasetMutationPolicy,Queryable} from '@artifactbin/contracts';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
 const WRITE_SNAPSHOT_WINDOW_MS = 120_000;
@@ -90,7 +92,7 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean;document?:MutationDocument} = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean;document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
   const table = 'dataset_rows';
@@ -111,6 +113,7 @@ export async function mutateDataset(
     // Deleted under us — the write has nothing to apply to. Reported as a
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
+    if(guard.expectedState&&artifactState(current)!==guard.expectedState)return {reason:'row_changed',detail:'The dataset changed since the operation was prepared. Read the current state before proposing a new mutation.'};
     if ((current.policy_revision??0)!==(dataset.policy_revision??0) || await canWriteDataset(current, actor,!!guard.document)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
 
     if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
@@ -160,7 +163,12 @@ export async function mutateDataset(
     // ONE guarded statement: swap the pointer if and only if the rows we read
     // are still the rows on disk, archive the previous state (coalesced, like
     // the edit protocol), and wake every document reading this dataset.
-    const updated = await db.query<ArtifactRow>(
+    const commit=async(tx:Queryable)=>{
+     if(guard.expectedState){
+      const locked=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
+      if(!locked||artifactState(locked)!==guard.expectedState)return {rows:[] as ArtifactRow[]};
+     }
+     const result=await tx.query<ArtifactRow>(
       `WITH updated AS (
          UPDATE artifacts
             SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14
@@ -204,6 +212,12 @@ export async function mutateDataset(
         actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&!!policy,policy?.role??null,
       ],
     );
+
+     const committed=result.rows[0];
+     if(committed&&guard.receipt)await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
+     return result;
+    };
+    const updated=guard.receipt||guard.expectedState?await db.transaction(commit):await commit(db);
 
     const row = updated.rows[0];
     if (row) {

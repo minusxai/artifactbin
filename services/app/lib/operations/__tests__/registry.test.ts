@@ -30,8 +30,8 @@ describe('the registry is curated, not generated', () => {
   it('carries the artifact and dataset operations of the protocol', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
       'annotate', 'create_artifact', 'create_dataset_secret', 'delete_artifact', 'discover_dataset_source', 'edit_artifact', 'export_artifact', 'fork_artifact', 'get_artifact',
-      'get_dataset_policy', 'get_version', 'list_artifacts', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'refresh_asset', 'restore_artifact', 'revert_artifact',
-      'set_dataset_policy', 'update_artifact', 'update_metadata',
+      'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'query_resource', 'refresh_asset', 'restore_artifact', 'revert_artifact',
+      'set_dataset_policy', 'terminate_remote_session', 'update_artifact', 'update_metadata',
     ]);
   });
 
@@ -52,7 +52,7 @@ describe('the registry is curated, not generated', () => {
 
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_dataset_policy', 'get_version', 'list_artifacts', 'list_versions', 'preview_dataset_notebook']);
+    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'preview_dataset_notebook', 'query_resource']);
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 
@@ -60,7 +60,7 @@ describe('the registry is curated, not generated', () => {
     for (const op of OPERATIONS) {
       // /api/artifacts is the bearer surface; export is the one op whose HTTP
       // twin is the document's own sub-path (a page can't return bytes).
-      expect(op.http.path, op.name).toMatch(/^\/api\/(artifacts|datasets|secrets)(\/|$)|^\/a\/\{id\}\/export$/);
+      expect(op.http.path, op.name).toMatch(/^\/api\/(artifacts|datasets|secrets|sessions)(\/|$)|^\/a\/\{id\}\/export$/);
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(op.http.method);
       for (const [, param] of op.http.path.matchAll(/\{(\w+)\}/g)) {
         expect(Object.keys(op.input), `${op.name}: path param ${param}`).toContain(param);

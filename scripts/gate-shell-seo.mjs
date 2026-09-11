@@ -103,7 +103,7 @@ const docFrame = page.mainFrame();
 check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="menu"]').count()) === 1, 'the protected reader chrome carries the menu control');
 check(!!docFrame && (await docFrame.locator('[data-mx-reader-trigger="controls"]').count()) === 1, 'and the artifact controls');
 await openMenu(page);
-for (const item of ['Artifacts', 'Account', 'Human Docs', 'Download local skills']) {
+for (const item of ['Artifacts', 'Account', 'Human Docs']) {
   check(await page.isVisible(`[aria-label="${item}"]`), `the menu carries ${item}`);
 }
 check((await docFrame.locator('.mx-reader-title').first().textContent())?.includes('Crawlable'), 'the document bar names the document');

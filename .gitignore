@@ -8,9 +8,6 @@ node_modules/
 next-env.d.ts
 # vendored runtime assets — copied from node_modules on postinstall
 **/public/monaco/
-# generated plugin for local `claude --plugin-dir ./plugin` (npm run build:plugin);
-# published to the public mirror repo by CI, never committed here
-/plugin/
 .artifact-objects/
 .artifactbin/
 tmp/

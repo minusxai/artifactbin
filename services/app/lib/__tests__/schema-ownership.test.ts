@@ -27,7 +27,7 @@ const declared = (): Record<string, 'app' | 'proxy' | 'events'> => renderedSchem
 
 /** The seed test's literal (CORE TEST 9) — the declared set, one owner each. */
 const DECLARED_SET = [
-  'app.annotations',
+  'app.annotations', 'app.mutation_receipts',
   'app.artifact_edits', 'app.artifact_creation_operations',
   'app.artifact_node_aliases',
   'app.artifact_shares',
@@ -81,3 +81,5 @@ it('keeps editor annotation receipts beside app-owned atomic source edits',()=>{
  expect(declared()['app.artifact_edits']).toBe('app');
  expect(renderedSchema().schema).toContain('annotation_changes');
 });
+
+it('sharing revision belongs to app artifact state',()=>{expect(renderedSchema().schema).toMatch(/sharing_revision/);});

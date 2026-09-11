@@ -86,6 +86,20 @@ export class RemoteRegistry {
       .filter((s) => s.owner === userId)
       .map((s) => this.info(s));
   }
+  read(userId: string, id: string): RemoteSessionInfo {
+    return this.info(this.get(userId, id));
+  }
+  /**
+   * Ownership WITHOUT consuming the session, and deliberately true for a
+   * session this owner already removed: a retried terminate carrying the same
+   * operation identity must authorize against the tombstone, or the retry that
+   * should answer with the saved receipt would answer "not found" instead.
+   */
+  owns(userId: string, id: string): boolean {
+    this.prune();
+    const s = this.sessions.get(id);
+    return s ? s.owner === userId : this.removed.get(id)?.owner === userId;
+  }
   create(
     userId: string,
     registration: Registration,

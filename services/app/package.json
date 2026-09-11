@@ -16,7 +16,6 @@
     "validate": "tsc --noEmit -p ../../tsconfig.json",
     "postinstall": "node scripts/copy-assets.mjs",
     "generate-story-ui-classes": "tsx scripts/generate-story-ui-classes.ts",
-    "build:plugin": "tsx -r ../../scripts/register-yaml.cjs scripts/build-plugin.ts",
     "generate:theme-previews": "tsx -r ../../scripts/register-yaml.cjs scripts/generate-theme-previews.ts",
     "generate:og": "tsx scripts/generate-og-image.ts"
   },

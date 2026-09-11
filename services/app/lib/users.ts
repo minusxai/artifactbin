@@ -8,7 +8,7 @@ import crypto from 'crypto';
 // than an inherited predicate: these listings build their own statements
 // instead of going through the row-loading seam, so each one names the gate.
 import { LIVE_ARTIFACT_SQL, type ArtifactSummary, type ShareRole } from './artifacts';
-import { getDb } from './db';
+import { getDb,type Queryable } from './db';
 import { emit } from './events';
 import { generateInternalId } from './ids';
 import { LIVE_TOKEN_SQL, sha256 } from './tokens';
@@ -100,16 +100,17 @@ export async function ensureUsername(user: UserRow): Promise<UserRow> {
 export async function setUsername(
   userId: string,
   requested: string,
+  query?:Queryable,
 ): Promise<{ ok: true; username: string } | { error: 'invalid' | 'taken' }> {
   const username = requested.toLowerCase().trim();
   if (!USERNAME_RE.test(username) || RESERVED_USERNAMES.has(username)) return { error: 'invalid' };
-  const db = await getDb();
+  const db = query??await getDb();
   try {
     const r = await db.query('UPDATE users SET username = $2 WHERE id = $1', [userId, username]);
     if (r.rowCount === 0) return { error: 'invalid' }; // unknown user — nothing to rename
     return { ok: true, username };
   } catch (error) {
-    if ((error as { code?: string }).code === '23505') return { error: 'taken' };
+    if (!query&&(error as { code?: string }).code === '23505') return { error: 'taken' };
     throw error;
   }
 }
@@ -152,9 +153,9 @@ export async function getUserByEmail(email: string): Promise<UserRow | null> {
   return r.rows[0] ?? null;
 }
 
-export async function getUserById(id: string): Promise<UserRow | null> {
-  const db = await getDb();
-  const r = await db.query<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = $1`, [id]);
+export async function getUserById(id: string,query?:Queryable,lock=false): Promise<UserRow | null> {
+  const db = query??await getDb();
+  const r = await db.query<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = $1${lock?' FOR UPDATE':''}`, [id]);
   return r.rows[0] ?? null;
 }
 

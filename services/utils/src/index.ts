@@ -18,3 +18,5 @@ export { parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from './
 
 export { generationOptions, generationCallConfig } from './generation-options';
 export * from './dataset-policy';
+export {parseSharingEntries} from './sharing';
+export {artifactIdFromSegment,artifactIdFromPath} from './artifact-reference';

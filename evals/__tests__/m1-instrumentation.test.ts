@@ -89,11 +89,11 @@ describe('the token-less task', () => {
     // …and `paste` still acquires nothing, which is a different reason for null from handing the
     // agent nothing: the product gives the agent its own token in the paste.
     await expect(acquireCredential('paste', { base: 'https://x.test', env: {} } as never)).resolves.toBeNull();
-    expect(() => credentialSourceFor('cli', {}, {})).toThrow(/EVAL_ACCOUNT_TOKEN/);
+    expect(() => credentialSourceFor('installed', {}, {})).toThrow(/EVAL_ACCOUNT_TOKEN/);
   });
 
   it('builds a prompt that names the store and hands over NO credential', () => {
-    const prompt = buildPrompt(TASK, { kind: 'none', base: 'https://x.test' }, { mode: 'cli' as never });
+    const prompt = buildPrompt(TASK, { kind: 'none', base: 'https://x.test' });
     expect(prompt).toContain('https://x.test');
     expect(prompt).not.toMatch(/mx_[A-Za-z0-9_-]+/);
     expect(prompt).not.toContain('/start?k=');
@@ -175,9 +175,8 @@ describe('the no-credential access line', () => {
   const NONE = { kind: 'none', base: 'https://x.test' } as const;
 
   it('teaches local help without inventing a saved connection or a supplied document', () => {
-    const line = buildPrompt(TASK, NONE, { mode: 'cli' });
-    expect(line).toContain('installed artifactbin skill');
-    expect(line).toContain('afbin help');
+    const line = buildPrompt(TASK, NONE);
+    expect(line).toContain('The artifactbin server is');
     expect(line).toContain('https://x.test');
     expect(line).toContain('not been given a token or a document');
     expect(line).not.toMatch(/saved|mx_[A-Za-z0-9_-]+|\/docs\//);

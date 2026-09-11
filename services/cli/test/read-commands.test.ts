@@ -31,20 +31,12 @@ test('comment selects listing, anchored creation, or a combined reply and resolu
   for(const [args,method,path,body] of [
    [[], 'GET','/api/artifacts/abc123/annotations?limit=2',undefined],
    [['--quote','Revenue','--body','Explain'], 'POST','/api/artifacts/abc123/annotations',{quote:'Revenue',body:'Explain'}],
-   [['--reply','ann_123','--body','Done','--resolve'],'POST','/api/artifacts/abc123/annotations/ann_123',{reply:'Done',resolve:true}],
+   [['--thread','ann_123','--body','Done','--state','resolved'],'POST','/api/artifacts/abc123/annotations/ann_123',{reply:'Done',resolve:true}],
   ] as const){
    const out:string[]=[];let calls=0;
    const code=await runCli(['comment','abc123',...args,...(!args.length?['--limit','2']:[]),'--server','https://example.com','--json'],{cwd:root,home:root,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
-    calls++;assert.equal(init?.method,method);assert.equal(new URL(String(input)).pathname+new URL(String(input)).search,path);assert.deepEqual(init?.body?JSON.parse(String(init.body)):undefined,body);return Response.json({ok:true});
-   }});assert.equal(code,0,out.join(''));assert.equal(calls,1);
+    calls++;if(method==='POST'&&init?.method==='GET')return Response.json({capabilities:{comment_receipts:true}},{headers:{'X-Artifactbin-Account':'test-account'}});assert.equal(init?.method,method);assert.equal(new URL(String(input)).pathname+new URL(String(input)).search,path);assert.deepEqual(init?.body?JSON.parse(String(init.body)):undefined,body);return Response.json({ok:true});
+   }});assert.equal(code,0,out.join(''));assert.equal(calls,method==='POST'?2:1);
   }
- }finally{await rm(root,{recursive:true,force:true});}
-});
-test('advanced api preserves binary results in an explicit JSON envelope',async()=>{
- const root=await mkdtemp(join(tmpdir(),'afbin-api-bytes-'));const bytes=Buffer.from([255,0,10]);
- try{
-  await saveConnection({server:'https://example.com',token:'test-token'},root);const out:string[]=[];
-  const code=await runCli(['api','/artifacts/abc123/export','--json','--server','https://example.com'],{cwd:root,home:root,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async()=>new Response(bytes,{headers:{'Content-Type':'image/png'}})});
-  assert.equal(code,0,out.join(''));assert.deepEqual(JSON.parse(out[0]),{content_type:'image/png',encoding:'base64',data:bytes.toString('base64')});
  }finally{await rm(root,{recursive:true,force:true});}
 });

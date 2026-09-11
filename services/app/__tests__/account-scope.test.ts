@@ -161,7 +161,7 @@ describe('account-wide bearer scope', () => {
     }
   });
 
-  it('anonymous tokens keep the old boundary: their own artifacts only', async () => {
+  it('anonymous tokens may read public artifacts without gaining edit access', async () => {
     const anonA = await mintToken('anon-a', null);
     const anonB = await mintToken('anon-b', null);
     const made = await createMarkup(anonA.token);
@@ -169,6 +169,6 @@ describe('account-wide bearer scope', () => {
     const own = await getArtifactRoute(request(`/api/artifacts/${made.id}`, { token: anonA.token }), params({ id: made.id }));
     expect(own.status).toBe(200);
     const foreign = await getArtifactRoute(request(`/api/artifacts/${made.id}`, { token: anonB.token }), params({ id: made.id }));
-    expect(foreign.status).toBe(404);
+    expect(foreign.status).toBe(200);expect((await foreign.json()).capabilities.edit).toBe(false);
   });
 });

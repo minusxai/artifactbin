@@ -1,9 +1,9 @@
+import {validateDatasetPolicyForRow} from './validation';
 import type {
   DatasetPolicy,
   DatasetMutationPolicy,
-  Scalar,
 } from '@artifactbin/contracts';
-import { parseDatasetPolicy, compilePolicyPredicate } from '@artifactbin/utils';
+import { parseDatasetPolicy } from '@artifactbin/utils';
 import { getDb } from '@/lib/db';
 import {
   editorScope,
@@ -57,71 +57,14 @@ export async function setDatasetPolicy(
     return null;
   if (!Number.isSafeInteger(revision) || revision < 0)
     throw new Error('expectedPolicyRevision must be a nonnegative integer');
-  const policy = value === null ? null : parseDatasetPolicy(value);
-  if (policy) {
-    const tables = catalogOf(row)?.tables ?? [
-      {
-        schema: 'public',
-        name: 'rows',
-        columns: (row.meta.columns ?? []) as Array<{ name: string }>,
-      },
-    ];
-    for (const t of policy.tables) {
-      const target = tables.find(
-        (x) => x.schema === t.table.schema && x.name === t.table.name,
-      );
-      if (!target) throw new Error('Policy table is not in this dataset');
-      const columns = target.columns.map((c) => c.name);
-      for (const entry of [
-        ...(t.insert_permissions ?? []),
-        ...(t.update_permissions ?? []),
-        ...(t.delete_permissions ?? []),
-      ]) {
-        if (entry.role !== 'viewer')
-          throw new Error(
-            'Data policies use the viewer role for everyone with dataset access',
-          );
-        const p = entry.permission;
-        if (
-          'columns' in p &&
-          p.columns !== undefined &&
-          p.columns !== '*' &&
-          p.columns.some((c) => !columns.includes(c))
-        )
-          throw new Error('Unknown permission column');
-        for (const field of ['filter', 'check'] as const)
-          if (field in p && p[field as keyof typeof p]) {
-            // Validate field names now; trusted session values are available only at execution.
-            const session: Record<string, Scalar> = {
-              'x-hasura-user-id': 'validation',
-              'x-hasura-role': entry.role,
-            };
-            compilePolicyPredicate(
-              (
-                p as {
-                  filter?: Record<string, unknown>;
-                  check?: Record<string, unknown>;
-                }
-              )[field]!,
-              columns,
-              session,
-            );
-          }
-        if (
-          'set' in p &&
-          p.set &&
-          Object.keys(p.set).some((c) => !columns.includes(c))
-        )
-          throw new Error('Unknown preset column');
-      }
-    }
-  }
+  const policy = validateDatasetPolicyForRow(row,value);
   const db = await getDb(),
     scope = editorScope(actor);
   const result = await db.query<{ policy_revision: number }>(
     `WITH updated AS (
  UPDATE artifacts SET dataset_policy=$3::jsonb,policy_revision=policy_revision+1
  WHERE id=$1 AND ${scope.where('$2')} AND policy_revision=$4 AND deleted_at IS NULL
+ AND version=$7 AND edit_id=$8 AND sharing_revision=$9
  RETURNING *), audit AS (
  INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)
  SELECT id,policy_revision,dataset_policy,$5,$6 FROM updated)
@@ -133,6 +76,9 @@ export async function setDatasetPolicy(
       revision,
       actor.userId,
       actor.tokenId,
+      row.version,
+      row.edit_id,
+      row.sharing_revision ?? 0,
     ],
   );
   return result.rows[0]

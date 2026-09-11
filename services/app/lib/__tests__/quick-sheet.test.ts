@@ -27,7 +27,7 @@ describe('the installed short skill',()=>{
  });
  it('points to data, comments, history and recovery without another network reference',()=>{
   for(const topic of ['markup-data','publishing-annotations','publishing-auth','errors'])expect(sheet).toContain(`references/${topic}.md`);
-  for(const term of ['afbin comment','afbin log','afbin delete','--reply','--resolve','--json'])expect(sheet).toContain(term);
+  for(const term of ['afbin comment','afbin log','afbin delete','--thread','--state resolved','--json'])expect(sheet).toContain(term);
   expect(sheet).toContain('if you can view images');
  });
  it('every concrete link exists in the shipped local bundle',()=>{

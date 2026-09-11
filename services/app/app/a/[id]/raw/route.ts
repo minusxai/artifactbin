@@ -28,7 +28,7 @@ import { canAnnotate } from '@/lib/share-roles';
 import { forkedFromCredit } from '@/lib/story/fork-credit.server';
 import { roleBehindLogin } from '@/lib/share-roles';
 import { trackEvent } from '@/lib/analytics';
-import { sessionActor } from '@/lib/viewer';
+import { requestOrSessionActor } from '@/lib/viewer';
 import { verifyExportKey } from '@/lib/export-key';
 import { baseUrl, parseByteRange } from '@/lib/http';
 import { ID_RE } from '@/lib/ids';
@@ -93,10 +93,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // agent cookie. The former split-viewer bug occurred when a serving surface
   // used only the account session: a claimed-token browser was an owner in
   // the shell and a stranger in its own private document.
-  const actor = await sessionActor(request);
+  // Bearer first, then the browser credentials, the same order as the export route, so the CLI
+  // can fetch the page of an artifact its token owns or may read.
+  const actor = await requestOrSessionActor(request);
   const viewer = actor.viewer;
   const byExportKey = verifyExportKey(artifact.id, key ?? undefined);
-  const admitted = (await canReadArtifact(artifact, viewer)) || byExportKey;
+  const admitted = actor.tokenId === artifact.token_id || (await canReadArtifact(artifact, viewer)) || byExportKey;
   if (!admitted) return notFound();
 
   switch (artifact.format) {

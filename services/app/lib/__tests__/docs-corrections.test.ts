@@ -14,7 +14,7 @@ import { buildQuickSheet, renderDoc } from '../skills';
 import { IMAGE_URL_FIELD_GUIDANCE } from '../agent-guidance';
 import { OPERATIONS } from '../operations/registry';
 
-const buildSkillDoc = (base: string) => ['artifactbin/references/api.md', 'artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
+const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
@@ -33,9 +33,9 @@ describe('the publishing skill', () => {
     expect(doc).not.toMatch(/no network\./);
     for (const p of ['/query', '/events', '/mutate', '/geojson/']) expect(doc).toContain(p);
   });
-  it('§1.6 invalid_annotation_action lists reopen', () => {
-    const row = doc.split('\n').find((l: string) => l.includes('invalid_annotation_action'))!;
-    expect(row).toContain('reopen');
+  it('§1.6 the comment command teaches reopening through --state open', () => {
+    expect(doc).toContain('--state');
+    expect(doc).toContain('open or resolved');
   });
   it('§1.6b the annotation markdown subset says what an image DOES — it is a link, not a picture', () => {
     // `![alt](url)` parses as a literal "!" plus a link (lib/markdown-lite has
@@ -79,13 +79,14 @@ describe('the publishing skill', () => {
    * the create/edit loop is where a document that already exists gets adapted.
    */
   it('§F8 teaches forking as the way to adapt a document you can read', () => {
-    expect(doc).toContain('POST /api/artifacts/{id}/fork');
-    expect(doc).toContain('To fork, copy a JSX file');
+    expect(doc).toContain('afbin fork <ref>');
     expect(doc).toContain('forked_from');
+    expect(doc).not.toContain('afbin api');
   });
   it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
-    expect(doc).toContain('image_fetch_failed');
-    expect(doc).toContain('dataset_read_only');
+    const errors = renderDoc('artifactbin/references/errors.md', BASE);
+    expect(errors).toContain('image_fetch_failed');
+    expect(errors).toContain('dataset_read_only');
   });
 });
 
@@ -113,8 +114,8 @@ describe('folders and the trash', () => {
     expect(flat(doc)).toContain('unlisted artifact is excluded from public listings, a folder page included');
   });
   it('§P4.2 delete is a trash, and restore is named', () => {
-    expect(doc).toContain('DELETE is a TRASH');
-    expect(doc).toContain('restore_artifact');
+    expect(doc).toContain('Delete is a trash');
+    expect(doc).toContain('push --restore');
     expect(flat(doc)).toContain('restorable with no deadline');
   });
   /*
@@ -149,7 +150,7 @@ describe('folders and the trash', () => {
    */
   it('§FP.1 a folder has NO content, and the page is not something you edit', () => {
     expect(flat(doc)).toContain('A folder has no content');
-    expect(flat(doc)).toContain('Only title, visibility and parent_id are editable');
+    expect(flat(doc)).toContain('Only title, visibility and folder are editable');
     expect(flat(doc), 'the scaffold is gone').not.toContain('its own stored markup');
     expect(flat(doc), 'a folder is not edited like a document').not.toContain('edit one like any document');
   });
@@ -268,14 +269,6 @@ describe('URL-kept external assets', () => {
  * where every MCP reply signed itself "Agent". The auth reference owns the
  * header; the file an agent is actually in has to NAME it.
  */
-describe('a REST reply is signed', () => {
-  it('the annotations reference teaches Artifactbin-Agent on the reply call', () => {
-    const doc = renderDoc('artifactbin/references/publishing-annotations.md', BASE);
-    expect(doc).toContain('Artifactbin-Agent');
-    expect(doc).toContain('Artifactbin-Agent');
-  });
-});
-
 describe('the design skill', () => {
   const doc = buildDesignDoc(BASE);
   it('§1.1 numbers bind through <Query> → data="$name", never a `ref:` dataset', () => {

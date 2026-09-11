@@ -132,12 +132,13 @@ describe('artifact CRUD', () => {
     expect((await read.json()).markup).toBe('<h1 id="head">v2</h1>');
   });
 
-  it("answers uniform 404 for another token's artifact id", async () => {
+  it("allows public reads while refusing another token's writes", async () => {
     const a = await mint('a');
     const b = await mint('b');
     const created = await create(a.token);
+    const readable=await getArtifactRoute(request(`/api/artifacts/${created.id}`, {token:b.token}),params({id:created.id}));
+    expect(readable.status).toBe(200);expect((await readable.json()).capabilities.edit).toBe(false);
     for (const handler of [
-      () => getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: b.token }), params({ id: created.id })),
       async () =>
         putArtifact(
           await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: b.token, json: { markup: '<p>x</p>' } }),
@@ -201,7 +202,7 @@ describe('CLI discovery',()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
   expect(text).toContain('afbin setup --server http://localhost:3000');
-  expect(text).toContain('afbin help');expect(text).toContain('/releases/download/afbin-v');
+  expect(text).toContain('afbin help');expect(text).toContain('/chat/install.sh | sh');expect(text).not.toMatch(/releases\/download|npm install|MCP/);
   expect(text).not.toContain('/docs/');expect(Buffer.byteLength(text)).toBeLessThan(1024);
  });
 });

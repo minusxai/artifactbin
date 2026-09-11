@@ -96,10 +96,10 @@ const inviteEditor = async (w: Awaited<ReturnType<typeof world>>, email = 'bob@x
 const head = async (id: string) => (await getArtifactById(id))!;
 
 describe('a viewer share is read-only, exactly as before', () => {
-  it('a legacy string[] share is a viewer: 404 on every /api/my write and on reach', async () => {
+  it('an explicit viewer share is read-only: 404 on every /api/my write and on reach', async () => {
     const w = await world();
     asSession({ id: w.owner.id, email: w.owner.email });
-    expect((await share(w.doc.id, ['bob@x.com'])).status).toBe(200);
+    expect((await share(w.doc.id, [{email:'bob@x.com',role:'viewer'}])).status).toBe(200);
     asSession({ id: w.bob.id, email: w.bob.email });
     const id = w.doc.id;
     expect((await getMineRoute(await jreq(`/api/my/artifacts/${id}`, 'GET'), params({ id }))).status).toBe(404);
@@ -107,7 +107,7 @@ describe('a viewer share is read-only, exactly as before', () => {
     expect((await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
     expect((await versionsMineRoute(await jreq(`/api/my/artifacts/${id}/versions`, 'GET'), params({ id }))).status).toBe(404);
     // …and the same through B's claimed bearer token.
-    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(404);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tb.token), params({ id }))).status).toBe(200);
   });
 });
 
@@ -191,8 +191,8 @@ describe('an editor edits through every write door, and nothing else', () => {
     const put = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE }, w.tb.token), params({ id }));
     expect(put.status, await put.clone().text()).toBe(200);
 
-    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(404);
-    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tc.token), params({ id }))).status).toBe(404);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.anon.token), params({ id }))).status).toBe(200);
+    expect((await getArtifactRoute(await jreq(`/api/artifacts/${id}`, 'GET', undefined, w.tc.token), params({ id }))).status).toBe(200);
     const h = await head(id);
     expect((await editsRoute(await jreq(`/api/artifacts/${id}/edits`, 'POST', { edit_id: h.edit_id, source: PROSE2 }, w.tc.token), params({ id }))).status).toBe(404);
   });
@@ -309,11 +309,11 @@ describe('the live stream says who moved the document', () => {
 });
 
 describe('the share list carries roles', () => {
-  it('GET returns entries; PUT takes legacy strings (viewer) or {email, role}; a bad role is 400', async () => {
+  it('GET returns entries; PUT requires explicit roles and rejects ambiguous grants', async () => {
     const w = await world();
     asSession({ id: w.owner.id, email: w.owner.email });
     const id = w.doc.id;
-    expect((await share(id, ['Bob@X.com', { email: 'carol@x.com', role: 'editor' }])).status).toBe(200);
+    expect((await share(id, [{ email:'Bob@X.com', role:'viewer' }, { email: 'carol@x.com', role: 'editor' }])).status).toBe(200);
     const got = await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }));
     expect(await got.json()).toMatchObject({
       visibility: 'public',
@@ -322,8 +322,10 @@ describe('the share list carries roles', () => {
     expect((await share(id, [{ email: 'bob@x.com', role: 'owner' }])).status).toBe(400);
     expect((await share(id, [{ email: 'nope', role: 'editor' }])).status).toBe(400);
     expect((await share(id, [{ role: 'editor' }])).status).toBe(400);
-    // Duplicates collapse to ONE row, the last role given wins.
-    expect((await share(id, ['bob@x.com', { email: 'BOB@x.com', role: 'editor' }])).status).toBe(200);
+    // Conflicting duplicate roles are rejected; legacy strings are not accepted.
+    expect((await share(id, ['bob@x.com'])).status).toBe(400);
+    expect((await share(id, [{email:'bob@x.com',role:'viewer'}, { email: 'BOB@x.com', role: 'editor' }])).status).toBe(400);
+    expect((await share(id, [{email:'bob@x.com',role:'editor'}, { email: 'BOB@x.com', role: 'editor' }])).status).toBe(200);
     const again = (await (await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).json()) as { shares: unknown[] };
     expect(again.shares).toEqual([{ email: 'bob@x.com', role: 'editor' }]);
   });
@@ -448,7 +450,7 @@ describe('roleFor and the read ACL', () => {
   it('a private document shared to an email is readable by that account\'s TOKEN viewer too (email: null)', async () => {
     const w = await world(PROSE, 'private');
     asSession({ id: w.owner.id, email: w.owner.email });
-    expect((await share(w.doc.id, ['bob@x.com'])).status).toBe(200);
+    expect((await share(w.doc.id, [{email:'bob@x.com',role:'viewer'}])).status).toBe(200);
     const row = await head(w.doc.id);
     expect(await canReadArtifact(row, { userId: w.bob.id, email: null })).toBe(true);
     expect(await canReadArtifact(row, { userId: w.bob.id, email: 'bob@x.com' })).toBe(true);

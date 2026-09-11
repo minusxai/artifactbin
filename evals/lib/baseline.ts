@@ -17,12 +17,12 @@
  * the estimate — base context is only ROUGHLY constant across a run — from
  * being dressed up as a measurement.
  */
-import {materializeCli} from './cli-kit';
+import {browserShims,materializeCli} from './cli-kit';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { HarnessAdapter, HarnessRunContext } from './contracts';
 import type { Leg } from './leg';
-import type { PluginKit } from './plugin-kit';
+import type { SkillKit } from './skill-kit';
 import { runInvocation } from './spawn';
 import { taskCost } from './price';
 
@@ -50,7 +50,7 @@ export interface BaselineOptions {
   /** Workspace outside the protected run records. */
   workspace?: { root: string; cwd: string; homeDir: string };
   /** Present in installed_skill modes — the baseline includes what those skills cost to have. */
-  plugin?: PluginKit;
+  skills?: SkillKit;
   timeoutMs: number;
   /** Run the probe as this unix user — the same isolation the tasks get, so the floor is measured under it too. */
   runAs?: string;
@@ -72,12 +72,12 @@ export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> 
     apiKey: opts.apiKey,
     maxTurns: 1,
     maxBudgetUsd: 1,
-    ...(opts.plugin ? { plugin: opts.plugin } : {}),
+    ...(opts.skills ? { skills: opts.skills } : {}),
   };
   await opts.adapter.prepare(ctx);
   const spawned = await runInvocation({ ...opts.adapter.invocation(ctx), redact: [opts.apiKey] }, {
     cwd,
-    baseEnv: { ...process.env, PATH:[materializeCli(path.join(ctx.homeDir,'bin')),process.env.PATH??''].join(path.delimiter) },
+    baseEnv: { ...process.env, PATH:[browserShims(path.join(ctx.homeDir,'shims')),materializeCli(path.join(ctx.homeDir,'bin')),process.env.PATH??''].join(path.delimiter) },
     timeoutMs: opts.timeoutMs,
     stdoutPath: path.join(opts.dir, 'transcript.jsonl'),
     stderrPath: path.join(opts.dir, 'stderr.log'),

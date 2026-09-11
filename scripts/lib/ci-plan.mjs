@@ -15,7 +15,7 @@ export const CI_MODULES = {
   events: ['contracts', 'utils'],
   proxy: ['contracts', 'utils'],
   app: ['contracts', 'utils', 'sql', 'browser', 'events', 'proxy'],
-  cli: ['contracts', 'app'],
+  cli: ['contracts', 'app', 'sql'],
   evals: ['app', 'cli'],
 };
 

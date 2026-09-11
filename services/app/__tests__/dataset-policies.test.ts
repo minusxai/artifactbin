@@ -264,3 +264,18 @@ it('rechecks edit access when committing a policy change', async () => {
     expect((await getArtifactById(f.ds))?.policy_revision).toBe(0);
   } finally {spy.mockRestore();}
 });
+
+it('refuses a policy validated against dataset content that changed before its commit',async()=>{
+ const f=await fixture();const db=await getDb(),original=db.query.bind(db);let changed=false;
+ const spy=vi.spyOn(db,'query').mockImplementation(async(sql:string,values?:unknown[])=>{
+  if(!changed&&sql.includes('UPDATE artifacts SET dataset_policy=')){
+   changed=true;await original('UPDATE artifacts SET version=version+1,edit_id=$2 WHERE id=$1',[f.ds,'mxmx_test_new_content']);
+  }
+  return original(sql,values);
+ });
+ try{
+  expect(await setDatasetPolicy(f.actor,f.ds,f.policy,0)).toEqual({conflict:true});expect(changed).toBe(true);
+  expect((await getArtifactById(f.ds))?.policy_revision).toBe(0);
+  expect((await original('SELECT revision FROM dataset_policy_audit WHERE dataset_id=$1',[f.ds])).rows).toEqual([]);
+ }finally{spy.mockRestore();}
+});

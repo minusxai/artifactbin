@@ -37,7 +37,8 @@
     "@xterm/headless": "6.0.0",
     "diff": "^8.0.4",
     "marked": "18.0.12",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.0",
+    "@artifactbin/sql": "*"
   },
   "devDependencies": {
     "postject": "1.0.0-alpha.6"

@@ -1,3 +1,5 @@
+import type {MutationReceipt} from './mutation-receipt';
+import {parseSharingEntries} from '@artifactbin/utils';
 import type {RefLoader} from '@/lib/story/refs';
 import {creationOperation,lookupCreation,CreationReplay} from '@/lib/creation-ledger';
 import {artifactState} from '@/lib/artifact-state';
@@ -18,8 +20,9 @@ import {DatasetError} from '@/lib/datasets/errors';
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, findDependentsFor, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canReadArtifact, canWriteDataset, createArtifact, fontResolver, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
+  declarationsForRow, runDocumentMutation,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
 import { hasAmbiguousLegacyAliases, stampNodeIds } from '@/lib/story/node-ids';
@@ -193,6 +196,9 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           template: m.template ?? null,
           colorMode: design.colorMode,
           refs: (meta as { refs?: unknown }).refs ?? [],
+          // Declared mutations by name and parameter, so a CLI can validate a
+          // `--name --write` call before it sends anything.
+          mutations: (declarationsForRow(row)?.flow.mutations ?? []).filter((decl) => decl.scope !== 'local').map((decl) => ({ name: decl.name, params: decl.params.map((name) => ({ name })) })),
         }
       : {}),
     theme: design.theme,
@@ -317,29 +323,9 @@ export function parseAccessValue(v: unknown, format: string | undefined): Datase
   return v as DatasetAccess;
 }
 
-/** Not RFC-grade on purpose — the address only has to be matchable at login. */
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const MAX_SHARES = 100;
-
-/**
- * The share list on the wire: `{email, role}` entries, or bare email strings
- * (the shape before roles — a viewer). Absent = leave the list alone. Every
- * entry is validated, none silently dropped: a typo'd address that vanished
- * from the list would read as "shared" to the person who typed it, and a
- * role the door does not know is refused BY NAME.
- */
-export function parseShareEntries(v: unknown): ShareEntry[] | undefined | Response {
-  if (v === undefined) return undefined;
-  if (!Array.isArray(v) || v.length > MAX_SHARES) return json({ error: 'invalid_shares' }, 400);
-  const entries: ShareEntry[] = [];
-  for (const raw of v) {
-    const entry = typeof raw === 'string' ? { email: raw, role: 'viewer' } : raw;
-    const email = typeof entry?.email === 'string' ? entry.email.trim() : '';
-    if (!EMAIL_RE.test(email)) return json({ error: 'invalid_shares', detail: String(entry?.email ?? raw) }, 400);
-    if (!SHARE_ROLES.includes(entry.role)) return json({ error: 'invalid_shares', detail: `role: ${String(entry.role)}`, hint: `one of ${SHARE_ROLES.join(', ')}` }, 400);
-    entries.push({ email, role: entry.role });
-  }
-  return entries;
+/** Typed sharing is shared with the CLI; absent preserves and [] clears. */
+export function parseShareEntries(v:unknown):ShareEntry[]|undefined|Response{
+ try{return parseSharingEntries(v);}catch(error){return json({error:'invalid_shares',detail:error instanceof Error?error.message:'Invalid sharing entries'},400);}
 }
 
 function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
@@ -383,6 +369,7 @@ export async function replaceArtifactWithBody(
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
+  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish content first, then change policy in the dataset YAML without replacing content.'},400);
   // Sharing settings use edit access; filing under an owner's folder still checks placement.
   const owned = body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   const owner = writerFor(current);
@@ -442,6 +429,7 @@ export async function replaceArtifactWithBody(
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
   if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
+  const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   /*
@@ -508,11 +496,12 @@ export async function replaceArtifactWithBody(
   }
   const row = current.format === 'folder'
     ? await setMetadataFor(actor, id, {
+      ...(shares!==undefined?{shares}:{}),
       ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps});
+    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares});
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
@@ -529,7 +518,7 @@ export async function replaceArtifactWithBody(
     // neither the version nor this pointer, so what comes back is the head the
     // caller already had: still the answer to "what do I quote next", which is
     // the only thing it is for.
-    edit_id: row.edit_id, state: artifactState(row),
+    edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
     title:row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',parent_id:parentOf(row),format:row.format,
     ...markupEcho(sentMarkup, row.source),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
@@ -557,12 +546,27 @@ export async function createArtifactFromBody(
   request?: Request,
   options: {dryRun?:boolean; loadRef?:RefLoader} = {},
 ): Promise<Response> {
+  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish the dataset first, pull its YAML, then change its policy.'},400);
+  // LINEAGE. A fork is made locally — a draft with the source's identity stripped
+  // and `forked_from` recorded — and its FIRST create presents that id here. The
+  // claim is checked, not trusted: provenance may only name a source this actor
+  // can actually read, by the same rule `fork_artifact` and the export door use,
+  // and unreachable is unknown. Written once at creation; no later write touches it.
+  let forkedFrom: string | undefined;
+  if (body.forked_from !== undefined && body.forked_from !== null) {
+    if (typeof body.forked_from !== 'string' || !ID_RE.test(body.forked_from)) return json({ error: 'invalid_metadata', hint: 'forked_from is the id of the artifact this copy came from.' }, 400);
+    const source = await getArtifactById(body.forked_from);
+    const viewer = actor.userId ? { userId: actor.userId, email: null } : null;
+    if (!source || (actor.tokenId !== source.token_id && !(await canReadArtifact(source, viewer)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
+    forkedFrom = source.id;
+  }
   let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup);
   let operation;
   try {operation = creationOperation(actor,base,request?.headers.get('Idempotency-Key'),body,row=>({status:201,body:responseBody(row)}));}
   catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
   if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return json(replay.body,replay.status);}
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   const sentMarkup=body.markup;
@@ -602,7 +606,7 @@ export async function createArtifactFromBody(
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
-  }, {operation,...(link?{linkRole:link}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 
@@ -620,7 +624,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
-    edit_id: row.edit_id, state: artifactState(row),
+    edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
     format: row.format, title: row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',
     // Where it landed. `parent_id` is what a caller writes back, so the create
     // reply hands it straight into the next call.
@@ -729,11 +733,12 @@ export async function respondToAnnotationAction(
   author: AnnotationAuthor,
   id: string,
   annId: string,
+  receipt?:MutationReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   const action = parseAnnotationAction(body);
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
-  const wire = await actOnAnnotationFor(actor, id, annId, action, author);
+  const wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt);
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);
@@ -751,11 +756,41 @@ const isScalar = (v: unknown): v is Scalar =>
  * table, and `access` still governs (`readwrite` required even for the owner —
  * the toggle is the one place that says a dataset is writable).
  */
+/** A document's declared mutation, run by name with bound values — the bearer twin of the page door. */
+async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
+  const row = await getArtifactById(id);
+  if (!row || row.deleted_at || !(row.token_id === actor.tokenId || (await canReadArtifact(row, actor.userId ? { userId: actor.userId, email: null } : null)))) return json({ error: 'not_found' }, 404);
+  const values: Record<string, Scalar> = {};
+  if (body.values !== undefined) {
+    if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) return json({ error: 'invalid_values', details: ['values must be an object of scalars'] }, 400);
+    for (const [k, v] of Object.entries(body.values as Record<string, unknown>)) {
+      if (!isScalar(v)) return json({ error: 'invalid_values', details: [`value "${k}" must be a string, number, boolean or null`] }, 400);
+      values[k] = v;
+    }
+  }
+  const result = await runDocumentMutation(row, String(body.name), values, undefined, { userId: actor.userId, tokenId: actor.tokenId }, undefined, receipt);
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'unknown_mutation': return json({ error: 'unknown_mutation', details: [`this document declares no <Mutation name="${String(body.name)}">`] }, 400);
+      case 'invalid_row': return json({ error: 'invalid_row', details: [result.detail ?? ''] }, 400);
+      case 'row_changed': case 'row_not_unique': return json({ error: result.reason, details: [result.detail ?? ''] }, 409);
+      case 'dataset_full': return json({ error: 'dataset_full', details: [result.detail ?? ''] }, 409);
+      case 'contended': return json({ error: 'dataset_busy', details: [result.detail ?? ''] }, 503, { 'Retry-After': '1' });
+      case 'policy_denied': return json({ error: 'policy_denied', details: [result.detail ?? ''] }, 403);
+      case 'invalid_sql': return json({ error: 'mutation_failed', details: [result.detail ?? ''] }, 400);
+      default: return json({ error: 'dataset_read_only', details: ['You need edit access to a writable dataset to make this change.'] }, 403);
+    }
+  }
+  if ('local' in result) return json({ ok: true, local: result.local });
+  return json({ id: result.dataset.id, version: result.dataset.version, affected: result.affected, rowCount: result.rowCount });
+}
 export async function respondToMutate(
   actor: TokenActor,
   id: string,
   body: Record<string, unknown> | null,
+  receipt?:MutationReceipt,
 ): Promise<Response> {
+  if (body && typeof body.name === 'string') return respondToDeclaredMutation(actor, id, body, receipt);
   const dataset = await getArtifactFor(actor, id);
   if (!dataset) return json({ error: 'not_found' }, 404);
 
@@ -774,6 +809,8 @@ export async function respondToMutate(
   if (typeof body.sql !== 'string' || body.sql.trim() === '') {
     return json({ error: 'sql_required', details: [`one INSERT, UPDATE or DELETE naming a catalog table, for example public.rows`] }, 400);
   }
+  const expected=body.expectedState===undefined?undefined:parseExpectedVersion(body,false);
+  if(expected instanceof Response)return expected;
   const values: Record<string, Scalar> = {};
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {
@@ -785,8 +822,9 @@ export async function respondToMutate(
     }
   }
 
-  const result = await mutateDataset(dataset, actor, body.sql, values);
+  const result = await mutateDataset(dataset, actor, body.sql, values,{receipt,expectedState:expected?.expectedState});
   if (isMutationRefused(result)) {
+    if(result.reason==='row_changed')return json({error:'row_changed',details:[result.detail]},409);
     if (result.reason === 'dataset_read_only' || result.reason === 'policy_denied') return json({error:result.reason,details:[result.detail]},403);
     if (result.reason === 'dataset_full') return json({ error: 'dataset_full', details: [result.detail] }, 409);
     // Contention is retryable, not an author error — never a 400.

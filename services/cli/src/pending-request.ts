@@ -6,10 +6,11 @@ import {confinedPath} from './journal';
 import {normalizeServer} from './config';
 import {CliError} from './commands';
 import type {TrackedFile} from './workspace';
+import type {ResourceSource} from './resource-file';
 export interface RequestIntent {
  server:string;account?:string;credential:string;
  request:{path:string;method:string;body:Record<string,unknown>};
- file:{path:string;bytes:string;tracked?:TrackedFile;paths?:Record<string,string>;renamedFrom?:string};
+ file:{source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;paths?:Record<string,string>;renamedFrom?:string};
 }
 export interface PendingRequest extends RequestIntent {version:1;key:string;checksum:string;response?:Record<string,unknown>;responseAccount?:string;responseChecksum?:string}
 const fileOf=(root:string)=>join(root,'.artifactbin','pending-request.json');
@@ -62,5 +63,5 @@ export async function checkRetiredCreate(root:string,path:string,id?:string):Pro
  let record:RetiredCreate;try{record=JSON.parse(raw.toString());}catch{throw new CliError('invalid_journal','Deleted creation recovery is invalid.');}
  if(record.path!==path||!/^[A-Za-z0-9]{6,12}$/.test(record.id))throw new CliError('invalid_journal','Deleted creation recovery is invalid.');
  if(id)return; // An explicit fence or tracked identity makes this an update, never a create.
- throw new CliError('result_deleted',`The original creation of ${path} (${record.id}) was deleted.`,`Restore that artifact and run afbin pull ${record.id} ${path}, or publish a new file to create a different artifact.`,{id:record.id,pending_key:record.key});
+ throw new CliError('result_deleted',`The original creation of ${path} (${record.id}) was deleted.`,`Restore that artifact and run afbin pull ${record.id} --output ${path}, or publish a new file to create a different artifact.`,{id:record.id,pending_key:record.key});
 }

@@ -25,7 +25,6 @@
     "test:ui": "npm run test:ui -w services/app",
     "test:gates": "node scripts/gates.mjs",
     "generate-story-ui-classes": "npm run generate-story-ui-classes -w services/app",
-    "build:plugin": "npm run build:plugin -w services/app",
     "generate:theme-previews": "npm run generate:theme-previews -w services/app",
     "generate:og": "npm run generate:og -w services/app",
     "eval": "tsx evals/run.ts",

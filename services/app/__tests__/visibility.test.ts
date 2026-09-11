@@ -154,7 +154,7 @@ describe('read enforcement — uniform 404, decided before serving', () => {
 
     // Share with an email that has no account yet, then log in as it.
     const shared = await putSharingRoute(
-      request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: ['Invitee@Example.com'] } }),
+      request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'Invitee@Example.com',role:'viewer'}] } }),
       params({ id: doc.id }),
     );
     expect(shared.status).toBe(200);
@@ -195,14 +195,14 @@ describe('the sharing surface (session-only, owner-only)', () => {
 
     // Shares are normalized to lowercase and deduped; visibility flips ride the same PUT.
     const updated = await (await putSharingRoute(
-      request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { visibility: 'public', shares: ['A@B.com', 'a@b.com', 'c@d.com'] } }),
+      request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { visibility: 'public', shares: ['A@B.com', 'a@b.com', 'c@d.com'].map(email=>({email,role:'viewer'})) } }),
       params({ id: doc.id }),
     )).json();
     expect(updated).toMatchObject({ visibility: 'public', shares: [{ email: 'a@b.com', role: 'viewer' }, { email: 'c@d.com', role: 'viewer' }] });
 
     // A malformed email is rejected, not silently dropped.
     const bad = await putSharingRoute(
-      request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: ['not-an-email'] } }),
+      request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'not-an-email',role:'viewer'}] } }),
       params({ id: doc.id }),
     );
     expect(bad.status).toBe(400);

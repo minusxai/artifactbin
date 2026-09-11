@@ -6,7 +6,7 @@ import {homedir} from 'node:os';
 import {normalizeServer,saveConnection,type Connection} from './config';
 import {CliError} from './commands';
 
-interface Options {home?:string;fetch?:typeof fetch;open:(url:string)=>Promise<void>;notify?:(message:string)=>void;timeoutMs?:number}
+interface Options {home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;open:(url:string)=>Promise<void>;notify?:(message:string)=>void;timeoutMs?:number}
 export async function loopbackAuthenticate(origin:string,options:Options):Promise<Connection>{
  const server=normalizeServer(origin);const verifier=randomBytes(32).toString('base64url');const state=randomBytes(32).toString('base64url');
  let accept!:(code:string)=>void;let refuse!:(error:Error)=>void;
@@ -46,6 +46,6 @@ export async function loopbackAuthenticate(origin:string,options:Options):Promis
   const token=await post('/oauth/token',{grant_type:'authorization_code',client_id:registered.client_id,redirect_uri:redirectUri,code,code_verifier:verifier,resource:`${server}${API_RESOURCE_PATH}`});
   if(typeof token.access_token!=='string'||typeof token.refresh_token!=='string'||typeof token.expires_in!=='number'||token.expires_in<=0)throw new CliError('invalid_response','Token exchange returned incomplete credentials.');
   const connection:Connection={server,token:token.access_token,refreshToken:token.refresh_token,clientId:registered.client_id,expiresAt:Date.now()+token.expires_in*1000};
-  await saveConnection(connection,options.home??homedir());return connection;
+  await saveConnection(connection,options.home??homedir(),{ARTIFACTBIN_HOME:options.env?.ARTIFACTBIN_HOME});return connection;
  }finally{clearTimeout(timer);listener.closeAllConnections();await new Promise<void>(resolve=>listener.close(()=>resolve()));}
 }

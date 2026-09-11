@@ -12,7 +12,7 @@
  * Never inside a `db.transaction` callback (the emit would deadlock PGLite).
  */
 import { RELATION_EVENTS, RELATION_VERBS, type RelationVerb } from '@artifactbin/contracts';
-import { getDb } from '@/lib/db';
+import { getDb,type Queryable } from '@/lib/db';
 import { emit } from '@/lib/events';
 
 /** What the subject of every relation is today: an account. */
@@ -81,14 +81,16 @@ export async function link(userId: string, verb: RelationVerb, objectId: string)
    * records when this row came into being, and every link and unlink since is
    * already in the log.
    */
-  const changed = await db.query(
+  const changed = await db.transaction(async tx=>{
+    await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
+    return tx.query(
     `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id)
      VALUES ('${RELATION_SUBJECT_KIND}', $1, '${verb}', '${entry.object}', $2)
      ON CONFLICT (subject_kind, subject_id, verb, object_kind, object_id)
      DO UPDATE SET deleted_at = NULL WHERE relations.deleted_at IS NOT NULL
      RETURNING 1`,
     [userId, objectId],
-  );
+  );});
   if (changed.rows.length === 0) return 'already';
   await say(entry, 'linked', userId, objectId);
   return 'linked';
@@ -98,10 +100,12 @@ export async function link(userId: string, verb: RelationVerb, objectId: string)
 export async function unlink(userId: string, verb: RelationVerb, objectId: string): Promise<'unlinked' | 'absent'> {
   const entry = vocabulary(verb);
   const db = await getDb();
-  const changed = await db.query(
+  const changed = await db.transaction(async tx=>{
+    await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
+    return tx.query(
     `UPDATE relations SET deleted_at = now() WHERE ${subjectWhere(verb, entry)} AND object_id = $2 AND deleted_at IS NULL RETURNING 1`,
     [userId, objectId],
-  );
+  );});
   if (changed.rows.length === 0) return 'absent';
   await say(entry, 'unlinked', userId, objectId);
   return 'unlinked';
@@ -131,9 +135,9 @@ export async function count(verb: RelationVerb, objectId: string): Promise<numbe
 }
 
 /** Live edges OUT of a user for a verb: the artifacts they like, the users they follow — the audience of a feed. */
-export async function linked(userId: string, verb: RelationVerb): Promise<string[]> {
+export async function linked(userId: string, verb: RelationVerb,query?:Queryable): Promise<string[]> {
   const entry = vocabulary(verb);
-  const db = await getDb();
+  const db = query??await getDb();
   const out = await db.query<{ object_id: string }>(
     // Newest first, then by id: two edges made in the same millisecond still
     // come back in ONE order, so a feed built on this never shuffles.
@@ -141,4 +145,14 @@ export async function linked(userId: string, verb: RelationVerb): Promise<string
     [userId],
   );
   return out.rows.map((row) => row.object_id);
+}
+
+/** The caller holds the subject's user-row lock. Effects are announced only after commit. */
+export async function replaceLinked(query:Queryable,userId:string,verb:RelationVerb,ids:string[]){
+ const entry=vocabulary(verb);
+ const removed=await query.query<{object_id:string}>(`UPDATE relations SET deleted_at=now() WHERE ${subjectWhere(verb,entry)} AND deleted_at IS NULL AND NOT (object_id=ANY($2::text[])) RETURNING object_id`,[userId,ids]);
+ const added=await query.query<{object_id:string}>(`INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id)
+ SELECT '${RELATION_SUBJECT_KIND}',$1,'${verb}','${entry.object}',id FROM unnest($2::text[]) AS id
+ ON CONFLICT(subject_kind,subject_id,verb,object_kind,object_id) DO UPDATE SET deleted_at=NULL WHERE relations.deleted_at IS NOT NULL RETURNING object_id`,[userId,ids]);
+ return async()=>{for(const row of removed.rows)await say(entry,'unlinked',userId,row.object_id);for(const row of added.rows)await say(entry,'linked',userId,row.object_id);};
 }

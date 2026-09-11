@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { browserAuthenticate, deviceAuthenticate, ApprovalRequired } from '../src/browser-auth';
+import { browserAuthenticate, deviceAuthenticate } from '../src/browser-auth';
 import {CliError} from '../src/commands';
 import { loadConnection } from '../src/config';
 
-test('unattended pairing reports approval, resumes, and persists credentials without a validation GET', async () => {
+test('interrupted pairing resumes and persists credentials without a validation GET', async () => {
   const home = await mkdtemp(join(tmpdir(), 'afbin-pair-'));
   const calls: string[] = [];
   let approved = false;
@@ -21,15 +21,10 @@ test('unattended pairing reports approval, resumes, and persists credentials wit
     throw new Error(`Unexpected request ${path}`);
   };
   try {
-    await assert.rejects(browserAuthenticate('https://example.com', {home, fetch:request, interactive:false}), error => {
-      assert.ok(error instanceof ApprovalRequired);
-      assert.match(error.verificationUrl, /user_code=/);
-      assert.ok(!error.message.includes('d'.repeat(43)));
-      return true;
-    });
+    await assert.rejects(browserAuthenticate('https://example.com', {home, fetch:request, interactive:false,noBrowser:true,notify:()=>{},sleep:async()=>{throw new Error('interrupted');}}), /interrupted/);
     assert.equal((await stat(join(home,'.artifactbin'))).mode & 0o777, 0o700);
     approved = true;
-    const connection = await browserAuthenticate('https://example.com', {home, fetch:request, interactive:false});
+    const connection = await browserAuthenticate('https://example.com', {home, fetch:request, interactive:false,noBrowser:true,notify:()=>{}});
     assert.equal(connection.token,'mx_access');
     assert.deepEqual(await loadConnection(undefined,home,{}),connection);
     assert.equal(calls.filter(x=>x==='/oauth/device').length,1);
@@ -55,7 +50,7 @@ test('interactive flow opens the browser and bounded polling never implies appro
 test('device denial has a stable error code and leaves no credentials',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-denied-'));
  try{
-  await assert.rejects(deviceAuthenticate('https://example.com',{home,interactive:false,fetch:async input=>String(input).endsWith('/oauth/device')
+  await assert.rejects(deviceAuthenticate('https://example.com',{home,interactive:false,noBrowser:true,notify:()=>{},fetch:async input=>String(input).endsWith('/oauth/device')
    ?Response.json({device_code:'d'.repeat(43),user_code:'code',verification_uri_complete:'https://example.com/oauth/device?user_code=code',expires_in:300,interval:5})
    :Response.json({error:'access_denied'},{status:400})}),error=>error instanceof CliError&&error.code==='access_denied');
   assert.equal(await loadConnection(undefined,home,{}),null);

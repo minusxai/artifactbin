@@ -20,7 +20,7 @@ const fx = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', na
 
 function ctx(leg: Partial<Leg> & Pick<Leg, 'harness' | 'model'>): HarnessRunContext {
   return {
-    leg: { envVar: 'SOME_API_KEY', apiKey: 'the-secret', label: leg.harness, price: null, vision: true, mode: planMode(leg.harness, 'cli'), ...leg },
+    leg: { envVar: 'SOME_API_KEY', apiKey: 'the-secret', label: leg.harness, price: null, vision: true, mode: planMode(leg.harness, 'installed'), ...leg },
     prompt: 'Do the thing.\n\nHelp me create an artifact. Follow instructions at http://127.0.0.1:3101/a/abc123/start?k=s',
     cwd: '/tmp/run/cwd',
     homeDir: '/tmp/run/home',

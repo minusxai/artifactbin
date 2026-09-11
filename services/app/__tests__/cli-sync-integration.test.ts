@@ -33,10 +33,10 @@ it('runs the real CLI through publication handlers: create, no-op, body edit, me
   await invoke(['push']);expect(calls.at(-1)).toBe(`POST /api/artifacts/${first.metadata.id}/edits`);expect(calls).toHaveLength(2);
   const updated=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));expect(updated.metadata.head_version).toBe(2);
   updated.metadata.title='Changed title';await writeFile(join(root,'doc.jsx'),writeDocument(updated));
-  await invoke(['push']);expect(calls.at(-1)).toBe(`PATCH /api/artifacts/${first.metadata.id}`);expect(calls).toHaveLength(3);
+  await invoke(['push']);expect(calls.at(-1)).toBe(`PATCH /api/artifacts/${first.metadata.id}`);expect(calls.slice(-2)).toEqual([`GET /api/artifacts/${first.metadata.id}`,`PATCH /api/artifacts/${first.metadata.id}`]);expect(calls).toHaveLength(4);
   const renamed=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));expect(renamed.metadata.title).toBe('Changed title');expect(renamed.metadata.head_version).toBe(2);
   await invoke(['pull']);expect(calls.at(-1)).toBe(`GET /api/artifacts/${first.metadata.id}`);
-  await invoke(['push']);expect(calls).toHaveLength(4);
+  await invoke(['push']);expect(calls).toHaveLength(5);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 it('bare push publishes changed composed dependencies under new identities before replacing their document refs',async()=>{
@@ -65,6 +65,6 @@ it('bare push publishes changed composed dependencies under new identities befor
   expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body).toContain('source="./sales.csv"');
   const old=await read(new Request(`http://localhost:3000/api/artifacts/${oldAsset}`,{headers:{Authorization:`Bearer ${token.token}`}}),{params:Promise.resolve({id:oldAsset})});expect((await old.json()).version).toBe(1);
   const titled=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));titled.metadata.title='Sales';await writeFile(join(root,'doc.jsx'),writeDocument(titled));
-  calls.length=0;await invoke(['push','doc.jsx']);expect(calls).toEqual([`PATCH /api/artifacts/${titled.metadata.id}`]);
+  calls.length=0;await invoke(['push','doc.jsx']);expect(calls).toEqual([`GET /api/artifacts/${titled.metadata.id}`,`PATCH /api/artifacts/${titled.metadata.id}`]);
  }finally{await rm(root,{recursive:true,force:true});}
 });

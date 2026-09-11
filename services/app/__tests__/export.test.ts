@@ -161,9 +161,10 @@ describe('GET /a/:id/export', () => {
 });
 
 describe('skill doc', () => {
-  it('teaches the export URL', async () => {
-    const text = teaching.files['references/api.md'];
-    expect(text).toContain('/export');
+  it('teaches the native export command', async () => {
+    const text = teaching.files['references/publishing-versions.md'];
+    expect(text).toContain('afbin export');
+    expect(text).not.toContain('afbin api');
   });
 });
 

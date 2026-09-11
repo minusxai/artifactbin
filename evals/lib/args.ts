@@ -61,7 +61,40 @@ export interface Args {
   runAs?: string;
   /** Additional evidence or credential paths hidden from local agents (repeatable). */
   protectPaths?: string[];
+  /** `--help` prints the usage below and runs nothing. */
+  help?: boolean;
 }
+
+/** One place to read the whole command line, printed by `npm run eval -- --help`. */
+export const USAGE = `usage: npm run eval -- --harness <name> --model <id> [options]
+
+Runs ONE leg — one harness, one model — over the selected tasks and writes a run directory.
+
+  --harness <name>          Harness to drive (see evals/lib/harness/).
+  --model <id>              Provider model id for that harness.
+  --api-key-env <NAME>      Environment variable holding the provider key.
+  --label <text>            Report label for this leg; defaults to harness · model.
+  --price-in|--price-out|--price-cache-read|--price-cache-write <dollars>
+                            $ per 1M tokens, for cost reporting.
+  --price-web-search <dollars>  $ per provider-side web-search call.
+  --no-vision               Tell the leg its model cannot read images.
+  --mode <mode>             installed (the driver installs afbin and runs its setup first) or not-installed (the agent installs it); see lib/mode.ts.
+  --credential <source>     Where this leg's token comes from (see lib/credential.ts).
+  --tasks <id,id>           Run only these task ids.
+  --shard <i/n>             Run shard i of n; a task is never split.
+  --deployment <url>        Run against a live deployment instead of a booted server.
+  --port-base <port>        Move the local port range (1024-65000).
+  --concurrency <n>         Tasks in flight per leg (1-16).
+  --run-as <user>           Run harness processes as this unix user.
+  --protect-path <path>     Hide an extra evidence or credential path (repeatable).
+  --out <dir>               Run directory root; defaults to evals/.metrics.
+  --ci                      Run the CI task set instead of the eval set.
+  --no-retry                Do not give a failed CI flow one more turn.
+  --no-report               Do not write the report after the run.
+  -h, --help                Print this usage and exit.
+
+Both spellings of every option work: --shard 2/2 and --shard=2/2. See docs/evals.md
+before running paid legs.`;
 
 const EVALS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const list = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
@@ -131,6 +164,7 @@ export function parseArgs(argv: string[]): Args {
       case '--ci': args.ci = true; break;
       case '--no-retry': args.retry = false; break;
       case '--no-report': args.report = false; break;
+      case '-h': case '--help': args.help = true; break;
       default: throw new Error(`unknown argument ${flag}`);
     }
   }

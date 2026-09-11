@@ -18,3 +18,12 @@ test('one resolver gives an existing full path precedence over version suffixes'
  }finally{await rm(root,{recursive:true,force:true});}
 });
 const expectShadow='Existing path report.jsx@2 takes precedence over report.jsx at version 2. Use the explicit artifact id@2 to select that version.';
+test('decorative names and view parameters never change exact artifact identity',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-pretty-ref-'));
+ try{
+  for(const url of ['https://example.com/@OLD_NAME/AbC123-','https://example.com/@wrong/AbC123-RENAMED?view=slide#heading','https://example.com/a/AbC123-old-title']){
+   assert.deepEqual(await resolveReference(url,{root,server:'https://example.com'}),{kind:'id',id:'AbC123',notices:[]});
+  }
+  for(const url of ['https://other.example/a/AbC123','https://user:password@example.com/a/AbC123','https://example.com/api/artifacts/AbC123','https://example.com/@user/old-folder/AbC123'])await assert.rejects(resolveReference(url,{root,server:'https://example.com'}));
+ }finally{await rm(root,{recursive:true,force:true});}
+});

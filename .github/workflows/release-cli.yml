@@ -26,6 +26,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN: ${{ github.event.workflow_run.id }}
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
     steps:
       # No checkout or execution of downloaded code in this privileged workflow.
       - name: Identify the tested release
@@ -43,6 +46,9 @@ jobs:
           tag="afbin-v$version"
           installer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/install.sh?ref=$SOURCE_SHA" --jq .content | base64 --decode)
           grep -Fxq "  version=$version" <<< "$installer"
+          # The pointer the CLI resolves its release from ships with the same commit.
+          pointer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/release.json?ref=$SOURCE_SHA" --jq .content | base64 --decode)
+          test "$(jq -r .version <<< "$pointer")" = "$version"
           # Existing published versions are immutable; unrelated merges are no-ops.
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
             if [ "$(cat draft.txt)" = false ]; then exit 0; fi
@@ -50,6 +56,7 @@ jobs:
             cat release-error.txt >&2; exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Download the binaries tested by this CI run
         if: steps.release.outputs.tag != ''
@@ -69,7 +76,6 @@ jobs:
             for common in afbin-skills.json afbin.1; do
               if [ -f "bundle/$common" ]; then cmp "bundle/$common" "downloads/$runner/$common"; else cp "downloads/$runner/$common" "bundle/$common"; fi
             done
-            if [ ! -f bundle/afbin-skills.tar.gz ]; then cp "downloads/$runner/afbin-skills.tar.gz" bundle/; fi
           done
           (cd bundle && sha256sum afbin-* afbin.1 > SHA256SUMS)
 

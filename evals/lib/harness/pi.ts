@@ -41,7 +41,7 @@ export const pi: HarnessAdapter = {
         // `--skill <path>` is repeatable and takes a directory; `--no-skills` would disable the
         // lot, so it is exactly the flag plugin mode replaces. Pi needs no extension for this.
         '--no-extensions',
-        ...(ctx.plugin ? ctx.plugin.skillDirs.flatMap((d) => ['--skill', d]) : ['--no-skills']),
+        ...(ctx.skills ? ctx.skills.skillDirs.flatMap((d) => ['--skill', d]) : ['--no-skills']),
         '--no-prompt-templates', '--no-context-files', '--no-session',
         '--session-dir', path.join(ctx.homeDir, 'sessions'),
         '--model', ctx.leg.model,

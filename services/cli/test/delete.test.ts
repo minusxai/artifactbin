@@ -15,7 +15,7 @@ test('retrying a lost folder-delete reply forgets every deleted identity while p
  }});return{code,result:JSON.parse(output.join(''))};};
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);
-  assert.equal((await invoke(['pull','abc123','folder.jsx'])).code,0);assert.equal((await invoke(['pull','def456','child.jsx'])).code,0);
+  assert.equal((await invoke(['pull','abc123','--output','folder.jsx'])).code,0);assert.equal((await invoke(['pull','def456','--output','child.jsx'])).code,0);
   const folder=await readFile(join(root,'folder.jsx'));const child=await readFile(join(root,'child.jsx'));
   assert.notEqual((await invoke(['delete','folder.jsx'])).code,0);
   assert.equal(Object.keys(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files).length,2);

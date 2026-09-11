@@ -175,7 +175,7 @@ const pds = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers:
 const priv = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ markup: doc1(pds.id), visibility: 'private' }) }));
 ok(priv.visibility === 'private', `a private data document published (${priv.id})`);
 const readerEmail = `mxmx_test_dataflow_reader_${stamp}@example.com`;
-const shared = await owner.evaluate(async ([id, email]) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [email] }) })).status, [priv.id, readerEmail]);
+const shared = await owner.evaluate(async ([id, email]) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }) })).status, [priv.id, readerEmail]);
 ok(shared === 200, 'the owner shared it with the reader');
 const anonGet = await fetch(`${B}/a/${priv.id}/query?q=%7B%7D`);
 ok(anonGet.status === 404, `the document's own GET is the uniform 404 for a private document (${anonGet.status})`);

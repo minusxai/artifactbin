@@ -17,7 +17,7 @@ test('local commands and malformed invocations never load credentials, call the 
   await assert.rejects(stat(join(root,'.artifactbin')),{code:'ENOENT'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
-test('malformed remote references and API paths fail before authentication',async()=>{
+test('malformed remote references fail before authentication',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-invalid-remote-'));
  try{
   await writeFile(join(root,'doc.jsx'),'<p>Hello</p>');
@@ -26,8 +26,6 @@ test('malformed remote references and API paths fail before authentication',asyn
    [['comment','doc.jsx@2'],'version_not_writable'],
    [['delete','doc.jsx'],'unpublished_file'],
    [['log','missing.jsx'],'invalid_reference'],
-   [['api','https://elsewhere.test/api/artifacts'],'invalid_api_path'],
-   [['api','/../oauth/token'],'invalid_api_path'],
   ] as Array<[string[],string]>){
    const output:string[]=[];
    await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,stdout:x=>output.push(x),stderr:()=>{},fetch:async()=>assert.fail('network before local validation')});
@@ -43,5 +41,14 @@ test('an empty dry-run push needs no credentials, network or local state',async(
   const code=await runCli(['push','--dry-run','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('empty dry-run made HTTP')});
   assert.equal(code,0);assert.deepEqual(JSON.parse(output.join('')),{dry_run:true,operations:[]});
   await assert.rejects(stat(join(root,'.artifactbin')),{code:'ENOENT'});
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+test('recognized file extensions ignore case without renaming the user file',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-extension-'));
+ try{
+  await writeFile(join(root,'MyReport.JSX'),'<p>Mixed-case filename</p>');
+  const output:string[]=[];
+  const code=await runCli(['validate','MyReport.JSX','--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
+  assert.equal(code,0,output.join(''));assert.equal(JSON.parse(output.join('')).files[0].path,'MyReport.JSX');
  }finally{await rm(root,{recursive:true,force:true});}
 });

@@ -1,0 +1,24 @@
+import type {AccountResource} from '@artifactbin/contracts';
+/** The CLI's literal YAML and the server use this same finite field vocabulary. */
+export function parseAccountResource(input:unknown):AccountResource{
+ if(!input||typeof input!=='object'||Array.isArray(input))throw new Error('Account resources must be mappings.');
+ const value={...input} as Record<string,unknown>;
+ if(typeof value.type!=='string'||!['profile','session'].includes(value.type.toLowerCase()))throw new Error('Use type: profile or session.');
+ value.type=value.type.toLowerCase();
+ const fields=value.type==='profile'?['type','id','state','username','email','name','liked','following']:['type','id','state','name','harness','machine','cwd','status','cols','rows','controller','created_at','last_seen_at','url'];
+ for(const [key,item] of Object.entries(value)){
+  if(!fields.includes(key))throw new Error(`Unknown ${value.type} field: ${key}.`);
+  if(key==='type')continue;
+  if(key==='liked'||key==='following'){
+   const pattern=key==='liked'?/^[A-Za-z0-9]{6,12}$/:/^usr_[A-Za-z0-9_-]+$/;
+   if(!Array.isArray(item)||item.length>1000||!item.every(id=>typeof id==='string'&&pattern.test(id))||new Set(item).size!==item.length)throw new Error(`${key} must contain at most 1000 distinct exact IDs.`);
+  }else if(key==='id'){if(typeof item!=='string'||!(value.type==='profile'?/^usr_[A-Za-z0-9_-]+$/:/^[A-Za-z0-9_-]{1,128}$/).test(item))throw new Error('Invalid account resource ID.');}
+  else if(key==='state'){if(typeof item!=='string'||!/^[a-f0-9]{64}$/.test(item))throw new Error('Invalid observed state.');}
+  else if(key==='status'){if(typeof item!=='string'||!['online','offline','exited'].includes(item.toLowerCase()))throw new Error('Invalid session status.');value[key]=item.toLowerCase();}
+  else if(key==='cols'||key==='rows'){if(!Number.isSafeInteger(item)||Number(item)<2||Number(item)>300)throw new Error(`${key} must be an integer from 2 to 300.`);}
+  else if(key==='controller'){if(item!=='local'&&item!=='web')throw new Error('controller must be local or web.');}
+  else if(['created_at','last_seen_at'].includes(key)){if(item!==null&&(typeof item!=='string'||!Number.isFinite(Date.parse(item))))throw new Error(`Invalid ${key} timestamp.`);}
+  else if(item!==null&&(typeof item!=='string'||item.length>1000))throw new Error(`Invalid ${key}.`);
+ }
+ return value as unknown as AccountResource;
+}

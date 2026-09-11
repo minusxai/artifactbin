@@ -167,10 +167,10 @@ describe('the write echo is documented as canonical', () => {
  * one-slide document per look.
  */
 describe('the export section teaches the per-slide shot', () => {
-  it('names ?slide=N', () => {
+  it('names --page N', () => {
     const doc = buildSkillDoc(BASE);
     const section = doc.slice(doc.indexOf('## Screenshot / export'));
-    expect(section).toContain('slide=');
+    expect(section).toContain('--page');
   });
 });
 
@@ -303,6 +303,6 @@ describe('no agent-facing surface forbids a look or claims to be complete', () =
 
   /** And the escape hatch has to be present, not merely un-forbidden. */
   it('the quick sheet names the full reference', () => {
-    expect(buildQuickSheet(BASE)).toContain('references/api.md');
+    expect(buildQuickSheet(BASE)).toContain('references/commands.md');
   });
 });

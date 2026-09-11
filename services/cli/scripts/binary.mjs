@@ -1,3 +1,4 @@
+import {duckdbNative} from './duckdb-native.mjs';
 // Node SEA plus node-pty's platform-native files, built on the target OS/architecture.
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -59,6 +60,7 @@ for(const [file,data] of Object.entries(files)) {
 }
 export const pty=createRequire(join(root,'package.json'))(root);
 `;
+const duckdb=await duckdbNative();
 await build({
   entryPoints: ["src/main.ts"],
   outfile: "dist/sea.cjs",
@@ -66,7 +68,7 @@ await build({
   platform: "node",
   format: "cjs",
   target: "node22",
-  plugins: [
+  plugins: [duckdb.plugin,
     {
       name: "native-asset",
       setup(b) {
@@ -86,7 +88,7 @@ await writeFile(
     disableExperimentalSEAWarning: true,
     useCodeCache: false,
     useSnapshot: false,
-    assets: { pty: resolve("dist/pty.json.gz") },
+    assets: { pty: resolve("dist/pty.json.gz"), duckdb:duckdb.asset },
   }),
 );
 execFileSync(
@@ -112,7 +114,6 @@ const teaching=JSON.parse(await readFile("src/generated/teaching.json","utf8"));
 const skills=Buffer.from(JSON.stringify({version:teaching.version,protocol:teaching.protocol,files:teaching.files})+'\n');
 await writeFile("dist/afbin-skills.json",skills);
 await copyFile("dist/share/man/man1/afbin.1","dist/afbin.1");
-execFileSync("tar",["-czf",resolve("dist/afbin-skills.tar.gz"),"-C",resolve("dist/skills"),"artifactbin"],{env:{...process.env,COPYFILE_DISABLE:"1"}});
 const sha256=data=>createHash('sha256').update(data).digest('hex');
 await writeFile(`${binary}.manifest.json`,JSON.stringify({version:teaching.version,protocol:teaching.protocol,platform:process.platform,arch:process.arch,binary:{file:`afbin-${process.platform}-${process.arch}`,sha256:sha256(await readFile(binary))},skills:{file:'afbin-skills.json',sha256:sha256(skills)}},null,2)+'\n');
 console.log(`Built ${binary} with matching local skills and release manifest.`);

@@ -1,3 +1,4 @@
+import {completeMutationReceipt,type MutationReceipt} from './mutation-receipt';
 import type { CommentTarget } from '@/lib/story/comment-target';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes of a document. The ONLY reader/writer of the
@@ -303,6 +304,7 @@ export async function createAnnotationFor(
   artifactId: string,
   input: CreateAnnotationInput,
   author: AnnotationAuthor,
+  receipt?:MutationReceipt,
 ): Promise<AnnotationWire | CreateAnnotationRefusal | Response | null> {
   const db = await getDb();
   const scope = annotationScope(actor);
@@ -346,6 +348,7 @@ export async function createAnnotationFor(
     );
     await notify(tx, artifactId, id);
     const [wire] = await wireFor(tx, row, inserted.rows);
+    if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
     return wire ?? null;
   });
   if (!made || 'refused' in made) return made;
@@ -419,14 +422,15 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
  */
 /** Page only roots; replies for these roots remain one coherent conversation. */
 export async function listAnnotationPageFor(actor: TokenActor, artifactId: string,
-  opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
+  opts: {status: 'open' | 'resolved' | 'all'; limit: number; after?: string;author?:string}): Promise<{annotations: AnnotationWire[]; next?: string} | null> {
   const db = await getDb();
   const row = await scopedRow(db, annotationScope(actor), artifactId);
   if (!row) return null;
   const roots = await db.query<AnnotationRowDb>(
     `SELECT * FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
       AND ($2::text='all' OR status=$2) AND ($3::bigint IS NULL OR seq>$3)
-      ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1]);
+      AND ($5::text IS NULL OR author_user_id=$5 OR author_token_id=$5)
+      ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1,opts.author??null]);
   const selected = roots.rows.slice(0, opts.limit);
   return {annotations: await wireFor(db, row, selected),
     ...(roots.rows.length > opts.limit ? {next: String(selected.at(-1)!.seq)} : {})};
@@ -474,6 +478,7 @@ export async function actOnAnnotationFor(
   annotationId: string,
   action: AnnotationAction,
   author: AnnotationAuthor,
+  receipt?:MutationReceipt,
 ): Promise<AnnotationWire | null> {
   const db = await getDb();
   const scope = annotationScope(actor);
@@ -487,7 +492,7 @@ export async function actOnAnnotationFor(
    * transaction — so the callback hands the facts back and the log is told
    * once the transaction has resolved.
    */
-  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean } | null> => {
+  const updated = await db.transaction(async (tx): Promise<{ row: AnnotationRowDb; replied: boolean; resolved: boolean; wire?:AnnotationWire } | null> => {
     const row = await scopedRow(tx, scope, artifactId);
     if (!row) return null;
     const found = await tx.query<AnnotationRowDb>(
@@ -518,7 +523,9 @@ export async function actOnAnnotationFor(
     // wrapping it in an object would have made every miss truthy.
     if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
-    return { row: fresh.rows[0], replied, resolved };
+    const wire=receipt?(await wireFor(tx,row,[fresh.rows[0]]))[0]:undefined;
+    if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:200,body:wire as unknown as Record<string,unknown>});
+    return { row: fresh.rows[0], replied, resolved,...(wire?{wire}:{}) };
   });
   if (!updated) return null;
   const subject = actorSubject(actor);
@@ -528,6 +535,7 @@ export async function actOnAnnotationFor(
   if (updated.replied) await emit(subject, 'annotated', thread, { annotation_id: annotationId });
   if (updated.resolved) await emit(subject, 'annotation_resolved', thread, { annotation_id: annotationId });
 
+  if(updated.wire)return updated.wire;
   const head = await scopedRow(db, scope, artifactId);
   if (!head) return null;
   const [wire] = await wireFor(db, head, [updated.row]);

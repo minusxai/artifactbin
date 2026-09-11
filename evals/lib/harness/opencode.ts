@@ -9,7 +9,7 @@
 import { countDocsReads, type ToolInvocation } from '../docs-reads';
 import path from 'node:path';
 import type { HarnessAdapter, HarnessResult, HarnessRunContext, TokenUsage } from '../contracts';
-import { copySkillsInto } from '../plugin-kit';
+import { copySkillsInto } from '../skill-kit';
 import { NO_TELEMETRY, parseJsonl } from './shared';
 
 export const opencode:HarnessAdapter={
@@ -23,7 +23,7 @@ export const opencode:HarnessAdapter={
     // OpenCode has no install command — it DISCOVERS skills from the project directory
     // (`.opencode/skills/`, `.claude/skills/`, `.agents/skills/`), so plugin mode means
     // copying them in beside the task's files. `--dir` already points it here.
-    if (ctx.plugin) copySkillsInto(ctx.plugin, ctx.cwd);
+    if (ctx.skills) copySkillsInto(ctx.skills, ctx.cwd);
 
   },
 

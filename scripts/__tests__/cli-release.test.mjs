@@ -9,7 +9,7 @@ const root = resolve(import.meta.dirname, '../..');
 const workflow = parse(readFileSync(join(root, '.github/workflows/release-cli.yml'), 'utf8'));
 const sha = 'a'.repeat(40);
 
-it('patch bump keeps package, lockfile, and installer synchronized', () => {
+it('patch bump keeps package, lockfile, installer and release pointer synchronized', () => {
   const dir = mkdtempSync(join(tmpdir(), 'afbin-bump-'));
   try {
     mkdirSync(join(dir, 'services/cli'), { recursive: true });
@@ -17,12 +17,38 @@ it('patch bump keeps package, lockfile, and installer synchronized', () => {
     writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
     writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
     writeFileSync(join(dir, 'services/app/public/chat/install.sh'), '  version=0.1.9\n--version 0.1.9\n');
+    writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{\n  "version": "0.1.9",\n  "protocol": 1\n}\n');
     const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs')], { cwd: dir });
     expect(run.status, run.stderr.toString()).toBe(0);
     expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.10');
     expect(JSON.parse(readFileSync(join(dir, 'package-lock.json'))).packages['services/cli'].version).toBe('0.1.10');
     expect(readFileSync(join(dir, 'services/app/public/chat/install.sh'), 'utf8')).toContain('version=0.1.10');
+    expect(JSON.parse(readFileSync(join(dir, 'services/app/public/chat/release.json'))).version).toBe('0.1.10');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('a drifted release pointer stops the bump instead of publishing a mismatched release', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'afbin-bump-drift-'));
+  try {
+    mkdirSync(join(dir, 'services/cli'), { recursive: true });
+    mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
+    writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
+    writeFileSync(join(dir, 'services/app/public/chat/install.sh'), '  version=0.1.9\n');
+    writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{"version": "0.1.8", "protocol": 1}\n');
+    const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs')], { cwd: dir });
+    expect(run.status).not.toBe(0);
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.9');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('the checked-in pointer, installer and CLI package name one release, at this protocol', () => {
+  const version = JSON.parse(readFileSync(join(root, 'services/cli/package.json'), 'utf8')).version;
+  const pointer = JSON.parse(readFileSync(join(root, 'services/app/public/chat/release.json'), 'utf8'));
+  const protocol = /CLI_PROTOCOL_VERSION\s*=\s*(\d+)/.exec(readFileSync(join(root, 'services/contracts/src/cli-auth.ts'), 'utf8'));
+  expect(pointer.version).toBe(version);
+  expect(String(pointer.protocol)).toBe(protocol[1]);
+  expect(readFileSync(join(root, 'services/app/public/chat/install.sh'), 'utf8')).toContain(`  version=${version}\n`);
 });
 
 for (const scenario of ['new', 'published', 'stale', 'draft']) {
@@ -37,6 +63,7 @@ const scenario = process.env.SCENARIO;
 if (all.includes('git/ref/heads/main')) console.log(scenario === 'stale' ? 'b'.repeat(40) : process.env.SOURCE_SHA);
 else if(all.includes('contents/services/cli/package.json')) console.log(Buffer.from('{"version":"0.1.1"}').toString('base64'));
 else if(all.includes('contents/services/app/public/chat/install.sh')) console.log(Buffer.from('  version=0.1.1\\n').toString('base64'));
+else if(all.includes('contents/services/app/public/chat/release.json')) console.log(Buffer.from('{"version":"0.1.1","protocol":1}').toString('base64'));
 else if(all.startsWith('release view')) {
   if (scenario === 'published') console.log('false');
   else if (scenario === 'draft') console.log('true');
@@ -50,7 +77,6 @@ else if(all.startsWith('release view')) {
   fs.mkdirSync(dir,{recursive:true}); fs.writeFileSync(dir+'/afbin-'+mapping[name], 'test binary');
   fs.writeFileSync(dir+'/afbin-'+mapping[name]+'.manifest.json', '{}');
   fs.writeFileSync(dir+'/afbin-skills.json', '{"version":"0.1.1","protocol":1,"files":{}}');
-  fs.writeFileSync(dir+'/afbin-skills.tar.gz', 'skill archive');
   fs.writeFileSync(dir+'/afbin.1', 'manual');
 } else if (!(all.startsWith('api --method POST') || all.startsWith('release create') || all.startsWith('release upload') || all.startsWith('release edit'))) process.exit(2);
 `;
@@ -66,7 +92,7 @@ else if(all.startsWith('release view')) {
         expect(existsSync(join(dir, 'output'))).toBe(false);
       } else {
         run(steps[1].run); run(steps[2].run);
-        expect(readFileSync(join(dir, 'bundle/SHA256SUMS'), 'utf8').trim().split('\n')).toHaveLength(11);
+        expect(readFileSync(join(dir, 'bundle/SHA256SUMS'), 'utf8').trim().split('\n')).toHaveLength(10);
         const calls = readFileSync(join(dir, 'calls'), 'utf8');
         expect(calls).toContain('release edit afbin-v0.1.1');
         expect(calls).toContain(scenario === 'draft' ? 'release upload' : 'release create');
