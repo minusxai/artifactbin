@@ -202,7 +202,7 @@ describe('CLI discovery',()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
   expect(text).toContain('afbin setup --server http://localhost:3000');
-  expect(text).toContain('afbin help');expect(text).toContain('/releases/download/afbin-v');
+  expect(text).toContain('afbin help');expect(text).toContain('/chat/install.sh | sh');expect(text).not.toMatch(/releases\/download|npm install|MCP/);
   expect(text).not.toContain('/docs/');expect(Buffer.byteLength(text)).toBeLessThan(1024);
  });
 });
