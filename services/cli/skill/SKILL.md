@@ -23,6 +23,7 @@ Read only the guidance the task needs:
 - `afbin help themes` and `afbin help templates` list bundled choices. `afbin help dashboard`, `editorial`, `deck` or `scrolly` prints an example. Detailed guides are in `references/templates-<name>.md` and `references/themes-<name>.md`.
 - [Sync and recovery](references/publishing.md), [comments](references/publishing-annotations.md), [authentication](references/publishing-auth.md).
 - [Database catalogs](references/databases.md), [files and datasets](references/publishing-datasets.md), [queries](references/publishing-query.md).
+- Every command and flag: [commands](references/commands.md), or `afbin help <command>`; refusal codes: [errors](references/errors.md).
 
 `afbin comment <ref>` lists threads; `--quote TEXT --body TEXT` starts one, and `--thread THREAD --body TEXT --state resolved` answers and resolves it. `afbin log <ref>` reads history. `afbin delete <ref>` deletes remotely and retains local files.
 
