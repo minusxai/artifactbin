@@ -176,73 +176,34 @@ export function startModeForSource(source: string): StartMode {
   return source.includes(WAITING_LINE) ? 'fill' : 'edit';
 }
 
-/**
- * The brief the link's GET serves — short, none of it a secret. It used to
- * carry the whole quick sheet inline, which made the start page and
- * /docs/artifactbin/SKILL.md the same 8 KB at two addresses; now the sheet
- * lives at ONE address and the brief points at it. The exact next command is
- * still spelled out because "obtain credentials somehow" is where agents
- * wander; a copy-pastable curl is where they comply.
- */
-export function startBrief(base: string, artifactId: string, secret: string, mode: StartMode = 'fill'): string {
-  const self = `${base}/a/${artifactId}/start?k=${secret}`;
-  const modeBlock = mode === 'fill'
-    ? `This document is an empty PLACEHOLDER — fill it. Publish it COMPLETE in one
-call when you can produce it in one go:
+/** A one-use credential handoff; all authoring and teaching then stay in the CLI. */
+export function startBrief(base:string,artifactId:string,secret:string,mode:StartMode='fill'):string{
+ const self=`${base}/a/${artifactId}/start?k=${secret}`;
+ return `# Edit artifact ${artifactId}
 
-\`\`\`bash
-curl -X PUT ${base}/api/artifacts/${artifactId} \\
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \\
-  -d '{"title":"…","markup":"…"}'
-\`\`\`
+The human is watching ${base}/a/${artifactId} live.
 
-Only when it will take several minutes, land a complete first screen first —
-the human is watching, and a first screen beats a placeholder — and make every
-later write a targeted \`/edits\` call (the brief shows the shape).`
-    : `This document has REAL CONTENT. Read it first — \`GET ${base}/api/artifacts/${artifactId}\`
-returns the current \`markup\` and an \`edit_id\` — then make targeted edits
-(\`POST ${base}/api/artifacts/${artifactId}/edits\`): change what was asked and
-leave the rest alone, landing edits as you go rather than in one big rewrite.`;
-  return `# You are editing artifact \`${artifactId}\`
-
-The human who pasted this link is WATCHING ${base}/a/${artifactId} live.
-
-## 1. Get your write token (one-time)
+Claim this one-use link now. It expires in minutes:
 
 \`\`\`bash
 curl -X POST "${self}"
 \`\`\`
 
-Returns \`{"token": "..."}\`. This link is single-use and expires in minutes —
-claim it now and keep the token: **every \`/api\` call, \`GET\` included, sends
-\`Authorization: Bearer <token>\`.**
+The response contains a token. Keep it in the process environment as ARTIFACTBIN_TOKEN with ARTIFACTBIN_URL=${base}; do not print or commit it.
 
-## 2. Read the brief, then write
+\`\`\`bash
+afbin pull ${artifactId} report.jsx
+afbin help markup
+\`\`\`
 
-Read ${base}/docs/artifactbin/SKILL.md first — enough for a straightforward
-document; ${base}/docs lists the rest, one line each saying when to read it.
+${mode==='fill'?'This is an empty placeholder. Fill the local file with the complete document.':'This document has real content. Read the local file and make the requested edits while preserving the rest.'}
+Preserve the YAML identity fence and node IDs. Then validate and publish the same file:
 
-${modeBlock}
+\`\`\`bash
+afbin validate report.jsx
+afbin push report.jsx
+\`\`\`
 
-${agentContract(base, 'http')}
-
-If the artifactbin skills or plugin are installed in your session, use them —
-they carry the same brief and the MCP tools; if not, you may mention to your
-user that the plugin makes this smoother next time.
-
-## Can't send POST requests or headers? (GET-only clients)
-
-Write the document with plain GET fetches of this same URL — no token needed.
-Base64url-encode the markup source (gzip first is optional) and split it into
-pieces of at most 1,300 characters:
-
-1. Send each piece:   \`GET ${self}&i=<index>&d=<piece>\`   (index from 0)
-2. Finish:            \`GET ${self}&done=1&n=<total pieces>\`
-   — the response contains the live document URL to hand to the human.
-
-Each URL must stay under ~1,400 characters; re-sending a piece is harmless, and
-a failed finish names any missing pieces — send them and repeat. If your fetch
-tool refuses URLs you constructed yourself, PRINT the numbered URLs for the
-human to click — they are safe to re-click and carry no credentials.
+${agentContract(base)}
 `;
 }

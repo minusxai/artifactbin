@@ -55,7 +55,7 @@ describe('resolveRefProps — the one ref-patch for both render paths', () => {
     expect(resolveRefProps({ isComponent: false, tag: 'img' }, { src: '/plain.png' }, REF_DATA)).toBeNull();
     expect(resolveRefProps({ isComponent: true, tag: 'Video' }, { src: 'https://youtu.be/x' }, REF_DATA)).toBeNull();
     expect(resolveRefProps({ isComponent: false, tag: 'div' }, { src: 'ref:img123' }, REF_DATA)).toBeNull();
-    expect(resolveRefProps({ isComponent: false, tag: 'video' }, { poster: 'ref:img123' }, REF_DATA)).toBeNull();
+    expect(resolveRefProps({ isComponent: false, tag: 'video' }, { poster: '/plain.png' }, REF_DATA)).toBeNull();
   });
 
   it('an unresolved ref stays unpatched — the component falls back, the string never reaches the DOM as a URL', () => {

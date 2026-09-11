@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './fixture-http.mjs';
 /** Real viewport geometry for raw h-screen slides; owned by the layout gate. */
 import { becomeOwner, startDocument } from './start-doc.mjs';
 

@@ -9,6 +9,7 @@
  *
  *   usage: node scripts/gate-data-ingest.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
@@ -49,7 +50,7 @@ check(!!datasetId, `the upload returns a usable reference (${made.body.ref})`);
 // id is not usable, and omitting the ref: prefix is exactly the mistake that
 // shipped a blank chart.
 check(made.body.ref === `ref:${made.body.id}`, `the create response carries the ref form (${made.body.ref})`);
-check((made.body.usage ?? '').includes(`<Query name="rows" source="${datasetId}">`)
+check((made.body.usage ?? '').includes(`<Query name="rows" source="ref:${datasetId}">`)
   && /from\s+"public"\."rows"/i.test(made.body.usage ?? '')
   && /data="\$rows"/.test(made.body.usage ?? ''), 'and a canonical source query over public.rows + embed bound as data="$rows"');
 check(/vega-lite/.test(made.body.usage ?? ''), 'with a viz spec bound to the real columns');
@@ -58,7 +59,7 @@ check(/vega-lite/.test(made.body.usage ?? ''), 'with a viz spec bound to the rea
 // The editor writes through the same /edits protocol a human's typing does, so
 // driving it by API here exercises the identical write path the UI uses.
 const markup =
-  `<Helmet><Query name="rows" source="${datasetId}">{\`select * from public.rows\`}</Query></Helmet>` +
+  `<Helmet><Query name="rows" source="ref:${datasetId}">{\`select * from public.rows\`}</Query></Helmet>` +
   `<div data-design="tw" className="@container p-10">` +
   `<h1 className="text-4xl font-bold">Sales</h1>` +
   `<Question title="Revenue by month" data="$rows" ` +

@@ -1,23 +1,22 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Edge cases around the ACL, placement, and the agent surfaces — the ones the
  * happy-path suites don't reach: share rows outliving their artifact, the
- * bounds on a share list, a trailing segment that looks like a file id, the MCP
- * tool's own validation, and what the list/metadata surfaces disclose.
+ * bounds on a share list, a trailing segment that looks like a file id, HTTP
+ * validation, and what the list/metadata surfaces disclose.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
-import { POST as mcp } from '@/app/mcp/route';
+import {operationHttp} from './operation-http';
 import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
 import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
-import { getArtifactById } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
 
-const BASE = 'http://localhost:3000';
 const harness = useAppHarness();
 const sessionUser = { id: '', email: '' };
 vi.mock('@/auth', () => ({
@@ -25,15 +24,6 @@ vi.mock('@/auth', () => ({
 }));
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-const mcpCall = async (token: string, name: string, args: Record<string, unknown>) => {
-  const res = await mcp(new Request(`${BASE}/mcp`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
-  }));
-  const body = (await res.json()) as { result: { content: Array<{ text: string }>; isError?: boolean } };
-  return { isError: body.result.isError ?? false, data: JSON.parse(body.result.content[0].text) as Record<string, unknown> };
-};
 
 async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'notFound'> {
   try {
@@ -198,37 +188,37 @@ describe('what the surfaces disclose', () => {
       // The retired PATH field is answered by name, never as "invalid".
       [{ markup: '<h1>y</h1>', folder: 'reports/q3' }, 'folder_retired'],
     ] as const) {
-      const res = await putArtifact(request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
+      const res = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
       expect(res.status, JSON.stringify(body)).toBe(400);
       expect((await res.json()).error).toBe(error);
     }
   });
 });
 
-describe('the MCP tool validates the same way the REST route does', () => {
+describe('the advanced HTTP surface preserves sharing policy', () => {
   it('an anonymous token cannot publish private; an account-owned one defaults to it', async () => {
     const anon = await mintToken('anon');
-    const refused = await mcpCall(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', visibility: 'private' });
+    const refused = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', visibility: 'private' });
     expect(refused.isError).toBe(true);
     expect(refused.data.error).toBe('private_requires_account');
 
-    const anonDefault = await mcpCall(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const anonDefault = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
     expect(anonDefault.data.visibility).toBe('public');
 
     const { token } = await ownerFixture();
-    const owned = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const owned = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
     expect(owned.data.visibility).toBe('private');
   });
 
   it('update_artifact HONOURS visibility and parent_id — the doc tells agents to use it', async () => {
     const { token } = await ownerFixture();
-    const box = await mcpCall(token, 'create_artifact', { format: 'folder', title: 'Shared' });
+    const box = await operationHttp(token, 'create_artifact', { format: 'folder', title: 'Shared' });
     expect(box.isError).toBe(false);
-    const made = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const made = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
     expect(made.data.visibility).toBe('private');
 
     // "make it shareable" — the agent's only lever, and it must actually pull.
-    const updated = await mcpCall(token, 'update_artifact', {
+    const updated = await operationHttp(token, 'update_artifact', {
       id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'public', parent_id: box.data.id as string,
     });
     expect(updated.isError).toBe(false);
@@ -242,8 +232,8 @@ describe('the MCP tool validates the same way the REST route does', () => {
 
   it('update_artifact refuses private on an anonymous token, like the REST route', async () => {
     const anon = await mintToken('anon2');
-    const made = await mcpCall(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
-    const refused = await mcpCall(anon.token, 'update_artifact', {
+    const made = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const refused = await operationHttp(anon.token, 'update_artifact', {
       id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'private',
     });
     expect(refused.isError).toBe(true);
@@ -252,25 +242,16 @@ describe('the MCP tool validates the same way the REST route does', () => {
 
   it('rejects an unreachable parent instead of storing it, and names the retired field', async () => {
     const { token } = await ownerFixture();
-    const bad = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: 'zzzzzz' });
+    const bad = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: 'zzzzzz' });
     expect(bad.isError).toBe(true);
     expect(bad.data.error).toBe('invalid_parent');
 
-    /*
-     * The RETIRED field over MCP: the tool's own schema no longer declares
-     * `folder`, so the SDK strips it before the operation runs and the document
-     * lands at the root. That is the same thing every other retired input
-     * (`markdown`, `html`, `jsx`) already does over this transport — a JSON-RPC
-     * tool call is validated against a declared schema, where an HTTP body is
-     * not — and REST, which sees the raw body, answers `folder_retired` by name
-     * (asserted above, on PUT).
-     */
-    const retired = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', folder: 'reports/q3' });
-    expect(retired.isError).toBe(false);
-    expect((await getArtifactById(retired.data.id as string))!.ancestor_ids).toEqual([]);
+    const retired = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', folder: 'reports/q3' });
+    expect(retired.isError).toBe(true);
+    expect(retired.data.error).toBe('folder_retired');
 
-    const box = await mcpCall(token, 'create_artifact', { format: 'folder', title: 'Reports' });
-    const good = await mcpCall(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: box.data.id as string });
+    const box = await operationHttp(token, 'create_artifact', { format: 'folder', title: 'Reports' });
+    const good = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: box.data.id as string });
     expect(good.isError).toBe(false);
   });
 });

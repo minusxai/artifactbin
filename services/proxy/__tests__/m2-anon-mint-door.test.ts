@@ -34,7 +34,9 @@ describe('the anonymous mint door', () => {
     }));
     const body = await res.json() as Record<string, unknown>;
     const text = JSON.stringify(body);
-    expect(text).toMatch(/mcp|plugin/i);
+    expect(text).not.toMatch(/mcp|plugin/i);
+    expect(text).toContain('afbin setup --server http://localhost');
+    expect(text).toContain('afbin help');
     expect(text).toContain('/tokens/new');
     expect(text).toContain('source=claude-code');
   });

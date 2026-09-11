@@ -43,6 +43,7 @@ beforeEach(() => {
       patches.push({ url, body });
       return new Response(JSON.stringify({ id: ROW.id, parent_id: body.parent_id }), { status: 200 });
     }
+    if(!init?.method || init.method==='GET')return Response.json({state:'a'.repeat(64),version:1});
     return new Response('{}', { status: 404 });
   }));
 });
@@ -88,7 +89,7 @@ describe('ArtifactTable folder moves', () => {
     fireEvent.click(screen.getByLabelText('Move to Archive'));
 
     await waitFor(() => expect(patches).toEqual([
-      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: 'Ar4Ch1' } },
+      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: 'Ar4Ch1', expectedState:'a'.repeat(64) } },
     ]));
     await waitFor(() => expect(screen.getByText('Archive')).toBeTruthy());
   });
@@ -101,7 +102,7 @@ describe('ArtifactTable folder moves', () => {
     // Absent would mean "leave it where it is"; null means "the root". The two
     // must stay distinguishable on the wire.
     await waitFor(() => expect(patches).toEqual([
-      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: null } },
+      { url: '/api/my/artifacts/Ab3xK9', body: { parent_id: null, expectedState:'a'.repeat(64) } },
     ]));
   });
 

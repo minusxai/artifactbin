@@ -24,18 +24,18 @@ describe('the human docs address', () => {
       expect(code(read(f)), f).toContain('/docs-human');
     }
   });
-  it('nothing but the redirect still names /docs/human', () => {
+  it('no current code names the retired /docs/human address', () => {
     const offenders = ['app', 'components', 'lib', 'server', 'web'].flatMap((d) => walk(path.join(APP, d)))
       .filter((f) => code(fs.readFileSync(f, 'utf8')).includes('/docs/human'))
       .map((f) => path.relative(APP, f));
-    expect(offenders).toEqual(['server/app.ts']);
+    expect(offenders).toEqual([]);
   });
   it('the docs server never sniffs Accept', () => {
     expect(code(read('lib/skills/serve.ts'))).not.toContain('text/html');
   });
   it('the shell head names /docs for agents', () => {
     const html = read('web/index.html');
-    expect(html).toMatch(/<link rel="help" href="\/docs" title="[^"]+"/);
-    expect(html).toMatch(/<meta name="artifactbin:agent" content="[^"]*\/docs[^"]*"/);
+    expect(html).toMatch(/<link rel="help" href="\/llms.txt" title="[^"]+"/);
+    expect(html).toMatch(/<meta name="artifactbin:agent" content="[^"]*afbin[^"]*"/);
   });
 });

@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * `<Mutation>` at the publish door. A document may declare a write only
  * against a dataset that (a) resolves, (b) the publisher OWNS — the
@@ -28,10 +29,10 @@ const dataset = async (token: string, extra: Record<string, unknown> = {}) => {
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
 };
-const POLL = (ds: string, sql = `insert into ref_${ds} (choice, who) values ($choice, $who)`) =>
+const POLL = (ds: string, sql = `insert into public.rows (choice, who) values ($choice, $who)`) =>
   '<Helmet><Value name="choice" type="string" /><Value name="who" type="string" />'
-  + `<Query name="tally">{\`select choice, count(*) votes from ref_${ds} group by 1\`}</Query>`
-  + `<Mutation name="vote">{\`${sql}\`}</Mutation></Helmet>`
+  + `<Query name="tally" source="ref:${ds}">{\`select choice, count(*) votes from public.rows group by 1\`}</Query>`
+  + `<Mutation name="vote" source="ref:${ds}">{\`${sql}\`}</Mutation></Helmet>`
   + '<div><input value="$who" /><Button run="$vote">Vote</Button><Question data="$tally" viz={{"kind":"table"}} /></div>';
 const details = async (res: Response) => {
   const body = (await res.json()) as { error: string; details: Array<string | { message: string }> };
@@ -45,7 +46,7 @@ describe('publishing a document with a <Mutation>', () => {
     const res = await create(t.token, { markup: POLL(ds) });
     expect(res.status, await res.clone().text()).toBe(201);
     const body = (await res.json()) as { id: string; markup?: string; markup_changed?: boolean };
-    expect(storedMarkup(body, POLL(ds))).toContain('<Mutation name="vote">');
+    expect(storedMarkup(body, POLL(ds))).toContain(`<Mutation name="vote" source="ref:${ds}">`);
     const row = (await getArtifactById(body.id))!;
     expect((row.meta as { refs: Array<{ id: string; kind: string }> }).refs).toEqual([{ id: ds, kind: 'dataset' }]);
   });
@@ -66,7 +67,7 @@ describe('publishing a document with a <Mutation>', () => {
     const ds = await dataset(owner.token, { access: 'readwrite', visibility: 'public' });
     const other = await mintToken('other');
     // Reading it is fine (the link-readable rule) …
-    const reads = await create(other.token, { markup: `<Helmet><Query name="q">{\`select * from ref_${ds}\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>` });
+    const reads = await create(other.token, { markup: `<Helmet><Query name="q" source="ref:${ds}">{\`select * from public.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>` });
     expect(reads.status).toBe(201);
     // … writing it is not.
     const writes = await create(other.token, { markup: POLL(ds) });
@@ -79,10 +80,10 @@ describe('publishing a document with a <Mutation>', () => {
   it('dry-runs the SQL: a SELECT in a Mutation and an unknown column are invalid_sql with the engine message', async () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token, { access: 'readwrite' });
-    const select = await create(t.token, { markup: POLL(ds, `select * from ref_${ds}`) });
+    const select = await create(t.token, { markup: POLL(ds, `select * from public.rows`) });
     expect(select.status).toBe(400);
     expect(await details(select)).toMatch(/^invalid_sql.*INSERT, UPDATE or DELETE/);
-    const column = await create(t.token, { markup: POLL(ds, `insert into ref_${ds} (chioce, who) values ($choice, $who)`) });
+    const column = await create(t.token, { markup: POLL(ds, `insert into public.rows (chioce, who) values ($choice, $who)`) });
     expect(column.status).toBe(400);
     expect(await details(column)).toMatch(/^invalid_sql.*chioce/);
   });
@@ -103,8 +104,8 @@ describe('publishing a document with a <Mutation>', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token, { access: 'readwrite' });
     const doc = ((await (await create(t.token, { markup: POLL(ds) })).json()) as { id: string }).id;
-    await putArtifactRoute(request(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
-    const res = await putArtifactRoute(request(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: POLL(ds) } }), params({ id: doc }));
+    await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
+    const res = await putArtifactRoute(await observedRequest(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: POLL(ds) } }), params({ id: doc }));
     expect(res.status).toBe(400);
     expect(await details(res)).toMatch(/read-only/);
   });

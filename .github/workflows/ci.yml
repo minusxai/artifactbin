@@ -137,6 +137,7 @@ jobs:
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
       - run: docker pull postgres:17-alpine
+      - run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
         run: node scripts/ci.mjs node ${{ matrix.shard }}/3
@@ -258,38 +259,13 @@ jobs:
         run: npx playwright install chromium
       - run: npx vitest run --project=api --shard=${{ matrix.shard }}/5
 
-  # A real coding agent, end to end: mints a start document, reads /docs,
+  # A real coding agent, end to end: mints a start document, loads local skills,
   # publishes, and the served document passes the render guards — the manual
   # pre-merge hole the gates leave. It runs the CI-ONLY tasks (comment, data,
-  # edit, mcp, no-token), never the creative comparison briefs, which are not a
-  # per-PR question. `comment` is on the fetched api_action row only: it was measured on THIS
-  # harness first (opencode × minimax-m3, PASS, $0.021 a leg; the leg now runs GLM 5.3 Flash), because
-  # a gate no weak model has passed becomes a red check on every PR.
-  #
-  # The harness and model are named HERE rather than in the repo: `evals/` knows
-  # how to run one leg, not which legs exist (see evals/lib/leg.ts). OpenCode ×
-  # GLM 5.3 Flash is the choice because it is cents per run AND speaks MCP — the
-  # mcp task would silently skip on a harness that does not.
-  #
-  # Toggle: the repository VARIABLE `AGENT_SMOKE_ENABLED` (Settings → Secrets
-  # and variables → Actions → Variables). `false` skips the job on the next run
-  # with no commit — and a skipped job satisfies a required check, so flipping
-  # it never blocks a merge. Forks carry no secret, so they skip too.
-  # Deliberately NOT in the `test` roll-up until it has been green for weeks.
+  # The paid regression uses the shipped CLI and installed local skills only.
+  # Credentials remain limited to trusted repository runs; the agent cannot read the checkout.
   agent-smoke:
     needs: [plan]
-    # Exercise the real two-axis treatments explicitly. API modes run the comment/data/edit
-    # regressions plus the token-less guard; MCP modes run the MCP regression. A task never
-    # changes transport behind the mode's back, so every job's name describes what the
-    # harness actually received.
-    #
-    # `no-token` is on the API rows ONLY. It declares `handoff: none` — no token, no start
-    # document, no MCP config — and an MCP transport carries its token in the harness
-    # configuration, so `lib/tasks planAccess` REFUSES it rather than measuring an
-    # authenticated run under a "no credential" heading. That refusal is a FAILED flow, not
-    # a skipped one, so an mcp_action row that ever received it would go red instead of
-    # quietly reporting a pass. `evals/__tests__/ci-tasks.test.ts` keeps this list and the
-    # tasks on disk in step, in both directions.
     name: agent smoke (${{ matrix.mode }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -297,14 +273,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - mode: fetched_skill+api_action
-            tasks: comment,data,edit,no-token
-          - mode: fetched_skill+mcp_action
-            tasks: mcp
-          - mode: installed_skill+api_action
-            tasks: data,edit,no-token
-          - mode: installed_skill+mcp_action
-            tasks: mcp
+          - mode: cli
+            tasks: comment,data,edit,cli,no-token
     if: needs.plan.outputs.agent-smoke == 'true' && vars.AGENT_SMOKE_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -350,6 +320,7 @@ jobs:
           fi
       # The harness this job drives — one global npm package, no login.
       - run: npm i -g opencode-ai
+      - run: npm run build -w services/cli
       - run: npm run build
       - run: |
           umask 077
@@ -638,5 +609,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: afbin-${{ matrix.os }}
-          path: services/cli/dist/afbin-*
+          path: |
+            services/cli/dist/afbin-*
+            services/cli/dist/afbin.1
           if-no-files-found: error

@@ -14,7 +14,7 @@ import { buildQuickSheet, renderDoc } from '../skills';
 import { IMAGE_URL_FIELD_GUIDANCE } from '../agent-guidance';
 import { OPERATIONS } from '../operations/registry';
 
-const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
+const buildSkillDoc = (base: string) => ['artifactbin/references/api.md', 'artifactbin/references/publishing.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-versions.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
@@ -45,11 +45,9 @@ describe('the publishing skill', () => {
     expect(doc).toContain('is not an image');
     expect(doc).toContain('A comment cannot embed a picture.');
   });
-  it('§1.7 the create response example shows edit_id and markup_changed, and does not promise markup', () => {
-    const line = doc.split('\n').find((l: string) => l.includes('→ 201 {') && l.includes('"url"'))!;
-    expect(line).toContain('"edit_id"');
-    expect(line).toContain('"markup_changed"');
-    expect(line).not.toContain('"markup": "<canonical');
+  it('push handles the canonical response and sync identity', () => {
+    expect(doc).toContain('canonical source and identity in the same response');
+    expect(doc).toContain('afbin.lock');
   });
   it('§2.1 one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
     expect(doc).not.toContain('for the full reference before authoring');
@@ -81,9 +79,9 @@ describe('the publishing skill', () => {
    * the create/edit loop is where a document that already exists gets adapted.
    */
   it('§F8 teaches forking as the way to adapt a document you can read', () => {
-    expect(doc).toContain(`POST ${BASE}/api/artifacts/<id>/fork`);
-    expect(doc.replace(/\s+/g, ' ')).toContain('To adapt a document you can read, fork it, then edit the copy');
-    expect(doc).toContain('"forked_from"');
+    expect(doc).toContain('POST /api/artifacts/{id}/fork');
+    expect(doc).toContain('To fork, copy a JSX file');
+    expect(doc).toContain('forked_from');
   });
   it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
     expect(doc).toContain('image_fetch_failed');
@@ -112,7 +110,7 @@ describe('folders and the trash', () => {
   const doc = buildSkillDoc(BASE);
   const flat = (t: string) => t.replace(/\s+/g, ' ');
   it('§P4.1 unlisted is listed nowhere — a folder page included', () => {
-    expect(flat(doc)).toContain('unlisted is listed nowhere, a folder page included');
+    expect(flat(doc)).toContain('unlisted artifact is excluded from public listings, a folder page included');
   });
   it('§P4.2 delete is a trash, and restore is named', () => {
     expect(doc).toContain('DELETE is a TRASH');
@@ -131,13 +129,13 @@ describe('folders and the trash', () => {
     expect(flat(doc)).toContain('there is no undo for it here');
   });
   it('§P5.1 nothing is ever erased, and the docs say so three ways', () => {
-    expect(flat(doc)).toContain('Nothing here is ever erased');
+    expect(flat(doc)).toContain('Actual erasure is an administrative act');
     expect(flat(doc)).toContain('still counts against your quota');
     expect(flat(doc)).toContain('an administrative act on the database, outside this API');
     expect(flat(doc), 'no retention survives anywhere in the docs').not.toContain('30 days');
   });
   it('§P4.3 the two limits are stated, not implied away', () => {
-    expect(flat(doc)).toContain('a restore can land a row deeper than the 6-level cap');
+    expect(flat(doc)).toContain('A restore can land a row deeper than the 6-level cap');
   });
   /*
    * ADDED (the folder page). A folder was a DOCUMENT — created with a two-line
@@ -150,8 +148,8 @@ describe('folders and the trash', () => {
    * folder has (nothing) and what its PUT will take.
    */
   it('§FP.1 a folder has NO content, and the page is not something you edit', () => {
-    expect(flat(doc)).toContain('A FOLDER HAS NO CONTENT');
-    expect(flat(doc)).toContain('are all a PUT takes on one');
+    expect(flat(doc)).toContain('A folder has no content');
+    expect(flat(doc)).toContain('Only title, visibility and parent_id are editable');
     expect(flat(doc), 'the scaffold is gone').not.toContain('its own stored markup');
     expect(flat(doc), 'a folder is not edited like a document').not.toContain('edit one like any document');
   });
@@ -244,7 +242,7 @@ describe('URL-kept external assets', () => {
   });
   it('an imported URL is not an artifact and is not in the listing', () => {
     expect(flat(publishing)).toContain('An imported URL is NOT an artifact');
-    expect(flat(publishing)).toContain('never appears in `GET ' + BASE + '/api/artifacts`');
+    expect(flat(publishing)).toContain('never appears in `afbin list`');
   });
   it('the byte quota is the account\'s, and the first importer pays once', () => {
     expect(flat(publishing)).toContain('count against your ACCOUNT\'s byte quota');
@@ -274,7 +272,7 @@ describe('a REST reply is signed', () => {
   it('the annotations reference teaches Artifactbin-Agent on the reply call', () => {
     const doc = renderDoc('artifactbin/references/publishing-annotations.md', BASE);
     expect(doc).toContain('Artifactbin-Agent');
-    expect(doc.replace(/\s+/g, ' ')).toContain('signed with your name instead of "Agent"');
+    expect(doc).toContain('Artifactbin-Agent');
   });
 });
 

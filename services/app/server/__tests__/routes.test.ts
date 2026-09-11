@@ -26,12 +26,13 @@ describe('the route table', () => {
     const paths = new Map(ROUTES.map((r) => [r.dir, r.path]));
     expect(paths.get('/api/artifacts/[id]')).toBe('/api/artifacts/:id');
     expect(paths.get('/tiles/[...tile]')).toBe('/tiles/:tile{.+}');
-    expect(paths.get('/docs/[[...path]]')).toBe('/docs/:path{.*}?');
+    expect(paths.has('/docs/[[...path]]')).toBe(false);
+    expect(paths.has('/mcp')).toBe(false);
     expect(paths.get('/api/artifacts/[id]/annotations/[annId]')).toBe('/api/artifacts/:id/annotations/:annId');
   });
   it('records only the methods a module exports', () => {
     const byDir = new Map(ROUTES.map((r) => [r.dir, r.methods]));
-    expect(byDir.get('/docs/[[...path]]')).toEqual(['GET']);
+    expect(byDir.get('/llms.txt')).toEqual(['GET']);
     expect(byDir.get('/api/artifacts')).toEqual(expect.arrayContaining(['GET', 'POST']));
     expect(byDir.get('/oauth/register') ?? null).toBeNull(); // the proxy's now
   });
@@ -41,9 +42,11 @@ describe('handlers through Hono', () => {
   const app = new Hono();
   mountRoutes(app);
 
-  it('serves the docs, refuses an unknown document uniformly, and creates then reads an artifact with a bearer', async () => {
-    expect((await app.request('/docs/artifactbin/references/publishing.md')).status).toBe(200);
-    expect((await app.request('/docs')).status).toBe(200);
+  it('retires remote skills and MCP, refuses an unknown document uniformly, and creates then reads an artifact with a bearer', async () => {
+    expect((await app.request('/docs/artifactbin/references/publishing.md')).status).toBe(404);
+    expect((await app.request('/mcp',{method:'POST'})).status).toBe(404);
+    expect((await app.request('/docs')).status).toBe(404);
+    expect(await (await app.request('/llms.txt')).text()).toContain('afbin help');
     expect((await app.request('/a/nope00/raw')).status).toBe(404);
     const t = await mintToken('t');
     const created = await app.request('/api/artifacts', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${t.token}` }, body: JSON.stringify({ markup: '<div><p>via hono</p></div>' }) });

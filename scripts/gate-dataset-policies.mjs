@@ -20,7 +20,7 @@ const dataset = await publish({
   access: 'readwrite',
 });
 const doc = await publish({
-  markup: `<Helmet><Value name="branch" default="new branch"/><Query name="tree">{\`select * from ref_${dataset.id}\`}</Query><Mutation name="append">{\`insert into ref_${dataset.id} values ($branch)\`}</Mutation><Mutation name="delete">{\`delete from ref_${dataset.id}\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/><Iframe title="Policy action" height={120}><button id="action" disabled>Script append</button><script>{\`const action=document.getElementById('action');const sync=()=>{action.disabled=!mx.canMutate('append');};mx.data.subscribe(sync);sync();action.onclick=()=>mx.mutate('append');\`}</script></Iframe>`,
+  markup: `<Helmet><Value name="branch" default="new branch"/><Query name="tree" source="ref:${dataset.id}">{\`select * from public.rows\`}</Query><Mutation name="append" source="ref:${dataset.id}">{\`insert into public.rows values ($branch)\`}</Mutation><Mutation name="delete" source="ref:${dataset.id}">{\`delete from public.rows\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/><Iframe title="Policy action" height={120}><button id="action" disabled>Script append</button><script>{\`const action=document.getElementById('action');const sync=()=>{action.disabled=!mx.canMutate('append');};mx.data.subscribe(sync);sync();action.onclick=()=>mx.mutate('append');\`}</script></Iframe>`,
 });
 const browser = await chromium.launch();
 try {
@@ -89,7 +89,7 @@ try {
       authorization: `Bearer ${seed.token}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ sql: `delete from ref_${dataset.id}` }),
+    body: JSON.stringify({ sql: `delete from public.rows` }),
   });
   assert(
     raw.status >= 400,

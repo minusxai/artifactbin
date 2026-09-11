@@ -23,7 +23,7 @@ const SALES: Row[] = [
   { region: 'NA', revenue: 300, day: '2024-01-03', ok: true },
 ];
 const TABLES = {
-  ref_abc123: {
+  source_rows: {
     rows: SALES,
     columns: [
       { name: 'region', type: 'string' as const },
@@ -47,7 +47,7 @@ describe('runQueries', () => {
   it('runs a select over a registered dataset and types the columns', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('sales', 'select region, sum(revenue) as revenue from ref_abc123 group by 1 order by 1')],
+      queries: [q('sales', 'select region, sum(revenue) as revenue from source_rows group by 1 order by 1')],
       params: {},
     });
     expect(table(out.sales).rows).toEqual([{ region: 'EU', revenue: 300 }, { region: 'NA', revenue: 300 }]);
@@ -58,7 +58,7 @@ describe('runQueries', () => {
   });
 
   it('binds $params by name, including a NULL that a filter tests for', async () => {
-    const query = q('f', 'select count(*) as n from ref_abc123 where ($region is null or region = $region)');
+    const query = q('f', 'select count(*) as n from source_rows where ($region is null or region = $region)');
     const all = await runQueries({ tables: TABLES, queries: [query], params: { region: null } });
     expect(table(all.f).rows).toEqual([{ n: 3 }]);
     const eu = await runQueries({ tables: TABLES, queries: [query], params: { region: 'EU' } });
@@ -68,7 +68,7 @@ describe('runQueries', () => {
   it('binds number, boolean and date scalars', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('f', 'select count(*) n from ref_abc123 where revenue >= $min and ok = $flag and day >= $since::date')],
+      queries: [q('f', 'select count(*) n from source_rows where revenue >= $min and ok = $flag and day >= $since::date')],
       params: { min: 200, flag: true, since: '2024-01-01' },
     });
     expect(table(out.f).rows).toEqual([{ n: 1 }]);
@@ -77,7 +77,7 @@ describe('runQueries', () => {
   it('binds NULL for a param the caller did not supply', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('f', 'select count(*) n from ref_abc123 where $region is null or region = $region')],
+      queries: [q('f', 'select count(*) n from source_rows where $region is null or region = $region')],
       params: {},
     });
     expect(table(out.f).rows).toEqual([{ n: 3 }]);
@@ -87,7 +87,7 @@ describe('runQueries', () => {
     const out = await runQueries({
       tables: TABLES,
       queries: [
-        q('base', 'select region, sum(revenue) revenue from ref_abc123 group by 1'),
+        q('base', 'select region, sum(revenue) revenue from source_rows group by 1'),
         q('top', 'select region from base order by revenue desc, region limit 1'),
       ],
       params: {},
@@ -98,7 +98,7 @@ describe('runQueries', () => {
   it('serialises engine types to JSON-safe values (bigint, decimal, date, list)', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('t', "select count(*) n, sum(revenue)::decimal(18,2) s, min(day) d, list(region)[1:2] l, 1.5 f, null nul from ref_abc123")],
+      queries: [q('t', "select count(*) n, sum(revenue)::decimal(18,2) s, min(day) d, list(region)[1:2] l, 1.5 f, null nul from source_rows")],
       params: {},
     });
     const row = table(out.t).rows[0];
@@ -109,7 +109,7 @@ describe('runQueries', () => {
   it('reports an author error per query without stopping the others', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('bad', 'select revenu from ref_abc123'), q('good', 'select 1 as one')],
+      queries: [q('bad', 'select revenu from source_rows'), q('good', 'select 1 as one')],
       params: {},
     });
     expect(failure(out.bad)).toMatch(/revenu/);
@@ -144,7 +144,7 @@ describe('runQueries', () => {
   it('a downstream query can read a list-typed column of an earlier result', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('lists', 'select region, list(revenue) revs from ref_abc123 group by 1'), q('n', 'select count(*) n from lists')],
+      queries: [q('lists', 'select region, list(revenue) revs from source_rows group by 1'), q('n', 'select count(*) n from lists')],
       params: {},
     });
     expect(table(out.n).rows).toEqual([{ n: 2 }]);
@@ -153,7 +153,7 @@ describe('runQueries', () => {
   it('binds a date-typed Value (ISO string) against a DATE column without an explicit cast', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('d', 'select count(*) n from ref_abc123 where day = $day')],
+      queries: [q('d', 'select count(*) n from source_rows where day = $day')],
       params: { day: '2024-01-02' },
     });
     expect(table(out.d).rows).toEqual([{ n: 1 }]);
@@ -204,10 +204,10 @@ describe('runQueries', () => {
     it('refuses anything that is not a SELECT', async () => {
       for (const sql of [
         'create table t as select 1',
-        'drop table ref_abc123',
-        'insert into ref_abc123 values (1, 2, null, true)',
-        'update ref_abc123 set revenue = 0',
-        'delete from ref_abc123',
+        'drop table source_rows',
+        'insert into source_rows values (1, 2, null, true)',
+        'update source_rows set revenue = 0',
+        'delete from source_rows',
         'attach \':memory:\' as other',
         'set threads = 1',
         'pragma enable_profiling',
@@ -266,12 +266,12 @@ describe('runQueries', () => {
 });
 
 describe('dryRunQueries', () => {
-  const shapes = { ref_abc123: { columns: TABLES.ref_abc123.columns } };
+  const shapes = { source_rows: { columns: TABLES.source_rows.columns } };
 
   it('passes a valid query without any rows loaded, and reports its result columns', async () => {
     const dry = await dryRunQueries({
       tables: shapes,
-      queries: [q('ok', 'select region, sum(revenue) r from ref_abc123 where region = $region group by 1')],
+      queries: [q('ok', 'select region, sum(revenue) r from source_rows where region = $region group by 1')],
       paramNames: ['region'],
     });
     expect(dry.errors).toEqual([]);
@@ -279,7 +279,7 @@ describe('dryRunQueries', () => {
   });
 
   it('names the query and the offending column, with candidates', async () => {
-    const { errors } = await dryRunQueries({ tables: shapes, queries: [q('bad', 'select revenu from ref_abc123')], paramNames: [] });
+    const { errors } = await dryRunQueries({ tables: shapes, queries: [q('bad', 'select revenu from source_rows')], paramNames: [] });
     expect(errors).toHaveLength(1);
     expect(errors[0].name).toBe('bad');
     expect(errors[0].error).toMatch(/revenu/);
@@ -289,7 +289,7 @@ describe('dryRunQueries', () => {
   it('catches a missing table and a non-SELECT statement', async () => {
     const { errors } = await dryRunQueries({
       tables: shapes,
-      queries: [q('a', 'select * from nowhere'), q('b', 'drop table ref_abc123')],
+      queries: [q('a', 'select * from nowhere'), q('b', 'drop table source_rows')],
       paramNames: [],
     });
     expect(errors.map((e) => e.name)).toEqual(['a', 'b']);
@@ -300,7 +300,7 @@ describe('dryRunQueries', () => {
   it('sees earlier queries as tables (the run order is the dry-run order)', async () => {
     expect((await dryRunQueries({
       tables: shapes,
-      queries: [q('base', 'select region from ref_abc123'), q('top', 'select region from base limit 1')],
+      queries: [q('base', 'select region from source_rows'), q('top', 'select region from base limit 1')],
       paramNames: [],
     })).errors).toEqual([]);
   });
@@ -328,7 +328,7 @@ describe('runQueries — a page of one query', () => {
   it('binds params inside the wrapped query, and dependencies still run whole', async () => {
     const out = await runQueries({
       tables: TABLES,
-      queries: [q('base', 'select region, revenue from ref_abc123 where revenue >= $min'), q('top', 'select * from base')],
+      queries: [q('base', 'select region, revenue from source_rows where revenue >= $min'), q('top', 'select * from base')],
       params: { min: 150 },
       page: { name: 'top', offset: 0, limit: 1, sort: { col: 'revenue', dir: 'desc' } },
     });

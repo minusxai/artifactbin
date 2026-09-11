@@ -4,6 +4,7 @@ import { mintToken } from '@/lib/tokens';
 import { createAnnotationFor } from '@/lib/annotations';
 import { POST as create } from '@/app/api/artifacts/route';
 import { POST as edit } from '@/app/api/artifacts/[id]/edits/route';
+import { PUT as replace } from '@/app/api/artifacts/[id]/route';
 import { GET as read } from '@/app/api/artifacts/[id]/route';
 const harness = useAppHarness();
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -106,4 +107,18 @@ it('commits merge source and exact relation together, restores on undo, and pres
   const foreign = await mintToken('mxmx_test_other');
   expect((await change(after, [operation], foreign.token)).status).toBe(404);
   expect((await head()).markup).toBe(before);
+});
+
+it('keeps annotation mappings atomic with mixed metadata replacement and records their undo',async()=>{
+ const token=await mintToken('mxmx_test_editor_mixed');
+ const response=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:before}}));
+ const doc=await response.json();
+ await createAnnotationFor({tokenId:token.id,userId:null},doc.id,{nodeId:'b',body:'suffix',quote:'same',range:{v:1,parts:[{rel:'',start:5,end:9,text:'same'}]}},{kind:'human',label:'Tester',transport:'browser'});
+ const get=async()=> (await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),params(doc.id))).json();
+ const head=await get();
+ const result=await replace(request(`/api/artifacts/${doc.id}`,{method:'PUT',token:token.token,json:{markup:after,title:'Retitled',expectedVersion:head.version,expectedState:head.state,annotation_ops:[operation]}}),params(doc.id));
+ expect(result.status,await result.clone().text()).toBe(200);
+ const changed=await get();expect(changed.title).toBe('Retitled');expect(changed.annotations[0].anchor.key).toBe('a');
+ const undone=await edit(request(`/api/artifacts/${doc.id}/edits`,{method:'POST',token:token.token,json:{edit_id:changed.edit_id,source:before,annotation_ops:[{id:operation.id,kind:'undo'}]}}),params(doc.id));
+ expect(undone.status,await undone.clone().text()).toBe(200);expect((await get()).annotations[0].anchor.key).toBe('b');
 });

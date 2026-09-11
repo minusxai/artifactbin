@@ -57,5 +57,5 @@ Local SQL is intentionally ephemeral and per loaded document. It does not
 create a source version, alter stored dataset rows, or change permissions.
 Reload resets `_signals` and inline table rows to their declared defaults;
 non-default scalar choices written into the URL persist. A Query or Mutation
-with `source="<datasetId>"` remains a stored-dataset operation with its normal
+with `source="ref:abc123"` remains a stored-dataset operation with its normal
 read and write permissions; local state does not weaken that boundary.

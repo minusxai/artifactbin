@@ -23,9 +23,9 @@ export interface ImageLocation {
  * Persist image bytes. Content-addressed, so re-uploading the same screenshot
  * costs one object rather than one per artifact.
  */
-export async function storeImage(buffer: Buffer, contentType: string): Promise<ImageLocation> {
+export async function storeImage(buffer: Buffer, contentType: string, store: Pick<import('@/lib/object-store').ObjectStore, 'put'> = objectStore()): Promise<ImageLocation> {
   const key = objectKey('image', buffer);
-  await objectStore().put(key, buffer, contentType);
+  await store.put(key, buffer, contentType);
   return { objectKey: key, bytes: buffer.length };
 }
 

@@ -26,6 +26,7 @@
  * size in the same place, so nothing moves when it opens. It writes through the
  * metadata door (`PATCH {title}`): a rename should not archive a version.
  */
+import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
 import Shelf from '@/components/Shelf';
@@ -77,16 +78,9 @@ function Name({ id, title, mayRename, onRenamed }: { id: string; title: string |
     const next = draft.trim();
     setEditing(false);
     if (!next || next === title) return;
-    // Optimistic: the door is a metadata write that cannot conflict, and a name
-    // that snapped back a beat after being typed reads as a failure even when
-    // the write succeeded. A refusal is answered by the live refetch below.
+    // Optimistic display is reconciled by the next live refetch after the conditional write.
     onRenamed(next);
-    void fetch(`/api/my/artifacts/${id}`, {
-      method: 'PATCH',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title: next }),
-    }).catch(() => { /* the listing re-reads on its own; a lost rename is not a lost document */ });
+    void writeBrowserArtifact(id, { title: next }).catch(() => { /* the listing re-reads on its own; a lost rename is not a lost document */ });
   }, [draft, id, onRenamed, title]);
 
   if (editing) {

@@ -5,7 +5,7 @@ import { splitHelmet } from './helmet';
 import { queryDeps, scalarMatches, type Dataflow } from './dataflow';
 
 /** Bump when declaration parsing or dependency semantics change. */
-export const PARSED_ARTIFACT_COMPILER_REVISION = 'dataflow-1';
+export const PARSED_ARTIFACT_COMPILER_REVISION = 'dataflow-2';
 const columnType = z.enum(['string', 'number', 'boolean', 'date']);
 const scalar = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
 const name = z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/).refine(v => !v.startsWith('ref_'));

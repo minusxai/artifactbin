@@ -651,6 +651,34 @@ ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS lease_until TIMEST
 
 ALTER TABLE app.dataset_result_cache ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.artifact_creation_operations (
+  scope TEXT NOT NULL,
+  operation_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  artifact_id TEXT,
+  response JSONB,
+  response_status INTEGER,
+  response_until TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (scope, operation_key)
+);
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL;
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS operation_key TEXT NOT NULL;
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS request_hash TEXT NOT NULL;
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS artifact_id TEXT;
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS response JSONB;
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS response_status INTEGER;
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS response_until TIMESTAMPTZ NOT NULL;
+
+ALTER TABLE app.artifact_creation_operations ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 -- schema "auth" — owned by the proxy role; tables declared by the proxy's schema module
 
 CREATE TABLE IF NOT EXISTS auth.clients (

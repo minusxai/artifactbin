@@ -15,6 +15,7 @@
  *
  *   usage: node scripts/gate-data-ux.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
@@ -63,7 +64,7 @@ ok(writable.status === 200, 'the owner can enable stored row edits');
 if (!writable.ok) throw new Error(`Enable writes: ${writable.status} ${await writable.text()}`);
 const changed = await fetch(`${B}/api/artifacts/${made.id}/mutate`, { method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
-  body: JSON.stringify({ sql: `update ref_${made.id} set revenue=125 where month='2026-01'` }) });
+  body: JSON.stringify({ sql: `update public.rows set revenue=125 where month='2026-01'` }) });
 ok(changed.status === 200, 'a stored row mutation succeeds');
 if (!changed.ok) throw new Error(`Mutate rows: ${changed.status} ${await changed.text()}`);
 await p.getByLabel('Table preview', { exact: true }).getByText('125', { exact: true }).waitFor();
@@ -79,7 +80,7 @@ ok((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'rows
   const ds = await fetch(`${B}/api/artifacts`, { method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
     body: JSON.stringify({ title: 'edit-mode data', dataset: 'region,revenue\nNorth,4200\nSouth,3100' }) }).then((r) => r.json());
-  const mk = `<Helmet><Query name="rows">{\`select * from ref_${ds.id}\`}</Query></Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Rev</h1><Question title="Revenue" data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" /></div>`;
+  const mk = `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Rev</h1><Question title="Revenue" data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" /></div>`;
   await fetch(`${B}/api/artifacts/${st.id}`, { method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
     body: JSON.stringify({ title: 'Rev', markup: mk, theme: 'manuscript' }) });

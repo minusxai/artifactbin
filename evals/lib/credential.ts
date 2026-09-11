@@ -34,7 +34,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CredentialEnv } from './env';
-import { type EvalMode, actionTransport, installsSkills } from './mode';
+import { type EvalMode } from './mode';
 import { slug } from './slug';
 
 /** Where a leg's token comes from. */
@@ -98,7 +98,6 @@ export interface CredentialOptions {
  * local server and has neither a Resend inbox nor an account token) died on the throw below.
  */
 export function credentialSourceFor(mode: EvalMode, env: CredentialEnv, opts: CredentialOptions = {}): CredentialSource {
-  if (!installsSkills(mode) && actionTransport(mode) === 'api') return 'paste';
   if (opts.localOutbox) return 'outbox-oauth';
   if (env.RESEND_EVAL_API_KEY && env.EVAL_LOGIN_EMAIL) return 'inbox-oauth';
   if (env.EVAL_ACCOUNT_TOKEN) return 'secret';
@@ -218,7 +217,9 @@ export function callbackCode(location: string): string | null {
  */
 export function writeArtifactbinEnv(homeDir: string, base: string, token: string): string {
   fs.mkdirSync(homeDir, { recursive: true });
-  const file = path.join(homeDir, '.artifactbin.env');
+  const dir=path.join(homeDir,'.artifactbin');
+  fs.mkdirSync(dir,{recursive:true,mode:0o700});
+  const file = path.join(dir, '.env');
   fs.writeFileSync(file, `ARTIFACTBIN_URL=${base}\nARTIFACTBIN_TOKEN=${token}\n`, { mode: 0o600 });
   fs.chmodSync(file, 0o600); // an existing file keeps its old mode through writeFileSync
   return file;

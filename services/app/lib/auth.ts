@@ -1,3 +1,4 @@
+import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 /**
  * Route auth wrappers. (Shape from minusx lib/http/with-remote-session-auth.ts;
  * admin-secret discipline from minusx-gateway admin_api.py.)
@@ -24,7 +25,7 @@ export interface TokenContext {
   userId: string | null;
   /** How this call proved itself; used only to choose owner vs agent display attribution. */
   credential: Credential;
-  /** Declared HTTP or MCP initialize identity remembered on the bearer token. */
+  /** Declared HTTP client identity remembered on the bearer token. */
   clientHarness: Harness | null;
   params: Record<string, string>;
 }
@@ -141,11 +142,13 @@ export function clientIp(request: Request, hops: number = TRUSTED_PROXY_HOPS): s
  * refused. A bearer call sends no Origin at all — an agent curling the API
  * must never be blocked by a header it has no reason to send.
  */
-export function withTokenAuth(handler: TokenHandler) {
+export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean} = {}) {
   return async (
     request: Request,
     routeCtx?: { params: Promise<Record<string, string>> },
   ): Promise<Response> => {
+    const protocol=request.headers.get('X-Artifactbin-Protocol');
+    if(isMutation(request)&&protocol!==null&&protocol!==String(CLI_PROTOCOL_VERSION))return new Response(JSON.stringify({error:'cli_update_required',required_protocol:CLI_PROTOCOL_VERSION,hint:'Run afbin update, then retry with the current write contract.'}),{status:426,headers:{'Content-Type':'application/json','X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION)}});
     const auth = request.headers.get('authorization') ?? '';
     const presented = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
     const resolved = presented ? await resolveToken(presented) : null;
@@ -159,7 +162,11 @@ export function withTokenAuth(handler: TokenHandler) {
       if (actor && refusesCrossSite(request, browser)) return json({ error: 'forbidden' }, 403);
     }
     if (!actor) return unauthorized(request);
-    if (resolved) {
+    const account=actor.userId??actor.id;
+    const expectedAccount=request.headers.get('X-Artifactbin-Account');
+    if(expectedAccount&&expectedAccount!==account)return json({error:'account_mismatch',hint:'Use the credentials for this workspace account.'},409);
+    const readOnly=options.readOnly||(['GET','HEAD'].includes(request.method)&&request.headers.get('X-Artifactbin-Dry-Run')==='1');
+    if (resolved && !readOnly) {
       await touchToken(resolved.id);
       const declared = identifyClient({ agentHeader: request.headers.get(ARTIFACTBIN_AGENT_HEADER) });
       if (declared.source === 'agent-header') {
@@ -169,7 +176,11 @@ export function withTokenAuth(handler: TokenHandler) {
       }
     }
     const params = routeCtx ? await routeCtx.params : {};
-    return handler(request, { tokenId: actor.id, userId: actor.userId, credential, clientHarness: actor.clientHarness, params });
+    const response=await handler(request, { tokenId: actor.id, userId: actor.userId, credential, clientHarness: actor.clientHarness, params });
+    const headers=new Headers(response.headers);
+    headers.set('X-Artifactbin-Account',account);
+    headers.set('X-Artifactbin-Protocol',String(CLI_PROTOCOL_VERSION));
+    return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   };
 }
 

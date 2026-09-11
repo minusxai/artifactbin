@@ -38,7 +38,7 @@ const ROWS = [{ region: 'EU', revenue: 800 }, { region: 'NA', revenue: 1200 }, {
 
 const DOC = (ds: string) =>
   '<Helmet><Value name="region" type="string" default="EU" /><Value name="top" type="number" default={10} />' +
-  `<Query name="sales">{\`select region, sum(revenue) revenue from ref_${ds} where $region is null or region = $region group by 1 order by 1\`}</Query>` +
+  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
   '</Helmet><div><select aria-label="Region" value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
 const island = (html: string): StoryIslandData => {

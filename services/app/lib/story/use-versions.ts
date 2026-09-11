@@ -76,10 +76,12 @@ export function useArtifactVersions({ id, currentVersion }: {
   const restore = useCallback(async (version: number) => {
     setBusy(true);
     try {
+      const observed=await fetch(base);if(!observed.ok)return null;
+      const head=await observed.json() as {version:number;state:string};
       const res = await fetch(`${base}/revert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ version }),
+        body: JSON.stringify({ version, expectedVersion:head.version, expectedState:head.state }),
       });
       if (!res.ok) return null;
       return ((await res.json()) as { version: number }).version;

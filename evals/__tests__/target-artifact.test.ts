@@ -49,7 +49,7 @@ describe('targetArtifactId', () => {
     expect(targetArtifactId([e({ method: 'GET', path: '/docs/llm' })])).toBeNull();
   });
 
-  it('follows an MCP write, whose artifact id is only in the response body', () => {
-    expect(targetArtifactId([e({ method: 'POST', path: '/mcp', status: 200, artifactId: 'viaMcp' })])).toBe('viaMcp');
+  it('follows a create whose artifact id is only in the response body', () => {
+    expect(targetArtifactId([e({ method: 'POST', path: '/api/artifacts', status: 200, artifactId: 'viaCli' })])).toBe('viaCli');
   });
 });

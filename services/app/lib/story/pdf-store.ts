@@ -27,9 +27,9 @@ export interface PdfLocation {
 }
 
 /** Persist PDF bytes. Content-addressed: the same paper twice costs one object. */
-export async function storePdf(buffer: Buffer): Promise<PdfLocation> {
+export async function storePdf(buffer: Buffer, store: Pick<import('@/lib/object-store').ObjectStore, 'put'> = objectStore()): Promise<PdfLocation> {
   const key = objectKey('pdf', buffer);
-  await objectStore().put(key, buffer, PDF_CONTENT_TYPE);
+  await store.put(key, buffer, PDF_CONTENT_TYPE);
   return { objectKey: key, bytes: buffer.length };
 }
 

@@ -89,11 +89,11 @@ describe('the token-less task', () => {
     // …and `paste` still acquires nothing, which is a different reason for null from handing the
     // agent nothing: the product gives the agent its own token in the paste.
     await expect(acquireCredential('paste', { base: 'https://x.test', env: {} } as never)).resolves.toBeNull();
-    expect(credentialSourceFor('fetched_skill+api_action' as never, {} as never, {})).toBe('paste');
+    expect(() => credentialSourceFor('cli', {}, {})).toThrow(/EVAL_ACCOUNT_TOKEN/);
   });
 
   it('builds a prompt that names the store and hands over NO credential', () => {
-    const prompt = buildPrompt(TASK, { kind: 'none', base: 'https://x.test' }, { mode: 'installed_skill+api_action' as never });
+    const prompt = buildPrompt(TASK, { kind: 'none', base: 'https://x.test' }, { mode: 'cli' as never });
     expect(prompt).toContain('https://x.test');
     expect(prompt).not.toMatch(/mx_[A-Za-z0-9_-]+/);
     expect(prompt).not.toContain('/start?k=');
@@ -107,9 +107,9 @@ describe('the edges the seed did not pin', () => {
     expect(m.selfMinted).toBe(true);
   });
 
-  it('msToFirstPublish counts an MCP write, because `isWrite` does', () => {
+  it('msToFirstPublish counts a conditional body write', () => {
     const m = ledgerMetrics([
-      entry({ t: 3_000, method: 'POST', path: '/mcp', status: 200, artifactId: 'ab3cd9' }),
+      entry({ t: 3_000, method: 'PUT', path: '/api/artifacts/ab3cd9', status: 200, artifactId: 'ab3cd9' }),
     ], { startedAtMs: 1_000 });
     expect(m.msToFirstPublish).toBe(2_000);
   });
@@ -174,26 +174,15 @@ describe('the edges the seed did not pin', () => {
 describe('the no-credential access line', () => {
   const NONE = { kind: 'none', base: 'https://x.test' } as const;
 
-  it('points a FETCHED-skill agent at the docs, names no document, and claims no saved connection', () => {
-    const line = buildPrompt(TASK, NONE, { mode: 'fetched_skill+api_action' as never });
-    expect(line).toContain('https://x.test/docs/artifactbin/SKILL.md');
-    expect(line).not.toContain('.artifactbin.env');
-    expect(line).not.toMatch(/document [A-Za-z0-9]{6,12}/);
-    expect(line).not.toMatch(/mx_[A-Za-z0-9_-]+/);
-  });
-
-  it('names the INSTALLED skill but never claims a connection file that was deliberately not written', () => {
-    const line = buildPrompt(TASK, NONE, { mode: 'installed_skill+api_action' as never });
+  it('teaches local help without inventing a saved connection or a supplied document', () => {
+    const line = buildPrompt(TASK, NONE, { mode: 'cli' });
+    expect(line).toContain('installed artifactbin skill');
+    expect(line).toContain('afbin help');
     expect(line).toContain('https://x.test');
-    expect(line).toMatch(/skill is installed/i);
-    // The whole point of the leg: no token anywhere, and no lie about one being on disk.
-    expect(line).not.toContain('.artifactbin.env');
-    expect(line).not.toMatch(/mx_[A-Za-z0-9_-]+/);
+    expect(line).toContain('not been given a token or a document');
+    expect(line).not.toMatch(/saved|mx_[A-Za-z0-9_-]+|\/docs\//);
   });
 
-  it('refuses an MCP mode outright — the MCP config IS a token handoff', () => {
-    expect(() => buildPrompt(TASK, NONE, { mode: 'installed_skill+mcp_action' as never })).toThrow(/token/i);
-  });
 });
 
 describe('scoring a run that was never given a document', () => {

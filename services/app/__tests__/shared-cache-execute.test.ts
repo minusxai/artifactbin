@@ -58,7 +58,7 @@ it('tables endpoint rechecks public visibility after a joined cache wait',async(
 });
 it('public document queries still use the authorized owner-bound source',async()=>{
  const {row,actor}=await setup();
- const source=`<Helmet><Query name="rows" source="${row.id}">{\`select * from rows\`}</Query></Helmet><p>Hello</p>`;
+ const source=`<Helmet><Query name="rows" source="ref:${row.id}">{\`select * from rows\`}</Query></Helmet><p>Hello</p>`;
  for(let i=0;i<2;i++)expect((await runDocumentDataflow(source,datasetResolverForActor(actor)))?.state.tables.rows.rows).toEqual([{n:1}]);
  expect(upstream.query).toHaveBeenCalledTimes(1);
 });
@@ -66,7 +66,7 @@ it('public document queries still use the authorized owner-bound source',async()
 it('draft queries recheck bearer revocation after SQL starts',async()=>{
  const {row,token}=await setup();let finish!:(r:unknown)=>void,started!:()=>void;const begun=new Promise<void>(r=>{started=r;});
  upstream.query.mockImplementation(()=>{started();return new Promise(r=>{finish=r;});});
- const pending=draftQuery(request('/api/query',{method:'POST',token:token.token,json:{markup:`<Helmet><Query name="q" source="${row.id}">{\`select n from rows\`}</Query></Helmet><p>Test</p>`}}));
+ const pending=draftQuery(request('/api/query',{method:'POST',token:token.token,json:{markup:`<Helmet><Query name="q" source="ref:${row.id}">{\`select n from rows\`}</Query></Helmet><p>Test</p>`}}));
  await begun;await (await getDb()).query('UPDATE tokens SET deleted_at=now() WHERE id=$1',[token.id]);finish({rows:[{n:991991}],columns:[{name:'n',type:'number'}]});
  expect(await (await pending).text()).not.toContain('991991');
 });
@@ -81,7 +81,7 @@ it('direct queries reject narrowed catalog exposure during SQL',async()=>{
 
 it('source queries cannot return data after their document is deleted',async()=>{
  const {row,token}=await setup();
- const doc=await createArtifact(token.id,null,{format:'markup',source:`<Helmet><Query name="q" source="${row.id}">{\`select n from rows\`}</Query></Helmet><p>Test</p>`,content:'',meta:{},visibility:'public'});
+ const doc=await createArtifact(token.id,null,{format:'markup',source:`<Helmet><Query name="q" source="ref:${row.id}">{\`select n from rows\`}</Query></Helmet><p>Test</p>`,content:'',meta:{},visibility:'public'});
  let finish!:(r:unknown)=>void,started!:()=>void;const begun=new Promise<void>(r=>{started=r;});
  upstream.query.mockImplementation(()=>{started();return new Promise(r=>{finish=r;});});
  const pending=documentQuery(request(`/a/${doc.id}/query?q=%7B%7D`),{params:Promise.resolve({id:doc.id})});

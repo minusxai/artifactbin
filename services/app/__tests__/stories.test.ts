@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Document-tier lifecycle over the story engine: format switching, versioning
  * and revert, user-scope editing, and the preview compile. (Creation-path
@@ -94,7 +95,7 @@ describe('document editing', () => {
     expect(created.format).toBe('markup');
 
     const put = await putArtifact(
-      request(`/api/artifacts/${created.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>Second</h1>', theme: 'industry' } }),
+      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>Second</h1>', theme: 'industry' } }),
       params({ id: created.id }),
     );
     expect(put.status).toBe(200);
@@ -107,7 +108,7 @@ describe('document editing', () => {
     expect(read.theme).toBe('industry');
 
     const revert = await revertRoute(
-      request(`/api/artifacts/${created.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
+      await observedRequest(`/api/artifacts/${created.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
       params({ id: created.id }),
     );
     expect(revert.status).toBe(200);

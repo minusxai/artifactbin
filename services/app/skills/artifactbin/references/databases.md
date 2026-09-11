@@ -17,7 +17,7 @@ Bearer API (browser equivalents add `/my`):
 
 For a new dataset, omit `datasetId`: the secret remains pending and belongs to its creator. Use that reference for discovery and notebook previews, then publish the dataset to bind it. A bound secret cannot be reused for another dataset. For an existing dataset, pass its `datasetId` when creating a replacement secret and on discovery/preview requests; update the definition with the new reference. Changing any connection setting requires a matching new secret. Send plaintext only as `value` to the secret endpoint, never in dataset markup.
 
-MCP equivalents: `create_dataset_secret`, `discover_dataset_source`, and `preview_dataset_notebook`. Dataset editors control the connection, notebook and whitelist.
+Use `afbin api <path> --method POST --input request.json` for these operations. Dataset editors control the connection, notebook and whitelist.
 
 Dataset secret, discovery and notebook operation failures return `error: "dataset_error"` with a `details` array. HTTP status `400` means invalid or refused input/query; `403` means credentials or access are outside the permitted scope; `404` means the dataset is unavailable to the actor; `503` means stored credentials cannot be decrypted, for example after key rotation. Earlier HTTP authentication, body validation and not-found checks can return other error codes; inspect the status and details together.
 
@@ -67,7 +67,7 @@ The default schema is fixed after creation. A bare `events` resolves only there;
 ```jsx
 <Helmet>
   <Value name="user" type="number" />
-  <Query name="activity" source="<datasetId>">
+  <Query name="activity" source="ref:abc123">
     {`select * from models.activity where $user is null or user_id=$user`}
   </Query>
 </Helmet>
@@ -76,7 +76,7 @@ The default schema is fixed after creation. A bare `events` resolves only there;
 
 `source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
 
-Stored writes use `<Mutation name="edit" source="<datasetId>">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. The dataset must be writable and the viewer must have edit permission. Postgres writes are unavailable.
+Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Writable datasets use one data policy for everyone with view access (Hasura role `viewer`); sharing sets the audience. Owners configure rules through `set_dataset_policy`; editors can inspect with `get_dataset_policy`. No policy means editor-only writes. Postgres writes are unavailable.
 
 ## Preview and freshness
 
@@ -86,6 +86,6 @@ At `/datasets/new`: Connection → Data models notebook → Whitelist → Table 
 
 ## Migration
 
-Existing `ref_<id>` SQL remains supported while migrating. The original alias remains bound to `public.rows` even if more tables are added. New markup should use source.
+Use `source="ref:<id>"` to choose the dataset and its exposed table names in SQL. Flat uploads expose `public.rows`.
 
 Operators run `node scripts/dataset-catalog-migrate.mjs --url <origin>` with `ADMIN__SECRET` in the environment. Dry-run is the default; `--apply` performs it. Inspect the report first. The migration updates catalogs and query declarations in heads and retained versions without changing logical version numbers. Multiple-source queries get explicit upstream queries and retain local joins. Unverifiable SQL, history limits and concurrent edits refuse the affected artifact atomically. Reruns skip completed work. No deployment or production migration happens automatically.

@@ -31,7 +31,7 @@ const island = (html: string): StoryIslandData => {
 
 const DOC = (ds: string) =>
   '<Helmet><Value name="region" type="string" />' +
-  `<Query name="sales">{\`select region, sum(revenue) revenue from ref_${ds} where $region is null or region = $region group by 1 order by 1\`}</Query>` +
+  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
   '</Helmet><div><select value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
 describe('dataflowForRow', () => {
@@ -67,7 +67,7 @@ describe('dataflowForRow', () => {
     const db = await harness.db();
     await db.query('DELETE FROM artifacts WHERE id = $1', [ds]);
     const flow = await dataflowForRow((await getArtifactById(doc))!);
-    expect(flow!.state.errors.sales).toMatch(new RegExp(`ref_${ds}`));
+    expect(flow!.state.errors.sales).toMatch(new RegExp(`ref:${ds}`));
     expect(flow!.state.tables.sales).toBeUndefined();
   });
 });

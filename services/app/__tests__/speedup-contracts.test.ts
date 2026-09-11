@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
 import { useAppHarness, request } from './harness';
@@ -20,7 +21,7 @@ it('create and full replace persist a manifest of the exact final stamped source
   expect(response.status).toBe(201);
   const {id} = await response.json();
   for (let pass=0;pass<2;pass++) {
-    if(pass) expect((await replaceArtifact(request(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{markup:source.replace('Hello','Updated')}}),{params:Promise.resolve({id})})).status).toBe(200);
+    if(pass) expect((await replaceArtifact(await observedRequest(`/api/artifacts/${id}`,{method:'PUT',token:token.token,json:{markup:source.replace('Hello','Updated')}}),{params:Promise.resolve({id})})).status).toBe(200);
     const row = (await getArtifactById(id))!;
     expect(row.source).toMatch(/id="/);
     expect(row.meta.parsedArtifact).toEqual(compileParsedArtifactMetadata(row.source!));

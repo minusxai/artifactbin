@@ -18,6 +18,7 @@
  *   though it is same-host. Verified live: reading localStorage throws.
  * Keep the repo middleware-free so nothing rewrites them.
  */
+import {agentDiscovery} from '@/lib/agent-discovery';
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
@@ -381,7 +382,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
             image: `${base}/a/${artifact.id}/export?mode=card&v=${artifact.version}&r=${CARD_RENDER_GENERATION}`,
           }
           : null,
-    help: chrome ? { docs: `${base}/docs`, tokens: `${base}/tokens/new` } : null,
+    help: chrome ? agentDiscovery(base) : null,
         author: chrome ? { username: creatorUsername, forkedFrom } : null,
         /*
          * THE WAY IN. A guest — no account, so ANONYMOUS_CEILING holds them at
@@ -466,7 +467,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
           'Content-Security-Policy': markupCsp(base, artifact.id, ASSETS_ORIGIN ?? undefined),
-      ...(chrome ? { Link: `<${base}/docs>; rel="help"` } : {}),
+      ...(chrome ? { Link: `<${agentDiscovery(base).url}>; rel="help"` } : {}),
           ...COMMON,
         },
       });

@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkWebImport } from './lib/web-import-cases.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**

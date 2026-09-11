@@ -11,7 +11,7 @@ const create = async (token:string, body:Record<string,unknown>) => {
   expect(res.status,await res.clone().text()).toBe(201);
   return await res.json() as {id:string};
 };
-const markup=(ds:string)=>`<Helmet><Query name="tasks">{\`select * from ref_${ds}\`}</Query><Mutation name="set_status" expectedAffected={1}>{\`update ref_${ds} set status=$_value where id=$_row.id and status is not distinct from $_row.status\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="status"><Select value="$_row.status" options={["backlog","active","done"]} run="$set_status"/></Column></DataTable>`;
+const markup=(ds:string)=>`<Helmet><Query name="tasks" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="set_status" expectedAffected={1} source="ref:${ds}">{\`update public.rows set status=$_value where id=$_row.id and status is not distinct from $_row.status\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="status"><Select value="$_row.status" options={["backlog","active","done"]} run="$set_status"/></Column></DataTable>`;
 describe('editable DataTable feature',()=>{
   it('publishes, updates one cell, and rejects a stale edit without bumping dataset version',async()=>{
     const t=await mintToken('editable');
@@ -57,7 +57,7 @@ describe('editable DataTable feature',()=>{
   it('preserves concurrent different-column edits and rejects one same-cell writer on CAS retry', async () => {
     const t=await mintToken('concurrent');
     const ds=await create(t.token,{dataset:[{id:1,status:'backlog',owner:'TBD'}],access:'readwrite'});
-    const source=markup(ds.id).replace('</Helmet>',`<Mutation name="set_owner" expectedAffected={1}>{\`update ref_${ds.id} set owner=$_value where id=$_row.id and owner is not distinct from $_row.owner\`}</Mutation></Helmet>`).replace('</DataTable>','<Column col="owner"><Select value="$_row.owner" options={["TBD","alice"]} run="$set_owner"/></Column></DataTable>');
+    const source=markup(ds.id).replace('</Helmet>',`<Mutation name="set_owner" expectedAffected={1} source="ref:${ds.id}">{\`update public.rows set owner=$_value where id=$_row.id and owner is not distinct from $_row.owner\`}</Mutation></Helmet>`).replace('</DataTable>','<Column col="owner"><Select value="$_row.owner" options={["TBD","alice"]} run="$set_owner"/></Column></DataTable>');
     const doc=await create(t.token,{markup:source});
     const update=(mutation:string,value:string,row:Record<string,unknown>)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation,values:{_value:value},row}}),{params:Promise.resolve({id:doc.id})});
     const original={id:1,status:'backlog',owner:'TBD'};

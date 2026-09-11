@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Fire-and-forget analytics (lib/analytics.ts + the analytics_events table).
  *
@@ -134,10 +135,10 @@ describe('write events', () => {
     const t = await mintToken('t');
     const doc = await create(t.token, { markup: '<h1>v1</h1>' });
 
-    expect((await putArtifact(request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>v2</h1>' } }), params({ id: doc.id }))).status).toBe(200);
+    expect((await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1>v2</h1>' } }), params({ id: doc.id }))).status).toBe(200);
     await expectEvent(doc.id, 'update');
 
-    expect((await revertRoute(request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }), params({ id: doc.id }))).status).toBe(200);
+    expect((await revertRoute(await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }), params({ id: doc.id }))).status).toBe(200);
     await expectEvent(doc.id, 'revert');
 
     // The delete path is transactional: this completing at all proves the

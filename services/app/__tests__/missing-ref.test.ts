@@ -28,7 +28,7 @@ describe('deleted-ref serving', () => {
 
     const doc = await (
       await createArtifactRoute(
-        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<Helmet><Query name="rows">{\`select * from ref_${ds.id}\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" title="Revenue" /></div>` } }),
+        request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" title="Revenue" /></div>` } }),
       )
     ).json();
     expect(doc.format).toBe('markup');
@@ -49,7 +49,7 @@ describe('deleted-ref serving', () => {
     row = await getArtifactById(doc.id);
     flow = await dataflowForRow(row!); // must not throw
     expect(flow!.state.tables.rows).toBeUndefined();
-    expect(flow!.state.errors.rows).toMatch(new RegExp(`ref_${ds.id}`)); // the query names the missing table
+    expect(flow!.state.errors.rows).toMatch(new RegExp(`ref:${ds.id}`)); // the query names the missing table
     expect(await refDataForRow(row!)).toEqual({});
 
     // The document itself still reads back intact (meta.refs still names the dead id).

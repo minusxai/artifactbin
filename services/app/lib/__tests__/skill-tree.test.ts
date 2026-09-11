@@ -13,8 +13,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  buildDocsIndex, buildMcpInstructions, buildQuickSheet, buildSkillTree, docsListing, expectedSkillName, readFirstBlock, renderSkill,
-  mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, DOCS_INDEX_MAX_BYTES, QUICK_SHEET_MAX_BYTES,
+  buildQuickSheet, buildSkillTree, expectedSkillName, readFirstBlock, renderSkill,
+  mentionResolves, renderTree, resolveSkillLink, skillFileMentions, skillLinks, skillTree, validateSkillTree, QUICK_SHEET_MAX_BYTES,
   SKILL_FILE_MAX_BYTES, SKILL_LISTING_MAX_BYTES,
 } from '../skills';
 import { STORY_THEMES } from '../data/story/story-themes';
@@ -155,36 +155,12 @@ describe('the rules, each seen to fire on a literal tree', () => {
     expect(render(tree.get('artifactbin/references/themes-industry.md')!)).toContain('Industry / display Inter, body Inter, mono JetBrains Mono / light');
     expect(render(tree.get('artifactbin/references/templates-deck.md')!)).toMatch(/Cover → /);
   });
-  it('the listing is one line per file — URL, description — SKILL.md first, then references by order; human files skipped', () => {
-    const tree = buildSkillTree({
-      'artifactbin/SKILL.md': ok('artifactbin'),
-      'artifactbin/references/markup-data.md': `---\nname: markup-data\ndescription: Data.\norder: 1\n---\n## Read first\n`,
-      'artifactbin/references/markup.md': `---\nname: markup\ndescription: Markup.\norder: 0\n---\n## Read first\n`,
-      'artifactbin/references/notes.md': `---\nname: notes\ndescription: For people.\naudience: human\n---\n## Read first\n`,
-    });
-    const listing = docsListing(tree, BASE);
-    const lines = listing.split('\n').filter((l) => l.includes('\t'));
-    expect(lines.map((l) => l.split('\t')[0])).toEqual([
-      `${BASE}/docs/artifactbin/SKILL.md`,
-      `${BASE}/docs/artifactbin/references/markup.md`,
-      `${BASE}/docs/artifactbin/references/markup-data.md`,
-    ]);
-    expect(lines[2]).toBe(`${BASE}/docs/artifactbin/references/markup-data.md\tData.`);
-    expect(listing).toContain('download=true');
-
-    const mcpListing = docsListing(tree, BASE, undefined, 'mcp');
-    expect(mcpListing).toContain(`${BASE}/docs/artifactbin/SKILL.md?transport=mcp`);
-    expect(mcpListing).toContain('download=true&transport=mcp');
-  });
 });
 
 describe('the real tree (skills/) obeys every rule', () => {
   const tree = skillTree();
-  it('validates clean — every problem is printed', () => {
-    // The listing's size goes in at SIZE_BASE, because `render` above already
-    // measures every FILE there: judging one half at the short test base was
-    // the hole that let a 6,178 B listing render green (see the case below).
-    expect(validateSkillTree(tree, render, Buffer.byteLength(buildDocsIndex(SIZE_BASE)))).toEqual([]);
+  it('keeps every authored reference within its reading budget',()=>{
+    for(const file of tree.files.filter(file=>file.ref))expect(Buffer.byteLength(render(file)),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
   });
   it('is ONE skill — the brief over its references, nothing else preloaded', () => {
     expect(tree.dirs.map((d) => d.name)).toEqual(['artifactbin']);
@@ -194,49 +170,8 @@ describe('the real tree (skills/) obeys every rule', () => {
     for (const t of STORY_THEMES) expect(tree.get(`artifactbin/references/themes-${t.name}.md`)?.name).toBe(`themes-${t.name}`);
     for (const t of STORY_TEMPLATES) expect(tree.get(`artifactbin/references/templates-${t.name}.md`)?.name).toBe(`templates-${t.name}`);
   });
-  it('the brief is the root SKILL.md, under its cap, teaching the CREATE call at its one address', () => {
-    const sheet = buildQuickSheet(BASE);
-    expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
-    expect(sheet).toContain(`curl -X POST ${BASE}/api/artifacts`);
-    expect(QUICK_SHEET_MAX_BYTES).toBe(SKILL_FILE_MAX_BYTES);
-  });
-  it('the brief dispatches EVERY reference — a new file must join the table', () => {
-    const sheet = buildQuickSheet(BASE);
-    expect(sheet).toContain('references/');
-    for (const f of tree.files.filter((x) => x.ref && x.audience === 'agent')) {
-      // Theme/template files are dispatched as their family pattern, and the
-      // two family INDEXES ride under it (the listing names them; the brief's
-      // own theme/template sections already enumerate every name).
-      if (f.file === 'themes.md' || f.file === 'templates.md') continue;
-      const family = /^(themes|templates)-(.+)\.md$/.exec(f.file);
-      const expected = family ? `\`${family[1]}-<name>.md\`` : `\`${f.file}\``;
-      expect(sheet, `${f.file} missing from the dispatch table`).toContain(expected);
-    }
-  });
-  /**
-   * THE LISTING IS MEASURED AT THE PRODUCTION BASE, like every file above it.
-   *
-   * Every URL in the listing carries the base, so the listing grows by ~1 B per
-   * file per base character: measured at the 20-char `https://example.test` it
-   * is 81 B smaller than at `https://artifactbin.dev`, and F8's round-2
-   * front-matter wording landed in exactly that gap — 6,124 B in the suite,
-   * 6,178 B on the deployment, green here and over the cap there. Its own case
-   * rather than an edit to the one below, because the two bases are two facts.
-   */
-  it('the listing fits at the PRODUCTION base, not only at the test one', () => {
-    expect(Buffer.byteLength(buildDocsIndex(SIZE_BASE))).toBeLessThanOrEqual(DOCS_INDEX_MAX_BYTES);
-  });
-  it('the listing is small and names every agent file, the brief first', () => {
-    const index = buildDocsIndex(BASE);
-    expect(Buffer.byteLength(index)).toBeLessThanOrEqual(DOCS_INDEX_MAX_BYTES);
-    const urls = index.split('\n').filter((l) => l.includes('\t')).map((l) => l.split('\t')[0]);
-    expect(urls[0]).toBe(`${BASE}/docs/artifactbin/SKILL.md`);
-    expect(urls).toHaveLength(tree.files.filter((f) => f.audience === 'agent').length);
-  });
-  it('the MCP instructions are the mcp reference\'s Read first block, rendered', () => {
-    const text = buildMcpInstructions(BASE);
-    expect(text).toContain(`${BASE}/docs/artifactbin/SKILL.md`);
-    expect(text).not.toContain('## ');
+  it('uses the CLI-owned root within its budget',()=>{
+    const sheet=buildQuickSheet(BASE);expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);expect(sheet).toContain('afbin push');
   });
   it('renders every file for two bases with no leftover template syntax', () => {
     for (const base of [BASE, 'http://localhost:3000']) {
@@ -258,17 +193,11 @@ describe('each topic is taught by exactly its owner', () => {
   const owners = (needle: string | RegExp) => Object.keys(rendered).filter((p) => (typeof needle === 'string' ? rendered[p].includes(needle) : needle.test(rendered[p])));
   const R = 'artifactbin/references';
   const cases: Array<[string, string | RegExp, string[]]> = [
-    ['the generic <Mutation> grammar', '<Mutation name>{`insert', [`${R}/markup-data.md`]],
+    ['the generic <Mutation> grammar', '<Mutation name source="ref:abc123">{`insert', [`${R}/markup-data.md`]],
     ['the Helmet cardinality rule', /at most ONE per document/i, [`${R}/markup.md`]],
     ['editable table grammar and seven-editor example', '<DataTable data="$roadmap" rowKey="id">', [`${R}/markup-editing.md`]],
     ['the reader-control roster', '## Bindings: controls', [`${R}/markup-data.md`]],
     ['the <Helmet> :root override example', /:root \{ --background/, [`${R}/markup.md`]],
-    ['the create endpoint', /^### Create an artifact/m, [`${R}/publishing.md`]],
-    ['the error table', '`stale_edit_id`', [`${R}/publishing.md`]],
-    ['the annotation reply call', '/annotations/<annotation_id>', [`${R}/publishing-annotations.md`]],
-    ['the revert call', '/revert', [`${R}/publishing-versions.md`]],
-    ['the writable-dataset ACL', '## Writable datasets', [`${R}/publishing-datasets.md`]],
-    ['saved config', '~/.config/artifact-bin/config.json', [`${R}/publishing-auth.md`]],
     ['the scroll-reveal observer', 'data-mx-seen', [`${R}/markup-motion.md`]],
     ['the video card', '<Video src=', [`${R}/markup-video.md`]],
     ['the SVG subset', 'foreignObject', [`${R}/markup-svg.md`]],

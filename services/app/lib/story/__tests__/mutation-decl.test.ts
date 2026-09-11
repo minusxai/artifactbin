@@ -27,11 +27,11 @@ const flowOf = (helmetChildren: string): Dataflow => {
 
 describe('parseMutationDecl', () => {
   it('parses name, SQL, $params and the one dataset it writes', () => {
-    const r = parseMutationDecl(element('<Mutation name="add">{`insert into ref_abc123 (a, b) values ($a, $b)`}</Mutation>'));
+    const r = parseMutationDecl(element('<Mutation name="add" source="ref:abc123">{`insert into public.rows (a, b) values ($a, $b)`}</Mutation>'));
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.decl).toMatchObject({ name: 'add', params: ['a', 'b'], target: 'abc123', refs: ['abc123'] });
-    expect(r.decl.sql).toContain('insert into ref_abc123');
+    expect(r.decl.sql).toContain('insert into public.rows');
   });
 
   it('parses a syntactic local target, and refuses a mutation naming two datasets', () => {
@@ -40,7 +40,7 @@ describe('parseMutationDecl', () => {
     if (local.ok) expect(local.decl).toMatchObject({ target: 'sales', scope: 'local' });
     const two = parseMutationDecl(element('<Mutation name="mv">{`insert into ref_aaaaaa select * from ref_bbbbbb`}</Mutation>'));
     expect(two.ok).toBe(false);
-    if (!two.ok) expect(two.errors[0].message).toMatch(/exactly one dataset/i);
+    if (!two.ok) expect(two.errors[0].message).toMatch(/Implicit SQL artifact references/i);
   });
 
   it('refuses the Query mistakes too: a sql= attribute, empty SQL, a non-literal child', () => {
@@ -55,8 +55,8 @@ describe('parseMutationDecl', () => {
 describe('<Helmet> grammar', () => {
   it('accepts <Mutation> beside <Value> and <Query>, and splits it into content.mutations', () => {
     const nodes = parse(
-      '<Helmet><Value name="a" type="number" /><Query name="rows">{`select * from ref_abc123`}</Query>'
-      + '<Mutation name="add">{`insert into ref_abc123 (a) values ($a)`}</Mutation></Helmet><p>hi</p>',
+      '<Helmet><Value name="a" type="number" /><Query name="rows" source="ref:abc123">{`select * from public.rows`}</Query>'
+      + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation></Helmet><p>hi</p>',
     );
     expect(validateHelmet(nodes)).toEqual([]);
     const { content, body } = splitHelmet(nodes);
@@ -65,7 +65,7 @@ describe('<Helmet> grammar', () => {
   });
 
   it('reports a malformed Mutation with the Mutation tag, and names <Mutation> in the child list', () => {
-    const errors = validateHelmet(parse('<Helmet><Mutation name="x">{`update ref_abc123 set a = 1 where b = 2; delete from ref_abc123`}</Mutation></Helmet>'));
+    const errors = validateHelmet(parse('<Helmet><Mutation name="x" source="ref:abc123">{`update public.rows set a = 1 where b = 2; delete from public.rows`}</Mutation></Helmet>'));
     // Two statements are the engine's business (it counts them); the parser
     // only refuses shapes. But a bare <b> child is not a Helmet child at all.
     expect(errors).toEqual([]);
@@ -74,7 +74,7 @@ describe('<Helmet> grammar', () => {
   });
 
   it('declaresMutations / declaresLiveData answer from the parsed Helmet only', () => {
-    const src = '<Helmet><Mutation name="add">{`insert into ref_abc123 (a) values ($a)`}</Mutation></Helmet><p>&lt;Mutation&gt; in prose</p>';
+    const src = '<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation></Helmet><p>&lt;Mutation&gt; in prose</p>';
     expect(declaresMutations(src)).toBe(true);
     expect(declaresLiveData(src)).toBe(true);
     expect(declaresMutations('<p>Mutation</p>')).toBe(false);
@@ -87,8 +87,8 @@ describe('validateDataflow with mutations', () => {
   const FLOW = flowOf(
     '<Value name="a" type="number" />'
     + '<Value name="tbl" type="table" value={[{"x":1}]} />'
-    + '<Query name="rows">{`select * from ref_abc123`}</Query>'
-    + '<Mutation name="add">{`insert into ref_abc123 (a) values ($a)`}</Mutation>',
+    + '<Query name="rows" source="ref:abc123">{`select * from public.rows`}</Query>'
+    + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>',
   );
   const uses = (body: string) => collectRefNameUses(parse(body));
 
@@ -108,7 +108,7 @@ describe('validateDataflow with mutations', () => {
   });
 
   it('names are one namespace across Value, Query and Mutation', () => {
-    const dup = flowOf('<Query name="add">{`select 1`}</Query><Mutation name="add">{`insert into ref_abc123 (a) values (1)`}</Mutation>');
+    const dup = flowOf('<Query name="add">{`select 1`}</Query><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation>');
     const errors = validateDataflow(dup, []);
     expect(errors.some((e) => /declared twice/.test(e.message))).toBe(true);
   });
@@ -116,8 +116,8 @@ describe('validateDataflow with mutations', () => {
   it('a mutation $param must name a scalar Value', () => {
     const bad = flowOf(
       '<Value name="tbl" type="table" value={[{"x":1}]} />'
-      + '<Mutation name="add">{`insert into ref_abc123 (a) values ($tbl)`}</Mutation>'
-      + '<Mutation name="add2">{`insert into ref_abc123 (a) values ($ghost)`}</Mutation>',
+      + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values ($tbl)`}</Mutation>'
+      + '<Mutation name="add2" source="ref:abc123">{`insert into public.rows (a) values ($ghost)`}</Mutation>',
     );
     const errors = validateDataflow(bad, []);
     expect(errors.map((e) => e.message).join('\n')).toMatch(/<Mutation name="add"> binds \$tbl, but "tbl" is a table/);
@@ -127,11 +127,11 @@ describe('validateDataflow with mutations', () => {
 
 describe('what a dataset write invalidates', () => {
   const FLOW = flowOf(
-    '<Query name="rows">{`select * from ref_abc123`}</Query>'
+    '<Query name="rows" source="ref:abc123">{`select * from public.rows`}</Query>'
     + '<Query name="top">{`select * from rows limit 1`}</Query>'
-    + '<Query name="other">{`select * from ref_zzzzzz`}</Query>'
+    + '<Query name="other" source="ref:zzzzzz">{`select * from public.rows`}</Query>'
     + '<Query name="both">{`select * from other union all select * from top`}</Query>'
-    + '<Mutation name="add">{`insert into ref_abc123 (a) values (1)`}</Mutation>',
+    + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation>',
   );
 
   it('queriesReadingDatasets: the readers and everything downstream, in run order', () => {
@@ -142,14 +142,14 @@ describe('what a dataset write invalidates', () => {
 
   it('mutationTargets lists the datasets a document writes; a mutation alone is not an empty dataflow', () => {
     expect(mutationTargets(FLOW)).toEqual(['abc123']);
-    expect(isEmptyDataflow(flowOf('<Mutation name="add">{`insert into ref_abc123 (a) values (1)`}</Mutation>'))).toBe(false);
+    expect(isEmptyDataflow(flowOf('<Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation>'))).toBe(false);
     expect(isEmptyDataflow({ values: [], queries: [] })).toBe(true);
   });
 
   it('storyUpdateParts carries mutations and its declarations signature moves when one changes', () => {
-    const a = storyUpdateParts('<Helmet><Mutation name="add">{`insert into ref_abc123 (a) values (1)`}</Mutation></Helmet><p>x</p>')!;
-    const b = storyUpdateParts('<Helmet><Mutation name="add">{`insert into ref_abc123 (a) values (2)`}</Mutation></Helmet><p>x</p>')!;
-    const c = storyUpdateParts('<Helmet><Mutation name="add">{`insert into ref_abc123 (a) values (1)`}</Mutation></Helmet><p>y</p>')!;
+    const a = storyUpdateParts('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation></Helmet><p>x</p>')!;
+    const b = storyUpdateParts('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (2)`}</Mutation></Helmet><p>x</p>')!;
+    const c = storyUpdateParts('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows (a) values (1)`}</Mutation></Helmet><p>y</p>')!;
     expect(a.flow.mutations?.map((m) => m.name)).toEqual(['add']);
     expect(a.declarations).not.toBe(b.declarations);
     expect(a.declarations).toBe(c.declarations);

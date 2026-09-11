@@ -1,4 +1,5 @@
 /** Real sandbox: optional library loading, GLB assets, WebGL paint, isolation, export. */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import sharp from 'sharp';

@@ -40,7 +40,7 @@ async function create(body: Record<string, unknown>) {
 
 const wrap = (inner: string) => `<div data-design="tw" className="@container p-6">${inner}</div>`;
 /** The document declares its table: a <Query> over the dataset, bound as `$rows`. */
-const declared = (inner: string) => `<Helmet><Query name="rows">{\`select * from ref_${datasetId}\`}</Query></Helmet>` + wrap(inner);
+const declared = (inner: string) => `<Helmet><Query name="rows" source="ref:${datasetId}">{\`select * from public.rows\`}</Query></Helmet>` + wrap(inner);
 
 describe('a Question that cannot resolve is refused', () => {
   it('rejects the exact shape ChatGPT published', async () => {
@@ -70,8 +70,8 @@ describe('a Question that cannot resolve is refused', () => {
     expect(status).toBe(400);
     const message = body.details[0].message as string;
     expect(message).toMatch(/does not name a declared table/);
-    expect(message).toContain(`ref_${datasetId}`);
-    expect(message).toMatch(/<Query name="rows">/);
+    expect(message).toContain(`ref:${datasetId}`);
+    expect(message).toMatch(/<Query name="rows" source="ref:/);
   });
 
   it('names the single_value shape when singleValueConfig is written without kind: "single_value"', async () => {
@@ -211,7 +211,8 @@ describe('a JSX syntax error points at the character', () => {
  */
 describe('a viz that is a bare spec instead of an envelope', () => {
   const q = (viz: string) =>
-    `<Helmet><Query name="q">{\`select a from ref_abc123\`}</Query></Helmet>\n<Question data="$q" viz={${viz}} />`;
+    `<Helmet><Query name="q" source="ref:abc123">{\`select a from public.rows\`}</Query></Helmet>
+<Question data="$q" viz={${viz}} />`;
 
   it('is refused, and the message shows the wrapper', () => {
     const errs = findBrokenEmbeds(q('{"mark":"line","encoding":{"x":{"field":"a","type":"ordinal"}}}'));
@@ -226,6 +227,6 @@ describe('a viz that is a bare spec instead of an envelope', () => {
 
   /** A `<Question>` with no viz at all is the themed TABLE, and stays legal. */
   it('leaves a viz-less Question alone', () => {
-    expect(findBrokenEmbeds('<Helmet><Query name="q">{`select a from ref_abc123`}</Query></Helmet>\n<Question data="$q" />')).toEqual([]);
+    expect(findBrokenEmbeds('<Helmet><Query name="q" source="ref:abc123">{`select a from public.rows`}</Query></Helmet>\n<Question data="$q" />')).toEqual([]);
   });
 });

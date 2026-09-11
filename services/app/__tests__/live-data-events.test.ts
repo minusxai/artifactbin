@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * A document's live stream hears its DATASETS, not only itself. Every write to
  * a dataset already ends in a NOTIFY on that dataset's channel; the stream of
@@ -67,13 +68,13 @@ describe('GET /a/<id>/events hears the document\'s datasets', () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS, access: 'readwrite' })).id;
     const doc = (await create(t.token, {
-      markup: `<Helmet><Query name="q">{\`select * from ref_${ds}\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
+      markup: `<Helmet><Query name="q" source="ref:${ds}">{\`select * from public.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
     })).id;
     const res = await eventsRoute(request(`/a/${doc}/events`), params({ id: doc }));
     expect(res.status).toBe(200);
     // The document and its one dataset: two channels for one stream.
     expect(liveChannelCount()).toBe(2);
-    const write = mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into ref_${ds} (choice) values ('tacos')` } }), params({ id: ds }));
+    const write = mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `insert into public.rows (choice) values ('tacos')` } }), params({ id: ds }));
     const events = await readEvents(res.body!, 2);
     expect((await write).status).toBe(200);
     // Both arrive; their ORDER is not a promise the stream makes (the opening
@@ -120,12 +121,12 @@ describe('GET /a/<id>/events hears the document\'s datasets', () => {
     const t = await mintToken('t');
     const ds = (await create(t.token, { dataset: ROWS })).id;
     const reader = (await create(t.token, {
-      markup: `<Helmet><Query name="q">{\`select * from ref_${ds}\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
+      markup: `<Helmet><Query name="q" source="ref:${ds}">{\`select * from public.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>`,
     })).id;
     const bystander = (await create(t.token, { markup: '<div><p>nothing here</p></div>' })).id;
     const a = await eventsRoute(request(`/a/${reader}/events`), params({ id: reader }));
     const b = await eventsRoute(request(`/a/${bystander}/events`), params({ id: bystander }));
-    const refresh = putArtifactRoute(request(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: [...ROWS, { choice: 'salad' }] } }), params({ id: ds }));
+    const refresh = putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: [...ROWS, { choice: 'salad' }] } }), params({ id: ds }));
     const [ea, eb] = await Promise.all([readEvents(a.body!, 2), readEvents(b.body!, 2, 800)]);
     expect((await refresh).status).toBe(200);
     expect(ea.some((e) => e.event === 'data' && (e.data.datasets as string[]).includes(ds))).toBe(true);
@@ -138,7 +139,7 @@ describe('GET /a/<id>/events hears the document\'s datasets', () => {
     const doc = (await create(t.token, { markup: '<div><p>prose</p></div>' })).id;
     const res = await eventsRoute(request(`/a/${doc}/events`), params({ id: doc }));
     expect(liveChannelCount()).toBe(1);
-    const edit = await putArtifactRoute(request(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: `<Helmet><Query name="q">{\`select * from ref_${ds}\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>` } }), params({ id: doc }));
+    const edit = await putArtifactRoute(await observedRequest(`/api/artifacts/${doc}`, { method: 'PUT', token: t.token, json: { markup: `<Helmet><Query name="q" source="ref:${ds}">{\`select * from public.rows\`}</Query></Helmet><div><Question data="$q" viz={{"kind":"table"}} /></div>` } }), params({ id: doc }));
     expect(edit.status).toBe(200);
     // The opening frame, then the edit's frame; by then the stream follows the dataset.
     const first = await readEvents(res.body!, 2);

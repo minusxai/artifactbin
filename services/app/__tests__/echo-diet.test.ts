@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * A write echoes the stored document only when storing CHANGED it.
  *
@@ -64,12 +65,12 @@ describe('the write echo is present only when it is news', () => {
 
   it('a PUT follows the same rule', async () => {
     const { body: made } = await create(CANONICAL);
-    const unchanged = await (await putArtifact(request(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: CANONICAL } }), params({ id: made.id }))).json();
+    const unchanged = await (await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: CANONICAL } }), params({ id: made.id }))).json();
     expect(unchanged.markup_changed).toBe(false);
     expect(unchanged.markup).toBeUndefined();
     expect(unchanged.edit_id).toEqual(expect.any(String));
 
-    const rewritten = await (await putArtifact(request(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: NEEDS_REWRITE } }), params({ id: made.id }))).json();
+    const rewritten = await (await putArtifact(await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: NEEDS_REWRITE } }), params({ id: made.id }))).json();
     expect(rewritten.markup_changed).toBe(true);
     expect(rewritten.markup).toEqual(expect.any(String));
   });
@@ -88,7 +89,7 @@ describe('the write echo is present only when it is news', () => {
   it('a write that carried no markup at all is unaffected — nothing to compare against', async () => {
     const { body: made } = await create(CANONICAL);
     const res = await putArtifact(
-      request(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: CANONICAL, title: 'Named' } }),
+      await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: token, json: { markup: CANONICAL, title: 'Named' } }),
       params({ id: made.id }),
     );
     const body = await res.json();

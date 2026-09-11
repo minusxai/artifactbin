@@ -15,7 +15,7 @@ async function fixture(){
  const user=await createUser({email:'mxmx_test_dataset_friend@example.com'});await claimToken(user.id,friend.token);
  const publish=async(body:object)=>{const r=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:body}));expect(r.status,await r.clone().text()).toBe(201);return (await r.json()).id as string;};
  const ds=await publish({dataset:[{n:1}],access:'readwrite'});
- const doc=await publish({markup:`<Helmet><Query name="rows">{\`select * from ref_${ds}\`}</Query><Mutation name="add">{\`insert into ref_${ds} values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ const doc=await publish({markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values (2)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
  const cookie=await agentCookie([friend.id]);
  const write=(auth?:string)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'add'}}),ctx(doc));
  const permissions=async(auth?:string)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',cookie:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};

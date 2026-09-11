@@ -31,22 +31,7 @@ import { OPERATIONS } from '@/lib/operations/registry';
 import { anonymousClaimRelay } from '@/lib/agent-copy';
 import type { SkillFile } from './tree';
 
-/**
- * Which action transport a rendering TEACHES: `curl` for API calls, `mcp` for
- * tool calls. Delivery (HTTP-served or installed) is a separate option because
- * either action vocabulary can travel either way. The variation is carried by COMPUTED
- * GLOBALS (`publishExample`, `editExample`), never by `if` in a file.
- */
-export type DocTransport = 'curl' | 'mcp';
-export type SkillDelivery = 'http' | 'installed';
-
-export interface RenderOptions {
-  /** The caller's own origin, e.g. `https://artifactbin.dev`. */
-  base: string;
-  transport?: DocTransport;
-  /** Where references live; independent of the compiled action vocabulary. */
-  delivery?: SkillDelivery;
-}
+export interface RenderOptions { base: string }
 
 const env = new nunjucks.Environment(null, {
   autoescape: false,
@@ -55,84 +40,6 @@ const env = new nunjucks.Environment(null, {
   lstripBlocks: true,
   tags: { variableStart: '[[', variableEnd: ']]', blockStart: '[%', blockEnd: '%]', commentStart: '[[#', commentEnd: '#]]' },
 });
-
-/** The publish example the brief opens with, per transport (see DocTransport). */
-function publishExample(base: string, transport: DocTransport): string {
-  return transport === 'mcp'
-    ? '```\ncreate_artifact({ "title": "…", "markup": "…", "theme": "industry", "template": "deck" })\n```'
-    : '```bash\ncurl -X POST ' + base + '/api/artifacts \\\n  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \\\n  -d \'{"title":"…","markup":"…","theme":"industry","template":"deck"}\'\n```';
-}
-
-/** The targeted-edit example, per transport. */
-function editExample(base: string, transport: DocTransport): string {
-  return transport === 'mcp'
-    ? '```\nedit_artifact({ "id": "<id>", "edit_id": "…", "old_string": "exact text once in the document", "new_string": "replacement" })\n```'
-    : '```bash\ncurl -X POST ' + base + '/api/artifacts/<id>/edits \\\n  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \\\n  -d \'{"edit_id":"…","old_string":"exact text once in the document","new_string":"replacement"}\'\n```';
-}
-
-/** How the read-before-edit is made, per transport. */
-function readBackCall(base: string, transport: DocTransport): string {
-  return transport === 'mcp' ? '`get_artifact`' : `\`GET ${base}/api/artifacts/<id>\``;
-}
-
-/** The auth rule, per transport: MCP is authenticated by the connection; HTTP by the bearer on every call. */
-/**
- * AUTH, AND THE ONE THING TO DO WHEN THERE IS NO TOKEN.
- *
- * The rule that an agent with no credential must STOP and hand its human a
- * DOOR — the token page, or the plugin/MCP that needs no token at all — lived
- * only in `publishing-auth.md`. Measured on the CI eval (run 33874008704): an
- * agent read the brief, correctly concluded it had no token, refused, did not
- * self-mint and did not fabricate — and then said only "please provide a
- * bearer token", because it had read one file and made one request and so had
- * never seen the door. `/api` was never called, so the 403 that carries the
- * ladder never arrived either. A correct refusal that leaves the person
- * exactly where they started, twice in a row.
- *
- * So the brief carries it. Paid for in place (six wording reclaims in
- * SKILL.md) rather than by growing the file: the rendered brief is measured at
- * the PRODUCTION base against a hard 8,192 B cap, and the margin was 18 B.
- */
-function authRule(base: string, transport: DocTransport): string {
-  return transport === 'mcp'
-    ? '**The MCP connection is already authenticated — every call is a tool call; there is no token to manage.**'
-    : '**Every `/api` call, `GET` included, sends `Authorization: Bearer <token>`.**\n'
-      + `No token? Never mint one — send your human to ${base}/tokens/new, or\n`
-      + 'the plugin/MCP.';
-}
-
-/**
- * Checking your own render, per transport. The PNG lives at a URL in both
- * worlds (export is a page feature, not an operation), but only the curl
- * rendering phrases it as a request to make — the plugin rendering offers it
- * as the page's address and sends re-reads through the tool.
- */
-function checkWork(base: string, transport: DocTransport): string {
-  return transport === 'mcp'
-    ? 'A successful tool call already validated the document. `export_artifact`\nreturns it as a PNG (`slide: 2` for one deck slide, 1-based) — call it only if\nyou can actually view images; otherwise re-read the markup with `get_artifact`.'
-    : `A 200 already validated the document. \`GET ${base}/a/<id>/export\`\nrenders it as a PNG (\`?slide=2\` for one deck slide, 1-based) — fetch it only if\nyou can actually view images; otherwise read the stored markup back.`;
-}
-
-/**
- * How to reach MORE docs, per delivery. An HTTP agent fetches by URL (with the
- * action compiler preserved in the query); an installed agent opens the files
- * beside the skill.
- */
-function docsMoreLine(base: string, transport: DocTransport, delivery: SkillDelivery): string {
-  if (delivery === 'installed') {
-    return 'Open ONE — the files sit under `references/` beside this skill (`grep -rl <term> references/` finds the owner).';
-  }
-  const query = transport === 'mcp' ? '?transport=mcp' : '';
-  const archiveQuery = transport === 'mcp' ? '&transport=mcp' : '';
-  return `Fetch \`${base}/docs/artifactbin/references/<file>${query}\`; the whole folder:\n\`curl -s "${base}/docs?download=true${archiveQuery}" | tar xz\`, then \`grep -rl\` it.\nNo OpenAPI, no Swagger, no \`/api/docs\`: a guess is a 404.`;
-}
-
-/** Where the file list lives (the dispatch-table intro's parenthetical). */
-function docsIndexHint(base: string, transport: DocTransport, delivery: SkillDelivery): string {
-  if (delivery === 'installed') return 'all beside this file under `references/`';
-  return transport === 'mcp' ? `\`${base}/docs?transport=mcp\` lists them all` : `\`${base}/docs\` lists them all`;
-}
-
 
 const REGISTRY_GLOBALS = {
   /** The operations registry, projected for the docs: what exists, at which address, under which tool name. */
@@ -154,13 +61,11 @@ const REGISTRY_GLOBALS = {
   maxPdfBytes: MAX_PDF_BYTES.toLocaleString('en-US'),
   /** The cap on how many external urls ONE document may import (images, faces and PDFs). */
   maxExternalAssets: MAX_EXTERNAL_ASSETS_PER_PUBLISH,
-  /** ONE sentence for the MCP schema and the docs — the rule that figures are computed, never typed. */
+  /** One shared sentence for validation and authoring guidance — the rule that figures are computed, never typed. */
   computedFigureRule: COMPUTED_FIGURE_RULE,
 };
 
 export function renderSkill(file: SkillFile, opts: RenderOptions): string {
-  const transport = opts.transport ?? 'curl';
-  const delivery = opts.delivery ?? (transport === 'mcp' ? 'installed' : 'http');
   // ONE source for this advice: agent-copy's fifth string, the line an agent relays about an orphaned
   // document. The docs render it for a stand-in id, so the words a reader sees are the words we hand over.
   const claim = anonymousClaimRelay(opts.base, '<id>');
@@ -173,13 +78,13 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       ...REGISTRY_GLOBALS,
       base: opts.base,
       claim,
-      publishExample: publishExample(opts.base, transport),
-      editExample: editExample(opts.base, transport),
-      readBackCall: readBackCall(opts.base, transport),
-      authRule: authRule(opts.base, transport),
-      checkWork: checkWork(opts.base, transport),
-      docsMoreLine: docsMoreLine(opts.base, transport, delivery),
-      docsIndexHint: docsIndexHint(opts.base, transport, delivery),
+      publishExample: '```sh\nafbin push report.jsx\n```',
+      editExample: 'Edit the local JSX file, then run `afbin push report.jsx`.',
+      readBackCall: '`afbin pull`',
+      authRule: 'Run `afbin setup` for browser approval and local skill selection.',
+      checkWork: 'Run `afbin validate report.jsx` locally before `afbin push report.jsx`. Use `afbin help operations` for image export.',
+      docsMoreLine: 'Open the relevant local file in `references/` beside this skill.',
+      docsIndexHint: 'all beside this file under `references/`',
       ...own,
     }).replace(/\n{3,}/g, '\n\n');
   } catch (error) {

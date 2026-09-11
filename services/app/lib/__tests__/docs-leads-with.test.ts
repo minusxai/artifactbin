@@ -15,7 +15,7 @@
  * with byte budgets that are the measured cut points, not round numbers.
  */
 import { describe, it, expect } from 'vitest';
-import { buildDocsIndex, buildQuickSheet, renderDoc, DOCS_INDEX_MAX_BYTES } from '../skills';
+import { buildQuickSheet, renderDoc } from '../skills';
 import { STORY_TEMPLATES } from '../data/story/story-templates';
 import { STORY_THEMES } from '../data/story/story-themes';
 
@@ -24,45 +24,9 @@ const head = (doc: string, bytes: number) => Buffer.from(doc, 'utf8').subarray(0
 const within = (doc: string, bytes: number, needle: string) =>
   expect(head(doc, bytes), `"${needle}" must sit within the first ${bytes} bytes`).toContain(needle);
 
-describe('/llms.txt and /docs are ONE small listing — never a second copy of a large doc', () => {
-  const index = buildDocsIndex(BASE);
-  it('is small enough to cost nothing to fetch twice', () => {
-    expect(Buffer.byteLength(index)).toBeLessThanOrEqual(DOCS_INDEX_MAX_BYTES);
-  });
-  it('lists every skill, the brief first, then the API', () => {
-    const pages = ['/docs/artifactbin/SKILL.md', '/docs/artifactbin/references/design.md', '/docs/artifactbin/references/markup.md', '/docs/artifactbin/references/publishing.md', '/docs/artifactbin/references/templates.md', '/docs/artifactbin/references/themes.md'];
-    let last = -1;
-    for (const page of pages) {
-      const at = index.indexOf(`${BASE}${page}`);
-      expect(at, `${page} must be linked`).toBeGreaterThan(-1);
-      expect(at, `${page} must come after the previous page`).toBeGreaterThan(last);
-      last = at;
-    }
-  });
-  it('says the critical content is at the TOP — once, about all of them', () => {
-    expect(index.toLowerCase()).toMatch(/critical[^\n]{0,40}at the top/);
-  });
-  it('is not the protocol doc', () => {
-    expect(index).not.toContain('## Endpoints');
-    expect(index).not.toContain('POST ' + BASE + '/api/artifacts');
-  });
-});
-
-describe('the publishing skill opens with the essentials', () => {
-  const doc = renderDoc('artifactbin/references/publishing.md', BASE);
-  it('the first 2,000 bytes carry the publish call, the bearer rule, and where the rest is', () => {
-    within(doc, 2000, `POST ${BASE}/api/artifacts`);
-    within(doc, 2000, 'Every `/api` call, `GET` included');
-    within(doc, 2000, '[auth](publishing-auth.md)');
-    within(doc, 2000, '[datasets](publishing-datasets.md)');
-    within(doc, 2000, '[markup.md](markup.md)');
-  });
-  it('`head -c 6000` really is the whole briefing (rules, create, the public-link fix)', () => {
-    within(doc, 6000, '## Rules every document lives by');
-    within(doc, 6000, '### Create an artifact');
-    // The FIX sentence, not the example line that merely shows the field.
-    within(doc, 6000, '`"visibility": "public"` or `"unlisted"`');
-  });
+it('the local root leads with the common pull/edit/push workflow',()=>{
+ const text=buildQuickSheet(BASE);
+ within(text,2000,'afbin pull');within(text,2000,'afbin push');within(text,2000,'afbin validate');
 });
 
 describe('the markup skill teaches vocabulary before configuration', () => {
@@ -124,7 +88,8 @@ describe('the brief — the one text every agent reads', () => {
   const sheet = buildQuickSheet(BASE);
   it('carries the data vocabulary a dashboard needs (sourced Query, bound by $name)', () => {
     expect(sheet).toContain('<Query');
-    expect(sheet).toContain('source="<datasetId>"');
+    expect(sheet).toContain('source="./sales.csv"');
+    expect(sheet).toContain('ref:<id>');
     expect(sheet).toContain('public.rows');
     expect(sheet).toContain('data="$');
   });
@@ -134,7 +99,7 @@ describe('the brief — the one text every agent reads', () => {
   it('the hard rules and the data block are adjacent — no theme prose between them', () => {
     const rules = sheet.indexOf('self-contained');
     const data = sheet.indexOf('<Query');
-    const theme = sheet.indexOf('**theme**');
+    const theme = sheet.indexOf('afbin help themes');
     expect(rules).toBeGreaterThan(-1);
     expect(Math.abs(data - rules)).toBeLessThan(2500);
     expect(theme).toBeGreaterThan(Math.min(rules, data));

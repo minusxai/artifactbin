@@ -68,10 +68,11 @@ describe('every theme page names the token class its accent means', () => {
   }
 });
 
-describe('the brief says the bearer travels on EVERY /api call, GET included', () => {
+describe('the brief delegates authentication to setup', () => {
   it('in one line', () => {
     const sheet = buildQuickSheet(BASE);
-    expect(sheet).toMatch(/Every `\/api` call, `GET` included, sends `Authorization: Bearer/);
+    expect(sheet).toContain('afbin setup');
+    expect(sheet).toContain('~/.artifactbin/.env');
   });
 });
 

@@ -1,11 +1,11 @@
-/** OAuth 2.1 for `/mcp`, implemented over the auth domain's clients and credentials. */
+/** OAuth 2.1 for `/api`, implemented over the auth domain's clients and credentials. */
 import { createHash, randomBytes } from 'node:crypto';
-import type { Queryable } from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
 
 export const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 export const ACCESS_TOKEN_TTL_SECONDS = 6 * 60 * 60;
 export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-export const MCP_SCOPE = 'artifacts';
+export {ARTIFACT_SCOPE} from '@artifactbin/contracts';
 
 const AUTHORIZATION_CODE = 'authorization_code';
 const REFRESH_TOKEN = 'refresh_token';
@@ -86,7 +86,7 @@ function registration(body: Record<string, unknown>): { clientName: string; redi
   if (body.grant_types !== undefined && (!Array.isArray(body.grant_types) || body.grant_types.some((grant) => grant !== AUTHORIZATION_CODE && grant !== REFRESH_TOKEN))) throw new Error('unsupported grant_types');
   if (body.response_types !== undefined && (!Array.isArray(body.response_types) || body.response_types.some((type) => type !== 'code'))) throw new Error('unsupported response_types');
   return {
-    clientName: typeof body.client_name === 'string' && body.client_name.trim() ? body.client_name.trim().slice(0, 200) : 'MCP Client',
+    clientName: typeof body.client_name === 'string' && body.client_name.trim() ? body.client_name.trim().slice(0, 200) : 'Artifactbin Client',
     redirectUris: [...new Set(body.redirect_uris as string[])],
   };
 }
@@ -102,7 +102,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
   return {
     async register(body) {
       const valid = registration(body);
-      const clientId = `mcp_${randomBytes(24).toString('base64url')}`;
+      const clientId = `afbin_${randomBytes(24).toString('base64url')}`;
       const metadata = {
         client_name: valid.clientName,
         redirect_uris: valid.redirectUris,
@@ -122,7 +122,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       const metadata = objectOf(row.metadata);
       return {
         clientId: row.id,
-        clientName: typeof metadata.client_name === 'string' ? metadata.client_name : 'MCP Client',
+        clientName: typeof metadata.client_name === 'string' ? metadata.client_name : 'Artifactbin Client',
         redirectUris: Array.isArray(metadata.redirect_uris) ? metadata.redirect_uris.filter((uri): uri is string => typeof uri === 'string') : [],
       };
     },
@@ -217,14 +217,14 @@ export const authServerMetadata = (base: string): Record<string, unknown> => ({
   registration_endpoint: `${base}/oauth/register`,
   response_types_supported: ['code'],
   grant_types_supported: [AUTHORIZATION_CODE, REFRESH_TOKEN],
-  scopes_supported: [MCP_SCOPE],
+  scopes_supported: [ARTIFACT_SCOPE],
   code_challenge_methods_supported: ['S256'],
   token_endpoint_auth_methods_supported: ['none'],
 });
 export const protectedResourceMetadata = (base: string): Record<string, unknown> => ({
-  resource: `${base}/mcp`,
+  resource: `${base}${API_RESOURCE_PATH}`,
   authorization_servers: [base],
-  scopes_supported: [MCP_SCOPE],
+  scopes_supported: [ARTIFACT_SCOPE],
   bearer_methods_supported: ['header'],
 });
 export { wwwAuthenticate } from '@artifactbin/utils';

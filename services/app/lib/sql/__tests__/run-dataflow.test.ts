@@ -27,7 +27,7 @@ const FLOW = flowOf(
   '<Value name="min_rev" type="number" default={0} />' +
   '<Value name="tiny" type="table" value={[{"k":"a"},{"k":"b"}]} />' +
   '<Query name="top">{`select region from sales order by revenue desc limit 1`}</Query>' +
-  '<Query name="sales">{`select region, sum(revenue) revenue from ref_abc123 where ($region is null or region = $region) and revenue >= $min_rev group by 1 order by 1`}</Query>' +
+  '<Query name="sales" source="ref:abc123">{`select region, sum(revenue) revenue from public.rows where ($region is null or region = $region) and revenue >= $min_rev group by 1 order by 1`}</Query>' +
   '<Query name="k">{`select count(*) n from tiny`}</Query>',
 );
 
@@ -59,7 +59,7 @@ describe('runDataflow', () => {
 
   it('reports a failing query and lets the rest run; a dependent of a failure fails too', async () => {
     const flow = flowOf(
-      '<Query name="bad">{`select nope from ref_abc123`}</Query>' +
+      '<Query name="bad" source="ref:abc123">{`select nope from public.rows`}</Query>' +
       '<Query name="dep">{`select * from bad`}</Query>' +
       '<Query name="ok">{`select 1 one`}</Query>',
     );
@@ -71,9 +71,9 @@ describe('runDataflow', () => {
   });
 
   it('a dataset the caller could not resolve reads as a missing table, named', async () => {
-    const flow = flowOf('<Query name="q">{`select * from ref_gone12`}</Query>');
+    const flow = flowOf('<Query name="q" source="ref:gone12">{`select * from public.rows`}</Query>');
     const state = await runDataflow(flow, {});
-    expect(state.errors.q).toMatch(/ref_gone12/);
+    expect(state.errors.q).toMatch(/ref:gone12/);
   });
 
   it('runs nothing for an empty flow', async () => {

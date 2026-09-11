@@ -13,6 +13,7 @@
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
+import {agentDiscovery,agentDiscoveryHead} from '@/lib/agent-discovery';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -43,6 +44,7 @@ import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
+import { createReaderPreloader } from './reader-preloads';
 
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
@@ -70,8 +72,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
   const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`
-    + `<link rel="help" href="${escapeHtml(origin)}/docs" title="Agents: read this first to edit any artifact here">`
-    + `<meta name="artifactbin:agent" content="To edit this artifact with an agent, read ${escapeHtml(origin)}/docs — tokens at ${escapeHtml(origin)}/tokens/new">`;
+    + agentDiscoveryHead(agentDiscovery(origin));
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
     .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style><div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></div></body>`);
@@ -158,12 +159,11 @@ const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/doc
  * `/help` handed a fetch tool the 891-byte SPA shell and no way on.
  */
 const apiNotFound = (c: { req: { raw: Request } }) => {
-  const base = baseUrl(c.req.raw);
   const guessedQuery = /^\/api\/artifacts\/[^/]+\/query\/?$/.test(new URL(c.req.raw.url).pathname);
   return json({
     error: 'not_found',
-    docs: `${base}/docs${guessedQuery ? '/artifactbin/references/publishing-query.md' : ''}`,
-    ...(guessedQuery ? { details: ['This route does not exist. Stored document queries use /a/<documentId>/query and select declared queries with {"only":["query_name"]}; they do not accept SQL. See docs for methods and access rules.'] } : {}),
+    help: guessedQuery ? 'afbin help publishing-query' : 'afbin help',
+    ...(guessedQuery ? { details: ['This route does not exist. Stored document queries use /a/<documentId>/query and select declared queries with {"only":["query_name"]}; they do not accept SQL. Use afbin help publishing-query for methods and access rules.'] } : {}),
   }, 404, { 'Cache-Control': 'no-store' });
 };
 
@@ -194,6 +194,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   }
   const webDir = opts.webDir ?? path.resolve('dist/web');
+  const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   let indexCache: string | null = null;
@@ -228,11 +229,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       return actor.credential === 'none';
     });
     const shell = surface?.surface?.runtime
-      ? withInitialStory(html, surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
+      ? withInitialStory(preloadReader(html), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
       : publicHome ? withInitialHome(html) : html;
     return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
-      ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/docs>; rel="help"` } : {}),
+      ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
     } });
   };
 
@@ -320,7 +321,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // address's redirect. `/docs-human` is outside that catch-all by shape, and
   // sits here beside the address it replaced.
   app.get('/docs-human', (c) => page(c));
-  app.get('/docs/human', (c) => c.redirect('/docs-human', 301));
   // The token page must likewise win over the later profile-shaped catch-all
   // (`/tokens/new` otherwise looks like user "tokens", path "new").
   app.get('/tokens/new', (c) => page(c));

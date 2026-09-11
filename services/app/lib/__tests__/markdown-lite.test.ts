@@ -204,15 +204,21 @@ describe('bounded', () => {
    * live. The earlier version of this test measured the fence path and passed
    * while the inline path took 156 ms.
    */
-  const fastest = (body: string) => {
+  const cpuMillisecondsPerParse = (body: string) => {
+    // Warm the parser before sampling. Wall time on a shared CI runner includes
+    // time when this worker is descheduled, which is not parser work. Measure
+    // CPU consumed by this test process, amortized over a batch, instead.
+    for (let i = 0; i < 5; i += 1) parseMarkdownLite(body);
+    const batchSize = 20;
     const runs = [0, 0, 0].map(() => {
-      const started = performance.now();
-      const nodes = parseMarkdownLite(body);
-      const elapsed = performance.now() - started;
+      const started = process.cpuUsage();
+      let nodes = parseMarkdownLite(body);
+      for (let i = 1; i < batchSize; i += 1) nodes = parseMarkdownLite(body);
+      const elapsed = process.cpuUsage(started);
       expect(nodes.length).toBeGreaterThan(0);
-      return elapsed;
+      return (elapsed.user + elapsed.system) / 1000 / batchSize;
     }).sort((a, b) => a - b);
-    return runs[1]; // the median of three — a shared laptop has outliers
+    return runs[1];
   };
 
   it('a 10 KB body of pathological runs INSIDE a paragraph parses well under 10 ms', () => {
@@ -220,23 +226,23 @@ describe('bounded', () => {
     const body = `${'the quick brown fox jumps over the lazy dog. '.repeat(120)}\n\n`
       + `x${'*'.repeat(2000)}\n\nx${'`'.repeat(2000)}\n\nx${'_'.repeat(2000)}`;
     expect(body.length).toBeGreaterThan(9000);
-    expect(fastest(body)).toBeLessThan(10);
+    expect(cpuMillisecondsPerParse(body)).toBeLessThan(10);
   });
 
   it('a 10 KB inline backtick run — the shape that was quadratic — parses under 10 ms', () => {
     const body = `x${'`'.repeat(10_000)}`;
-    expect(fastest(body)).toBeLessThan(10);
+    expect(cpuMillisecondsPerParse(body)).toBeLessThan(10);
   });
 
   it('and 16,000 of them stay under 20 ms — the growth is not 4x per doubling', () => {
     const body = `x${'`'.repeat(16_000)}`;
-    expect(fastest(body)).toBeLessThan(20);
+    expect(cpuMillisecondsPerParse(body)).toBeLessThan(20);
   });
 
   it('a run whose fence never closes is still measured once, not once per backtick', () => {
     // The memory half: the old code built one fence string per position, so a
     // 3,000-backtick run constructed 4.5M characters before finding nothing.
     const body = `x${'`'.repeat(3000)} and then ${'plain words '.repeat(400)}`;
-    expect(fastest(body)).toBeLessThan(10);
+    expect(cpuMillisecondsPerParse(body)).toBeLessThan(10);
   });
 });

@@ -14,8 +14,8 @@ describe('dataset catalog migration planning', () => {
     const source = '<Helmet>\n<Query name="q">{`select ref_abc123.id, \'ref_abc123\' s from ref_abc123 -- ref_abc123\nwhere note <> \'x\'`}</Query>\n<Mutation name="m">{`update ref_abc123 set n=$_value where id=$_row.id /* ref_abc123 */`}</Mutation>\n</Helmet><p id="same"> exact </p>';
     const out = migrateMarkupSource(source);
     expect(out.diagnostics).toEqual([]);
-    expect(out.source).toContain('<Query name="q" source="abc123">{`select rows.id, \'ref_abc123\' s from public.rows -- ref_abc123');
-    expect(out.source).toContain('<Mutation name="m" source="abc123">{`update public.rows set n=$_value where id=$_row.id /* ref_abc123 */`}');
+    expect(out.source).toContain('<Query name="q" source="ref:abc123">{`select rows.id, \'ref_abc123\' s from public.rows -- ref_abc123');
+    expect(out.source).toContain('<Mutation name="m" source="ref:abc123">{`update public.rows set n=$_value where id=$_row.id /* ref_abc123 */`}');
     expect(out.source.endsWith('</Helmet><p id="same"> exact </p>')).toBe(true);
     expect(migrateMarkupSource(out.source).source).toBe(out.source);
   });
@@ -23,14 +23,14 @@ describe('dataset catalog migration planning', () => {
   it('federates a multi-source join through deterministic upstream queries and preserves aliases', () => {
     const source = '<Helmet><Query name="joined">{`select a.id,b.v from ref_abc123 a join ref_def456 b on ref_abc123.id=ref_def456.id`}</Query></Helmet><DataTable data="$joined" />';
     const out = migrateMarkupSource(source).source;
-    expect(out).toContain('<Query name="source_abc123" source="abc123">{`select * from public.rows`}</Query>');
-    expect(out).toContain('<Query name="source_def456" source="def456">{`select * from public.rows`}</Query>');
+    expect(out).toContain('<Query name="source_abc123" source="ref:abc123">{`select * from public.rows`}</Query>');
+    expect(out).toContain('<Query name="source_def456" source="ref:def456">{`select * from public.rows`}</Query>');
     expect(out).toContain('from source_abc123 a join source_def456 b on source_abc123.id=source_def456.id');
     expect(out.endsWith('<DataTable data="$joined" />')).toBe(true);
   });
 
   it('leaves queries without legacy refs and already canonical declarations byte-identical', () => {
-    for (const source of ['<Helmet><Query name="q">{`select 1`}</Query></Helmet>', '<Helmet><Query name="q" source="abc123">{`select * from public.rows`}</Query></Helmet>']) {
+    for (const source of ['<Helmet><Query name="q">{`select 1`}</Query></Helmet>', '<Helmet><Query name="q" source="ref:abc123">{`select * from public.rows`}</Query></Helmet>']) {
       expect(migrateMarkupSource(source)).toMatchObject({ source, changed: false, diagnostics: [] });
     }
   });
@@ -38,7 +38,7 @@ describe('dataset catalog migration planning', () => {
   it('federates one legacy source when the query also reads a local table and avoids Value name collisions',()=>{
     const source='<Helmet><Value name="source_abc123" type="table" value={[]} /><Value name="local" type="table" value={[]} /><Query name="q">{`select * from ref_abc123 join local on true`}</Query></Helmet>';
     const out=migrateMarkupSource(source).source;
-    expect(out).toContain('<Query name="source_abc123_2" source="abc123">');
+    expect(out).toContain('<Query name="source_abc123_2" source="ref:abc123">');
     expect(out).toContain('from source_abc123_2 join local');
     expect(out).not.toContain('<Query name="q" source=');
   });
@@ -51,12 +51,13 @@ describe('dataset catalog migration planning', () => {
     expect(out.source).toContain('"rows".id from "public"."rows"');
   });
 
-  it('keeps known folder refs local while federating a dataset in the same query',()=>{
+  it('federates folders and datasets through the same explicit source contract',()=>{
     const source='<Helmet><Query name="q">{`select d.id,f.title from ref_abc123 d join ref_folder1 f on true`}</Query></Helmet>';
     const out=migrateMarkupSource(source,{folderIds:new Set(['folder1']),knownTargetIds:new Set(['abc123','folder1'])});
     expect(out.diagnostics).toEqual([]);
-    expect(out.source).toContain('<Query name="source_abc123" source="abc123">');
-    expect(out.source).toContain('from source_abc123 d join ref_folder1 f');
+    expect(out.source).toContain('<Query name="source_abc123" source="ref:abc123">');
+    expect(out.source).toContain('<Query name="source_folder1" source="ref:folder1">');
+    expect(out.source).toContain('from source_abc123 d join source_folder1 f');
     expect(out.source).not.toContain('<Query name="q" source=');
   });
 
@@ -64,4 +65,18 @@ describe('dataset catalog migration planning', () => {
     const source='<Helmet><Query name="q">{`select * from ref_missing`}</Query></Helmet>';
     expect(migrateMarkupSource(source,{folderIds:new Set(),knownTargetIds:new Set()})).toMatchObject({changed:false,diagnostics:[{reason:'Query q references unavailable source missing'}]});
   });
+});
+
+it('converts bare source IDs without changing SQL, node IDs or surrounding bytes', () => {
+ const source = '<Helmet>\n<Query name="q" source="abc123">{`select * from analytics.events`}</Query>\n</Helmet><p id="node1">Keep</p>';
+ const out = migrateMarkupSource(source);
+ expect(out).toEqual({source:source.replace('source="abc123"', 'source="ref:abc123"'), changed:true, diagnostics:[]});
+ expect(migrateMarkupSource(out.source).changed).toBe(false);
+});
+it('normalizes an explicit source and its matching retired SQL relation together',()=>{
+ const source='<Helmet><Query name="q" source="abc123">{`select ref_abc123.id from ref_abc123`}</Query></Helmet><p id="stable">Keep</p>';
+ const migrated=migrateMarkupSource(source);
+ expect(migrated.diagnostics).toEqual([]);expect(migrated.source).toContain('source="ref:abc123"');expect(migrated.source).toContain('select rows.id from public.rows');expect(migrated.source).toContain('<p id="stable">Keep</p>');
+ const ambiguous=migrateMarkupSource(source.replace('from ref_abc123','from ref_def456'));
+ expect(ambiguous.changed).toBe(false);expect(ambiguous.diagnostics[0].reason).toMatch(/explicit source/);
 });

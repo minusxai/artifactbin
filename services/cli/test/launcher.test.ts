@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { installedHarnesses, parseLaunchFlags } from "../src/launcher";
-import { parseArgs } from "../src/config";
+import { parseCommand } from "../src/commands";
 
 test("discovers executable harness files on PATH, without running them or listing directories", async () => {
   const dir = await mkdtemp(join(tmpdir(), "afbin-picker-"));
@@ -25,13 +25,12 @@ test("optional flags preserve quoted arguments and never evaluate shell syntax",
   assert.throws(() => parseLaunchFlags("trailing\\"), /trailing backslash/);
 });
 
-test("both launcher entry points accept afbin options and explicit commands preserve flags", () => {
-  assert.deepEqual(parseArgs(["--server", "http://localhost:6400", "--name", "Work"]), parseArgs(["remote", "--server", "http://localhost:6400", "--name", "Work"]));
-  assert.deepEqual(parseArgs(["remote", "codex", "--yolo", "--model", "a b"]), { command: "remote", harness: "codex", args: ["--yolo", "--model", "a b"] });
-  assert.equal(parseArgs(["--help"]).command, "--help");
+test("remote preserves command flags and bare startup selects setup", () => {
+ assert.equal(parseCommand([]).command,'setup');
+ assert.deepEqual(parseCommand(['remote','codex','--yolo','--model','a b']),{command:'remote',positionals:['codex','--yolo','--model','a b'],flags:{}});
 });
 
-for (const entry of [[], ["remote"], ["remote", "codex", "--yolo"]]) test(`real terminal launches from ${["afbin", ...entry].join(" ")}`, async () => {
+for (const entry of [["remote"], ["remote", "codex", "--yolo"]]) test(`real terminal launches from ${["afbin", ...entry].join(" ")}`, async () => {
   const { createServer } = await import("node:http");
   const { pty } = await import("../src/pty");
   const { fileURLToPath } = await import("node:url");

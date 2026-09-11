@@ -12,7 +12,7 @@ beforeEach(() => {
 });
 
 it('binds dialog state two ways and submits with current signals through the existing mutation transport', async () => {
-  const parsed = parseJsx('<Helmet><Value name="editing" type="boolean" default={false} /><Value name="title" type="string" default="First" /><Mutation name="save">{`insert into ref_abc123 (title) values ($title)`}</Mutation></Helmet><Dialog open="$editing"><DialogTrigger>Open</DialogTrigger><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" value="$title" required /><button type="submit">Save</button><DialogClose>Cancel</DialogClose></DialogContent></Dialog>{$editing && <p>Editing</p>}');
+  const parsed = parseJsx('<Helmet><Value name="editing" type="boolean" default={false} /><Value name="title" type="string" default="First" /><Mutation name="save" source="ref:abc123">{`insert into public.rows (title) values ($title)`}</Mutation></Helmet><Dialog open="$editing"><DialogTrigger>Open</DialogTrigger><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" value="$title" required /><button type="submit">Save</button><DialogClose>Cancel</DialogClose></DialogContent></Dialog>{$editing && <p>Editing</p>}');
   if (!parsed.ok) throw new Error(parsed.error);
   const {content, body: nodes} = splitHelmet(parsed.nodes);
   const flow = {values: content.values, queries: content.queries, mutations: content.mutations};

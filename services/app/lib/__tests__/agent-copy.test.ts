@@ -15,7 +15,7 @@ import { startPrompt } from '@/lib/start-links';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const DOCS = '. Read https://x.test/docs/artifactbin/SKILL.md for the HTTP API. No local SDK or CLI is needed.';
+const DOCS = '. Use afbin: pull, edit local JSX, validate, push. Read afbin help and the local skill. Connect with afbin setup --server https://x.test for browser approval.';
 
 describe('the four pastes', () => {
   it('anonymous: link + the token inline', () => {

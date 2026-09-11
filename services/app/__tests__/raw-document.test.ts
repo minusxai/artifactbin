@@ -100,7 +100,7 @@ describe('/a/<id>/raw for markup rows', () => {
   it('names its own query url in the island, so the top-level document can fetch its re-runs — and a document that declares data hydrates even with no component (its bound control needs the store)', async () => {
     const t = await mintToken('t');
     const ds = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { dataset: [{ region: 'EU' }, { region: 'NA' }] } })).then((r) => r.json());
-    const boundOnly = `<Helmet><Value name="region" type="string" /><Query name="regions">{\`select distinct region from ref_${ds.id} order by 1\`}</Query></Helmet><div><select aria-label="Region" value="$region" options="$regions" /></div>`;
+    const boundOnly = `<Helmet><Query name="source_${ds.id}" source="ref:${ds.id}">{\`select * from public.rows\`}</Query><Value name="region" type="string" /><Query name="regions">{\`select distinct region from source_${ds.id} order by 1\`}</Query></Helmet><div><select aria-label="Region" value="$region" options="$regions" /></div>`;
     const id = (await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: boundOnly } })).then((r) => r.json())).id as string;
     const html = await (await serveArtifact(request(`/a/${id}/raw`), params({ id }))).text();
     const m = html.match(/<script type="application\/json" id="mx-story-data">(.*?)<\/script>/s);
@@ -128,7 +128,7 @@ describe('/a/<id>/raw for markup rows', () => {
     const t = await mintToken('t');
     const ds = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { dataset: [{ month: '2026-01', revenue: 10 }, { month: '2026-02', revenue: 20 }], title: 'rev' } }));
     const { id: dsId } = (await ds.json()) as { id: string };
-    const doc = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<Helmet><Query name="rows">{\`select * from ref_${dsId}\`}</Query></Helmet><p>n: <Number data="$rows" col="revenue" agg="sum" /></p>` } }));
+    const doc = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: `<Helmet><Query name="rows" source="ref:${dsId}">{\`select * from public.rows\`}</Query></Helmet><p>n: <Number data="$rows" col="revenue" agg="sum" /></p>` } }));
     expect(doc.status).toBe(201);
     return ((await doc.json()) as { id: string }).id;
   };

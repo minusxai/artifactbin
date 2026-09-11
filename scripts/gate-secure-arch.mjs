@@ -22,6 +22,7 @@
 
  *   node scripts/gate-secure-arch.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
@@ -185,8 +186,8 @@ const ratio = Math.min(pubBytes.length, privBytes.length) / Math.max(pubBytes.le
 check(ratio > 0.9, `a PRIVATE doc exports the same image its PUBLIC twin does (size ratio ${ratio.toFixed(2)}) — not a 404 page`);
 
 // ── 4. /raw is internal ───────────────────────────────────────────────────
-const llm = await (await fetch(`${BASE}/docs/artifactbin/references/publishing.md`)).text();
-check(!llm.includes('/raw'), '/docs/artifactbin/references/publishing.md no longer teaches /raw');
+const llm = await (await fetch(`${BASE}/llms.txt`)).text();
+check(llm.includes('afbin') && !llm.includes('/raw'), 'agent discovery teaches the CLI without internal raw links');
 const rawResp = await readerCtx.request.get(`${BASE}/a/${doc.id}/raw`);
 check(rawResp.status() === 200, '/raw still answers (internal address for the iframe/embeds)');
 

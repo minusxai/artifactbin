@@ -75,12 +75,12 @@ describe('browser_only is refused BEFORE anything is counted', () => {
     const app = await proxy();
     const res = await app.request(`${BASE}/api/tokens/anonymous`, { method: 'POST', headers: { 'artifactbin-agent': 'claude-code' } });
     expect(res.status).toBe(403);
-    const body = await res.json() as { error: string; reason: string; ladder: string[]; tokens: string; docs: string };
+    const body = await res.json() as { error: string; reason: string; ladder: string[]; tokens: string; help: string };
     expect(body.error).toBe('browser_only');
     expect(body.tokens).toBe(`${BASE}/tokens/new?source=claude-code`);
     expect(body.ladder).toHaveLength(3);
-    expect(body.ladder[2]).toContain(`${BASE}/tokens/new?source=claude-code`);
-    expect(body.docs).toBe(`${BASE}/docs/artifactbin/references/publishing-auth.md`);
+    expect(body.ladder[2]).toContain('browser approval');
+    expect(body.help).toBe('afbin help publishing-auth');
     expect(fake.events.filter((e) => e.verb === 'denied'), 'a browser-only refusal is not a door denial').toEqual([]);
     // the mint budget is 1 and nothing above spent it
     const ok = await app.request(`${BASE}/api/tokens/anonymous`, { method: 'POST', headers: { ...BROWSER_MINT_HEADERS, origin: BASE } });

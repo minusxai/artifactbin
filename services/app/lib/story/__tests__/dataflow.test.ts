@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
-  coerceScalarInput, collectRefNameUses, datasetRefsInDataflow, datasetRefsInSql, initialValues, parseQueryDecl, parseValueDecl,
+  coerceScalarInput, collectRefNameUses, datasetRefsInDataflow, initialValues, parseQueryDecl, parseValueDecl,
   queriesDependingOn, queryDeps, queryOrder, refName, sqlParams, validateDataflow,
   type Dataflow, type QueryDecl, type ValueDecl,
 } from '@/lib/story/dataflow';
@@ -141,7 +141,7 @@ describe('parseValueDecl', () => {
 
 describe('parseQueryDecl', () => {
   it('parses name, sql, params and dataset refs', () => {
-    const q = query('<Query name="sales">{`select region, sum(revenue) r from ref_abc123 where ($region is null or region = $region) and revenue >= $min_rev group by 1`}</Query>');
+    const q = query('<Query name="sales" source="ref:abc123">{`select region, sum(revenue) r from public.rows where ($region is null or region = $region) and revenue >= $min_rev group by 1`}</Query>');
     expect(q.name).toBe('sales');
     expect(q.sql).toContain('sum(revenue)');
     expect(q.params).toEqual(['region', 'min_rev']);
@@ -171,13 +171,6 @@ describe('sql text helpers', () => {
     expect(sqlParams("select 'hello $who'")).toEqual(['who']);
   });
 
-  it('datasetRefsInSql finds ref_<id> tables once each', () => {
-    expect(datasetRefsInSql('select * from ref_abc123 a join ref_XYZ789 b using (k), ref_abc123 c')).toEqual(['abc123', 'XYZ789']);
-    expect(datasetRefsInSql('select * from schema.ref_abc123')).toEqual([]);
-    expect(datasetRefsInSql('select * from prefref_abc123')).toEqual([]);
-    expect(datasetRefsInSql('select * from ref_ab')).toEqual([]); // too short to be an id
-  });
-
   it('queryDeps finds declared table names used as bare identifiers', () => {
     expect(queryDeps('select * from sales s join regions r on s.region = r.region', ['sales', 'regions', 'other'])).toEqual(['sales', 'regions']);
     expect(queryDeps('select $sales from t', ['sales'])).toEqual([]);      // a param, not a table
@@ -189,7 +182,7 @@ describe('sql text helpers', () => {
 const REGION = value('<Value name="region" type="string" />');
 const MIN = value('<Value name="min_rev" type="number" default={0} />');
 const TINY = value('<Value name="tiny" type="table" value={[{"a":1}]} />');
-const SALES = query('<Query name="sales">{`select * from ref_abc123 where region = $region and revenue >= $min_rev`}</Query>');
+const SALES = query('<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region and revenue >= $min_rev`}</Query>');
 const TOP = query('<Query name="top">{`select * from sales order by revenue desc limit 5`}</Query>');
 
 describe('collectRefNameUses', () => {
@@ -272,7 +265,7 @@ describe('validateDataflow', () => {
   });
 
   it('rejects a SQL $param that names a table or nothing', () => {
-    const q = query('<Query name="q">{`select * from ref_abc123 where a = $sales and b = $nope`}</Query>');
+    const q = query('<Query name="q" source="ref:abc123">{`select * from public.rows where a = $sales and b = $nope`}</Query>');
     const errors = validateDataflow(flow([REGION, MIN], [SALES, q]), []);
     const msgs = errors.map((e) => e.message).join('\n');
     expect(msgs).toMatch(/\$sales.*table/);
@@ -298,7 +291,7 @@ describe('validateDataflow', () => {
 
 describe('queryOrder', () => {
   it('orders dependencies first, keeping authored order among ties', () => {
-    const c = query('<Query name="c">{`select * from ref_abc123`}</Query>');
+    const c = query('<Query name="c" source="ref:abc123">{`select * from public.rows`}</Query>');
     expect(queryOrder(flow([TINY], [TOP, SALES, c]))).toEqual(['sales', 'top', 'c']);
   });
 
@@ -311,7 +304,7 @@ describe('queryOrder', () => {
 
 describe('derived views', () => {
   it('datasetRefsInDataflow dedupes across queries', () => {
-    const q2 = query('<Query name="q2">{`select * from ref_abc123 join ref_def456 using (k)`}</Query>');
+    const q2 = query('<Query name="q2" source="ref:def456">{`select * from public.rows`}</Query>');
     expect(datasetRefsInDataflow(flow([], [SALES, q2]))).toEqual(['abc123', 'def456']);
   });
 

@@ -201,7 +201,7 @@ describe('hoistHelmet', () => {
 // ── data declarations: <Value> and <Query> (lib/story/dataflow.ts) ──────────
 
 const VALUE = '<Value name="region" type="string" />';
-const QUERY = '<Query name="sales">{`select * from ref_abc123 where region = $region`}</Query>';
+const QUERY = '<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region`}</Query>';
 
 describe('validateHelmet — data declarations', () => {
   it('accepts <Value> and <Query> children, any number, with their attributes', () => {
@@ -258,6 +258,6 @@ describe('hoistHelmet — data declarations', () => {
     expect((hoisted[0] as JsxElement).tag).toBe('Helmet');
     const again = hoistHelmet(hoisted);
     expect(again).toEqual(hoisted);
-    expect(splitHelmet(hoisted).content.queries[0].sql).toContain('ref_abc123');
+    expect(splitHelmet(hoisted).content.queries[0].sql).toContain('public.rows');
   });
 });

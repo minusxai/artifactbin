@@ -1,3 +1,4 @@
+import type {ContentObjects} from '@/lib/story/prepared-objects';
 import {z} from 'zod';
 import type {ArtifactRow,TokenActor} from '@/lib/artifacts';
 import type {StoredContent} from '@/lib/story/input';
@@ -31,7 +32,7 @@ export function publicCatalogOf(row:{meta:unknown}):DatasetCatalog|null {
  return {kind:catalog.kind,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,tables:catalog.tables.map(({schema,name,columns})=>({schema,name,columns}))};
 }
 const key=(table:{schema:string;name:string})=>JSON.stringify([table.schema,table.name]);
-export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:ArtifactRow):Promise<StoredContent|Response> {
+export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:ArtifactRow,objects?:ContentObjects):Promise<StoredContent|Response> {
  try{
   const authored=typeof input==='string'?parseDatasetDefinition(input):input;
   if(authored&&typeof authored==='object'&&(authored as {connection?:unknown}).connection){
@@ -68,14 +69,14 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    if(t.source)throw new DatasetError('Stored tables do not have a remote source');
    const prior=old?.tables.find(p=>key(p)===key(t));
    if(!t.rows&&prior?.objectKey){tables.push({...prior});continue;}
-   const stored=await publishDataset({},t.rows);if(stored instanceof Response)return stored;
+   const stored=await publishDataset({},t.rows,objects);if(stored instanceof Response)return stored;
    tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});
   }
   const catalog:DatasetCatalog={kind:data.kind,defaultSchema:data.defaultSchema,refreshSeconds:data.kind==='stored'?0:data.refreshSeconds,tables};
   // Dependencies are probed in topological order by retrying only unknown model shapes.
   const pending=tables.filter(t=>t.sql);let lastError:unknown;
   while(pending.length){let progress=false;
-   for(let i=pending.length-1;i>=0;i--){const t=pending[i];try{const result=await executeCatalog(catalog,t.sql!,{}, {limit:1,refresh:true});t.columns=result.columns;pending.splice(i,1);progress=true;}catch(error){lastError=error;}}
+   for(let i=pending.length-1;i>=0;i--){const t=pending[i];try{const result=await executeCatalog(catalog,t.sql!,{}, {limit:1,refresh:true,objects});t.columns=result.columns;pending.splice(i,1);progress=true;}catch(error){lastError=error;}}
    if(!progress)throw new DatasetError(lastError instanceof Error?lastError.message:'Model dependencies are invalid or cyclic');
   }
   // Keep the original single-table alias pinned to public.rows; adding tables never rebinds it.
@@ -83,6 +84,6 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
   return {format:'dataset',source:serializeDatasetDefinition(data),content:'',derivedTitle:null,meta:{catalog,...(legacy?{objectKey:legacy.objectKey,columns:legacy.columns}:{}),columns:legacy?.columns??[]}};
  }catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Dataset validation failed']},error instanceof DatasetError?error.status:400);}
 }
-export async function storedTables(catalog:DatasetCatalog):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
- return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.objectKey?await loadDatasetRows({content:'',meta:{objectKey:t.objectKey}}):[],columns:t.columns}] as const)));
+export async function storedTables(catalog:DatasetCatalog,objects?:Pick<ContentObjects,'get'>):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
+ return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.objectKey?(objects?JSON.parse((await objects.get(t.objectKey)).toString('utf8')):await loadDatasetRows({content:'',meta:{objectKey:t.objectKey}})):[],columns:t.columns}] as const)));
 }

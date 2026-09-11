@@ -93,7 +93,7 @@ export async function mutateDataset(
   guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean;document?:MutationDocument} = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
-  const table = `ref_${dataset.id}`;
+  const table = 'dataset_rows';
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
   // One result cache per invocation, outside the CAS loop: replaying storage
   // must not generate a different answer or charge for the same prompt again.
@@ -117,7 +117,7 @@ export async function mutateDataset(
     const catalog=catalogOf(current);
     let selected:import('@/lib/datasets/types').DatasetTable|undefined;
     let executedSql=sql;
-    if(guard.source){
+    {
       try{if(!catalog)throw new Error('Dataset catalog unavailable');const compiled=compileStoredMutation(catalog,sql,table);selected=compiled.table;executedSql=compiled.sql;}
       catch(error){return {reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid stored mutation'};}
     }

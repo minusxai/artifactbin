@@ -12,16 +12,16 @@ describe('401 bodies', () => {
   it('GET /api/artifacts without a credential names the docs and the token page', async () => {
     const res = await listArtifacts(new Request(`${BASE}/api/artifacts`));
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: 'unauthorized', docs: `${BASE}/docs`, tokens: `${BASE}/tokens/new` });
+    expect(await res.json()).toEqual({ error: 'unauthorized', help: `afbin setup --server ${BASE}`, tokens: `${BASE}/tokens/new` });
   });
   it('a session-only route says the same', async () => {
     const res = await listMine(new Request(`${BASE}/api/my/tokens`));
     expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: 'unauthorized', docs: `${BASE}/docs`, tokens: `${BASE}/tokens/new` });
+    expect(await res.json()).toMatchObject({ error: 'unauthorized', help: `afbin setup --server ${BASE}`, tokens: `${BASE}/tokens/new` });
   });
   it('a bad bearer is refused with the same hints', async () => {
     const res = await listArtifacts(new Request(`${BASE}/api/artifacts`, { headers: { authorization: 'Bearer mx_' + 'x'.repeat(43) } }));
     expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ docs: `${BASE}/docs`, tokens: `${BASE}/tokens/new` });
+    expect(await res.json()).toMatchObject({ help: `afbin setup --server ${BASE}`, tokens: `${BASE}/tokens/new` });
   });
 });

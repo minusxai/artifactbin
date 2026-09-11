@@ -9,7 +9,7 @@ import { ensureProxySchema } from '../src/schema';
 import { RELAXED_POLICY_FILE, resetTestDb, testDb, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:4794';
-const RESOURCE = `${BASE}/mcp`;
+const RESOURCE = `${BASE}/api`;
 const REGISTERED_REDIRECT = 'http://127.0.0.1/callback';
 const REDIRECT = 'http://127.0.0.1:9987/callback';
 const verifier = 'v'.repeat(43);
@@ -75,7 +75,7 @@ async function approve(clientId: string): Promise<string> {
   const response = await app.request('/oauth/authorize/approve', {
     method: 'POST',
     body: approveForm(clientId),
-    headers: { ...asUser(), 'content-type': 'application/x-www-form-urlencoded' },
+    headers: { ...asUser(), origin: BASE, 'content-type': 'application/x-www-form-urlencoded' },
   });
   expect(response.status).toBe(303);
   return new URL(response.headers.get('location')!).searchParams.get('code')!;
@@ -88,7 +88,7 @@ describe('the oauth provider routes', () => {
     expect(md.grant_types_supported).toEqual(['authorization_code', 'refresh_token']);
     const first = await register();
     const second = await register('https://client.example/oauth/callback');
-    expect(first).toMatch(/^mcp_/);
+    expect(first).toMatch(/^afbin_/);
     expect(second).not.toBe(first);
     const { query } = testDb();
     expect((await query('SELECT id FROM auth.clients')).rows).toHaveLength(2);
@@ -121,7 +121,7 @@ describe('the oauth provider routes', () => {
 
   it('exchanges a bound PKCE code and rotates refresh tokens without another login', async () => {
     const clientId = await register();
-    expect((await app.request('/oauth/authorize/approve', { method: 'POST', body: approveForm(clientId), headers: { 'content-type': 'application/x-www-form-urlencoded' } })).status).toBe(401);
+    expect((await app.request('/oauth/authorize/approve', { method: 'POST', body: approveForm(clientId), headers: { origin: BASE, 'content-type': 'application/x-www-form-urlencoded' } })).status).toBe(401);
     const code = await approve(clientId);
     const tokenResponse = await app.request('/oauth/token', {
       method: 'POST',
@@ -139,7 +139,7 @@ describe('the oauth provider routes', () => {
     const { query } = testDb();
     expect(await createTokenReader({ db: { query } }).byToken(first.access_token)).toMatchObject({ userId: 'usr_1', audience: RESOURCE, scope: 'artifacts' });
     expect(await (await app.request(`${RESOURCE}`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'bearer' });
-    expect(await (await app.request(`${BASE}/api/artifacts`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'none' });
+    expect(await (await app.request(`${BASE}/api/artifacts`, { headers: { authorization: `Bearer ${first.access_token}` } })).json()).toMatchObject({ credential: 'bearer' });
     expect((await query("SELECT credential_hash FROM auth.credentials WHERE kind = 'refresh_token'")).rows[0]).not.toMatchObject({ credential_hash: first.refresh_token });
 
     const refreshed = await app.request('/oauth/token', {
@@ -171,7 +171,7 @@ describe('oauth code and redirect binding', () => {
   it('spends a PKCE code once and binds it to client, redirect, and resource', async () => {
     const { query } = testDb();
     const store = createOAuthStore({ query }, 'auth');
-    const grant = { userId: 'usr_1', clientId: 'mcp_client', redirectUri: REDIRECT, resource: RESOURCE, scope: 'artifacts' };
+    const grant = { userId: 'usr_1', clientId: 'afbin_client', redirectUri: REDIRECT, resource: RESOURCE, scope: 'artifacts' };
     const code = await createAuthCode(store, grant, s256(verifier));
     expect(await consumeAuthCode(store, { code, clientId: 'other', redirectUri: REDIRECT, resource: RESOURCE, codeVerifier: verifier })).toBeNull();
     expect(await consumeAuthCode(store, { code, clientId: grant.clientId, redirectUri: REDIRECT, resource: RESOURCE, codeVerifier: verifier }), 'a failed attempt spent the code').toBeNull();
@@ -192,9 +192,9 @@ describe('oauth code and redirect binding', () => {
     const accessToken = `mx_${'r'.repeat(40)}`;
     await query('INSERT INTO tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', ['tok_revocable', 'oauth', hashToken(accessToken), 'usr_1']);
     const oauth = createOAuthStore({ query }, 'auth');
-    const refreshToken = await oauth.issueRefresh({ clientId: 'mcp_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
+    const refreshToken = await oauth.issueRefresh({ clientId: 'afbin_client', userId: 'usr_1', resource: RESOURCE, scope: 'artifacts', accessTokenId: 'tok_revocable' });
     await query('UPDATE tokens SET deleted_at = now() WHERE id = $1', ['tok_revocable']);
-    expect(await oauth.rotateRefresh(refreshToken, 'mcp_client', RESOURCE)).toBeNull();
+    expect(await oauth.rotateRefresh(refreshToken, 'afbin_client', RESOURCE)).toBeNull();
   });
 });
 
@@ -238,4 +238,37 @@ describe('auth schema migration', () => {
       await legacy.close();
     }
   });
+});
+
+it('pairs through browser consent without exposing tokens to the browser', async () => {
+  const started = await app.request('/oauth/device', { method: 'POST' });
+  expect(started.status).toBe(200);
+  const pair = await started.json() as { device_code: string; verification_uri_complete: string; user_code: string };
+  expect(pair.verification_uri_complete).not.toContain(pair.device_code);
+  const poll = () => app.request('/oauth/device/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: pair.device_code }) });
+  expect(await (await poll()).json()).toMatchObject({ error: 'authorization_pending' });
+  const consent = await app.request(pair.verification_uri_complete, { headers: asUser() });
+  expect(await consent.text()).toContain(pair.user_code);
+  const approve = (origin: string) => app.request('/oauth/device/approve', { method: 'POST', headers: { ...asUser(), origin }, body: new URLSearchParams({ user_code: pair.user_code }) });
+  expect((await approve('https://evil.example')).status).toBe(403);
+  const approved = await approve(BASE);
+  expect(approved.status).toBe(200);
+  expect(await approved.text()).not.toContain('mx_');
+  session = null;
+  const token = await poll();
+  expect(token.status).toBe(200);
+  const credentials = await token.json() as { access_token: string; refresh_token: string; client_id: string };
+  expect(credentials).toMatchObject({ access_token: expect.stringMatching(/^mx_/), refresh_token: expect.stringMatching(/^mxr_/), client_id: expect.any(String) });
+  expect((await poll()).status).toBe(400);
+  expect(await (await app.request(`${BASE}/api/artifacts`, { headers: { authorization: `Bearer ${credentials.access_token}` } })).json()).toMatchObject({ credential: 'bearer' });
+  expect(await (await app.request(`${BASE}/api-other`, { headers: { authorization: `Bearer ${credentials.access_token}` } })).json()).toMatchObject({ credential: 'none' });
+});
+
+it('requires same-origin browser consent and denial issues no authorization code',async()=>{
+ const client=await register();const cookie=asUser();
+ const rejected=await app.request('/oauth/authorize/approve',{method:'POST',headers:{...cookie,origin:'https://foreign.example','content-type':'application/x-www-form-urlencoded'},body:approveForm(client)});
+ expect(rejected.status).toBe(403);
+ const form=approveForm(client);form.set('action','deny');
+ const denied=await app.request('/oauth/authorize/approve',{method:'POST',headers:{...cookie,origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form});
+ expect(denied.status).toBe(303);const location=new URL(denied.headers.get('location')!);expect(location.searchParams.get('error')).toBe('access_denied');expect(location.searchParams.has('code')).toBe(false);expect(location.searchParams.get('state')).toBe('st');
 });

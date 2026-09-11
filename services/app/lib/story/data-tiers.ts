@@ -12,6 +12,7 @@
  * must name a declared binding slot or param; unknown tokens are hard errors
  * naming the token.
  */
+import type {ContentObjects} from './prepared-objects';
 import { json } from '../http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { storeDatasetRows } from './dataset-store';
@@ -41,7 +42,7 @@ function valueMatches(v: unknown, t: ColumnType): boolean {
   }
 }
 
-export async function publishDataset(body: Record<string, unknown>, rows: unknown): Promise<StoredContent | Response> {
+export async function publishDataset(body: Record<string, unknown>, rows: unknown, objects?: ContentObjects): Promise<StoredContent | Response> {
   const details: string[] = [];
   if (!Array.isArray(rows) || rows.length === 0) {
     return json({ error: 'invalid_dataset', details: ['dataset must be a non-empty JSON array of flat objects'] }, 400);
@@ -87,7 +88,7 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
 
   // The rows go to the object store; the row keeps a reference. See
   // lib/story/dataset-store.ts for why a 27 MB blob cannot live in a column.
-  const located = await storeDatasetRows(flat);
+  const located = await storeDatasetRows(flat, objects);
   return {
     format: 'dataset',
     content: located.content,
@@ -169,7 +170,7 @@ const IMAGE_DATA_URL_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,
  * to the object store; the row keeps `meta.objectKey` and `content` stays empty
  * (see lib/story/image-store).
  */
-export async function storeImageContent(buffer: Buffer, contentType: string): Promise<StoredContent | Response> {
+export async function storeImageContent(buffer: Buffer, contentType: string, objects?: ContentObjects): Promise<StoredContent | Response> {
   if (!(IMAGE_CONTENT_TYPES as readonly string[]).includes(contentType)) {
     return json({ error: 'invalid_image', details: [`unsupported image type "${contentType}" (png|jpeg|webp|gif|svg+xml)`] }, 400);
   }
@@ -198,13 +199,13 @@ export async function storeImageContent(buffer: Buffer, contentType: string): Pr
    * handed the link to, and they must not be the one paying for an encode.
    */
   const fit = await optimiseImage(buffer, sniffed);
-  const located = await storeImage(fit.buffer, fit.contentType);
+  const located = await storeImage(fit.buffer, fit.contentType, objects);
   /*
    * The narrow copy, stored beside the full one and CHARGED WITH IT: `bytes` is
    * what this upload cost the store, which is both objects, and the byte quota
    * (lib/asset-quota) sums exactly that column. One upload, one number.
    */
-  const small = fit.variant ? await storeImage(fit.variant.buffer, fit.variant.contentType) : null;
+  const small = fit.variant ? await storeImage(fit.variant.buffer, fit.variant.contentType, objects) : null;
   return {
     format: 'image',
     content: '',
@@ -223,10 +224,10 @@ export async function storeImageContent(buffer: Buffer, contentType: string): Pr
   };
 }
 
-export async function publishImage(_body: Record<string, unknown>, dataUrl: string): Promise<StoredContent | Response> {
+export async function publishImage(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
   const m = IMAGE_DATA_URL_RE.exec(dataUrl);
   if (!m) return json({ error: 'invalid_image', details: ['image must be a base64 data: URL (png|jpeg|webp|gif|svg+xml)'] }, 400);
-  return storeImageContent(Buffer.from(m[2], 'base64'), m[1]);
+  return storeImageContent(Buffer.from(m[2], 'base64'), m[1], objects);
 }
 
 // ── pdf ──────────────────────────────────────────────────────────────────────
@@ -246,13 +247,13 @@ const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/;
  *
  * Unlike an image, nothing is re-encoded or resized: see lib/story/pdf-store.
  */
-export async function storePdfContent(buffer: Buffer): Promise<StoredContent | Response> {
+export async function storePdfContent(buffer: Buffer, objects?: ContentObjects): Promise<StoredContent | Response> {
   if (buffer.length === 0) return json({ error: 'invalid_pdf', details: ['the pdf is empty'] }, 400);
   if (buffer.length > MAX_PDF_BYTES) return json({ error: 'pdf_too_large', maxBytes: MAX_PDF_BYTES }, 413);
   if (sniffAssetType(buffer) !== PDF_CONTENT_TYPE) {
     return json({ error: 'invalid_pdf', details: ['those bytes are not a PDF — the type comes from the file, never from its name or its Content-Type'] }, 400);
   }
-  const located = await storePdf(buffer);
+  const located = await storePdf(buffer, objects);
   return {
     format: 'pdf',
     content: '',
@@ -269,8 +270,8 @@ export async function storePdfContent(buffer: Buffer): Promise<StoredContent | R
   };
 }
 
-export async function publishPdf(_body: Record<string, unknown>, dataUrl: string): Promise<StoredContent | Response> {
+export async function publishPdf(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
   const m = PDF_DATA_URL_RE.exec(dataUrl);
   if (!m) return json({ error: 'invalid_pdf', details: ['pdf must be a base64 data: URL — data:application/pdf;base64,<…>. To publish one that is already on the web, send pdfUrl instead.'] }, 400);
-  return storePdfContent(Buffer.from(m[1], 'base64'));
+  return storePdfContent(Buffer.from(m[1], 'base64'), objects);
 }

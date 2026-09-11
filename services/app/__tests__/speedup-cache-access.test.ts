@@ -25,7 +25,7 @@ async function fixture(twoQueries=false){
   const secret=await createDatasetSecret({userId:user.id,tokenId:token.id},'test-only-password',target);
   const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'private',dataset:{kind:'postgres',connection:{...target,passwordSecretId:secret.id},defaultSchema:'public',refreshSeconds:60,tables:[{schema:'public',name:'numbers',source:{schema:'source',table:'numbers'},columns:['n']}]}}}));
   expect(ds.status,await ds.clone().text()).toBe(201);const dataset=(await ds.json()).id;
-  const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Query name="q" source="${dataset}">{\`select n from numbers\`}</Query>${twoQueries?`<Query name="q2" source="${dataset}">{\`select n from numbers where n > 0\`}</Query>`:''}</Helmet><DataTable data="$q"/>`}}));
+  const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{visibility:'public',markup:`<Helmet><Query name="q" source="ref:${dataset}">{\`select n from numbers\`}</Query>${twoQueries?`<Query name="q2" source="ref:${dataset}">{\`select n from numbers where n > 0\`}</Query>`:''}</Helmet><DataTable data="$q"/>`}}));
   expect(made.status,await made.clone().text()).toBe(201);const id=(await made.json()).id;
   return {id,dataset,user,token};
 }

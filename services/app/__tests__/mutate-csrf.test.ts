@@ -51,7 +51,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
 const ROWS = [{ choice: 'ramen' }];
 const DOC = (ds: string) =>
   '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + `<Mutation name="vote">{\`insert into ref_${ds} (choice) values ($choice)\`}</Mutation></Helmet>`
+  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ($choice)\`}</Mutation></Helmet>`
   + '<div><Button run="$vote">Vote</Button></div>';
 
 beforeEach(async () => {

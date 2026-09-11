@@ -20,6 +20,7 @@ beforeEach(() => {
     if (init?.method === 'POST') { const body = JSON.parse(String(init.body)); posts.push({ url, body }); return new Response(JSON.stringify({ id: 'new001', format: 'folder', title: body.title, parent_id: body.parent_id ?? null, ancestor_ids: [] }), { status: 201 }); }
     if (init?.method === 'DELETE') { deletes.push(String(url)); return new Response('{}', { status: 200 }); }
     if (init?.method === 'PATCH') { const body = JSON.parse(String(init.body)); patches.push({ url, body }); return new Response(JSON.stringify({ id: 'rep001', ...body }), { status: 200 }); }
+    if(!init?.method || init.method==='GET')return Response.json({state:'a'.repeat(64),version:1});
     return new Response('{}', { status: 404 });
   }));
 });
@@ -101,7 +102,7 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     expect(field.value).toBe('Reports');
     fireEvent.change(field, { target: { value: 'Quarterly' } });
     fireEvent.keyDown(field, { key: 'Enter' });
-    await waitFor(() => expect(patches).toEqual([{ url: '/api/my/artifacts/rep001', body: { title: 'Quarterly' } }]));
+    await waitFor(() => expect(patches).toEqual([{ url: '/api/my/artifacts/rep001', body: { title: 'Quarterly', expectedState:'a'.repeat(64) } }]));
     expect(screen.getByLabelText('Open folder Quarterly')).toBeTruthy();
   });
 

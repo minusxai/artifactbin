@@ -7,7 +7,6 @@ import { createElement } from 'react';
 import { renderToReadableStream } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GET as docs } from '@/app/docs/[[...path]]/route';
 import { App } from '@/web/App';
 
 vi.mock('@/web/bootstrap', () => ({
@@ -69,13 +68,5 @@ describe('artifact pages carry no app chrome', () => {
     }
   });
 
-  it('/docs is a route handler for agents, and the tour for people is an app page', async () => {
-    const response = await docs(
-      new Request('https://example.test/docs', { headers: { accept: 'text/html' } }),
-      { params: Promise.resolve({ path: undefined }) },
-    );
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toContain('text/plain');
-    expect(await renderPath('/docs-human')).toContain(MASTHEAD);
-  });
+  it('the human tour remains an app page',async()=>{expect(await renderPath('/docs-human')).toContain(MASTHEAD);});
 });

@@ -28,6 +28,7 @@
  *
  *   usage: node scripts/gate-hydration.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';

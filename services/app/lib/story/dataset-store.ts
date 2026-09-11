@@ -24,10 +24,10 @@ export interface DatasetLocation {
  * Persist rows. Content-addressed, so re-uploading the same file costs one
  * object rather than one per artifact.
  */
-export async function storeDatasetRows(rows: unknown[]): Promise<DatasetLocation> {
+export async function storeDatasetRows(rows: unknown[], store: Pick<import('@/lib/object-store').ObjectStore, 'put'> = objectStore()): Promise<DatasetLocation> {
   const json = JSON.stringify(rows);
   const key = objectKey('dataset', json);
-  await objectStore().put(key, json, 'application/json');
+  await store.put(key, json, 'application/json');
   // `content` is NOT NULL, and an empty string is the honest value: the rows
   // are elsewhere. A reader keys off objectKey, never off content being empty.
   return { content: '', objectKey: key };

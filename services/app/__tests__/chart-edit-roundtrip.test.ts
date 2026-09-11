@@ -57,7 +57,7 @@ beforeEach(async () => {
 const PATH = '1.1';
 const TABLE = 'rows';
 const storySource = () =>
-  `<Helmet><Query name="rows">{\`select * from ref_${datasetId}\`}</Query></Helmet>` +
+  `<Helmet><Query name="rows" source="ref:${datasetId}">{\`select * from public.rows\`}</Query></Helmet>` +
   `<div data-design="tw" className="p-4"><h1 className="text-2xl">Report</h1><Question title="Revenue" data="$rows" /></div>`;
 
 async function createStory() {

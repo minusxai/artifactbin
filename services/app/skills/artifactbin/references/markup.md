@@ -3,7 +3,7 @@ name: markup
 description: >-
   Explains JSX markup.
 ---
-## Read first
+## Start
 
 `markup` is **static JSX data** over the component registry.
 Keep content and interactions native; use Iframe for isolated DOM scripts or canvas.
@@ -19,7 +19,7 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
 - **Style with Tailwind classes via `className`**, starting from a
   `<div data-design="tw" className="@container …">` wrapper with `@2xl:`
   container variants for responsive layout.
-- Data (`<Query>`, `<Value>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
+- Data (`<Query source="ref:abc123">`, `<Value>`, `<Mutation>`, embeds, controls): [data](markup-data.md).
   Editable dataset cells: [editing](markup-editing.md).
   [motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
 
@@ -30,7 +30,7 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
 ## Skeleton (editorial)
 
 ```jsx
-<Helmet><Query name="monthly">{`select month, sum(revenue) revenue from ref_<datasetId> group by 1 order by 1`}</Query></Helmet>
+<Helmet><Query name="monthly">{`select month, sum(revenue) revenue from public.rows group by 1 order by 1`}</Query></Helmet>
 <div data-design="tw" className="@container px-6 py-12 @2xl:px-12 @2xl:py-16">
   <header className="max-w-4xl">
     <p className="animate-fade-in text-xs uppercase tracking-widest text-muted-foreground">Eyebrow</p>

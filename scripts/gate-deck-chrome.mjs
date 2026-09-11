@@ -16,6 +16,7 @@
  *
  * usage: node scripts/gate-deck-chrome.mjs [base]   (default :3040)
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { becomeOwner } from './lib/start-doc.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';

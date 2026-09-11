@@ -55,7 +55,7 @@ async function fixture() {
     maxTokens: 100,
   });
   const doc = await publish({
-    markup: `<Helmet><Mutation name="add">{\`insert into ref_${ds} select llm('hello','answer','${config}')\`}</Mutation></Helmet><Button run="$add">Add</Button>`,
+    markup: `<Helmet><Mutation name="add" source="ref:${ds}">{\`insert into public.rows select llm('hello','answer','${config}')\`}</Mutation></Helmet><Button run="$add">Add</Button>`,
   });
   const policy = {
     version: 1,

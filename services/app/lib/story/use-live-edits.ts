@@ -15,6 +15,7 @@
  * `doc_changed`. On rejection, keep the local draft and block navigation until it is saved
  * or the user explicitly recovers the remote version.
  */
+import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { combineAnnotationOperations, type AnnotationOperation } from '@/lib/editor-v2/annotation-map';
 import { rebaseEditBatch } from '@/lib/story/edit-batch';
 import { sourceChanges } from '@/lib/editor-v2/history';
@@ -145,7 +146,8 @@ export function useLiveEdits({
 
     const run = (async () => {
       try {
-        const res = await fetch(endpoint, {
+        const metadata=change.title!==undefined||change.theme!==undefined||change.colorMode!==undefined;
+        const res = metadata ? await writeBrowserArtifact(id,{...change},editIdRef.current) : await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

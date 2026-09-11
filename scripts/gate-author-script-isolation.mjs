@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /** Built-server security acceptance: authored JS has data capabilities, never renderer/account authority. */
 import assert from 'node:assert/strict';

@@ -1,3 +1,4 @@
+import type {ContentObjects} from './prepared-objects';
 /**
  * Shared request-body → stored-content translation for POST and PUT. A body
  * carries exactly ONE content field:
@@ -106,7 +107,9 @@ const imageTitleFromUrl = (url: string): string | null => {
 };
 
 export interface ContentInputCtx {
-  prepareDataset?: (input:unknown)=>Promise<StoredContent|Response>;
+  prepareMarkup?: (body: Record<string, unknown>, source: string) => Promise<StoredContent | Response>;
+  objects?: ContentObjects;
+  prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Response>;
   /** Identity normalization after caller-coordinate validation, before compilation. */
   normalizeMarkup?: (source: string) => string;
   /**
@@ -192,14 +195,14 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   if (kind === 'file') {
     if (!ctx.overByteQuota) return json({ error: 'file_not_previewable', details: ['Upload the file with POST /api/artifacts.'] }, 400);
     if (await ctx.overByteQuota()) return json({ error: 'quota_exceeded' }, 403);
-    return publishFile(body.file);
+    return publishFile(body.file, ctx.objects);
   }
   // `dataset` accepts a JSON array (what an agent hand-writes) OR raw CSV text
   // (what a file or a sheet actually contains); `sheetUrl` fetches a public
   // Google Sheet. All three converge on the same rows — see lib/data-ingest.
   const datasetDefinition=body.dataset&&typeof body.dataset==='object'&&!Array.isArray(body.dataset)||typeof body.dataset==='string'&&body.dataset.trimStart().startsWith('<Dataset');
   if (kind === 'dataset' && datasetDefinition) {
-    return ctx.prepareDataset ? ctx.prepareDataset(body.dataset) : json({error:'dataset_not_previewable',details:['Use the dataset preview endpoint']},400);
+    return ctx.prepareDataset ? ctx.prepareDataset(body.dataset, ctx.objects) : json({error:'dataset_not_previewable',details:['Use the dataset preview endpoint']},400);
   }
   if (kind === 'dataset' || kind === 'sheetUrl' || kind === 'csvUrl') {
     const source =
@@ -207,12 +210,12 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       : kind === 'csvUrl' ? { kind: 'csvUrl' as const, url: String(body.csvUrl) }
       : typeof body.dataset === 'string' ? { kind: 'csv' as const, text: body.dataset }
       : null;
-    if (!source) return await publishDataset(body, body.dataset); // already-typed JSON rows
+    if (!source) return await publishDataset(body, body.dataset, ctx.objects); // already-typed JSON rows
     try {
       // Declared columns win over the sniffer — see lib/data-ingest/coerce.ts.
       const declared = Array.isArray(body.columns) ? (body.columns as { name: string; type: string }[]) : [];
       const ingested = await ingestDataset(source, declared);
-      return await publishDataset({ ...body, __totalRows: ingested.totalRows, __truncated: ingested.truncated }, ingested.rows);
+      return await publishDataset({ ...body, __totalRows: ingested.totalRows, __truncated: ingested.truncated }, ingested.rows, ctx.objects);
     } catch (error) {
       if (error instanceof IngestError) return json({ error: 'invalid_dataset', code: error.code, details: [error.message] }, 400);
       throw error;
@@ -247,11 +250,11 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
     }
     if (kind === 'imageUrl') {
-      const ingested = await ingestImageFromUrl(String(body.imageUrl));
+      const ingested = await ingestImageFromUrl(String(body.imageUrl), ctx.objects);
       if (ingested instanceof Response) return ingested;
       return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.imageUrl)) };
     }
-    return await publishImage(body, body.image as string);
+    return await publishImage(body, body.image as string, ctx.objects);
   }
   /*
    * THE ONE PLACE THE BYTE QUOTA IS CHARGED at this door, and it guards both
@@ -275,11 +278,11 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
       return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
     }
     if (kind === 'pdfUrl') {
-      const ingested = await ingestPdfFromUrl(String(body.pdfUrl));
+      const ingested = await ingestPdfFromUrl(String(body.pdfUrl), ctx.objects);
       if (ingested instanceof Response) return ingested;
       return { ...ingested, derivedTitle: typeof body.title === 'string' ? null : imageTitleFromUrl(String(body.pdfUrl)) };
     }
-    return await publishPdf(body, body.pdf as string);
+    return await publishPdf(body, body.pdf as string, ctx.objects);
   }
   if (kind === 'viz') return publishVizRecipe(body, body.viz);
   const value = body[kind] as string;
@@ -288,5 +291,5 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
 
   // The document — `markup` (story JSX). publishJsx owns
   // theme/template/colorMode validation.
-  return publishJsx(body, value, ctx);
+  return ctx.prepareMarkup ? ctx.prepareMarkup(body, value) : publishJsx(body, value, ctx);
 }

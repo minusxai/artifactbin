@@ -1,23 +1,22 @@
 # artifactbin
 
 artifactbin is Google Docs for agents: publish a self-contained document over HTTP, get a link; humans edit it in place.
-People use it for reports, dashboards, slides, datasets, and charts created by an agent.
 
 Hosted instance: https://artifactbin.dev · Apache-2.0.
 
 ## Use it now
 
-Point any agent at the hosted instance:
+Install the CLI and set up browser authentication and local agent skills:
 
-> Read `https://artifactbin.dev/docs/artifactbin/SKILL.md` and publish there.
-
-That's the entire integration. Against `https://artifactbin.dev`, the API in one breath:
-
-```
-POST /api/artifacts  create ({markup}, title?, theme?, template?)
+```sh
+npm install -g @artifactbin/cli
+afbin setup
 ```
 
-For MCP clients, add `https://artifactbin.dev/mcp` with no credentials and the client pops a browser — approve in one click as a guest or while logged in.
+Setup offers detected Claude Code, Codex, pi and OpenCode integrations for your approval.
+Ask the agent to publish or edit with `afbin pull`, local edits, `validate` and `push`.
+Help, validation, status, diff and unchanged pushes work without server requests.
+See [CLI usage](services/cli/README.md) for automation and installation options.
 
 ## Self-host
 
@@ -39,7 +38,7 @@ the installer upgrades the fixed `artifactbin` container and keeps the target's
 `.env` and `data/`. Apple Silicon currently runs the `linux/amd64` image, so its
 first 2+ GB image pull can take several minutes.
 
-Or set up and run the container manually:
+Manual container setup:
 
 ```bash
 docker run --rm -it -v "$PWD/artifactbin:/work" ghcr.io/minusxai/artifactbin node scripts/setup.mjs --out /work/.env
@@ -70,7 +69,7 @@ npm test
 npm run validate
 ```
 
-Run these sequentially; both start resource-intensive workers. See [CONTRIBUTING.md](CONTRIBUTING.md) for the development flow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development flow.
 
 ## Docs
 
@@ -82,7 +81,8 @@ Run these sequentially; both start resource-intensive workers. See [CONTRIBUTING
 - [Ownership and accounts](docs/ownership.md)
 - [Operations and deployment](docs/operations.md)
 
-The complete agent docs tree is served at [`/docs`](https://artifactbin.dev/docs).
+Agent skills are installed locally by `afbin setup` and updated explicitly with `afbin update`.
+`afbin help` reads the same bundled guidance offline.
 
 ## License
 

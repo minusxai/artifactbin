@@ -43,14 +43,14 @@ describe('CI change selection', () => {
   it('selects the app and downstream evals without standalone service tests', () => {
     const plan = planCi(['services/app/components/AnnotationLayer.tsx']);
     expect(plan.nodeRoots).toEqual(['evals/', 'scripts/', 'services/app/']);
-    expect(plan.jobs).toMatchObject({ api: true, ui: true, build: true, gates: true, image: true, compose: true, cli: false });
+    expect(plan.jobs).toMatchObject({ api: true, ui: true, build: true, gates: true, image: true, compose: true, cli: true });
   });
 
   it('expands transitive test/composition dependents for a service', () => {
     const plan = planCi(['services/sql/src/engine.ts']);
     expect(plan.nodeRoots).toEqual(['evals/', 'scripts/', 'services/app/', 'services/sql/']);
     expect(plan.jobs.api).toBe(true);
-    expect(plan.jobs.cli).toBe(false);
+    expect(plan.jobs.cli).toBe(true);
   });
 
   it('isolates CLI and eval changes while retaining script contract tests', () => {

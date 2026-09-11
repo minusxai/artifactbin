@@ -31,7 +31,7 @@ async function fixture() {
   };
   const ds = await publish({ dataset: [{ n: 1 }], access: 'readwrite' });
   const doc = await publish({
-    markup: `<Helmet><Query name="rows">{\`select * from ref_${ds}\`}</Query><Mutation name="add">{\`insert into ref_${ds} values ($n)\`}</Mutation><Mutation name="remove">{\`delete from ref_${ds}\`}</Mutation><Value name="n" type="number" default={2} /></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`,
+    markup: `<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values ($n)\`}</Mutation><Mutation name="remove" source="ref:${ds}">{\`delete from public.rows\`}</Mutation><Value name="n" type="number" default={2} /></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`,
   });
   const policy = {
     version: 1,

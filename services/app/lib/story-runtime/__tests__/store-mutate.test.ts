@@ -22,10 +22,10 @@ const flowOf = (helmetChildren: string): Dataflow => {
 
 const FLOW = flowOf(
   '<Value name="choice" type="string" default="ramen" />'
-  + '<Query name="tally">{`select choice, count(*) votes from ref_abc123 group by 1`}</Query>'
+  + '<Query name="tally" source="ref:abc123">{`select choice, count(*) votes from public.rows group by 1`}</Query>'
   + '<Query name="top">{`select * from tally limit 1`}</Query>'
-  + '<Query name="elsewhere">{`select * from ref_zzzzzz`}</Query>'
-  + '<Mutation name="vote">{`insert into ref_abc123 (choice) values ($choice)`}</Mutation>',
+  + '<Query name="elsewhere" source="ref:zzzzzz">{`select * from public.rows`}</Query>'
+  + '<Mutation name="vote" source="ref:abc123">{`insert into public.rows (choice) values ($choice)`}</Mutation>',
 );
 const STATE: DataflowState = {
   mutationAccess: {vote:null},

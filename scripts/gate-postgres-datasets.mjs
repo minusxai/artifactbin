@@ -4,6 +4,7 @@
  * Usage: node scripts/gate-postgres-datasets.mjs [base]
  * Gate manifest: needsMail:true; budget 120 seconds. Own fixture always removed.
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -133,7 +134,7 @@ try {
   log('read-only schema browser lists all exposed relations and columns without editor access');
 
   const markup = '<Helmet><Value name="region" type="string" default="west" />'
-    + `<Query name="orders" source="${datasetId}">{\`select id, region, amount from orders where $region is null or region=$region order by id\`}</Query></Helmet>`
+    + `<Query name="orders" source="ref:${datasetId}">{\`select id, region, amount from orders where $region is null or region=$region order by id\`}</Query></Helmet>`
     + '<div data-design="tw" className="p-8"><h1>Regional orders</h1><input aria-label="Region" value="$region" /><DataTable data="$orders" /></div>';
   const published = await fetch(`${base}/api/artifacts/${start.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${start.token}` }, body: JSON.stringify({ title: 'Postgres sourced document', markup, visibility: 'unlisted' }) });
   const publication = await published.json();

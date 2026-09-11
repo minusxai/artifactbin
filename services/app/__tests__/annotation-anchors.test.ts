@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE ANCHOR LIVES IN THE DOCUMENT — `data-annotation-anchor="<key>"` on the annotated
  * node, stamped by the FIRST comment as a real edit through the protocol
@@ -67,7 +68,7 @@ const list = async (token: string, id: string) => {
 };
 
 const put = async (token: string, id: string, markup: string) => {
-  const res = await putArtifactRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: token, json: { markup } }), params({ id }));
+  const res = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: token, json: { markup } }), params({ id }));
   expect(res.status, await res.clone().text()).toBe(200);
 };
 
@@ -125,7 +126,7 @@ describe('the annotation anchor', () => {
     await put(t.token,doc.id,'<p>replacement</p>');
     expect((await list(t.token,doc.id))[0].orphaned).toBe(true);
     const back = await revertRoute(
-      request(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: doc.version } }),
+      await observedRequest(`/api/artifacts/${doc.id}/revert`, { method: 'POST', token: t.token, json: { version: doc.version } }),
       params({ id: doc.id }),
     );
     expect(back.status, await back.clone().text()).toBe(200);

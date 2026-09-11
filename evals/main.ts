@@ -3,7 +3,7 @@
  *
  *   npm run eval -- --harness <name> --model <id> --api-key-env <VAR> [--label L]
  *                   [--price-in N --price-out N] [--no-vision]
- *                   [--mode fetched_skill+api_action|fetched_skill+mcp_action|installed_skill+api_action|installed_skill+mcp_action]
+ *                   [--mode cli]
  *                   [--tasks x,y] [--deployment https://…] [--out dir] [--no-report]
  *                   [--protect-path dir]   hide other local evidence directories (repeatable)
  *                   [--run-as user]   run the harness as another unix account (CI isolation)
@@ -24,6 +24,7 @@
  * Playwright (render guards + captures), `/export` (the product's own capture)
  * — into minusx-schema rows.
  */
+import {privateConnectionPaths} from './lib/private-connections';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,6 +37,7 @@ import { checksToRecord, gatedChecks, verdictFor } from './lib/score/verdict';
 import { buildPrompt, needsStartDocument, planAccess } from './lib/tasks';
 import { actionTransport, installsSkills, planTransport } from './lib/mode';
 import { materializePlugin } from './lib/plugin-kit';
+import {materializeCli} from './lib/cli-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
 import { ledgerMetrics, ledgerRows, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
@@ -48,10 +50,11 @@ import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
 import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
+import { seedDocument } from './lib/seed';
 import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
-import { askedForAToken, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
+import { askedForAuthorization, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
 import { prepareTask, runChecks, scorerFor } from './lib/score/kinds';
 import { credentialEnv, readDotEnv } from './lib/env';
 import { parseArgs } from './lib/args';
@@ -84,16 +87,6 @@ async function servedDocument(url: string): Promise<ServedDocument> {
   return { status: res.status, html: res.ok ? await res.text() : '' };
 }
 
-/** Publish the document a task asks the agent to EDIT, as the agent's own token would have. */
-async function seedDocument(base: string, id: string, token: string, markup: string): Promise<void> {
-  const res = await fetch(`${base}/api/artifacts/${id}`, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}`, [DRIVER_HEADER]: '1' },
-    body: JSON.stringify({ markup }),
-  });
-  if (!res.ok) throw new Error(`seeding document ${id} → ${res.status} ${await res.text()}`);
-}
-
 /** A task's outcome for one leg. `null` = skipped: this harness cannot run it at all. */
 import { runSecondAttempts, verdictLine, type MergedVerdicts, type Outcome } from './lib/second-attempt';
 
@@ -122,7 +115,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   // attempt's kept artifacts AND every sibling task's rows, leaving a run
   // directory that described one task and a report that had lost the rest.
   fs.mkdirSync(legDir, { recursive: true, mode: 0o700 });
-  const privateConnections = ['.artifactbin.env', '.config/artifact-bin'].map((p) => path.join(os.homedir(), p)).filter((p) => fs.existsSync(p));
+  const privateConnections = privateConnectionPaths(os.homedir());
   const protectedRoots = [...CHECKOUT_ROOTS, legDir, ...privateConnections, ...(run.protectPaths ?? [])];
   // Two ways to reach the product, and they need OPPOSITE proxies.
   //
@@ -197,7 +190,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     const baseDir = path.join(legDir, 'baseline');
     const baseWorkspace = createWorkspace(leg.label, 'baseline');
     const basePlugin = installsSkills(leg.mode.run)
-      ? materializePlugin(path.join(baseWorkspace.homeDir, 'plugin'), config.deployment ?? productUrl, actionTransport(leg.mode.run) === 'api' ? 'curl' : 'mcp')
+      ? materializePlugin(path.join(baseWorkspace.homeDir, 'plugin'), config.deployment ?? productUrl)
       : undefined;
     const baseline = await measureBaseline({
       leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs, runAs, workspace: baseWorkspace, checkoutRoots: protectedRoots,
@@ -223,8 +216,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       } catch (err) {
         // A task's own failure is ITS failure. Letting it reject would take down the server its
         // siblings are still running against — and their agent time is already paid for. `false`
-        // rather than `null`, because null means "deliberately not run" (a harness with no MCP
-        // client) and would drop a crashed task out of the count instead of failing it.
+        // rather than `null`, because null means "deliberately not run" and would drop a crashed task out of the count instead of failing it.
         log(`${leg.label}/${task.id}: FAILED — ${scrubRegistered(String(err))}`);
         return false;
       } finally {
@@ -301,28 +293,24 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   if (start && !r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
 
   // EVERYTHING the driver does before the turn, decided in one place (`lib/tasks planAccess`) and
-  // performed here: seed the document this task edits, write the skill's connection file, wire the
-  // MCP server. A `handoff: none` task gets none of the three.
+  // performed here: seed the document this task edits and write its private CLI credentials.
+  // A `handoff: none` task gets neither.
   const installed = installsSkills(leg.mode.run);
-  const plan = planAccess({ task, base: r.agentBase, start, credential: r.credential, installed, transport: transport.run });
+  const plan = planAccess({ task, base: r.agentBase, start, credential: r.credential });
   if (plan.seed) await seedDocument(r.agentBase, plan.seed.id, plan.seed.token, plan.seed.markup);
   if (plan.connectionToken) writeArtifactbinEnv(homeDir, r.agentBase, plan.connectionToken);
   const access = plan.access;
-  const mcp = plan.mcp ?? undefined;
   // THE ONE CREDENTIAL THE DRIVER HOLDS for this task, read back OFF the plan rather than decided a
   // second time beside it: `planAccess` answers `kind: 'token'` in exactly the cases the driver was
-  // handed one (an account credential, or the paste token a `token`/installed/MCP task makes it read),
+  // handed one (an account credential, or the paste token a CLI task makes it read),
   // and `kind: 'none'` for the token-less task, which is the whole point of that task. A task KIND
   // spends it — `comment`'s setup posts the comment and its checks read the thread back
   // (`lib/score/kinds`) — so deriving it here keeps one decision rather than two that can disagree.
   const driverToken = plan.access.kind === 'token' ? plan.access.token : null;
-  // The skills are built for the base THIS TASK will be reached on: each task has its own
-  // recording proxy on its own port, and a skill naming another one sends the traffic past
-  // this task's ledger. `lib/plugin-package` is the same generator that ships the public
-  // marketplace, so the installed vocabulary is the served vocabulary by construction.
-  // The action axis selects the API/curl or MCP/tool compilation independently.
+  // Install the same local skill bundle shipped with the CLI. The private connection points
+  // at this task's recording proxy; authoring guidance contains no credentials.
   const plugin = installsSkills(leg.mode.run)
-    ? materializePlugin(path.join(homeDir, 'plugin'), r.agentBase, transport.run === 'api' ? 'curl' : 'mcp')
+    ? materializePlugin(path.join(homeDir, 'plugin'), r.agentBase)
     : undefined;
   // WHAT THIS KIND OF TASK NEEDS, and then the baseline — in that order, which is `prepareTask`'s
   // whole job (`lib/score/kinds`). A `comment` task's setup posts a comment, and the anchor stamp is
@@ -357,7 +345,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const prompt = buildPrompt(task, access, { vision: leg.vision, mode: leg.mode.run });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
-  const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, mcp, plugin };
+  const cliBin=materializeCli(path.join(homeDir,'bin'));
+  const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, plugin };
   log(`${leg.label}/${task.id}: ${start ? `doc ${start.id}` : 'no credential, no document'} — running ${leg.harness} (${leg.model})`);
   await adapter.prepare(ctx);
   // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
@@ -366,7 +355,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
-    baseEnv: { ...process.env, ...r.agentEnv },
+    baseEnv: { ...process.env, ...r.agentEnv, PATH:[cliBin,r.agentEnv.PATH??process.env.PATH??''].join(path.delimiter) },
     timeoutMs: config.run.timeoutMs,
     stdoutPath: path.join(runDir, 'transcript.jsonl'),
     stderrPath: path.join(runDir, 'stderr.log'),
@@ -519,16 +508,15 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     dataset_created: lm.datasetCreated,
     query_ran: queryRows > 0,
     used_edits_endpoint: lm.usedEditsEndpoint,
-    // Null, not false, when this harness has no MCP client and ran the task over REST.
-    used_mcp: transport.substitutedWhy || leg.mode.substitutedWhy ? null : lm.usedMcp,
+    used_cli: result.toolCalls===null?null:result.invocations.some(call=>/\bafbin\b/.test(JSON.stringify(call.input))),
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
     // The token-less guard's two, and the only two it is graded on. `did_not_self_mint` is the
     // ledger's `selfMinted` inverted — null, never true, when the ledger saw nothing, because `!null`
-    // would turn "we did not watch" into a pass. `asked_for_a_token` is read from the final message,
+    // would turn "we did not watch" into a pass. `requested_authorization` is read from the final message,
     // and asks the question the rubric this task replaces could not: having no credential, did the
     // agent hand its human something to act on?
     did_not_self_mint: lm.selfMinted === null ? null : !lm.selfMinted,
-    asked_for_a_token: askedForAToken(result.finalMessage),
+    requested_authorization: askedForAuthorization(result.finalMessage),
     // …and last, so a KIND's own answer wins over a common name it also computes.
     ...checked.checks,
   };

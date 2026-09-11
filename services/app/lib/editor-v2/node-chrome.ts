@@ -1,5 +1,6 @@
 /** Selected-block controls own their preview; only a completed gesture changes source. */
 import type { BlockEdit } from './block-edit';
+import { createDragPreview } from './drag-preview';
 interface GridGeometry {
   cols: number;
   rowHeight: number;
@@ -39,6 +40,7 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     path: string | null = null,
     grid: GridGeometry | undefined;
   let gesture: Gesture | null = null;
+  const dragPreview = createDragPreview(doc);
   const previewStyle = doc.createElement('style');
   const previewId = crypto.randomUUID();
   doc.head.append(previewStyle);
@@ -147,13 +149,14 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
       return;
     }
     const r = element.getBoundingClientRect();
-    const size = gesture ? dimensions(gesture) : r;
+    const size = gesture && gesture.kind !== 'move' ? dimensions(gesture) : r;
     Object.assign(root.style, {
       left: `${r.left}px`,
       top: `${r.top}px`,
       width: `${grid ? r.width : size.width}px`,
       height: `${Math.max(size.height, r.height)}px`,
     });
+    if (gesture?.kind === 'move') moveDestination();
   };
   function start(kind: GestureKind, pointer: number | null, x = 0, y = 0) {
     if (!element || !path) return;
@@ -174,6 +177,10 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
           ? span(r.width) + span(element.nextElementSibling.getBoundingClientRect().width)
           : undefined,
     };
+    if (kind === 'move') {
+      dragPreview.start(element, path);
+      preview();
+    }
   }
   function begin(event: PointerEvent, kind: GestureKind) {
     event.stopPropagation();
@@ -188,7 +195,11 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     height: Math.max(20, g.height + (['width', 'divider'].includes(g.kind) ? 0 : g.dy)),
   });
   const preview = () => {
-    if (!gesture || !element || gesture.kind === 'move') return;
+    if (!gesture || !element) return;
+    if (gesture.kind === 'move') {
+      moveDestination();
+      return;
+    }
     const size = dimensions(gesture);
     previewElement = element;
     element.setAttribute('data-mx-resize-preview', previewId);
@@ -246,11 +257,20 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     gesture = null;
     doc.defaultView?.cancelAnimationFrame(frame);
     clearPreview();
+    dragPreview.clear();
     root.style.outline = '';
     position();
     return true;
   };
-  const finish = (target?: string) => {
+  const moveDestination = () => {
+    if (!gesture || !element || !path) return;
+    const parts = path.split('.'), index = Number(parts.pop());
+    const r = element.getBoundingClientRect();
+    return gesture.pointer === null
+      ? dragPreview.update(r.left, r.top, [...parts, String(index + gesture.steps)].join('.'))
+      : dragPreview.update(gesture.x + gesture.dx, gesture.y + gesture.dy);
+  };
+  const finish = () => {
     const g = gesture;
     if (!g || !path) return;
     const p = path,
@@ -260,16 +280,13 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
       return;
     }
     preview();
+    const target = g.kind === 'move' ? moveDestination() : undefined;
     gesture = null;
     doc.defaultView?.cancelAnimationFrame(frame);
     root.style.outline = '';
     settlePreview();
     if (g.kind === 'move') {
-      if (!target && g.pointer === null) {
-        const parts = p.split('.'),
-          index = Number(parts.pop());
-        target = [...parts, String(index + g.steps)].join('.');
-      }
+      dragPreview.clear();
       if (target) commit({ kind: 'move', path: p, target });
       return;
     }
@@ -305,12 +322,7 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     if (!gesture || gesture.pointer !== e.pointerId) return;
     gesture.dx = e.clientX - gesture.x;
     gesture.dy = e.clientY - gesture.y;
-    let target = doc.elementFromPoint(e.clientX, e.clientY)?.closest('[data-mx-ast]');
-    // Dropping on text inside the sibling column moves the column itself.
-    const depth = path?.split('.').length;
-    while (target && target.getAttribute('data-mx-ast')?.split('.').length !== depth)
-      target = target.parentElement?.closest('[data-mx-ast]') ?? null;
-    finish(target?.getAttribute('data-mx-ast') ?? undefined);
+    finish();
   };
   const onKey = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && cancel()) {
@@ -376,6 +388,7 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     dispose() {
       cancel();
       clearPreview();
+      dragPreview.dispose();
       previewStyle.remove();
       root.remove();
       doc.removeEventListener('pointermove', onMove, true);

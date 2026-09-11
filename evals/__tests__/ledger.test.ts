@@ -40,10 +40,10 @@ describe('ledgerMetrics', () => {
     expect(ledgerMetrics([startLink, ...noDocs]).readDocsBeforeWrite).toBe(true);
   });
 
-  it('treats POST /api/artifacts, PUT, /edits and /mcp as writes; a first-try publish has one attempt and no 4xx', () => {
+  it('treats POST /api/artifacts, PUT and /edits as writes; a first-try publish has one attempt and no 4xx', () => {
     const w = (method: string, p: string, status = 200): LedgerEntry => ({ t: 0, ms: 1, method, path: p, status, ua: null, auth: 'bearer', error: null });
-    const m = ledgerMetrics([w('GET', '/docs/llm'), w('POST', '/api/artifacts', 201), w('POST', '/api/artifacts/abc123/edits'), w('POST', '/mcp'), w('GET', '/api/artifacts/abc123')]);
-    expect(m.writeAttempts).toBe(3);
+    const m = ledgerMetrics([w('GET', '/docs/llm'), w('POST', '/api/artifacts', 201), w('POST', '/api/artifacts/abc123/edits'), w('GET', '/api/artifacts/abc123')]);
+    expect(m.writeAttempts).toBe(2);
     expect(m.firstError).toBeNull();
     expect(m.publishedFirstTry).toBe(true);
     expect(ledgerMetrics(entries).publishedFirstTry).toBe(false);
@@ -76,8 +76,7 @@ describe('documentWrites', () => {
       e({ method: 'PUT', path: '/api/artifacts/abc123' }),
       e({ path: '/api/artifacts/abc123/edits' }),
       e({ path: '/api/artifacts/abc123/revert' }),
-      e({ path: '/mcp' }),
-    ])).toBe(5);
+    ])).toBe(4);
     // Replying to a comment and resolving it: one call, no version.
     expect(documentWrites([e({ path: '/api/artifacts/abc123/annotations/ann_4504j887w47si35kba9' })])).toBe(0);
     // Reads and refusals never count either.
@@ -129,7 +128,7 @@ describe('endpoint and transport metrics', () => {
   });
 
   it('knows every route the docs teach', () => {
-    for (const p of ['/api/artifacts/abc123/annotations/ann_2vlmssgwhdloxo0zdlx', '/api/artifacts/abc123/annotations', '/docs/llm', '/docs/markup', '/api/tokens/anonymous', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/mcp', '/a/abc123', '/a/abc123/start?k=x', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
+    for (const p of ['/api/artifacts/abc123/annotations/ann_2vlmssgwhdloxo0zdlx', '/api/artifacts/abc123/annotations', '/api/tokens/anonymous', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/a/abc123', '/a/abc123/start?k=x', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
       expect(ledgerMetrics([e({ path: p, status: 404 })]).inventedEndpoints).toBe(0);
     }
   });
@@ -138,18 +137,14 @@ describe('endpoint and transport metrics', () => {
     const m = ledgerMetrics([
       e({ method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset' }),
       e({ method: 'POST', path: '/api/artifacts/abc123/edits', status: 200 }),
-      e({ method: 'POST', path: '/mcp', status: 200 }),
     ]);
     expect(m.datasetCreated).toBe(true);
     expect(m.usedEditsEndpoint).toBe(true);
-    expect(m.usedMcp).toBe(true);
     const none = ledgerMetrics([e({ method: 'PUT', path: '/api/artifacts/abc123', status: 200, reqFormat: 'markup' })]);
-    expect(none).toMatchObject({ datasetCreated: false, usedEditsEndpoint: false, usedMcp: false });
+    expect(none).toMatchObject({ datasetCreated: false, usedEditsEndpoint: false });
   });
 
-  it('a FAILED write does not count as having used the transport', () => {
-    expect(ledgerMetrics([e({ method: 'POST', path: '/mcp', status: 500 })]).usedMcp).toBe(false);
-  });
+
 });
 
 describe('a ledger that saw NOTHING knows nothing', () => {
@@ -166,7 +161,6 @@ describe('a ledger that saw NOTHING knows nothing', () => {
     expect(m.publishedFirstTry).toBeNull();
     expect(m.datasetCreated).toBeNull();
     expect(m.usedEditsEndpoint).toBeNull();
-    expect(m.usedMcp).toBeNull();
     expect(m.canonicalStable).toBeNull();
   });
 
@@ -305,21 +299,15 @@ describe('writtenArtifactIds', () => {
   });
 });
 
-describe('MCP operation-aware metrics', () => {
-  it('counts a tool error despite HTTP 200 and excludes it from successful writes', () => {
-    const base = {t:1,ms:1,method:'POST',path:'/mcp',status:200,ua:null,auth:null,error:null} as const;
-    const entries = [
-      {...base,mcpMethod:'initialize'},
-      {...base,mcpMethod:'tools/call',mcpTool:'get_artifact'},
-      {...base,mcpMethod:'tools/call',mcpTool:'edit_artifact',mcpError:'invalid_jsx',reqMarkup:'bad'},
-      {...base,mcpMethod:'tools/call',mcpTool:'edit_artifact',reqMarkup:'<h1>Good</h1>'},
-    ];
+describe('HTTP operation failures', () => {
+  it('counts refused writes and excludes them from successful versions', () => {
+    const base = {t:1,ms:1,method:'PUT',path:'/api/artifacts/abc123',status:200,ua:null,auth:null,error:null} as const;
+    const entries = [{...base,status:400,error:'invalid_jsx',reqMarkup:'bad'}, {...base,reqMarkup:'<h1>Good</h1>'}];
     const metrics = ledgerMetrics(entries);
     expect(metrics.writeAttempts).toBe(2);
     expect(metrics.firstError).toBe('invalid_jsx');
     expect(metrics.publishedFirstTry).toBe(false);
     expect(documentWrites(entries)).toBe(1);
-    expect(ledgerRows(entries)).toContainEqual({metric:'mcp_errors',value:1});
     expect(ledgerRows(entries)).toContainEqual({metric:'operation_errors',value:1});
   });
 });

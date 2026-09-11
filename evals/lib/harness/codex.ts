@@ -28,7 +28,7 @@ import { countDocsReads, type ToolInvocation } from '../docs-reads';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { HarnessAdapter, HarnessResult, HarnessRunContext, McpTarget, TokenUsage } from '../contracts';
+import type { HarnessAdapter, HarnessResult, HarnessRunContext, TokenUsage } from '../contracts';
 import { NO_TELEMETRY, parseJsonl } from './shared';
 import type { PluginKit } from '../plugin-kit';
 
@@ -64,25 +64,8 @@ const TOOL_ITEMS = new Set(['command_execution', 'mcp_tool_call', 'file_change',
 /** Every item type Codex emits as the ASSISTANT acting — its count is the run's `turns`. Superset of `TOOL_ITEMS`. */
 const ASSISTANT_ITEMS = new Set(['agent_message', 'reasoning', 'command_execution', 'file_change', 'web_search', 'mcp_tool_call']);
 
-/** Codex reads a bearer token from an environment variable, so it never lands in config.toml. */
-const MCP_TOKEN_ENV = 'ARTIFACTBIN_MCP_TOKEN';
-
-async function mcpAdd(home: string, mcp: McpTarget): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn('codex', ['mcp', 'add', mcp.name, '--url', mcp.url, '--bearer-token-env-var', MCP_TOKEN_ENV], {
-      env: { ...process.env, CODEX_HOME: home },
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
-    let err = '';
-    child.stderr.on('data', (c) => (err += c));
-    child.on('error', reject);
-    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`codex mcp add failed (${code}): ${err.trim()}`))));
-  });
-}
-
 export const codex: HarnessAdapter = {
   harness: 'codex',
-  supportsMcp: true,
 
   async prepare(ctx: HarnessRunContext) {
     fs.mkdirSync(ctx.homeDir, { recursive: true });
@@ -97,7 +80,6 @@ export const codex: HarnessAdapter = {
       child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`codex login failed (${code}): ${err.trim()}`))));
       child.stdin.end(ctx.apiKey);
     });
-    if (ctx.mcp) await mcpAdd(ctx.homeDir, ctx.mcp);
     for (const argv of ctx.plugin ? pluginInstallCommands(ctx.plugin) : []) {
       await run(argv, ctx.homeDir);
     }
@@ -105,7 +87,6 @@ export const codex: HarnessAdapter = {
 
   invocation(ctx: HarnessRunContext) {
     const env: Record<string, string> = { CODEX_HOME: ctx.homeDir };
-    if (ctx.mcp) env[MCP_TOKEN_ENV] = ctx.mcp.token;
     return {
       argv: [
         'codex', 'exec', '--json', '--skip-git-repo-check',

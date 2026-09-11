@@ -29,3 +29,8 @@ export const DELETE = withTokenAuth((request: Request, { tokenId, userId, params
     id: params.id,
     force: new URL(request.url).searchParams.get('force') === 'true',
   }));
+
+/** PATCH changes metadata conditionally without creating a content version. */
+export const PATCH=withTokenAuth(async(request,{tokenId,userId,params})=>{
+ const body=await readJson(request);return body?runOperation('update_metadata',request,{tokenId,userId},{...body,id:params.id}):json({error:'invalid_json'},400);
+});

@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * API contract tests — real route handlers, in-memory PGLite (NODE_ENV=test ⇒
  * no data dir), no HTTP server. One PGLite instance for the file; rows are
@@ -8,12 +9,7 @@ import { useAppHarness, request } from '@/__tests__/harness';
 import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { GET as docsRoute } from '@/app/docs/[[...path]]/route';
-
-const docsPath = (p: string) => docsRoute(request(`/docs${p ? '/' + p : ''}`), { params: Promise.resolve({ path: p }) });
-const getDoc = (_r: Request) => docsPath('artifactbin/references/publishing.md');
-import { GET as getLlmsTxt } from '@/app/llms.txt/route';
-const docsIndexRoute = (_r: Request) => docsPath('');
+import {GET as getLlmsTxt} from '@/app/llms.txt/route';
 // Minting and revoking are the APP's own routes (app/api/tokens/**) — the real
 // handlers, driven in-process exactly as the proxy forwards them.
 import { DELETE as revokeTokenRoute } from '@/app/api/tokens/[id]/route';
@@ -113,7 +109,7 @@ describe('artifact CRUD', () => {
     const { token } = await mint();
     const created = await create(token, '<h1 id="head">v1</h1>');
     const res = await putArtifact(
-      request(`/api/artifacts/${created.id}`, { method: 'PUT', token: token, json: { markup: '<h1 id="head">v2</h1>' } }),
+      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: token, json: { markup: '<h1 id="head">v2</h1>' } }),
       params({ id: created.id }),
     );
     expect(res.status).toBe(200);
@@ -142,9 +138,9 @@ describe('artifact CRUD', () => {
     const created = await create(a.token);
     for (const handler of [
       () => getArtifactRoute(request(`/api/artifacts/${created.id}`, { token: b.token }), params({ id: created.id })),
-      () =>
+      async () =>
         putArtifact(
-          request(`/api/artifacts/${created.id}`, { method: 'PUT', token: b.token, json: { markup: '<p>x</p>' } }),
+          await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: b.token, json: { markup: '<p>x</p>' } }),
           params({ id: created.id }),
         ),
     ]) {
@@ -200,106 +196,12 @@ describe('public serving', () => {
   });
 });
 
-/**
- * `/llms.txt` is where an agent looks when nobody told it where the docs are.
- * It is the llmstxt.org shape — a SMALL index of links — and deliberately not
- * a copy of the protocol doc: an agent that fetched `/llms.txt` and then
- * `/docs/llm` was reading the same 30 KB twice (measured on the dashboard
- * task), and two large copies of one doc is the worst of both worlds.
- */
-describe('/llms.txt', () => {
-  it('serves the small docs index — the same bytes /docs serves an agent', async () => {
-    const [a, b, full] = await Promise.all([
-      getLlmsTxt(request('/llms.txt')).then((r) => r.text()),
-      docsIndexRoute(request('/docs')).then((r: Response) => r.text()),
-      getDoc(request('/docs/artifactbin/references/publishing.md')).then((r: Response) => r.text()),
-    ]);
-    expect(a).toBe(b);
-    expect(a).not.toBe(full);
-    expect(Buffer.byteLength(a)).toBeLessThan(6200);
-    expect(a).toContain(`${BASE}/docs/artifactbin/references/publishing.md`);
-  });
-
-  it('answers as markdown, uncached', async () => {
-    const res = await getLlmsTxt(request('/llms.txt'));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toMatch(/markdown|text\/plain/);
-  });
-});
-
-describe('skill doc', () => {
-  it('serves markdown with absolute URLs baked in', async () => {
-    const res = await getDoc(request('/docs/llm'));
-    expect(res.status).toBe(200);
-    // text/plain, not text/markdown — see MARKDOWN_CONTENT_TYPE: agents' web
-    // readers reject the markdown type, and this doc exists for agents.
-    expect(res.headers.get('Content-Type')).toContain('text/plain');
-    const text = await res.text();
-    expect(text).toContain(`POST ${BASE}/api/artifacts`);
-    expect(text).toContain('Authorization: Bearer mx_');
-  });
-
-  /**
-   * The doc IS the agent's only spec — an example it teaches that the API
-   * rejects sends the agent into a 400 loop it cannot escape. Every ```json
-   * block in the doc is therefore executed against the real create route.
-   */
-  it('every ```json example it teaches is a payload the API accepts', async () => {
-    const { token } = await mint('doc-examples');
-    const doc = await (await docsPath('artifactbin/references/publishing-datasets.md')).text();
-    const blocks = [...doc.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1]);
-    // `viz` is the one tier whose shape (description/engine/bindings[]/
-    // template{}) prose cannot convey, so the doc must carry a working
-    // example. The others are fully determined by the text around them.
-    expect(blocks.some((b) => b.includes('"viz"'))).toBe(true);
-    for (const block of blocks) {
-      const body = JSON.parse(block) as Record<string, unknown>;
-      const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
-      expect(
-        res.status,
-        `doc example rejected: ${JSON.stringify(await res.clone().json())}\n${block.slice(0, 200)}`,
-      ).toBe(201);
-    }
-  });
-
-  /**
-   * The order is a CONTRACT, and it is ordered for how agents actually read:
-   * they truncate. Measured on the production matrix, pi fetched this page with
-   * `head -c 6000` and opencode with `head -100`, while the data vocabulary
-   * began at byte 15,493 and the document rules at 24,807 — so both wrote a
-   * data document having seen neither, and failed publish repeatedly.
-   *
-   * What a document cannot be written without now comes FIRST — a short auth
-   * recap, the data path, the rules a document lives by — then the endpoint
-   * reference, then the long material, with the full auth preference list moved
-   * down to where a reader who needs it will look.
-   */
-  it('orders the doc for a reader who truncates: essentials first, reference after', async () => {
-    const res = await getDoc(request('/docs/llm'));
-    const text = await res.text();
-    const sections = [
-      '## Read first',
-      '## Rules every document lives by',
-      '### Create an artifact',
-      '### Update an artifact',
-      '### Read one back',
-      '### List your artifacts',
-      '## Errors',
-    ];
-    const indices = sections.map((s) => ({ s, i: text.indexOf(s) }));
-    for (const { s, i } of indices) expect(i, `missing section: ${s}`).toBeGreaterThan(-1);
-    const positions = indices.map(({ i }) => i);
-    expect(positions).toEqual([...positions].sort((a, b) => a - b));
-  });
-
-  it('points all deep docs at /docs/* — the old /api doc URLs are gone', async () => {
-    const res = await getDoc(request('/docs/llm'));
-    const text = await res.text();
-    const index = await (await docsIndexRoute(request('/docs'))).text();
-    for (const path of ['/docs/artifactbin/SKILL.md', '/docs/artifactbin/references/publishing.md', '/docs/artifactbin/references/markup.md', '/docs/artifactbin/references/themes.md', '/docs/artifactbin/references/templates.md', '/docs/artifactbin/references/design.md']) {
-      expect(index).toContain(`${BASE}${path}`);
-    }
-    expect(text).not.toContain(`${BASE}/api/markup`);
-    expect(text).not.toContain('llm-docs');
-  });
+describe('CLI discovery',()=>{
+ it('names local help, browser setup and a versioned downloadable bundle',async()=>{
+  const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
+  expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
+  expect(text).toContain('afbin setup --server http://localhost:3000');
+  expect(text).toContain('afbin help');expect(text).toContain('/releases/download/afbin-v');
+  expect(text).not.toContain('/docs/');expect(Buffer.byteLength(text)).toBeLessThan(1024);
+ });
 });

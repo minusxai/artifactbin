@@ -9,6 +9,9 @@ import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 
 import { mintToken } from '@/lib/tokens';
@@ -37,6 +40,26 @@ async function world() {
 }
 
 describe('inlined page data', () => {
+  it('preloads the authorized markup reader before bootstrap data, but not listings or denied documents', async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'reader-page-'));
+    try {
+      mkdirSync(path.join(dir, '.vite'));
+      writeFileSync(path.join(dir, 'index.html'), '<html><head></head><body><div id="root"></div></body></html>');
+      writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({
+        'pages/Profile.tsx': { file: 'assets/Profile-test.js' },
+        'pages/Artifact.tsx': { file: 'assets/Artifact-test.js' },
+        '../lib/story-runtime/InlineStoryRuntime.tsx': { file: 'assets/InlineStoryRuntime-test.js' },
+      }));
+      const built = createAppServer({ webDir: dir }), w = await world();
+      const canonical = (await built.request(`/a/${w.pub.id}`)).headers.get('location')!;
+      const html = await (await built.request(canonical)).text();
+      expect(html).toContain('rel="modulepreload" href="/assets/InlineStoryRuntime-test.js"');
+      expect(html.indexOf('/assets/InlineStoryRuntime-test.js')).toBeLessThan(html.indexOf(`id="${BOOTSTRAP_ID}"`));
+      for (const url of [`/@${w.owner.username}`, `/a/${w.priv.id}`]) {
+        expect(await (await built.request(url, { headers: { accept: 'text/html' } })).text()).not.toContain('/assets/InlineStoryRuntime-test.js');
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
   it('discovers only the theme critical fonts as crossorigin preloads before body markup', async () => {
     const runtime = await prepareStoryRuntime({source:'<h1>Headline</h1>',compiledCss:null,theme:'manuscript',colorMode:'light',refData:{},title:'Fonts'});
     const html = withInitialStory('<html><head></head><body><div id="root"></div></body></html>',runtime,'ABC123');

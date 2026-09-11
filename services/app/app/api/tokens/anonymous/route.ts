@@ -11,6 +11,7 @@
  * it publishes lands in its dashboard without a claim; anyone else gets an
  * anonymous token that reaches only what it itself creates, claimable later.
  */
+import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';
 import { agentContract } from '@/lib/agent-contract';
 import { MAX_TOKEN_TTL_MS, MIN_TOKEN_TTL_MS, mintToken, sourcedTokenName } from '@/lib/tokens';
@@ -32,11 +33,11 @@ export async function POST(request: Request) {
   let audience: string | undefined;
   let scope: string | undefined;
   if (body.audience !== undefined || body.scope !== undefined) {
-    if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== 'artifacts') return json({ error: 'invalid_audience' }, 400);
+    if (actor.credential !== 'session' || typeof body.audience !== 'string' || body.scope !== ARTIFACT_SCOPE) return json({ error: 'invalid_audience' }, 400);
     try {
       const target = new URL(body.audience);
       const loopback = target.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(target.hostname);
-      if ((target.protocol !== 'https:' && !loopback) || target.pathname !== '/mcp' || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
+      if ((target.protocol !== 'https:' && !loopback) || target.pathname !== API_RESOURCE_PATH || target.search || target.hash || target.username || target.password) return json({ error: 'invalid_audience' }, 400);
       audience = target.href;
       scope = body.scope;
     } catch {
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
       id: minted.id,
       token: minted.token,
       expiresAt: minted.expiresAt,
-      note: agentContract(baseUrl(request), 'http'),
+      note: agentContract(baseUrl(request)),
     },
     201,
   );

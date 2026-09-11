@@ -12,6 +12,7 @@
  * Dependents warnings on dataset/viz refresh re-run the same checks.
  */
 import { parseJsx, type JsxAttribute, type JsxNode, type JsxElement, type ValidationError } from '@/lib/jsx';
+import {REFERENCE_POSITIONS} from './reference-positions';
 import { urlListUrls } from '@/lib/jsx/url-attrs';
 import { videoEmbedUrl } from '@/lib/story-ui/video-embed';
 import { collectFieldRefs, collectDerivedFieldNames, hasUnverifiableTransform } from '@/lib/viz/field-refs';
@@ -20,10 +21,11 @@ import type { DatasetColumn } from './data-tiers';
 import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-schemas';
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
+import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 
 export interface RefUse {
   id: string;
-  kind: 'dataset' | 'viz' | 'image' | 'pdf';
+  kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
   /** Datasets are only ever reached as `ref_<id>` tables inside a <Query>'s or <Mutation>'s SQL. */
   via?: 'sql';
   /**
@@ -57,11 +59,9 @@ export interface ResolvedRef {
 
 export type RefLoader = (id: string) => Promise<ResolvedRef | null>;
 
-const REF_RE = /^ref:([A-Za-z0-9_-]+)$/;
-
 export function refId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const m = REF_RE.exec(value);
+  const m = ARTIFACT_REFERENCE_PATTERN.exec(value);
   return m ? m[1] : null;
 }
 
@@ -111,14 +111,12 @@ export function collectRefUses(source: string): RefUse[] | null {
     const viz = attrValue(el, 'viz') as Record<string, unknown> | undefined;
     const recipeRef = viz ? refId(viz.recipe) : null;
     if (recipeRef) uses.push({ id: recipeRef, kind: 'viz', element: { viz: viz ?? null, dataRef: typeof data === 'string' ? data : null } });
-    // URL attrs: src (images). href stays same-origin-URL-only for now.
-    const srcRef = refId(attrValue(el, 'src'));
-    if (srcRef && tag.toLowerCase() === 'img') uses.push({ id: srcRef, kind: 'image' });
-    // <Video poster> is the card's thumbnail — hosted, like every image.
-    const posterRef = refId(attrValue(el, 'poster'));
-    if (posterRef && el.isComponent && tag === 'Video') uses.push({ id: posterRef, kind: 'image' });
-    // <File src> is the ONE position that names a PDF: a card that links it.
-    if (srcRef && el.isComponent && tag === 'File') uses.push({ id: srcRef, kind: 'pdf' });
+    for(const position of REFERENCE_POSITIONS){
+      if(position.component!==el.isComponent||position.tag!==(el.isComponent?tag:tag.toLowerCase()))continue;
+      const value=attrValue(el,position.attribute);
+      const values=position.list&&typeof value==='string'?urlListUrls(value,position.attribute):[value];
+      for(const candidate of values){const id=refId(candidate);if(id)uses.push({id,kind:position.kind});}
+    }
   });
   return uses;
 }
@@ -231,7 +229,7 @@ export function findExternalSubresources(source: string): ValidationError[] {
  * refuses it separately, because a listing is computed and there is nothing
  * there to write.
  */
-const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', folder: 'dataset' };
+const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', file:'file', folder: 'dataset' };
 
 const colKind = (t: DatasetColumn['type']): 'quantitative' | 'temporal' | 'nominal' =>
   t === 'number' ? 'quantitative' : t === 'date' ? 'temporal' : 'nominal';
@@ -256,7 +254,7 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
     // existence oracle for every id.
     if (!r) { details.push(`ref:${use.id} does not resolve — use one of your own artifact ids, or any public/unlisted one`); continue; }
     const kind = KIND_FOR_FORMAT[r.format];
-    if (kind !== use.kind) {
+    if (use.kind==='asset'?!['file','image','pdf'].includes(r.format):kind!==use.kind) {
       details.push(`ref:${use.id} is a ${r.format ?? 'unknown'} artifact — this position needs a ${use.kind}`);
       continue;
     }
@@ -272,15 +270,15 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
       // message as a foreign dataset on purpose: the fix is the same one, a
       // dataset of your own.
       if (r.format === 'folder') {
-        details.push(`ref_${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
+        details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
         continue;
       }
       if (!r.owned) {
-        details.push(`ref_${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
+        details.push(`ref:${use.id} is not yours to write — a <Mutation> may only write a dataset you own (read it with a <Query> instead, or publish your own copy)`);
         continue;
       }
       if (r.access !== 'readwrite') {
-        details.push(`ref_${use.id} is read-only — a <Mutation> needs a dataset with access: readwrite (set it on create or PUT, PATCH /api/my/artifacts/${use.id} { "access": "readwrite" }, or from the dataset's share menu)`);
+        details.push(`ref:${use.id} is read-only — a <Mutation> needs a dataset with access: readwrite (set it on create or PUT, PATCH /api/my/artifacts/${use.id} { "access": "readwrite" }, or from the dataset's share menu)`);
         continue;
       }
     }
@@ -487,7 +485,7 @@ export function findBrokenEmbeds(source: string): ValidationError[] {
       errors.push({
         message: `<${el.tag} data=${got.length > 40 ? got.slice(0, 40) + '…' : got}> does not name a declared table. ${rule.usage}` +
           (typeof json === 'string' && json.startsWith('ref:')
-            ? ` — a dataset is read through SQL: <Query name="rows">{\`select * from ref_${json.slice(4)}\`}</Query>, then data="$rows".`
+            ? ` — a dataset is read through SQL: <Query name="rows" source="${json}">{\`select * from public.rows\`}</Query>, then data="$rows".`
             : '.'),
         tag: el.tag, attr: attr.name, start: attr.start, end: attr.end,
       });

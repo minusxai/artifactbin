@@ -1,29 +1,46 @@
-# afbin remote (V0)
+# afbin
 
-Run a regular local agent terminal and access the same terminal from a desktop or mobile browser. Claude Code, Codex, Pi, OpenCode, or another interactive command can run inside the PTY; no harness protocol or plugin is required for terminal access.
+Publish and edit artifacts through local files, with offline help and validation. Mirror a local terminal with `afbin remote`.
 
-## Install
-
-Once the `afbin-v0.1.1` GitHub Release is published and the app is deployed:
+## Install and authenticate
 
 ```sh
-curl -fsSL https://artifactbin.dev/chat/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
-afbin
-# Or, skip the picker: afbin remote codex --yolo
+npm install -g @artifactbin/cli
+afbin setup
 ```
 
-Sign into artifactbin.dev, follow the auth prompt to generate and paste an account token, then open
-https://artifactbin.dev/chat. The harness must already be installed. The installer needs curl and
-sha256sum or shasum, but no Node runtime or sudo. It supports macOS and Linux on arm64 and x64;
-Windows users can use WSL. It checks SHA-256 before replacing an existing installation. Re-run it to
-reinstall, or select a published version/location:
+Setup opens browser authentication automatically and saves credentials privately in
+`~/.artifactbin/.env`. It offers a preselected checklist of detected Claude Code, Codex, pi and
+OpenCode skills; uncheck integrations you do not want. Choices are remembered. Standalone executables
+for macOS/Linux arm64/x64 and versioned local skill bundles are published in GitHub releases.
+The `/chat/install.sh` installer verifies SHA-256; `/install.sh` installs the self-hosted server.
 
 ```sh
-curl -fsSL https://artifactbin.dev/chat/install.sh | sh -s -- --version 0.1.1 --dir "$HOME/.local/bin"
+afbin pull <artifact-url> report.jsx
+# Edit report.jsx, retaining its YAML fence and body IDs.
+afbin validate report.jsx
+afbin diff report.jsx
+afbin push report.jsx
 ```
 
-The existing `/install.sh` installs the self-hosted server; `/chat/install.sh` installs only this CLI.
+Push also creates a new artifact from a new JSX file. `status`, `diff`, validation, help and unchanged
+pushes make no HTTP request. Use `--remote` to refresh a comparison. `push --dry-run` preflights without
+saving files or publishing. `afbin -h`, command `-h`, `afbin help <topic>` and the installed man page
+teach the same flags and rules.
+
+A command reference is `<url|id|path>[@version]`; existing filenames win. Published references in
+markup use `ref:<id>`, including Query/Mutation sources. SQL names tables; `$query` binds a result.
+Old reference spellings are rejected. Relative dependencies publish with their document.
+
+For automation, use `setup --yes --json --harness pi --harness opencode`, or `--harness none`.
+A pending browser approval returns its URL and expiry; approve it and rerun setup. `--yes` does not
+approve the browser or imply `--force`. No noninteractive prompt waits for input.
+
+`afbin update` explicitly updates a compatible standalone binary and selected local skills, with
+checksums and backups. npm-managed installs use npm for binary updates. Ordinary commands never
+poll releases. Use `afbin update -h` for selection and recovery options.
+
+## Local development
 
 From the repository root (Node 22+, plus Python/make/C++ on Linux for node-pty):
 
@@ -45,7 +62,7 @@ afbin remote --server http://localhost:6401 claude --chrome
 
 The flags prompt accepts quoted arguments (for example `--model "my model"`) without shell expansion. If no supported harness is installed, afbin explains how to install one or run an explicit executable.
 
-Put afbin options **before** the command; everything after the command goes to the harness unchanged. Your working directory, environment, installed skills, MCP configuration, and local input/output remain available. The CLI starts the executable directly, without constructing a shell command string. You can explicitly run a shell too: `afbin remote bash`.
+Put afbin options **before** the command; everything after the command goes to the harness unchanged. Your working directory, environment, installed skills, and local input/output remain available. The CLI starts the executable directly, without constructing a shell command string. You can explicitly run a shell too: `afbin remote bash`.
 
 Open the printed session link, or `/chat` on the selected server, and sign into the same artifactbin account. Select a session, swipe up/down to scroll terminal history (or use Scroll up, Scroll down, and Latest output), and use the terminal directly, the message box, or the Enter/Escape/arrow buttons. **Switch to mobile** and **Switch to desktop** resize the shared terminal. The selected size stays in effect even when the local terminal sends input or automatic replies. **Disconnect** removes remote access and leaves the local command running; Ctrl+C goes to the command as usual.
 
@@ -53,22 +70,19 @@ The browser retries temporary failures indefinitely with capped backoff and a â€
 
 ## Auth
 
-`afbin`, `afbin remote`, and `afbin remote <command>` automatically ask you to open the server's `/tokens/new` page while signed in and paste its token (hidden input). It validates that the token belongs to an account and saves it with owner-only permissions in the same file used by artifactbin skills:
+The first interactive authenticated command opens browser authentication automatically, saves the
+connection with owner-only permissions and resumes the command. Explicit `afbin setup` also manages
+local skills. `ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can supply a connection; saved credentials are
+used only for their matching server origin. HTTP is restricted to localhost development. Tokens are
+sent in authorization headers, never session URLs. No legacy credential file is read.
 
-```dotenv
-ARTIFACTBIN_URL=https://artifactbin.dev
-ARTIFACTBIN_TOKEN=your_token
-```
-
-Location: `~/.artifactbin.env`. `afbin remote` reuses a valid saved token without another login. Missing or expired credentials enter the sign-in flow directly; a specified command starts after sign-in. Bare commands offer an arrow-key picker of Claude Code, Codex, Pi, and OpenCode executables found on PATH, then an optional flags prompt for the selected agent. Enter keeps the harness defaults; Esc or Ctrl+C cancels. There is no separate auth command. Legacy `~/.config/artifact-bin/config.json` (`url`, `token`) is read as a fallback. An anonymous token must first be claimed by an account.
-
-`ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can explicitly supply a connection. Saved credentials are used only for their matching server origin; changing a host does not send the saved production token to it. Authentication sends a bearer header, never a token in the session URL. HTTP is allowed only for localhost development; other hosts require HTTPS. The paste-token flow replaces the most recent connection, consistent with the existing skills.
+Bare commands offer a picker of installed agent executables. The harness itself must be installed.
 
 ## Artifact comments
 
 Type `@` in an artifact comment or reply and select one of your online sessions. The comment stores a readable link to that exact session. After saving the comment, the server queues a single-line JSON notification containing the artifact, annotation and comment IDs, author, and body, followed by Enter. It does not wait for the harness to become idle. The harness handles the input according to its current screen, just as if you typed locally.
 
-The agent can use its existing artifactbin plugin/MCP/API to read the artifact and respond. The relay does not parse replies or post comments itself. Agent-authored replies do not generate more notifications. V0 only allows you to invoke **your own account's sessions**. Offline, disconnected, or full sessions receive no notification; the comment is still saved. There is no historical comment replay. Mention links identify a session, so restarting a command creates a new mention target.
+The agent can use its artifactbin CLI and installed local skill to read the artifact and respond. The relay does not parse replies or post comments itself. Agent-authored replies do not generate more notifications. V0 only allows you to invoke **your own account's sessions**. Offline, disconnected, or full sessions receive no notification; the comment is still saved. There is no historical comment replay. Mention links identify a session, so restarting a command creates a new mention target.
 
 ## Embedded use
 
@@ -77,7 +91,7 @@ The CLI exports the same PTY lifecycle for another TypeScript/JavaScript CLI:
 ```ts
 import { loadConnection, runRemote } from '@artifactbin/cli';
 const connection = await loadConnection();
-if (!connection) throw new Error('Run afbin to sign in first');
+if (!connection) throw new Error('Run afbin setup to sign in first');
 const exitCode = await runRemote({
   connection, command: 'claude', args: ['--chrome'],
   onSession: url => console.error(url),
@@ -93,7 +107,7 @@ npm run build:binary -w services/cli
 # services/cli/dist/afbin-<platform>-<arch>[.exe]
 ```
 
-Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Native files extract into a private temporary directory for the process lifetime. macOS arm64 is verified locally; other platforms need their own build and smoke test. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
+Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Native files extract into a private temporary directory for the process lifetime. Each of the four release targets has its own build and smoke gate. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
 
 ## V0 boundaries
 

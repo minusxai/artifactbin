@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The WRITE endpoints:
  *  - POST /a/<id>/mutate { mutation, values? } — the DOCUMENT's door. Anyone
@@ -41,9 +42,9 @@ const create = async (token: string, body: Record<string, unknown>) => {
 const ROWS = [{ choice: 'ramen', who: 'seed' }, { choice: 'tacos', who: 'seed' }];
 const POLL = (ds: string) =>
   '<Helmet><Value name="choice" type="string" /><Value name="who" type="string" default="anon" />'
-  + `<Query name="tally">{\`select choice, count(*)::int votes from ref_${ds} group by 1 order by 1\`}</Query>`
-  + `<Mutation name="vote">{\`insert into ref_${ds} (choice, who) values ($choice, $who)\`}</Mutation>`
-  + `<Mutation name="clear">{\`delete from ref_${ds} where who = $who\`}</Mutation></Helmet>`
+  + `<Query name="tally" source="ref:${ds}">{\`select choice, count(*)::int votes from public.rows group by 1 order by 1\`}</Query>`
+  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice, who) values ($choice, $who)\`}</Mutation>`
+  + `<Mutation name="clear" source="ref:${ds}">{\`delete from public.rows where who = $who\`}</Mutation></Helmet>`
   + '<div><input value="$who" /><Button run="$vote">Vote</Button><Question data="$tally" viz={{"kind":"table"}} /></div>';
 const credentials = new Map<string,string>();
 const mutate = (doc: string, body: unknown, init: RequestOptions = {}) =>
@@ -109,7 +110,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
 
   it('is re-checked on EVERY call: a dataset flipped to read-only refuses with dataset_read_only', async () => {
     const { ds, t, doc } = await poll();
-    await putArtifactRoute(request(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
+    await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
     const res = await mutate(doc, { mutation: 'vote', values: { choice: 'ramen' } });
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: string }).error).toBe('dataset_read_only');
@@ -185,7 +186,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
 describe('POST /api/artifacts/<id>/mutate — the owner\'s door', () => {
   it('runs the owner\'s own DML against a readwrite dataset; foreign is 404, read-only is 403', async () => {
     const { ds, t } = await poll();
-    const res = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `update ref_${ds} set who = $w`, values: { w: 'agent' } } }), params({ id: ds }));
+    const res = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `update public.rows set who = $w`, values: { w: 'agent' } } }), params({ id: ds }));
     expect(res.status, await res.clone().text()).toBe(200);
     expect((await res.json()) as object).toMatchObject({ id: ds, version: 2, affected: 2, rowCount: 2 });
     expect((await loadDatasetRows((await getArtifactById(ds))!)).every((r) => r.who === 'agent')).toBe(true);
@@ -194,17 +195,17 @@ describe('POST /api/artifacts/<id>/mutate — the owner\'s door', () => {
     expect(wire.rows).toHaveLength(2);
 
     const other = await mintToken('o');
-    const foreign = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: other.token, json: { sql: `delete from ref_${ds}` } }), params({ id: ds }));
+    const foreign = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: other.token, json: { sql: `delete from public.rows` } }), params({ id: ds }));
     expect(foreign.status).toBe(404);
 
-    await putArtifactRoute(request(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
-    const ro = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `delete from ref_${ds}` } }), params({ id: ds }));
+    await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
+    const ro = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `delete from public.rows` } }), params({ id: ds }));
     expect(ro.status).toBe(403);
   });
 
   it('a bad statement is invalid_sql with the engine\'s message; a document id is not a dataset', async () => {
     const { ds, doc, t } = await poll();
-    const bad = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `select * from ref_${ds}` } }), params({ id: ds }));
+    const bad = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `select * from public.rows` } }), params({ id: ds }));
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: string; details: string[] })).toMatchObject({ error: 'invalid_sql' });
     const notData = await mutateDatasetRoute(request(`/api/artifacts/${doc}/mutate`, { method: 'POST', token: t.token, json: { sql: 'delete from x' } }), params({ id: doc }));

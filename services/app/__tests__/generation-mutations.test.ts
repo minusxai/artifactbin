@@ -49,7 +49,7 @@ async function fixture() {
     access: "readwrite",
   });
   const doc = await publish({
-    markup: `<Helmet><Value name="move" default="Go left" /><Query name="nodes">{\`select * from ref_${ds}\`}</Query><Mutation name="step">{\`insert into ref_${ds} select llm($move, 'Narrate.', '${JSON.stringify({ model: "default", schema: JSON.parse(schema) })}')\`}</Mutation></Helmet><Button run="$step">Do it</Button><DataTable data="$nodes" />`,
+    markup: `<Helmet><Value name="move" default="Go left" /><Query name="nodes" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="step" source="ref:${ds}">{\`insert into public.rows select llm($move, 'Narrate.', '${JSON.stringify({ model: "default", schema: JSON.parse(schema) })}')\`}</Mutation></Helmet><Button run="$step">Do it</Button><DataTable data="$nodes" />`,
   });
   const cookie = await agentCookie([owner.id]);
   const write = (auth: string | undefined = cookie) =>

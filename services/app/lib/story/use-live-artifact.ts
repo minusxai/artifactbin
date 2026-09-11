@@ -18,6 +18,7 @@
  * keep counting even for frames this hook decides not to surface. See
  * `isOwnFrame`.
  */
+import {readAnnotationPages} from '@/lib/annotation-pages';
 import { useEffect, useRef, useState } from 'react';
 import type { AnnotationWire } from '@/lib/annotations';
 import type { ArtifactDataEvent, ArtifactLiveEvent, ArtifactVersionPing } from '@/lib/story/live';
@@ -73,7 +74,7 @@ export function useLiveArtifact(
     if (!enabled) return;
     seenVersionRef.current = initialVersion;
     const source = new EventSource(`/a/${id}/events`);
-    let alive = true;
+    let alive = true;let annotationsRequest:AbortController|undefined;
     /*
      * The stream carries PINGS; the document is fetched. A ping names the head
      * (`{editId, version, by}`), and the frame — complete, cached per
@@ -107,12 +108,12 @@ export function useLiveArtifact(
     // Annotations are a PING too: the owner's page refetches the list.
     source.addEventListener(STORY_ANNOTATIONS_EVENT, () => {
       if (!onAnnotationsRef.current) return;
-      void fetch(`/api/my/artifacts/${id}/annotations?status=open`, { credentials: 'same-origin' })
-        .then((r) => (r.ok ? (r.json() as Promise<{ annotations?: AnnotationWire[] }>) : null))
-        .then((body) => { if (alive && body && Array.isArray(body.annotations)) onAnnotationsRef.current?.(body.annotations); })
+      annotationsRequest?.abort();annotationsRequest=new AbortController();
+      void readAnnotationPages(`/api/my/artifacts/${id}/annotations?status=open`,{signal:annotationsRequest.signal})
+        .then((annotations) => { if (alive) onAnnotationsRef.current?.(annotations); })
         .catch(() => { /* next ping */ });
     });
-    return () => { alive = false; source.close(); };
+    return () => { alive = false; annotationsRequest?.abort();source.close(); };
   }, [id, initialEditId, initialVersion, enabled]);
 
   return live?.id === id && live.frame.version > initialVersion ? live.frame : null;
