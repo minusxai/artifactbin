@@ -45,11 +45,11 @@ try {
   await loginViaEmail(editor, base, sink, email);
   const grant = await owner.request.put(`${base}/api/my/artifacts/${dataset.id}/sharing`, {data:{shares:[{email,role:'editor'}]}});
   assert.equal(grant.status(),200);
-  await editor.goto(dataset.url);
+  await editor.goto(`${base}/a/${dataset.id}/edit`);
   await editor
     .getByRole('button', { name: 'Open artifact controls', exact: true })
     .click();
-  await editor.getByRole('button', { name: 'Share', exact: true }).click();
+  await editor.getByRole('dialog', {name:'Artifact controls'}).getByRole('button', { name: 'Share', exact: true }).click();
   const recipient='mxmx_test_policy_recipient@example.com';
   await editor.getByLabel('Invite email').fill(recipient);
   await editor.getByLabel('Add email').click();
@@ -57,10 +57,16 @@ try {
   await editor.getByRole('option',{name:/can edit/}).click();
   const sharing=await editor.request.get(`${base}/api/my/artifacts/${dataset.id}/sharing`);
   assert((await sharing.json()).shares.some(s=>s.email===recipient&&s.role==='editor'));
-  await editor
-    .getByRole('button', { name: 'Manage access policies', exact: true })
-    .click();
+  await editor.getByLabel('Close sharing', {exact:true}).click();
+  await editor.getByLabel('Dismiss artifact controls').click();
   await editor.getByLabel('Allow insert', { exact: true }).check();
+  await editor.getByLabel('Add insert check condition', {exact:true}).click();
+  await editor.getByLabel('insert check.1.1 value', {exact:true}).fill('"blocked"');
+  await editor.getByLabel('Add insert check condition', {exact:true}).click();
+  await editor.getByLabel('insert check.2.1 operator', {exact:true}).selectOption('_neq');
+  await editor.getByLabel('insert check.2.1 value', {exact:true}).fill('"blocked"');
+  await editor.getByLabel('Remove insert check.1.1 condition', {exact:true}).click();
+  assert.equal(await editor.getByLabel('insert check.1.1 operator', {exact:true}).inputValue(), '_neq');
   await editor
     .getByRole('button', { name: 'Save access policies', exact: true })
     .click();
@@ -124,6 +130,13 @@ try {
     await scriptAction.isDisabled(),
     'managed scripts receive live revocation',
   );
+  await editor.reload();
+  await editor.getByRole('button', {name:'Source & models', exact:true}).click();
+  await editor.getByLabel('Dataset title', {exact:true}).fill('Updated policy dataset');
+  await editor.getByLabel('Save dataset', {exact:true}).click();
+  await editor.getByRole('link', {name:'Edit dataset',exact:true}).waitFor();
+  await editor.waitForFunction(()=>document.title==='Updated policy dataset');
+  assert(!new URL(editor.url()).pathname.endsWith('/edit'));
   console.log(
     'all good: public declared insert, denied deletion/direct SQL, shared live rows, persistence and live revocation',
   );

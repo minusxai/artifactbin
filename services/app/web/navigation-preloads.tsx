@@ -15,7 +15,7 @@ export function NavigationPreloads({ children }: { children: ReactNode }): React
   const identity = route?.identity ?? location.pathname;
   // Aliases, signals and hashes retain the request/token, just as the mounted
   // artifact runtime retains its initial URL. No fetch or mutation in render.
-  const navigation = useMemo(() => ({ id: location.key, route, editing: location.hash === '#edit' }), [identity]);
+  const navigation = useMemo(() => ({ id: location.key, route, editing: location.pathname.endsWith('/edit') || location.hash === '#edit' }), [identity]);
   const initial = useRef(navigation);
   useLayoutEffect(() => {
     if (!pages || sessionError || navigation === initial.current) return;

@@ -475,7 +475,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // history move only changes the fragment, so hashchange is the signal.
   useEffect(() => {
     const sync = () => {
-      if (window.location.hash === '#edit') { setEditing(true); return; }
+      if (route.pathname.endsWith('/edit') || window.location.hash === '#edit') { setEditing(true); return; }
       setInitialEditSelectionPath(null);
       // Leaving edit mode UNMOUNTS the editor, and its pending save is a timer
       // inside it — the unmount cancels the save. `done` drains before it calls
@@ -488,7 +488,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     sync();
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
-  }, [route.hash]);
+  }, [route.hash, route.pathname]);
 
   /*
    * Fetch the editor bundle while the reader is still reading, so pressing edit
@@ -609,7 +609,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       pushedEdit.current = false;
       history.back();
     } else {
-      void navigate(window.location.pathname + window.location.search, {replace:true, state:route.state});
+      void navigate(window.location.pathname.replace(/\/edit$/, '') + window.location.search, {replace:true, state:route.state});
       setEditing(false);
     }
   }, []);

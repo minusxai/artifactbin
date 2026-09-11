@@ -31,9 +31,10 @@ import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
 import { runWithRequest } from '@/lib/request-context';
 import { SHOWCASE_ORIGIN } from '@/lib/showcase';
-import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
+import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
-import { sessionActor } from '@/lib/viewer';
+import { canEdit } from '@/lib/share-roles';
+import { roleFor, sessionActor } from '@/lib/viewer';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
@@ -132,6 +133,7 @@ export interface AppServerOptions {
 
 /** Which document, if any, a path names — `/a/<id>` or a pretty URL. */
 export function candidateDocument(pathname: string): { id: string } | null {
+  pathname = artifactViewPath(pathname);
   const segments = pathname.split('/').filter(Boolean);
   if (segments[0] === 'a') return segments.length === 2 && ID_RE.test(segments[1]) ? { id: segments[1] } : null;
   if (!segments[0]?.startsWith('@')) return null;
@@ -140,7 +142,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
 }
 
 
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/datasets\/[A-Za-z0-9]+\/edit)$/;
+const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. `/docs`
@@ -255,6 +257,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       const res = await runWithRequest(request, () => fn(request, { params: Promise.resolve(params) }));
       return res.ok ? await res.json() : null;
     };
+    if (segments.at(-1) === 'edit') segments.pop();
     if (segments[0] === 'a' && segments.length === 2) {
       const artifact = await call(artifactData, { id: segments[1] });
       return artifact ? { path: url.pathname, artifact } : null;
@@ -290,11 +293,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (!row) return { status: 404 };
     // A key skips canonical healing, but only a valid key admits the page.
     const key = url.searchParams.get('key');
-    if (key && verifyExportKey(row.id, key)) return { status: 200 };
+    if (!url.pathname.endsWith('/edit') && key && verifyExportKey(row.id, key)) return { status: 200 };
     const actor = await sessionActor(request).catch(() => null);
+    if (url.pathname.endsWith('/edit') && (!actor || !canEdit(await roleFor(row, actor)))) return { status: 404 };
     if (!(await canReadArtifact(row, actor?.viewer ?? null))) return { status: 404 };
     if (url.searchParams.has('key')) return { status: 200 };
-    const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id));
+    const canonical = canonicalArtifactPath(row, await ownerUsername(row.user_id)) + (url.pathname.endsWith('/edit') ? '/edit' : '');
     return { status: 200, ...(canonical !== url.pathname ? { redirect: canonical + url.search } : {}) };
   };
 
@@ -345,6 +349,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return page(c, status === 404 ? 404 : undefined);
   };
 
+  app.get('/a/:id/edit', documentAddress);
   app.get('/a/:id', documentAddress);
   // A handle is `@name` in ONE segment — Hono's params are whole segments, so the shape is a regex param.
   app.get('/:user{@[a-z0-9_]+}/*', documentAddress);

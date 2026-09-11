@@ -5,7 +5,7 @@ import { PageLoading } from '../PageLoading';
 import { Navigate, useLocation, useParams } from 'react-router';
 import { ListingHero, ListingShell, NothingHere } from '@/components/Listing';
 import Shelf from '@/components/Shelf';
-import { canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
+import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { routePages } from '../route-pages';
 import { NotFoundPage } from './NotFound';
 
@@ -21,7 +21,7 @@ export function ProfilePage() {
   const { user, '*': rest, id } = useParams();
   // Both aliases use this SAME route element/child position, so healing /a/id
   // to its pretty address does not tear down the editor or author runtime.
-  const artifactId = id ?? (user?.startsWith('@') ? parsePrettyPath((rest ?? '').split('/'))?.id : undefined);
+  const artifactId = id ?? (user?.startsWith('@') ? parsePrettyPath(artifactViewPath(rest ?? '').split('/'))?.id : undefined);
   if (artifactId) return <ArtifactPage id={artifactId} />;
   return <ResolvedProfile key={`${user}/${rest}`} user={user} rest={rest} />;
 }

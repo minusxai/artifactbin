@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react';
 import { UNSAFE_DataRouterContext, useBlocker, useLocation, useNavigate, useNavigationType, type Location, type BlockerFunction } from 'react-router';
-import { parsePrettyPath } from '@/lib/urls';
+import { artifactViewPath, parsePrettyPath } from '@/lib/urls';
 
 /** A leaving editor commits its DOM and flushes persistence; false retains its mounted draft. */
 export type NavigationGuard = () => Promise<boolean>;
@@ -9,6 +9,7 @@ export type NavigationGuard = () => Promise<boolean>;
 const Guards = createContext<Set<NavigationGuard> | null>(null);
 
 function documentIdentity(path: string): string {
+  path = artifactViewPath(path);
   const direct = /^\/a\/([^/]+)\/?$/.exec(path);
   if (direct) return `artifact:${direct[1]}`;
   if (path.startsWith('/@')) {
@@ -20,7 +21,7 @@ function documentIdentity(path: string): string {
 
 /** Explicit app routes only. Files, API, auth callbacks and docs retain native navigation. */
 export function isClientRoute(url: Pick<URL, 'pathname'>): boolean {
-  return /^\/(?:$|(?:account|assets|chat|login|privacy|terms|trash|docs-human)\/?$|tokens(?:\/new)?\/?$|datasets\/(?:new|[^/]+\/edit)\/?$|a\/[^/]+\/?$|@[^/]+(?:\/[^/]+)?\/?$)/.test(url.pathname);
+  return /^\/(?:$|(?:account|assets|chat|login|privacy|terms|trash|docs-human)\/?$|tokens(?:\/new)?\/?$|datasets\/new\/?$|a\/[^/]+(?:\/edit)?\/?$|@[^/]+(?:\/[^/]+(?:\/edit)?)?\/?$)/.test(url.pathname);
 }
 
 export function NavigationBoundary({ children }: { children: ReactNode }): ReactNode {

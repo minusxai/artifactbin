@@ -142,3 +142,9 @@ it('opens social preview from sharing for an editor without exposing access cont
   expect(editPreview).toHaveBeenCalledOnce();
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
+
+it('takes dataset editors to the shared edit workspace for data actions', async () => {
+  render(<ShareLink artifactId="abc123" format="dataset" editable className="x" />);
+  fireEvent.click(screen.getByLabelText('Share'));
+  expect(await screen.findByRole('link',{name:'Manage access policies'})).toHaveAttribute('href','/a/abc123/edit');
+});

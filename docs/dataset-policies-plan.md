@@ -54,3 +54,21 @@ No paid provider is used for these checks.
 
 Runnable checks: npm run validate; npm test; npm run build;
 npm run test:gates -- --only=dataset-policies,generation-mutations,mutation-permissions,managed-iframe --servers=1.
+
+## Editor experience contracts
+
+- `/a/:id/edit` and the corresponding pretty artifact address resolve the same
+  artifact and permission checks, then select its editor by format. The obsolete
+  `/datasets/:id/edit` route is removed, without redirects.
+- Existing dataset editing uses artifact chrome. An admitted editor can open
+  sharing from Artifact controls and from the editor header.
+- The policy condition editor owns recursive Hasura predicates behind a controlled
+  `value/onChange` boundary. Each comparison and logical group can be edited or
+  removed independently; unrelated predicates, presets and permission metadata
+  survive GUI/source round trips. Empty All and Any retain their DSL semantics.
+- The dataset workspace presents data actions, a data preview, and source settings
+  as separate sections with clear save scope. Advanced source remains available.
+  Title-only saves use metadata PATCH with the observed state, leaving protected
+  rows untouched; successful saves refresh the retained artifact before returning.
+- Verify behavior first with failing condition/route/chrome tests, then full tests,
+  production browser gates, and desktop/mobile inspection of the running app.

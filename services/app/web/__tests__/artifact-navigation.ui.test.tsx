@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { ArtifactPage } from '../pages/Artifact';
@@ -6,7 +6,8 @@ import { ProfilePage } from '../pages/Profile';
 import { takeBootstrap } from '../bootstrap';
 
 vi.mock('@/components/ArtifactShell', () => ({ default: ({ children }: { children: React.ReactNode }) => children }));
-vi.mock('@/components/ArtifactSurface', () => ({ default: ({ id, search }: { id: string; search: string }) => <div aria-label="surface">{id}{search}</div> }));
+vi.mock('@/components/ArtifactSurface', () => ({ default: ({ id, search, title }: { id: string; search: string; title?: string }) => <div aria-label="surface" data-title={title}>{id}{search}</div> }));
+vi.mock('../pages/DatasetEditor', () => ({DatasetEditorPage: ({onSaved}:{onSaved?:()=>Promise<unknown>}) => <button onClick={()=>void onSaved?.()}>Save test dataset</button>}));
 vi.mock('../bootstrap', () => ({ takeBootstrap: vi.fn(() => null) }));
 vi.mock('../Shell', () => ({ ShellFrame: ({children}: {children: React.ReactNode}) => <><header aria-label="Page bar">artifactbin</header>{children}</> }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -86,4 +87,19 @@ it('direct and pretty artifact routes share the mounted surface during canonical
   await act(async () => { await router.navigate('/@different/abc123-new?$count=4'); });
   expect(screen.getByLabelText('surface')).toBe(surface);
   expect(fetchMock).toHaveBeenCalledOnce();
+});
+
+
+it('refreshes the artifact after a dataset save before returning to its reader', async () => {
+  let title='Before';
+  const fetcher=vi.fn(async()=>({ok:true,json:async()=>({canonical:'/a/abc123',role:'editor',kind:'account',surface:{id:'abc123',format:'dataset',title}})}));
+  vi.stubGlobal('fetch',fetcher);
+  const router=createMemoryRouter([{path:'*',element:<ArtifactPage id="abc123"/>}],{initialEntries:['/a/abc123/edit']});
+  render(<RouterProvider router={router}/>);
+  const save=await screen.findByRole('button',{name:'Save test dataset'});
+  title='After';
+  fireEvent.click(save);
+  await waitFor(()=>expect(fetcher).toHaveBeenCalledTimes(2));
+  await act(async()=>{await router.navigate('/a/abc123');});
+  expect(await screen.findByLabelText('surface')).toHaveAttribute('data-title','After');
 });

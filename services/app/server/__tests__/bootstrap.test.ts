@@ -162,3 +162,17 @@ describe('inlined page data', () => {
     for (const p of ['/', '/login', '/account']) expect(inlined(await (await app.request(p)).text()), p).toBeNull();
   });
 });
+
+it('serves shared artifact edit addresses with authorized bootstrap data and removes the dataset-specific route', async () => {
+  const w=await world();
+  const headers=as({credential:'session',userId:w.owner.id,email:w.owner.email});
+  const first=await app.request(`/a/${w.pub.id}/edit`,{headers});
+  expect(first.status).toBe(302);
+  const canonical=first.headers.get('location')!;
+  expect(canonical).toMatch(new RegExp(`/@[^/]+/${w.pub.id}[^/]*/edit$`));
+  const page=await app.request(canonical,{headers});
+  expect(page.status).toBe(200);
+  expect(inlined(await page.text()).artifact.surface.id).toBe(w.pub.id);
+  expect((await app.request(`/datasets/${w.pub.id}/edit`,{headers})).status).toBe(404);
+  expect((await app.request(`/a/${w.pub.id}/edit`,{headers:as({credential:'none'})})).status).toBe(404);
+});

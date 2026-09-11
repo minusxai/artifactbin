@@ -29,17 +29,18 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     const method = init?.method ?? 'GET'; calls.push({ url, body, method });
+    if (url.endsWith('/policy')) return reply({canManage:true,policy:null,revision:0,tables:loadedCatalog.tables,writtenBy:[]});
     if (url === '/api/my/secrets') return secretReply ? secretReply() : reply({ secret: { id: 'secret-new' } }, 201);
     if (url === '/api/my/datasets/discover') return discoveryReply ? discoveryReply() : reply({ tables: discoveryTables });
     if (url.endsWith('/notebook/preview') && notebookReply) return notebookReply();
     if (url.endsWith('/preview') || url.endsWith('/tables')) return failPreview ? reply({ error: 'Query refused' }, 400) : reply({ rows: [{ id: 42 }], columns: previewColumns, refreshedAt: '2026-09-06T10:00:00Z', truncated: true });
-    if (method === 'GET') return reply({ id: 'data-1', title: 'Orders', version: 7, meta: { catalog: loadedCatalog } });
+    if (method === 'GET') return reply({ id: 'data-1', title: 'Orders', version: 7, state:'state-7', meta: { catalog: loadedCatalog } });
     return failSave ? reply({ error: 'Version conflict' }, 409) : reply({ id: 'data-1', version: 8 });
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 function editor(edit = false) {
-  render(<MemoryRouter initialEntries={[edit ? '/datasets/data-1/edit' : '/datasets/new']}><Routes><Route path="/login" element={<p aria-label="Dataset login">Log in</p>} /><Route path="/datasets/new" element={<DatasetEditorPage />} /><Route path="/datasets/:id/edit" element={<DatasetEditorPage />} /><Route path="/a/:id" element={<p aria-label="Saved dataset">Saved</p>} /></Routes></MemoryRouter>);
+  render(<MemoryRouter initialEntries={[edit ? '/a/data-1/edit' : '/datasets/new']}><Routes><Route path="/login" element={<p aria-label="Dataset login">Log in</p>} /><Route path="/datasets/new" element={<DatasetEditorPage />} /><Route path="/a/:id/edit" element={<DatasetEditorPage />} /><Route path="/a/:id" element={<p aria-label="Saved dataset">Saved</p>} /></Routes></MemoryRouter>);
 }
 const change = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const click = (label: string) => fireEvent.click(screen.getByLabelText(label));
@@ -243,7 +244,7 @@ describe('dataset editor', () => {
     editor(true); await screen.findByLabelText('Password status'); click('Test and discover'); await screen.findByLabelText('Expose schema crm');
     expect(screen.getByLabelText('Expose schema sales')).toBePartiallyChecked(); click('Toggle table sales.orders');
     expect(screen.getByLabelText('Expose column sales.orders.secret')).not.toBeChecked();
-    expect(screen.queryByLabelText(/Logical schema/)).not.toBeInTheDocument(); click('Toggle schema sales'); click('Save dataset');
+    expect(screen.queryByLabelText(/Logical schema/)).not.toBeInTheDocument(); click('Toggle schema sales'); change('Refresh interval','30'); click('Save dataset');
     await waitFor(() => expect(savedDefinition()?.tables).toEqual([{ schema:'sales', name:'orders', source:{schema:'sales',table:'orders'}, columns:['id'] }]));
   });
   it('exposes only selected columns and keeps the explicit default schema stable as tables are added', async () => {
@@ -268,7 +269,7 @@ describe('dataset editor', () => {
     discoveryTables=[{...tables[0],columns:[tables[0].columns[1]]}];
     editor(true); await screen.findByLabelText('Password status'); click('Test and discover'); await waitFor(() => expect(screen.getByLabelText('Dataset notice')).toHaveTextContent('Connected'));
     expect(screen.getByLabelText('Expose table crm.people')).toBeChecked(); click('Toggle table sales.orders'); expect(screen.getByLabelText('Expose column sales.orders.id')).toBeChecked();
-    click('Save dataset'); await waitFor(() => expect(savedDefinition()?.tables).toHaveLength(2));
+    change('Refresh interval','30'); click('Save dataset'); await waitFor(() => expect(savedDefinition()?.tables).toHaveLength(2));
     expect(savedDefinition()?.tables[0].columns).toEqual(['id']);
   });
   it('auto-names inserted cells and runs the requested prefix despite an unfinished later cell', async () => {
@@ -347,7 +348,7 @@ describe('dataset editor', () => {
   it('preserves edited title after a version conflict', async () => {
     editor(true); await screen.findByLabelText('Password status'); change('Dataset title','New title'); failSave=true; click('Save dataset');
     await waitFor(() => expect(screen.getByLabelText('Dataset error')).toHaveTextContent('Version conflict')); expect(screen.getByLabelText('Dataset title')).toHaveValue('New title');
-    expect(calls.find(c => c.method === 'PUT')?.body.expectedVersion).toBe(7);
+    expect(calls.find(c => c.method === 'PATCH')?.body.expectedState).toBe('state-7');
   });
   it('preserves and edits legacy SQL model definitions without changing their resolution semantics', async () => {
     loadedCatalog={...catalog,tables:[...catalog.tables,{schema:'sales',name:'summary',sql:'select id from orders',columns:[{name:'id',type:'number'}]}]};
@@ -362,9 +363,9 @@ describe('dataset editor', () => {
     editor(); click('Add stored table'); change('Stored schema 1','main'); change('Stored table name 1','rows'); change('Stored rows 1','[{"id":1}]'); change('Default schema','main'); click('Save dataset');
     await waitFor(() => expect(savedDefinition()).toMatchObject({kind:'stored',defaultSchema:'main',tables:[{schema:'main',name:'rows',rows:[{id:1}]}]}));
   });
-  it('retains stored object data when editing metadata without new rows', async () => {
+  it('retains stored object data when changing refresh settings without new rows', async () => {
     loadedCatalog={kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}],objectKey:'private/object'}]};
-    editor(true); await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders')); click('Save dataset');
+    editor(true); await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders')); change('Refresh interval','30'); click('Save dataset');
     await waitFor(() => expect(savedDefinition()?.tables).toEqual([{schema:'public',name:'rows'}]));
   });
 });
@@ -399,7 +400,7 @@ describe('dataset catalog viewer', () => {
     render(<DatasetCatalogView id="data-1" catalog={catalog} canEdit />);
     await waitFor(() => expect(screen.getByLabelText('Table preview')).toHaveTextContent('42'));
     expect(screen.getByLabelText('Table preview')).toHaveTextContent('number');
-    expect(screen.getByLabelText('Edit dataset')).toHaveAttribute('href', '/datasets/data-1/edit');
+    expect(screen.getByLabelText('Edit dataset')).toHaveAttribute('href', '/a/data-1/edit');
     fireEvent.click(screen.getByLabelText('Next page'));
     await waitFor(() => expect(calls.at(-1)?.body.offset).toBe(50));
     fireEvent.click(screen.getByLabelText('Refresh dataset'));
@@ -434,4 +435,22 @@ describe('dataset catalog viewer', () => {
     expect(screen.getByLabelText('Refresh status')).toHaveTextContent(/stale/i);
     expect(screen.queryByLabelText('Edit dataset')).not.toBeInTheDocument();
   });
+});
+
+it('uses artifact controls with sharing when editing a dataset', async () => {
+  editor(true);
+  await screen.findByDisplayValue('Orders');
+  expect(screen.getByLabelText('Open artifact controls')).toBeInTheDocument();
+  expect(screen.getByRole('button', {name:'Share'})).toBeInTheDocument();
+});
+
+it('renames a dataset without attempting to replace its protected rows', async () => {
+  editor(true);
+  await screen.findByDisplayValue('Orders');
+  change('Dataset title','Renamed');
+  click('Save dataset');
+  await waitFor(()=>expect(calls.some(c=>c.method==='PATCH')).toBe(true));
+  const saved=calls.find(c=>c.method==='PATCH')!;
+  expect(saved.body.title).toBe('Renamed');
+  expect(saved.body).not.toHaveProperty('dataset');
 });

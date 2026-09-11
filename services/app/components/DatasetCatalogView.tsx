@@ -1,3 +1,4 @@
+import { artifactEditPath } from '@/lib/urls';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui';
@@ -39,7 +40,7 @@ export function DatasetCatalogView({ id, catalog, canEdit }: { id: string; catal
     if (!response.ok) throw new Error(data.details?.[0] ?? data.error ?? 'Could not load this query.');
     return data;
   }, [id]);
-  return <DatasetExplorer catalog={catalog} query={query} schemaTables={catalog.tables} editHref={canEdit ? `/datasets/${encodeURIComponent(id)}/edit` : undefined} />;
+  return <DatasetExplorer catalog={catalog} query={query} schemaTables={catalog.tables} editHref={canEdit ? artifactEditPath(id) : undefined} />;
 }
 
 /** Browsing schema metadata is local and never expands the reader's data access. */

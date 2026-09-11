@@ -16,7 +16,7 @@
  * address explicitly. The ACL
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
-import {DatasetPolicies} from '@/components/DatasetPolicies';
+import { artifactEditPath } from '@/lib/urls';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';
@@ -401,7 +401,7 @@ export default function ShareLink({
                     </button>
                   </form>
               </div>
-              {format === 'dataset' && !postgres && artifactId && <DatasetPolicies artifactId={artifactId} />}
+              {format === 'dataset' && !postgres && artifactId && <a aria-label="Manage access policies" onClick={() => { setOpen(false); onClose?.(); }} href={artifactEditPath(artifactId)} className="mt-4 block rounded-lg border border-edge px-3 py-2 text-sm text-muted hover:border-accent hover:text-fg">Manage data actions ↗</a>}
             </>
           )}
         </SharePanel>
