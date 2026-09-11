@@ -154,13 +154,13 @@ export function createRecorder(ledgerPath: string): (e: LedgerEntry) => void {
   return (entry: LedgerEntry) => fs.appendFileSync(ledgerPath, JSON.stringify(entry) + '\n');
 }
 
-export async function startProxy(opts: { port: number; target: string; ledgerPath: string; rewriteHost?: boolean; rewriteDeviceOrigin?: boolean }): Promise<RunningProxy> {
+export async function startProxy(opts: { port: number; target: string; ledgerPath: string; rewriteHost?: boolean; /** The origin the product advertises on its OAuth device door; rewritten to this proxy's own. */ rewriteDeviceOrigin?: string }): Promise<RunningProxy> {
   const target = new URL(opts.target);
   const transport = transportFor(opts.target);
   const record = createRecorder(opts.ledgerPath);
   let self = '';
   const server = http.createServer((req, res) =>
-    forwardExchange(req, res, { target, transport, rewriteHost: !!opts.rewriteHost, record, ...(opts.rewriteDeviceOrigin && self ? { rewriteBody: { path: '/oauth/device', from: target.origin, to: self } } : {}) }));
+    forwardExchange(req, res, { target, transport, rewriteHost: !!opts.rewriteHost, record, ...(opts.rewriteDeviceOrigin && self ? { rewriteBody: { path: '/oauth/device', from: opts.rewriteDeviceOrigin, to: self } } : {}) }));
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);

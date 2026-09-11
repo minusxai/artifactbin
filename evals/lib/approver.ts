@@ -67,7 +67,7 @@ export function startApprover(opts: ApproverOptions): Approver {
           body: new URLSearchParams({ user_code: code, decision: 'approve' }).toString(),
         });
         if (response.ok) { approved.push(code); opts.log?.(`approved device pairing ${code}`); }
-        else opts.log?.(`approval of ${code} answered HTTP ${response.status}`);
+        else opts.log?.(`approval of ${code} answered HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`);
       }
     } finally { busy = false; }
   };

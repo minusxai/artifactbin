@@ -108,6 +108,8 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   const runAs = run.runAs;
   const apiKey = leg.apiKey;
   const ports = serverPorts(config.server.portBase, 0);
+  // The origin the booted product believes it is served from (`APP__PUBLIC_BASE_URL` in lib/server.ts).
+  const publicOrigin = config.deployment ? new URL(config.deployment).origin : `http://127.0.0.1:${ports.proxy}`;
   const legDir = outDir;
   const startedAt = new Date().toISOString();
   // main() owns the run directory and empties it once, BEFORE the first attempt.
@@ -178,7 +180,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       // The agent is given the DEPLOYMENT's own address; its traffic is caught by where it SENDS.
       return { agentBase: config.deployment, agentEnv: agentProxyEnv(mitm.url, mitm.ca), ledgerPath, stop: mitm.stop };
     }
-    const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath, rewriteDeviceOrigin: true });
+    const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath, rewriteDeviceOrigin: publicOrigin });
     log(`${leg.label}/${taskId}: proxy :${proxy.port}`);
     // The agent is given the PROXY's address; the server mints its links from it.
     return { agentBase: proxy.url, agentEnv: {}, ledgerPath, stop: proxy.stop };
@@ -213,7 +215,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     return await mapConcurrent(tasks, config.run.concurrency, async (task) => {
       const t = await startTaskProxy(task.id);
       try {
-        return await runTask({ protectedRoots, leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, agentEnv: t.agentEnv, browser, startedAt, credential, ...(runAs ? { runAs } : {}) });
+        return await runTask({ protectedRoots, leg, task, config, apiKey, legDir, ledgerPath: t.ledgerPath, productUrl, agentBase: t.agentBase, publicOrigin, agentEnv: t.agentEnv, browser, startedAt, credential, ...(runAs ? { runAs } : {}) });
       } catch (err) {
         // A task's own failure is ITS failure. Letting it reject would take down the server its
         // siblings are still running against — and their agent time is already paid for. `false`
@@ -238,6 +240,8 @@ interface TaskRun {
   productUrl: string;
   /** The base the AGENT is given — the reverse proxy locally, the deployment itself behind a MITM. */
   agentBase: string;
+  /** The origin the product advertises for browser approval; the driver's approvals must name it. */
+  publicOrigin: string;
   /** Extra environment that puts the harness behind the MITM proxy. Empty for a local run. */
   agentEnv: Record<string, string>;
   /** When the LEG started (ISO) — one value for every task, so the report can be named by it. */
@@ -356,7 +360,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The `cold` treatment: the driver stands in for the person who approves `afbin setup`, but only when
   // this task was meant to have an account at all — the token-less task keeps its wall.
   const approver = !providesConnection(leg.mode.run) && r.credential?.cookie && plan.access.kind === 'token'
-    ? startApprover({ homeDir, agentBase: r.agentBase, publicOrigin: new URL(r.productUrl).origin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
+    ? startApprover({ homeDir, agentBase: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
     : null;
   const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
