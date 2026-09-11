@@ -19,8 +19,8 @@ import {parseCommand,commandHelp,commands,CliError,type ParsedCommand} from './c
 import {loadWorkspace} from './workspace';
 import {validateFiles} from './validation';
 import {deleteArtifact} from './delete';
-import {compare,remoteStatus} from './comparison';
-import {localStatus,localDiff} from './local';
+import {diffCommand,remoteStatus} from './comparison';
+import {localStatus} from './local';
 import {helpTopics} from './teaching';
 import {loadConnection} from './config';
 import {browserAuthenticate,ApprovalRequired,type AuthOptions} from './browser-auth';
@@ -67,7 +67,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='validate'&&!account){const result=await validateFiles(workspace,positionals,!!flags.fix);emit(result);return result.valid?0:2;}
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
-   try{emit(positionals.length?await compare(workspace,positionals[0],serverOrigin()??'https://artifactbin.dev',false):await localDiff(workspace));return 0;}
+   try{const result=await diffCommand(workspace,parsed,serverOrigin()??'https://artifactbin.dev',false,stdout);if(result)emit(result);return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
   const selectedServer=serverOrigin()??'https://artifactbin.dev';
@@ -120,7 +120,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='query'){const result=await remoteQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='delete'){emit(await deleteArtifact(workspace,positionals[0],client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
-  if(command==='diff'){emit(await compare(workspace,positionals[0],client.connection.server,!!flags.remote,client));return 0;}
+  if(command==='diff'){const result=await diffCommand(workspace,parsed,client.connection.server,!!flags.remote,stdout,client);if(result)emit(result);return 0;}
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
   if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='log'){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));emit(result.value);return result.exitCode;}
@@ -143,17 +143,15 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }
 }
 /** Seeded surface: the parser accepts these rows, and dispatch refuses them until their workstream lands. Each implementer deletes its own entries. */
-const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session','table'],delete:['folder','dataset','file','session','comment'],log:['artifact','folder','dataset','file']};
+const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session','table'],delete:['folder','dataset','file','session','comment']};
 function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
  if(['fork','export','open'].includes(command))pending(`afbin ${command}`);
  if(typeof flags.type==='string'&&PENDING_TYPES[command]?.includes(flags.type))pending(`afbin ${command} --type ${flags.type}`);
  for(const flag of ['restore','refresh','secret-env','session','page'])if(flags[flag]!==undefined)pending(`--${flag}`);
  if(command==='validate'&&flags.remote)pending('validate --remote');
- if(command==='diff'&&(flags.output!==undefined||positionals.length>1))pending('diff --output and multiple targets');
  if(command==='status'&&positionals.length)pending('status <ref>');
  if(command==='list'&&positionals.length)pending('list <ref>');
- if(command==='log'&&flags.filter!==undefined)pending('log --filter');
  if(command==='delete'&&positionals.length>1)pending('delete with multiple targets');
  if(['comment','query','update'].includes(command)&&flags['dry-run'])pending(`${command} --dry-run`);
  if(command==='help'&&(flags.format!==undefined||flags.output!==undefined))pending('help --format and --output');
