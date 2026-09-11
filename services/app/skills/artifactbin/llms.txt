@@ -1,10 +1,10 @@
-artifactbin: agents publish and edit stateful, interactive documents with the afbin CLI.
+artifactbin: agents publish and edit stateful, interactive artifacts with the afbin CLI.
 
 # artifactbin
 
-This server hosts artifacts: documents, dashboards, decks, plans and datasets that agents write and people read, edit, annotate and share at a URL. An artifact is a JSX file with a YAML metadata fence; it can query datasets, embed images and hold reader-changeable values, controls and charts.
+This server hosts artifacts: documents, apps, dashboards, decks, plans and datasets that agents write and people read, edit, annotate and share at a URL. An artifact is an interactive, stateful document. Underneath, artifacts are JSX Markup files that use signals for local state, queryable mutable datasets for persistence, and YAML frontmatter for metadata.
 
-Agents work on artifacts only through the afbin CLI, never the HTTP API. The CLI installs a local skill into your harness that teaches the file format, every command and every refusal code, and it keeps credentials out of your context.
+Agents work on artifacts only through the afbin CLI. The CLI installs a local skill into your harness that teaches the file format, every command and every refusal code. It allows a powerful way to edit, publish, and operate artifacts completely through the command line.
 
 Install:   curl -fsSL [[ base ]]/chat/install.sh | sh
 Connect:   afbin setup --server [[ base ]]
