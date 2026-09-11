@@ -1,62 +1,61 @@
-import {randomUUID} from 'node:crypto';
-import {join} from 'node:path';
-import {unlink} from 'node:fs/promises';
-import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
+import type {Scalar} from '@artifactbin/contracts';
 import {CliError,type ParsedCommand} from './commands';
 import {queryParameters} from './local-query';
 import {artifactReference} from './read-commands';
-import {atomicWrite,digest,privateDirectory,readOptional,syncDirectory} from './files';
-import {withProcessLock} from './process-lock';
-import {readPendingRequest} from './pending-request';
+import {recoverableOperation} from './recoverable-operation';
 import type {Workspace,Snapshot} from './workspace';
 import type {HttpClient} from './http';
-interface SavedMutation {version:1;key:string;server:string;account:string;intent:string;body:Record<string,unknown>;path:string;checksum:string;response?:Record<string,unknown>}
-const checksum=(value:Omit<SavedMutation,'checksum'>)=>digest(JSON.stringify(value));
 
-/** One frozen domain operation survives a transport failure. No credential is stored in the workspace. */
+interface MutationParameter {name:string;type?:string;required?:boolean;default?:Scalar}
+interface MutationDeclaration {name:string;params?:MutationParameter[];target?:string}
+
+/** A declared mutation is the document's own statement; the caller supplies bound values, never SQL. */
+function declaredMutation(head:Snapshot,name:string,values:Record<string,Scalar>):Record<string,unknown>{
+ const declared=(Array.isArray(head.mutations)?head.mutations:[]) as MutationDeclaration[];
+ const selected=declared.find(item=>item&&item.name===name);
+ if(!selected)throw new CliError('unknown_mutation',`${head.id} does not declare the mutation ${name}.`,declared.length?`Declared mutations: ${declared.map(item=>item.name).join(', ')}.`:'This resource declares no mutations; write dataset rows with --input SQL.');
+ const params=selected.params??[];
+ for(const key of Object.keys(values))if(!params.some(param=>param.name===key))throw new CliError('unknown_parameter',`${name} does not declare the parameter ${key}.`,`Declared parameters: ${params.map(param=>param.name).join(', ')||'none'}.`);
+ const missing=params.filter(param=>param.required!==false&&param.default===undefined&&!Object.hasOwn(values,param.name)).map(param=>param.name);
+ if(missing.length)throw new CliError('missing_parameter',`${name} requires ${missing.join(', ')}.`,'Supply each value with --param name=value.');
+ for(const param of params){
+  if(!Object.hasOwn(values,param.name)||param.type===undefined)continue;
+  const value=values[param.name];
+  const valid=param.type==='number'?typeof value==='number':param.type==='boolean'?typeof value==='boolean':['string','date'].includes(param.type)?typeof value==='string':true;
+  if(!valid)throw new CliError('invalid_parameter',`Parameter ${param.name} must be a ${param.type}.`,'Values are bound by declared type, never interpolated.');
+ }
+ return{mutation:name,target:selected.target??head.id,parameters:params.map(param=>param.name)};
+}
+function datasetMutation(head:Snapshot,sql:string):Record<string,unknown>{
+ if(head.format!=='dataset')throw new CliError('invalid_query',`${head.id} is a ${head.format} artifact; SQL input writes dataset rows.`,'Select one of its declared mutations with --name instead.');
+ return{mutation:'sql',target:head.id,statement:sql.trim().split(/\s+/)[0].toLowerCase()};
+}
+
+/** One frozen domain operation survives a transport failure through the shared journal. */
 export async function queryMutation(workspace:Workspace,parsed:ParsedCommand,sql:string|undefined,client:HttpClient){
- if(!sql?.trim())throw new CliError('invalid_query','A dataset mutation requires SQL supplied with --input.');
+ const {flags}=parsed;
+ const name=typeof flags.name==='string'?flags.name:undefined;
+ if(!name&&!sql?.trim())throw new CliError('invalid_query','A mutation needs SQL supplied with --input, or a declared mutation selected with --name.');
+ const values=queryParameters(flags.param as string[]|undefined);
  const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,true);
- const values=queryParameters(parsed.flags.param as string[]|undefined);
- const intent=digest(JSON.stringify({id:ref.id,sql,values}));
- return withProcessLock(workspace.root,async()=>{
-  if(await readPendingRequest(workspace.root))throw new CliError('pending_recovery','Finish the pending publication with afbin push before changing dataset rows.');
-  const directory=join(workspace.root,'.artifactbin'),path=join(directory,'pending-operation.json');
-  const raw=await readOptional(path);let saved:SavedMutation;
-  if(raw){
-   try{saved=JSON.parse(raw.toString());}catch{throw new CliError('invalid_journal','The pending operation is not valid JSON.');}
-   const {checksum:claimed,...value}=saved;
-   if(claimed!==checksum(value)||!saved.account||!saved.key)throw new CliError('invalid_journal','The pending operation checksum is invalid.');
-   if(saved.version!==1)throw new CliError('pending_recovery','Another native operation is pending.','Repeat its original command and inputs to recover it.');
-   if(saved.path!==`/artifacts/${ref.id}/mutate`||digest(JSON.stringify({id:ref.id,sql:saved.body?.sql,values:saved.body?.values}))!==saved.intent||typeof saved.body.expectedState!=='string'||!/^[a-f0-9]{64}$/.test(saved.body.expectedState))throw new CliError('invalid_journal','The saved request does not match its declared mutation intent.');
-   if(saved.intent!==intent||saved.server!==client.connection.server)throw new CliError('pending_recovery','A different operation is still pending.','Restore its original SQL and arguments, then repeat the same command to recover it.');
-   if(client.account&&client.account!==saved.account)throw new CliError('account_mismatch','The pending mutation belongs to another account.');
-   client.account=saved.account;
-  }else{
+ if(ref.version!==undefined)throw new CliError('historical_mutation','A mutation writes the current resource.','Pull the historical version and push it conditionally instead.');
+ const plan=(head:Snapshot)=>{
+  if(head.id!==ref.id||typeof head.state!=='string')throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');
+  return name?declaredMutation(head,name,values):datasetMutation(head,sql!);
+ };
+ if(flags['dry-run']){
+  const head=await client.request<Snapshot>(`/artifacts/${ref.id}`);
+  return{dry_run:true,id:ref.id,...plan(head),values,applied:false};
+ }
+ return recoverableOperation(workspace,client,{
+  path:`/artifacts/${ref.id}/mutate`,method:'POST',
+  identity:{id:ref.id,...(name?{name}:{sql}),values},
+  body:{...(name?{name}:{sql}),values},
+  prepare:async()=>{
    const head=await client.request<Snapshot>(`/artifacts/${ref.id}`);
-   if(head.format!=='dataset')throw new CliError('invalid_query','SQL input requires one dataset.');
-   if(!(head.capabilities as {mutation_receipts?:boolean}|undefined)?.mutation_receipts)throw new CliError('unsupported_server','This server does not support recoverable dataset mutations.');
-   if(!client.account)throw new CliError('unsupported_server','The server did not return the mutation account identity.');
-   const value={version:1 as const,key:randomUUID(),server:client.connection.server,account:client.account,intent,path:`/artifacts/${ref.id}/mutate`,body:{sql,values,expectedState:head.state}};
-   saved={...value,checksum:checksum(value)};await privateDirectory(directory);await atomicWrite(path,JSON.stringify(saved),{exclusive:true});
-  }
-  if(!saved.response){
-   let response:Record<string,unknown>;
-   try{response=await client.request(saved.path,'POST',saved.body,{'Idempotency-Key':saved.key},{timeoutMs:MUTATION_REPLY_TIMEOUT_MS});}
-   catch(error){
-    if(error instanceof CliError&&(error.details as {mutation_receipt?:unknown}|undefined)?.mutation_receipt===saved.key){
-     const archive=join(directory,'completed-operations');await privateDirectory(archive);
-     await atomicWrite(join(archive,`${saved.key}.json`),JSON.stringify({pending:saved,refusal:error.details}));
-     await unlink(path);await syncDirectory(directory);
-    }
-    throw error;
-   }
-   const {checksum:_prior,...value}=saved;const next={...value,response};saved={...next,checksum:checksum(next)};await atomicWrite(path,JSON.stringify(saved));
-  }
-  // Archive the confirmed receipt before removing pending state.
-  const archive=join(directory,'completed-operations');await privateDirectory(archive);
-  await atomicWrite(join(archive,`${saved.key}.json`),JSON.stringify(saved));
-  await unlink(path);await syncDirectory(directory);
-  return {...saved.response,operation:saved.key};
+   plan(head);
+   if(!(head.capabilities as {mutation_receipts?:boolean}|undefined)?.mutation_receipts)throw new CliError('unsupported_server','This server does not support recoverable mutations.');
+   return{body:name?{name,values}:{sql,values,expectedState:head.state}};
+  },
  });
 }
