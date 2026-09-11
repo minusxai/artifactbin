@@ -78,18 +78,24 @@ async function oracleDaily(db: Queryable, userId: string): Promise<Array<{ day: 
 }
 /* ─────────────────────────────────────────────────────────────────────────────── */
 
-const at = (daysAgo: number, minute: number) => new Date(Date.now() - daysAgo * 86_400_000 + minute * 60_000).toISOString();
+const at = (daysAgo: number, minute: number, now = Date.now()) => new Date(Math.floor(now / 86_400_000) * 86_400_000 - daysAgo * 86_400_000 + minute * 60_000).toISOString();
+
+it.each(['2026-09-10T00:01:00Z', '2026-09-10T23:59:00Z'])('history timestamps stay in their intended UTC day at %s', (now) => {
+  expect(at(39, 9, Date.parse(now))).toBe('2026-08-02T00:09:00.000Z');
+});
 
 /** 40 days, deterministic: refreshes, one account on two devices, legacy NULL visitors, another owner, non-view rows. */
 async function seedHistory(db: Queryable): Promise<void> {
+  // One UTC day for the entire fixture, even if seeding crosses midnight.
+  const now = Date.now();
   await db.query(`INSERT INTO artifacts (id, token_id, user_id, content) VALUES ('art0a1', 'tok_a', 'usr_a', 'x'), ('art0a2', 'tok_a', 'usr_a', 'x'), ('art0b1', 'tok_b', 'usr_b', 'x')`);
   const rows: Array<[string, string, string | null, string | null, string | null, string]> = [];
   for (let d = 0; d < 40; d += 1) {
-    if (d % 2 === 0) { rows.push(['view', 'art0a1', null, 'browser', `h${d}`.padEnd(32, 'h'), at(d, 1)], ['view', 'art0a1', null, 'browser', `h${d}`.padEnd(32, 'h'), at(d, 2)]); }
-    rows.push(['view', 'art0a2', 'usr_x', 'browser', `x1${d}`.padEnd(32, 'x'), at(d, 3)], ['view', 'art0a2', 'usr_x', 'browser', `x2${d}`.padEnd(32, 'y'), at(d, 4)]);
-    if (d % 5 === 0) rows.push(['view', 'art0a1', null, 'curl', null, at(d, 5)], ['view', 'art0a1', null, 'curl', null, at(d, 6)]);
-    if (d % 3 === 0) rows.push(['view', 'art0b1', 'usr_b', 'browser', `q${d}`.padEnd(32, 'q'), at(d, 7)]);
-    if (d % 7 === 0) rows.push(['create', 'art0a1', 'usr_a', 'claude-code', `c${d}`.padEnd(32, 'c'), at(d, 8)], ['sse_connect', 'art0a1', null, null, null, at(d, 9)]);
+    if (d % 2 === 0) { rows.push(['view', 'art0a1', null, 'browser', `h${d}`.padEnd(32, 'h'), at(d, 1, now)], ['view', 'art0a1', null, 'browser', `h${d}`.padEnd(32, 'h'), at(d, 2, now)]); }
+    rows.push(['view', 'art0a2', 'usr_x', 'browser', `x1${d}`.padEnd(32, 'x'), at(d, 3, now)], ['view', 'art0a2', 'usr_x', 'browser', `x2${d}`.padEnd(32, 'y'), at(d, 4, now)]);
+    if (d % 5 === 0) rows.push(['view', 'art0a1', null, 'curl', null, at(d, 5, now)], ['view', 'art0a1', null, 'curl', null, at(d, 6, now)]);
+    if (d % 3 === 0) rows.push(['view', 'art0b1', 'usr_b', 'browser', `q${d}`.padEnd(32, 'q'), at(d, 7, now)]);
+    if (d % 7 === 0) rows.push(['create', 'art0a1', 'usr_a', 'claude-code', `c${d}`.padEnd(32, 'c'), at(d, 8, now)], ['sse_connect', 'art0a1', null, null, null, at(d, 9, now)]);
   }
   for (const r of rows) await db.query('INSERT INTO analytics_events (event, artifact_id, user_id, client, visitor, created_at) VALUES ($1, $2, $3, $4, $5, $6)', r);
 }
