@@ -36,7 +36,8 @@ export function json(body: unknown, status = 200, headers: Record<string, string
 }
 
 /**
- * The uniform bearer/browser refusal, with the two recovery addresses an agent needs.
+ * The uniform bearer/browser refusal, with the recovery addresses an agent needs: the setup command,
+ * the one-pager that explains it, and the human's token door.
  *
  * `tokens` is the HUMAN's door, and it is SOURCE-TAGGED when the caller declared a harness
  * (`Artifactbin-Agent`), so the person who ends up on `/tokens/new` arrives on a page that knows which
@@ -49,6 +50,7 @@ export function unauthorized(request: Request): Response {
     {
       error: 'unauthorized',
       help: `afbin setup --server ${base}`,
+      guide: `${base}/llms.txt`,
       tokens: `${base}/tokens/new${source ? `?source=${source}` : ''}`,
     },
     401,

@@ -266,7 +266,7 @@ export function readFirstBlock(text: string): string | null {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-/** The tree on disk — `<root>/<skill>/SKILL.md` + `<root>/<skill>/references/*.md`, nothing else, nothing loose at the root. */
+/** The tree on disk — `<root>/<skill>/SKILL.md` + `<root>/<skill>/references/*.md`; a skill's non-markdown siblings (`example.jsx`, `llms.txt`) are assets, not tree files; nothing loose at the root. */
 export function loadSkillSources(root = path.resolve(process.cwd(), 'skills')): Record<string, string> {
   const out: Record<string, string> = {};
   for (const dir of readdirSync(root)) {

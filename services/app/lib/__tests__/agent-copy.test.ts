@@ -7,7 +7,7 @@
  *   existingPaste   an existing document handed over — the agent uses the token it holds
  *   startLinkPaste  the start-link flow, unchanged wording; lib/start-links `startPrompt` IS this function
  *
- * Existing-document pastes include the exact HTTP documentation URL.
+ * Every paste ends with the one guide address, llms.txt on the caller's base.
  */
 import { describe, expect, it } from 'vitest';
 import { anonymousPaste, existingPaste, ownedPaste, startLinkPaste } from '@/lib/agent-copy';
@@ -15,7 +15,7 @@ import { startPrompt } from '@/lib/start-links';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const DOCS = '. Use afbin: pull, edit local JSX, validate, push. Read afbin help and the local skill. Connect with afbin setup --server https://x.test for browser approval.';
+const DOCS = '. Use afbin (afbin help): pull, edit local JSX, validate, push. Connect: afbin setup --server https://x.test. Guide: https://x.test/llms.txt.';
 
 describe('the four pastes', () => {
   it('anonymous: link + the token inline', () => {

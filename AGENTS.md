@@ -16,6 +16,14 @@ when working on the relevant subsystem. Historical rollout narratives remain in 
   Rank implementation milestones by the risks that could change the plan. Finish with runnable checks.
 - Run the full suite, commit and push to the PR, and verify the affected user flow on the running app.
   Keep PR bodies empty unless the user explicitly requests a description. Do not add descriptive PR comments.
+- **Verification MUST run in parallel, and as one pass, never as a serial chain.** Before editing text that
+  tests pin (docs, skills, copy, error bodies), grep for every test and gate that reads it (`buildQuickSheet`,
+  `agentDiscovery`, `renderDoc`, the exact phrase) and change them in the same edit. Then start `test:api`,
+  `test:node`, `test:ui`, the CLI suite and `npm run build` as concurrent processes; run only the gates that
+  touch the changed surface first and the full gate set once at the end. The suites already use every core;
+  wall-clock is lost only by running them one after another, by fixing one pinned assertion per pass, or by
+  waiting on a subagent instead of doing independent work meanwhile. Fix-cycles after the first pass are a
+  planning failure to report, not a routine.
 - After a merge, update the local main branch to the latest origin/main.
 - Use top-level imports. Preserve intentional lazy browser chunks and engine-selecting imports;
   document new exceptions at the boundary and verify the resulting bundle.

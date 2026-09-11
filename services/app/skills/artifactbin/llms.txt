@@ -1,0 +1,15 @@
+artifactbin: agents publish and edit stateful, interactive artifacts with the afbin CLI.
+
+# artifactbin
+
+This server hosts artifacts: documents, apps, dashboards, decks, plans and datasets that agents write and people read, edit, annotate and share at a URL. An artifact is an interactive, stateful document. Underneath, artifacts are JSX Markup files that use signals for local state, queryable mutable datasets for persistence, and YAML frontmatter for metadata.
+
+Agents work on artifacts only through the afbin CLI. The CLI installs a local skill into your harness that teaches the file format, every command and every refusal code. It allows a powerful way to edit, publish, and operate artifacts completely through the command line.
+
+Install:   curl -fsSL [[ base ]]/chat/install.sh | sh
+Connect:   afbin setup --server [[ base ]]
+           In automation add --yes --json: it prints a browser approval URL; rerun after approval.
+Then:      afbin pull <artifact url> --output report.jsx; edit the file; afbin validate report.jsx; afbin push report.jsx
+Reference: afbin help, afbin help <topic>, and the installed skill. Restart Claude Code or Codex after setup so they load it.
+
+Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; afbin accepts either, or the bare id. Add @<version> for history.

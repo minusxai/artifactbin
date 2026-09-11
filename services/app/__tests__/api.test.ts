@@ -198,11 +198,12 @@ describe('public serving', () => {
 });
 
 describe('CLI discovery',()=>{
- it('names local help, browser setup and a versioned downloadable bundle',async()=>{
+ it('is the one-pager: what artifactbin is, local help, browser setup and both URL forms, under 2 KB',async()=>{
   const response=await getLlmsTxt(request('/llms.txt'));const text=await response.text();
   expect(response.status).toBe(200);expect(response.headers.get('content-type')).toContain('text/plain');
-  expect(text).toContain('afbin setup --server http://localhost:3000');
+  expect(text.split('\n')[0]).toMatch(/^artifactbin: .*afbin CLI\.$/);
+  expect(text).toContain('afbin setup --server http://localhost:3000');expect(text).toContain('http://localhost:3000/a/<id>');
   expect(text).toContain('afbin help');expect(text).toContain('/chat/install.sh | sh');expect(text).not.toMatch(/releases\/download|npm install|MCP/);
-  expect(text).not.toContain('/docs/');expect(Buffer.byteLength(text)).toBeLessThan(1024);
+  expect(text).not.toContain('/docs/');expect(Buffer.byteLength(text)).toBeLessThan(2048);
  });
 });

@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {localSkillFiles,manPage} from '../src/teaching';
 import {roffLiteral} from '../src/man';
-test('bundled skill links resolve locally and every template example validates offline',async()=>{
+test('bundled skill links resolve locally and every template example, including the brief\'s, validates offline',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-teaching-'));
  try{
   assert.ok(localSkillFiles['SKILL.md']);assert.match(manPage(),/afbin/);
@@ -14,8 +14,8 @@ test('bundled skill links resolve locally and every template example validates o
    if(/^[a-z]+:/i.test(match[1]))continue;
    const target=join(path.includes('/')?path.slice(0,path.lastIndexOf('/')):'',match[1]);assert.ok(localSkillFiles[target],`${path} links to missing ${target}`);
   }
-  await writeFile(join(root,'sales.csv'),'region,total\nEast,12\n');
-  for(const template of ['editorial','dashboard','deck','scrolly']){
+  await writeFile(join(root,'sales.csv'),'month,region,revenue\n2026-07-01,East,12\n2026-08-01,West,9\n');
+  for(const template of ['editorial','dashboard','deck','scrolly','example']){
    const output:string[]=[];const context={cwd:root,home:root,interactive:false,stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('bundled teaching must stay offline')};
    assert.equal(await runCli(['help',template],context),0);await writeFile(join(root,template+'.jsx'),output.join(''));output.length=0;
    assert.equal(await runCli(['validate',template+'.jsx','--json'],context),0,output.join(''));

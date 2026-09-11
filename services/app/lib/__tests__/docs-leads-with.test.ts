@@ -97,11 +97,24 @@ describe('the brief — the one text every agent reads', () => {
     expect(sheet).not.toMatch(/never vh/i);
   });
   it('the hard rules and the data block are adjacent — no theme prose between them', () => {
+    // The brief is: Read first (what an artifact is, the CLI loop), then ONE
+    // example that carries the data block AND the document rules as comments
+    // beside the lines they govern, then the reference list. So the rules
+    // sit inside the example, the example follows the read-first block, and
+    // the theme/template routing comes after both.
     const rules = sheet.indexOf('self-contained');
+    const example = sheet.indexOf('```jsx');
     const data = sheet.indexOf('<Query');
-    const theme = sheet.indexOf('afbin help themes');
+    const bodyRules = sheet.indexOf('static JSX', example);
+    const theme = sheet.indexOf('afbin help themes', sheet.indexOf('## Read next'));
     expect(rules).toBeGreaterThan(-1);
-    expect(Math.abs(data - rules)).toBeLessThan(2500);
-    expect(theme).toBeGreaterThan(Math.min(rules, data));
+    expect(example).toBeGreaterThan(rules);
+    // Nothing about themes or templates sits between the rules and the example.
+    expect(sheet.slice(rules, example)).not.toMatch(/themes-|templates-|afbin help themes/);
+    expect(sheet.indexOf('## Example')).toBeLessThan(example);
+    expect(data).toBeGreaterThan(example);
+    expect(data - example).toBeLessThan(1500);
+    expect(bodyRules - data).toBeLessThan(1500);
+    expect(theme).toBeGreaterThan(bodyRules);
   });
 });

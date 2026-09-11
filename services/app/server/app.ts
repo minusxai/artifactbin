@@ -47,6 +47,11 @@ import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
 
+/** The `<link rel="help">` and `<meta name="artifactbin:agent">` an agent that fetched any page reads, on the caller's base. */
+export function withAgentDiscovery(html: string, origin: string): string {
+  return html.replace('</head>', () => `${agentDiscoveryHead(agentDiscovery(origin))}</head>`);
+}
+
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
 /** `<` is the only character that can end a script element early; JSON never needs it. */
@@ -72,8 +77,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
   const fontPreloads = (runtime.fontPreloads ?? []).map(url => `<link rel="preload" href="${escapeHtml(url)}" as="font" type="font/woff2" crossorigin>`).join('');
   const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
-    + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`
-    + agentDiscoveryHead(agentDiscovery(origin));
+    + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`;
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
     .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style><div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></div></body>`);
@@ -230,9 +234,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       const actor = await sessionActor(c.req.raw);
       return actor.credential === 'none';
     });
+    // The agent pointer is injected here, on the request base, for EVERY shell
+    // — the static index.html carries none, so there is one source (lib/agent-discovery).
+    const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
-      ? withInitialStory(preloadReader(html), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : publicHome ? withInitialHome(html) : html;
+      ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
+      : publicHome ? withInitialHome(discovered) : discovered;
     return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),

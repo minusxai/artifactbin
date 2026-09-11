@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {buildQuickSheet,QUICK_SHEET_MAX_BYTES,renderDoc} from '../skills';
+import {buildQuickSheet,QUICK_SHEET_MAX_BYTES,renderDoc,skillExample} from '../skills';
 import teaching from '../../../cli/src/generated/teaching.json';
 const sheet=buildQuickSheet('https://artifactbin.dev');
 describe('the installed short skill',()=>{
@@ -9,9 +9,8 @@ describe('the installed short skill',()=>{
   expect(sheet).not.toMatch(/MCP|\/docs\//);
  });
  it('uses the same push for create and update with local validation',()=>{
-  for(const text of ['afbin pull','afbin push report.jsx','new artifact','afbin validate','afbin.lock']){
-   expect(text==='afbin.lock'?renderDoc('artifactbin/references/publishing.md','https://example.test'):sheet).toContain(text);
-  }
+  for(const text of ['afbin pull','afbin push report.jsx','new artifact','afbin validate'])expect(sheet).toContain(text);
+  expect(renderDoc('artifactbin/references/publishing.md','https://example.test')).toContain('afbin.lock');
   expect(sheet).toContain('YAML fence');
   expect(sheet).toContain('edit_id');
  });
@@ -22,13 +21,16 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('afbin help themes');
   expect(sheet).toContain('afbin help templates');
  });
- it('teaches responsive containers, static JSX and appropriate chart primitives',()=>{
-  for(const term of ['grid-cols-1 @2xl:grid-cols-2','text-3xl @2xl:text-5xl','phone','static JSX','className','<Helmet>','No CDN scripts','inline style','never a hand-rolled `<svg>` chart'])expect(sheet).toContain(term);
+ it('teaches responsive containers, static JSX and appropriate chart primitives through the example',()=>{
+  for(const term of ['@2xl:','phone width','static JSX','className','<Helmet>','CDN','never inline','never hand-rolled <svg>'])expect(sheet).toContain(term);
+  expect(sheet).toContain(skillExample().trimEnd());
  });
  it('points to data, comments, history and recovery without another network reference',()=>{
-  for(const topic of ['markup-data','publishing-annotations','publishing-auth','errors'])expect(sheet).toContain(`references/${topic}.md`);
-  for(const term of ['afbin comment','afbin log','afbin delete','--thread','--state resolved','--json'])expect(sheet).toContain(term);
+  for(const topic of ['markup-data','publishing-annotations','publishing-auth','publishing','errors','commands'])expect(sheet).toContain(`references/${topic}.md`);
+  for(const term of ['afbin comment','afbin log','afbin delete','--json','On refusal'])expect(sheet).toContain(term);
   expect(sheet).toContain('if you can view images');
+  const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
+  for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });
  it('every concrete link exists in the shipped local bundle',()=>{
   for(const [,link] of sheet.matchAll(/\]\((references\/[^)]+)\)/g))expect(teaching.files).toHaveProperty(link);
@@ -38,5 +40,10 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('public.rows');
   expect(sheet).toContain('$sales');
   for(const dead of ['<Param','data="ref:','ref_<id>','"markdown"','"html"'])expect(sheet).not.toContain(dead);
+ });
+ it('the bundle carries the brief with its frontmatter and the example as a help topic',()=>{
+  expect(teaching.files['SKILL.md']).toMatch(/^---\nname: artifactbin\ndescription: "Required for every artifactbin task/);
+  expect(teaching.files['SKILL.md']).toContain(skillExample().trimEnd());
+  expect((teaching as {example:string}).example).toBe(skillExample());
  });
 });

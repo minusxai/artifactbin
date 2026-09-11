@@ -90,7 +90,7 @@ describe('one document format', () => {
   });
 
   it('the agent doc teaches markup only', () => {
-    const doc = readFileSync(path.join(ROOT, '../cli/skill/SKILL.md'), 'utf8');
+    const doc = readFileSync(path.join(ROOT, 'skills/artifactbin/SKILL.md'), 'utf8');
     expect(doc).toContain('static JSX');
     expect(doc).not.toContain('markup | markdown | html');
   });
