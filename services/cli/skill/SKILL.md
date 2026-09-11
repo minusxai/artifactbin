@@ -5,7 +5,7 @@ description: Publish and edit shareable documents, dashboards, presentations and
 
 # artifactbin
 
-Use `afbin` with local files. `afbin -h`, command `-h`, and `afbin help <topic>` work offline. If the binary is missing, install `@artifactbin/cli` with npm. Authentication and local skill updates belong to `afbin setup`. It requests browser approval and saves credentials privately in `~/.artifactbin/.env`. In automation, `setup --yes --json` reports the pending approval URL; `--yes` never grants browser approval. Never self-mint credentials or expose tokens in output.
+Use `afbin` with local files. `afbin -h`, command `-h`, and `afbin help <topic>` work offline. If the binary is missing, download `https://artifactbin.dev/chat/install.sh` and run it with `sh`; the installer verifies the released standalone binary’s checksum. Authentication and local skill updates belong to `afbin setup`. It requests browser approval and saves credentials privately in `~/.artifactbin/.env`. In automation, `setup --yes --json` reports the pending approval URL; `--yes` never grants browser approval. Never self-mint credentials or expose tokens in output.
 
 For a supplied artifact, run `afbin pull <url-or-id> report.jsx`, edit that file, then `afbin push report.jsx`. For a new artifact, write a `.jsx` file and use the same push command. Share its returned URL according to the user's request. Preserve its identity; creating another artifact is a deliberate fork.
 
