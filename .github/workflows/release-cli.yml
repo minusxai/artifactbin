@@ -76,7 +76,6 @@ jobs:
             for common in afbin-skills.json afbin.1; do
               if [ -f "bundle/$common" ]; then cmp "bundle/$common" "downloads/$runner/$common"; else cp "downloads/$runner/$common" "bundle/$common"; fi
             done
-            if [ ! -f bundle/afbin-skills.tar.gz ]; then cp "downloads/$runner/afbin-skills.tar.gz" bundle/; fi
           done
           (cd bundle && sha256sum afbin-* afbin.1 > SHA256SUMS)
 

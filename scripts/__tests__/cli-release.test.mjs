@@ -120,7 +120,6 @@ else if(all.startsWith('release view')) {
   fs.mkdirSync(dir,{recursive:true}); fs.writeFileSync(dir+'/afbin-'+mapping[name], 'test binary');
   fs.writeFileSync(dir+'/afbin-'+mapping[name]+'.manifest.json', '{}');
   fs.writeFileSync(dir+'/afbin-skills.json', '{"version":"0.1.1","protocol":1,"files":{}}');
-  fs.writeFileSync(dir+'/afbin-skills.tar.gz', 'skill archive');
   fs.writeFileSync(dir+'/afbin.1', 'manual');
 } else if (!(all.startsWith('api --method POST') || all.startsWith('release create') || all.startsWith('release upload') || all.startsWith('release edit'))) process.exit(2);
 `;
@@ -136,7 +135,7 @@ else if(all.startsWith('release view')) {
         expect(existsSync(join(dir, 'output'))).toBe(false);
       } else {
         run(steps[1].run); run(steps[2].run);
-        expect(readFileSync(join(dir, 'bundle/SHA256SUMS'), 'utf8').trim().split('\n')).toHaveLength(11);
+        expect(readFileSync(join(dir, 'bundle/SHA256SUMS'), 'utf8').trim().split('\n')).toHaveLength(10);
         const calls = readFileSync(join(dir, 'calls'), 'utf8');
         expect(calls).toContain('release edit afbin-v0.1.1');
         expect(calls).toContain(scenario === 'draft' ? 'release upload' : 'release create');

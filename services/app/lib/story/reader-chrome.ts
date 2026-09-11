@@ -37,7 +37,6 @@
  * it at all.
  */
 
-import {CLI_SKILLS_DOWNLOAD} from '../cli-release';
 import { REPO_URL } from '@/lib/repo';
 import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
 import { githubStarMarkup } from '@/lib/github-star';
@@ -267,7 +266,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + '<a class="mx-reader-brand" href="/" target="_top"><img src="/logo-128.png" alt="">artifactbin</a>'
     + (login ? `<a class="mx-reader-signin" data-mx-login href="${escapeHtml(login.href)}" target="_top" aria-label="Sign in">sign in</a>` : '')
     + '<a href="/" target="_top">Artifacts</a><a href="/account" target="_top">Account</a>'
-    + `<a href="/docs-human" target="_top">Human Docs</a><a href="${escapeHtml(CLI_SKILLS_DOWNLOAD)}" target="_top">Download local skills</a>`
+    + '<a href="/docs-human" target="_top">Human Docs</a>'
     + `<a href="${REPO_URL}" target="_blank" rel="noopener noreferrer">${ICON_GITHUB}Support artifactbin</a>`
     + '</nav>'
     + '<section class="mx-reader-panel mx-reader-panel--controls" data-mx-reader-panel="controls" aria-label="Artifact controls" hidden>'
