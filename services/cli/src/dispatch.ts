@@ -77,7 +77,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='push'&&!flags['dry-run']&&!await readPendingRequest(workspace.root)){
    const result=await finishLocalPush(workspace,positionals,!!flags.force);if(result){emit(result);return 0;}
   }
-  if(command==='pull'){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin());if(!targets.length){emit({operations:[]});return 0;}}
+  if(command==='pull'){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined);if(!targets.length){emit({operations:[]});return 0;}}
   let apiBody:unknown;
   if(command==='api'&&typeof flags.input==='string'){
    const input=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
@@ -120,7 +120,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='diff'){emit(await compare(workspace,positionals[0],client.connection.server,!!flags.remote,client));return 0;}
   if(command==='comment'){emit(await commentCommand(workspace,parsed,client,commentBody));return 0;}
   if(command==='list'||command==='log'){emit(await readCommand(workspace,parsed,client));return 0;}
-  if(command==='pull'){emit(await pull(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
+  if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='push'&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd);}
   if(command==='push'){emit(await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='api'){

@@ -4,6 +4,8 @@ export {CliError} from './errors';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
+ format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
  'no-browser':{description:'Print browser URLs without launching a browser; authentication still waits for approval.'},
  version:{description:'Show the installed CLI version.'},
  help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
@@ -23,7 +25,7 @@ const globalFlags=['help','version','json','server','yes','no-browser'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
  {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
- {name:'pull',usage:'[<ref>] [path]',description:'Get one artifact or refresh tracked files.',min:0,max:2,flags:['dry-run','force'],examples:['afbin pull abc123 report.jsx','afbin pull report.jsx@2']},
+ {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts and reconcile tracked files.',min:0,max:Infinity,flags:['output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2']},
  {name:'push',usage:'[path ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['dry-run','force'],examples:['afbin push report.jsx','afbin push --dry-run']},
  {name:'validate',usage:'[path ...]',description:'Check local files without network access.',min:0,max:Infinity,flags:['fix'],examples:['afbin validate report.jsx','afbin validate --fix report.jsx']},
  {name:'status',usage:'',description:'Compare local files with saved state; remote state is last observed.',min:0,max:0,flags:['remote'],examples:['afbin status','afbin status --remote']},
@@ -77,6 +79,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(result.flags.help||result.flags.version)return result;
  if(result.positionals.length<command.min||result.positionals.length>command.max)throw new CliError('invalid_arguments',`Usage: afbin ${command.name} ${command.usage}`.trim());
  const f=result.flags;
+ if(command.name==='pull'&&f.format!==undefined)f.format=enumArgument(f.format,['jsx','yaml','csv','json','original'],'format');
  if(f.limit!==undefined&&(!/^\d+$/.test(String(f.limit))||Number(f.limit)<1||Number(f.limit)>100))throw new CliError('invalid_limit','--limit must be an integer from 1 to 100.');
  if(f.method&&!['GET','POST','PUT','PATCH','DELETE','HEAD'].includes(String(f.method)))throw new CliError('invalid_method','--method must be GET, POST, PUT, PATCH, DELETE or HEAD.');
  if(command.name==='api'&&f.input&&(!f.method||f.method==='GET'||f.method==='HEAD'))throw new CliError('invalid_input','--input requires an explicit write --method.');

@@ -20,7 +20,7 @@ test('typing during a push preserves the remote nodes incorporated into its conf
   return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
  }});return{code,result:JSON.parse(out.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   await writeFile(join(root,'doc.jsx'),(await readFile(join(root,'doc.jsx'),'utf8')).replace('First','Submitted'));
   const pushed=await invoke(['push']);assert.equal(pushed.code,0,JSON.stringify(pushed));
   const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));assert.match(local.body,/Submitted/);assert.match(local.body,/Remote/);assert.match(local.body,/Typing/);
@@ -36,7 +36,7 @@ test('unconfirmed invitation edits are replayed only when the full governance st
   return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
  }});return{code,result:JSON.parse(out.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const document=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));document.metadata.shares=[{email:shares[0].email,role:'viewer'}];await writeFile(join(root,'doc.jsx'),writeDocument(document));
   assert.equal((await invoke(['push'])).result.error.code,'outcome_unknown');const retried=await invoke(['push']);assert.equal(retried.code,0,JSON.stringify(retried));assert.equal(patches,2);
   assert.deepEqual(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).metadata.shares,shares);

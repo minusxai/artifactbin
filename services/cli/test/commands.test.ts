@@ -12,7 +12,7 @@ test('one flag vocabulary works before or after the command and aliases normaliz
  assert.deepEqual(parseCommand(['push','--','-report.jsx']).positionals,['-report.jsx']);
 });
 test('refuses inapplicable flags and malformed requests before any auth or network',()=>{
- for(const args of [['status','--force'],['help','--dry-run'],['push','--fix'],['pull','a','b','c'],['list','--limit','0'],['list','--limit','no'],['api'],['comment','a','--resolve'],['comment','a','--body','x','--body-file','x'],['setup','--harness','none','--harness','pi'],['push','--froce'],['push','--json=false']]) assert.throws(()=>parseCommand(args),Error,args.join(' '));
+ for(const args of [['status','--force'],['help','--dry-run'],['push','--fix'],['pull','--output','one','--output','two'],['list','--limit','0'],['list','--limit','no'],['api'],['comment','a','--resolve'],['comment','a','--body','x','--body-file','x'],['setup','--harness','none','--harness','pi'],['push','--froce'],['push','--json=false']]) assert.throws(()=>parseCommand(args),Error,args.join(' '));
  assert.equal(parseCommand([]).command,'setup');
 });
 test('each command documents its actual flags and supports local short help',()=>{

@@ -22,7 +22,7 @@ test('mixed content and metadata push rebases unrelated remote nodes before its 
   return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
  }});return{code,result:JSON.parse(out.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));local.body=local.body.replace('First','Local');local.metadata.title='My title';await writeFile(join(root,'doc.jsx'),writeDocument(local));
   head={...head,version:2,edit_id:'two',state:digest('two'),markup:head.markup.replace('Second','Remote')};
   const result=await invoke(['push','doc.jsx']);assert.equal(result.code,0,JSON.stringify(result.result));assert.equal(writes,1);
@@ -35,7 +35,7 @@ test('mixed push records overlapping proposals and dry-run leaves no conflict st
  let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<p id="first">First</p>'};
  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{assert.equal(init?.method,'GET');return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});}});return{code,result:JSON.parse(out.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));local.body=local.body.replace('First','Local');local.metadata.title='My title';await writeFile(join(root,'doc.jsx'),writeDocument(local));
   head={...head,version:2,edit_id:'two',state:digest('two'),markup:head.markup.replace('First','Remote')};
   assert.equal((await invoke(['push','doc.jsx','--dry-run'])).code,3);await assert.rejects(readFile(join(root,'.artifactbin','conflicts.json')),{code:'ENOENT'});
@@ -63,7 +63,7 @@ test('mixed push reconciles before dependency preflight and again using immutabl
   return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
  }});return{code,result:JSON.parse(out.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   await writeFile(join(root,'sales.csv'),'score\n42\n');
   const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));local.body=local.body.replace('First','<a href="./sales.csv">Local data</a>');local.metadata.title='My title';await writeFile(join(root,'doc.jsx'),writeDocument(local));
   head={...head,version:2,edit_id:'two',state:digest('two'),markup:head.markup.replace('Second','Remote')};

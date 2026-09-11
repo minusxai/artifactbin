@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {useAppHarness,request} from './harness';
 import {POST as create} from '@/app/api/artifacts/route';
 import {GET as read,PUT as replace,PATCH as metadata} from '@/app/api/artifacts/[id]/route';
+import {GET as content} from '@/app/api/artifacts/[id]/content/route';
 import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {mintToken} from '@/lib/tokens';
 import {runCli} from '../../cli/src/dispatch';
@@ -40,6 +41,7 @@ it('native YAML dataset publication enables a subsequent real SQL write and pres
    if(path==='/api/artifacts')return create(req);
    const id=path.split('/')[3],context={params:Promise.resolve({id})};
    if(path.endsWith('/mutate'))return mutate(req,context);
+   if(path.endsWith('/content'))return content(req,context);
    return req.method==='PUT'?replace(req,context):req.method==='PATCH'?metadata(req,context):read(req,context);
   };
   const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,fetch:transport,stdout:s=>out.push(s),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
@@ -48,5 +50,6 @@ it('native YAML dataset publication enables a subsequent real SQL write and pres
   await writeFile(join(root,'change.sql'),'insert into public.rows (n) values (2)');
   const changed=await invoke(['query','sales.yaml','--write','--input','change.sql']);expect(changed.code,JSON.stringify(changed)).toBe(0);expect(changed.result.affected).toBe(1);
   const snapshot=await read(request(`/api/artifacts/${file.id}`,{token:token.token}),{params:Promise.resolve({id:file.id!})});expect((await snapshot.json()).rows).toEqual([{n:1},{n:2}]);
+  const pulled=await invoke(['pull','sales.yaml']);expect(pulled.code,JSON.stringify(pulled)).toBe(0);expect(await readFile(join(root,'sales.csv'),'utf8')).toBe('n\n1\n2\n');
  }finally{await rm(root,{recursive:true,force:true});}
 });

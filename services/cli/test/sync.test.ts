@@ -46,7 +46,7 @@ test('pull preserves local edits against an unchanged head and keeps explicit hi
  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},home);
-  assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   await writeFile(join(cwd,'doc.jsx'),(await readFile(join(cwd,'doc.jsx'),'utf8')).replace('Head','Local'));
   assert.equal((await invoke(['pull','doc.jsx'])).code,0);assert.match(await readFile(join(cwd,'doc.jsx'),'utf8'),/Local/);
   const count=calls.length;assert.equal((await invoke(['pull','doc.jsx@1'])).result.error.code,'local_changed');assert.equal(calls.length,count,'historical overwrite requires explicit force');
@@ -94,7 +94,7 @@ test('pull saves exact binary bytes and uses an immutable content version',async
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);
   const output:string[]=[];
-  const code=await runCli(['pull','abc123','data.zip','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(input)=>{
+  const code=await runCli(['pull','abc123','--output','data.zip','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(input)=>{
    const url=new URL(String(input));calls.push(url.pathname+url.search);
    if(url.pathname.endsWith('/content'))return new Response(bytes,{headers:{'Content-Type':'application/zip','X-Artifactbin-Account':'usr_one'}});
    return Response.json({id:'abc123',version:3,edit_id:'edit3',state:digest('three'),format:'file',meta:{filename:'data.zip'}},{headers:{'X-Artifactbin-Account':'usr_one'}});
@@ -107,7 +107,7 @@ test('remote status observes a newer head without replacing the local sync base'
  let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">First</p>'};
  const invoke=async(args:string[])=>{const output:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>{reads++;return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});}});return{code,result:JSON.parse(output.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   head={...head,version:2,edit_id:'two',state:digest('two'),markup:'<p id="p001">Second</p>'};
   const remote=await invoke(['status','--remote']);assert.equal(remote.code,0,JSON.stringify(remote.result));assert.equal(remote.result.files[0].remote,'changed');
   const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.equal(lock.files['doc.jsx'].snapshot.version,1);assert.equal(lock.files['doc.jsx'].observed.version,2);
@@ -124,7 +124,7 @@ test('delete dry-run preserves tracking and confirmed delete keeps the local fil
   return Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Keep</p>'},{headers:{'X-Artifactbin-Account':'usr_one'}});
  }});return{code,result:JSON.parse(output.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const original=await readFile(join(root,'doc.jsx'));const lock=await readFile(join(root,'afbin.lock'));
   assert.equal((await invoke(['delete','doc.jsx','--dry-run'])).code,0);assert.deepEqual(await readFile(join(root,'afbin.lock')),lock);
   const deleted=await invoke(['delete','doc.jsx']);assert.equal(deleted.code,0,JSON.stringify(deleted.result));assert.deepEqual(await readFile(join(root,'doc.jsx')),original);assert.deepEqual(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files,{});
@@ -163,7 +163,7 @@ test('pushing a renamed unchanged file updates tracking locally without credenti
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);
   const out:string[]=[];const context={cwd:root,home:root,interactive:false,stdout:(s:string)=>out.push(s),stderr:()=>{}};
-  assert.equal(await runCli(['pull','abc123','before.jsx','--json'],{...context,fetch:async()=>Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Same</p>'},{headers:{'X-Artifactbin-Account':'usr_one'}})}),0);
+  assert.equal(await runCli(['pull','abc123','--output','before.jsx','--json'],{...context,fetch:async()=>Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Same</p>'},{headers:{'X-Artifactbin-Account':'usr_one'}})}),0);
   const {rename,unlink}=await import('node:fs/promises');await rename(join(root,'before.jsx'),join(root,'after.jsx'));await unlink(join(root,'.artifactbin','.env'));
   assert.equal(await runCli(['push','after.jsx','--json'],{...context,fetch:async()=>assert.fail('network during local rename')}),0,out.join(''));
   const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.deepEqual(Object.keys(lock.files),['after.jsx']);
@@ -174,7 +174,7 @@ test('pull recovers an interrupted local commit before treating its partially wr
  const head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Same</p>'};
  const context={cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})};
  try{
-  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal(await runCli(['pull','abc123','doc.jsx'],context),0);
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal(await runCli(['pull','abc123','--output','doc.jsx'],context),0);
   const {stageFiles}=await import('../src/journal');const old=await readFile(join(root,'doc.jsx'));const lockBytes=await readFile(join(root,'afbin.lock'));const lock=JSON.parse(lockBytes.toString());const next=Buffer.from(old.toString().replace('<p>Same</p>','<p>Staged</p>'));
   lock.files['doc.jsx'].baseline=next.toString('base64');lock.files['doc.jsx'].file=digest(next);
   await stageFiles(root,[{path:'doc.jsx',before:digest(old),data:next},{path:'afbin.lock',before:digest(lockBytes),data:Buffer.from(JSON.stringify(lock))}]);
@@ -185,7 +185,7 @@ test('pull recovers an interrupted local commit before treating its partially wr
 test('pull preserves dependency mappings and restores available paths across repeated pulls',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-pull-mappings-'));
  const head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<img title="ref:def456" srcSet="ref:def456 1x" />'};
- const invoke=()=>runCli(['pull','abc123','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})});
+ const invoke=()=>runCli(['pull','abc123','--output','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})});
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal(await invoke(),0);
   const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));lock.files['doc.jsx'].paths={def456:'./small.png'};
@@ -202,7 +202,7 @@ test('missing tracked files are reported and skipped by push without deleting or
  const head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">Saved</p>'};
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);
-  assert.equal(await runCli(['pull','abc123','doc.jsx'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})}),0);
+  assert.equal(await runCli(['pull','abc123','--output','doc.jsx'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})}),0);
   await rm(join(root,'doc.jsx'));await rm(join(root,'.artifactbin','.env'));
   const before=await readFile(join(root,'afbin.lock'));const output:string[]=[];
   assert.equal(await runCli(['push','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('missing file must not cause a request')}),0,output.join(''));
@@ -232,7 +232,7 @@ test('forced pull resolves an ambiguous conditional write while preserving its p
   throw new Error('unexpected write');
  }});return{code,result:JSON.parse(output.join(''))};};
  try{
-  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const proposal=(await readFile(join(root,'doc.jsx'),'utf8')).replace('Original','My proposal');await writeFile(join(root,'doc.jsx'),proposal);
   assert.notEqual((await invoke(['push','doc.jsx'])).code,0);
   const pending=JSON.parse(await readFile(join(root,'.artifactbin','pending-request.json'),'utf8'));

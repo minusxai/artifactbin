@@ -57,3 +57,11 @@ Open risks before completing later phases: persistent conflict resolution; depen
 - Sharing list updates preserve retained account-bound grants, including after an email change. Policy saves now conditionally verify the content and sharing revision used during validation. Both fixes have observed failing-then-passing tests.
 - Typed YAML parsing/validation is shared with JSX metadata and the existing dataset policy parser. CSV/JSON and asset bytes remain separate local source files. Initial dataset YAML push tracks its source bytes under one resource identity and detects source changes offline. In-flight YAML edits now reconcile fields against the confirmed response; policy publication remains incomplete and refuses before content/settings changes.
 - Full suite after recovery changes: API 1,440 passing; Node 3,856 passing/1 skipped; UI 1,383 passing; CLI 129 passing. Subsequent resource checks: CLI 131 passing, type checks and CLI build pass; real-handler YAML publication followed by a SQL mutation passes. Root production build passed. Broader resource/release work remains incomplete.
+
+## Pull and native source checkpoint (in progress)
+
+- Recovery/YAML foundations are committed and pushed as 67871468.
+- Pull now accepts multiple refs and --output; the positional destination is retired. Bundled command help and skill examples are regenerated. Stdout output remains pending.
+- --format yaml retrieves authorized sharing/access/policy metadata and a separate native source file under one tracked identity. Unchanged immutable content is reused locally; local metadata and source edits survive an unchanged remote head. Forced source replacement saves recoverable bytes.
+- The real-handler publication → SQL mutation → pull test detected JSON being written into a CSV source; shared CSV encoding fixes the round trip. Focused integration tests pass.
+- Remaining YAML gaps include policy publication, connected/multi-table dataset definitions, remote field reconciliation before push, source diffs, representation conversion and complete type/format validation. Other command/resource/release phases remain open.
