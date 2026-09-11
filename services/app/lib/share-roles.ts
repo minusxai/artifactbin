@@ -14,12 +14,9 @@
  *   'editor' — may also edit, PUT, revert and read history (and annotate).
  *              May manage sharing and dataset data actions. Deletion and restoration stay the owner's.
  */
-export type ShareRole = 'viewer' | 'commenter' | 'editor';
-export const SHARE_ROLES: readonly ShareRole[] = ['viewer', 'commenter', 'editor'];
-export interface ShareEntry {
-  email: string;
-  role: ShareRole;
-}
+import {SHARE_ROLES,type ShareRole,type ShareEntry} from '@artifactbin/contracts';
+export {SHARE_ROLES};
+export type {ShareRole,ShareEntry};
 /** How the share menu names each role. */
 export const SHARE_ROLE_LABEL: Record<ShareRole, string> = { viewer: 'can view', commenter: 'can comment', editor: 'can edit' };
 

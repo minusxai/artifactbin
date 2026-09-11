@@ -11,7 +11,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node22",
-  external: ["node-pty"],
+  external: ["node-pty", "@duckdb/node-api"],
   banner: { js: "#!/usr/bin/env node\nimport {createRequire as __afbinCreateRequire} from 'node:module'; const require=__afbinCreateRequire(import.meta.url);" },
 });
 await chmod("dist/afbin.mjs", 0o755);

@@ -7,19 +7,19 @@ export class HttpClient {
  connection:Connection;
  account?:string;
  constructor(private options:HttpOptions){this.connection={...options.connection,server:normalizeServer(options.connection.server)};this.account=options.account;}
- async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={}):Promise<T>{
-  return this.perform(path,method,body,headers,false) as Promise<T>;
+ async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number}={}):Promise<T>{
+  return this.perform(path,method,body,headers,false,options.timeoutMs) as Promise<T>;
  }
  async content(path:string,method='GET',body?:unknown):Promise<{bytes:Buffer;contentType:string}>{
   return this.perform(path,method,body,{},true) as Promise<{bytes:Buffer;contentType:string}>;
  }
- private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean):Promise<unknown>{
+ private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000):Promise<unknown>{
   const url=apiUrl(path,this.connection.server);
   if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight')throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
   let refreshed=false,authenticated=false;
   for(let attempt=0;attempt<3;attempt++){
    let response:Response;
-   try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:'error',signal:AbortSignal.timeout(30000),headers:{
+   try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:'error',signal:AbortSignal.timeout(timeoutMs),headers:{
     ...headers,Authorization:`Bearer ${this.connection.token}`,'X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),
     ...(body!==undefined?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
     ...(this.options.readOnly?{'X-Artifactbin-Dry-Run':'1'}:{}),
@@ -42,7 +42,7 @@ export class HttpClient {
    const data=method==='HEAD'?{}:await response.json().catch(()=>null);
    if(!response.ok){
     const code=typeof data?.error==='string'?data.error:`http_${response.status}`;
-    throw new CliError(code,`${code}: ${data?.message??response.statusText??'request refused'}`,typeof data?.hint==='string'?data.hint:typeof data?.recovery==='string'?data.recovery:undefined,{...data,http_status:response.status},response.status===409?3:1);
+    throw new CliError(code,`${code}: ${data?.message??response.statusText??'request refused'}`,typeof data?.hint==='string'?data.hint:typeof data?.recovery==='string'?data.recovery:undefined,{...data,http_status:response.status,...(response.headers.has('X-Artifactbin-Mutation-Receipt')?{mutation_receipt:response.headers.get('X-Artifactbin-Mutation-Receipt')}:{})},response.status===409?3:1);
    }
    if(!data||typeof data!=='object')throw new CliError('invalid_response','The server returned an incomplete JSON response.','Keep pending recovery state before retrying a write.');
    return data;

@@ -58,18 +58,18 @@ test('setup verifies saved credentials once and installs the exact unattended se
   await assert.rejects(stat(skillTargets(home,{}).codex),{code:'ENOENT'});
  }finally{await rm(home,{recursive:true,force:true});}
 });
-test('setup detects revoked credentials and returns a fresh browser approval without installing skills',async()=>{
+test('setup detects revoked credentials and does not install skills when fresh browser approval is denied',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-setup-revoked-'));
  try{
   await saveConnection({server:'https://artifactbin.dev',token:'revoked_token'},home);const output:string[]=[],calls:string[]=[];
-  await runCli(['setup','--harness','pi','--yes','--json'],{home,cwd:home,env:{},interactive:false,stdout:x=>output.push(x),stderr:()=>{},fetch:async input=>{
+  await runCli(['setup','--no-browser','--harness','pi','--yes','--json'],{home,cwd:home,env:{},interactive:false,stdout:x=>output.push(x),stderr:()=>{},fetch:async input=>{
    const path=new URL(String(input)).pathname;calls.push(path);
    if(path==='/api/artifacts')return Response.json({error:'unauthorized'},{status:401});
    if(path==='/oauth/device')return Response.json({device_code:'a'.repeat(43),user_code:'ABCD-EFGH',verification_uri_complete:'https://artifactbin.dev/oauth/device?code=ABCD-EFGH',expires_in:300,interval:5});
-   if(path==='/oauth/device/token')return Response.json({error:'authorization_pending'},{status:400});
+   if(path==='/oauth/device/token')return Response.json({error:'access_denied'},{status:400});
    assert.fail(path);
   }});
-  assert.equal(JSON.parse(output.join('')).error.code,'approval_required');assert.deepEqual(calls,['/api/artifacts','/oauth/device','/oauth/device/token']);await assert.rejects(stat(skillTargets(home,{}).pi),{code:'ENOENT'});
+  assert.equal(JSON.parse(output.join('')).error.code,'access_denied');assert.deepEqual(calls,['/api/artifacts','/oauth/device','/oauth/device/token']);await assert.rejects(stat(skillTargets(home,{}).pi),{code:'ENOENT'});
  }finally{await rm(home,{recursive:true,force:true});}
 });
 

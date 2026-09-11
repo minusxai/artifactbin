@@ -1,3 +1,5 @@
+import {durableMutation} from '@/lib/mutation-receipt';
+import {getArtifactFor} from '@/lib/artifacts';
 /**
  * The HTTP half of the operations registry: a bearer route is a TRANSLATION
  * LAYER — it gathers the input (JSON body + path params + the odd query
@@ -40,5 +42,12 @@ export async function runOperation(
   author: AnnotationAuthor = { kind: 'agent', label: null, transport: 'http' },
 ): Promise<Response> {
   const ctx: OpContext = { actor, base: baseUrl(request), request, author };
+  const key=request.headers.get('Idempotency-Key');
+  if(name==='mutate_dataset'&&key){
+    if(!await getArtifactFor(actor,String(input.id)))return json({error:'not_found'},404);
+    const result=await durableMutation(actor,ctx.base,key,{name,input},receipt=>operation(name).run({...ctx,mutationReceipt:receipt},input));
+    const terminal=!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
+    return opResponse({...result,...(terminal?{headers:{'X-Artifactbin-Mutation-Receipt':key}}:{})});
+  }
   return opResponse(await operation(name).run(ctx, input));
 }

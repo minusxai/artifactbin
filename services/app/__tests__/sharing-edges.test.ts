@@ -82,7 +82,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
     const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: ['a@b.com'] } }), params({ id: doc.id }));
+    await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
     expect(await sharesFor(doc.id)).toBe(1);
 
     expect((await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: token }), params({ id: doc.id }))).status).toBe(200);
@@ -99,7 +99,7 @@ describe('share rows survive their artifact\'s delete, and the id is never recyc
     const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: ['a@b.com'] } }), params({ id: doc.id }));
+    await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
     expect((await deleteMineRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
     await age(doc.id);
     expect(await sharesFor(doc.id)).toBe(1);
@@ -112,7 +112,7 @@ describe('share-list bounds', () => {
     const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    const tooMany = Array.from({ length: 101 }, (_, i) => `u${i}@example.com`);
+    const tooMany = Array.from({ length: 101 }, (_, i) => ({email:`u${i}@example.com`,role:'viewer'}));
     const res = await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: tooMany } }), params({ id: doc.id }));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toBe('invalid_shares');
@@ -123,7 +123,7 @@ describe('share-list bounds', () => {
     const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
-    const hundred = Array.from({ length: 100 }, (_, i) => `U${i}@Example.com`);
+    const hundred = Array.from({ length: 100 }, (_, i) => ({email:`U${i}@Example.com`,role:'viewer'}));
     const res = await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: hundred } }), params({ id: doc.id }));
     expect(res.status).toBe(200);
     expect((await res.json()).shares).toHaveLength(100);

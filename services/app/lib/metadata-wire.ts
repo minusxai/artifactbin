@@ -1,5 +1,5 @@
 import {artifactState} from './artifact-state';
-import {artifactToWire,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './artifact-wire';
+import {artifactToWire,parseShareEntries,parseExpectedVersion,parseVisibilityValue,parseLinkRoleValue,parseParentField,parseAccessValue} from './artifact-wire';
 import {getArtifactFor,getOwnedArtifactFor,isVersionConflict,setMetadataFor,writerFor,type TokenActor,type MetadataPatch} from './artifacts';
 import {resolveParent,isParentRefusal} from './folders';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from './validation/atlas-schemas';
@@ -8,11 +8,12 @@ export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Rec
  const current=await getArtifactFor(actor,id);if(!current)return json({error:'not_found'},404);
  const expected=parseExpectedVersion(body,false);if(expected instanceof Response)return expected;
  if(!expected.expectedState)return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
- const allowed=new Set(['expectedState','expectedVersion','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access']);
+ const allowed=new Set(['expectedState','expectedVersion','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access','shares']);
  if(Object.keys(body).some(key=>!allowed.has(key)))return json({error:'invalid_metadata',allowed:[...allowed]},400);
  const governs='parent_id' in body;
  if(governs&&!await getOwnedArtifactFor(actor,id))return json({error:'owner_only'},403);
  const patch:MetadataPatch={};
+ const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;if(shares!==undefined)patch.shares=shares;
  for(const key of ['title','description','theme','template','colorMode'] as const){
   const value=body[key];if(value===undefined)continue;
   if(value!==null&&typeof value!=='string')return json({error:'invalid_metadata',field:key},400);

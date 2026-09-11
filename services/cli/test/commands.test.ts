@@ -31,3 +31,11 @@ test('rejects flags that cannot affect the selected operation',()=>{
   ['remote','--json','pi'],
  ])assert.throws(()=>parseCommand(args),Error,args.join(' '));
 });
+test('fixed choices ignore ASCII case but commands, flags and user arguments retain exact spelling',()=>{
+ assert.deepEqual(parseCommand(['setup','--harness','CoDeX','--harness','PI']).flags.harness,['codex','pi']);
+ assert.throws(()=>parseCommand(['setup','--harness','NONE','--harness','pi']));
+ assert.throws(()=>parseCommand(['setup','--harness','pi','--harness','PI']));
+ assert.throws(()=>parseCommand(['SETUP']));
+ assert.throws(()=>parseCommand(['setup','--HARNESS','pi']));
+ assert.deepEqual(parseCommand(['push','MiXeD.jsx']).positionals,['MiXeD.jsx']);
+});

@@ -17,7 +17,7 @@
  *   /a/<id>                            anonymous (or owner has no username yet)
  *   /@<username>/<id>[-<title-slug>]   owned
  */
-import { ID_RE } from './ids-shape';
+import {artifactIdFromSegment} from '@artifactbin/utils/artifact-reference';
 
 /** Derived from the title on every render — never stored, never trusted on read. */
 export function titleSlug(title: string | null | undefined): string {
@@ -30,9 +30,6 @@ export function titleSlug(title: string | null | undefined): string {
     .replace(/-+$/, '');
 }
 
-/** `<id>` or `<id>-<anything>` — the ONLY segment shape that names a file. */
-const FILE_SEGMENT_RE = /^([a-zA-Z0-9]{6,12})(?:-(.*))?$/;
-
 /**
  * The forgiving parse: given the path segments AFTER /@username/, find the
  * file id. Null = the last segment can't carry one. Everything before the last
@@ -42,9 +39,8 @@ const FILE_SEGMENT_RE = /^([a-zA-Z0-9]{6,12})(?:-(.*))?$/;
 export function parsePrettyPath(segments: string[]): { id: string } | null {
   const last = segments[segments.length - 1];
   if (!last) return null;
-  const m = FILE_SEGMENT_RE.exec(last);
-  if (!m || !ID_RE.test(m[1])) return null;
-  return { id: m[1] };
+  const id=artifactIdFromSegment(last);
+  return id?{id}:null;
 }
 
 export function canonicalArtifactPath(

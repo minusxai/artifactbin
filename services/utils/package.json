@@ -10,7 +10,8 @@
     ".": "./src/index.ts",
     "./shape": "./src/shape.ts",
     "./rate-limits": "./src/rate-limits.ts",
-    "./dataset-policy": "./src/dataset-policy.ts"
+    "./dataset-policy": "./src/dataset-policy.ts",
+    "./artifact-reference": "./src/artifact-reference.ts"
   },
   "files": [
     "src"

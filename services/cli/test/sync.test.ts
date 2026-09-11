@@ -38,7 +38,7 @@ test('push recovers a lost create reply with frozen bytes, then publishes newer 
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('pull refuses dirty files, keeps the current head distinct from selected history, and force stays conditional on push',async()=>{
+test('pull preserves local edits against an unchanged head and keeps explicit history distinct',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-pull-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
  const head={id:'abc123',version:3,edit_id:'edit3',state:digest('head3'),markup:'<p id="p001">Head</p>',format:'markup',title:'Title',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
  const calls:string[]=[];
@@ -48,7 +48,8 @@ test('pull refuses dirty files, keeps the current head distinct from selected hi
   await saveConnection({server:'https://example.com',token:'mx_test'},home);
   assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
   await writeFile(join(cwd,'doc.jsx'),(await readFile(join(cwd,'doc.jsx'),'utf8')).replace('Head','Local'));
-  const count=calls.length;assert.equal((await invoke(['pull','doc.jsx'])).result.error.code,'local_changed');assert.equal(calls.length,count,'dirty pull refuses before a request');
+  assert.equal((await invoke(['pull','doc.jsx'])).code,0);assert.match(await readFile(join(cwd,'doc.jsx'),'utf8'),/Local/);
+  const count=calls.length;assert.equal((await invoke(['pull','doc.jsx@1'])).result.error.code,'local_changed');assert.equal(calls.length,count,'historical overwrite requires explicit force');
   assert.equal((await invoke(['pull','doc.jsx@1','--force'])).code,0);
   const selected=parseDocument(await readFile(join(cwd,'doc.jsx'),'utf8'));assert.equal(selected.metadata.version,1);assert.equal(selected.metadata.head_version,3);assert.equal(selected.metadata.state,head.state);assert.match(selected.body,/History/);
   assert.equal((await invoke(['pull','doc.jsx@1'])).code,0);

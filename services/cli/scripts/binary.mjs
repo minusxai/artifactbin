@@ -1,3 +1,4 @@
+import {duckdbNative} from './duckdb-native.mjs';
 // Node SEA plus node-pty's platform-native files, built on the target OS/architecture.
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -59,6 +60,7 @@ for(const [file,data] of Object.entries(files)) {
 }
 export const pty=createRequire(join(root,'package.json'))(root);
 `;
+const duckdb=await duckdbNative();
 await build({
   entryPoints: ["src/main.ts"],
   outfile: "dist/sea.cjs",
@@ -66,7 +68,7 @@ await build({
   platform: "node",
   format: "cjs",
   target: "node22",
-  plugins: [
+  plugins: [duckdb.plugin,
     {
       name: "native-asset",
       setup(b) {
@@ -86,7 +88,7 @@ await writeFile(
     disableExperimentalSEAWarning: true,
     useCodeCache: false,
     useSnapshot: false,
-    assets: { pty: resolve("dist/pty.json.gz") },
+    assets: { pty: resolve("dist/pty.json.gz"), duckdb:duckdb.asset },
   }),
 );
 execFileSync(

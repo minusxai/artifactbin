@@ -1,3 +1,4 @@
+import {isDeepStrictEqual} from 'node:util';
 import {randomUUID} from 'node:crypto';
 import {extname,join} from 'node:path';
 import {canonicalizeMarkup} from '../../app/lib/story/canonical-source';
@@ -13,8 +14,9 @@ import {validateFiles} from './validation';
 import {checkRetiredCreate,retireDeletedCreate,stageRequest,readPendingRequest,savePendingResponse,clearPendingRequest,type PendingRequest} from './pending-request';
 import {HttpClient} from './http';
 import {describeConflict} from './conflict';
+import {reconcileDocument} from './reconcile';
 interface PushOptions {force?:boolean;dryRun?:boolean}
-interface PushPlan {file:LocalFile;dependencies:Dependency[];ids:Record<string,string>;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string}
+interface PushPlan {reconcile?:boolean;file:LocalFile;dependencies:Dependency[];ids:Record<string,string>;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
 function metadataInput(metadata:DocumentMetadata):Record<string,unknown>{return Object.fromEntries(metadataFields.filter(key=>metadata[key]!==undefined).map(key=>[fieldMap[key]??key,metadata[key]]));}
 export async function planPush(workspace:Workspace,paths?:string[],options:PushOptions={}):Promise<PushPlan[]>{
@@ -35,12 +37,12 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   const base=file.tracked.snapshot;
   const metadata=file.document?.metadata;
   const oldMetadata=snapshotDocument(base).metadata;
-  const delta=metadata?Object.fromEntries(metadataFields.filter(key=>metadata[key]!==undefined&&metadata[key]!==oldMetadata[key]).map(key=>[fieldMap[key]??key,metadata[key]])):{};
+  const delta=metadata?Object.fromEntries(metadataFields.filter(key=>metadata[key]!==undefined&&!isDeepStrictEqual(metadata[key],oldMetadata[key])).map(key=>[fieldMap[key]??key,metadata[key]])):{};
   const changedBody=file.document?canonicalizeMarkup(source!)!==base.markup:digest(file.bytes)!==digest(Buffer.from(file.tracked.baseline,'base64'));
   const historical=metadata?.version!==undefined;
   const mode=options.force||historical?'replace':!changedBody&&!Object.keys(delta).length?'none':changedBody&&file.document&&!Object.keys(delta).length?'edit':!changedBody?'metadata':'replace';
   const body=mode==='edit'?{source,edit_id:metadata?.edit_id??base.edit_id}:mode==='metadata'?{...delta,expectedState:metadata?.state??base.state}: {...input,expectedState:metadata?.state??base.state,expectedVersion:metadata?.head_version??base.version};
-  plans.push({file,dependencies,ids,body,mode,id});
+  plans.push({file,dependencies,ids,body,mode,id,reconcile:!options.force&&!historical&&!!file.document&&(mode==='replace'||mode==='metadata')});
  }
  // Selected documents own publication of their local dependencies. A bare push
  // must not also replace those assets in place and change existing readers.
@@ -76,6 +78,18 @@ async function observeConditions(plan:PushPlan,client:HttpClient,force:boolean):
  if(!force&&(plan.body.expectedVersion!==undefined&&plan.body.expectedVersion!==head.version||plan.body.expectedState!==undefined&&plan.body.expectedState!==head.state))throw new CliError('state_conflict','The remote artifact differs from the state recorded in this file.','Inspect afbin diff --remote before deciding how to reconcile the changes.',{head},3);
  return{...plan,mode:'replace',body:{...plan.body,expectedVersion:head.version,expectedState:head.state}};
 }
+/** Mixed edits reconcile with the shared node kernel before a conditional atomic replacement. */
+async function reconcileMixed(plan:PushPlan,client:HttpClient):Promise<PushPlan>{
+ if(!plan.reconcile||!plan.file.tracked||!plan.file.document)return plan;
+ const head=await client.request<Snapshot>(`/artifacts/${plan.id}`);
+ if(head.id!==plan.id||typeof head.markup!=='string'||typeof head.state!=='string'||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','Reconciliation requires a complete remote snapshot.');
+ const local={...plan.file.document,body:typeof plan.body.markup==='string'?plan.body.markup:plan.file.tracked.snapshot.markup??''};
+ const result=reconcileDocument(snapshotDocument(plan.file.tracked.snapshot),local,snapshotDocument(head));
+ if(!result.ok)throw new CliError('merge_conflict','Local and remote changes overlap.','Preserve both proposals and resolve the reported fields before publishing.',{path:plan.file.path,fields:result.fields,head},3);
+ const observed=metadataInput(snapshotDocument(head).metadata);
+ const delta=Object.fromEntries(Object.entries(metadataInput(result.document.metadata)).filter(([key,value])=>!isDeepStrictEqual(value,observed[key])));
+ return {...plan,body:{...delta,...(plan.mode==='replace'?{markup:result.document.body,expectedVersion:head.version}:{}),expectedState:head.state}};
+}
 export async function push(workspace:Workspace,paths:string[],client:HttpClient,options:PushOptions={}){
  if(options.dryRun){
   if(await readPendingRequest(workspace.root))throw new CliError('pending_recovery','Recover the pending request before dry-run.');
@@ -83,6 +97,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   for(let plan of plans){
    if(plan.mode==='missing'){results.push({path:plan.file.path,status:'skipped',reason:'missing_file'});continue;}
    plan=await observeConditions(plan,client,!!options.force);
+   plan=await reconcileMixed(plan,client);
    const mode=plan.mode==='none'?'replace':plan.mode;
    const input=plan.body;
    results.push({path:plan.file.path,...await client.request('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(mode!=='create'?{mode}:{}),input,dependencies:plan.dependencies.filter(d=>plan.ids[d.path]===d.id).map(d=>({id:plan.ids[d.path],input:d.input}))})});
@@ -123,6 +138,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
     const source=substituteDependencies(plan.file.document!.body,plan.dependencies,plan.ids);
     plan.body={...plan.body,...(plan.mode==='edit'?{source}:{markup:source})};
    }
+   plan=await reconcileMixed(plan,client);
    const method=plan.mode==='metadata'?'PATCH':plan.mode==='replace'?'PUT':'POST';
    const path=plan.mode==='create'?'/artifacts':`/artifacts/${plan.id}${plan.mode==='edit'?'/edits':''}`;
    const mappings=Object.fromEntries(plan.dependencies.map(d=>[plan.ids[d.path],d.authored]));
@@ -172,7 +188,7 @@ async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingReque
  const current=await readOptional(await confinedPath(workspace.root,pending.file.path));
  if(!current)throw new CliError('local_changed',`Remote publication succeeded, but ${pending.file.path} was removed. Recovery was retained.`,'Restore the local file and rerun afbin push.');
  let baseline=Buffer.from(pending.file.bytes,'base64');let written=current;
- if(extname(pending.file.path)==='.jsx'){
+ if(extname(pending.file.path).toLowerCase()==='.jsx'){
   const frozen=parseDocument(baseline.toString());const latest=parseDocument(current.toString());
   if(latest.metadata.id&&latest.metadata.id!==snapshot.id||frozen.metadata.id&&!latest.metadata.id)throw new CliError('identity_mismatch','Local identity changed while the request was in flight. The server response is retained for recovery.');
   const restored=await restoreDependencyPaths(snapshot.markup??'',pending.file.paths??{},pending.file.path,workspace.root);
@@ -198,7 +214,7 @@ function readSnapshot(response:Record<string,unknown>,pending:PendingRequest):Sn
  const result={...previous,...response};
  if(typeof result.id!=='string'||!Number.isSafeInteger(result.version)||Number(result.version)<1||typeof result.edit_id!=='string'||typeof result.state!=='string'||!/^[a-f0-9]{64}$/.test(result.state))throw new CliError('invalid_response','The write response is incomplete; recovery is retained.');
  if(response.markup_changed===false){const source=pending.request.body.markup??pending.request.body.source??previous?.markup;if(typeof source==='string')result.markup=source;}
- if(extname(pending.file.path)==='.jsx'&&typeof result.markup!=='string')throw new CliError('invalid_response','The canonical source is missing; recovery is retained.');
+ if(extname(pending.file.path).toLowerCase()==='.jsx'&&typeof result.markup!=='string')throw new CliError('invalid_response','The canonical source is missing; recovery is retained.');
  return result as Snapshot;
 }
 

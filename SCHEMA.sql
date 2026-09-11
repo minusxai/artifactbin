@@ -32,6 +32,25 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.mutation_receipts (
+  scope TEXT NOT NULL,
+  operation_key TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  response JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (scope, operation_key)
+);
+
+ALTER TABLE app.mutation_receipts ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL;
+
+ALTER TABLE app.mutation_receipts ADD COLUMN IF NOT EXISTS operation_key TEXT NOT NULL;
+
+ALTER TABLE app.mutation_receipts ADD COLUMN IF NOT EXISTS request_hash TEXT NOT NULL;
+
+ALTER TABLE app.mutation_receipts ADD COLUMN IF NOT EXISTS response JSONB;
+
+ALTER TABLE app.mutation_receipts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE TABLE IF NOT EXISTS app.dataset_policy_audit (
   dataset_id TEXT NOT NULL,
   revision INTEGER NOT NULL,
@@ -148,6 +167,7 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   user_id TEXT,
   visibility TEXT NOT NULL DEFAULT 'public',
   dataset_policy JSONB,
+  sharing_revision INTEGER NOT NULL DEFAULT 0,
   policy_revision INTEGER NOT NULL DEFAULT 0,
   generation_calls INTEGER NOT NULL DEFAULT 0,
   link_role TEXT,
@@ -179,6 +199,8 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS user_id TEXT;
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'public';
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS dataset_policy JSONB;
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS sharing_revision INTEGER NOT NULL DEFAULT 0;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS policy_revision INTEGER NOT NULL DEFAULT 0;
 

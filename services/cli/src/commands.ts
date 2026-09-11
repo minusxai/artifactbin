@@ -1,7 +1,10 @@
-import {diagnosticCatalog} from './diagnostics';
+import {enumArgument} from './arguments';
+import {CliError} from './errors';
+export {CliError} from './errors';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ 'no-browser':{description:'Print browser URLs without launching a browser; authentication still waits for approval.'},
  version:{description:'Show the installed CLI version.'},
  help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
  server:{value:'URL',description:'Use this HTTPS server origin.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; browser approval is still required.'},
@@ -10,13 +13,16 @@ export const flags: Record<string,Flag> = {
  body:{value:'TEXT',description:'Post this comment text.'},'body-file':{value:'PATH',description:'Read comment text from a file; use - for stdin.'},reply:{value:'THREAD',description:'Reply to this thread on the selected artifact.'},
  node:{value:'ID',description:'Anchor a new thread to this node.'},quote:{value:'TEXT',description:'Anchor a new thread to this quote.'},resolve:{description:'Resolve the thread selected by --reply; may accompany a reply.'},
  limit:{value:'N',description:'Maximum results in this page (1–100).'},cursor:{value:'CURSOR',description:'Continue from a returned next_cursor.'},
- method:{short:'X',value:'METHOD',description:'HTTP method; defaults to GET.'},input:{value:'PATH',description:'Read the JSON request body from a file; use - for stdin.'},
+ method:{short:'X',value:'METHOD',description:'HTTP method; defaults to GET.'},input:{value:'PATH',description:'Read command input from a local file; use - for stdin.'},
  harness:{value:'NAME',repeat:true,description:'Select a skill installation target: claude, codex, pi, opencode; repeat to select several, or use none.'},
- name:{value:'NAME',description:'Name the remote terminal session.'},
+ write:{description:'Execute a dataset row mutation explicitly; otherwise queries only read.'},
+ param:{value:'NAME=VALUE',repeat:true,description:'Bind a named scalar parameter; repeat for distinct names.'},
+ name:{value:'NAME',description:'Select a named query/table, or name a remote terminal session.'},
 };
-const globalFlags=['help','version','json','server','yes'];
+const globalFlags=['help','version','json','server','yes','no-browser'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
+ {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
  {name:'pull',usage:'[<ref>] [path]',description:'Get one artifact or refresh tracked files.',min:0,max:2,flags:['dry-run','force'],examples:['afbin pull abc123 report.jsx','afbin pull report.jsx@2']},
  {name:'push',usage:'[path ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['dry-run','force'],examples:['afbin push report.jsx','afbin push --dry-run']},
  {name:'validate',usage:'[path ...]',description:'Check local files without network access.',min:0,max:Infinity,flags:['fix'],examples:['afbin validate report.jsx','afbin validate --fix report.jsx']},
@@ -28,13 +34,10 @@ export const commands: Command[] = [
  {name:'comment',usage:'<ref>',description:'List threads, post an anchored comment, reply or resolve.',min:1,max:1,flags:['body','body-file','reply','node','quote','resolve','limit','cursor'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --reply ann_123 --body "Fixed" --resolve']},
  {name:'help',usage:'[topic]',description:'Read bundled markup, data, themes, templates or command help.',min:0,max:1,flags:[],examples:['afbin help markup','afbin help dashboard']},
  {name:'api',usage:'<path>',description:'Call an advanced HTTP operation; GET by default. See afbin help operations.',min:1,max:1,flags:['method','input'],examples:['afbin api /artifacts','afbin api /artifacts/abc123/fork --method POST --input request.json']},
- {name:'setup',usage:'',description:'Authenticate in your browser and install selected local skills.',min:0,max:0,flags:['harness'],examples:['afbin setup','afbin setup --harness pi --harness opencode --yes --json']},
+ {name:'setup',usage:'',description:'Authenticate in your browser and install selected local skills.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin setup','afbin setup --harness pi --harness opencode --yes --json']},
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness'],examples:['afbin update --yes --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access.',min:0,max:Infinity,flags:['name'],examples:['afbin remote pi','afbin remote --name Backend codex']},
 ];
-export class CliError extends Error {
- constructor(readonly code:string,message:string,readonly fix:string|undefined=diagnosticCatalog[code]?.fix,readonly details?:unknown,readonly exitCode=2){super(message);}
-}
 export interface ParsedCommand {command:string;positionals:string[];flags:Record<string,string|boolean|string[]>}
 export function parseCommand(argv:string[]):ParsedCommand {
  const result:ParsedCommand={command:'',positionals:[],flags:{}};
@@ -76,9 +79,11 @@ export function parseCommand(argv:string[]):ParsedCommand {
  const f=result.flags;
  if(f.limit!==undefined&&(!/^\d+$/.test(String(f.limit))||Number(f.limit)<1||Number(f.limit)>100))throw new CliError('invalid_limit','--limit must be an integer from 1 to 100.');
  if(f.method&&!['GET','POST','PUT','PATCH','DELETE','HEAD'].includes(String(f.method)))throw new CliError('invalid_method','--method must be GET, POST, PUT, PATCH, DELETE or HEAD.');
- if(f.input&&(!f.method||f.method==='GET'||f.method==='HEAD'))throw new CliError('invalid_input','--input requires an explicit write --method.');
- if(f.harness){const targets=f.harness as string[];if(targets.some(x=>!['claude','codex','pi','opencode','none'].includes(x))||(targets.includes('none')&&targets.length>1)||new Set(targets).size!==targets.length)throw new CliError('invalid_harness','Choose unique harness names; none must be used alone.');}
+ if(command.name==='api'&&f.input&&(!f.method||f.method==='GET'||f.method==='HEAD'))throw new CliError('invalid_input','--input requires an explicit write --method.');
+ if(f.harness){const targets=(f.harness as string[]).map(value=>enumArgument(value,['claude','codex','pi','opencode','none'],'harness'));f.harness=targets;if(targets.some(x=>!['claude','codex','pi','opencode','none'].includes(x))||(targets.includes('none')&&targets.length>1)||new Set(targets).size!==targets.length)throw new CliError('invalid_harness','Choose unique harness names; none must be used alone.');}
  if(command.name==='remote'&&f.json)throw new CliError('unsupported_flag','afbin remote streams a terminal and does not accept --json.','Run afbin remote -h.');
+ if(command.name==='query'&&f.write&&(f.remote||f.limit||f.cursor||result.positionals.length!==1||!f.input))throw new CliError('invalid_arguments','--write requires one target and --input; --remote, --limit and --cursor apply to reads.');
+ if(command.name==='query'&&result.positionals.length>1&&(f.input||f.cursor||f.name))throw new CliError('invalid_arguments','--input, --name and --cursor require one query target.');
  if(command.name==='comment'){
   if(f.body!==undefined&&f['body-file']!==undefined)throw new CliError('invalid_comment','Use --body or --body-file, once.');
   if(f.resolve&&!f.reply)throw new CliError('invalid_comment','--resolve requires --reply THREAD.');

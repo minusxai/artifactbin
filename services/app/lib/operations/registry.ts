@@ -1,3 +1,5 @@
+import type {MutationReceipt} from '@/lib/mutation-receipt';
+import {readArtifactSnapshot} from '@/lib/artifact-read';
 import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/datasets/policy/http';
 import {updateMetadataFromBody} from '@/lib/metadata-wire';
 import {decodePage, encodeCursor} from '@/lib/pagination';
@@ -8,7 +10,7 @@ import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import {
-  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getVersionFor, listArtifactPageFor, listVersionPageFor,
+  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
 } from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/folders';
@@ -17,7 +19,7 @@ import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import {
-  artifactSummaryToWire, artifactToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseParentField, parseVisibilityValue, replaceArtifactWithBody,
+  artifactSummaryToWire, artifactToWire, createArtifactFromBody, createdArtifactWire, parseParentField, parseVisibilityValue, replaceArtifactWithBody,
   parseExpectedVersion, refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifact-wire';
 import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE } from '@/lib/agent-guidance';
@@ -35,6 +37,7 @@ export interface OpReply {
 
 /** What every `run` gets: who is calling, from where, and how to attribute them. */
 export interface OpContext {
+  mutationReceipt?:MutationReceipt;
   actor: TokenActor;
   /** The caller's own origin — every `url` in a reply is built from it. */
   base: string;
@@ -111,6 +114,7 @@ const CONTENT_FIELDS = {
   // has none.
   format: z.enum(['folder']).optional().describe("a folder: send it with NO content field. A folder is an artifact like any other — it has a url, visibility and sharing — and you file documents under it with parent_id"),
   parent_id: z.string().nullable().optional().describe("the id of a FOLDER artifact to file this under (create one with {\"format\":\"folder\",\"title\":\"…\"}), or null for your root. Ids, never paths: two sibling folders may share a name. The URL keeps working wherever the file moves"),
+  shares: z.array(z.object({email:z.string(),role:z.enum(['viewer','commenter','editor'])})).max(100).optional().describe('Explicit sharing list; omission preserves it and an empty list clears it atomically with content.'),
   access: z.enum(['read', 'readwrite']).optional().describe("dataset WRITE ACL: 'read' (default — documents may only read it) or 'readwrite' (documents you publish may add/change/remove rows through a <Mutation>)."),
   visibility: z.enum(['public', 'private', 'unlisted']).optional().describe("read ACL: 'public' = anyone with the link, and it lists on the owner's public profile; 'unlisted' = anyone with the link, but never listed anywhere; 'private' = the owner + emails they share it with (needs a logged-in account — anonymous tokens can be public or unlisted). Defaults: account-owned tokens publish private — except images and datasets, born unlisted; anonymous tokens publish public."),
 };
@@ -237,9 +241,8 @@ const getArtifactOp: Operation = {
   example: { input: { id: 'aB3xK9' } },
   errors: [NOT_FOUND],
   async run(ctx, input) {
-    const row = await getArtifactFor(ctx.actor, String(input.id));
-    if (!row) return reply({ error: 'not_found' }, 404);
-    return reply(await artifactToWireWithAnnotations(row, ctx.base) as Record<string, unknown>);
+    const snapshot = await readArtifactSnapshot(ctx.actor,String(input.id),ctx.base);
+    return snapshot ? reply(snapshot) : reply({error:'not_found'},404);
   },
 };
 
@@ -450,7 +453,7 @@ const mutateDatasetOp: Operation = {
     { status: 503, code: 'dataset_busy', fix: 'concurrent writes contended — retry after a moment (Retry-After rides the response)' },
   ],
   async run(ctx, input) {
-    return fromResponse(await respondToMutate(ctx.actor, String(input.id), input));
+    return fromResponse(await respondToMutate(ctx.actor, String(input.id), input,ctx.mutationReceipt));
   },
 };
 

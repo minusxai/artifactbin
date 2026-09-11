@@ -29,7 +29,7 @@ export async function loadWorkspace(cwd=process.cwd()):Promise<Workspace>{
    }
    return{root,cwd,lock,raw};
   }
-  if(await readOptional(join(root,'.artifactbin','pending-request.json'))||await readOptional(join(root,'.artifactbin','pending-files.json')))return{root,cwd,lock:null,raw:null};
+  if(await readOptional(join(root,'.artifactbin','pending-operation.json'))||await readOptional(join(root,'.artifactbin','pending-request.json'))||await readOptional(join(root,'.artifactbin','pending-files.json')))return{root,cwd,lock:null,raw:null};
   const parent=dirname(root);if(parent===root)return{root:cwd,cwd,lock:null,raw:null};root=parent;
  }
 }
@@ -42,7 +42,7 @@ export async function inspectWorkspace(workspace:Workspace,paths?:string[]):Prom
   const bytes=workspace.virtualFiles?.[path]??await readOptional(await confinedPath(workspace.root,path));
   let tracked=workspace.lock?.files[path];
   let renamedFrom:string|undefined;
-  const document=bytes&&extname(path)==='.jsx'?parseDocument(bytes.toString()):undefined;
+  const document=bytes&&extname(path).toLowerCase()==='.jsx'?parseDocument(bytes.toString()):undefined;
   if(document&&tracked&&document.metadata.id!==tracked.id)throw new CliError('identity_mismatch',`Fence id ${document.metadata.id??'(missing)'} disagrees with tracked id ${tracked.id} in ${path}.`,'Restore the tracked identity fields, or remove all identity fields from an untracked copy to fork it.');
   const id=document?.metadata.id??tracked?.id;
   if(id){

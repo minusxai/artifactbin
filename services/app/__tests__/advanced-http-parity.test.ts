@@ -46,10 +46,10 @@ describe('advanced HTTP parity',()=>{
     expect(reverted.isError).toBe(false);
     expect(reverted.data.version).toBe(3);
 
-    // Another token cannot see it (uniform not-found).
+    // Another token can read this public document but cannot edit it.
     const other = await mintToken('other');
     const denied = await operationHttp(other.token, 'get_artifact', { id: story.data.id as string });
-    expect(denied.isError).toBe(true);
+    expect(denied.isError).toBe(false);expect(denied.data.capabilities).toMatchObject({read:true,edit:false});
     const deleted = await operationHttp(t.token, 'delete_artifact', { id });
     expect(deleted.isError).toBe(false);
     expect(deleted.data.ok).toBe(true);

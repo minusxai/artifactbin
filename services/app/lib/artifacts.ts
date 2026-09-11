@@ -1,3 +1,4 @@
+import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
 import {artifactState} from './artifact-state';
 import {channelFor} from './story/live';
@@ -110,6 +111,9 @@ export interface ArtifactRow {
   dataset_policy?: unknown;
   policy_revision?: number;
   generation_calls?: number;
+  sharing_revision?: number;
+  /** Present only on an authorized governance snapshot, never a public summary. */
+  shares?: ShareEntry[];
   /**
    * GENERAL ACCESS: what the LINK grants whoever holds the address. NULL on
    * every row written before the column existed, and NULL means `viewer` —
@@ -355,7 +359,7 @@ export async function createArtifact(
    *                and access — the same axis, and carrying the tier while
    *                resetting the role would be incoherent.
    */
-  atCreation: { forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null } = {},
+  atCreation: { forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[] } = {},
 ): Promise<ArtifactRow> {
   const db = await getDb();
   if (input.format === 'markup' && input.source) {
@@ -423,6 +427,7 @@ export async function createArtifact(
           JSON.stringify(sourceIds),
         ],
         );
+        Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
         if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
         return created;
       });
@@ -733,26 +738,41 @@ export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'ed
  */
 export const annotationScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'commenter');
 
+const SHARES_PROJECTION="COALESCE((SELECT jsonb_agg(jsonb_build_object('email',s.email,'role',s.role) ORDER BY s.email) FROM artifact_shares s WHERE s.artifact_id=artifacts.id),'[]'::jsonb) AS shares";
+async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Promise<{shares:ShareEntry[];sharing_revision:number}>{
+ const normalized=[...new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
+ const current=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
+ if(JSON.stringify(current)!==JSON.stringify(normalized)){
+  await tx.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[id]);
+  for(const entry of normalized)await tx.query('INSERT INTO artifact_shares (artifact_id,email,role) VALUES ($1,$2,$3)',[id,entry.email,entry.role]);
+  await tx.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[id]);
+ }
+ const row=(await tx.query<{sharing_revision:number}>('SELECT sharing_revision FROM artifacts WHERE id=$1',[id])).rows[0];
+ return {shares:normalized,sharing_revision:row.sharing_revision};
+}
 async function getArtifactScoped(scope: Scope, id: string): Promise<ArtifactRow | null> {
   const db = await getDb();
-  const r = await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
+  const r = await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val]);
   return r.rows[0] ?? null;
 }
 
 /**
  * Whole-document writes (PUT, revert) join the edit protocol rather than
  * sitting outside it: they mint a fresh `edit_id`, log one splice covering the
- * entire old document — so every edit still based on an older version overlaps
- * it and is correctly rejected as `doc_changed` — and wake live readers.
+ * entire old document for restoration/migration. Ordinary markup replacement
+ * records its actual node-scoped changes so unrelated stale edits can rebase.
+ * Both paths wake live readers.
  * Callers must already hold the row inside `tx`.
  */
-async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: ArtifactRow): Promise<void> {
+async function logWholeDocumentWrite(tx: Queryable, before: ArtifactRow, after: ArtifactRow, nodeScoped=false): Promise<void> {
   const oldText = before.source ?? before.content;
   const newText = after.source ?? after.content;
+  const changes=nodeScoped&&before.format==='markup'&&after.format==='markup'?sourceChanges(oldText,newText):null;
+  if(changes&&!changes.length)changes.push({splice:{start:0,removed:'',inserted:''},span:{start:0,end:0}});
   await tx.query(
-    `INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
-     VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7)`,
-    [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id],
+    `INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id, changes)
+     VALUES ($1, $2, 0, $3, $4, 0, $5, $6, $7, $8::jsonb)`,
+    [after.id, after.edit_id, oldText, newText, oldText.length, after.actor_user_id, after.actor_token_id, changes?JSON.stringify(changes):null],
   );
   // Lowercased to match channelFor (lib/story/live.ts) — see the note there.
   await tx.query('SELECT pg_notify($1, $2)', [`artifact_${after.id.toLowerCase()}`, after.edit_id]);
@@ -956,6 +976,7 @@ export function isVersionConflict(r: ArtifactRow | null | VersionConflict): r is
 }
 
 export interface ReplaceOpts {
+  shares?:ShareEntry[];
   annotationOps?: AnnotationOperation[];
   expectedState?: string;
   /** When set, the replace applies only if it still names the head version. */
@@ -1039,7 +1060,9 @@ async function replaceScoped(
       const swap = ancestorsForMove(current, input.ancestor_ids);
       await tx.query(swap.sql, swap.params);
     }
-    await logWholeDocumentWrite(tx, current, updated.rows[0]);
+    if(opts.shares!==undefined)Object.assign(updated.rows[0],await writeShares(tx,id,opts.shares));
+    else updated.rows[0].shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
+    await logWholeDocumentWrite(tx, current, updated.rows[0],true);
     const movedAnnotations=new Set<string>();
     for(const change of effects.updates){
       const applied=await tx.query<{id:string}>('UPDATE annotations SET anchor_key=$3,range=$4 WHERE artifact_id=$1 AND id=$2 AND anchor_key=$5 AND range IS NOT DISTINCT FROM $6 RETURNING id',[id,change.annotationId,change.after.anchor,change.after.range,change.before.anchor,change.before.range]);
@@ -1197,7 +1220,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
 
   for (let attempt = 0; ; attempt++) {
     const head = (
-      await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
+      await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
     ).rows[0];
     if (!head) return null;
     // Documents edit; VALUES do not. A dataset/viz/image is a blob whose
@@ -1370,7 +1393,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       `WITH updated AS (
          UPDATE artifacts SET content = $3, source = $4, meta = $5, version = version + 1,
                 edit_id = $6, title = $21, actor_user_id = $22, actor_token_id = $23, updated_at = now()
-         WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $7
+         WHERE id = $1 AND ${scope.where('$2')} AND edit_id = $7 AND sharing_revision=$32
            AND meta = $14::jsonb AND title IS NOT DISTINCT FROM $9 AND description IS NOT DISTINCT FROM $10
          RETURNING *
        ), archived AS (
@@ -1433,18 +1456,18 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         JSON.stringify(identity.aliases),
         identity.ids,
         JSON.stringify(sideEffects.updates),
-        JSON.stringify(sideEffects.receipts),
+        JSON.stringify(sideEffects.receipts),head.sharing_revision??0,
       ],
     );
     if (updated.rows[0]) {
       void trackEvent('edit', updated.rows[0].id, { userId: updated.rows[0].user_id });
-      return { applied: true, row: updated.rows[0], ...(published.warnings?.length ? { warnings: published.warnings } : {}) };
+      return { applied: true, row: {...updated.rows[0],shares:head.shares}, ...(published.warnings?.length ? { warnings: published.warnings } : {}) };
     }
     // Lost the CAS: someone landed between our read and our write. Re-read and
     // redo — our base is now an ordinary stale base, so the node-scope check
     // decides it. (Near-unreachable on PGLite, which serializes all ops.)
     if (attempt >= EDIT_CAS_RETRIES) {
-      const now = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
+      const now = (await db.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])).rows[0];
       return now ? { applied: false, reason: 'doc_changed', head: headOf(now) } : null;
     }
   }
@@ -1490,7 +1513,7 @@ async function setParentScoped(actor: TokenActor, scope: Scope, id: string, next
   let moved: { from: string | null; to: string | null } | null = null;
   const row = await db.transaction(async (tx) => {
     const current = (
-      await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
+      await tx.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
     ).rows[0];
     if (!current) return null;
     const updated = await tx.query<ArtifactRow>(
@@ -1586,13 +1609,7 @@ export async function updateSharingFor(actor: TokenActor, id: string, patch: Sha
       // can never acquire a write ACL by way of this surface.
       await tx.query(`UPDATE artifacts SET access = $2 WHERE id = $1  AND format = 'dataset' AND ($2 <> 'readwrite' OR COALESCE(meta->'catalog'->>'kind','stored') <> 'postgres')`, [id, patch.access]);
     }
-    if (patch.shares) {
-      const entries = new Map(patch.shares.map((e) => [e.email.toLowerCase().trim(), e.role]));
-      await tx.query('DELETE FROM artifact_shares WHERE artifact_id = $1', [id]);
-      for (const [email, role] of entries) {
-        await tx.query('INSERT INTO artifact_shares (artifact_id, email, role) VALUES ($1, $2, $3)', [id, email, role]);
-      }
-    }
+    if(patch.shares!==undefined)await writeShares(tx,id,patch.shares);
     // Dataset subscribers must re-read capabilities even when rows/version
     // have not changed. The existing data wakeup already refreshes queries.
     await tx.query(`SELECT pg_notify('artifact_' || lower(id), edit_id) FROM artifacts WHERE id = $1`, [id]);
@@ -1857,6 +1874,7 @@ export async function setTitleFor(actor: TokenActor, id: string, title: string):
 
 /** What a METADATA write may change: policy ABOUT a row, never its content. */
 export interface MetadataPatch {
+  shares?:ShareEntry[];
   title?: string | null;
   description?: string | null;
   visibility?: Visibility;
@@ -1892,6 +1910,8 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
       JSON.stringify(meta),patch.visibility ?? current.visibility,patch.access ?? current.access,
       patch.ancestor_ids ?? current.ancestor_ids,patch.link_role ?? current.link_role,...actorStamp(actor),
     ])).rows[0];
+    if(patch.shares!==undefined)Object.assign(updated,await writeShares(tx,id,patch.shares));
+    else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
     if (patch.ancestor_ids && current.format === 'folder') {
       const swap = ancestorsForMove(current,patch.ancestor_ids);
       await tx.query(swap.sql,swap.params);
@@ -1902,7 +1922,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
   if (result && !isVersionConflict(result) && !opts.dryRun) {
     if (moved) {await wakeParents(moved);sayMoved(actor,id,moved);}
     else await notifyParent(parentOf(result));
-    if (patch.access || patch.visibility || patch.link_role) await db.query('SELECT pg_notify($1,$2)',[channelFor(id),result.edit_id]);
+    if (patch.access || patch.visibility || patch.link_role || patch.shares) await db.query('SELECT pg_notify($1,$2)',[channelFor(id),result.edit_id]);
   }
   return result;
 }

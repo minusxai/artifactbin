@@ -9,7 +9,7 @@ export async function describeConflict(error:CliError,pending:PendingRequest,cli
  const details=error.details&&typeof error.details==='object'?error.details as Record<string,unknown>:{};
  let head=details.head&&typeof details.head==='object'?details.head as Record<string,unknown>:details;
  if(typeof head.source!=='string'&&typeof head.markup!=='string'){
-  const id=pending.file.tracked?.id??(pending.file.path.endsWith('.jsx')?parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).metadata.id:undefined);
+  const id=pending.file.tracked?.id??(pending.file.path.toLowerCase().endsWith('.jsx')?parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).metadata.id:undefined);
   if(id)try{head=await client.request(`/artifacts/${id}`);}catch{return new CliError(error.code,error.message,'Inspect afbin diff --remote when the server is available. Your local file is unchanged.',{...details,diff_unavailable:true},error.exitCode);}
  }
  const source=pending.request.body.source??pending.request.body.markup;

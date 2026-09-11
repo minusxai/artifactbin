@@ -1,3 +1,5 @@
+import {queryMutation} from './mutation-command';
+import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
 import {installSkills,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
@@ -17,21 +19,21 @@ import {compare,remoteStatus} from './comparison';
 import {localStatus,localDiff} from './local';
 import {helpTopics} from './teaching';
 import {loadConnection} from './config';
-import {browserAuthenticate,ApprovalRequired} from './browser-auth';
+import {browserAuthenticate,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient,apiUrl} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull} from './pull';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;cwd?:string;home?:string;interactive?:boolean;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;cwd?:string;home?:string;interactive?:boolean;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const stdout=context.stdout??(value=>process.stdout.write(value));const stderr=context.stderr??(value=>process.stderr.write(value));
  let parsed:ParsedCommand|undefined;let json=argv.includes('--json');
  try{
   parsed=parseCommand(argv);json=!!parsed.flags.json;
   const {command,positionals,flags}=parsed;
-  let recoveredRequest:string|undefined;let markdownPlan:MarkdownPlan|undefined;
+  let recoveredRequest:string|undefined;let markdownPlan:MarkdownPlan|undefined;let querySql:string|undefined;
   const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':JSON.stringify(value,null,2)+'\n');};
   if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`afbin ${CLI_VERSION}`);return 0;}
   if(flags.help||command==='help'){
@@ -42,6 +44,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   let workspace=await loadWorkspace(context.cwd);
   const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.lock?.server??(context.env??process.env).ARTIFACTBIN_URL;
+  if(['push','pull','delete'].includes(command)&&!flags['dry-run']&&await readOptional(join(workspace.root,'.artifactbin','pending-operation.json')))throw new CliError('pending_recovery','Recover the pending row mutation before changing this workspace.','Repeat the original afbin query --write command.');
   const pendingFiles=await readOptional(join(workspace.root,'.artifactbin','pending-files.json'));
   if(pendingFiles&&['push','pull','delete'].includes(command)&&!flags['dry-run']){
    await withProcessLock(workspace.root,()=>recoverFiles(workspace.root));workspace=await loadWorkspace(context.cwd);
@@ -61,6 +64,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
   const selectedServer=serverOrigin()??'https://artifactbin.dev';
+  if(command==='query'){
+   queryParameters(flags.param as string[]|undefined);
+   querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
+   const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){emit(result);return 0;}
+  }
   if(['comment','delete','log'].includes(command))await artifactReference(workspace,positionals[0],selectedServer,command!=='log');
   if(command==='api')apiUrl(positionals[0],selectedServer);
   if(command==='push')for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
@@ -86,22 +94,27 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   let connection=await loadConnection(server,home,context.env);
   const firstAuthentication=!connection;
-  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{home,interactive,fetch:context.fetch,notify:message=>stderr(message+'\n')});
+  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,interactive,noBrowser:!!flags['no-browser'],rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(message+'\n')});
+  if(command==='setup'&&flags['dry-run']){
+   const harnesses=await selectSkills({home,env:context.env,interactive:false,requested:flags.harness as string[]|undefined});
+   emit({dry_run:true,server:connection?.server??server??'https://artifactbin.dev',credentials:connection?'saved_not_verified':'missing',harnesses});return 0;
+  }
   if(command==='setup'&&connection){
    const probe=new HttpClient({connection,home,fetch:context.fetch});
    try{await probe.request('/artifacts?limit=1');connection=probe.connection;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;connection=await authenticate();}
   }
   if(!connection){
-   if(flags['dry-run']||!interactive&&command!=='setup')throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin setup, or set ARTIFACTBIN_TOKEN for the selected server.');
+   if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin setup, or set ARTIFACTBIN_TOKEN for the selected server.');
    connection=await authenticate();
   }
-  if(command==='setup'||firstAuthentication&&interactive){
+  if(command==='setup'||firstAuthentication){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    const installed=await installSkills(selected,{home,env:context.env});
    if(command==='setup'){emit({authenticated:true,server:connection.server,...installed});return 0;}
    for(const item of installed.installations)stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
   }
-  const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(interactive&&!flags['dry-run']?{authenticate}: {})});
+  const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
   if(command==='delete'){emit(await deleteArtifact(workspace,positionals[0],client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
   if(command==='diff'){emit(await compare(workspace,positionals[0],client.connection.server,!!flags.remote,client));return 0;}

@@ -1,13 +1,14 @@
+import {readableArtifact} from '@/lib/artifact-read';
 /** Authenticated immutable content reads never use public serving/import paths. */
 import {withTokenAuth} from '@/lib/auth';
-import {getArtifactFor,getVersionFor} from '@/lib/artifacts';
+import {getVersionFor} from '@/lib/artifacts';
 import {serveStoredFile} from '@/lib/story/file-store';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {objectStore} from '@/lib/object-store';
 import {json} from '@/lib/http';
 
 export const GET=withTokenAuth(async(request,{tokenId,userId,params})=>{
- const actor={tokenId,userId};const head=await getArtifactFor(actor,params.id);
+ const actor={tokenId,userId};const head=(await readableArtifact(actor,params.id))?.row;
  if(!head)return json({error:'not_found'},404);
  const raw=new URL(request.url).searchParams.get('version');
  if(raw!==null&&(!/^[1-9]\d*$/.test(raw)||!Number.isSafeInteger(Number(raw))))return json({error:'invalid_version'},400);

@@ -94,6 +94,7 @@ const ARTIFACTS: Table = {
     // A NULL here is a fact about when the row was written, never a missing
     // value. `linkRoleOf` is the only reader.
     { name: 'dataset_policy', type: 'JSONB' },
+    { name: 'sharing_revision', type: 'INTEGER', notNull: true, default: '0' },
     { name: 'policy_revision', type: 'INTEGER', notNull: true, default: '0' },
     { name: 'generation_calls', type: 'INTEGER', notNull: true, default: '0' },
     { name: 'link_role', type: 'TEXT' },
@@ -520,6 +521,19 @@ const DATASET_RESULT_CACHE: Table = {
   primaryKey: ['cache_key'],
 };
 
+/** At-most-once mutation admission, including external generation before the content transaction. */
+const MUTATION_RECEIPTS: Table = {
+ name:'mutation_receipts',
+ columns:[
+  {name:'scope',type:'TEXT',notNull:true},
+  {name:'operation_key',type:'TEXT',notNull:true},
+  {name:'request_hash',type:'TEXT',notNull:true},
+  {name:'response',type:'JSONB'},
+  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ ],
+ primaryKey:['scope','operation_key'],
+};
+
 /** Durable create identity; the response expires while the key-to-id mapping remains. */
 const ARTIFACT_CREATION_OPERATIONS: Table = {
   name: 'artifact_creation_operations',
@@ -560,7 +574,7 @@ const DATASET_USAGE: Table = {
   columns:[{name:'bucket',type:'TEXT',notNull:true},{name:'calls',type:'INTEGER',notNull:true,default:'0'}],
   primaryKey:['bucket'],
 };
-export const TABLES: Table[] = [DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
+export const TABLES: Table[] = [MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

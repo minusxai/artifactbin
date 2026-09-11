@@ -45,3 +45,12 @@ test('an empty dry-run push needs no credentials, network or local state',async(
   await assert.rejects(stat(join(root,'.artifactbin')),{code:'ENOENT'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
+test('recognized file extensions ignore case without renaming the user file',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-extension-'));
+ try{
+  await writeFile(join(root,'MyReport.JSX'),'<p>Mixed-case filename</p>');
+  const output:string[]=[];
+  const code=await runCli(['validate','MyReport.JSX','--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
+  assert.equal(code,0,output.join(''));assert.equal(JSON.parse(output.join('')).files[0].path,'MyReport.JSX');
+ }finally{await rm(root,{recursive:true,force:true});}
+});

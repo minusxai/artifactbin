@@ -1,3 +1,5 @@
+import type {MutationReceipt} from './mutation-receipt';
+import {parseSharingEntries} from '@artifactbin/utils';
 import type {RefLoader} from '@/lib/story/refs';
 import {creationOperation,lookupCreation,CreationReplay} from '@/lib/creation-ledger';
 import {artifactState} from '@/lib/artifact-state';
@@ -317,29 +319,9 @@ export function parseAccessValue(v: unknown, format: string | undefined): Datase
   return v as DatasetAccess;
 }
 
-/** Not RFC-grade on purpose — the address only has to be matchable at login. */
-const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const MAX_SHARES = 100;
-
-/**
- * The share list on the wire: `{email, role}` entries, or bare email strings
- * (the shape before roles — a viewer). Absent = leave the list alone. Every
- * entry is validated, none silently dropped: a typo'd address that vanished
- * from the list would read as "shared" to the person who typed it, and a
- * role the door does not know is refused BY NAME.
- */
-export function parseShareEntries(v: unknown): ShareEntry[] | undefined | Response {
-  if (v === undefined) return undefined;
-  if (!Array.isArray(v) || v.length > MAX_SHARES) return json({ error: 'invalid_shares' }, 400);
-  const entries: ShareEntry[] = [];
-  for (const raw of v) {
-    const entry = typeof raw === 'string' ? { email: raw, role: 'viewer' } : raw;
-    const email = typeof entry?.email === 'string' ? entry.email.trim() : '';
-    if (!EMAIL_RE.test(email)) return json({ error: 'invalid_shares', detail: String(entry?.email ?? raw) }, 400);
-    if (!SHARE_ROLES.includes(entry.role)) return json({ error: 'invalid_shares', detail: `role: ${String(entry.role)}`, hint: `one of ${SHARE_ROLES.join(', ')}` }, 400);
-    entries.push({ email, role: entry.role });
-  }
-  return entries;
+/** Typed sharing is shared with the CLI; absent preserves and [] clears. */
+export function parseShareEntries(v:unknown):ShareEntry[]|undefined|Response{
+ try{return parseSharingEntries(v);}catch(error){return json({error:'invalid_shares',detail:error instanceof Error?error.message:'Invalid sharing entries'},400);}
 }
 
 function parseAccessField(body: Record<string, unknown>, format: string | undefined): DatasetAccess | undefined | Response {
@@ -442,6 +424,7 @@ export async function replaceArtifactWithBody(
   const access = parseAccessField(body, parsed.format);
   if (access instanceof Response) return access;
   if(access==='readwrite'&&catalogOf(parsed)?.kind==='postgres')return json({error:'dataset_read_only',details:['Postgres datasets are read-only']},400);
+  const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   /*
@@ -508,11 +491,12 @@ export async function replaceArtifactWithBody(
   }
   const row = current.format === 'folder'
     ? await setMetadataFor(actor, id, {
+      ...(shares!==undefined?{shares}:{}),
       ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
       ...(visibility ? { visibility } : {}),
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
-    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps});
+    : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares});
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
@@ -529,7 +513,7 @@ export async function replaceArtifactWithBody(
     // neither the version nor this pointer, so what comes back is the head the
     // caller already had: still the answer to "what do I quote next", which is
     // the only thing it is for.
-    edit_id: row.edit_id, state: artifactState(row),
+    edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
     title:row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',parent_id:parentOf(row),format:row.format,
     ...markupEcho(sentMarkup, row.source),
     // A dataset echoes its WRITE acl too: an agent that just set it should not
@@ -563,6 +547,7 @@ export async function createArtifactFromBody(
   catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);throw error;}
   if(operation){const replay=await lookupCreation(await getDb(),operation);if(replay)return json(replay.body,replay.status);}
   if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;
   if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   const sentMarkup=body.markup;
@@ -602,7 +587,7 @@ export async function createArtifactFromBody(
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
-  }, {operation,...(link?{linkRole:link}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {operation,shares,...(link?{linkRole:link}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 
@@ -620,7 +605,7 @@ export function createdArtifactWire(row: ArtifactRow, base: string, sentMarkup: 
     id: row.id, url: `${base}/a/${row.id}`, version: row.version, visibility: row.visibility,
     // The read-proof for the edit protocol: an agent can start editing straight
     // after create, without a round trip to learn the head pointer.
-    edit_id: row.edit_id, state: artifactState(row),
+    edit_id: row.edit_id, state: artifactState(row),...(row.shares!==undefined?{shares:row.shares}:{}),
     format: row.format, title: row.title,description:row.description,theme:row.meta.theme??null,template:row.meta.template??null,link_role:row.link_role??'viewer',
     // Where it landed. `parent_id` is what a caller writes back, so the create
     // reply hands it straight into the next call.
@@ -755,6 +740,7 @@ export async function respondToMutate(
   actor: TokenActor,
   id: string,
   body: Record<string, unknown> | null,
+  receipt?:MutationReceipt,
 ): Promise<Response> {
   const dataset = await getArtifactFor(actor, id);
   if (!dataset) return json({ error: 'not_found' }, 404);
@@ -774,6 +760,8 @@ export async function respondToMutate(
   if (typeof body.sql !== 'string' || body.sql.trim() === '') {
     return json({ error: 'sql_required', details: [`one INSERT, UPDATE or DELETE naming a catalog table, for example public.rows`] }, 400);
   }
+  const expected=body.expectedState===undefined?undefined:parseExpectedVersion(body,false);
+  if(expected instanceof Response)return expected;
   const values: Record<string, Scalar> = {};
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) {
@@ -785,8 +773,9 @@ export async function respondToMutate(
     }
   }
 
-  const result = await mutateDataset(dataset, actor, body.sql, values);
+  const result = await mutateDataset(dataset, actor, body.sql, values,{receipt,expectedState:expected?.expectedState});
   if (isMutationRefused(result)) {
+    if(result.reason==='row_changed')return json({error:'row_changed',details:[result.detail]},409);
     if (result.reason === 'dataset_read_only' || result.reason === 'policy_denied') return json({error:result.reason,details:[result.detail]},403);
     if (result.reason === 'dataset_full') return json({ error: 'dataset_full', details: [result.detail] }, 409);
     // Contention is retryable, not an author error — never a 400.

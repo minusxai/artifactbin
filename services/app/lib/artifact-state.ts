@@ -11,6 +11,7 @@ function ordered(value: unknown): unknown {
 export function artifactState(row: ArtifactRow): string {
   const {parsedArtifact: _parsed, compiledCss: _css, cssCompileVersion: _compiler, ...metadata} = row.meta;
   return createHash('sha256').update(JSON.stringify(ordered({
+    sharing_revision:row.sharing_revision??0,policy_revision:row.policy_revision??0,
     id: row.id, version: row.version, edit_id: row.edit_id,
     title: row.title, description: row.description, format: row.format,
     source: row.source, content: row.content, visibility: row.visibility, access: row.access,

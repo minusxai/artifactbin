@@ -11,7 +11,7 @@ export async function artifactReference(workspace:Workspace,input:string,server:
  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server,writable});
  if(ref.kind==='id')return{id:ref.id,version:ref.version,notices:ref.notices};
  const tracked=workspace.lock?.files[ref.path];
- const id=ref.path.endsWith('.jsx')?parseDocument(await readFile(join(workspace.root,ref.path),'utf8')).metadata.id:tracked?.id;
+ const id=ref.path.toLowerCase().endsWith('.jsx')?parseDocument(await readFile(join(workspace.root,ref.path),'utf8')).metadata.id:tracked?.id;
  if(!id)throw new CliError('unpublished_file',`${ref.path} has no published identity.`,'Publish it with afbin push first.');
  if(tracked&&tracked.id!==id)throw new CliError('identity_mismatch',`The fence identity for ${ref.path} differs from afbin.lock.`,'Resolve the identity before operating on the remote artifact.');
  return{id,version:ref.version,path:ref.path,notices:ref.notices};

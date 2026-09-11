@@ -7,18 +7,23 @@ import { join } from 'node:path';
 import { unlink } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { atomicWrite, digest, privateDirectory, readOptional } from './files';
-import { normalizeServer, saveConnection, type Connection } from './config';
+import { loadConnection, normalizeServer, saveConnection, type Connection } from './config';
+import {withProcessLock} from './process-lock';
 
 interface Pending { server: string; deviceCode: string; userCode: string; verificationUrl: string; expiresAt: number; interval: number }
 export class ApprovalRequired extends Error {
   readonly code = 'approval_required';
   constructor(readonly verificationUrl: string, readonly userCode: string, readonly expiresAt: number) {
-    super(`Approve code ${userCode} at ${verificationUrl}, then run afbin setup again.`);
+    super(`Approve code ${userCode} at ${verificationUrl}, the pending command will continue after approval.`);
   }
 }
-interface AuthOptions {
+export interface AuthOptions {
   home?: string;
   interactive: boolean;
+  /** Browser launch is independent of terminal prompts. Approval waiting is bounded. */
+  noBrowser?: boolean;
+  /** A rejected token must not be reused; another process may already have replaced it. */
+  rejectedToken?: string;
   fetch?: typeof fetch;
   now?: () => number;
   sleep?: (ms: number) => Promise<unknown>;
@@ -32,9 +37,14 @@ export async function openBrowser(url: string): Promise<void> {
 }
 export async function browserAuthenticate(origin:string,options:AuthOptions):Promise<Connection>{
  const server=normalizeServer(origin);
- const pending=await readOptional(join(options.home??homedir(),'.artifactbin',`pairing-${digest(server).slice(0,16)}.json`));
- if(options.interactive&&!pending)return loopbackAuthenticate(server,{...options,open:options.open??openBrowser});
- return deviceAuthenticate(server,options);
+ const home=options.home??homedir();
+ return withProcessLock(home,async()=>{
+  const saved=await loadConnection(server,home,{});
+  if(saved&&saved.token!==options.rejectedToken&&(!saved.expiresAt||saved.expiresAt>(options.now??Date.now)()))return saved;
+  const pending=await readOptional(join(home,'.artifactbin',`pairing-${digest(server).slice(0,16)}.json`));
+  if(options.interactive&&!options.noBrowser&&!pending)return loopbackAuthenticate(server,{...options,open:options.open??openBrowser});
+  return deviceAuthenticate(server,options);
+ },{name:`auth-${digest(server).slice(0,16)}`,waitMs:300000});
 }
 export async function deviceAuthenticate(origin: string, options: AuthOptions): Promise<Connection> {
   const server = normalizeServer(origin);
@@ -65,9 +75,9 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     await atomicWrite(file,JSON.stringify(pending));
   }
   const approval = new ApprovalRequired(pending.verificationUrl,pending.userCode,pending.expiresAt);
-  if (options.interactive) {
+  {
     (options.notify ?? (message=>process.stderr.write(`${message}\n`)))(approval.message);
-    try { await (options.open ?? openBrowser)(pending.verificationUrl); }
+    try { if (!options.noBrowser) await (options.open ?? openBrowser)(pending.verificationUrl); }
     catch (error) { options.notify?.(error instanceof Error ? error.message : 'Open the approval URL in your browser.'); }
   }
   do {
@@ -85,7 +95,6 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
       const code=data.error==='access_denied'?'access_denied':data.error==='expired_token'?'approval_expired':'auth_failed';
       throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.','Run afbin setup again.');
     }
-    if (!options.interactive) throw approval;
     await (options.sleep ?? sleep)(Math.min(pending.interval,Math.max(0,pending.expiresAt-clock())));
   } while (clock() < pending.expiresAt);
   await unlink(file);

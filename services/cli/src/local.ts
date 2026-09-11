@@ -1,8 +1,9 @@
+import type {ShareEntry} from '@artifactbin/contracts';
 import {createTwoFilesPatch} from 'diff';
 import {type LocalDocument} from './document';
 import {inspectWorkspace,type Snapshot,type Workspace} from './workspace';
 export function snapshotDocument(snapshot:Snapshot):LocalDocument{
- return{metadata:{id:snapshot.id,title:snapshot.title??null,theme:snapshot.theme??null,template:snapshot.template??null,
+ return{metadata:{...(snapshot.shares!==undefined?{shares:snapshot.shares as ShareEntry[]}:{}),...(snapshot.description!==undefined?{description:snapshot.description as string|null}:{}),...(snapshot.colorMode!==undefined?{colorMode:snapshot.colorMode as 'light'|'dark'|null}:{}),id:snapshot.id,title:snapshot.title??null,theme:snapshot.theme??null,template:snapshot.template??null,
   ...(snapshot.visibility?{visibility:snapshot.visibility}:{}),link:snapshot.link_role??'viewer',folder:snapshot.parent_id??null,
   edit_id:snapshot.edit_id,head_version:snapshot.version,state:snapshot.state},body:snapshot.markup??''};
 }
