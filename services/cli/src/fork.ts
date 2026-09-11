@@ -88,7 +88,7 @@ async function freePath(workspace:Workspace,directory:string|undefined,base:stri
 }
 
 function conflictingType(selected:string|undefined,actual:string,input:string):void{
- if(selected&&selected!==actual)throw new CliError('type_mismatch',`${input} is a ${actual}, not a ${selected}.`,'Remove --type, or name a source of that type.');
+ if(selected&&selected!==actual)throw new CliError('type_mismatch',`${input} is of type ${actual}, not ${selected}.`,'Remove --type, or name a source of that type.');
 }
 
 async function localDraft(workspace:Workspace,path:string,type:string|undefined):Promise<ForkDraft>{
