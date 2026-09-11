@@ -32,7 +32,6 @@
 import type { Harness } from './contracts';
 import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import type { CredentialEnv } from './env';
 import { type EvalMode } from './mode';
 import { slug } from './slug';
@@ -215,15 +214,6 @@ export function callbackCode(location: string): string | null {
  * the harness's home before its turn — exactly what a person's machine looks like after they connected
  * once. 0600: the run's transcript and the report are artifacts a CI job uploads.
  */
-export function writeArtifactbinEnv(homeDir: string, base: string, token: string): string {
-  fs.mkdirSync(homeDir, { recursive: true });
-  const dir=path.join(homeDir,'.artifactbin');
-  fs.mkdirSync(dir,{recursive:true,mode:0o700});
-  const file = path.join(dir, '.env');
-  fs.writeFileSync(file, `ARTIFACTBIN_URL=${base}\nARTIFACTBIN_TOKEN=${token}\n`, { mode: 0o600 });
-  fs.chmodSync(file, 0o600); // an existing file keeps its old mode through writeFileSync
-  return file;
-}
 
 export interface AcquireOptions {
   /** Where the product is, from the DRIVER's side. */

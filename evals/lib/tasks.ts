@@ -1,6 +1,5 @@
 /** The driver supplies local CLI access without exposing credentials in the prompt. */
 import type {Task} from './contracts';
-import type {EvalMode} from './mode';
 export type Access=
  | {kind:'start-link';startPrompt:string}
  | {kind:'token';base:string;token:string;id:string}
@@ -23,15 +22,14 @@ export function planAccess({task,base,start,credential}:AccessPlanInput):AccessP
  const token=credential?.token??tokenFromPaste(start.prompt);
  return {access:{kind:'token',base,token,id:start.id},connectionToken:token,seed:task.seed===undefined?null:{id:start.id,token,markup:task.seed}};
 }
-export interface PromptOptions {vision?:boolean;mode?:EvalMode}
+export interface PromptOptions {vision?:boolean}
 export function buildPrompt(task:Task,access:Access,opts:PromptOptions={}):string{
  const parts=[task.brief];
  if(opts.vision===false)parts.push('You cannot view images. Check your work by reading the document markup.');
  if(access.kind==='start-link')parts.push(access.startPrompt);
  else{
-  parts.push(`Use afbin and the installed artifactbin skill. The server is ${access.base}. Read afbin help for local command and authoring guidance.`);
-  if(access.kind==='token'&&opts.mode==='cold')parts.push(`afbin is installed but not set up on this machine: run afbin setup --server ${access.base} --yes first; it opens browser approval and installs the local skills, and it tells you where. Then work on artifact ${access.id} with afbin pull, local edits, afbin validate and afbin push.`);
-  else if(access.kind==='token')parts.push(`The connection is saved in ~/.artifactbin/.env. Work on artifact ${access.id} with afbin pull, local edits, afbin validate and afbin push.`);
+  parts.push(`The artifactbin server is ${access.base}.`);
+  if(access.kind==='token')parts.push(`Work on artifact ${access.id}.`);
   else parts.push('You have not been given a token or a document.');
  }
  return parts.join('\n\n');

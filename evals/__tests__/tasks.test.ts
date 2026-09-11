@@ -4,8 +4,8 @@ import {TaskSchema} from '../lib/contracts';
 const task=TaskSchema.parse({id:'publish',brief:'Publish a report.',handoff:'token',checks:['published']});
 it('teaches the local CLI without leaking the saved credential or fetching skills',()=>{
  const prompt=buildPrompt(task,{kind:'token',id:'abc123',base:'https://example.test',token:'mx_secret'});
- expect(prompt).toContain(task.brief);expect(prompt).toContain('abc123');expect(prompt).toContain('afbin pull');
- expect(prompt).toContain('~/.artifactbin/.env');expect(prompt).not.toMatch(/mx_secret|MCP|\/docs\//);
+ expect(prompt).toContain(task.brief);expect(prompt).toContain('abc123');expect(prompt).toContain('The artifactbin server is');
+ expect(prompt).not.toMatch(/mx_secret|MCP|\/docs\/|\.env|afbin setup|installed/);
 });
 it('does not invent authentication for a task with no credential',()=>{
  const prompt=buildPrompt(task,{kind:'none',base:'https://example.test'});

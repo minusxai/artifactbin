@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, writeArtifactbinEnv, codeFromOutbox, shareForScoring, deploymentLoginEmail, type InboundMail } from '../lib/credential';
+import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, codeFromOutbox, shareForScoring, deploymentLoginEmail, type InboundMail } from '../lib/credential';
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
@@ -311,16 +311,6 @@ describe('memoizeCredential', () => {
   });
 });
 
-describe('writeArtifactbinEnv', () => {
-  it('writes the skill’s own connection file into the harness home, readable only by its owner', () => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-cred-'));
-    writeArtifactbinEnv(home, 'https://x.test', 'mx_secret');
-    const file = path.join(home, '.artifactbin', '.env');
-    expect(fs.readFileSync(file, 'utf8')).toBe('ARTIFACTBIN_URL=https://x.test\nARTIFACTBIN_TOKEN=mx_secret\n');
-    expect(fs.statSync(file).mode & 0o077).toBe(0);
-    fs.rmSync(home, { recursive: true, force: true });
-  });
-});
 
 /**
  * A LOCAL eval server (CI's agent smoke, a laptop) has no Resend inbox: it writes its login mail to the dev outbox the
@@ -329,7 +319,7 @@ describe('writeArtifactbinEnv', () => {
 describe('a local server logs in through its dev outbox', () => {
   it('the account modes pick outbox-oauth when the driver booted the server, before any inbox or secret', () => {
     const local = { localOutbox: '/tmp/x/dev-mail.jsonl' };
-    for (const m of ['installed', 'cold'] as const) {
+    for (const m of ['installed', 'not-installed'] as const) {
       expect(credentialSourceFor(m, {}, local), m).toBe('outbox-oauth');
       expect(credentialSourceFor(m, { EVAL_ACCOUNT_TOKEN: 'mx_abc' }, local), m).toBe('outbox-oauth');
     }

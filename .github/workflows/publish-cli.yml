@@ -93,12 +93,3 @@ jobs:
           # Draft until every asset is attached; do not overwrite an existing release.
           gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
-
-  # Same canary wiring as the automatic release path; production stays a dispatch.
-  plugin:
-    needs: [verify, publish]
-    uses: ./.github/workflows/publish-plugin.yml
-    with:
-      channel: staging
-      source_sha: ${{ needs.verify.outputs.sha }}
-    secrets: inherit

@@ -124,7 +124,7 @@ describe('the public repository boundary', () => {
 
 describe('workflow supply-chain pins', () => {
   it('uses immutable full commit SHAs for every third-party action', () => {
-    for (const file of ['ci.yml', 'publish.yml', 'publish-plugin.yml']) {
+    for (const file of ['ci.yml', 'publish.yml', 'publish-cli.yml']) {
       const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
       const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
       expect(refs.length, file).toBeGreaterThan(0);

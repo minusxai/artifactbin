@@ -1,7 +1,7 @@
 /**
  * Workstream D (Distribution and teaching) seeds: update --dry-run, help --format/--output,
  * and no npm install teaching anywhere in the bundle. Each test is `todo` until its row is
- * implemented; the owner removes the todo option, never the assertion. Installer and plugin
+ * implemented; the owner removes the todo option, never the assertion. Installer and release
  * assembly checks live in scripts/__tests__/cli-install.test.mjs and cli-release.test.mjs.
  */
 import {test} from 'node:test';
@@ -18,12 +18,12 @@ async function harness(prefix:string){
  return {root,out,invoke,network:()=>network,last:()=>JSON.parse(out[out.length-1]),cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 
-test('update --dry-run resolves the compatible release and reports binary, skill and plugin changes without installing',async()=>{
+test('update --dry-run resolves the compatible release and reports binary and skill changes without installing',async()=>{
  const h=await harness('afbin-seed-update-dry-');
  try{
   const code=await h.invoke(['update','--dry-run','--harness','pi','--json','--server','https://example.com'],path=>Response.json(path.includes('release')?{version:'9.9.9',protocol:1,assets:{}}:{error:'not_found'},{status:path.includes('release')?200:404}));
   assert.equal(code,0,h.out.join(''));
-  const result=h.last();assert.equal(result.dry_run,true);assert.ok(result.binary);assert.ok(Array.isArray(result.skills));assert.ok('plugins' in result);
+  const result=h.last();assert.equal(result.dry_run,true);assert.ok(result.binary);assert.ok(Array.isArray(result.skills));
   assert.deepEqual((await readdir(h.root)).filter(name=>name!=='.artifactbin'),[],'dry-run writes nothing to the home directory');
  }finally{await h.cleanup();}
 });

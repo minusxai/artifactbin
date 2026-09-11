@@ -37,10 +37,9 @@ export const claudeCode: HarnessAdapter = {
   invocation(ctx: HarnessRunContext) {
     const env: Record<string, string> = { CLAUDE_CONFIG_DIR: ctx.homeDir, ANTHROPIC_API_KEY: ctx.apiKey };
     // Empty strict config prevents inheriting unrelated servers from the user's machine.
-    const pluginArgs = ctx.plugin ? ['--plugin-dir', ctx.plugin.pluginDir] : [];
     return {
       argv: [
-        'claude', '-p', ...pluginArgs,
+        'claude', '-p',
         '--model', ctx.leg.model,
         '--output-format', 'stream-json', '--verbose',
         '--max-turns', String(ctx.maxTurns),

@@ -11,7 +11,7 @@ import {CliError} from './commands';
 import {normalizeServer} from './config';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
 import {withProcessLock} from './process-lock';
-import {installSkills,pluginSkillCopies,planSkills,skillHarnesses,safeSkillPath,type PluginSkillCopy,type SkillPlan,type SkillHarness} from './skill-install';
+import {installSkills,planSkills,skillHarnesses,safeSkillPath,type SkillInstallation,type SkillPlan,type SkillHarness} from './skill-install';
 const run=promisify(execFile);
 /** The selected server names the release it speaks; its bytes come from the project's own releases. */
 const releasePointer='/chat/release.json';
@@ -22,7 +22,8 @@ interface ReleaseManifest {version:string;protocol:number;platform:string;arch:s
 interface SkillBundle {version:string;protocol:number;files:Record<string,string>}
 interface PendingUpdate {schema:1;installation:Installation;manifest:ReleaseManifest;skills:string;selected:SkillHarness[];before?:string;mode?:number;backup?:string}
 interface UpdateOptions {home:string;server:string;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
-export interface UpdatePreview {dry_run:true;server:string;release:ReleasePointer;binary:{installation:'standalone'|'unmanaged';path?:string;current:string;available:string;change:'update'|'current'|'unavailable';reason?:string;asset?:string};skills:SkillPlan[];plugins:PluginSkillCopy[]}
+export interface UpdatePreview {dry_run:true;server:string;release:ReleasePointer;binary:{installation:'standalone'|'unmanaged';path?:string;current:string;available:string;change:'update'|'current'|'unavailable';reason?:string;asset?:string};skills:SkillPlan[]}
+export interface UpdateResult {version:string;protocol:number;recovered:boolean;backup?:string;installations:SkillInstallation[];harnesses:SkillHarness[]}
 const semver=(value:unknown):value is string=>typeof value==='string'&&/^\d+\.\d+\.\d+$/.test(value);
 function compare(a:string,b:string):number{const x=a.split('.').map(BigInt),y=b.split('.').map(BigInt);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i]?1:-1;return 0;}
 /** The pointer names a version and the protocol that server speaks; any other field is ignored. */
@@ -75,11 +76,10 @@ async function previewUpdate(options:UpdateOptions,platform:string,arch:string):
   binary:{installation:installation?'standalone':'unmanaged',...(installation?{path:installation.path}:{}),current,available:release.version,change,...(reason?{reason}:{}),
    ...(installation&&change==='update'?{asset:`afbin-${platform}-${arch}`}:{})},
   skills:await planSkills(options.harnesses,{home:options.home,env:options.env,version:release.version}),
-  plugins:await pluginSkillCopies(options.home,options.env),
  };
 }
 export async function updateCli(options:UpdateOptions&{dryRun:true}):Promise<UpdatePreview>;
-export async function updateCli(options:UpdateOptions):Promise<unknown>;
+export async function updateCli(options:UpdateOptions):Promise<UpdatePreview|UpdateResult>;
 export async function updateCli(options:UpdateOptions){
  const platform=options.platform??process.platform,arch=options.arch??process.arch;
  if(!['darwin','linux'].includes(platform)||!['arm64','x64'].includes(arch))throw new CliError('unsupported_platform','Standalone releases support macOS and Linux on arm64 or x64.');
@@ -137,6 +137,6 @@ export async function updateCli(options:UpdateOptions){
   }
   const installed=await installSkills(operation.selected,{home:options.home,env:options.env,version:bundle.version,files:bundle.files,alreadyLocked:true});
   await rm(pendingPath);await rm(binaryPath,{force:true});
-  return{version:operation.manifest.version,protocol:operation.manifest.protocol,recovered:!!saved,...(operation.backup?{backup:operation.backup}:{}),...installed,plugins:await pluginSkillCopies(options.home,options.env)};
+  return{version:operation.manifest.version,protocol:operation.manifest.protocol,recovered:!!saved,...(operation.backup?{backup:operation.backup}:{}),...installed};
  });
 }

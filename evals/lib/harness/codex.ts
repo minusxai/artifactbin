@@ -30,34 +30,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { HarnessAdapter, HarnessResult, HarnessRunContext, TokenUsage } from '../contracts';
 import { NO_TELEMETRY, parseJsonl } from './shared';
-import type { PluginKit } from '../plugin-kit';
 
-/**
- * Codex installs a plugin only from a MARKETPLACE, and refuses a plugin
- * directory as one ("marketplace root does not contain a supported manifest")
- * — verified by running both. So the driver materializes the marketplace
- * mirror and Codex is pointed at that; the plugin is a path inside it, which
- * is what every other harness wants anyway.
- *
- * `plugin add` needs the marketplace named on the plugin (`<plugin>@<market>`)
- * or it refuses with "requires --marketplace" even when only one is configured.
- */
-export function pluginInstallCommands(kit: PluginKit): string[][] {
-  return [
-    ['codex', 'plugin', 'marketplace', 'add', kit.marketplaceDir],
-    ['codex', 'plugin', 'add', `${kit.plugin}@${kit.marketplace}`],
-  ];
-}
-
-function run(argv: string[], home: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(argv[0], argv.slice(1), { env: { ...process.env, CODEX_HOME: home }, stdio: ['ignore', 'ignore', 'pipe'] });
-    let err = '';
-    child.stderr.on('data', (c) => (err += c));
-    child.on('error', reject);
-    child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${argv.join(' ')} failed (${code}): ${err.trim()}`))));
-  });
-}
 
 const TOOL_ITEMS = new Set(['command_execution', 'mcp_tool_call', 'file_change', 'web_search']);
 
@@ -80,9 +53,7 @@ export const codex: HarnessAdapter = {
       child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`codex login failed (${code}): ${err.trim()}`))));
       child.stdin.end(ctx.apiKey);
     });
-    for (const argv of ctx.plugin ? pluginInstallCommands(ctx.plugin) : []) {
-      await run(argv, ctx.homeDir);
-    }
+    // Skills, when installed, sit under `$CODEX_HOME/skills`, where Codex discovers them itself.
   },
 
   invocation(ctx: HarnessRunContext) {

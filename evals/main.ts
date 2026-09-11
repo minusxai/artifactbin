@@ -35,9 +35,11 @@ import { legFromArgs, type Leg } from './lib/leg';
 import { discoverTasks, parseShard, selectTasks, shardTasks } from './lib/task-set';
 import { checksToRecord, gatedChecks, verdictFor } from './lib/score/verdict';
 import { buildPrompt, needsStartDocument, planAccess } from './lib/tasks';
-import { actionTransport, installsSkills, planTransport, providesConnection } from './lib/mode';
+import { actionTransport, cliPreinstalled, planTransport } from './lib/mode';
 import { startApprover } from './lib/approver';
-import { materializePlugin } from './lib/plugin-kit';
+import { skillKit } from './lib/skill-kit';
+import { CLI_VERSION } from '../services/cli/src/version';
+import { runCliSetup } from './lib/setup';
 import {materializeCli} from './lib/cli-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
@@ -52,7 +54,7 @@ import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
 import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
 import { seedDocument } from './lib/seed';
-import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, writeArtifactbinEnv, type Credential } from './lib/credential';
+import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
 import { exportDocument, inspectDocument, screenshotDocument } from './lib/score/browser';
 import { askedForAuthorization, dataflowRows, productMetrics, type ServedDocument } from './lib/score/product';
@@ -180,7 +182,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       // The agent is given the DEPLOYMENT's own address; its traffic is caught by where it SENDS.
       return { agentBase: config.deployment, agentEnv: agentProxyEnv(mitm.url, mitm.ca), ledgerPath, stop: mitm.stop };
     }
-    const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath, rewriteDeviceOrigin: publicOrigin });
+    const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath, rewriteDeviceOrigin: publicOrigin, localRelease: { version: CLI_VERSION, distDir: path.join(REPO_ROOT, 'services/cli/dist') } });
     log(`${leg.label}/${taskId}: proxy :${proxy.port}`);
     // The agent is given the PROXY's address; the server mints its links from it.
     return { agentBase: proxy.url, agentEnv: {}, ledgerPath, stop: proxy.stop };
@@ -192,11 +194,14 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   try {
     const baseDir = path.join(legDir, 'baseline');
     const baseWorkspace = createWorkspace(leg.label, 'baseline');
-    const basePlugin = installsSkills(leg.mode.run)
-      ? materializePlugin(path.join(baseWorkspace.homeDir, 'plugin'), config.deployment ?? productUrl)
-      : undefined;
+    // The baseline pays the same fixed context as a task: in the installed flow the skills are on disk.
+    let baseSkills = undefined as ReturnType<typeof skillKit> | undefined;
+    if (cliPreinstalled(leg.mode.run) && credential?.cookie) {
+      await runCliSetup({ cliBin: materializeCli(path.join(baseWorkspace.homeDir, 'bin')), homeDir: baseWorkspace.homeDir, harness: leg.harness, server: productUrl, publicOrigin, cookie: credential.cookie, log: (m) => log(`${leg.label}: baseline ${m}`) });
+      baseSkills = skillKit(baseWorkspace.homeDir, leg.harness);
+    }
     const baseline = await measureBaseline({
-      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, plugin: basePlugin, timeoutMs: config.run.timeoutMs, runAs, workspace: baseWorkspace, checkoutRoots: protectedRoots,
+      leg, adapter: adapterFor(leg.harness), apiKey, dir: baseDir, skills: baseSkills, timeoutMs: config.run.timeoutMs, runAs, workspace: baseWorkspace, checkoutRoots: protectedRoots,
     });
     const brec = new RunRecorder(legDir, { label: leg.label, target: productUrl, harness: leg.harness, model: leg.model, startedAt, mode: leg.mode.run }, BASELINE_ROWS_ID);
     brec.flow(BASELINE_FLOW, `${BASELINE_PROMPT} — the harness's fixed context, paid again on EVERY turn of every task below.`, { graded: false });
@@ -300,10 +305,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // EVERYTHING the driver does before the turn, decided in one place (`lib/tasks planAccess`) and
   // performed here: seed the document this task edits and write its private CLI credentials.
   // A `handoff: none` task gets neither.
-  const installed = installsSkills(leg.mode.run);
   const plan = planAccess({ task, base: r.agentBase, start, credential: r.credential });
   if (plan.seed) await seedDocument(r.agentBase, plan.seed.id, plan.seed.token, plan.seed.markup);
-  if (plan.connectionToken && providesConnection(leg.mode.run)) writeArtifactbinEnv(homeDir, r.agentBase, plan.connectionToken);
   const access = plan.access;
   // THE ONE CREDENTIAL THE DRIVER HOLDS for this task, read back OFF the plan rather than decided a
   // second time beside it: `planAccess` answers `kind: 'token'` in exactly the cases the driver was
@@ -314,9 +317,21 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const driverToken = plan.access.kind === 'token' ? plan.access.token : null;
   // Install the same local skill bundle shipped with the CLI. The private connection points
   // at this task's recording proxy; authoring guidance contains no credentials.
-  const plugin = installsSkills(leg.mode.run)
-    ? materializePlugin(path.join(homeDir, 'plugin'), r.agentBase)
-    : undefined;
+  // THE INSTALLED FLOW'S PRECONDITION, produced by the product: the driver installs afbin and runs its
+  // setup — approving the pairing as the person would — so the CLI itself saved the connection and put
+  // the skills where this harness looks, before the harness starts. A token-less task gets nothing.
+  const installed = cliPreinstalled(leg.mode.run);
+  let cliBin: string | null = null;
+  let skills: ReturnType<typeof skillKit> | undefined;
+  let setupApprovals: number | null = null;
+  if (cliPreinstalled(leg.mode.run)) {
+    cliBin = materializeCli(path.join(homeDir, 'bin'));
+    if (plan.access.kind === 'token' && r.credential?.cookie) {
+      const setup = await runCliSetup({ cliBin, homeDir, harness: leg.harness, server: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) });
+      setupApprovals = setup.approvals;
+      skills = skillKit(homeDir, leg.harness);
+    }
+  }
   // WHAT THIS KIND OF TASK NEEDS, and then the baseline — in that order, which is `prepareTask`'s
   // whole job (`lib/score/kinds`). A `comment` task's setup posts a comment, and the anchor stamp is
   // a REAL edit that bumps the version and rewrites the markup, so a baseline read before it would
@@ -347,11 +362,10 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
   const baseline = prepared.baseline;
 
-  const prompt = buildPrompt(task, access, { vision: leg.vision, mode: leg.mode.run });
+  const prompt = buildPrompt(task, access, { vision: leg.vision });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
-  const cliBin=materializeCli(path.join(homeDir,'bin'));
-  const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, plugin };
+  const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, skills };
   log(`${leg.label}/${task.id}: ${start ? `doc ${start.id}` : 'no credential, no document'} — running ${leg.harness} (${leg.model})`);
   await adapter.prepare(ctx);
   // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
@@ -359,13 +373,14 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // boot, and therefore only a floor. After `prepare`, which is the driver's setup, not the agent's time.
   // The `cold` treatment: the driver stands in for the person who approves `afbin setup`, but only when
   // this task was meant to have an account at all — the token-less task keeps its wall.
-  const approver = !providesConnection(leg.mode.run) && r.credential?.cookie && plan.access.kind === 'token'
+  const approver = !cliPreinstalled(leg.mode.run) && r.credential?.cookie && plan.access.kind === 'token'
     ? startApprover({ homeDir, agentBase: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
     : null;
   const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
-    baseEnv: { ...process.env, ...r.agentEnv, PATH:[cliBin,r.agentEnv.PATH??process.env.PATH??''].join(path.delimiter) },
+    // Installed: the staged afbin leads PATH. Not installed: only the installer's own target, `~/.local/bin` of the run home.
+    baseEnv: { ...process.env, ...r.agentEnv, PATH:[cliBin ?? path.join(homeDir, '.local', 'bin'),r.agentEnv.PATH??process.env.PATH??''].join(path.delimiter) },
     timeoutMs: config.run.timeoutMs,
     stdoutPath: path.join(runDir, 'transcript.jsonl'),
     stderrPath: path.join(runDir, 'stderr.log'),
@@ -465,7 +480,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'cost_usd', cost.usd);
   rec.record(task.id, 'duration_s', Math.round(spawned.durationMs / 100) / 10);
   // How many device pairings the driver approved on the agent's behalf (`cold` only); null when none could be.
-  rec.record(task.id, 'approvals', approver ? approver.approved.length : null, 'number');
+  rec.record(task.id, 'approvals', approver ? approver.approved.length : setupApprovals, 'number');
   // Every number the ledger answers, `versions` included, built in ONE pure place (`ledgerRows`) so
   // the count and its caller are one thing to break.
   for (const row of ledgerRows(ledger)) rec.record(task.id, row.metric, row.value);

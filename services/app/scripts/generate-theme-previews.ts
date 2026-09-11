@@ -14,7 +14,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
 import { STORY_THEMES } from '@/lib/data/story/story-themes';
-// YAML imports are registered by scripts/register-yaml.cjs (the build:plugin precedent).
+// YAML imports are registered by scripts/register-yaml.cjs.
 import { buildThemePreviewDocument } from '@/lib/data/story/theme-preview';
 
 const OUT_DIR = path.join(process.cwd(), 'public', 'story-themes');

@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { createHash } from 'node:crypto';
 /**
  * The recording proxy — the per-leg request ledger. Sits between the agent and
  * the product server, forwards everything verbatim (streams included), and
@@ -60,12 +62,20 @@ export const DRIVER_HEADER = 'x-eval-driver';
  * select, so the task proxy substitutes itself, exactly as a public host in front of the product would
  * be the origin in production.
  */
-export interface BodyRewrite { path: string; from: string; to: string }
+export interface BodyRewrite { path: string; from: string; to: string; /** `json` (the default) rewrites only JSON replies; `text` rewrites any text body. */ kind?: 'json' | 'text' }
+
+/**
+ * The locally built release, served by the task proxy so the `not-installed` flow installs THIS
+ * checkout's CLI through the real installer: `/chat/install.sh` is rewritten to download from the
+ * proxy (and, being plain http on 127.0.0.1, without the installer's https-only curl flags), and
+ * `/chat/releases/afbin-v<version>/<asset>` answers the platform binary and its SHA256SUMS from `dist/`.
+ */
+export interface LocalRelease { version: string; distDir: string }
 
 export function forwardExchange(
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  opts: { target: URL; transport: typeof http | typeof https; rewriteHost: boolean; record: (e: LedgerEntry) => void; rewriteBody?: BodyRewrite },
+  opts: { target: URL; transport: typeof http | typeof https; rewriteHost: boolean; record: (e: LedgerEntry) => void; rewriteBody?: BodyRewrite[] },
 ): void {
   const { target, transport, rewriteHost } = opts;
   const record = req.headers[DRIVER_HEADER] === undefined ? opts.record : () => {};
@@ -83,7 +93,7 @@ export function forwardExchange(
   const upstream = transport.request(
     { host: target.hostname, port: target.port || undefined, method, path: url, headers, servername: target.hostname },
     (up) => {
-      const rewrite = opts.rewriteBody && url.split('?')[0] === opts.rewriteBody.path && isJson(up.headers) ? opts.rewriteBody : null;
+      const rewrite = (opts.rewriteBody ?? []).find((r) => url.split('?')[0] === r.path && ((r.kind ?? 'json') === 'text' || isJson(up.headers))) ?? null;
       if (!rewrite) res.writeHead(up.statusCode ?? 502, up.headers);
       const rewriteChunks: Buffer[] = [];
       // A response body is retained for a failure (its `error` code) or a write (its echo + the artifact id).
@@ -100,7 +110,8 @@ export function forwardExchange(
       if (!rewrite) up.pipe(res);
       up.on('end', () => {
         if (rewrite) {
-          const body = Buffer.from(Buffer.concat(rewriteChunks).toString('utf8').split(rewrite.from).join(rewrite.to));
+          const text = Buffer.concat(rewriteChunks).toString('utf8');
+          const body = Buffer.from(rewrite.kind === 'text' ? rewriteInstallerForLocal(text, rewrite.from, rewrite.to) : text.split(rewrite.from).join(rewrite.to));
           res.writeHead(up.statusCode ?? 502, { ...up.headers, 'content-length': String(body.length) });
           res.end(body);
         }
@@ -154,13 +165,23 @@ export function createRecorder(ledgerPath: string): (e: LedgerEntry) => void {
   return (entry: LedgerEntry) => fs.appendFileSync(ledgerPath, JSON.stringify(entry) + '\n');
 }
 
-export async function startProxy(opts: { port: number; target: string; ledgerPath: string; rewriteHost?: boolean; /** The origin the product advertises on its OAuth device door; rewritten to this proxy's own. */ rewriteDeviceOrigin?: string }): Promise<RunningProxy> {
+export async function startProxy(opts: { port: number; target: string; ledgerPath: string; rewriteHost?: boolean; /** The origin the product advertises on its OAuth device door; rewritten to this proxy's own. */ rewriteDeviceOrigin?: string; localRelease?: LocalRelease }): Promise<RunningProxy> {
   const target = new URL(opts.target);
   const transport = transportFor(opts.target);
   const record = createRecorder(opts.ledgerPath);
   let self = '';
-  const server = http.createServer((req, res) =>
-    forwardExchange(req, res, { target, transport, rewriteHost: !!opts.rewriteHost, record, ...(opts.rewriteDeviceOrigin && self ? { rewriteBody: { path: '/oauth/device', from: opts.rewriteDeviceOrigin, to: self } } : {}) }));
+  const rewrites = (): BodyRewrite[] => {
+    if (!self) return [];
+    const list: BodyRewrite[] = [];
+    if (opts.rewriteDeviceOrigin) list.push({ path: '/oauth/device', from: opts.rewriteDeviceOrigin, to: self });
+    if (opts.localRelease) list.push({ path: '/chat/install.sh', from: 'https://github.com/minusxai/artifactbin/releases/download/afbin-v', to: `${self}/chat/releases/afbin-v`, kind: 'text' });
+    return list;
+  };
+  const server = http.createServer((req, res) => {
+    const pathname = (req.url ?? '/').split('?')[0];
+    if (opts.localRelease && pathname.startsWith(`/chat/releases/afbin-v${opts.localRelease.version}/`)) return serveLocalRelease(pathname, opts.localRelease, res);
+    forwardExchange(req, res, { target, transport, rewriteHost: !!opts.rewriteHost, record, rewriteBody: rewrites() });
+  });
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -175,6 +196,28 @@ export async function startProxy(opts: { port: number; target: string; ledgerPat
     // would hold the whole run open. See `lib/shutdown.ts`.
     stop: () => settleWithin(new Promise<void>((resolve) => { server.closeAllConnections?.(); server.close(() => resolve()); }), TEARDOWN_MS).then(() => undefined),
   };
+}
+
+/** The installer's https-only curl flags cannot fetch from a plain-http loopback proxy; the local rewrite drops them. */
+export function rewriteInstallerForLocal(body: string, from: string, to: string): string {
+  return body.split(from).join(to).replace(/--proto '=https' --proto-redir '=https' --tlsv1\.2 /g, '');
+}
+
+const RELEASE_ASSET = /^[A-Za-z0-9._-]+$/;
+function serveLocalRelease(pathname: string, release: LocalRelease, res: http.ServerResponse): void {
+  const asset = pathname.split('/').pop() ?? '';
+  if (!RELEASE_ASSET.test(asset)) { res.writeHead(404); res.end(); return; }
+  if (asset === 'SHA256SUMS') {
+    const lines = fs.readdirSync(release.distDir).filter((n) => /^afbin-(darwin|linux)-(arm64|x64)$/.test(n))
+      .map((n) => `${createHash('sha256').update(fs.readFileSync(path.join(release.distDir, n))).digest('hex')}  ${n}`);
+    const body = lines.join('\n') + '\n';
+    res.writeHead(200, { 'content-type': 'text/plain', 'content-length': String(Buffer.byteLength(body)) });
+    res.end(body); return;
+  }
+  const file = path.join(release.distDir, asset);
+  if (!/^afbin-(darwin|linux)-(arm64|x64)$/.test(asset) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+  res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': String(fs.statSync(file).size) });
+  fs.createReadStream(file).pipe(res);
 }
 
 function parseJson(buf: Buffer): Record<string, unknown> | null {

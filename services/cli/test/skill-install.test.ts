@@ -2,10 +2,10 @@ import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,symlink,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,symlink,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {installSkills,skillTargets,selectSkills} from '../src/skill-install';
+import {installSkills,restartHints,skillTargets,selectSkills} from '../src/skill-install';
 const bundle={'SKILL.md':'---\nname: artifactbin\ndescription: Publish artifacts.\n---\nHello','references/a.md':'A'};
 test('installation selects only requested harnesses, remembers opt-outs and backs up modified files',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-install-'));
@@ -80,5 +80,41 @@ test('malformed settings refuse explicit installation before any harness files c
   await assert.rejects(installSkills(['pi'],{home,env:{},files:bundle}),{code:'invalid_settings'});
   await assert.rejects(stat(skillTargets(home,{}).pi),{code:'ENOENT'});
   assert.equal(await readFile(join(home,'.artifactbin','settings.json'),'utf8'),'{broken');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+/**
+ * Claude Code and Codex read their skills folder once, when the process starts;
+ * pi and OpenCode read it per run. A skill written under a running Claude Code
+ * is invisible until it restarts, and nothing said so.
+ */
+test('a harness that discovers skills at startup is told to restart; one that discovers per run is not',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-restart-'));
+ try{
+  const targets=skillTargets(home,{});const options={home,env:{},files:bundle,version:'1.0.0'};
+  const fresh=await installSkills(['claude','codex','pi'],options);
+  const installedAt=async(name:'claude'|'codex'|'pi')=>await realpath(targets[name]);
+  assert.deepEqual(fresh.installations.filter(x=>x.restart_required).map(x=>x.path).sort(),[await installedAt('claude'),await installedAt('codex')].sort());
+  assert.equal(fresh.installations.find(x=>x.harnesses.includes('pi'))?.restart_required,undefined);
+  assert.deepEqual(restartHints(fresh.installations).sort(),[
+   `Restart Claude Code to load the installed skill at ${await installedAt('claude')}.`,
+   `Restart Codex to load the installed skill at ${await installedAt('codex')}.`,
+  ].sort());
+  // An install that changed nothing asks for no restart.
+  const again=await installSkills(['claude','codex','pi'],options);
+  assert.ok(again.installations.every(x=>x.status==='unchanged'&&x.restart_required===undefined));
+  assert.deepEqual(restartHints(again.installations),[]);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+test('setup prints the restart hint on stderr and records it in the JSON result',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-restart-setup-'));
+ try{
+  await saveConnection({server:'https://artifactbin.dev',token:'test_token'},home);
+  const out:string[]=[],err:string[]=[];
+  const code=await runCli(['setup','--harness','codex','--harness','pi','--yes','--json'],{home,cwd:home,env:{},interactive:false,stdout:x=>out.push(x),stderr:x=>err.push(x),fetch:async()=>Response.json({artifacts:[]})});
+  assert.equal(code,0,out.join(''));
+  const result=JSON.parse(out.join(''));
+  assert.deepEqual(result.installations.filter((x:any)=>x.restart_required).map((x:any)=>x.harnesses),[['codex']]);
+  assert.equal(err.join(''),`Restart Codex to load the installed skill at ${await realpath(skillTargets(home,{}).codex)}.\n`);
  }finally{await rm(home,{recursive:true,force:true});}
 });

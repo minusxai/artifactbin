@@ -1,20 +1,20 @@
 /**
- * Two treatments of the same product surface, the CLI.
+ * Two flows of one product surface, the CLI.
  *
- * `installed`: the CLI is on PATH, its local skill bundle is already in the harness's skill
- * directory and the account connection is saved in `~/.artifactbin/.env` before the agent starts.
- * This measures authoring with the guidance a set-up machine has.
+ * `installed`: afbin is on PATH and has been RUN — the driver executes `afbin setup` in the run home
+ * before the agent starts, approving the browser pairing as the person would (`lib/approver.ts`), so
+ * the CLI itself saved the account connection and installed the skills where the harness looks.
  *
- * `cold`: the CLI is on PATH and nothing else is set up — no skills, no connection. The agent has to
- * run `afbin setup`, which opens browser approval and installs the skills; the driver approves the
- * pairing with its own session (`lib/approver.ts`) so the flow completes headlessly and the agent
- * never sees a token. Skills installed mid-run are on disk but not loaded by a harness that
- * discovers them at startup, which is exactly the situation the restart hint describes.
+ * `not-installed`: nothing exists until the agent acts. No afbin on PATH, no skills, no connection.
+ * The agent must find the installer from the server (homepage or llms.txt), run it, and run
+ * `afbin setup`; the driver approves that pairing too. The task proxy serves the installer and the
+ * locally built release so the flow is measurable against this checkout (`lib/proxy.ts`).
+ *
+ * There is no plugin, MCP or separately staged skill treatment: skills only ever arrive through the CLI.
  */
 import type {Harness} from './contracts';
-export const EVAL_MODES=['installed','cold'] as const;
+export const EVAL_MODES=['installed','not-installed'] as const;
 export type EvalMode=(typeof EVAL_MODES)[number];
-export type SkillSource='installed_skill'|'none';
 export type ActionTransport='cli';
 export const DEFAULT_MODE:EvalMode='installed';
 export interface ModePlan {asked:EvalMode;run:EvalMode;substitutedWhy:null}
@@ -22,13 +22,9 @@ export function parseMode(raw:string):EvalMode{
  if(!(EVAL_MODES as readonly string[]).includes(raw))throw new Error(`unknown --mode "${raw}" — known: ${EVAL_MODES.join(', ')}`);
  return raw as EvalMode;
 }
-export function skillSource(mode:EvalMode):SkillSource{return mode==='installed'?'installed_skill':'none';}
 export function actionTransport(_mode:EvalMode):ActionTransport{return 'cli';}
-export function modeFor(source:SkillSource,_actions:ActionTransport):EvalMode{return source==='installed_skill'?'installed':'cold';}
 export function planMode(_harness:Harness,asked:EvalMode):ModePlan{return {asked,run:asked,substitutedWhy:null};}
-/** The driver stages the skill bundle before the agent starts. */
-export function installsSkills(mode:EvalMode):boolean{return mode==='installed';}
-/** The driver writes the account connection before the agent starts. */
-export function providesConnection(mode:EvalMode):boolean{return mode==='installed';}
+/** The driver stages afbin on PATH and runs its setup before the agent starts. */
+export function cliPreinstalled(mode:EvalMode):boolean{return mode==='installed';}
 export interface TransportPlan {run:ActionTransport;asked:ActionTransport;substitutedWhy:null}
 export function planTransport(_harness:Harness,asked:ActionTransport):TransportPlan{return {asked,run:asked,substitutedWhy:null};}
