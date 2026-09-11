@@ -8,7 +8,7 @@
  * be committed (`info/exclude`, `.gitignore`).
  *
  *   node scripts/agent-worktree.mjs --phase p2 --brief ../p2-brief.md            # from the repo the agent works in
- *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule services/artifactbin=<commit>
+ *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule <path>=<commit>
  *   node scripts/agent-worktree.mjs --phase p2 --remove                          # tear it down (branch kept)
  *
  * Options: --base <branch> (default main) · --dir <path> (default ../<repo>-<phase>) · --install (npm install there)
@@ -71,7 +71,7 @@ const base = arg('--base', 'main');
 const exists = git(['branch', '--list', branch], root) !== '';
 git(['worktree', 'add', ...(exists ? [] : ['-b', branch]), dir, exists ? branch : base], root);
 
-// 2. a pinned submodule, when asked (prod hands the agent the OSS commit it builds on)
+// 2. a pinned submodule, when asked (a downstream repository hands the agent the commit it builds on)
 const pin = arg('--pin-submodule');
 if (pin) {
   const [sub, commit] = pin.split('=');
