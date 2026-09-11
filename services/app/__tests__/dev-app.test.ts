@@ -158,7 +158,7 @@ describe('scripts/dev-app.mjs', () => {
   beforeAll(() => {
     writeFileSync(path.join(shimDir, 'npx'), `#!/usr/bin/env node
 const fs = require('node:fs');
-const pick = ['SQL__SERVICE_URL', 'BROWSER__SERVICE_URL', 'APP__PORT', 'APP__HMR_PORT', 'NODE_ENV'];
+const pick = ['SQL__SERVICE_URL', 'BROWSER__SERVICE_URL', 'APP__PORT', 'APP__HMR_PORT', 'NODE_ENV', 'PROXY__RATE_LIMIT_CONFIG_FILE'];
 fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
   argv: process.argv.slice(2),
   cwd: process.cwd(),
@@ -179,6 +179,7 @@ fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
         APP__PORT: '5221',
         APP__HMR_PORT: '5222',
         NODE_ENV: 'test',
+        PROXY__RATE_LIMIT_CONFIG_FILE: 'services/proxy/selfhost_rate_limits.yml',
       },
     });
     spawned = JSON.parse(readFileSync(shimOut, 'utf8'));
@@ -204,6 +205,10 @@ fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
     // would send every query to a dead service with nothing saying why.
     expect(spawned.env.SQL__SERVICE_URL).toBeNull();
     expect(spawned.env.BROWSER__SERVICE_URL).toBeNull();
+  });
+
+  it('resolves the setup policy from the checkout before changing the child cwd', () => {
+    expect(spawned.env.PROXY__RATE_LIMIT_CONFIG_FILE).toBe(path.join(ROOT, 'services/proxy/selfhost_rate_limits.yml'));
   });
 
   it('prints ONE line when the environment names the service URLs', () => {

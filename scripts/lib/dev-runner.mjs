@@ -45,8 +45,9 @@ export async function runDev({ appOnly, args = [] }) {
     // window is in memory, and the only recovery is restarting the dev server
     // in the middle of whatever you were verifying. A .env or an explicit
     // PROXY__RATE_LIMIT_CONFIG_FILE wins, so nothing here can reach production.
-    PROXY__RATE_LIMIT_CONFIG_FILE: process.env.PROXY__RATE_LIMIT_CONFIG_FILE
-      ?? path.join(ROOT, 'services/proxy/dev_rate_limits.yml'),
+    // setup writes checkout-relative paths; the server runs from APP_ROOT.
+    PROXY__RATE_LIMIT_CONFIG_FILE: path.resolve(ROOT,
+      process.env.PROXY__RATE_LIMIT_CONFIG_FILE?.trim() || 'services/proxy/dev_rate_limits.yml'),
   };
   delete env.EMAIL__RESEND_BASE_URL;
   if (appOnly) {
