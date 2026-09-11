@@ -1,6 +1,11 @@
 import {parseJsx,type JsxElement} from '../../app/lib/jsx';
+import {extname,join,resolve} from 'node:path';
 import {CliError} from './errors';
-import type {Snapshot} from './workspace';
+import {atomicWrite,readOptional} from './files';
+import {confinedPath} from './journal';
+import {parseResourceFile} from './resource-file';
+import type {HttpClient} from './http';
+import type {Snapshot,Workspace} from './workspace';
 
 /** The dataset's local source: rows for one stored table, a `<Dataset>` definition for everything else. */
 export function flatDataset(snapshot:Snapshot):boolean{
@@ -44,4 +49,33 @@ export function withSecretId(source:string,connection:DefinitionConnection,secre
  if(!/^[A-Za-z0-9_-]{1,128}$/.test(secretId))throw new CliError('invalid_response','The server returned an unusable secret id.');
  const attribute=`passwordSecretId="${secretId}"`;
  return source.slice(0,connection.span.start)+(connection.span.start===connection.span.end?' ':'')+attribute+source.slice(connection.span.end);
+}
+
+/**
+ * Bind a connection password once. The value is read from the environment, sent to the
+ * secret door and forgotten; only the returned id is written anywhere, and it is written
+ * into the definition the same push publishes.
+ */
+export async function bindDatasetSecret(workspace:Workspace,paths:string[],client:HttpClient,env:NodeJS.ProcessEnv,variable:string,dryRun=false):Promise<Record<string,unknown>>{
+ if(paths.length!==1)throw new CliError('invalid_arguments','--secret-env binds the password of one dataset connection.','Push that dataset YAML on its own.');
+ const path=await confinedPath(workspace.root,resolve(workspace.cwd,paths[0]));
+ const bytes=await readOptional(path);
+ if(!bytes)throw new CliError('missing_file',`Missing ${paths[0]}.`);
+ if(!/\.ya?ml$/i.test(path))throw new CliError('invalid_arguments','--secret-env applies to a dataset YAML whose source is a <Dataset> definition.');
+ const resource=parseResourceFile(bytes.toString());
+ if(resource.type!=='dataset'||!resource.source)throw new CliError('invalid_arguments','--secret-env applies to a dataset YAML whose source is a <Dataset> definition.');
+ if(extname(resource.source).toLowerCase()!=='.jsx')throw new CliError('invalid_arguments','Only a <Dataset> definition holds a connection.','A dataset of stored rows has no password.');
+ const definitionPath=await confinedPath(workspace.root,resolve(workspace.root,join(path,'..'),resource.source));
+ const definition=await readOptional(definitionPath);
+ if(!definition)throw new CliError('missing_source',`Cannot read source ${resource.source}.`);
+ const connection=datasetConnection(definition.toString());
+ if(!connection)throw new CliError('no_connection','The definition declares no <Connection> to bind a password to.','Add the connection first, or publish without --secret-env.');
+ const value=env[variable];
+ if(typeof value!=='string'||!value)throw new CliError('missing_secret',`The environment variable ${variable} is empty.`,'Export the password in the environment; it is never read from a file or an argument.');
+ if(dryRun)return{secret:{source:variable,status:'would_create'},connection:connection.target,source:resource.source};
+ const created=await client.request<{secret?:{id?:unknown}}>('/secrets','POST',{value,connection:connection.target,...(resource.id?{datasetId:resource.id}:{})});
+ const id=created.secret?.id;
+ if(typeof id!=='string'||!id)throw new CliError('invalid_response','The secret door did not return a secret id.');
+ await atomicWrite(definitionPath,Buffer.from(withSecretId(definition.toString(),connection,id)));
+ return{secret:{id,source:variable},source:resource.source};
 }

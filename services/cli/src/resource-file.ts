@@ -77,6 +77,7 @@ export async function resourceContent(resource:ArtifactResourceFile,path:string,
   if(extension!=='.jsx')throw new CliError('invalid_resource_source','An artifact source must be a JSX file.');
   return {markup:parseDocument(bytes.toString()).body};
  }
+ if(resource.type==='dataset'&&extension==='.jsx')return {dataset:bytes.toString()};
  if(resource.type==='dataset'&&!['.csv','.json'].includes(extension)||resource.type==='file'&&['.csv','.json','.jsx','.yaml','.yml'].includes(extension))throw new CliError('invalid_resource_source',`The source format does not match type ${resource.type}.`);
  return assetInput(source,bytes);
 }

@@ -27,6 +27,7 @@ import {browserAuthenticate,ApprovalRequired,type AuthOptions} from './browser-a
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull,pullToStdout} from './pull';
+import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
@@ -37,7 +38,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  try{
   parsed=parseCommand(argv);json=!!parsed.flags.json;
   const {command,positionals,flags}=parsed;
-  let recoveredRequest:string|undefined;let markdownPlan:MarkdownPlan|undefined;let querySql:string|undefined;
+  let recoveredRequest:string|undefined;let markdownPlan:MarkdownPlan|undefined;let querySql:string|undefined;let secretBinding:Record<string,unknown>|undefined;
   const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':JSON.stringify(value,null,2)+'\n');};
   if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`afbin ${CLI_VERSION}`);return 0;}
   if(flags.help||command==='help'){
@@ -126,8 +127,9 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='log'){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));emit(result.value);return result.exitCode;}
   if(command==='pull'&&flags.output==='-'){const result=await pullToStdout(workspace,positionals,client,parsed,stdout);if(result)emit(result);return 0;}
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
+  if(command==='push'&&!account&&typeof flags['secret-env']==='string')secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd);}
-  if(command==='push'&&!account){emit(await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
+  if(command==='push'&&!account){emit({...await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;}
   if(command==='remote'){
    // The PTY graph is loaded only after the user selects remote execution.
    const {chooseLaunch}=await import('./launcher');const {runRemote}=await import('./runner');
@@ -148,7 +150,7 @@ function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
  if(['fork','export','open'].includes(command))pending(`afbin ${command}`);
  if(typeof flags.type==='string'&&PENDING_TYPES[command]?.includes(flags.type))pending(`afbin ${command} --type ${flags.type}`);
- for(const flag of ['restore','refresh','secret-env','session','page'])if(flags[flag]!==undefined)pending(`--${flag}`);
+ for(const flag of ['restore','refresh','session','page'])if(flags[flag]!==undefined)pending(`--${flag}`);
  if(command==='validate'&&flags.remote)pending('validate --remote');
  if(command==='status'&&positionals.length)pending('status <ref>');
  if(command==='list'&&positionals.length)pending('list <ref>');
