@@ -1,3 +1,4 @@
+import {configDir} from './config';
 /** Explicit release update. Ordinary commands never import release metadata from the network. */
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -84,7 +85,7 @@ export async function updateCli(options:UpdateOptions){
  if(!['darwin','linux'].includes(platform)||!['arm64','x64'].includes(arch))throw new CliError('unsupported_platform','Standalone releases support macOS and Linux on arm64 or x64.');
  if(options.dryRun)return previewUpdate(options,platform,arch);
  const installation=options.installation??await detectInstallation();
- const state=join(options.home,'.artifactbin'),pendingPath=join(state,'pending-update.json'),binaryPath=join(state,'update-download');
+ const state=configDir(options.home,options.env),pendingPath=join(state,'pending-update.json'),binaryPath=join(state,'update-download');
  // Recover before making a release or server request. The release remains frozen across interruptions.
  const saved=await readOptional(pendingPath);
  let pending:PendingUpdate|undefined;

@@ -1,3 +1,4 @@
+import {configDir} from './config';
 /** Local integration boundary: selection never writes; installation owns managed files only. */
 import {cp,lstat,mkdir,readdir,realpath,rm} from 'node:fs/promises';
 import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
@@ -22,15 +23,15 @@ export function skillTargets(home:string,env:NodeJS.ProcessEnv=process.env):Reco
   opencode:join(env.OPENCODE_CONFIG_DIR??join(env.XDG_CONFIG_HOME??join(home,'.config'),'opencode'),'skills','artifactbin'),
  };
 }
-async function settings(home:string):Promise<Settings|undefined>{
- const bytes=await readOptional(join(home,'.artifactbin','settings.json'));if(!bytes)return;
+async function settings(home:string,env:NodeJS.ProcessEnv={}):Promise<Settings|undefined>{
+ const bytes=await readOptional(join(configDir(home,env),'settings.json'));if(!bytes)return;
  try{const value=JSON.parse(bytes.toString());if(!Array.isArray(value.harnesses)||value.harnesses.some((x:unknown)=>!skillHarnesses.includes(x as SkillHarness)))throw new Error();return value;}
  catch{throw new CliError('invalid_settings','Cannot read the saved harness selection.','Repair ~/.artifactbin/settings.json or move it aside, then run afbin setup.');}
 }
 export async function selectSkills(options:{home:string;env?:NodeJS.ProcessEnv;interactive:boolean;yes?:boolean;requested?:string[];detected?:string[];choose?:(choices:SkillChoice[])=>Promise<SkillHarness[]>}):Promise<SkillHarness[]>{
  if(options.requested){if(options.requested.some(x=>!([...skillHarnesses,'none'] as string[]).includes(x))||options.requested.includes('none')&&options.requested.length>1)throw new CliError('invalid_harness','Choose harness names or none.');return options.requested.filter(x=>x!=='none') as SkillHarness[];}
  const env=options.env??process.env;const targets=skillTargets(options.home,env);
- const saved=await settings(options.home);
+ const saved=await settings(options.home,options.env);
  const detected=options.detected??(await installedHarnesses(env.PATH??'')).map(x=>x.command);
  const selected=saved?.harnesses??skillHarnesses.filter(name=>detected.includes(name));
  if(!options.interactive||options.yes)return [...selected];
@@ -123,7 +124,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
  const targets=skillTargets(options.home,options.env);const groups=new Map<string,SkillHarness[]>();
  for(const name of selected){const path=await physicalPath(resolve(targets[name]));groups.set(path,[...(groups.get(path)??[]),name]);}
  const install=async()=>{
-  const saved=await settings(options.home)??{};
+  const saved=await settings(options.home,options.env)??{};
   const installations:SkillInstallation[]=[];
   for(const [path,harnesses] of groups){
    const manifestBytes=await readOptional(join(path,'.afbin-skill.json'));let previous:Manifest|undefined;
@@ -141,7 +142,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
    if(!changed){installations.push({path,harnesses,status:'unchanged',source:previous?.source??SKILL_SOURCE,version:previous?.version??version});continue;}
    let backup:string|undefined;
    if(existed&&(!previous||modified)){
-    const backupRoot=join(options.home,'.artifactbin','skill-backups');await privateDirectory(backupRoot);
+    const backupRoot=join(configDir(options.home,options.env),'skill-backups');await privateDirectory(backupRoot);
     backup=join(backupRoot,`${harnesses[0]}-${randomUUID()}`);await cp(path,backup,{recursive:true,dereference:false,errorOnExist:true,force:false});
    }
    await mkdir(path,{recursive:true});
@@ -151,7 +152,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
    installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{})});
   }
   // Preserve other settings when adding the selected integrations.
-  await atomicWrite(join(options.home,'.artifactbin','settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');
+  await atomicWrite(join(configDir(options.home,options.env),'settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');
   return {installations,harnesses:[...new Set(selected)]};
  };
  return options.alreadyLocked?install():withProcessLock(options.home,install);

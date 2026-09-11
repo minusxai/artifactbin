@@ -2,7 +2,7 @@ import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {CliError} from './commands';
 import {loadConnection,saveConnection,normalizeServer,type Connection} from './config';
-export interface HttpOptions {connection:Connection;home?:string;fetch?:typeof fetch;readOnly?:boolean;account?:string;authenticate?:()=>Promise<Connection>}
+export interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;authenticate?:()=>Promise<Connection>}
 export class HttpClient {
  connection:Connection;
  account?:string;
@@ -62,13 +62,13 @@ export class HttpClient {
   const {withProcessLock}=await import('./process-lock');
   const home=this.options.home??homedir();
   await withProcessLock(home,async()=>{
-   const saved=await loadConnection(this.connection.server,home,{});
+   const saved=await loadConnection(this.connection.server,home,{ARTIFACTBIN_HOME:this.options.env?.ARTIFACTBIN_HOME});
    if(saved&&saved.token!==this.connection.token&&saved.refreshToken&&saved.clientId===this.connection.clientId){this.connection=saved;return;}
    const response=await(this.options.fetch??fetch)(`${this.connection.server}/oauth/token`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:this.connection.clientId,refresh_token:this.connection.refreshToken,resource:`${this.connection.server}${API_RESOURCE_PATH}`})});
    const data=await response.json().catch(()=>null);
    if(!response.ok||typeof data?.access_token!=='string'||typeof data?.refresh_token!=='string'||!Number.isFinite(data?.expires_in)||data.expires_in<=0)throw new CliError('auth_required','auth_required: credentials could not be refreshed.','Run afbin setup again.');
    this.connection={...this.connection,token:data.access_token,refreshToken:data.refresh_token,expiresAt:Date.now()+data.expires_in*1000};
-   await saveConnection(this.connection,home);
+   await saveConnection(this.connection,home,{ARTIFACTBIN_HOME:this.options.env?.ARTIFACTBIN_HOME});
   });
  }
 }

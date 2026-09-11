@@ -402,7 +402,7 @@ Owner: A resources, B new commands, C read and query edges, D distribution, P pr
 
     **Acceptance / remaining work:** Define result envelopes, partial failures and output-file/stdout interactions consistently.
 
-    **`--server <origin>`:** Select the server. Explicit flag overrides the tracked workspace origin, then `ARTIFACTBIN_URL`, then saved configuration/default. Credentials remain origin-scoped.
+    **`--server <origin>`:** Select the server. Explicit flag overrides the tracked workspace origin, then `ARTIFACTBIN_URL`, then saved configuration/default. Credentials remain origin-scoped and are stored one file per origin under the state directory (`~/.artifactbin`, or `ARTIFACTBIN_HOME`), so switching origins selects the matching credential without re-approval; the first origin set up is the default.
 
     **Acceptance / remaining work:** Retain precedence across new commands; cover localhost in validation.
 

@@ -104,13 +104,13 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   let connection=await loadConnection(server,home,context.env);
   const firstAuthentication=!connection;
-  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,interactive,noBrowser:!!flags['no-browser'],rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(message+'\n')});
+  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,noBrowser:!!flags['no-browser'],rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(message+'\n')});
   if(command==='setup'&&flags['dry-run']){
    const harnesses=await selectSkills({home,env:context.env,interactive:false,requested:flags.harness as string[]|undefined});
    emit({dry_run:true,server:connection?.server??server??'https://artifactbin.dev',credentials:connection?'saved_not_verified':'missing',harnesses});return 0;
   }
   if(command==='setup'&&connection){
-   const probe=new HttpClient({connection,home,fetch:context.fetch});
+   const probe=new HttpClient({connection,home,env:context.env,fetch:context.fetch});
    try{await probe.request('/artifacts?limit=1');connection=probe.connection;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;connection=await authenticate();}
   }
   if(!connection){
@@ -123,7 +123,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(command==='setup'){emit({authenticated:true,server:connection.server,...installed});return 0;}
    for(const item of installed.installations)stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
   }
-  const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
   if(command==='export'){await exportResources(workspace,positionals,{...exportOptions(),client});return 0;}

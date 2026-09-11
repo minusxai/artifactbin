@@ -77,3 +77,30 @@ test("persists refresh credentials privately but explicit tokens never inherit t
     assert.deepEqual(await loadConnection(undefined, home, {ARTIFACTBIN_URL:connection.server, ARTIFACTBIN_TOKEN:'mx_explicit'}), {server:connection.server, token:'mx_explicit'});
   } finally { await rm(home,{recursive:true,force:true}); }
 });
+
+test("keeps one credential per origin, so switching servers never re-prompts or overwrites", async () => {
+  const home = await mkdtemp(join(tmpdir(), "afbin-origins-"));
+  try {
+    await saveConnection({ server: "https://artifactbin.dev", token: "mx_prod" }, home, {});
+    await saveConnection({ server: "http://localhost:3030", token: "mx_local" }, home, {});
+    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://artifactbin.dev", token: "mx_prod" });
+    assert.deepEqual(await loadConnection("http://localhost:3030", home, {}), { server: "http://localhost:3030", token: "mx_local" });
+    assert.deepEqual(await loadConnection(undefined, home, { ARTIFACTBIN_URL: "http://localhost:3030" }), { server: "http://localhost:3030", token: "mx_local" });
+    assert.match(await readFile(join(home, ".artifactbin/.env"), "utf8"), /ARTIFACTBIN_TOKEN=mx_prod/);
+    await saveConnection({ server: "http://localhost:3030", token: "mx_local2" }, home, {});
+    assert.deepEqual(await loadConnection("http://localhost:3030", home, {}), { server: "http://localhost:3030", token: "mx_local2" });
+    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://artifactbin.dev", token: "mx_prod" });
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test("ARTIFACTBIN_HOME selects a separate private state directory", async () => {
+  const home = await mkdtemp(join(tmpdir(), "afbin-home-"));
+  try {
+    const env = { ARTIFACTBIN_HOME: join(home, ".artifactbin.local") };
+    await saveConnection({ server: "http://localhost:3030", token: "mx_local" }, home, env);
+    assert.deepEqual(await loadConnection("http://localhost:3030", home, env), { server: "http://localhost:3030", token: "mx_local" });
+    assert.equal(await loadConnection("http://localhost:3030", home, {}), null);
+    assert.equal((await stat(join(home, ".artifactbin.local"))).mode & 0o777, 0o700);
+    await assert.rejects(stat(join(home, ".artifactbin")), { code: "ENOENT" });
+  } finally { await rm(home, { recursive: true, force: true }); }
+});

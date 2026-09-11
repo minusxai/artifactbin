@@ -1,3 +1,4 @@
+import {configDir} from './config';
 import {CliError} from './commands';
 /** Browser consent and bounded polling, independent of terminal prompts and command dispatch. */
 import {loopbackAuthenticate} from './loopback-auth';
@@ -19,6 +20,8 @@ export class ApprovalRequired extends Error {
 }
 export interface AuthOptions {
   home?: string;
+  /** Only `ARTIFACTBIN_HOME` is read here: an explicit `ARTIFACTBIN_TOKEN` never short-circuits browser approval. */
+  env?: NodeJS.ProcessEnv;
   interactive: boolean;
   /** Browser launch is independent of terminal prompts. Approval waiting is bounded. */
   noBrowser?: boolean;
@@ -39,9 +42,9 @@ export async function browserAuthenticate(origin:string,options:AuthOptions):Pro
  const server=normalizeServer(origin);
  const home=options.home??homedir();
  return withProcessLock(home,async()=>{
-  const saved=await loadConnection(server,home,{});
+  const saved=await loadConnection(server,home,{ARTIFACTBIN_HOME:options.env?.ARTIFACTBIN_HOME});
   if(saved&&saved.token!==options.rejectedToken&&(!saved.expiresAt||saved.expiresAt>(options.now??Date.now)()))return saved;
-  const pending=await readOptional(join(home,'.artifactbin',`pairing-${digest(server).slice(0,16)}.json`));
+  const pending=await readOptional(join(configDir(home,options.env),`pairing-${digest(server).slice(0,16)}.json`));
   if(options.interactive&&!options.noBrowser&&!pending)return loopbackAuthenticate(server,{...options,open:options.open??openBrowser});
   return deviceAuthenticate(server,options);
  },{name:`auth-${digest(server).slice(0,16)}`,waitMs:300000});
@@ -51,7 +54,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   const home = options.home ?? homedir();
   const clock = options.now ?? Date.now;
   const request = options.fetch ?? fetch;
-  const file = join(home, '.artifactbin', `pairing-${digest(server).slice(0,16)}.json`);
+  const file = join(configDir(home,options.env), `pairing-${digest(server).slice(0,16)}.json`);
   const post = async (path: string, body?: unknown) => {
     const response = await request(`${server}${path}`, {method:'POST', redirect:'error', signal:AbortSignal.timeout(15000),
       headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
@@ -75,7 +78,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
       if(advertised&&advertised!==server)throw new CliError('approval_origin_mismatch',`The selected server ${server} asks for approval at ${advertised}, a different origin.`,`Run the command with --server ${advertised} if that is the server you meant; credentials are never sent to an origin you did not select.`);
       throw new CliError('invalid_response','Authentication server returned invalid pairing details.');
     }
-    await privateDirectory(join(home,'.artifactbin'));
+    await privateDirectory(configDir(home,options.env));
     await atomicWrite(file,JSON.stringify(pending));
   }
   const approval = new ApprovalRequired(pending.verificationUrl,pending.userCode,pending.expiresAt);
@@ -90,7 +93,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
       if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string' || typeof data.client_id !== 'string'
         || !Number.isFinite(data.expires_in) || data.expires_in <= 0) throw new CliError('invalid_response','Authentication server returned invalid credentials.');
       const connection: Connection = {server,token:data.access_token,refreshToken:data.refresh_token,clientId:data.client_id,expiresAt:clock()+data.expires_in*1000};
-      await saveConnection(connection,home);
+      await saveConnection(connection,home,{ARTIFACTBIN_HOME:options.env?.ARTIFACTBIN_HOME});
       await unlink(file);
       return connection;
     }
