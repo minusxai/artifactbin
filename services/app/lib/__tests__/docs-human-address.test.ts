@@ -33,9 +33,9 @@ describe('the human docs address', () => {
   it('the docs server never sniffs Accept', () => {
     expect(code(read('lib/skills/serve.ts'))).not.toContain('text/html');
   });
-  it('the shell head names /docs for agents', () => {
+  it('the static shell carries no agent pointer of its own: the server injects the one source on every page', () => {
     const html = read('web/index.html');
-    expect(html).toMatch(/<link rel="help" href="\/llms.txt" title="[^"]+"/);
-    expect(html).toMatch(/<meta name="artifactbin:agent" content="[^"]*afbin[^"]*"/);
+    expect(html).not.toContain('rel="help"');
+    expect(html).not.toContain('artifactbin:agent');
   });
 });

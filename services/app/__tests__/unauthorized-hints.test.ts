@@ -9,10 +9,10 @@ import { GET as listMine } from '@/app/api/my/tokens/route';
 const BASE = 'http://localhost:3000';
 
 describe('401 bodies', () => {
-  it('GET /api/artifacts without a credential names the docs and the token page', async () => {
+  it('GET /api/artifacts without a credential names setup, the one-pager and the token page', async () => {
     const res = await listArtifacts(new Request(`${BASE}/api/artifacts`));
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: 'unauthorized', help: `afbin setup --server ${BASE}`, tokens: `${BASE}/tokens/new` });
+    expect(await res.json()).toEqual({ error: 'unauthorized', help: `afbin setup --server ${BASE}`, guide: `${BASE}/llms.txt`, tokens: `${BASE}/tokens/new` });
   });
   it('a session-only route says the same', async () => {
     const res = await listMine(new Request(`${BASE}/api/my/tokens`));

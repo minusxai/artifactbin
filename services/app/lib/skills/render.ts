@@ -12,13 +12,16 @@
  * `[[ basee ]]` as nothing, silently). No `if`: a file that needs one is two
  * files.
  *
- * Globals: `base` (the caller's origin — the ONLY runtime value; the plugin
- * renders it once with the production base), `themes`, `templates`,
+ * Globals: `base` (the caller's origin — the ONLY runtime value; the CLI
+ * bundle renders it once with the production base), `example` (the brief's
+ * inlined document, read from `skills/artifactbin/example.jsx` for `SKILL.md` only), `themes`, `templates`,
  * `components`, `tags`, `refusedTags`, `maxContentBytes`, `claim` (the advice
  * relayed to a person about their anonymous token), and
  * — inside `themes/<n>.md` / `templates/<n>.md` — that file's own registry
  * entry as `theme` / `template`.
  */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import nunjucks from 'nunjucks';
 import { STORY_THEMES } from '@/lib/data/story/story-themes';
 import { STORY_TEMPLATES } from '@/lib/data/story/story-templates';
@@ -32,6 +35,11 @@ import { anonymousClaimRelay } from '@/lib/agent-copy';
 import type { SkillFile } from './tree';
 
 export interface RenderOptions { base: string }
+
+/** The complete example document the brief inlines verbatim; `afbin help example` prints the same file. */
+export function skillExample(root = path.resolve(process.cwd(), 'skills')): string {
+  return readFileSync(path.join(root, 'artifactbin', 'example.jsx'), 'utf8');
+}
 
 const env = new nunjucks.Environment(null, {
   autoescape: false,
@@ -77,6 +85,8 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
     return env.renderString(file.body, {
       ...REGISTRY_GLOBALS,
       base: opts.base,
+      // Only the brief inlines the example; a reference that names it is a build failure, by design.
+      ...(file.file === 'SKILL.md' && !file.ref ? { example: skillExample().trimEnd() } : {}),
       claim,
       publishExample: '```sh\nafbin push report.jsx\n```',
       editExample: 'Edit the local JSX file, then run `afbin push report.jsx`.',

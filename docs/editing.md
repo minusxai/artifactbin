@@ -18,9 +18,9 @@ POST /api/artifacts/<id>/edits
 
 `edit_id` is an unguessable token returned by every read and every accepted
 edit — it proves the caller actually read the version it is changing, so
-read-before-write cannot be skipped by guessing a version number. `GET /docs` is a self-describing skills tree (one small file per topic, the brief first);
-the agent doesn't even need a token — it mints an anonymous one with one curl
-and starts publishing.
+read-before-write cannot be skipped by guessing a version number. `GET /llms.txt` is the one-pager that
+tells an agent what artifactbin is and how to install and connect the CLI, which installs the local
+skill (the brief, then one small file per topic).
 
 ## The editor
 

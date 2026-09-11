@@ -38,4 +38,4 @@ const artifactUrl = (base: string, artifactId: string): string =>
   `${base.replace(/\/$/, '')}/a/${artifactId}`;
 
 const docsHint = (base: string): string =>
-  `Use afbin: pull, edit local JSX, validate, push. Read afbin help and the local skill. Connect with afbin setup --server ${base.replace(/\/$/, '')} for browser approval.`;
+  `Use afbin (afbin help): pull, edit local JSX, validate, push. Connect: afbin setup --server ${base.replace(/\/$/, '')}. Guide: ${base.replace(/\/$/, '')}/llms.txt.`;

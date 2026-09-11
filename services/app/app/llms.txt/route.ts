@@ -1,8 +1,9 @@
 import {baseUrl,MARKDOWN_CONTENT_TYPE} from '@/lib/http';
+import {llmsText} from '@/lib/agent-discovery';
 
-/** Discovery only: authoring guidance ships in the versioned local bundle. */
+/** The served one-pager for an agent with nothing installed: what artifactbin is, install, connect, then the local skill. */
 export async function GET(request:Request){
- return new Response(`# artifactbin\n\nInstall: curl -fsSL ${baseUrl(request)}/chat/install.sh | sh\nConnect: afbin setup --server ${baseUrl(request)}\nLocal reference: afbin help\n`,{
+ return new Response(llmsText(baseUrl(request)),{
   headers:{'Content-Type':MARKDOWN_CONTENT_TYPE,'Cache-Control':'no-store'},
  });
 }
