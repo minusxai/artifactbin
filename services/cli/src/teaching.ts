@@ -1,9 +1,10 @@
+import {lstat} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import teaching from './generated/teaching.json';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
 import {commands,commandHelp,CliError} from './commands';
 import {manPage} from './man';
-import {atomicWrite,readOptional} from './files';
+import {atomicWrite,isMissing} from './files';
 export {manPage} from './man';
 export const localSkillFiles:Readonly<Record<string,string>>=teaching.files;
 export const examples:Record<string,string>={
@@ -38,10 +39,17 @@ export function helpDocument(topic?:string,format='text'):string{
  return `# afbin\n\nLocal files and published artifacts. Every command is offline unless it names a remote resource.\n\n`
   +commands.map(command=>section(command.name,`## ${command.name}`)).join('\n');
 }
-/** --output never replaces an existing file: help has no overwrite permission. */
+/** --output never replaces an existing path: help has no overwrite permission. */
 export async function writeHelp(text:string,destination:string,cwd:string,format:string):Promise<{format:string;output:string;bytes:number}>{
  const path=resolve(cwd,destination);
- if(await readOptional(path)!==null)throw new CliError('destination_exists',`${destination} already exists.`,'Choose a free destination; afbin help never replaces a file.');
- await atomicWrite(path,text);
+ const taken=new CliError('output_exists',`Output already exists: ${destination}.`,'Choose a new --output path; afbin help never replaces a file or writes into a directory.');
+ if(await lstat(path).then(()=>true,error=>{if(isMissing(error))return false;throw error;}))throw taken;
+ try{await atomicWrite(path,text,{exclusive:true});}
+ catch(error){
+  const code=(error as NodeJS.ErrnoException).code;
+  if(code==='EEXIST')throw taken;
+  if(code==='ENOENT'||code==='ENOTDIR')throw new CliError('invalid_output',`Cannot write ${destination}: its directory does not exist.`,'Name a path inside an existing directory.');
+  throw error;
+ }
  return {format,output:path,bytes:Buffer.byteLength(text)};
 }

@@ -43,10 +43,14 @@ test('help formats, destinations and the manual come from one command registry',
   assert.match(out.join(''),/^\.TH AFBIN 1/);assert.match(out.join(''),/\.SH EXPORT/);out.length=0;
   assert.equal(await runCli(['help','markup','--format','man'],context),2);
   assert.match(problems.join(''),/^unsupported_format: /);problems.length=0;
-  // --output never replaces an existing file; help has no overwrite permission.
+  // --output never replaces an existing path, and never writes into a directory or a missing one.
   await writeFile(join(root,'taken.md'),'mine');
   assert.equal(await runCli(['help','--format','markdown','--output','taken.md','--json'],context),2);
-  assert.match(out.join(''),/"destination_exists"/);assert.equal(await readFile(join(root,'taken.md'),'utf8'),'mine');out.length=0;
+  assert.match(out.join(''),/"output_exists"/);assert.equal(await readFile(join(root,'taken.md'),'utf8'),'mine');out.length=0;
+  assert.equal(await runCli(['help','--format','man','--output','.','--json'],context),2);
+  assert.match(out.join(''),/"output_exists"/);out.length=0;
+  assert.equal(await runCli(['help','--format','man','--output','missing/afbin.1','--json'],context),2);
+  assert.match(out.join(''),/"invalid_output"/);out.length=0;
   assert.equal(await runCli(['help','--format','man','--output','afbin.1','--json'],context),0);
   const written=JSON.parse(out.join(''));out.length=0;
   assert.equal(written.format,'man');assert.equal(written.bytes,Buffer.byteLength(manPage()));
