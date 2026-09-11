@@ -84,6 +84,8 @@ export function forwardExchange(
   const url = req.url ?? '/';
   const isJson = (h: http.IncomingHttpHeaders) => String(h['content-type'] ?? '').includes('application/json');
   const keepReq = isJson(req.headers) && ARTIFACT_WRITE.test(url) && method !== 'GET';
+  // The device door's reply carries the user code the driver approves for the agent (lib/approver).
+  const isPairing = method === 'POST' && url.split('?')[0] === '/oauth/device';
   const reqChunks: Buffer[] = [];
   let reqSize = 0;
 
@@ -97,7 +99,7 @@ export function forwardExchange(
       if (!rewrite) res.writeHead(up.statusCode ?? 502, up.headers);
       const rewriteChunks: Buffer[] = [];
       // A response body is retained for a failure (its `error` code) or a write (its echo + the artifact id).
-      const keepRes = isJson(up.headers) && ((up.statusCode ?? 0) >= 400 || keepReq);
+      const keepRes = isJson(up.headers) && ((up.statusCode ?? 0) >= 400 || keepReq || isPairing);
       const resChunks: Buffer[] = [];
       let resSize = 0;
       // Counted for EVERY response (the docs-cost metric reads it); retained only per keepRes.
@@ -130,6 +132,10 @@ export function forwardExchange(
           const body = parseJson(bytes);
           const output = body;
           if (status >= 400 && body && typeof body.error === 'string') entry.error = body.error;
+          if (isPairing && status === 200 && body && typeof body.user_code === 'string') {
+            entry.userCode = body.user_code;
+            if (typeof body.expires_in === 'number' && Number.isFinite(body.expires_in)) entry.pairingExpiresAt = started + body.expires_in * 1000;
+          }
           if (keepReq && output && typeof output.markup === 'string') entry.resMarkup = output.markup;
           if (keepReq && output && typeof output.markup_changed === 'boolean') entry.markupUnchanged = !output.markup_changed;
           if (!entry.artifactId) {

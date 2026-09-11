@@ -371,10 +371,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
   // beside the spawn, rather than read off the ledger — whose first entry is already past the agent's
   // boot, and therefore only a floor. After `prepare`, which is the driver's setup, not the agent's time.
-  // The `cold` treatment: the driver stands in for the person who approves `afbin setup`, but only when
-  // this task was meant to have an account at all — the token-less task keeps its wall.
+  // The not-installed flow: the driver stands in for the person who approves the AGENT's `afbin setup`,
+  // but only when this task was meant to have an account at all — the token-less task keeps its wall.
+  // The pairing is read off this task's proxy ledger, the driver's own file: the agent's home is private.
   const approver = !cliPreinstalled(leg.mode.run) && r.credential?.cookie && plan.access.kind === 'token'
-    ? startApprover({ homeDir, agentBase: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
+    ? startApprover({ ledgerPath: r.ledgerPath, agentBase: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
     : null;
   const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
