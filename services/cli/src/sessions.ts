@@ -3,6 +3,7 @@ import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import type {SessionResource} from '@artifactbin/contracts';
 import {CliError} from './errors';
 import {recoverableOperation} from './recoverable-operation';
+import {pendingOperation} from './restore';
 import type {Workspace} from './workspace';
 import type {HttpClient} from './http';
 
@@ -58,9 +59,12 @@ export async function readSession(client:HttpClient,id:string):Promise<SessionRe
  */
 export async function terminateSession(workspace:Workspace,client:HttpClient,input:string):Promise<Record<string,unknown>>{
  const id=sessionIdentity(input);
- const session=await readSession(client,id);
+ // A terminated session is a tombstone, so the pre-read only runs when there is
+ // no journalled operation to resume; repeating it would answer 410 and strand
+ // the very retry the record exists to finish.
+ const session=await pendingOperation(workspace)?undefined:await readSession(client,id);
  const result=await recoverableOperation(workspace,client,{
   path:`/sessions/${id}`,method:'DELETE',body:undefined,identity:{type:'session',id},prepare:async()=>{},
  });
- return {id,name:session.name??null,status:'terminated',operation:result.operation};
+ return {id,...(session?{name:session.name??null}:{}),status:'terminated',operation:result.operation};
 }

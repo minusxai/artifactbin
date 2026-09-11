@@ -3,6 +3,7 @@ import {batchCommand} from './batch';
 import {artifactReference} from './read-commands';
 import {readPendingRequest} from './pending-request';
 import {recoverableOperation} from './recoverable-operation';
+import {pendingOperation} from './restore';
 import {recoverFiles,stageFiles} from './journal';
 import {terminateSession} from './sessions';
 import {digest} from './files';
@@ -37,11 +38,14 @@ export async function deleteArtifact(workspace:Workspace,input:string,client:Htt
  // disagrees refuses instead of deleting the wrong thing; it also identifies
  // the account before the durable record claims an operation key. A typed local
  // file carries its own kind, so --type is only the default for a bare id.
- const head=await client.request<Record<string,unknown>>(`/artifacts/${ref.id}`);
- const kind=resourceKind(head.format);
- const declared=ref.path?undefined:options.type;
- if(declared&&declared!==kind)throw new CliError('type_conflict',`${input} is a ${kind}, not a ${declared}.`,`Run afbin delete --type ${kind} ${input}.`);
- if((head.capabilities as {delete?:boolean}|undefined)?.delete===false)throw new CliError('not_permitted',`Only the owner can delete ${ref.id}.`,'Ask the owner to delete it.');
+ let kind:string|undefined;
+ if(!await pendingOperation(workspace)){
+  const head=await client.request<Record<string,unknown>>(`/artifacts/${ref.id}`);
+  kind=resourceKind(head.format);
+  const declared=ref.path?undefined:options.type;
+  if(declared&&declared!==kind)throw new CliError('type_conflict',`${input} is a ${kind}, not a ${declared}.`,`Run afbin delete --type ${kind} ${input}.`);
+  if((head.capabilities as {delete?:boolean}|undefined)?.delete===false)throw new CliError('not_permitted',`Only the owner can delete ${ref.id}.`,'Ask the owner to delete it.');
+ }
  if(await readPendingRequest(workspace.root))throw new CliError('pending_recovery','Recover the pending publication before deleting an artifact.','Run afbin push to recover its result.');
  const result=await recoverableOperation(workspace,client,{
   path:`/artifacts/${ref.id}${options.force?'?force=true':''}`,method:'DELETE',body:undefined,identity:{type:'delete',id:ref.id},
@@ -60,5 +64,5 @@ export async function deleteArtifact(workspace:Workspace,input:string,client:Htt
    await recoverFiles(current.root);
   },
  });
- return{...result,id:ref.id,type:kind,status:'deleted',local_file:'preserved'};
+ return{...result,id:ref.id,...(kind?{type:kind}:{}),status:'deleted',local_file:'preserved'};
 }

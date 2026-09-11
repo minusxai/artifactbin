@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {useAppHarness,request} from './harness';
@@ -176,5 +176,42 @@ it('the real CLI refreshes each named target durably and reports their outcomes 
   expect(keys).toHaveLength(2);
   expect(keys.every(key=>!!key)).toBe(true);
   expect(new Set(keys).size).toBe(2);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+it('a delete whose reply is lost completes on the repeated command instead of stranding its journal',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-handler-delete-recovery-'));const calls:string[]=[];
+ let dropReply=true;
+ // The first DELETE reaches the real route and commits; only its reply is lost.
+ const lossy:typeof fetch=async(input,init)=>{
+  const message=new Request(input,init);
+  if(message.method==='DELETE'&&dropReply){dropReply=false;await transport(calls)(message);throw new Error('deleted, but the reply was lost');}
+  return transport(calls)(message);
+ };
+ const invoke=async(args:string[])=>{
+  const output:string[]=[];
+  const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,fetch:lossy,stdout:s=>output.push(s),stderr:()=>{}});
+  return {code,result:JSON.parse(output.join(''))};
+ };
+ const journal=join(root,'.artifactbin','pending-operation.json');
+ try{
+  const token=await mintToken('mxmx_test_delete_recovery');const actor={tokenId:token.id,userId:null};
+  await saveConnection({server:'http://localhost:3000',token:token.token},root);
+  const created=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Lost reply</p>'}}))).json();
+
+  const interrupted=await invoke(['delete',created.id]);
+  expect(interrupted.code).not.toBe(0);
+  expect(await ownedArtifactState(actor,created.id)).toEqual({deleted:true});
+  expect(await readFile(journal,'utf8')).toContain(created.id);
+
+  // The row is in the trash now, so the delete's own pre-read would 404 on the
+  // way back in. Repeating the command has to finish the journalled operation.
+  const recovered=await invoke(['delete',created.id]);
+  expect(recovered.code,JSON.stringify(recovered.result)).toBe(0);
+  expect(recovered.result).toMatchObject({id:created.id,status:'deleted',local_file:'preserved'});
+  await expect(readFile(journal,'utf8')).rejects.toThrow();
+  expect(await ownedArtifactState(actor,created.id)).toEqual({deleted:true});
+  // The retry re-sent the same operation key, and the receipt answered it.
+  expect(calls.filter(call=>call.startsWith('DELETE'))).toHaveLength(2);
  }finally{await rm(root,{recursive:true,force:true});}
 });

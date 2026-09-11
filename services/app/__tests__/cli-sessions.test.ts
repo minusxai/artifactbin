@@ -122,3 +122,39 @@ it('sessions are owner scoped: another account and an unclaimed token can neithe
  expect(owned.status).toBe(200);
  expect(remoteSessions.list(owner.id)).toEqual([]);
 });
+
+it('a terminate whose reply is lost completes on the repeated command instead of stranding its journal',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-handler-terminate-recovery-'));const calls:string[]=[];
+ let dropReply=true;
+ // The first DELETE reaches the relay and removes the session; only the reply is lost.
+ const lossy:typeof fetch=async(input,init)=>{
+  const message=new Request(input,init);
+  if(message.method==='DELETE'&&dropReply){dropReply=false;await transport(calls)(message);throw new Error('terminated, but the reply was lost');}
+  return transport(calls)(message);
+ };
+ const invoke=async(args:string[])=>{
+  const output:string[]=[];
+  const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,fetch:lossy,stdout:s=>output.push(s),stderr:()=>{}});
+  return {code,result:JSON.parse(output.join(''))};
+ };
+ const journal=join(root,'.artifactbin','pending-operation.json');
+ try{
+  const user=await createUser({email:'mxmx_test_terminate_recovery@example.com'});
+  const token=await mintToken('mxmx_test_terminate_recovery');await claimToken(user.id,token.token);
+  await saveConnection({server:'http://localhost:3000',token:token.token},root);
+  const session=remoteSessions.create(user.id,registration);
+
+  const interrupted=await invoke(['delete','--type','session',session.id]);
+  expect(interrupted.code).not.toBe(0);
+  expect(remoteSessions.list(user.id)).toEqual([]);
+  expect(await readFile(journal,'utf8')).toContain(session.id);
+
+  // The session is a tombstone now, so the terminate's own pre-read would answer
+  // 410. Repeating the command has to finish the journalled operation instead.
+  const recovered=await invoke(['delete','--type','session',session.id]);
+  expect(recovered.code,JSON.stringify(recovered.result)).toBe(0);
+  expect(recovered.result.operations).toEqual([{id:session.id,status:'terminated',operation:expect.any(String)}]);
+  await expect(readFile(journal,'utf8')).rejects.toThrow();
+  expect(calls.filter(call=>call.startsWith('DELETE'))).toHaveLength(2);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
