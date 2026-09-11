@@ -8,7 +8,7 @@ import {snapshotResource,writeResourceFile} from './resource-file';
 import {atomicWrite,digest} from './files';
 import {recoverFiles,stageFiles} from './journal';
 import {withProcessLock} from './process-lock';
-import {inspectWorkspace,loadWorkspace,type Workspace,type Snapshot} from './workspace';
+import {inspectWorkspace,loadWorkspace,type LocalFile,type Workspace,type Snapshot} from './workspace';
 import type {HttpClient} from './http';
 
 /** Observation never moves the accepted base or rewrites working files. */
@@ -32,7 +32,7 @@ export async function remoteStatus(workspace:Workspace,client:HttpClient){
 export async function comparisonTargets(workspace:Workspace,input:string|string[]|undefined,server:string){
  const inputs=input===undefined?[]:Array.isArray(input)?input:[input];
  if(!inputs.length)return(await inspectWorkspace(workspace)).map(file=>({file,version:undefined as number|undefined}));
- const targets=[];
+ const targets:Array<{file:LocalFile;version:number|undefined}>=[];
  for(const one of inputs){
   const ref=await resolveReference(one,{root:workspace.root,cwd:workspace.cwd,server});
   const path=ref.kind==='path'?ref.path:Object.entries(workspace.lock?.files??{}).find(([,file])=>file.id===ref.id)?.[0];

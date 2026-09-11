@@ -1,5 +1,5 @@
 import {accountPlan,localAccountCommand,remoteAccountCommand} from './account-workspace';
-import {remoteQuery} from './remote-query';
+import {discoverTables,mixedQuery} from './remote-query';
 import {batchCommand} from './batch';
 import {resultOutput} from './result-output';
 import {queryMutation} from './mutation-command';
@@ -118,11 +118,12 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return 0;}
   if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
-  if(command==='query'){const result=await remoteQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
+  if(command==='query'){const result=await mixedQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='delete'){emit(await deleteArtifact(workspace,positionals[0],client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
   if(command==='diff'){const result=await diffCommand(workspace,parsed,client.connection.server,!!flags.remote,stdout,client);if(result)emit(result);return 0;}
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
+  if(command==='list'&&flags.type==='table'){await resultOutput(await discoverTables(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='log'){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));emit(result.value);return result.exitCode;}
   if(command==='pull'&&flags.output==='-'){const result=await pullToStdout(workspace,positionals,client,parsed,stdout);if(result)emit(result);return 0;}
@@ -145,7 +146,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }
 }
 /** Seeded surface: the parser accepts these rows, and dispatch refuses them until their workstream lands. Each implementer deletes its own entries. */
-const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session','table'],delete:['folder','dataset','file','session','comment']};
+const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session'],delete:['folder','dataset','file','session','comment']};
 function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
  if(['fork','export','open'].includes(command))pending(`afbin ${command}`);

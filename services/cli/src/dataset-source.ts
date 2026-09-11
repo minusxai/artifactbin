@@ -1,4 +1,7 @@
 import {parseJsx,type JsxElement} from '../../app/lib/jsx';
+import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
+import type {CatalogInput} from '../../app/lib/datasets/types';
+import {resolveReference} from './reference';
 import {extname,join,resolve} from 'node:path';
 import {CliError} from './errors';
 import {atomicWrite,readOptional} from './files';
@@ -78,4 +81,19 @@ export async function bindDatasetSecret(workspace:Workspace,paths:string[],clien
  if(typeof id!=='string'||!id)throw new CliError('invalid_response','The secret door did not return a secret id.');
  await atomicWrite(definitionPath,Buffer.from(withSecretId(definition.toString(),connection,id)));
  return{secret:{id,source:variable},source:resource.source};
+}
+
+/** The local definition a dataset YAML names, when the target is a local dataset at all. */
+export async function localDefinition(workspace:Workspace,input:string,server:string):Promise<{definition:CatalogInput;id?:string;path:string}|undefined>{
+ const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server});
+ if(ref.kind!=='path'||ref.version!==undefined||!/\.ya?ml$/i.test(ref.path))return undefined;
+ const bytes=await readOptional(join(workspace.root,ref.path));if(!bytes)return undefined;
+ const resource=parseResourceFile(bytes.toString());
+ if(resource.type!=='dataset'||!resource.source||extname(resource.source).toLowerCase()!=='.jsx')return undefined;
+ const source=await readOptional(await confinedPath(workspace.root,resolve(workspace.root,join(ref.path,'..'),resource.source)));
+ if(!source)throw new CliError('missing_source',`Cannot read source ${resource.source}.`);
+ let definition:CatalogInput;
+ try{definition=parseDatasetDefinition(source.toString());}
+ catch(error){throw new CliError('invalid_definition',error instanceof Error?error.message:'The dataset definition is invalid.','A connected definition needs its bound passwordSecretId; run afbin push --secret-env NAME once.');}
+ return{definition,...(resource.id?{id:resource.id}:{}),path:ref.path};
 }
