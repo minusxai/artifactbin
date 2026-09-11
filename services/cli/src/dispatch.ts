@@ -18,7 +18,6 @@ import {homedir} from 'node:os';
 import {parseCommand,commandHelp,commands,CliError,type ParsedCommand} from './commands';
 import {loadWorkspace} from './workspace';
 import {validateFiles} from './validation';
-import {deleteArtifact} from './delete';
 import {compare,remoteStatus} from './comparison';
 import {localStatus,localDiff} from './local';
 import {helpTopics} from './teaching';
@@ -118,7 +117,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
   if(command==='query'){const result=await remoteQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
-  if(command==='delete'){emit(await deleteArtifact(workspace,positionals[0],client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
   if(command==='diff'){emit(await compare(workspace,positionals[0],client.connection.server,!!flags.remote,client));return 0;}
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
