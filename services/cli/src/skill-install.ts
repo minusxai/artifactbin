@@ -64,7 +64,15 @@ export function safeSkillPath(path:string):boolean{return !!path&&!isAbsolute(pa
 interface Manifest {version:string;source?:string;files:Record<string,string>}
 /** Managed copies record their provenance so status, update and the harness agree on who owns them. */
 export const SKILL_SOURCE='afbin-cli';
-export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged';source:string;version:string;backup?:string}
+export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged';source:string;version:string;backup?:string;restart_required?:true}
+/** These harnesses read their skills folder once, at startup; pi and OpenCode read it per run. */
+const restartHarnesses:Partial<Record<SkillHarness,string>>={claude:'Claude Code',codex:'Codex'};
+/** One line per harness that will not see a freshly written skill until it restarts. */
+export function restartHints(installations:readonly SkillInstallation[]):string[]{
+ return installations.filter(item=>item.restart_required).flatMap(item=>item.harnesses.flatMap(harness=>{
+  const name=restartHarnesses[harness];return name?[`Restart ${name} to load the installed skill at ${item.path}.`]:[];
+ }));
+}
 export interface SkillPlan {harness:SkillHarness;path:string;status:'install'|'update'|'unchanged';source:string;installed?:string;version:string}
 async function readManifest(path:string):Promise<Manifest|undefined>{
  const bytes=await readOptional(join(path,'.afbin-skill.json'));if(!bytes)return;
@@ -115,7 +123,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
    for(const [file,content] of Object.entries(files)){await mkdir(dirname(join(path,file)),{recursive:true});await atomicWrite(join(path,file),content);}
    for(const file of Object.keys(previous?.files??{}))if(!(file in files))await rm(join(path,file),{force:true});
    await atomicWrite(join(path,'.afbin-skill.json'),JSON.stringify({version,source:SKILL_SOURCE,files:Object.fromEntries(Object.entries(files).map(([file,content])=>[file,digest(content)]))}));
-   installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{})});
+   installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{}),...(harnesses.some(name=>name in restartHarnesses)?{restart_required:true as const}:{})});
   }
   // Preserve other settings when adding the selected integrations.
   await atomicWrite(join(options.home,'.artifactbin','settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');

@@ -9,7 +9,7 @@ import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
-import {installSkills,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
+import {installSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
 import {readFile} from 'node:fs/promises';
@@ -100,7 +100,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
   if(command==='update'){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   emit(await updateCli({home,server:server??'https://artifactbin.dev',env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch}));return 0;
+   const updated=await updateCli({home,server:server??'https://artifactbin.dev',env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
+   emit(updated);
+   if('installations' in updated)for(const hint of restartHints(updated.installations))stderr(hint+'\n');
+   return 0;
   }
   let connection=await loadConnection(server,home,context.env);
   const firstAuthentication=!connection;
@@ -120,8 +123,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='setup'||firstAuthentication){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    const installed=await installSkills(selected,{home,env:context.env});
-   if(command==='setup'){emit({authenticated:true,server:connection.server,...installed});return 0;}
+   const hints=restartHints(installed.installations);
+   if(command==='setup'){emit({authenticated:true,server:connection.server,...installed});for(const hint of hints)stderr(hint+'\n');return 0;}
    for(const item of installed.installations)stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
+   for(const hint of hints)stderr(hint+'\n');
   }
   const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}

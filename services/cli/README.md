@@ -46,7 +46,8 @@ checksums and recoverable backups. It asks the selected server for the release i
 (`/chat/release.json`) and takes the bytes from that published release. `afbin update --dry-run`
 resolves the release and reports the binary and skill changes without installing anything.
 An installation that did not come from the verified
-installer is reported, never overwritten. Ordinary commands never poll releases. Use
+installer is reported, never overwritten. Setup and update mark a skill written for a harness that
+reads its skills at startup (Claude Code, Codex) `restart_required` and name it on stderr. Ordinary commands never poll releases. Use
 `afbin update -h` for selection and recovery options.
 
 ## Local development

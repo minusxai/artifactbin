@@ -21,12 +21,14 @@ function transport(options:{corrupt?:boolean;protocol?:number}={}){return async(
 test('standalone update verifies bytes, atomically replaces, keeps a backup and installs matching skills',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-update-')),exe=join(home,'afbin');
  try{
-  await writeFile(exe,'old binary',{mode:0o755});const result=await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:['pi'],verifyExecutable:async()=>{},fetch:transport()}) as any;
+  await writeFile(exe,'old binary',{mode:0o755});const result=await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:['pi','codex'],verifyExecutable:async()=>{},fetch:transport()}) as any;
   assert.equal(await readFile(exe,'utf8'),'new binary');assert.equal((await stat(exe)).mode&0o777,0o755);assert.equal(await readFile(result.backup!,'utf8'),'old binary');
   assert.match(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),/New skill/);assert.equal(result.version,'9.0.0');
   const provenance=JSON.parse(await readFile(join(skillTargets(home,{}).pi,'.afbin-skill.json'),'utf8'));
   assert.equal(provenance.source,'afbin-cli');assert.equal(provenance.version,'9.0.0');
-  assert.deepEqual(result.installations.map((x:any)=>[x.status,x.source,x.version]),[['installed','afbin-cli','9.0.0']]);
+  assert.deepEqual(result.installations.map((x:any)=>[x.status,x.source,x.version]),[['installed','afbin-cli','9.0.0'],['installed','afbin-cli','9.0.0']]);
+  // Codex discovers skills at startup and is told to restart; pi rereads them per run.
+  assert.deepEqual(result.installations.map((x:any)=>[x.harnesses,x.restart_required]),[[['pi'],undefined],[['codex'],true]]);
  }finally{await rm(home,{recursive:true,force:true});}
 });
 test('bad checksum changes neither executable nor skills',async()=>{
