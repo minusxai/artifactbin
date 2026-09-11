@@ -44,9 +44,9 @@ The canonical definition is static dataset markup. Replace the example secret ID
 
 Use the full markup string as `definition` in the normal artifact operations:
 
-- Create: `POST /api/artifacts` with `{title, visibility: "private", dataset: definition}`.
-- Read back: `GET /api/artifacts/<id>` returns the canonical definition in `markup` and its `version` to an authorized editor.
-- Update: `PUT /api/artifacts/<id>` with `{dataset: editedDefinition, expectedVersion: version}`. Send the complete replacement definition.
+- Create: write `orders.yaml` with `type: dataset`, `source: orders.jsx` and `visibility: private`, then `afbin push orders.yaml`.
+- Read back: `afbin pull <id> --type dataset --output orders.yaml` writes the canonical definition beside the YAML for an authorized editor.
+- Update: edit `orders.jsx`, then `afbin push orders.yaml`; the push is conditional on the observed version and sends the complete replacement definition.
 
 The visual editor edits this same `dataset` string; read-back uses `markup`. Connection configuration contains only the secret ID, never the password.
 
