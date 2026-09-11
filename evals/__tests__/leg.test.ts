@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { legFromArgs } from '../lib/leg';
-import { parseArgs } from '../lib/args';
+import { parseArgs, USAGE } from '../lib/args';
 
 const base = ['--harness', 'pi', '--model', 'fireworks/accounts/fireworks/models/deepseek-v4-flash-0731', '--api-key-env', 'FIREWORKS_API_KEY'];
 
@@ -55,5 +55,14 @@ describe('legFromArgs', () => {
     expect(() => legFromArgs(parseArgs(['--model', 'm', '--api-key-env', 'K']), { K: 'k' })).toThrow(/--harness/);
     expect(() => legFromArgs(parseArgs(['--harness', 'pi', '--api-key-env', 'K']), { K: 'k' })).toThrow(/--model/);
     expect(() => legFromArgs(parseArgs(['--harness', 'pi', '--model', 'm']), {})).toThrow(/--api-key-env/);
+  });
+});
+
+describe('--help', () => {
+  it('is a request for the usage, not an unknown argument', () => {
+    for (const flag of ['--help', '-h']) expect(parseArgs([flag]).help).toBe(true);
+    expect(USAGE).toMatch(/^usage: npm run eval -- /);
+    for (const flag of ['--harness', '--model', '--api-key-env', '--shard', '--tasks', '--ci'])
+      expect(USAGE, flag).toContain(flag);
   });
 });
