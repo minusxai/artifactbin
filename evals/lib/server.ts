@@ -80,7 +80,7 @@ export function serverEnv(opts: { base: Record<string, string | undefined>; port
 export interface RunningServer { url: string; stop(): Promise<void> }
 
 /**
- * Boot the bundled server and wait until `/docs` answers.
+ * Boot the bundled server and wait until `/health` answers.
  *
  * It is run from the REPO ROOT, the way the image runs it: the bundle resolves
  * `dist/web` and `public/` against the working directory. This replaced
@@ -95,7 +95,7 @@ export async function startServer(opts: { repoRoot: string; env: Record<string, 
   const serverJs = path.join(opts.repoRoot, 'dist', 'proxy-server.mjs');
   if (!fs.existsSync(serverJs)) throw new Error(`no prod build at ${path.join('dist', 'proxy-server.mjs')} (${serverJs}) — run \`npm run build\` first`);
 
-  // A leftover server can answer /docs before the new child's EADDRINUSE exit
+  // A leftover server can answer /health before the new child's EADDRINUSE exit
   // arrives. Never mistake that process (and its old build/database) for this leg.
   await new Promise<void>((resolve, reject) => {
     const probe = net.createServer();
@@ -113,7 +113,7 @@ export async function startServer(opts: { repoRoot: string; env: Record<string, 
   while (Date.now() < deadline) {
     if (exited !== null) throw new Error(`server exited with ${exited} before it was ready — see ${opts.logPath}`);
     try {
-      const res = await fetch(`${url}/docs`);
+      const res = await fetch(`${url}/health`);
       if (res.ok) break;
     } catch {
       // not up yet

@@ -9,5 +9,8 @@ export * from './rate-limits';
 export * from './agent';
 export * from './deny';
 export * from './routes';
+export * from './artifact-reference';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';
 export type { Column, Index, Table } from './schema';
+
+export * from './cli-auth';

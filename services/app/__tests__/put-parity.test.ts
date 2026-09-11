@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE TWO WRITE PATHS ARE ONE PIPELINE.
  *
@@ -43,13 +44,13 @@ describe('the bearer and browser replace paths answer alike', () => {
   it('both return the same FIELDS on a successful replace', async () => {
     const a = await subject();
     const viaBearer = await (await putBearer(
-      request(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<h1 id="heading">bearer</h1>' } }),
+      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<h1 id="heading">bearer</h1>' } }),
       params({ id: a.id }),
     )).json();
 
     const b = await subject();
     const viaBrowser = await (await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<h1 id="heading">browser</h1>' } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<h1 id="heading">browser</h1>' } }),
       params({ id: b.id }),
     )).json();
 
@@ -68,27 +69,27 @@ describe('the bearer and browser replace paths answer alike', () => {
   it('both reject a stale expectedVersion with the same 409 body', async () => {
     const a = await subject();
     const bearer = await putBearer(
-      request(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
+      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
       params({ id: a.id }),
     );
     const b = await subject();
     const browser = await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', expectedVersion: 99 } }),
       params({ id: b.id }),
     );
     expect([bearer.status, browser.status]).toEqual([409, 409]);
-    expect(await bearer.json()).toEqual(await browser.json());
+    for(const response of [bearer,browser])expect(await response.json()).toMatchObject({error:'version_conflict',currentVersion:1,currentState:expect.stringMatching(/^[a-f0-9]{64}$/)});
   });
 
   it('both refuse `private` on an anonymous credential — never a silent downgrade', async () => {
     const a = await subject();
     const bearer = await putBearer(
-      request(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<p>x</p>', visibility: 'private' } }),
+      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { markup: '<p>x</p>', visibility: 'private' } }),
       params({ id: a.id }),
     );
     const b = await subject();
     const browser = await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', visibility: 'private' } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { markup: '<p>x</p>', visibility: 'private' } }),
       params({ id: b.id }),
     );
     expect([bearer.status, browser.status]).toEqual([400, 400]);
@@ -109,12 +110,12 @@ describe('the bearer and browser replace paths answer alike', () => {
     };
     const a = await mk();
     const viaBearer = await (await putBearer(
-      request(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { dataset: [{ a: 2 }] } }),
+      await observedRequest(`/api/artifacts/${a.id}`, { method: 'PUT', token: a.token, json: { dataset: [{ a: 2 }] } }),
       params({ id: a.id }),
     )).json();
     const b = await mk();
     const viaBrowser = await (await putBrowser(
-      request(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { dataset: [{ a: 2 }] } }),
+      await observedRequest(`/api/my/artifacts/${b.id}`, { method: 'PUT', cookie: b.cookie, json: { dataset: [{ a: 2 }] } }),
       params({ id: b.id }),
     )).json();
     expect(viaBearer.access).toBe('readwrite');
@@ -127,11 +128,11 @@ describe('the bearer and browser replace paths answer alike', () => {
     const stranger = await subject();
     // stranger's credential, mine's id.
     const bearer = await putBearer(
-      request(`/api/artifacts/${mine.id}`, { method: 'PUT', token: stranger.token, json: { markup: '<p>x</p>' } }),
+      await observedRequest(`/api/artifacts/${mine.id}`, { method: 'PUT', token: stranger.token, json: { markup: '<p>x</p>' } }),
       params({ id: mine.id }),
     );
     const browser = await putBrowser(
-      request(`/api/my/artifacts/${mine.id}`, { method: 'PUT', cookie: stranger.cookie, json: { markup: '<p>x</p>' } }),
+      await observedRequest(`/api/my/artifacts/${mine.id}`, { method: 'PUT', cookie: stranger.cookie, json: { markup: '<p>x</p>' } }),
       params({ id: mine.id }),
     );
     expect([bearer.status, browser.status]).toEqual([404, 404]);

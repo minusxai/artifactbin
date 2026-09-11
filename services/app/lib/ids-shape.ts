@@ -4,4 +4,4 @@
  * crypto coming with it. 6–12 of `[a-zA-Z0-9]`: six today, room to grow with
  * no migration, since the shape is all any reader checks.
  */
-export const ID_RE = /^[a-zA-Z0-9]{6,12}$/;
+export { ARTIFACT_ID_PATTERN as ID_RE } from '@artifactbin/contracts';

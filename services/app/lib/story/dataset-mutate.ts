@@ -85,10 +85,10 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean} = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected'> = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
-  const table = `ref_${dataset.id}`;
+  const table = 'dataset_rows';
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
 
   for (let attempt = 0; ; attempt++) {
@@ -105,14 +105,13 @@ export async function mutateDataset(
     const catalog=catalogOf(current);
     let selected:import('@/lib/datasets/types').DatasetTable|undefined;
     let executedSql=sql;
-    if(guard.source){
+    {
       try{if(!catalog)throw new Error('Dataset catalog unavailable');const compiled=compileStoredMutation(catalog,sql,table);selected=compiled.table;executedSql=compiled.sql;}
       catch(error){return {reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid stored mutation'};}
     }
     const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
     const rows = await loadDatasetRows(selected?{content:'',meta:{objectKey:selected.objectKey}}:current);
-    const {source:_,...mutationGuard}=guard;
-    const out = await runMutation({ table: { name: table, rows, columns }, sql:executedSql, params, ...mutationGuard, limit: datasetRowCap() });
+    const out = await runMutation({ table: { name: table, rows, columns }, sql:executedSql, params, ...guard, limit: datasetRowCap() });
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
     }

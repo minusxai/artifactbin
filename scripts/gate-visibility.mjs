@@ -23,6 +23,7 @@
 
  *     node scripts/gate-visibility.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';

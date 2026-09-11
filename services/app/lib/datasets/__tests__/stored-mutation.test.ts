@@ -24,6 +24,8 @@ describe('stored mutation target compiler', () => {
   it.each([
     ['update rows set status=$_value where rows.id=$_row.id', [{ id: 1, status: 'new' }]],
     ['update public.rows as r set status=$_value where r.id=$_row.id', [{ id: 1, status: 'new' }]],
+    ["insert into public.rows(id,status) select 2,$_value where not exists (select 1 from public.rows where id=2)", [{ id: 1, status: 'old' }, { id: 2, status: 'new' }]],
+    ["insert into rows(id,status) select 2,$_value where not exists (select 1 from rows where id=2)", [{ id: 1, status: 'old' }, { id: 2, status: 'new' }]],
     ['insert into rows(id,status) values (2,$_value)', [{ id: 1, status: 'old' }, { id: 2, status: 'new' }]],
     ['delete from public.rows where rows.id=$_row.id', []],
   ])('executes native DuckDB mutation %s', async (sql, rows) => {

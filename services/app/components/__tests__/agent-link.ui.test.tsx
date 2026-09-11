@@ -109,19 +109,8 @@ describe('<AgentLink>', () => {
   });
 });
 
-/**
- * The landing page renders this button through <GetStarted>, which is where
- * the divergence lived: it threaded a `reveal` prop that turned the
- * navigation off. Same click, same countdown, same destination.
- */
-describe('the landing surface', () => {
-  it('counts down and navigates exactly like every other surface', async () => {
-    vi.useFakeTimers();
-    render(<GetStarted />);
-    await clickAndCopy();
-
-    expect(theButton()).toHaveTextContent(/going to the artifact in 3/i);
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(push).toHaveBeenCalledWith('/a/abc123');
-  });
+it('the landing offers CLI setup without minting an empty document',()=>{
+ render(<GetStarted />);
+ expect(screen.getByRole('button',{name:'Copy the setup command'})).toBeInTheDocument();
+ expect(fetch).not.toHaveBeenCalled();
 });

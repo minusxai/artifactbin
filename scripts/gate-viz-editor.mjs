@@ -19,6 +19,7 @@
  *
  *   usage: node scripts/gate-viz-editor.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
@@ -52,8 +53,8 @@ const costs = await api('/api/artifacts', { method: 'POST', body: JSON.stringify
 
 // The document DECLARES both tables; the picker offers exactly these two.
 const HELMET = `<Helmet>` +
-  `<Query name="sales">{\`select * from ref_${sales.id}\`}</Query>` +
-  `<Query name="costs">{\`select * from ref_${costs.id}\`}</Query></Helmet>`;
+  `<Query name="sales" source="ref:${sales.id}">{\`select * from public.rows\`}</Query>` +
+  `<Query name="costs" source="ref:${costs.id}">{\`select * from public.rows\`}</Query></Helmet>`;
 const story = HELMET + `<div data-design="tw" className="@container p-8">` +
   `<h1 id="heading" className="text-3xl font-bold">Quarterly review</h1>` +
   `<p className="mt-2 text-base">A paragraph that must survive every chart edit.</p>` +
@@ -195,8 +196,8 @@ ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts 
 // which is a worse lie than the failure it replaced.
 {
   const twoCharts = `<Helmet>` +
-    `<Query name="live">{\`select * from ref_${sales.id}\`}</Query>` +
-    `<Query name="broken">{\`select nope from ref_${costs.id}\`}</Query></Helmet>` +
+    `<Query name="live" source="ref:${sales.id}">{\`select * from public.rows\`}</Query>` +
+    `<Query name="broken" source="ref:${costs.id}">{\`select nope from public.rows\`}</Query></Helmet>` +
     `<div data-design="tw" className="@container p-8">` +
     `<h1 className="text-3xl font-bold">Two charts</h1>` +
     `<Question title="Live" data="$live" height="300px" />` +
@@ -333,7 +334,7 @@ try {
  * jsdom has no hit-testing, so the retarget cannot happen there at all.
  */
 {
-  const gridDoc = `<Helmet><Query name="gsales">{\`select * from ref_${sales.id}\`}</Query></Helmet>`
+  const gridDoc = `<Helmet><Query name="gsales" source="ref:${sales.id}">{\`select * from public.rows\`}</Query></Helmet>`
     + `<div data-design="tw" className="@container p-4">`
     + `<Grid cols={12} rowHeight={86}>`
     + `<GridItem x={0} y={0} w={6} h={4}><Question title="Grid chart" data="$gsales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} /></GridItem>`

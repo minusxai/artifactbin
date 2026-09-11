@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * `GET /a/<id>/assets?u=<url>` — the per-document FIRST-REQUEST import.
  *
@@ -155,7 +156,7 @@ describe('who pays (R10): the document owner, never the reader', () => {
     const created = await createArtifact(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: MARKUP } }));
     const id = (await created.json()).id as string;
     // Public, so a stranger may read it — and the stranger is who asks.
-    await putArtifact(request(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { markup: MARKUP, visibility: 'public' } }), params(id));
+    await putArtifact(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { markup: MARKUP, visibility: 'public' } }), params(id));
 
     const reader = await mintToken('a passer-by');
     const res = await ask(id, `${web}/paid.png`, { token: reader.token });

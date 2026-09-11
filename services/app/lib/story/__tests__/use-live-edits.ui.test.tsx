@@ -96,12 +96,13 @@ describe('buffering is batching, never a draft', () => {
     expect(body).toMatchObject({ edit_id: 'edit-1', source: '<p>abc</p>' });
   });
 
-  it('sends metadata changes on the same protocol', async () => {
+  it('sends metadata through the state-guarded metadata protocol', async () => {
+    fetchMock.mockResolvedValue(okResponse({state:'a'.repeat(64),version:1,edit_id:'edit-1'}));
     const { hook } = setup();
     act(() => { hook.result.current.queue({ title: 'T', theme: 'nocturne', colorMode: 'dark' }); });
     await act(async () => { await vi.advanceTimersByTimeAsync(600); });
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({
-      edit_id: 'edit-1', title: 'T', theme: 'nocturne', colorMode: 'dark',
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toMatchObject({
+      expectedState: 'a'.repeat(64), title: 'T', theme: 'nocturne', colorMode: 'dark',
     });
   });
 

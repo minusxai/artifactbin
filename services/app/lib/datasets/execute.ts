@@ -1,3 +1,4 @@
+import type {ContentObjects} from '@/lib/story/prepared-objects';
 import {createHash} from 'node:crypto';
 import {runQueries,isQueryFailure} from '@/lib/sql/engine';
 import type {Scalar,TableResult} from '@/lib/story/dataflow';
@@ -10,7 +11,7 @@ import {storedTables} from './catalog';
 import type {DatasetCatalog} from './types';
 import {getDb} from '@/lib/db';
 import {createDatasetResultCache} from './result-cache';
-export interface CatalogQueryOptions {limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/story/dataset-shape').DatasetColumn['type']>;datasetId?:string;actor?:TokenActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
+export interface CatalogQueryOptions {objects?:Pick<ContentObjects,'get'>;limit?:number;offset?:number;refresh?:boolean;sort?:{col:string;dir:'asc'|'desc'};paramTypes?:Record<string,import('@/lib/story/dataset-shape').DatasetColumn['type']>;datasetId?:string;actor?:TokenActor;signal?:AbortSignal;authorize?:()=>Promise<void>}
 export type CatalogResult=TableResult&{refreshedAt:string};
 /** Callers authorize dataset access before entering this execution/cache boundary. */
 export async function executeCatalog(catalog:DatasetCatalog,sql:string,params:Record<string,Scalar>={},opts:CatalogQueryOptions={}):Promise<CatalogResult> {
@@ -28,9 +29,9 @@ export async function executeCatalog(catalog:DatasetCatalog,sql:string,params:Re
   const local={...catalog,tables:catalog.tables.map((t,i)=>t.sql?t:{...t,source:{schema:'main',table:`dataset_table_${i}`}})};
   const compiled=compileDatasetSql(local,sql,params);
   const values=Object.fromEntries(compiled.values.map((v,i)=>[String(i+1),v]));
-  const out=await runQueries({tables:await storedTables(catalog),queries:[{name:'result',sql:`SELECT * FROM (${sorted(compiled.sql)}) AS dataset_window LIMIT ${limit+1} OFFSET ${offset}`}],params:values,limit:Math.min(10000,limit+1)});
+  const out=await runQueries({tables:await storedTables(catalog,opts.objects),queries:[{name:'result',sql:compiled.sql}],params:values,limit,page:{name:'result',limit,offset,...(opts.sort?{sort:opts.sort}:{})}});
   const table=out.result;if(!table||isQueryFailure(table))throw new DatasetError(table?.error??'Query failed');
-  result={...table,rows:table.rows.slice(0,limit),...(table.rows.length>limit||table.truncated?{truncated:true}:{})};
+  result=table;
  }
  return {...result,refreshedAt:new Date().toISOString()};
  };

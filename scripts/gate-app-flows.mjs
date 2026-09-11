@@ -16,6 +16,7 @@
  *
  * Exits non-zero on the first failing section's summary.
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
@@ -70,27 +71,22 @@ for (const k of ['markup', 'prose', 'dataset', 'viz', 'image']) {
 // Raw formats, export renders, versions and permission/error matrices live in
 // artifact-urls, export, manage, version-conflict and delete-protection tests.
 // Keep the assembled server's top-level tier pages and missing-reference read.
-const doc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'refdoc', markup: `<Helmet><Query name="rows">{\`select * from ref_${made.dataset.id}\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" viz={{kind:"table"}} /></div>` }) }, T)).body;
+const doc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'refdoc', markup: `<Helmet><Query name="rows" source="ref:${made.dataset.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="p-8"><Question data="$rows" viz={{kind:"table"}} /></div>` }) }, T)).body;
 ok((await J(`/api/artifacts/${made.dataset.id}`, { method: 'DELETE' }, T)).status === 409, 'referenced dataset delete → 409');
 ok((await J(`/api/artifacts/${made.dataset.id}?force=true`, { method: 'DELETE' }, T)).status === 200, 'force delete breaks the link knowingly');
 ok((await fetch(`${B}/a/${doc.id}`)).status === 200, 'a document whose ref died still serves');
-const mcp = async (name, args) => {
-  const r = await fetch(`${B}/mcp`, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', Authorization: `Bearer ${T}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) });
-  const b = await r.json();
-  return { isError: b.result?.isError ?? false, data: JSON.parse(b.result?.content?.[0]?.text ?? '{}') };
-};
-const m = await mcp('create_artifact', { title: 'mcp doc', markup: '<div data-design="tw" className="p-6"><h1 className="text-2xl font-bold">mcp</h1></div>' });
-ok(!m.isError && m.data.format === 'markup', 'mcp create_artifact');
-ok((await mcp('get_artifact', { id: m.data.id })).data.markup.includes('mcp'), 'mcp get_artifact');
-// The full MCP CRUD/version sequence is owned by mcp.test.ts; create/get here
-// retains a small check of the built server's transport and authentication.
+const created = await J('/api/artifacts', {method:'POST',body:JSON.stringify({title:'CLI HTTP transport',markup:'<h1>HTTP flow</h1>'})},T);
+ok(created.status===201 && created.body.format==='markup','HTTP create');
+const fetched = await J(`/api/artifacts/${created.body.id}`,{},T);
+ok(fetched.status===200 && fetched.body.markup.includes('HTTP flow'),'HTTP read');
+ok((await fetch(`${B}/mcp`,{method:'POST'})).status===404,'retired transport is absent');
 
 // seed the documents the UI sections drive
 const ds = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Gate data', dataset: tiers.dataset.dataset }) }, T)).body;
 const dataDoc = (await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Gate doc', theme: 'modernist', markup: `<Helmet>
 <Value name="region" type="string" />
-<Query name="regions">{\`select distinct region from ref_${ds.id} order by 1\`}</Query>
-<Query name="sales">{\`select * from ref_${ds.id} where $region is null or region = $region\`}</Query>
+<Query name="regions" source="ref:${ds.id}">{\`select distinct region from public.rows order by 1\`}</Query>
+<Query name="sales" source="ref:${ds.id}">{\`select * from public.rows where $region is null or region = $region\`}</Query>
 </Helmet><div data-design="tw" className="@container p-10">
 <h1 className="text-4xl font-bold tracking-tight">Gate doc</h1>
 <div className="mt-4"><select aria-label="Region" value="$region" options="$regions" /></div>

@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The dataflow at the publish door: `<Value>`/`<Query>` in <Helmet> and
  * `$name` references in the body are validated on EVERY markup write —
@@ -35,7 +36,7 @@ async function dataset(token: string, extra: Record<string, unknown> = {}): Prom
 const helmet = (ds: string, extra = '') =>
   '<Helmet><title>Sales</title>' +
   '<Value name="region" type="string" />' +
-  `<Query name="sales">{\`select region, sum(revenue) revenue from ref_${ds} where $region is null or region = $region group by 1\`}</Query>` +
+  `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1\`}</Query>` +
   extra + '</Helmet>';
 const BODY = '<div><select value="$region" options="$sales" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
 
@@ -51,7 +52,7 @@ describe('dataflow at the publish door', () => {
     const res = await create(t.token, { markup: helmet(ds) + BODY });
     expect(res.status).toBe(201);
     const body = (await res.json()) as { id: string; markup?: string; markup_changed?: boolean };
-    expect(storedMarkup(body, helmet(ds) + BODY)).toContain(`ref_${ds}`);
+    expect(storedMarkup(body, helmet(ds) + BODY)).toContain(`ref:${ds}`);
     const row = await getArtifactById(body.id);
     expect((row!.meta as { refs: Array<{ id: string; kind: string }> }).refs).toEqual([{ id: ds, kind: 'dataset' }]);
   });
@@ -72,7 +73,7 @@ describe('dataflow at the publish door', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, {
-      markup: '<Helmet>' + `<Query name="q">{\`select * from ref_${ds} where region = $nowhere\`}</Query>` + '</Helmet><Question data="$q" />',
+      markup: '<Helmet>' + `<Query name="q" source="ref:${ds}">{\`select * from public.rows where region = $nowhere\`}</Query>` + '</Helmet><Question data="$q" />',
     });
     expect(res.status).toBe(400);
     expect(await details(res)).toMatch(/\$nowhere/);
@@ -120,13 +121,13 @@ describe('dataflow at the publish door', () => {
     const theirs = await mintToken('theirs');
     await claimToken(owner.id, theirs.token);
     const foreign = await dataset(theirs.token, { visibility: 'private' });
-    const res = await create(mine.token, { markup: `<Helmet><Query name="q">{\`select * from ref_${foreign}\`}</Query></Helmet><Question data="$q" />` });
+    const res = await create(mine.token, { markup: `<Helmet><Query name="q" source="ref:${foreign}">{\`select * from public.rows\`}</Query></Helmet><Question data="$q" />` });
     expect(res.status).toBe(400);
     expect(await details(res)).toMatch(new RegExp(`invalid_refs.*ref:${foreign}`));
 
     const doc = await create(mine.token, { markup: '<p>not data</p>' });
     const docId = ((await doc.json()) as { id: string }).id;
-    const res2 = await create(mine.token, { markup: `<Helmet><Query name="q">{\`select * from ref_${docId}\`}</Query></Helmet><Question data="$q" />` });
+    const res2 = await create(mine.token, { markup: `<Helmet><Query name="q" source="ref:${docId}">{\`select * from public.rows\`}</Query></Helmet><Question data="$q" />` });
     expect(res2.status).toBe(400);
     expect(await details(res2)).toMatch(/is a markup artifact.*needs a dataset/);
   });
@@ -137,7 +138,7 @@ describe('dataflow at the publish door', () => {
     const created = await create(t.token, { markup: helmet(ds) + BODY });
     const id = ((await created.json()) as { id: string }).id;
     const bad = await putArtifactRoute(
-      request(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { markup: helmet(ds) + '<Question data="$nope" />' } }),
+      await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { markup: helmet(ds) + '<Question data="$nope" />' } }),
       params({ id }),
     );
     expect(bad.status).toBe(400);
@@ -163,7 +164,7 @@ describe('dataflow at publish: the SQL dry run', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, {
-      markup: `<Helmet><Query name="q">{\`select revenu from ref_${ds}\`}</Query></Helmet><Question data="$q" />`,
+      markup: `<Helmet><Query name="q" source="ref:${ds}">{\`select revenu from public.rows\`}</Query></Helmet><Question data="$q" />`,
     });
     expect(res.status).toBe(400);
     const msg = await details(res);
@@ -177,10 +178,10 @@ describe('dataflow at publish: the SQL dry run', () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, {
-      markup: `<Helmet><Query name="q">{\`drop table ref_${ds}\`}</Query></Helmet><Question data="$q" />`,
+      markup: `<Helmet><Query name="q" source="ref:${ds}">{\`drop table public.rows\`}</Query></Helmet><Question data="$q" />`,
     });
     expect(res.status).toBe(400);
-    expect(await details(res)).toMatch(/only SELECT/);
+    expect(await details(res)).toMatch(/only read statements/);
   });
 
   it('checks a vega-lite encoding against the QUERY result columns', async () => {

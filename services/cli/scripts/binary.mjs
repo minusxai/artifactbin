@@ -1,4 +1,5 @@
 // Node SEA plus node-pty's platform-native files, built on the target OS/architecture.
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { build } from "esbuild";
 import { createRequire } from "node:module";
@@ -16,6 +17,7 @@ import { gzipSync } from "node:zlib";
 import { inject } from "postject";
 const require = createRequire(import.meta.url);
 const root = dirname(require.resolve("node-pty/package.json"));
+execFileSync(process.execPath,["scripts/build.mjs"],{stdio:"inherit"});
 await mkdir("dist", { recursive: true });
 const files = {};
 async function collect(relative) {
@@ -106,4 +108,11 @@ await inject(binary, "NODE_SEA_BLOB", await readFile("dist/sea.blob"), {
 if (process.platform === "darwin")
   execFileSync("codesign", ["--sign", "-", binary]);
 execFileSync(binary, ["--help"], { stdio: "inherit", cwd: tmpdir() });
-console.log(`Built ${binary}`);
+const teaching=JSON.parse(await readFile("src/generated/teaching.json","utf8"));
+const skills=Buffer.from(JSON.stringify({version:teaching.version,protocol:teaching.protocol,files:teaching.files})+'\n');
+await writeFile("dist/afbin-skills.json",skills);
+await copyFile("dist/share/man/man1/afbin.1","dist/afbin.1");
+execFileSync("tar",["-czf",resolve("dist/afbin-skills.tar.gz"),"-C",resolve("dist/skills"),"artifactbin"],{env:{...process.env,COPYFILE_DISABLE:"1"}});
+const sha256=data=>createHash('sha256').update(data).digest('hex');
+await writeFile(`${binary}.manifest.json`,JSON.stringify({version:teaching.version,protocol:teaching.protocol,platform:process.platform,arch:process.arch,binary:{file:`afbin-${process.platform}-${process.arch}`,sha256:sha256(await readFile(binary))},skills:{file:'afbin-skills.json',sha256:sha256(skills)}},null,2)+'\n');
+console.log(`Built ${binary} with matching local skills and release manifest.`);

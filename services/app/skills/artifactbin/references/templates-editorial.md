@@ -20,7 +20,7 @@ short paragraphs, no dangling one-line sections.
 
 Skeleton (one pass of the beats):
 
-  <Helmet><Query name="q">{`select month, sum(revenue) revenue from ref_<datasetId> group by 1 order by 1`}</Query></Helmet>
+  <Helmet><Query name="q" source="ref:abc123">{`select month, sum(revenue) revenue from public.rows group by 1 order by 1`}</Query></Helmet>
   <div data-design="tw" className="@container bg-background px-6 py-12 text-foreground @2xl:py-16">
     <article className="mx-auto max-w-2xl">
       <header>
@@ -85,7 +85,7 @@ heading never sits at the foot of a page — move the break, not the caption.
 FIGURES (aim for one per section). Every figure is a `<figure>` with a FIG-numbered
 `<figcaption>`, numbered continuously across the document. Four kinds:
 - Chart: `<Question data="$q" viz={{"kind":"vega-lite","spec":{…}}} height="380px" />`
-  over a `<Query name="q">{`select … from ref_<datasetId>`}</Query>` declared in
+  over a `<Query name="q" source="ref:abc123">{`select … from public.rows`}</Query>` declared in
   `<Helmet>` — Vega for every chart; quiet grays, ONE accented series, direct labels over
   legends. Evidence 380-440px; a lone number 170-220px.
 - Diagram: an inline `<svg>` drawn in `currentColor` strokes at hairline weights. Local

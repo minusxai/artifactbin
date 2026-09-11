@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * `access` — the WRITE ACL on a dataset, the sibling of `visibility`:
  * `'read'` (the default, every existing dataset) or `'readwrite'` (documents
@@ -51,10 +52,10 @@ describe('access on the bearer API', () => {
   it('PUT flips access alongside a refresh; absent keeps it', async () => {
     const t = await mintToken('t');
     const id = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const flip = await putArtifactRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'readwrite' } }), params({ id }));
+    const flip = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'readwrite' } }), params({ id }));
     expect(flip.status).toBe(200);
     expect((await getArtifactById(id))!.access).toBe('readwrite');
-    const keep = await putArtifactRoute(request(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { dataset: [...ROWS, { choice: 'tacos', who: 'x' }] } }), params({ id }));
+    const keep = await putArtifactRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: t.token, json: { dataset: [...ROWS, { choice: 'tacos', who: 'x' }] } }), params({ id }));
     expect(keep.status).toBe(200);
     expect((await getArtifactById(id))!.access).toBe('readwrite');
   });
@@ -75,7 +76,7 @@ describe('access on the browser surfaces', () => {
     const t = await mintToken('t');
     const cookie = await agentCookie([t.id]);
     const id = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
-    const res = await sessionPatchRoute(request(`/api/my/artifacts/${id}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id }));
+    const res = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${id}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id }));
     expect(res.status).toBe(200);
     expect((await res.json()) as object).toMatchObject({ id, access: 'readwrite' });
     const row = (await getArtifactById(id))!;
@@ -83,7 +84,7 @@ describe('access on the browser surfaces', () => {
     expect(row.version).toBe(1);
 
     const doc = ((await (await create(t.token, { markup: '<p>hi</p>' })).json()) as { id: string }).id;
-    const nope = await sessionPatchRoute(request(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: doc }));
+    const nope = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: doc }));
     expect(nope.status).toBe(400);
   });
 
@@ -95,7 +96,7 @@ describe('access on the browser surfaces', () => {
     const ds = ((await (await create(t.token, { dataset: ROWS, access: 'readwrite' })).json()) as { id: string }).id;
     const doc = await create(t.token, {
       title: 'Lunch poll',
-      markup: `<Helmet><Value name="c" /><Mutation name="vote">{\`insert into ref_${ds} (choice, who) values ($c, 'x')\`}</Mutation></Helmet><div><Button run="$vote">Vote</Button></div>`,
+      markup: `<Helmet><Value name="c" /><Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice, who) values ($c, 'x')\`}</Mutation></Helmet><div><Button run="$vote">Vote</Button></div>`,
     });
     expect(doc.status).toBe(201);
 
@@ -125,7 +126,7 @@ describe('access on the browser surfaces', () => {
       params({ id: doc }),
     );
     const viaPatch = await sessionPatchRoute(
-      request(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }),
+      await observedRequest(`/api/my/artifacts/${doc}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }),
       params({ id: doc }),
     );
     expect([viaSharing.status, viaPatch.status]).toEqual([400, 400]);
@@ -141,7 +142,7 @@ describe('access on the browser surfaces', () => {
     expect(sharing.status).toBe(200);
     expect((await sharing.json()) as object).toMatchObject({ access: 'readwrite' });
     await sharingPut(request(`/api/my/artifacts/${ds}/sharing`, { method: 'PUT', cookie: cookie, json: { access: 'read' } }), params({ id: ds }));
-    const patch = await sessionPatchRoute(request(`/api/my/artifacts/${ds}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
+    const patch = await sessionPatchRoute(await observedRequest(`/api/my/artifacts/${ds}`, { method: 'PATCH', cookie: cookie, json: { access: 'readwrite' } }), params({ id: ds }));
     expect(patch.status).toBe(200);
     expect((await patch.json()) as object).toMatchObject({ access: 'readwrite' });
   });

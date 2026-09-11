@@ -7,25 +7,13 @@
  * #26855), which is telemetry unavailable — NOT a failed run.
  */
 import { countDocsReads, type ToolInvocation } from '../docs-reads';
-import fs from 'node:fs';
 import path from 'node:path';
-import type { HarnessAdapter, HarnessResult, HarnessRunContext, McpTarget, TokenUsage } from '../contracts';
+import type { HarnessAdapter, HarnessResult, HarnessRunContext, TokenUsage } from '../contracts';
 import { copySkillsInto } from '../plugin-kit';
 import { NO_TELEMETRY, parseJsonl } from './shared';
 
-/**
- * The remote-server block, byte-for-byte what `opencode mcp add <name> --url <u>
- * --header "Authorization=Bearer <t>"` writes — verified by running it.
- */
-export function mcpConfig(mcp: McpTarget): Record<string, unknown> {
-  return { mcp: { [mcp.name]: { type: 'remote', url: mcp.url, headers: { Authorization: `Bearer ${mcp.token}` } } } };
-}
-
-export const opencode: HarnessAdapter & { mcpConfig: typeof mcpConfig } = {
-  harness: 'opencode',
-  supportsMcp: true,
-  mcpConfig,
-
+export const opencode:HarnessAdapter={
+  harness:'opencode',
   /** Nothing to drop: a `text` event carries a whole part, and it is the only source of the final message. */
   keepLine(): boolean {
     return true;
@@ -36,12 +24,7 @@ export const opencode: HarnessAdapter & { mcpConfig: typeof mcpConfig } = {
     // (`.opencode/skills/`, `.claude/skills/`, `.agents/skills/`), so plugin mode means
     // copying them in beside the task's files. `--dir` already points it here.
     if (ctx.plugin) copySkillsInto(ctx.plugin, ctx.cwd);
-    // OpenCode reads `$XDG_CONFIG_HOME/opencode/opencode.json` — where its own `mcp add` writes.
-    const configPath = path.join(ctx.homeDir, 'xdg-config', 'opencode', 'opencode.json');
-    fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    if (ctx.mcp) {
-      fs.writeFileSync(configPath, JSON.stringify({ $schema: 'https://opencode.ai/config.json', ...mcpConfig(ctx.mcp) }, null, 2));
-    }
+
   },
 
   invocation(ctx: HarnessRunContext) {

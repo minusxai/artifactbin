@@ -4,8 +4,8 @@
   IP-rate-limited. Artifacts belong to the token.
 - **Claim**: sign up, paste the token on `/tokens` — everything it published
   (past and future) attaches to your account.
-- **OAuth (MCP clients)**: add `/mcp` with no credentials and the client pops
-  a browser — log in and approve once. The access token IS an `mx_` token,
-  restricted to `/mcp`; a rotating refresh token keeps active clients signed
-  in without extending access-token lifetime.
+- **CLI browser authentication**: `afbin setup` opens browser approval automatically and saves
+  an account connection privately in `~/.artifactbin/.env`. Access tokens cover the `/api` resource;
+  rotating refresh tokens keep approved clients signed in without extending access-token lifetime.
+  Noninteractive setup returns a pending approval URL and expiry; browser consent remains required.
 - Tokens are stored hash-only, shown once, soft-revocable from `/tokens`.

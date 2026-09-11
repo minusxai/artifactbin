@@ -36,8 +36,10 @@ describe('the markup field description', () => {
     expect(text).toMatch(/style=/);
   });
 
-  it('points at the full reference by an absolute, fetchable path', () => {
-    expect(text).toMatch(/\/docs\/artifactbin\/references\/markup\.md/);
+  it('points at the installed local reference', () => {
+    expect(text).toContain('afbin help markup');
+    expect(text).toContain('source="ref:<id>"');
+    expect(text).not.toContain('/docs/');
   });
 
   it('stays short enough to survive in a tool schema', () => {

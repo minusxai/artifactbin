@@ -47,7 +47,7 @@ may exceed that window; there is no new scene-readiness protocol in this version
 
 ## File transport
 
-`POST /api/artifacts?format=file&filename=scene.glb` accepts bytes with a supported extension; see [file uploads](file-uploads.md). The session twin is `/api/my/artifacts`. JSON/MCP accepts
+`POST /api/artifacts?format=file&filename=scene.glb` accepts bytes with a supported extension; see [file uploads](file-uploads.md). The session twin is `/api/my/artifacts`. JSON API accepts
 `{file: {filename, contentType, base64}}`. Responses include the usual id and
 URL, plus filename, contentType, bytes and rawUrl. Files can be replaced through
 the existing JSON PUT flow, forked and shared like other artifacts.

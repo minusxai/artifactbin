@@ -25,7 +25,7 @@ export function notifyRemoteComment(
       author: comment.author.label,
       body: comment.body,
       instruction:
-        "A user mentioned this session. Read the artifact and comment, then respond using your artifactbin plugin, MCP, or API.",
+        "A user mentioned this session. Read the artifact and comment, then respond using afbin and the installed artifactbin skill. Run afbin comment with the artifact ID to read threads, then --reply with the annotation ID.",
     }) + "\r";
   for (const id of targets) {
     try {

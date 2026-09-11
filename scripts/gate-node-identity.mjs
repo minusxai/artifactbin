@@ -1,4 +1,5 @@
 /** Built-server acceptance: source identity, atomic moves, relation-only comments. */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { startDocument } from './lib/start-doc.mjs';
 

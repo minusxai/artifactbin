@@ -62,7 +62,9 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: afbin-${{ matrix.os }}
-          path: services/cli/dist/afbin-*
+          path: |
+            services/cli/dist/afbin-*
+            services/cli/dist/afbin.1
           if-no-files-found: error
           retention-days: 7
 
@@ -81,11 +83,11 @@ jobs:
           set -euo pipefail
           gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --pattern 'afbin-*' --dir downloads
           mkdir bundle
-          for directory in downloads/afbin-*; do cp "$directory"/afbin-* bundle/; done
+          for directory in downloads/afbin-*; do cp "$directory"/afbin-* "$directory"/afbin.1 bundle/; done
           for platform in darwin linux; do
             for arch in arm64 x64; do test -s "bundle/afbin-$platform-$arch"; done
           done
-          (cd bundle && sha256sum afbin-* > SHA256SUMS)
+          (cd bundle && sha256sum afbin-* afbin.1 > SHA256SUMS)
           # Draft until every asset is attached; do not overwrite an existing release.
           gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false

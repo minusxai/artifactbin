@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Account-wide bearer scope: a token CLAIMED BY AN ACCOUNT acts for the whole
  * account — any of a user's tokens may read, edit, and manage anything the
@@ -69,7 +70,7 @@ describe('account-wide bearer scope', () => {
 
     // Full replace, then the version surface and revert.
     const put = await putArtifact(
-      request(`/api/artifacts/${made.id}`, { method: 'PUT', token: second.token, json: { markup: MARKUP.replace('beta', 'delta') } }),
+      await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: second.token, json: { markup: MARKUP.replace('beta', 'delta') } }),
       params({ id: made.id }),
     );
     expect(put.status).toBe(200);
@@ -87,7 +88,7 @@ describe('account-wide bearer scope', () => {
     expect(one.status).toBe(200);
 
     const reverted = await revertRoute(
-      request(`/api/artifacts/${made.id}/revert`, { method: 'POST', token: second.token, json: { version: archived } }),
+      await observedRequest(`/api/artifacts/${made.id}/revert`, { method: 'POST', token: second.token, json: { version: archived } }),
       params({ id: made.id }),
     );
     expect(reverted.status).toBe(200);
@@ -118,7 +119,7 @@ describe('account-wide bearer scope', () => {
 
     // The second token can bind the first token's dataset...
     const doc = await createArtifactRoute(
-      request('/api/artifacts', { method: 'POST', token: second.token, json: { title: 'The doc', markup: `<Helmet><Query name="rows">{\`select * from ref_${ds.id}\`}</Query></Helmet><div data-design="tw" className="p-4"><Question data="$rows" title="Rev" /></div>` } }),
+      request('/api/artifacts', { method: 'POST', token: second.token, json: { title: 'The doc', markup: `<Helmet><Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query></Helmet><div data-design="tw" className="p-4"><Question data="$rows" title="Rev" /></div>` } }),
     );
     expect(doc.status).toBe(201);
     const docRow = (await doc.json()) as Wire;
@@ -153,7 +154,7 @@ describe('account-wide bearer scope', () => {
       const read = await getArtifactRoute(request(`/api/artifacts/${made.id}`, { token: t }), params({ id: made.id }));
       expect(read.status).toBe(404);
       const put = await putArtifact(
-        request(`/api/artifacts/${made.id}`, { method: 'PUT', token: t, json: { markup: MARKUP } }),
+        await observedRequest(`/api/artifacts/${made.id}`, { method: 'PUT', token: t, json: { markup: MARKUP } }),
         params({ id: made.id }),
       );
       expect(put.status).toBe(404);

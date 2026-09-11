@@ -8,7 +8,7 @@ curl -X POST 'http://localhost:3030/api/artifacts?format=file&filename=scene.glb
   -H 'Content-Type: model/gltf-binary' --data-binary @scene.glb
 ```
 
-The session equivalent is `/api/my/artifacts`. JSON/MCP callers can send
+The session equivalent is `/api/my/artifacts`. JSON API callers can send
 `{ "file": { "filename": "note.txt", "contentType": "text/plain", "base64": "SGVsbG8K" } }`.
 JSON PUT uses the same file envelope to replace an existing file.
 

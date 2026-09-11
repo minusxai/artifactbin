@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The visibility ACL — the thing that makes a 6-char id safe to be short.
  *
@@ -109,12 +110,12 @@ describe('defaults and validation', () => {
     const { ownedToken } = await fixtures();
     const doc = await create(ownedToken, { title: 'o', markup: '<h1>o</h1>' });
     const flipped = await (await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { markup: '<h1>o2</h1>', visibility: 'public' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { markup: '<h1>o2</h1>', visibility: 'public' } }),
       params({ id: doc.id }),
     )).json();
     expect(flipped.visibility).toBe('public');
     const kept = await (await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { markup: '<h1>o3</h1>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: ownedToken, json: { markup: '<h1>o3</h1>' } }),
       params({ id: doc.id }),
     )).json();
     expect(kept.visibility).toBe('public');

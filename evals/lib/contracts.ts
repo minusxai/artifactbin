@@ -69,8 +69,8 @@ const COMMON_CHECKS = [
   'query_ran',
   // edit
   'used_edits_endpoint',
-  // mcp
-  'used_mcp',
+  // Confirm the agent used the binary rather than hand-writing HTTP.
+  'used_cli',
   /**
    * The driver's own preparation succeeded. Its calls carry the driver header
    * and are invisible to the ledger, so a broken seed or a comment that would
@@ -96,7 +96,7 @@ const COMMON_CHECKS = [
    * what it DID about that, not on a document it was right not to publish.
    */
   'did_not_self_mint',
-  'asked_for_a_token',
+  'requested_authorization',
 ] as const;
 
 /** Every boolean the scorer can produce: the common ones plus every kind's own. */
@@ -320,8 +320,6 @@ export interface HarnessRunContext {
   apiKey: string;
   maxTurns: number;
   maxBudgetUsd: number;
-  /** Set when the mode's action axis is MCP: the harness is wired to this server. */
-  mcp?: McpTarget;
   /**
    * Set when skills are installed: the materialized marketplace holding this
    * deployment's skills. Each harness installs it its own way — there is no
@@ -352,17 +350,8 @@ export interface HarnessInvocation {
   redact?: string[];
 }
 
-/** Where a task's MCP transport points the harness. */
-export interface McpTarget {
-  name: string;
-  url: string;
-  token: string;
-}
-
 export interface HarnessAdapter {
   readonly harness: Harness;
-  /** Can this harness talk to an MCP server at all? Pi cannot — it ships no MCP client. */
-  readonly supportsMcp: boolean;
   /** One-time setup inside `ctx.homeDir` (a login file, a provider config). May be a no-op. */
   prepare(ctx: HarnessRunContext): Promise<void>;
   /** Pure: the process to spawn. */
@@ -390,9 +379,6 @@ export interface LedgerEntry {
   /** Response body size in bytes — counted for every response, never retained. Absent on ledgers written before it existed. */
   bytes?: number;
   /** MCP operation metadata; absent in older ledgers. */
-  mcpMethod?: string;
-  mcpTool?: string;
-  mcpError?: string;
   /** Which content tier a write declared (`markup` | `dataset` | `viz` | `image`) — how a dataset upload is told from a document. */
   reqFormat?: string;
   /** For document writes: the markup sent and the markup echoed back. */
@@ -406,7 +392,7 @@ export interface LedgerEntry {
   markupUnchanged?: boolean;
   /**
    * The artifact this request wrote to — from the URL, or from the response body
-   * when the agent CREATED one (`POST /api/artifacts`) or wrote through `/mcp`.
+   * when the agent CREATED one (`POST /api/artifacts`).
    * An agent need not use the document the start link named, and one that does not
    * must still be scored on what it actually made.
    */

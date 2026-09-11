@@ -35,6 +35,7 @@
  *
  *     node scripts/gate-folders.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { mintAnon } from './lib/mint-anon.mjs';

@@ -28,7 +28,7 @@ const declared = (): Record<string, 'app' | 'proxy' | 'events'> => renderedSchem
 /** The seed test's literal (CORE TEST 9) — the declared set, one owner each. */
 const DECLARED_SET = [
   'app.annotations',
-  'app.artifact_edits',
+  'app.artifact_edits', 'app.artifact_creation_operations',
   'app.artifact_node_aliases',
   'app.artifact_shares',
   'app.artifact_source_ids',

@@ -2,7 +2,7 @@
 
 `npm run eval -- --help` describes the current CLI. A run selects one harness/model leg; there is no
 hard-coded model roster in the product. `npm run eval:report -- --help` describes report aggregation.
-Build the product before a local leg. Live harness runs may spend money and need explicitly selected
+Build the product and CLI before a local leg (`npm run build` and `npm run build -w services/cli`). Live harness runs may spend money and need explicitly selected
 credentials; do not run them as part of an ordinary unit-test command.
 
 Task filenames are the selector (`evals/lib/task-set.ts`):
@@ -17,8 +17,8 @@ name costs, retries, skips and incomplete runs rather than treating them as equi
 CI retries failed smoke tasks once when enabled; creative comparisons do not inherit that retry policy.
 
 `.github/workflows/ci.yml` runs the smoke task matrix only when `AGENT_SMOKE_ENABLED` is exactly `true`
-and secrets are available to the trusted job. Its four modes cover fetched/installed skills and API/MCP
-actions. The job is currently outside the required test roll-up. Do not infer that it ran from `npm test`.
+and secrets are available to the trusted job. Its sole mode, `cli`, stages the built CLI and installs the same local skill bundle shipped to users.
+MCP and remotely fetched skill modes are refused. The job is currently outside the required test roll-up. Do not infer that it ran from `npm test`.
 The eval harness's unit tests are included in the Vitest Node project.
 
 The harness workspace must not expose the checkout, evaluator records or privileged credentials to

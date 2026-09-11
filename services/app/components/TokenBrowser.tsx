@@ -1,5 +1,6 @@
 'use client';
 
+import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { ChevronDown, ChevronLeft, ChevronRight, Folder, EyeOff, FolderInput, Globe, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
@@ -251,9 +252,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
     const title = draftTitle.trim();
     setRenamingId(null);
     if (!title) return;
-    const response = await fetch(`/api/my/artifacts/${a.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }),
-    }).catch(() => null);
+    const response = await writeBrowserArtifact(a.id, { title }).catch(() => null);
     if (response?.ok) { pageDataChanged(); setTitles((current) => ({ ...current, [a.id]: title })); }
   };
   const [movingId, setMovingId] = useState<string | null>(null);

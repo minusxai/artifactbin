@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The `jsx` content tier — the minusx stories engine.
  * Publish path: static JSX over the ported shadcn kit, validated by the ported
@@ -202,7 +203,7 @@ describe('jsx tier publish', () => {
     ).json();
 
     const res = await putArtifact(
-      request(`/api/artifacts/${created.id}`, { method: 'PUT', token: t.token, json: { title: 'v2', markup: JSX_DOC.replace('Quarterly Revenue', 'Annual Revenue'), theme: 'pop' } }),
+      await observedRequest(`/api/artifacts/${created.id}`, { method: 'PUT', token: t.token, json: { title: 'v2', markup: JSX_DOC.replace('Quarterly Revenue', 'Annual Revenue'), theme: 'pop' } }),
       params({ id: created.id }),
     );
     expect(res.status).toBe(200);

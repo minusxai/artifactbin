@@ -1,4 +1,5 @@
 /** Real app acceptance for durable targets across managed and declarative content. */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { expect } from 'playwright/test';

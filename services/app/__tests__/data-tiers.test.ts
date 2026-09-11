@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The data file tiers: datasets (one flat table), viz
  * recipes (inert spec templates), images — plus the markup tier's `ref:`
@@ -204,7 +205,7 @@ describe('image tier', () => {
 
 describe('markup tier references', () => {
   /** A dataset read through a <Query> (the only way a document reaches one), bound as `$rows`. */
-  const declared = (dsId: string) => `<Helmet><Query name="rows">{\`select * from ref_${dsId}\`}</Query></Helmet>`;
+  const declared = (dsId: string) => `<Helmet><Query name="rows" source="ref:${dsId}">{\`select * from public.rows\`}</Query></Helmet>`;
   const chart = (dsId: string, extra = '') => declared(dsId) + `<div data-design="tw" className="@container w-full">
   <Question data="$rows" viz={{ kind: "vega-lite", spec: { mark: "bar",
     encoding: { x: {field: "month"}, y: {field: "mrr", type: "quantitative"} } } }} height="400px" />${extra}
@@ -302,7 +303,7 @@ describe('markup tier references', () => {
     const story = await create(t.token, { title: 'story', markup: chart(ds.body.id) });
 
     const res = await putArtifact(
-      request(`/api/artifacts/${ds.body.id}`, { method: 'PUT', token: t.token, json: { title: 'sales', dataset: [{ month: 'Jan', revenue: 5 }] } }),
+      await observedRequest(`/api/artifacts/${ds.body.id}`, { method: 'PUT', token: t.token, json: { title: 'sales', dataset: [{ month: 'Jan', revenue: 5 }] } }),
       params({ id: ds.body.id }),
     );
     expect(res.status).toBe(200); // warnings, never blocks

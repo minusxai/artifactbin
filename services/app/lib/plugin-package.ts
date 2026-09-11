@@ -2,14 +2,14 @@
  * Deterministic Claude Code and Codex plugin generation from the canonical
  * skill tree. Hosted channels share content but have isolated identities.
  */
-import { renderTree, skillFileWithFrontmatter, skillTree } from './skills';
+import teaching from '../../cli/src/generated/teaching.json';
 import {
   PLUGIN_BASE_URL, type PluginChannel,
   pluginChannel,
   pluginInstall
 } from './plugin-id';
 
-export const PLUGIN_VERSION = '0.6.0';
+export const PLUGIN_VERSION = teaching.version;
 
 export {
   CODEX_APP_PLUGIN_REF,
@@ -38,11 +38,9 @@ function channelSkillFile(filePath: string, content: string, name: string): [str
 
 export function buildPluginFiles(
   base: string = PLUGIN_BASE_URL,
-  transport: 'curl' | 'mcp' = 'mcp',
   channel: PluginChannel = 'production',
 ): Record<string, string> {
   const identity = pluginChannel(channel);
-  const tree = skillTree();
   const files: Record<string, string> = {
     '.claude-plugin/plugin.json': json({
       name: identity.name,
@@ -56,14 +54,10 @@ export function buildPluginFiles(
       description: DESCRIPTION,
       version: PLUGIN_VERSION,
       skills: './skills/',
-      mcpServers: './.mcp.json',
-    }),
-    '.mcp.json': json({
-      mcpServers: { [identity.name]: { type: 'http', url: `${base}/mcp` } },
     }),
     'README.md': `# ${identity.name} plugin
 
-Skills and MCP server for publishing self-contained HTML artifacts to ${base}.
+Local CLI skills for publishing artifacts to ${base}.
 This is the **${identity.channel}** release channel.
 
 ## Install (Claude Code)
@@ -77,8 +71,9 @@ then \`claude --plugin-dir ./plugin\`.
 
 ## What you get
 
-- MCP tools (\`create_artifact\`, \`edit_artifact\`, and others) against \`${base}/mcp\`.
-- The \`${identity.name}\` skill generated from the same files served by \`${base}/docs\`.
+- The same local skill bundle shipped with afbin ${PLUGIN_VERSION}.
+- Install the CLI with \`npm install -g @artifactbin/cli\`, then run \`afbin setup --server ${base}\`.
+- Read \`afbin help\` locally; use \`afbin push\` to publish files.
 
 ## Self-hosting
 
@@ -93,8 +88,8 @@ This directory is generated. Do not edit it directly.
 `,
   };
 
-  for (const { file, text } of renderTree(tree, base, transport, 'installed')) {
-    const [rel, content] = channelSkillFile(file.path, skillFileWithFrontmatter(file, text), identity.name);
+  for (const [file, text] of Object.entries(teaching.files)) {
+    const [rel, content] = channelSkillFile('artifactbin/'+file, text, identity.name);
     files[`skills/${rel}`] = content;
   }
   return files;
@@ -102,12 +97,11 @@ This directory is generated. Do not edit it directly.
 
 export function buildMirrorFiles(
   base: string = PLUGIN_BASE_URL,
-  transport: 'curl' | 'mcp' = 'mcp',
   channel: PluginChannel = 'production',
   sourceSha = 'development',
 ): Record<string, string> {
   const identity = pluginChannel(channel);
-  const plugin = buildPluginFiles(base, transport, channel);
+  const plugin = buildPluginFiles(base, channel);
   return {
     ...Object.fromEntries(Object.entries(plugin).map(([rel, content]) => [`plugins/${identity.name}/${rel}`, content])),
     '.artifactbin-release.json': json({

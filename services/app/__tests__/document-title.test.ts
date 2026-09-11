@@ -1,3 +1,4 @@
+import {patchMetadata} from '@/__tests__/conditional-request';
 /**
  * What a document is CALLED follows its own heading until someone names it.
  *
@@ -68,10 +69,7 @@ describe('the page title follows the document', () => {
 
   it('stops following once someone names it explicitly', async () => {
     const doc = await start();
-    const res = await editRoute(
-      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: doc.token, json: { edit_id: doc.edit_id, title: 'Named by hand' } }),
-      params({ id: doc.id }),
-    );
+    const res = await patchMetadata(doc.token,doc.id,{title:'Named by hand'});
     expect(res.status).toBe(200);
     const after = (await res.json()) as { edit_id: string };
     const headingEdit = await editRoute(

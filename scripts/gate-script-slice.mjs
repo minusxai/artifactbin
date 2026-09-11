@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: the tracer slice, in a real browser, end to end.
@@ -49,7 +50,7 @@ const SCRIPT = [
 
 const markup = [
   '<Helmet><title>slice gate</title>',
-  `<Query name="rows">{\`select * from ref_${ds.id}\`}</Query>`,
+  `<Query name="rows" source="ref:${ds.id}">{\`select * from public.rows\`}</Query>`,
   '<style>{`h1 { color: rgb(200, 10, 10); }`}</style>',
   '</Helmet>',
   '<h1 className="text-4xl font-bold">Slice doc</h1>',

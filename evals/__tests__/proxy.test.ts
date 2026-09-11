@@ -22,21 +22,6 @@ beforeAll(async () => {
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       if (req.url === '/api/artifacts' && req.method === 'POST') { res.writeHead(201, { 'content-type': 'application/json' }); res.end(JSON.stringify({ id: 'madeUp', markup: '<h1>x</h1>' })); return; }
-      if (req.url === '/mcp' && body.includes('reject-me')) {
-        const sse = body.includes('sse');
-        res.writeHead(200, { 'content-type': sse ? 'text/event-stream' : 'application/json' });
-        const reply = JSON.stringify({jsonrpc:'2.0',id:1,result:{isError:true,content:[{type:'text',text:JSON.stringify({error:'invalid_jsx'})}]}});
-        res.end(sse ? `event: message\ndata: ${reply}\n\n` : reply); return;
-      }
-      if (req.url === '/mcp' && req.method === 'POST') {
-        const call = JSON.parse(body) as { id?: unknown; params?: { arguments?: { markup?: string } } };
-        res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({
-          jsonrpc: '2.0', id: call.id,
-          result: { content: [{ type: 'text', text: JSON.stringify({ id: 'mcpMade', markup: call.params?.arguments?.markup }) }] },
-        }));
-        return;
-      }
       if (req.url === '/api/artifacts/pathId/edits') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ id: 'pathId' })); return; }
       if (req.url === '/bad') { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: 'invalid_jsx', details: [] })); return; }
       if (req.url === '/echo' && req.method === 'PUT') {
@@ -121,33 +106,17 @@ describe('artifact id capture', () => {
     expect(entries[1].artifactId).toBe('pathId');       // from the URL
   });
 
-  it('unwraps MCP tool arguments before recording the content tier and markup', async () => {
+  it('records the source field used by a native conditional push', async () => {
     const p = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'eval-proxy-')), 'ledger.jsonl');
     const px = await startProxy({ port: 0, target: `http://127.0.0.1:${targetPort}`, ledgerPath: p });
-    await fetch(`${px.url}/mcp`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 1, method: 'tools/call',
-        params: { name: 'create_artifact', arguments: { dataset: [{ month: 'Jan', value: 4 }] } },
-      }),
-    });
-    await fetch(`${px.url}/mcp`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0', id: 2, method: 'tools/call',
-        params: { name: 'update_artifact', arguments: { id: 'mcpMade', markup: '<h1>From MCP</h1>' } },
-      }),
-    });
-    await px.stop();
-    const entries = parseLedger(fs.readFileSync(p, 'utf8'));
-    expect(entries[0]).toMatchObject({ artifactId: 'mcpMade', reqFormat: 'dataset' });
-    expect(entries[1]).toMatchObject({
-      artifactId: 'mcpMade', reqFormat: 'markup',
-      reqMarkup: '<h1>From MCP</h1>', resMarkup: '<h1>From MCP</h1>',
-    });
+    try {
+      await fetch(`${px.url}/api/artifacts/pathId`, {method:'PUT',headers:{'content-type':'application/json',authorization:'Bearer mx_test_secret'},body:JSON.stringify({source:'<h1>CLI body</h1>',edit_id:'old'})});
+      const text = fs.readFileSync(p,'utf8');
+      expect(parseLedger(text)[0]).toMatchObject({artifactId:'pathId',reqFormat:'markup',reqMarkup:'<h1>CLI body</h1>',auth:'bearer'});
+      expect(text).not.toContain('mx_test_secret');
+    } finally { await px.stop(); }
   });
+
 });
 
 describe('pointing at a deployment', () => {
@@ -226,17 +195,5 @@ describe('the conditional echo', () => {
     const entry = parseLedger(fs.readFileSync(p, 'utf8'))[0];
     expect(entry.markupUnchanged).toBe(true);
     expect(entry.reqMarkup).toBe('<div>same</div>');
-  });
-});
-
-describe('MCP operation failures', () => {
-  it.each(['json','sse'])('records %s tool errors inside HTTP 200 without retaining credentials', async (format) => {
-    const ledger = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-errors-')), 'ledger.jsonl');
-    const px = await startProxy({port:0,target:`http://127.0.0.1:${targetPort}`,ledgerPath:ledger});
-    try {
-      const response = await fetch(`${px.url}/mcp`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'edit_artifact',arguments:{markup:`reject-me ${format}`}}})});
-      await response.text();
-      expect(parseLedger(fs.readFileSync(ledger,'utf8'))[0]).toMatchObject({status:200,mcpMethod:'tools/call',mcpTool:'edit_artifact',mcpError:'invalid_jsx'});
-    } finally { await px.stop(); }
   });
 });

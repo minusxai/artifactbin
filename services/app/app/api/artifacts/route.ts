@@ -1,12 +1,8 @@
-import { parseVisibilityValue } from '@/lib/artifact-wire';
-import { artifactQuotaExceeded, createArtifact, type Visibility } from '@/lib/artifacts';
-import { assetByteQuotaExceeded } from '@/lib/asset-quota';
+import { createArtifactFromBody } from '@/lib/artifact-wire';
 import { withTokenAuth } from '@/lib/auth';
 import { runOperation } from '@/lib/operations/http';
 import { baseUrl, json, readJson } from '@/lib/http';
-import { storeImageContent } from '@/lib/story/data-tiers';
-import { imageRawUrl } from '@/lib/story/ref-data';
-import { readFileUpload, storeFileContent } from '@/lib/story/file-store';
+import { readFileUpload } from '@/lib/story/file-store';
 
 /**
  * The one create path both auth modes share (bearer here, session in
@@ -26,38 +22,17 @@ export async function createArtifactFromRequest(
   const q = new URL(request.url).searchParams;
   const fileUpload = q.get('format') === 'file';
   if (fileUpload || contentType.startsWith('image/')) {
-    const v = parseVisibilityValue(q.get('visibility'), !!userId);
-    if (v instanceof Response) return v;
-    // Two caps, two questions: how many artifacts this token holds, and how
-    // many BYTES its owner has caused to be stored (lib/asset-quota, R9 — the
-    // account's when the token has one). The JSON body asks the second through
-    // `ContentInputCtx.overByteQuota`; this branch never goes through that
-    // door, so it asks here, before the bytes are read into memory.
-    if (await artifactQuotaExceeded(tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
-    if (await assetByteQuotaExceeded(tokenId)) {
-      return json({ error: 'quota_exceeded', details: ['this account is over its stored-byte quota — delete assets you no longer need'] }, 403);
-    }
-    const bytes = fileUpload ? await readFileUpload(request) : Buffer.from(await request.arrayBuffer());
+    const bytes = await readFileUpload(request);
     if (bytes instanceof Response) return bytes;
-    const stored = fileUpload
-      ? await storeFileContent(bytes, contentType || 'application/octet-stream', q.get('filename') ?? '')
-      : await storeImageContent(bytes, contentType);
-    if (stored instanceof Response) return stored;
-    const visibility: Visibility | undefined = v;
-    const row = await createArtifact(tokenId, userId, {
-      ...stored,
-      title: q.get('title') ?? stored.derivedTitle,
-      description: null,
-      ...(visibility ? { visibility } : {}),
-    });
-    return json({
-      id: row.id, url: `${baseUrl(request)}/a/${row.id}`, version: row.version, visibility: row.visibility,
-      edit_id: row.edit_id,
-      format: row.format, title: row.title,
-      markup: row.source,
-      rawUrl: imageRawUrl(row.id, row.version),
-      ...(fileUpload ? { filename: row.meta.filename, contentType: row.meta.contentType, bytes: row.meta.bytes } : {}),
-    }, 201);
+    // Transport decoding only. Validation, staging, quota and durable replay
+    // belong to the same publication pipeline as JSON creates.
+    const body = {
+      ...(fileUpload ? {file:{filename:q.get('filename')??'',contentType:contentType||'application/octet-stream',base64:bytes.toString('base64')}}
+        : {image:`data:${contentType};base64,${bytes.toString('base64')}`}),
+      ...(q.has('title')?{title:q.get('title')}:{}),
+      ...(q.has('visibility')?{visibility:q.get('visibility')}:{}),
+    };
+    return createArtifactFromBody(body,{tokenId,userId},baseUrl(request),request);
   }
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
@@ -71,5 +46,5 @@ export const POST = withTokenAuth((request: Request, { tokenId, userId }) =>
 
 /** GET /api/artifacts — the actor's list (whole account for a claimed token), newest first, no content. */
 export const GET = withTokenAuth((request: Request, { tokenId, userId }) =>
-  runOperation('list_artifacts', request, { tokenId, userId }, {}),
+  runOperation('list_artifacts', request, { tokenId, userId }, Object.fromEntries(new URL(request.url).searchParams)),
 );

@@ -6,9 +6,9 @@ import { collectRefUses } from '../refs';
 import { dryRunDataflow } from '../data-checks';
 import { runDataflow } from '@/lib/sql/run-dataflow';
 
-const source = (sql: string) => `<Helmet><Value name="open" type="boolean" default={false} /><Value name="drafts" type="table" value={[{id: 1}]} /><Mutation name="change">{${JSON.stringify(sql)}}</Mutation></Helmet>`;
-function parse(sql: string) {
-  const result = parseJsx(source(sql));
+const source = (sql: string, dataset?:string) => `<Helmet><Value name="open" type="boolean" default={false} /><Value name="drafts" type="table" value={[{id: 1}]} /><Mutation name="change"${dataset ? ` source="ref:${dataset}"` : ''}>{${JSON.stringify(sql)}}</Mutation></Helmet>`;
+function parse(sql: string, dataset?:string) {
+  const result = parseJsx(source(sql,dataset));
   if (!result.ok) throw new Error(result.error);
   const {content} = splitHelmet(result.nodes);
   const flow: Dataflow = {values: content.values, queries: content.queries, mutations: content.mutations};
@@ -52,8 +52,8 @@ describe('declared local SQL state', () => {
   it('rejects a mutation mixing local and dataset tables', () => {
     expect(parse('insert into drafts select * from ref_abc123').errors.length).toBeGreaterThan(0);
   });
-  it('retains the existing persistent dataset target and ref graph', () => {
-    const {flow, errors} = parse('update ref_abc123 set id=1');
+  it('declares the persistent dataset source and ref graph', () => {
+    const {flow, errors} = parse('update public.rows set id=1','abc123');
     expect(errors).toEqual([]);
     expect(flow.mutations?.[0]).toMatchObject({target: 'abc123', refs: ['abc123']});
     expect(flow.mutations?.[0].scope).toBeUndefined();

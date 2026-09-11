@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './fixture-http.mjs';
 /** Font-family resolution and the editor URL-import door share the asset gate's fixture/browser. */
 import { startDocument, becomeOwner } from './start-doc.mjs';
 

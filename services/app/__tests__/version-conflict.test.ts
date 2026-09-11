@@ -1,11 +1,5 @@
-/**
- * Optimistic concurrency: PUT carries an optional
- * `expectedVersion`; a stale one answers 409 {version_conflict, currentVersion}
- * and changes NOTHING. The interleaved two-editor flow converges through
- * read → 409 → replay-with-fresh-version, and both streams land in one
- * version history. Omitting expectedVersion keeps last-write-wins (curl-
- * friendly, and the pre-existing contract).
- */
+import {observedRequest} from '@/__tests__/conditional-request';
+/** Both observed version and state are required; stale replacements never overwrite the head. */
 import { describe, expect, it } from 'vitest';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listVersionsRoute } from '@/app/api/artifacts/[id]/versions/route';
@@ -35,7 +29,7 @@ describe('expectedVersion on PUT', () => {
 
     // The "agent" edits first (v1 → v2).
     const agentPut = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">agent edit</h1>', expectedVersion: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">agent edit</h1>', expectedVersion: 1 } }),
       params({ id: doc.id }),
     );
     expect(agentPut.status).toBe(200);
@@ -43,7 +37,7 @@ describe('expectedVersion on PUT', () => {
 
     // The "human", still holding v1, saves — stale, must 409 and change nothing.
     const stale = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">human edit</h1>', expectedVersion: 1 } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">human edit</h1>', expectedVersion: 1 } }),
       params({ id: doc.id }),
     );
     expect(stale.status).toBe(409);
@@ -58,7 +52,7 @@ describe('expectedVersion on PUT', () => {
 
     // Replay against the version the 409 reported → converges as v3.
     const replay = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">human edit</h1>', expectedVersion: conflict.currentVersion } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<h1 className="text-2xl">human edit</h1>', expectedVersion: conflict.currentVersion } }),
       params({ id: doc.id }),
     );
     expect(replay.status).toBe(200);
@@ -67,29 +61,21 @@ describe('expectedVersion on PUT', () => {
     // Both streams are in one history: v1 (create), v2 (agent), head v3 (human).
     const versions = await listVersionsRoute(request(`/api/artifacts/${doc.id}/versions`, { token: t.token }), params({ id: doc.id }));
     const list = (await versions.json()) as { versions: Array<{ version: number }> };
-    expect(list.versions.map((v) => v.version).sort()).toEqual([1, 2]);
+    expect(list.versions.map((v) => v.version).sort()).toEqual([1, 2, 3]);
   });
 
-  it('omitted expectedVersion keeps last-write-wins', async () => {
-    const t = await mintToken('t');
-    const doc = await createDoc(t.token);
-    await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p className="p-1">two</p>' } }),
-      params({ id: doc.id }),
-    );
-    const res = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p className="p-1">three</p>' } }),
-      params({ id: doc.id }),
-    );
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { version: number }).version).toBe(3);
+  it('omitted expectedVersion refuses replacement without changing the head', async () => {
+    const t = await mintToken('t');const doc = await createDoc(t.token);
+    const res = await putArtifact(request(`/api/artifacts/${doc.id}`, {method:'PUT',token:t.token,json:{markup:'<p>Changed</p>'}}),params({id:doc.id}));
+    expect(res.status).toBe(400);expect((await res.json()).error).toBe('version_required');
+    const read=await getArtifactRoute(request(`/api/artifacts/${doc.id}`,{token:t.token}),params({id:doc.id}));expect((await read.json()).version).toBe(1);
   });
 
   it('a non-numeric expectedVersion is a 400, not a silent overwrite', async () => {
     const t = await mintToken('t');
     const doc = await createDoc(t.token);
     const res = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p className="p-1">x</p>', expectedVersion: 'one' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p className="p-1">x</p>', expectedVersion: 'one' } }),
       params({ id: doc.id }),
     );
     expect(res.status).toBe(400);

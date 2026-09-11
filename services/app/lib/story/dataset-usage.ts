@@ -12,7 +12,7 @@ const templateSql = (sql: string) => sql.replaceAll('\\', '\\\\').replaceAll('`'
 
 /** A stable logical table, never the connection's physical source names. */
 export function datasetQuerySnippet(id: string, catalog?: DatasetCatalog, name = 'rows'): string {
-  return `<Query name="${name}" source="${id}">{\`SELECT * FROM ${templateSql(tableName(catalog))}\`}</Query>`;
+  return `<Query name="${name}" source="ref:${id}">{\`SELECT * FROM ${templateSql(tableName(catalog))}\`}</Query>`;
 }
 
 const jsonAttr = (value: unknown) => `{${JSON.stringify(value)}}`;
@@ -62,7 +62,7 @@ function datasetMutationExample(id: string, columns: DatasetColumn[], catalog?: 
   const values = cols.map((c) => `<Value name="${c.name}" type="${c.type}" />`).join('');
   const names = cols.map((c) => quote(c.name)).join(', ');
   const binds = cols.map((c) => `$${c.name}`).join(', ');
-  return `<Helmet>${values}<Mutation name="add" source="${id}">{\`insert into ${templateSql(tableName(catalog))} (${names}) values (${binds})\`}</Mutation></Helmet>\n`
+  return `<Helmet>${values}<Mutation name="add" source="ref:${id}">{\`insert into ${templateSql(tableName(catalog))} (${names}) values (${binds})\`}</Mutation></Helmet>\n`
     + cols.map((c) => `<input value="$${c.name}" placeholder="${c.name}" />`).join('')
     + '\n<Button run="$add">Add</Button>';
 }
@@ -88,7 +88,7 @@ export function datasetCreateFields(id: string, columns: unknown, rowCount: unkn
     usage: datasetUsageExample(id, cols, meta?.catalog)
       + (effectiveAccess === 'readwrite' ? `\n\n${datasetMutationExample(id, cols, meta?.catalog)}` : ''),
     ...(postgres ? { writes: 'PostgreSQL database rows are read-only. Editors can manage the connection, notebook and whitelist. Viewers can query exposed data.' } : effectiveAccess === 'read'
-      ? { writes: `read-only — a <Mutation source="${id}"> is refused at publish. To open it: PATCH /api/my/artifacts/${id} { "access": "readwrite" }, or set access on create/PUT.` }
+      ? { writes: `read-only — a <Mutation source="ref:${id}"> is refused at publish. To open it: PATCH /api/my/artifacts/${id} { "access": "readwrite" }, or set access on create/PUT.` }
       : { writes: 'readwrite — viewers with edit access may insert/update/delete rows through a <Mutation>.' }),
   };
 }

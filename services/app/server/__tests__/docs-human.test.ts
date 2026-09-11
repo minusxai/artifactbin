@@ -16,15 +16,11 @@ const BROWSER = { accept: 'text/html,application/xhtml+xml,application/xml;q=0.9
 describe('docs addresses', () => {
   useAppHarness();
 
-  it('/docs answers the agent listing to a browser Accept too — no redirect, same text as curl', async () => {
-    const curl = await (await app.request('/docs')).text();
-    const res = await app.request('/docs', { headers: BROWSER });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/plain');
-    expect(await res.text()).toBe(curl);
-    const skill = await app.request('/docs/artifactbin', { headers: BROWSER });
-    expect(skill.status).toBe(200);
-    expect(skill.headers.get('content-type')).toContain('text/plain');
+  it('retired remote skill paths return 404 to machines and browsers', async () => {
+    for(const path of ['/docs','/docs/artifactbin','/docs/artifactbin/SKILL.md']) {
+      expect((await app.request(path)).status).toBe(404);
+      expect((await app.request(path,{headers:BROWSER})).status).toBe(404);
+    }
   });
 
   it('/docs-human is the page for people, and /docs/human sends them there', async () => {
@@ -32,8 +28,7 @@ describe('docs addresses', () => {
     expect(human.status).toBe(200);
     expect(human.headers.get('content-type')).toContain('text/html');
     const old = await app.request('/docs/human', { headers: BROWSER });
-    expect(old.status).toBe(301);
-    expect(old.headers.get('location')).toMatch(/\/docs-human$/);
+    expect(old.status).toBe(404);
   });
 
   it('a guessed API path answers 404 JSON naming /docs, never the SPA', async () => {
@@ -41,7 +36,7 @@ describe('docs addresses', () => {
       const res = await app.request(p);
       expect(res.status, p).toBe(404);
       expect(res.headers.get('content-type'), p).toContain('application/json');
-      expect((await res.json()).docs, p).toMatch(/\/docs$/);
+      expect((await res.json()).help, p).toContain('afbin help');
     }
   });
 
@@ -57,7 +52,7 @@ describe('docs addresses', () => {
       const machine = await app.request(p, { headers: { accept: '*/*' } });
       expect(machine.status, p).toBe(404);
       expect(machine.headers.get('content-type'), p).toContain('application/json');
-      expect((await machine.json()).docs, p).toMatch(/\/docs$/);
+      expect((await machine.json()).help, p).toContain('afbin help');
       const browser = await app.request(p, { headers: BROWSER });
       expect(browser.status, p).toBe(404);
       expect(browser.headers.get('content-type'), p).toContain('text/html');
@@ -84,7 +79,7 @@ describe('docs addresses', () => {
 
   it('the shell carries the help link with a title and the agent meta', async () => {
     const html = await (await app.request('/')).text();
-    expect(html).toMatch(/<link rel="help" href="\/docs" title="[^"]+"/);
-    expect(html).toMatch(/<meta name="artifactbin:agent" content="[^"]*\/docs[^"]*"/);
+    expect(html).toMatch(/<link rel="help" href="\/llms.txt" title="[^"]+"/);
+    expect(html).toMatch(/<meta name="artifactbin:agent" content="[^"]*afbin[^"]*"/);
   });
 });

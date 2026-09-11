@@ -1,33 +1,13 @@
+import {updateMetadataFromBody} from '@/lib/metadata-wire';
+import {decodePage, encodeCursor} from '@/lib/pagination';
 import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
-/**
- * THE OPERATIONS REGISTRY — one curated array of everything an agent can do
- * to an artifact, rendered three ways: the MCP tools (`app/mcp/route.ts`
- * loops over it), the bearer HTTP routes (each route is a translation layer
- * over its operation's `run`), and the docs' endpoint reference (a nunjucks
- * global, rendered per transport). One list, one set of input shapes, one
- * error vocabulary — a refusal cannot be documented in one transport and not
- * the other.
- *
- * This is NOT generated from routes — the generators' pitfall. It is the
- * curated surface: model-facing descriptions, action verbs, one worked
- * example each, read/write/destructive annotated (`annotate` stays ONE
- * operation for reply/resolve/reopen). `run` is transport-free: it takes an
- * actor + the caller's base origin and answers an `OpReply` (status + body).
- * The semantic depth lives in lib/artifact-wire and lib/artifacts — `run`
- * bodies are those same shared pipelines, so the two transports cannot fork.
- *
- * Two deliberate deviations from the fuller sketch, both to keep today's
- * wire contracts byte-compatible: no MCP `outputSchema` (the spec makes it
- * binding on the server, which would change every tool response envelope),
- * and the HTTP layer keeps its hand validation (the suite pins its named
- * error codes — `invalid_edit_body`, `version_required` — where a zod parse
- * would answer a zod error). The zod shapes remain the single source for the
- * MCP schema and the docs.
+/** Shared HTTP operations and schemas, projected into the CLI's bundled API reference.
+ * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import {
-  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getVersionFor, listArtifactsFor, listVersionsFor,
+  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getArtifactFor, getVersionFor, listArtifactPageFor, listVersionPageFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
 } from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/folders';
@@ -36,8 +16,8 @@ import { trackEvent } from '@/lib/analytics';
 import { exportImageResponse } from '@/lib/export';
 import type { AnnotationAuthor } from '@/lib/annotations';
 import {
-  artifactSummaryToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseParentField, parseVisibilityValue, replaceArtifactWithBody,
-  refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
+  artifactSummaryToWire, artifactToWire, artifactToWireWithAnnotations, createArtifactFromBody, createdArtifactWire, parseParentField, parseVisibilityValue, replaceArtifactWithBody,
+  parseExpectedVersion, refreshAssetsFor, respondToAnnotationAction, respondToEdit, respondToMutate,
 } from '@/lib/artifact-wire';
 import { MARKUP_FIELD_GUIDANCE, DATASET_FIELD_GUIDANCE, SHEET_URL_FIELD_GUIDANCE, IMAGE_URL_FIELD_GUIDANCE, CSV_URL_FIELD_GUIDANCE, PDF_FIELD_GUIDANCE, PDF_URL_FIELD_GUIDANCE } from '@/lib/agent-guidance';
 
@@ -47,8 +27,7 @@ export interface OpReply {
   body: Record<string, unknown>;
   headers?: Record<string, string>;
   /**
-   * Image payload (export_artifact): MCP renders it as a native image content
-   * block, HTTP as the bytes. When set, `body` is ignored on success.
+   * Image payload returned as bytes over HTTP. When set, body is ignored on success.
    */
   image?: { base64: string; mimeType: string };
 }
@@ -71,13 +50,13 @@ export interface OperationError {
 }
 
 export interface Operation {
-  /** The MCP tool name — an action verb, never a route transliteration. */
+  /** Stable operation identity for registry lookup. */
   name: string;
   title: string;
-  http: { method: 'GET' | 'POST' | 'PUT' | 'DELETE'; path: string };
+  http: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string };
   /** ONE model-facing paragraph: what it does, when to use it, what comes back. */
   description: string;
-  /** zod raw shape — the MCP inputSchema and the docs' field table. */
+  /** Zod field shape used by validation and the bundled API reference. */
   input: z.ZodRawShape;
   annotations: { readOnly?: boolean; destructive?: boolean; idempotent?: boolean };
   /** One worked example, rendered as curl or as a tool call by the docs. */
@@ -103,8 +82,7 @@ const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ statu
 
 /**
  * The one-of content fields every create/update takes — the field-level
- * guidance strings are the same ones the docs table renders, so the MCP
- * schema and the docs read one place.
+ * guidance strings are also rendered in local help.
  */
 const CONTENT_FIELDS = {
   markup: z.string().optional().describe(MARKUP_FIELD_GUIDANCE),
@@ -175,7 +153,7 @@ const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
   http: { method: 'POST', path: '/api/artifacts' },
-  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf | file). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name source="<datasetId>">{`select … from public.rows`}</Query> (SQL over named tables in one dataset; PostgreSQL datasets are read-only), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
+  description: 'Create an artifact (exactly one of markup | dataset | viz | image | pdf | file). Returns the public URL. markup is THE document format: story JSX over the component kit, HTML tags for everything else (prose is ordinary <p>/<h1>/<ul> — there is no markdown), and one top-level <Helmet> for <title>/<style>/<script> and the document\'s DATA: <Value name type default /> scalars and <Query name source="ref:<id>">{`select … from public.rows`}</Query> (SQL over named tables in one dataset; PostgreSQL datasets are read-only), bound in the body by name — <Question data="$q">, <DataTable data="$q">, <select value="$x" options="$q">. Recipes/images bind as ref:<id>, and a pdf as <File src="ref:<id>" />. No upload is needed for something already on the web: write <img src="https://…"> (or <Video poster>, <File src>) and publish stores a copy while your URL stays in the document. Dataset creation echoes the inferred columns and a ready-to-paste Query+Question. To ORGANISE: {"format":"folder","title":"Reports"} makes a folder — a folder HAS no content, its page is the listing we render for whoever opens it — and parent_id: "<folderId>" on any create files it there.',
   input: CONTENT_FIELDS,
   annotations: {},
   example: {
@@ -187,7 +165,7 @@ const createArtifactOp: Operation = {
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
-    return fromResponse(await createArtifactFromBody(input, ctx.actor, ctx.base));
+    return fromResponse(await createArtifactFromBody(input, ctx.actor, ctx.base, ctx.request));
   },
 };
 
@@ -195,16 +173,16 @@ const updateArtifactOp: Operation = {
   name: 'update_artifact',
   title: 'Replace an artifact',
   http: { method: 'PUT', path: '/api/artifacts/{id}' },
-  description: 'Full replace of an artifact you own (same one-of content fields as create). Archives the current state as a version; the URL never changes. Pass expectedVersion (from get_artifact) to fail with version_conflict instead of overwriting a concurrent edit — on conflict, re-read, merge, and retry with the reported currentVersion. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply, and they apply as METADATA — no new version, nothing archived — because a folder has no content to replace; renaming one is this call, and a content field answers not_editable.',
-  input: { id: z.string(), expectedVersion: z.number().int().positive().optional(), ...CONTENT_FIELDS },
+  description: 'Full replace of an artifact you own (same one-of content fields as create). Archives the current state as a version; the URL never changes. Both expectedVersion and expectedState from the observed head are required. A changed version or metadata state refuses the write; inspect the current head, merge and retry with its conditions. Dataset/recipe refreshes return warnings naming dependent artifacts whose bindings broke. On a FOLDER only title, visibility and parent_id apply, and they apply as METADATA — no new version, nothing archived — because a folder has no content to replace; renaming one is this call, and a content field answers not_editable.',
+  input: { id: z.string(), expectedVersion: z.number().int().positive(), expectedState: z.string().regex(/^[a-f0-9]{64}$/), ...CONTENT_FIELDS },
   annotations: { idempotent: true },
   example: {
-    input: { id: 'aB3xK9', markup: '<div data-design="tw" className="p-8"><h1 className="text-3xl">v2</h1></div>', expectedVersion: 1 },
+    input: { id: 'aB3xK9', markup: '<div data-design="tw" className="p-8"><h1 className="text-3xl">v2</h1></div>', expectedVersion: 1, expectedState: 'a'.repeat(64) },
   },
   errors: [
     NOT_FOUND,
     OWNER_ONLY,
-    { status: 409, code: 'version_conflict', fix: 'someone wrote meanwhile — re-read, merge, retry with the reported currentVersion' },
+    { status: 409, code: 'version_conflict', fix: 'someone wrote meanwhile — re-read, merge, retry with the observed currentVersion and currentState' },
     // A folder has no content, and this door is where that is enforced — so it
     // is declared HERE and not only on edit_artifact. The code is the same word
     // the data tiers answer; the FIX has to be different, because "replace it
@@ -221,9 +199,10 @@ const editArtifactOp: Operation = {
   name: 'edit_artifact',
   title: 'Edit an artifact in place',
   http: { method: 'POST', path: '/api/artifacts/{id}/edits' },
-  description: 'Edit markup using one old_string/new_string pair OR an edits list of 1–64 pairs, never both. Each old_string must match EXACTLY ONCE against the evolving in-memory source. Only the final document is validated and committed: one version or nothing; failures identify zero-based edit_index. Use the edit_id from your last create/get/edit response. Preserve persistent ids when moving nodes; include the nearest id-bearing context to distinguish repeated text. Unrelated concurrent edits rebase; conflicting regions return doc_changed with the current edit_id and source. Prefer this targeted operation over update_artifact, which replaces the whole document.',
+  description: 'Edit markup using source (a complete proposed JSX body), one old_string/new_string pair OR an edits list of 1–64 pairs; exactly one input form. Each old_string must match EXACTLY ONCE against the evolving in-memory source. Only the final document is validated and committed: one version or nothing; failures identify zero-based edit_index. Use the edit_id from your last create/get/edit response. Preserve persistent ids when moving nodes; include the nearest id-bearing context to distinguish repeated text. Unrelated concurrent edits rebase; conflicting regions return doc_changed with the current edit_id and source. Prefer this targeted operation over update_artifact, which replaces the whole document.',
   input: {
     id: z.string(), edit_id: z.string(),
+    source: z.string().optional().describe("The complete proposed JSX body; use instead of old_string/new_string or edits. The edit_id identifies its base for conservative rebase."),
     old_string: z.string().optional(), new_string: z.string().optional(),
     edits: z.array(z.object({ old_string: z.string(), new_string: z.string() })).min(1).max(64).optional(),
   },
@@ -285,13 +264,15 @@ const listArtifactsOp: Operation = {
   title: 'List your artifacts',
   http: { method: 'GET', path: '/api/artifacts' },
   description: 'List your artifacts (newest first): id, title, format, version, url, parent_id, ancestor_ids — no content. Folders are artifacts too — a title and a place, with no content of their own — so they list here beside documents; filter by parent_id (or an empty ancestor_ids for your root) to see one folder\'s contents. A claimed token lists the whole account.',
-  input: {},
+  input: { limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional() },
   annotations: { readOnly: true },
   example: { input: {} },
   errors: [],
-  async run(ctx) {
-    const rows = await listArtifactsFor(ctx.actor);
-    return reply({ artifacts: rows.map((r) => artifactSummaryToWire(r, ctx.base)) });
+  async run(ctx, input) {
+    const page = decodePage(input, 'artifacts');
+    if (page instanceof Response) return fromResponse(page);
+    const result = await listArtifactPageFor(ctx.actor, page.limit, page.cursor as {created: string; id: string} | undefined);
+    return reply({ artifacts: result.rows.map((r) => artifactSummaryToWire(r, ctx.base)), next_cursor: result.next ? encodeCursor('artifacts', result.next) : null });
   },
 };
 
@@ -300,14 +281,18 @@ const listVersionsOp: Operation = {
   title: 'List an artifact\'s versions',
   http: { method: 'GET', path: '/api/artifacts/{id}/versions' },
   description: 'An artifact\'s version history (every save, newest first), no content — read one with get_version.',
-  input: { id: z.string() },
+  input: { id: z.string(), limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional(), version: z.number().int().positive().optional() },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9' } },
   errors: [NOT_FOUND],
   async run(ctx, input) {
-    const versions = await listVersionsFor(ctx.actor, String(input.id));
-    if (!versions) return reply({ error: 'not_found' }, 404);
-    return reply({ versions });
+    const page = decodePage(input, 'versions');
+    if (page instanceof Response) return fromResponse(page);
+    const version=input.version===undefined?undefined:Number(input.version);
+    if(version!==undefined&&(!Number.isSafeInteger(version)||version<1))return reply({error:'invalid_version',hint:'Use a positive integer version.'},400);
+    const result = await listVersionPageFor(ctx.actor, String(input.id), page.limit, page.cursor?.version as number | undefined,version);
+    if (!result) return reply({ error: 'not_found' }, 404);
+    return reply({ versions: result.rows, next_cursor: result.next ? encodeCursor('versions', {version: result.next}) : null });
   },
 };
 
@@ -332,14 +317,25 @@ const getVersionOp: Operation = {
   },
 };
 
+const updateMetadataOp: Operation = {
+ name:'update_metadata', title:'Update metadata without a content version', http:{method:'PATCH',path:'/api/artifacts/{id}'},
+ description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
+ input:{id:z.string(),expectedState:z.string().regex(/^[a-f0-9]{64}$/),expectedVersion:z.number().int().positive().optional(),
+  title:z.string().nullable().optional(),description:z.string().nullable().optional(),theme:z.string().nullable().optional(),template:z.string().nullable().optional(),colorMode:z.enum(['light','dark']).nullable().optional(),
+  visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional()},
+ annotations:{},example:{input:{id:'aB3xK9',title:'Updated title',expectedState:'a'.repeat(64)}},
+ errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},{status:409,code:'state_conflict',fix:'Read the current metadata, reconcile your changes and retry with the new state.'}],
+ async run(ctx,input){const {id,...body}=input;return fromResponse(await updateMetadataFromBody(ctx.actor,String(id),body,ctx.base));},
+};
+
 const revertArtifactOp: Operation = {
   name: 'revert_artifact',
   title: 'Revert to an archived version',
   http: { method: 'POST', path: '/api/artifacts/{id}/revert' },
-  description: 'Restore an archived version as a NEW head version (the current state is archived first, so reverts are undoable). Answers the fresh edit_id and the restored markup.',
-  input: { id: z.string(), version: z.number() },
+  description: 'Restore an archived version as a NEW head version (the current state is archived first, so reverts are undoable). Answers the complete canonical head, including restored markup, metadata, edit_id and state for the next conditional write.',
+  input: { id: z.string(), version: z.number(), expectedVersion: z.number().int().positive(), expectedState: z.string().regex(/^[a-f0-9]{64}$/) },
   annotations: {},
-  example: { input: { id: 'aB3xK9', version: 1 } },
+  example: { input: { id: 'aB3xK9', version: 1, expectedVersion: 2, expectedState: 'a'.repeat(64) } },
   errors: [
     NOT_FOUND,
     { status: 409, code: 'version_not_archived', fix: 'that checkpoint was never archived (save-less edits coalesce) — list_versions shows the real ones' },
@@ -349,7 +345,9 @@ const revertArtifactOp: Operation = {
     if (typeof input.version !== 'number' || !Number.isInteger(input.version) || input.version < 1) {
       return reply({ error: 'version_required' }, 400);
     }
-    const row = await revertArtifactFor(ctx.actor, String(input.id), input.version);
+    const expected = parseExpectedVersion(input);
+    if (expected instanceof Response) return fromResponse(expected);
+    const row = await revertArtifactFor(ctx.actor, String(input.id), input.version, expected);
     // Distinct from not_found: the artifact is yours, that checkpoint just was
     // never archived (save-less edits coalesce). list_versions has the real ones.
     if (isVersionNotArchived(row)) {
@@ -358,11 +356,7 @@ const revertArtifactOp: Operation = {
       return reply({ error: 'version_not_archived' }, 409);
     }
     if (!row) return reply({ error: 'not_found' }, 404);
-    return reply({
-      id: row.id, url: `${ctx.base}/a/${row.id}`, version: row.version,
-      // Reverting moves the head pointer like any other whole-document write.
-      edit_id: row.edit_id, markup: row.source,
-    });
+    return reply(await artifactToWire(row,ctx.base));
   },
 };
 
@@ -392,7 +386,7 @@ const deleteArtifactOp: Operation = {
     // confirm a permanent act, and this one is not permanent.
     const deleted = await trashArtifactFor(ctx.actor, String(input.id));
     if (!deleted) return reply({ error: 'not_found' }, 404);
-    return reply({ ok: true });
+    return reply({ ok: true, deleted_ids:deleted });
   },
 };
 
@@ -421,19 +415,19 @@ const mutateDatasetOp: Operation = {
   name: 'mutate_dataset',
   title: 'Write rows into a dataset',
   http: { method: 'POST', path: '/api/artifacts/{id}/mutate' },
-  description: 'Run one INSERT, UPDATE or DELETE against a dataset you own (named as ref_<id> in the SQL, scalars bound via $params in values) — append or fix rows without re-sending the whole table. The dataset must be access: readwrite. Answers the new version and how many rows were affected; documents charting the dataset update live.',
+  description: 'Run one INSERT, UPDATE or DELETE against a dataset you own (selected by the path ID; SQL names a catalog table such as public.rows, scalars bound via $params in values) — append or fix rows without re-sending the whole table. The dataset must be access: readwrite. Answers the new version and how many rows were affected; documents charting the dataset update live.',
   input: {
     id: z.string(),
-    sql: z.string().describe('one INSERT/UPDATE/DELETE naming this dataset as ref_<id>; bind scalars as $name, never interpolate'),
+    sql: z.string().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
     values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   },
   annotations: {},
-  example: { input: { id: 'aB3xK9', sql: 'insert into ref_aB3xK9 (m, v) values ($m, $v)', values: { m: 'Sep', v: 12 } } },
+  example: { input: { id: 'aB3xK9', sql: 'insert into public.rows (m, v) values ($m, $v)', values: { m: 'Sep', v: 12 } } },
   errors: [
     NOT_FOUND,
     { status: 400, code: 'not_a_dataset', fix: 'only datasets hold rows — this id is another tier' },
     { status: 403, code: 'dataset_read_only', fix: 'set access: readwrite on the dataset first' },
-    { status: 400, code: 'invalid_sql', fix: 'one statement, INSERT/UPDATE/DELETE only, naming ref_<id> — the detail says what was wrong' },
+    { status: 400, code: 'invalid_sql', fix: 'one statement, INSERT/UPDATE/DELETE only, naming a catalog table such as public.rows — the detail says what was wrong' },
     { status: 409, code: 'dataset_full', fix: 'the write would cross the row cap — delete rows or split the dataset' },
     { status: 503, code: 'dataset_busy', fix: 'concurrent writes contended — retry after a moment (Retry-After rides the response)' },
   ],
@@ -445,12 +439,16 @@ const mutateDatasetOp: Operation = {
 const exportArtifactOp: Operation = {
   name: 'export_artifact',
   title: 'Export an artifact as an image',
-  http: { method: 'GET', path: '/a/{id}/export' },
+  http: { method: 'GET', path: '/api/artifacts/{id}/export' },
   description: 'Render a document you can read as a PNG and return the image — use ONLY if you can actually view images (otherwise read the markup back with get_artifact). For a deck, ask for ONE slide at a time (slide, 1-based): the whole-deck shot stacks every slide too small to read. The same render is served at <base>/a/<id>/export for anyone who can view the document.',
   input: {
     id: z.string(),
     slide: z.number().int().positive().optional().describe('one deck slide, 1-based; omit for the whole document'),
     format: z.enum(['png', 'jpg']).optional(),
+    mode: z.enum(['full','card','preview']).optional().describe('Capture mode; defaults to full.'),
+    crop: z.string().optional().describe('Card crop selection.'),
+    image: z.string().optional().describe('Card image selection.'),
+    search: z.string().optional().describe('Capture search selection.'),
   },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9', slide: 2 } },
@@ -472,6 +470,7 @@ const exportArtifactOp: Operation = {
     const res = await exportImageResponse(artifact, {
       ...(input.slide !== undefined ? { slide: String(input.slide) } : {}),
       ...(typeof input.format === 'string' ? { format: input.format } : {}),
+      ...Object.fromEntries(['mode','crop','image','search'].filter(key=>typeof input[key]==='string').map(key=>[key,input[key] as string])),
     }, ctx.base);
     const mime = res.headers.get('Content-Type') ?? '';
     if (!res.ok || !mime.startsWith('image/')) return fromResponse(res);
@@ -596,6 +595,6 @@ const refreshAssetOp: Operation = {
 export const OPERATIONS: Operation[] = [
   ...DATASET_OPERATIONS,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];

@@ -4,6 +4,9 @@
  * current content; the embeds consume this map — no network from inside the
  * surface beyond same-origin image URLs.
  */
+import {REFERENCE_POSITIONS} from './reference-positions';
+import {ARTIFACT_REFERENCE_PATTERN} from '@artifactbin/contracts';
+const refId=(value:string)=>ARTIFACT_REFERENCE_PATTERN.exec(value)?.[1]??null;
 import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
 
 /**
@@ -13,6 +16,7 @@ import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
  */
 export type ResolvedRefData =
   | { kind: 'viz'; recipe: VizRecipeContent }
+  | { kind: 'file'; url:string }
   /**
    * A PDF a document links with `<File src="ref:<id>">`. What travels is what
    * the CARD says — where the file is, what it is called, how big it is and how
@@ -118,7 +122,7 @@ const REF_FILE_POSITION = { component: true, tag: 'File', prop: 'src' } as const
 /** What a resolved ref contributes: url and box as strings, the blur as a style object. */
 export type RefPropPatch = Record<string, string | Record<string, string>>;
 
-export function resolveRefProps(
+function resolveImageAndFileProps(
   node: { isComponent: boolean; tag: string },
   props: Record<string, unknown>,
   refData: RefDataMap | undefined,
@@ -192,4 +196,23 @@ export function resolveRefProps(
     return patch;
   }
   return null;
+}
+
+/** Generic attachments and native media use the same position inventory as publication. */
+export function resolveRefProps(node:{isComponent:boolean;tag:string},props:Record<string,unknown>,refData:RefDataMap|undefined):RefPropPatch|null{
+ const patch:RefPropPatch=resolveImageAndFileProps(node,props,refData)??{};
+ for(const position of REFERENCE_POSITIONS){
+  if(position.component!==node.isComponent||position.tag!==(node.isComponent?node.tag:node.tag.toLowerCase()))continue;
+  const key=Object.keys(props).find(key=>key.toLowerCase()===position.attribute);
+  if(!key||typeof props[key]!=='string')continue;
+  const resolve=(value:string)=>{
+   const id=refId(value);const ref=id?refData?.[id]:undefined;
+   if(!ref||!('url' in ref)||!(position.kind==='asset'?['file','image','pdf'].includes(ref.kind):ref.kind===position.kind))return value;
+   return ref.url;
+  };
+  const raw=props[key] as string;
+  const value=position.list?raw.split(',').map(entry=>entry.replace(/^(\s*)(\S+)/,(_match,space,url)=>space+resolve(url))).join(','):resolve(raw);
+  if(value!==raw)patch[key]=value;
+ }
+ return Object.keys(patch).length?patch:null;
 }

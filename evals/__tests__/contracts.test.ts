@@ -14,7 +14,7 @@ describe('tasks/*.json', () => {
   it('every task validates and lists at least one check', () => {
     const dir = path.join(EVALS, 'tasks');
     const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
-    expect(files).toEqual(expect.arrayContaining(['scrolly.eval.json', 'report.eval.json', 'deck.eval.json', 'dashboard.eval.json', 'comment.json', 'data.json', 'edit.json', 'mcp.json']));
+    expect(files).toEqual(expect.arrayContaining(['scrolly.eval.json', 'report.eval.json', 'deck.eval.json', 'dashboard.eval.json', 'comment.json', 'data.json', 'edit.json', 'cli.json']));
     for (const f of files) {
       const task = TaskSchema.parse(read(`tasks/${f}`));
       expect(task.id).toBe(f.replace(/\.eval\.json$/, '').replace(/\.json$/, ''));
@@ -33,7 +33,7 @@ describe('tasks/*.json', () => {
   });
 
   it('tasks do not choose transport, and every charted data task stages its own CSV', () => {
-    expect(TaskSchema.parse(read('tasks/mcp.json'))).not.toHaveProperty('transport');
+    expect(TaskSchema.parse(read('tasks/cli.json'))).not.toHaveProperty('transport');
     expect(Object.keys(TaskSchema.parse(read('tasks/data.json')).files!)).toEqual(['sales.csv']);
     expect(Object.keys(TaskSchema.parse(read('tasks/dashboard.eval.json')).files!)).toEqual(['support.csv']);
     expect(Object.keys(TaskSchema.parse(read('tasks/deck.eval.json')).files!)).toEqual(['onboarding.csv']);

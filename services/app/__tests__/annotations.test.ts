@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * ANNOTATIONS — human/agent comments pinned to nodes, with reply/state transitions.
  *
@@ -158,7 +159,7 @@ describe('the wire — colocation on GET', () => {
     await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'keep me' });
 
     const put = await putArtifactRoute(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>totally new</p>' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: t.token, json: { markup: '<p>totally new</p>' } }),
       params({ id: doc.id }),
     );
     expect(put.status, await put.clone().text()).toBe(200);

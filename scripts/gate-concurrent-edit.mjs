@@ -11,6 +11,7 @@
  * jsdom cannot model same-origin iframe focus/blur, so this has to be a real
  * browser.  usage: node scripts/gate-concurrent-edit.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';

@@ -29,7 +29,7 @@ describe('WorkspaceCreate', () => {
 
     expect(screen.getByRole('dialog', { name: 'Create new artifact' })).toBeInTheDocument();
     expect(screen.getByLabelText('Get started')).toBeInTheDocument();
-    expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
+    expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
   });
 
   it('creates a named root folder and refreshes the home data', async () => {

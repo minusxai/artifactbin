@@ -46,8 +46,8 @@ routes:
   - { method: POST, path: "^/api/auth/email-otp/send-verification-otp$", policies: [login_send] }
   - { path: "^/api/auth/sign-in",           policies: [login_verify] }
   - { path: "^/api/auth/email-otp/verify",  policies: [login_verify] }
-  - { path: "^/oauth/register$",            policies: [oauth_register] }
-  - { path: "^/oauth/token$",               policies: [oauth_token] }
+  - { path: "^/oauth/(register|device)$",            policies: [oauth_register] }
+  - { path: "^/oauth/(token|device/token|device/approve)$",               policies: [oauth_token] }
   - { path: "^/a/[A-Za-z0-9]+/mutate$",     policies: [mutate] }
   - { path: "^/a/[A-Za-z0-9]+/query$",      policies: [query] }
   - { path: "^/api/query$",                 policies: [query] }

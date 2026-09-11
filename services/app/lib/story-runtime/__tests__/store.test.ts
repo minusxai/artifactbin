@@ -19,7 +19,7 @@ const flowOf = (helmetChildren: string): Dataflow => {
 const FLOW = flowOf(
   '<Value name="region" type="string" />' +
   '<Value name="min_rev" type="number" default={0} />' +
-  '<Query name="sales">{`select * from ref_abc123 where region = $region and revenue >= $min_rev`}</Query>' +
+  '<Query name="sales" source="ref:abc123">{`select * from public.rows where region = $region and revenue >= $min_rev`}</Query>' +
   '<Query name="top">{`select * from sales limit 1`}</Query>' +
   '<Query name="other">{`select 1`}</Query>',
 );

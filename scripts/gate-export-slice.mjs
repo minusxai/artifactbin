@@ -15,6 +15,7 @@
  *
  *   usage: node scripts/gate-export-slice.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';

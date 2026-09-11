@@ -128,7 +128,7 @@ describe('renderReaderChrome', () => {
     expect(html).toContain('data-mx-mode-choice="light"');
     expect(html).toContain('data-mx-mode-choice="dark"');
     expect(html).toContain('href="/account" target="_top"');
-    expect(html).toContain('href="/docs/artifactbin/SKILL.md" target="_top"');
+    expect(html).toContain('afbin-skills.tar.gz" target="_top">Download local skills');
     expect(html).toContain('class="mx-reader-brand"');
   });
 

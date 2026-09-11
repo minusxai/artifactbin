@@ -16,6 +16,7 @@ import {
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import { localTableOverrides } from '@/lib/story/local-tables';
 import { SIGNALS_TABLE } from '@/lib/story/local-target';
+import { queryRows } from '@/lib/datasets/query-rows';
 
 /** Dataset rows by artifact id (the `ref_<id>` tables). */
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
@@ -54,7 +55,6 @@ export async function runDataflow(flow: Dataflow, datasets: DatasetTables, opts:
   }
   const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
   if (signalColumns.length) inputs[SIGNALS_TABLE] = {columns: signalColumns, rows: [values]};
-  for (const [id, t] of Object.entries(datasets)) inputs[`ref_${id}`] = t;
 
   const queries = selectedQueries(flow, opts);
   if (queries === null) {
@@ -65,8 +65,10 @@ export async function runDataflow(flow: Dataflow, datasets: DatasetTables, opts:
 
   await Promise.all(queries.filter(q=>q.source).map(async q=>{
     try{
-      if(!opts.sourceQuery)throw new Error('Dataset source is unavailable');
-      const result=await opts.sourceQuery(q,values,opts.page?.name===q.name?opts.page:undefined);
+      const table = datasets[q.source!];
+      if (!opts.sourceQuery && !table) throw new Error(`Source ref:${q.source} is unavailable`);
+      const page = opts.page?.name === q.name ? opts.page : undefined;
+      const result = opts.sourceQuery ? await opts.sourceQuery(q, values, page) : await queryRows(table, q.sql, values, page);
       inputs[q.name]=result;tables[q.name]=result;
     }catch(error){errors[q.name]=error instanceof Error?error.message:'Dataset query failed';}
   }));

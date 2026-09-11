@@ -41,7 +41,7 @@ describe('discoverTasks', () => {
     expect(byId['comment-image']).toMatchObject({ id: 'comment-image', inEvalSet: true });
     expect(byId.data).toMatchObject({ id: 'data', inEvalSet: false });
     expect(byId.edit).toMatchObject({ id: 'edit', inEvalSet: false });
-    expect(byId.mcp).toMatchObject({ id: 'mcp', inEvalSet: false });
+    expect(byId.cli).toMatchObject({ id: 'cli', inEvalSet: false });
   });
 
   it('every file on disk parses, and its id matches its filename', () => {

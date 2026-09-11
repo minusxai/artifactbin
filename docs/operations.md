@@ -74,9 +74,7 @@
   a signed-in account splits it back out). `client` is guessed from the
   User-Agent: browsers land as `browser` (every real browser still says
   `Mozilla/`), branded agents as themselves (`claude-code`, `chatgpt`,
-  `curl`…), bare runtimes (`node`, `python`) as `script` — which is where
-  MCP tool calls from Claude Code land, since only the MCP `initialize`
-  handshake names the client and per-request telemetry can't see it.
+  `curl`…), bare runtimes (`node`, `python`) as `script`. An explicit Artifactbin-Agent header identifies a calling harness.
   Telemetry only: nothing gates on any of it.
 - Dev credentials live in `.env` (see `.env.example`); nothing secret is ever
   in the repo or stored in plaintext.
@@ -125,7 +123,7 @@ standard `callback/:id` endpoint; preserve the configured origin exactly
 (including scheme and any non-default port).
 
 Plan a user-visible authentication boundary. Account sessions should sign in
-again after cutover, and operators should restart MCP clients with requests in
+again after cutover, and operators should restart clients with requests in
 flight so they initialize and authorize against one release. Browser-held
 anonymous authority now includes a per-browser nonce backed by
 `AUTH__SCHEMA.credentials`; a legacy cookie without that nonce, or one whose
@@ -135,7 +133,7 @@ cookie alone. Keep `AUTH__SECRET` stable across the deployment.
 If rollback is required, roll the app, proxy and browser images/config back as
 one unit, but **do not roll the database back**: writes accepted after cutover
 must remain, and the additive credential rows are safe for the previous code
-to ignore. Expect another account login and MCP-client restart at that boundary.
+to ignore. Expect another account login and client restart at that boundary.
 
 **The rate limits are a file.** Every number lives in a policy file, and
 `PROXY__RATE_LIMIT_CONFIG_FILE` says which one — it and

@@ -19,7 +19,7 @@ put the air BELOW the content, not around it.
 
 Skeleton (cover → divider → chart slide; extend the pattern per act):
 
-  <Helmet><Query name="q">{`select month, sum(revenue) revenue from ref_<datasetId> group by 1 order by 1`}</Query></Helmet>
+  <Helmet><Query name="q" source="ref:abc123">{`select month, sum(revenue) revenue from public.rows group by 1 order by 1`}</Query></Helmet>
   <div data-design="tw" className="@container px-6 @2xl:px-12">
     <SlideDeck>
       <Slide title="Cover" className="border-b border-border py-14">

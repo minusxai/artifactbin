@@ -1,13 +1,12 @@
 /**
- * SPIKE — can the eval driver log in like a person and grant like an MCP client, over plain HTTP?
+ * SPIKE — can the eval driver log in like a person and grant an HTTP API client, over plain HTTP?
  *
  *   RESEND_EVAL_API_KEY=… EVAL_LOGIN_EMAIL=… npx tsx evals/scripts/spike-inbox-oauth.ts [base]
  *
  * De-risks the credential handoff BEFORE any driver wiring exists (brief 2026-09-03): one line per
  * step with its HTTP status and measured latency, and a PROBE block that answers the question the
- * design turns on — WHICH credential can do WHAT. An OAuth access token is minted for one exact MCP
- * resource (`services/proxy/src/parts.ts tokenFitsRequest`), so whether it reaches `/api/artifacts`
- * at all is measured here rather than assumed.
+ * design turns on — WHICH credential can do WHAT. The current OAuth grant targets the HTTP API;
+ * publication verifies that the issued credential reaches `/api/artifacts`.
  *
  * Secrets are read from the environment and NEVER printed: no key, no code, no cookie, no token —
  * only shapes, lengths and statuses. The address is masked to its domain.
@@ -110,7 +109,7 @@ let otp = '';
   if (!res.ok || jar.size === 0) fail(`sign-in answered ${res.status} with ${jar.size} cookie(s)`);
 }
 
-// ── 4. the OAuth grant, as an MCP client would ────────────────────────────────────────────────
+// ── 4. the OAuth grant for the HTTP API ────────────────────────────────────────────────
 const { verifier, challenge } = pkcePair();
 
 let clientId = '';
@@ -179,16 +178,6 @@ const createDoc = (headers: Record<string, string>) => fetch(`${BASE}/api/artifa
   body: JSON.stringify({ markup: PLACEHOLDER, title: 'eval spike placeholder', visibility: 'unlisted' }),
 });
 
-{
-  const at = t0();
-  const res = await fetch(`${BASE}/mcp`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${oauthToken}` },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
-  });
-  const text = await res.text();
-  line('PROBE oauth token → POST /mcp tools/list', res.status, at, `create_artifact listed: ${text.includes('create_artifact')}`);
-}
 
 {
   const at = t0();

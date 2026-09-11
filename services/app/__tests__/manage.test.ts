@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Management surface: token listing/revocation (dashboard), artifact deletion,
  * version listing, and revert-to-version.
@@ -29,7 +30,7 @@ async function create(token: string, html: string, title = 'x') {
 
 async function put(token: string, id: string, html: string) {
   const res = await putArtifact(
-    request(`/api/artifacts/${id}`, { method: 'PUT', token: token, json: { markup: html } }),
+    await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', token: token, json: { markup: html } }),
     params({ id }),
   );
   expect(res.status).toBe(200);
@@ -114,7 +115,7 @@ describe('artifact deletion', () => {
 });
 
 describe('versions + revert', () => {
-  it('lists archived versions (no content) newest first', async () => {
+  it('lists the current head and archived versions without content, newest first', async () => {
     const t = await mintToken('t');
     const art = await create(t.token, '<h1>v1</h1>', 'doc');
     await put(t.token, art.id, '<h1>v2</h1>');
@@ -123,7 +124,7 @@ describe('versions + revert', () => {
     const res = await listVersionsRoute(request(`/api/artifacts/${art.id}/versions`, { token: t.token }), params({ id: art.id }));
     expect(res.status).toBe(200);
     const { versions } = await res.json();
-    expect(versions.map((v: { version: number }) => v.version)).toEqual([2, 1]);
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([3, 2, 1]);
     expect(versions[0].content).toBeUndefined();
   });
 
@@ -133,7 +134,7 @@ describe('versions + revert', () => {
     await put(t.token, art.id, '<h1 id="head">v2</h1>');
 
     const res = await revertRoute(
-      request(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
+      await observedRequest(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: { version: 1 } }),
       params({ id: art.id }),
     );
     expect(res.status).toBe(200);
@@ -151,14 +152,14 @@ describe('versions + revert', () => {
     const versions = await (
       await listVersionsRoute(request(`/api/artifacts/${art.id}/versions`, { token: t.token }), params({ id: art.id }))
     ).json();
-    expect(versions.versions.map((v: { version: number }) => v.version)).toEqual([2, 1]);
+    expect(versions.versions.map((v: { version: number }) => v.version)).toEqual([3, 2, 1]);
   });
 
   it('refuses a version it cannot restore WITHOUT pretending the artifact is missing', async () => {
     const t = await mintToken('t');
     const art = await create(t.token, '<h1>v1</h1>');
     const res = await revertRoute(
-      request(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: { version: 7 } }),
+      await observedRequest(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: { version: 7 } }),
       params({ id: art.id }),
     );
     // Ownership is already proved here, so a bare 404 would only confuse:
@@ -171,7 +172,7 @@ describe('versions + revert', () => {
     const t = await mintToken('t');
     const art = await create(t.token, '<h1>v1</h1>');
     const res = await revertRoute(
-      request(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: {} }),
+      await observedRequest(`/api/artifacts/${art.id}/revert`, { method: 'POST', token: t.token, json: {} }),
       params({ id: art.id }),
     );
     expect(res.status).toBe(400);

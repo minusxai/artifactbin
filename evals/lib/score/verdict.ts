@@ -17,11 +17,11 @@
  */
 const LEDGER_ONLY = new Set([
   'published_first_try', 'read_docs_before_write', 'no_unknown_endpoints',
-  'canonical_stable', 'dataset_created', 'used_edits_endpoint', 'used_mcp',
+  'canonical_stable', 'dataset_created', 'used_edits_endpoint',
   'query_ran',
   // Whether the agent minted its own token is `POST /api/tokens/anonymous` in the ledger and nowhere
   // else. A ledger that saw nothing did not see the agent DECLINE to mint, so it stops gating like
-  // its neighbours — and the token-less guard falls back to its other half, `asked_for_a_token`,
+  // its neighbours — and the token-less guard falls back to its other half, `requested_authorization`,
   // which is read from the transcript and is never dropped. The guard therefore degrades to a
   // weaker question rather than to an EMPTY gate, which would pass every run vacuously.
   'did_not_self_mint',
@@ -49,17 +49,6 @@ const LEDGER_ONLY = new Set([
 const NEEDS_A_DOCS_FETCH = new Set(['read_docs_before_write']);
 
 /**
- * And once more, for the harness that has no MCP client. Its `mcp` task now
- * RUNS — over REST, labelled — because a skipped cell reads as a failure and
- * shrinks the denominator its column is judged against. But `used_mcp` then
- * asks it to prove it did the thing it cannot do, and a red cell for an
- * impossible check is the same lie as a green one. The task's other checks —
- * did it publish, is there a title, did the document render — are exactly as
- * meaningful over REST, and those still decide it.
- */
-const NEEDS_MCP = new Set(['used_mcp']);
-
-/**
  * And once more, one axis further over: `no_local_checkout_reads` is read out of
  * the HARNESS TRANSCRIPT's tool calls, and some harnesses emit none — OpenCode
  * can exit before its final event, which is the whole reason
@@ -76,7 +65,7 @@ const NEEDS_MCP = new Set(['used_mcp']);
  * produced instead. The check is still RECORDED, as null, which the report
  * renders "—".
  */
-const NEEDS_TOOL_TELEMETRY = new Set(['no_local_checkout_reads']);
+const NEEDS_TOOL_TELEMETRY = new Set(['no_local_checkout_reads','used_cli']);
 
 export interface GateOptions {
   trafficObserved: boolean;
@@ -94,7 +83,6 @@ export interface GateOptions {
 export function gatedChecks(gated: string[], opts: GateOptions): string[] {
   let out = opts.trafficObserved ? gated : gated.filter((c) => !LEDGER_ONLY.has(c));
   if (opts.vocabularyInstalled) out = out.filter((c) => !NEEDS_A_DOCS_FETCH.has(c));
-  if (opts.transportSubstituted) out = out.filter((c) => !NEEDS_MCP.has(c));
   if (opts.toolTelemetryObserved === false) out = out.filter((c) => !NEEDS_TOOL_TELEMETRY.has(c));
   return out;
 }

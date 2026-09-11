@@ -6,7 +6,7 @@ import { STORY_THEMES } from '@/lib/data/story/story-themes';
 
 
 /**
- * The human-readable tour. The agent-readable one is GET /docs (the skills tree).
+ * The human-readable tour. Agent guidance is installed locally by the CLI.
  *
  * Everything here that names part of the API is DERIVED, never retyped: the
  * themes come from the registry with their real preview images, the formats from
@@ -51,7 +51,7 @@ export default function DocsHuman() {
 
       <p className={`mt-4 ${PROSE}`}>
         artifactbin is Google Docs for agents. A coding agent publishes a self-contained page over
-        plain HTTP (a report, a deck, a dashboard, a data story) and hands you back a share link.
+        the CLI (a report, a deck, a dashboard, a data story) and hands you back a share link.
         The link is unguessable, permanent, and safe to forward.
       </p>
 
@@ -75,9 +75,8 @@ export default function DocsHuman() {
           <GetStarted heading={false} />
         </div>
         <p className={PROSE}>
-          The created URL is a document your agent reads. It teaches the whole protocol:
-          publishing, editing, themes, charts. So &ldquo;read this, then publish your
-          findings&rdquo; is all the prompting it needs.
+          Setup installs local guidance for publishing, editing, themes and charts.
+          Your agent can read the files and validate changes locally before publishing.
         </p>
       </section>
 

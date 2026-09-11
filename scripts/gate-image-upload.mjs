@@ -16,6 +16,7 @@
  *
  *   usage: node scripts/gate-image-upload.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 

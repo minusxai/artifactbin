@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: reactive JSX, document-local SQL, and Dialog over both document
@@ -47,7 +48,7 @@ const source = `<Helmet>
   </Dialog>
 </main>`;
 const doc = await json(await api('/api/artifacts', {markup:source, visibility:'unlisted'}));
-const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Mutation name="stored_write">{\`insert into ref_${dataset.id} (id, label) values (2, 'forbidden')\`}</Mutation></Helmet><Button run="$stored_write">Write</Button>`, visibility:'unlisted'}));
+const aclDoc = await json(await api('/api/artifacts', {markup:`<Helmet><Mutation name="stored_write" source="ref:${dataset.id}">{\`insert into public.rows (id, label) values (2, 'forbidden')\`}</Mutation></Helmet><Button run="$stored_write">Write</Button>`, visibility:'unlisted'}));
 ok(!!dataset.id && !!doc.id && !!aclDoc.id, `fixtures published (${dataset.id}, ${doc.id})`);
 if (!dataset.id || !doc.id || !aclDoc.id) throw new Error(`fixture publish failed: ${JSON.stringify({dataset, doc, aclDoc})}`);
 

@@ -12,8 +12,8 @@ Declare Queries/table Values and scalar Values in `<Helmet>`; bind by name.
 <Helmet>
   <Value name="region" type="string" />
   <Value name="min_rev" type="number" default={1000} />
-  <Query name="regions" source="<datasetId>">{`select distinct region from public.rows order by 1`}</Query>
-  <Query name="sales" source="<datasetId>">{`
+  <Query name="regions" source="ref:abc123">{`select distinct region from public.rows order by 1`}</Query>
+  <Query name="sales" source="ref:abc123">{`
     select region, sum(revenue) as revenue
     from public.rows
     where ($region is null or region = $region) and revenue >= $min_rev
@@ -25,10 +25,8 @@ Declare Queries/table Values and scalar Values in `<Helmet>`; bind by name.
 <Question title="Revenue by region" data="$sales" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" />
 ```
 
-`ref:<id>` survives ONLY for images and recipes; `data="ref:<id>"`, inline
-`data={[…]}` and the old Param control are retired and refused by name.
-
-Legacy `ref_<datasetId>` remains compatible. [Catalogs](databases.md).
+Published artifacts use `ref:<id>` in source, image and recipe attributes. SQL names tables.
+`data="ref:<id>"`, inline `data={[…]}` and Param are refused. [Catalogs](databases.md).
 
 Editable cells: [editing](markup-editing.md).
 
@@ -50,7 +48,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   Local Mutations may edit its rows; dependent local Queries re-run. `_signals`
   is the implicit one-row scalar table and accepts `UPDATE` only. [Examples and
   reload semantics](markup-state.md).
-- `<Query name source="<datasetId>">{`select …`}</Query>` — SQL as a
+- `<Query name source="ref:abc123">{`select …`}</Query>` — SQL as a
   template-literal child, exactly one SELECT over that dataset’s exposed tables.
   Without `source`, SQL runs locally in DuckDB; another query
   or table Value is a table by its bare name (any order; cycles refused); a
@@ -58,13 +56,13 @@ Declarations · Bindings: embeds · Bindings: controls.
   at publish against the real columns: a bad column is a
   `400 {"error":"invalid_sql"}` carrying the engine's message with candidate
   names. Results are cut at 10,000 rows; a query has 5 s. A FOLDER is a table
-  too — `ref_<folderId>`, its children, which a document can list with
+  too — use `source="ref:<folderId>"` and query `public.rows` for its children, which a document can list with
   `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
   level visibility updated_at url thumbnail views sparkline`, computed per
   VIEWER: a stranger gets the `public` children, `thumbnail` (a card) is null
   for a private child AND for every folder, `views`/`sparkline` null unless you
   may edit the folder.
-- `<Mutation name>{`insert into ref_<datasetId> (a) values ($a)`}</Mutation>`
+- `<Mutation name source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>`
   — a `<Query>` that WRITES (the dataset needs `access: readwrite`,
   [datasets](publishing-datasets.md)). Exactly one INSERT | UPDATE | DELETE
   naming one dataset in your edit scope. Runs on demand, never at render:

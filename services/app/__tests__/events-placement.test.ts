@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * THE PLACEMENT MOMENTS — the log's half of the folders and the trash.
  *
@@ -68,7 +69,7 @@ describe('a move is its own verb, at both placement doors', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
     listen();
-    const r = await patchRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: folder.id }, cookie: w.cookie }), params(doc.id));
+    const r = await patchRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: folder.id }, cookie: w.cookie }), params(doc.id));
     expect(r.status).toBe(200);
     const moved = said('moved');
     expect(moved).toHaveLength(1);
@@ -80,7 +81,7 @@ describe('a move is its own verb, at both placement doors', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D', parent_id: folder.id });
     listen();
-    await patchRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: null }, cookie: w.cookie }), params(doc.id));
+    await patchRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { parent_id: null }, cookie: w.cookie }), params(doc.id));
     expect(said('moved')[0]?.payload).toMatchObject({ from_parent_id: folder.id, to_parent_id: null });
   });
 
@@ -89,11 +90,11 @@ describe('a move is its own verb, at both placement doors', () => {
     const folder = await w.mk({ format: 'folder', title: 'F' });
     const doc = await w.mk({ markup: '<h1>x</h1>', title: 'D' });
     listen();
-    const filed = await replaceOneRoute(request(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>y</h1>', title: 'D', parent_id: folder.id }, token: w.token }), params(doc.id));
+    const filed = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>y</h1>', title: 'D', parent_id: folder.id }, token: w.token }), params(doc.id));
     expect(filed.status).toBe(200);
     expect(said('moved')[0]).toMatchObject({ object_id: doc.id, payload: { from_parent_id: null, to_parent_id: folder.id } });
     listen();
-    const plain = await replaceOneRoute(request(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>z</h1>', title: 'D' }, token: w.token }), params(doc.id));
+    const plain = await replaceOneRoute(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', json: { markup: '<h1>z</h1>', title: 'D' }, token: w.token }), params(doc.id));
     expect(plain.status).toBe(200);
     expect(said('moved')).toHaveLength(0);
   });

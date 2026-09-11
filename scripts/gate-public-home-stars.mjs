@@ -1,3 +1,4 @@
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';

@@ -28,7 +28,7 @@ describe('page menu', () => {
     render(<PageMenu authed />);
     expect(screen.queryByLabelText('Menu')).toBeNull();
     fireEvent.click(screen.getByLabelText('Open menu'));
-    for (const label of ['Artifacts', 'Account', 'Human Docs', 'Agent docs', 'Sign out']) {
+    for (const label of ['Artifacts', 'Account', 'Human Docs', 'Download local skills', 'Sign out']) {
       expect(screen.getByLabelText(label)).toBeInTheDocument();
     }
     expect(screen.queryByLabelText('Tokens')).toBeNull();

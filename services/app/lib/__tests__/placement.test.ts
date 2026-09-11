@@ -56,8 +56,8 @@ describe('deletions and merges', () => {
   it('3. docs-claim is folded into docs — its two cases live there by name', () => {
     expect(exists('__tests__/docs-claim.test.ts')).toBe(false);
     const docs = read('__tests__/docs.test.ts');
-    expect(docs).toContain('tells the user how to keep anonymous work under an account');
-    expect(docs).toContain('counts the vocabulary instead of restating it');
+    expect(docs).toContain('the bundled auth guide');
+    expect(docs).toContain('the bundled vocabulary');
   });
   it('4. the token-lifecycle DDL strings are gone; the schema render and one legacy-row upgrade own the columns', () => {
     expect(exists('lib/__tests__/schema-tokens-lifecycle.test.ts')).toBe(false);

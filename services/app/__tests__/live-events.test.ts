@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Live down-sync: the SSE surface at /a/<id>/events and the LISTEN fan-out
  * behind it. Asserts the properties the design rests on — first frame is
@@ -91,7 +92,7 @@ describe('GET /a/<id>/events', () => {
     const before = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
     expect(before).toMatchObject({ theme: null, colorMode: null });
     const put = await putArtifact(
-      request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<div data-design="tw"><h1>themed</h1></div>', theme: 'terminal', colorMode: 'dark', template: 'deck' } }),
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<div data-design="tw"><h1>themed</h1></div>', theme: 'terminal', colorMode: 'dark', template: 'deck' } }),
       params({ id: doc.id }),
     );
     expect(put.status).toBe(200);
@@ -121,7 +122,7 @@ describe('GET /a/<id>/events', () => {
     const { token, doc } = await setup();
     const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
     const framesPromise = readFrames(res.body!, 2);
-    const put = await putArtifact(request(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p>replaced</p>' } }), params({ id: doc.id }));
+    const put = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p>replaced</p>' } }), params({ id: doc.id }));
     expect(put.status).toBe(200);
     const frames = await framesPromise;
     expect(frames.length).toBeGreaterThanOrEqual(2);

@@ -61,9 +61,9 @@ describe('POST /api/start', () => {
     expect(res.headers.get('set-cookie') ?? '').toContain('HttpOnly');
     expect(body.prompt).toBe(anonymousPaste(BASE, body.id, body.token));
     expect(body.prompt).toContain(body.token);
-    expect(body.prompt).toContain(`${BASE}/docs/artifactbin/SKILL.md`);
+    expect(body.prompt).toContain('afbin help');
     expect(body.prompt.split('\n')).toHaveLength(1);
-    expect(body.prompt.length).toBeLessThan(320);
+    expect(body.prompt.length).toBeLessThan(600);
 
     // The document is readable with the token the START LINK hands the agent.
     const read = await artifactPage(request(`/api/artifacts/${body.id}`, { token: await agentToken(body) }), params({ id: body.id }));

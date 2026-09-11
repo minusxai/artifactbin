@@ -1,3 +1,4 @@
+import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * The single-identifier contract: an artifact has ONE id — 6 chars of
  * [a-zA-Z0-9] — which is the API handle, the ref:<id> target, and the URL
@@ -111,7 +112,7 @@ describe('the one identifier', () => {
       dataset: [{ region: 'east', total: 1 }, { region: 'west', total: 2 }],
     });
     const chart = (dsId: string) =>
-      `<Helmet><Query name="rows">{\`select * from ref_${dsId}\`}</Query></Helmet>` +
+      `<Helmet><Query name="rows" source="ref:${dsId}">{\`select * from public.rows\`}</Query></Helmet>` +
       `<section><Question title="t" data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"region","type":"nominal"},"y":{"field":"total","type":"quantitative"}}}}} height="200px" /></section>`;
 
     const ok = await create(token, { title: 'doc', markup: chart(ds.id) });
@@ -154,7 +155,7 @@ describe('/a/<id> namespace', () => {
 
     // First frame is the current state; then a whole-document PUT must wake us.
     const put = await putArtifact(
-      request('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { markup: '<section><p>beta</p></section>' } }),
+      await observedRequest('/api/artifacts/AbC123', { method: 'PUT', token: token, json: { markup: '<section><p>beta</p></section>' } }),
       params({ id: 'AbC123' }),
     );
     expect(put.status).toBe(200);

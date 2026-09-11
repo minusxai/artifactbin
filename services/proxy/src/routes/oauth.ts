@@ -1,5 +1,6 @@
+import {API_RESOURCE_PATH} from '@artifactbin/contracts';
 /**
- * OAuth 2.1 provider for `/mcp`: discovery, dynamic client registration,
+ * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
  * token minting remains app-owned and runs as the consenting session actor.
  */
@@ -12,11 +13,12 @@ import {
   isAllowedRedirectUri,
   isValidCodeChallenge,
   isValidCodeVerifier,
-  MCP_SCOPE,
+  ARTIFACT_SCOPE,
   type OAuthStore,
   protectedResourceMetadata,
   sameRedirectTarget,
 } from '../identity/oauth';
+import type { DevicePairing } from '../identity/device-pairing';
 import type { ProxyApp } from '../parts';
 
 type App = ProxyApp;
@@ -65,6 +67,7 @@ function page(title: string, body: string, status = 200, redirectUri = ''): Resp
 
 export interface OAuthRoutesOptions {
   oauth: OAuthStore;
+  pairing: DevicePairing;
   upstream: Upstream;
   trustedHops: number;
   publicBaseUrl?: string;
@@ -85,11 +88,59 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
 
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
-  const resource = (request: Request) => `${base(request)}/mcp`;
+  const resource = (request: Request) => `${base(request)}${API_RESOURCE_PATH}`;
   const meta = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' } });
   app.get('/.well-known/oauth-authorization-server', (c) => meta(authServerMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
-  app.get('/.well-known/oauth-protected-resource/mcp', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
+  app.get('/.well-known/oauth-protected-resource/api', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
+
+  app.post('/oauth/device', async (c) => {
+    const pair = await o.pairing.begin(base(c.req.raw));
+    const verificationUri = `${base(c.req.raw)}/oauth/device`;
+    return new Response(JSON.stringify({ device_code: pair.deviceCode, user_code: pair.userCode,
+      verification_uri: verificationUri, verification_uri_complete: `${verificationUri}?user_code=${pair.userCode}`,
+      expires_in: pair.expiresIn, interval: pair.interval }), { headers: { 'Content-Type': 'application/json', ...NO_STORE } });
+  });
+  app.get('/oauth/device', async (c) => {
+    const userCode = c.req.query('user_code') ?? '';
+    if (!await o.pairing.inspect(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin setup again.</p>', 400);
+    const actor = c.get('actor') ?? ANONYMOUS;
+    if (actor.credential !== 'session' || !actor.userId) {
+      const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
+      return page('Connect artifactbin', `<h1>Connect artifactbin</h1><form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${esc(callback)}"><button type="submit">Log in to connect</button></form>`);
+    }
+    return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${esc(userCode)}</strong>. This gives the CLI access to your artifacts as <strong>${esc(actor.email ?? 'your account')}</strong>.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><button type="submit">Approve connection</button><button type="submit" name="decision" value="deny">Deny connection</button></form>`);
+  });
+  app.post('/oauth/device/approve', async (c) => {
+    if (c.req.header('origin') !== base(c.req.raw)) return c.json({ error: 'invalid_origin' }, 403);
+    const actor = c.get('actor') ?? ANONYMOUS;
+    if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
+    const form = await c.req.formData();
+    if (form.get('decision') === 'deny') {
+      if (!await o.pairing.deny(String(form.get('user_code') ?? ''),base(c.req.raw))) return page('Connection expired','<h1>Connection expired</h1>',400);
+      return page('Connection denied','<h1>Connection denied</h1><p>No access was granted.</p>');
+    }
+    if (!await o.pairing.approve(String(form.get('user_code') ?? ''), base(c.req.raw), actor.userId)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+    return page('Connection approved', '<h1>Connection approved</h1><p>Return to your terminal. You can close this page.</p>');
+  });
+  app.post('/oauth/device/token', async (c) => {
+    const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE } });
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body.device_code !== 'string') return reply({ error: 'invalid_request' }, 400);
+    const result = await o.pairing.consume(body.device_code, base(c.req.raw));
+    if (result.status !== 'approved') return reply({ error: result.status === 'pending' ? 'authorization_pending' : result.status === 'denied' ? 'access_denied' : 'expired_token' }, 400);
+    try {
+      const client = await o.oauth.register({ client_name: 'artifactbin CLI', redirect_uris: ['http://127.0.0.1/callback'] });
+      const clientId = String(client.client_id);
+      const grant = { userId: result.userId, resource: resource(c.req.raw), scope: ARTIFACT_SCOPE };
+      const minted = await mintFor(o, c.req.raw, grant);
+      const refreshToken = await o.oauth.issueRefresh({ ...grant, clientId, accessTokenId: minted.id });
+      return reply({ access_token: minted.token, refresh_token: refreshToken, client_id: clientId,
+        token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, scope: ARTIFACT_SCOPE });
+    } catch {
+      return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin setup to start a new approval.' }, 503);
+    }
+  });
 
   app.options('/oauth/register', () => new Response(null, { status: 204, headers: { ...CORS } }));
   app.post('/oauth/register', async (c) => {
@@ -111,15 +162,15 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const state = q.get('state') ?? '';
     const expectedResource = resource(c.req.raw);
     const requestedResource = q.get('resource') ?? expectedResource;
-    const scope = q.get('scope') || MCP_SCOPE;
+    const scope = q.get('scope') || ARTIFACT_SCOPE;
     const client = clientId ? await o.oauth.client(clientId) : null;
     const problem =
       !client ? 'Unknown client.'
       : q.get('response_type') !== 'code' ? 'Unsupported response type.'
       : !isValidCodeChallenge(codeChallenge) || method !== 'S256' ? 'Invalid PKCE code challenge.'
       : !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) ? 'Redirect URI not registered.'
-      : requestedResource !== expectedResource ? 'Invalid MCP resource.'
-      : scope !== MCP_SCOPE ? 'Unsupported scope.'
+      : requestedResource !== expectedResource ? 'Invalid API resource.'
+      : scope !== ARTIFACT_SCOPE ? 'Unsupported scope.'
       : null;
     if (problem) return page('artifactbin — error', `<h1>Can’t connect</h1><p class="err">${esc(problem)}</p>`, 400);
     const actor = c.get('actor') ?? ANONYMOUS;
@@ -127,7 +178,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     if (actor.credential === 'session' && actor.userId) {
       return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
       <p>Your coding agent wants to publish artifacts. New artifacts will belong to <strong>${esc(actor.email ?? 'your account')}</strong>.</p>
-      <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" aria-label="Approve connection">Approve</button></form>`, 200, redirectUri);
+      <form method="POST" action="/oauth/authorize/approve">${fields}<input type="hidden" name="grant" value="user"><button type="submit" name="action" value="approve" aria-label="Approve connection">Approve</button><button type="submit" name="action" value="deny">Deny</button></form>`, 200, redirectUri);
     }
     const retryPath = `/oauth/authorize?${q.toString()}`;
     return page('artifactbin — connect', `<h1>Connect to artifactbin</h1>
@@ -137,6 +188,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   });
 
   app.post('/oauth/authorize/approve', async (c) => {
+    if (c.req.header('origin') !== base(c.req.raw)) return c.json({error:'invalid_origin'},403);
     const form = await c.req.formData();
     const clientId = String(form.get('client_id') ?? '');
     const redirectUri = String(form.get('redirect_uri') ?? '');
@@ -145,12 +197,17 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const scope = String(form.get('scope') ?? '');
     const state = form.get('state');
     const client = clientId ? await o.oauth.client(clientId) : null;
-    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || requestedResource !== resource(c.req.raw) || scope !== MCP_SCOPE) {
+    if (!client || !isAllowedRedirectUri(redirectUri) || !client.redirectUris.some((registered) => sameRedirectTarget(registered, redirectUri)) || !isValidCodeChallenge(codeChallenge) || requestedResource !== resource(c.req.raw) || scope !== ARTIFACT_SCOPE) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
     const url = new URL(redirectUri);
+    if (form.get('action') === 'deny') {
+      url.searchParams.set('error','access_denied');
+      if (typeof state === 'string' && state) url.searchParams.set('state',state);
+      return Response.redirect(url,303);
+    }
     url.searchParams.set('code', await createAuthCode(o.oauth, { userId: actor.userId, clientId, redirectUri, resource: requestedResource, scope }, codeChallenge));
     if (typeof state === 'string' && state) url.searchParams.set('state', state);
     return Response.redirect(url, 303);
@@ -176,7 +233,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (!isValidCodeVerifier(body.code_verifier)) return oauthError('invalid_request', 'Invalid code_verifier');
       if (!body.redirect_uri) return oauthError('invalid_request', 'Missing redirect_uri');
       const requestedResource = body.resource || expectedResource;
-      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid MCP resource');
+      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid API resource');
       const grant = await consumeAuthCode(o.oauth, { code: body.code, clientId: body.client_id, redirectUri: body.redirect_uri, resource: requestedResource, codeVerifier: body.code_verifier });
       if (!grant?.userId) return oauthError('invalid_grant', 'Invalid, expired, or already-used authorization code');
       try {
@@ -191,7 +248,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     if (body.grant_type === 'refresh_token') {
       if (!body.refresh_token) return oauthError('invalid_request', 'Missing refresh_token');
       const requestedResource = body.resource || expectedResource;
-      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid MCP resource');
+      if (requestedResource !== expectedResource) return oauthError('invalid_target', 'Invalid API resource');
       const grant = await o.oauth.rotateRefresh(body.refresh_token, body.client_id, requestedResource);
       if (!grant) return oauthError('invalid_grant', 'Invalid, expired, revoked, or already-used refresh token');
       try {

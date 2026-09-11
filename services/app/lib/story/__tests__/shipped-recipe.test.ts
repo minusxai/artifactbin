@@ -9,25 +9,29 @@
  */
 import { describe, expect, it } from 'vitest';
 import { checkDocumentData } from '../data-checks';
+import {queryRows} from '@/lib/datasets/query-rows';
+import type {DatasetColumn} from '../dataset-shape';
 import type { RefLoader } from '../refs';
 
 const DS = 'abc123';
+const columns:DatasetColumn[]=[
+        { name: 'day', type: 'date' },
+        { name: 'revenue', type: 'number' },
+        { name: 'region', type: 'string' },
+      ];
 const load: RefLoader = async (id) =>
   id === DS
     ? {
       id: DS,
       format: 'dataset',
-      columns: [
-        { name: 'day', type: 'date' },
-        { name: 'revenue', type: 'number' },
-        { name: 'region', type: 'string' },
-      ],
+      columns,
+      query: (sql,params) => queryRows({columns,rows:[]},sql,params),
     }
     : null;
 
 const doc = (viz: string) =>
   '<Helmet>' +
-  `<Query name="trend">{\`select day as period, sum(revenue) as revenue from ref_${DS} group by 1 order by 1\`}</Query>` +
+  `<Query name="trend" source="ref:${DS}">{\`select day as period, sum(revenue) as revenue from public.rows group by 1 order by 1\`}</Query>` +
   '</Helmet>' +
   `<Question data="$trend" viz={${viz}} height="300px" />`;
 

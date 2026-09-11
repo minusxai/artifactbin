@@ -14,6 +14,7 @@
  *
  *   usage: node scripts/gate-live-reader.mjs [base]
  */
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';

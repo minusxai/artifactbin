@@ -96,14 +96,11 @@ limit is 50 MB (self-host setting `FILES__MAX_BYTES`). Files count toward the
 same stored-byte and artifact quotas as other assets.
 
 ```bash
-curl -sS -X POST "[[ base ]]/api/artifacts?format=file&filename=scene.glb" \
-  -H "Authorization: Bearer $ARTIFACTBIN_TOKEN" \
-  -H "Content-Type: model/gltf-binary" --data-binary @scene.glb
+afbin push scene.glb
 ```
 
-Use `format=file` even for JSON or images when you want the original
-bytes preserved. URL-encode the filename. Session uploads use the same shape
-at `/api/my/artifacts`. JSON/MCP callers can send:
+Use the advanced API when JSON or images must remain generic file bytes.
+Write this JSON to request.json, then run `afbin api /artifacts --method POST --input request.json`:
 
 ```json
 { "file": { "filename": "note.txt", "contentType": "text/plain", "base64": "SGVsbG8K" } }

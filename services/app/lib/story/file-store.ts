@@ -1,4 +1,5 @@
 /** Allowlisted file uploads: bounded bytes, content-addressed storage, inert streaming downloads. */
+import type {ContentObjects} from './prepared-objects';
 import { Readable } from 'node:stream';
 import { MAX_FILE_BYTES } from '@/lib/config';
 import { json } from '@/lib/http';
@@ -14,7 +15,7 @@ export interface FileMeta {
 }
 
 /** JSON/MCP transport; raw-body uploads avoid base64 overhead for larger files. */
-export async function publishFile(input: unknown): Promise<StoredContent | Response> {
+export async function publishFile(input: unknown, objects?: ContentObjects): Promise<StoredContent | Response> {
   const file = input as { filename?: unknown; contentType?: unknown; base64?: unknown } | null;
   if (!file || typeof file.filename !== 'string' || typeof file.contentType !== 'string' || typeof file.base64 !== 'string') {
     return json({ error: 'invalid_file', details: ['file must be {filename, contentType, base64}'] }, 400);
@@ -23,7 +24,7 @@ export async function publishFile(input: unknown): Promise<StoredContent | Respo
   if (file.base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(file.base64)) {
     return json({ error: 'invalid_file', details: ['base64 must contain valid, padded base64 bytes'] }, 400);
   }
-  return storeFileContent(Buffer.from(file.base64, 'base64'), file.contentType, file.filename);
+  return storeFileContent(Buffer.from(file.base64, 'base64'), file.contentType, file.filename, objects);
 }
 
 export async function readFileUpload(request: Request): Promise<Buffer | Response> {
@@ -45,7 +46,7 @@ export async function readFileUpload(request: Request): Promise<Buffer | Respons
   return Buffer.concat(chunks, size);
 }
 
-export async function storeFileContent(bytes: Buffer, contentType: string, filename: string): Promise<StoredContent | Response> {
+export async function storeFileContent(bytes: Buffer, contentType: string, filename: string, objects: ContentObjects = objectStore()): Promise<StoredContent | Response> {
   if (bytes.length > MAX_FILE_BYTES) return json({ error: 'file_too_large', maxBytes: MAX_FILE_BYTES }, 413);
   if (!filename || filename.length > 255 || !filename.isWellFormed() || /[\x00-\x1f\x7f/\\]/.test(filename)) {
     return json({ error: 'invalid_filename', details: ['Provide a filename of 1–255 characters without paths or control characters.'] }, 400);
@@ -59,7 +60,7 @@ export async function storeFileContent(bytes: Buffer, contentType: string, filen
   // application/octet-stream. This is extension validation, not byte sniffing.
   contentType = canonicalType;
   const key = objectKey('file', bytes);
-  await objectStore().put(key, bytes, contentType);
+  await objects.put(key, bytes, contentType);
   const meta: FileMeta = { objectKey: key, bytes: bytes.length, contentType, filename };
   return { format: 'file', content: '', source: null, meta: { ...meta }, derivedTitle: filename };
 }
