@@ -87,7 +87,7 @@ export async function planSkills(selected:readonly SkillHarness[],options:{home:
 }
 /** Plugin caches belong to their harness. Report them and their refresh command; never write there. */
 export async function pluginSkillCopies(home:string,env:NodeJS.ProcessEnv=process.env):Promise<PluginSkillCopy[]>{
- const names=new Map(Object.values(PLUGIN_CHANNELS).map(channel=>[channel.name,channel]));
+ const names=new Map<string,typeof PLUGIN_CHANNELS[keyof typeof PLUGIN_CHANNELS]>(Object.values(PLUGIN_CHANNELS).map(channel=>[channel.name,channel]));
  const found:PluginSkillCopy[]=[];
  for(const harness of skillHarnesses){
   const root=join(dirname(dirname(skillTargets(home,env)[harness])),'plugins');
