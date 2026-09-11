@@ -1,6 +1,10 @@
 /**
- * Plugin release-channel identities. Production and hosted OSS staging are
- * deliberately distinct so both can be installed in the same client.
+ * Marketplace identities for the generated skill mirror.
+ *
+ * The hosted plugin distribution channel is gone: nothing here is published,
+ * installed or linked. What survives is the layout an agent harness expects
+ * when it discovers skills from a marketplace directory, which `evals/` writes
+ * to a temporary directory to give each harness the released skill bundle.
  */
 export const PLUGIN_CHANNELS = {
   production: {
@@ -48,12 +52,5 @@ export function pluginInstallCommands(
 
 const production = PLUGIN_CHANNELS.production;
 export const PLUGIN_NAME = production.name;
-export const PLUGIN_REPO = production.repo;
-export const PLUGIN_REPO_URL = `https://github.com/${PLUGIN_REPO}`;
 export const PLUGIN_BASE_URL = production.baseUrl;
 export const MARKETPLACE_NAME = production.marketplace;
-export const [PLUGIN_MARKETPLACE_ADD_COMMAND, PLUGIN_INSTALL_COMMAND] =
-  pluginInstallCommands('production');
-export const PLUGIN_INSTALL = pluginInstall('production');
-export const CODEX_APP_PLUGIN_REPO_URL = PLUGIN_REPO_URL;
-export const CODEX_APP_PLUGIN_REF = production.branch;

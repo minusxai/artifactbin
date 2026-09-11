@@ -44,9 +44,8 @@ approve the browser or imply `--force`. No noninteractive prompt waits for input
 `afbin update` explicitly updates the standalone executable and the selected local skills, with
 checksums and recoverable backups. It asks the selected server for the release it speaks
 (`/chat/release.json`) and takes the bytes from that published release. `afbin update --dry-run`
-resolves the release and reports the binary, skill and plugin changes without installing anything.
-Plugin-managed skill copies are reported with the command their harness uses to refresh them; afbin
-never edits a harness-owned plugin cache. An installation that did not come from the verified
+resolves the release and reports the binary and skill changes without installing anything.
+An installation that did not come from the verified
 installer is reported, never overwritten. Ordinary commands never poll releases. Use
 `afbin update -h` for selection and recovery options.
 

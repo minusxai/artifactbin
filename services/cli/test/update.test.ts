@@ -27,7 +27,6 @@ test('standalone update verifies bytes, atomically replaces, keeps a backup and 
   const provenance=JSON.parse(await readFile(join(skillTargets(home,{}).pi,'.afbin-skill.json'),'utf8'));
   assert.equal(provenance.source,'afbin-cli');assert.equal(provenance.version,'9.0.0');
   assert.deepEqual(result.installations.map((x:any)=>[x.status,x.source,x.version]),[['installed','afbin-cli','9.0.0']]);
-  assert.deepEqual(result.plugins,[]);
  }finally{await rm(home,{recursive:true,force:true});}
 });
 test('bad checksum changes neither executable nor skills',async()=>{
@@ -50,15 +49,10 @@ test('interruption after executable replacement completes matching skills offlin
   const result=await updateCli({...options,fetch:async()=>assert.fail('recovery must stay offline')}) as any;assert.equal(result.recovered,true);assert.match(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),/New skill/);
  }finally{await rm(home,{recursive:true,force:true});}
 });
-test('dry-run resolves the release and reports skill and plugin provenance without writing',async()=>{
+test('dry-run resolves the release and reports skill provenance without writing',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-update-dry-')),exe=join(home,'afbin');
  try{
   await writeFile(exe,'old binary',{mode:0o755});
-  // A harness-owned plugin copy: reported with its refresh command, never edited.
-  const plugin=join(home,'.claude','plugins','marketplaces','artifactbin','plugins','artifactbin');
-  await mkdir(join(plugin,'.claude-plugin'),{recursive:true});
-  await writeFile(join(plugin,'.claude-plugin','plugin.json'),JSON.stringify({name:'artifactbin',version:'0.1.5'}));
-  await writeFile(join(plugin,'SKILL.md'),'plugin copy');
   const target=skillTargets(home,{}).pi;await mkdir(target,{recursive:true});
   await writeFile(join(target,'SKILL.md'),'old skill');
   await writeFile(join(target,'.afbin-skill.json'),JSON.stringify({version:'1.0.0',source:'afbin-cli',files:{'SKILL.md':digest('old skill')}}));
@@ -71,10 +65,6 @@ test('dry-run resolves the release and reports skill and plugin provenance witho
   assert.deepEqual(result.release,{version:'9.0.0',protocol:1});
   assert.deepEqual(result.binary,{installation:'standalone',path:exe,current:'1.0.0',available:'9.0.0',change:'update',asset:'afbin-darwin-arm64'});
   assert.deepEqual(result.skills,[{harness:'pi',path:target,version:'9.0.0',status:'update',source:'afbin-cli',installed:'1.0.0'}]);
-  assert.equal(result.plugins.length,1);
-  assert.equal(result.plugins[0].harness,'claude');
-  assert.equal(result.plugins[0].version,'0.1.5');
-  assert.match(result.plugins[0].refresh,/\/plugin install artifactbin@artifactbin/);
   assert.equal(await readFile(exe,'utf8'),'old binary');
   assert.equal(await readFile(join(target,'SKILL.md'),'utf8'),'old skill');
   assert.equal(JSON.stringify((await readdir(home,{recursive:true})).sort()),before,'dry-run wrote to the home directory');

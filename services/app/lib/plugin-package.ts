@@ -1,6 +1,9 @@
 /**
- * Deterministic Claude Code and Codex plugin generation from the canonical
- * skill tree. Hosted channels share content but have isolated identities.
+ * Deterministic generation of the skill mirror from the canonical skill tree.
+ *
+ * This is not a distribution channel — nothing built here is published. It is
+ * the on-disk shape a harness discovers skills from, so `evals/` can hand a
+ * real agent the exact bundle a release ships.
  */
 import teaching from '../../cli/src/generated/teaching.json';
 import {
@@ -9,45 +12,7 @@ import {
   pluginInstall
 } from './plugin-id';
 
-export const PLUGIN_VERSION = teaching.version;
-
-export {
-  CODEX_APP_PLUGIN_REF,
-  CODEX_APP_PLUGIN_REPO_URL,
-  MARKETPLACE_NAME,
-  PLUGIN_BASE_URL,
-  PLUGIN_CHANNELS,
-  PLUGIN_INSTALL,
-  PLUGIN_NAME,
-  PLUGIN_REPO,
-  PLUGIN_REPO_URL,
-  pluginChannel,
-  pluginInstall,
-  pluginInstallCommands,
-} from './plugin-id';
-export type { PluginChannel, PluginIdentity } from './plugin-id';
-
-/**
- * A channel's published version never moves backwards: clients cache a plugin by
- * version, so a regression would strand them on newer teaching. Republishing the
- * same version is allowed — one CLI release can correct its own skill bundle.
- */
-export function assertMonotonicVersion(previous: string | undefined, version: string = PLUGIN_VERSION): string {
-  const parse = (value: string, label: string): number[] => {
-    const parts = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
-    if (!parts) throw new Error(`${label} plugin version ${value} is not MAJOR.MINOR.PATCH`);
-    return parts.slice(1).map(Number);
-  };
-  if (previous === undefined) return version;
-  const next = parse(version, 'next');
-  const published = parse(previous, 'published');
-  for (let index = 0; index < 3; index += 1) {
-    if (next[index] === published[index]) continue;
-    if (next[index] < published[index]) throw new Error(`plugin version ${version} is older than the published ${previous}`);
-    return version;
-  }
-  return version;
-}
+const PLUGIN_VERSION = teaching.version;
 
 const DESCRIPTION = 'Publish self-contained HTML artifacts (reports, dashboards, decks, datasets, charts, images) to artifactbin and share the public link.';
 const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
@@ -88,23 +53,11 @@ This is the **${identity.channel}** release channel.
 ${pluginInstall(channel)}
 \`\`\`
 
-Local development from the artifactbin repository: \`npm run build:plugin\`,
-then \`claude --plugin-dir ./plugin\`.
-
 ## What you get
 
 - The same local skill bundle shipped with afbin ${PLUGIN_VERSION}.
 - Install the CLI with \`curl -fsSL ${base}/chat/install.sh | sh\` (checksum verified), then run \`afbin setup --server ${base}\`.
 - Read \`afbin help\` locally; use \`afbin push\` to publish files.
-
-## Self-hosting
-
-This hosted-channel plugin points at ${base}. Self-hosters should generate
-their own plugin from the source repository:
-
-\`\`\`
-npm run build:plugin -- --base https://your-deployment.example
-\`\`\`
 
 This directory is generated. Do not edit it directly.
 `,

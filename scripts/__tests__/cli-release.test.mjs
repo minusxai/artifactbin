@@ -51,49 +51,6 @@ it('the checked-in pointer, installer and CLI package name one release, at this 
   expect(readFileSync(join(root, 'services/app/public/chat/install.sh'), 'utf8')).toContain(`  version=${version}\n`);
 });
 
-it('every CLI release path publishes the canary plugin channel from the same commit', () => {
-  const pluginWorkflow = parse(readFileSync(join(root, '.github/workflows/publish-plugin.yml'), 'utf8'));
-  const triggers = pluginWorkflow.on ?? pluginWorkflow[true];
-  expect(Object.keys(triggers)).toEqual(expect.arrayContaining(['workflow_dispatch', 'workflow_call']));
-  const guard = pluginWorkflow.jobs.publish.steps.find((step) => step.name?.startsWith('Verify and check out'));
-  expect(guard.run).toContain('production publication must be dispatched explicitly');
-  for (const [file, source] of [['release-cli.yml', 'release'], ['publish-cli.yml', 'verify']]) {
-    const caller = file === 'release-cli.yml' ? workflow : parse(readFileSync(join(root, '.github/workflows', file), 'utf8'));
-    expect(caller.jobs.plugin.uses, file).toBe('./.github/workflows/publish-plugin.yml');
-    expect(caller.jobs.plugin.with.channel, file).toBe('staging');
-    expect(caller.jobs.plugin.with.source_sha, file).toBe(`\${{ needs.${source}.outputs.sha }}`);
-    expect(caller.jobs[source].outputs.sha, file).toBeTruthy();
-  }
-});
-
-it('a published plugin version never moves backwards, and a republish of the same version is allowed', async () => {
-  const { assertMonotonicVersion, PLUGIN_VERSION } = await import('../../services/app/lib/plugin-package.ts');
-  expect(PLUGIN_VERSION).toBe(JSON.parse(readFileSync(join(root, 'services/cli/package.json'), 'utf8')).version);
-  expect(assertMonotonicVersion(undefined, '0.2.0')).toBe('0.2.0');
-  expect(assertMonotonicVersion('0.1.9', '0.1.9')).toBe('0.1.9');
-  expect(assertMonotonicVersion('0.1.9', '0.1.10')).toBe('0.1.10');
-  expect(() => assertMonotonicVersion('0.2.0', '0.1.10')).toThrow(/older than the published/);
-  expect(() => assertMonotonicVersion('0.2.0', 'latest')).toThrow(/MAJOR\.MINOR\.PATCH/);
-});
-
-it('both plugin channels build from the same bundled teaching and keep distinct identities', async () => {
-  const { buildPluginFiles, PLUGIN_VERSION } = await import('../../services/app/lib/plugin-package.ts');
-  const { default: teaching } = await import('../../services/cli/src/generated/teaching.json', { with: { type: 'json' } });
-  const production = buildPluginFiles(undefined, 'production');
-  const staging = buildPluginFiles('https://afx-oss.artifactbin.dev', 'staging');
-  expect(JSON.parse(production['.claude-plugin/plugin.json']).name).toBe('artifactbin');
-  expect(JSON.parse(staging['.claude-plugin/plugin.json']).name).toBe('artifactbin-oss');
-  for (const files of [production, staging]) {
-    expect(JSON.parse(files['.claude-plugin/plugin.json']).version).toBe(PLUGIN_VERSION);
-    expect(files['README.md']).toContain('/chat/install.sh');
-    expect(files['README.md']).not.toMatch(/npm install -g|npx afbin/);
-  }
-  for (const [file, text] of Object.entries(teaching.files)) {
-    expect(production[`skills/artifactbin/${file}`], file).toBe(text);
-    expect(staging[`skills/artifactbin-oss/${file}`].replace(/^name: artifactbin-oss$/m, 'name: artifactbin'), file).toBe(text);
-  }
-});
-
 for (const scenario of ['new', 'published', 'stale', 'draft']) {
   it(`release workflow handles ${scenario} builds without running binaries`, () => {
     const dir = mkdtempSync(join(tmpdir(), 'afbin-release-'));

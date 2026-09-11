@@ -102,14 +102,3 @@ jobs:
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
           fi
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
-
-  # The canary plugin channel carries the skill bundle of the release just published.
-  # Production follows its deployment's smoke checks, so it stays an explicit dispatch.
-  plugin:
-    needs: release
-    if: needs.release.outputs.tag != ''
-    uses: ./.github/workflows/publish-plugin.yml
-    with:
-      channel: staging
-      source_sha: ${{ needs.release.outputs.sha }}
-    secrets: inherit
