@@ -20,7 +20,7 @@ import {DatasetError} from '@/lib/datasets/errors';
  * answer with the same shape (`edit_id` and refresh `warnings` included).
  */
 import {
-  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canWriteDataset, createArtifact, fontResolver, findDependentsFor, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
+  DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canReadArtifact, canWriteDataset, createArtifact, fontResolver, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
@@ -543,6 +543,19 @@ export async function createArtifactFromBody(
   options: {dryRun?:boolean; loadRef?:RefLoader} = {},
 ): Promise<Response> {
   if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish the dataset first, pull its YAML, then change its policy.'},400);
+  // LINEAGE. A fork is made locally — a draft with the source's identity stripped
+  // and `forked_from` recorded — and its FIRST create presents that id here. The
+  // claim is checked, not trusted: provenance may only name a source this actor
+  // can actually read, by the same rule `fork_artifact` and the export door use,
+  // and unreachable is unknown. Written once at creation; no later write touches it.
+  let forkedFrom: string | undefined;
+  if (body.forked_from !== undefined && body.forked_from !== null) {
+    if (typeof body.forked_from !== 'string' || !ID_RE.test(body.forked_from)) return json({ error: 'invalid_metadata', hint: 'forked_from is the id of the artifact this copy came from.' }, 400);
+    const source = await getArtifactById(body.forked_from);
+    const viewer = actor.userId ? { userId: actor.userId, email: null } : null;
+    if (!source || (actor.tokenId !== source.token_id && !(await canReadArtifact(source, viewer)))) return json({ error: 'not_found', hint: 'forked_from must name an artifact you can read.' }, 404);
+    forkedFrom = source.id;
+  }
   let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup);
   let operation;
   try {operation = creationOperation(actor,base,request?.headers.get('Idempotency-Key'),body,row=>({status:201,body:responseBody(row)}));}
@@ -589,7 +602,7 @@ export async function createArtifactFromBody(
     ...(visibility ? { visibility } : {}),
     ...(access ? { access } : {}),
     ancestor_ids: placement.ancestor_ids,
-  }, {operation,shares,...(link?{linkRole:link}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
+  }, {operation,shares,...(link?{linkRole:link}:{}),...(forkedFrom?{forkedFrom}:{})});}catch(error){if(error instanceof CreationReplay)return json(error.reply.body,error.reply.status);if(error instanceof DatasetError)return json({error:'dataset_error',details:[error.message]},error.status);throw error;}
   return json(responseBody(row), 201);
 }
 
