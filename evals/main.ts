@@ -40,7 +40,7 @@ import { startApprover } from './lib/approver';
 import { skillKit } from './lib/skill-kit';
 import { CLI_VERSION } from '../services/cli/src/version';
 import { runCliSetup } from './lib/setup';
-import {materializeCli} from './lib/cli-kit';
+import {browserShims,materializeCli} from './lib/cli-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
 import { ledgerMetrics, ledgerRows, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
@@ -380,7 +380,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
     // Installed: the staged afbin leads PATH. Not installed: only the installer's own target, `~/.local/bin` of the run home.
-    baseEnv: { ...process.env, ...r.agentEnv, PATH:[cliBin ?? path.join(homeDir, '.local', 'bin'),r.agentEnv.PATH??process.env.PATH??''].join(path.delimiter) },
+    baseEnv: { ...process.env, ...r.agentEnv, PATH:[browserShims(path.join(homeDir, 'shims')), cliBin ?? path.join(homeDir, '.local', 'bin'),r.agentEnv.PATH??process.env.PATH??''].join(path.delimiter) },
     timeoutMs: config.run.timeoutMs,
     stdoutPath: path.join(runDir, 'transcript.jsonl'),
     stderrPath: path.join(runDir, 'stderr.log'),
