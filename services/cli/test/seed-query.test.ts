@@ -11,7 +11,7 @@ import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 
-const todo={todo:'workstream C: read and query edges'};
+const todo={};
 const head=(id:string,extra:Record<string,unknown>={})=>({id,version:2,edit_id:'e2',state:'b'.repeat(64),format:'markup',title:'Report',visibility:'unlisted',markup:'<p>Remote</p>',capabilities:{read:true,edit:true,mutation_receipts:true},...extra});
 async function harness(prefix:string){
  const root=await mkdtemp(join(tmpdir(),prefix));

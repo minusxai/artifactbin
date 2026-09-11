@@ -26,7 +26,7 @@ import {loadConnection} from './config';
 import {browserAuthenticate,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
-import {preparePull,pull} from './pull';
+import {preparePull,pull,pullToStdout} from './pull';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
@@ -124,6 +124,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
   if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='log'){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));emit(result.value);return result.exitCode;}
+  if(command==='pull'&&flags.output==='-'){const result=await pullToStdout(workspace,positionals,client,parsed,stdout);if(result)emit(result);return 0;}
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd);}
   if(command==='push'&&!account){emit(await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}

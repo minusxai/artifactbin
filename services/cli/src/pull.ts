@@ -1,4 +1,8 @@
 import {rowsCsv} from './tabular';
+import type {ArtifactResourceFile} from '@artifactbin/contracts';
+import {datasetRows,endLine,flatDataset} from './dataset-source';
+import {snapshotResource,writeResourceFile} from './resource-file';
+import type {ParsedCommand} from './commands';
 import {persistConflict,clearConflict} from './conflict-state';
 import {randomUUID} from 'node:crypto';
 import {join,relative,resolve,extname,basename,dirname} from 'node:path';
@@ -19,8 +23,17 @@ import {parseResourceFile,type ResourceSource} from './resource-file';
 import {prepareResourcePull} from './resource-pull';
 interface PullTarget {id:string;version?:number;path?:string;directory?:string;before:Buffer|null;previousPath?:string}
 export async function preparePull(workspace:Workspace,args:string[],force=false,server=workspace.lock?.server,output?:string):Promise<PullTarget[]>{
- if(output==='-')throw new CliError('unsupported_output','Stdout pull is not integrated yet.');
  if(output&&!args.length)throw new CliError('invalid_output','--output requires explicit pull targets.');
+ // Stdout never establishes tracking, so it resolves identity alone: no destination, no baseline, no lock entry.
+ if(output==='-'){
+  if(args.length!==1)throw new CliError('ambiguous_output','Stdout holds one pulled representation.','Write several targets into a directory with --output.');
+  const ref=await resolveReference(args[0],{root:workspace.root,cwd:workspace.cwd,server});
+  const document=ref.kind==='path'&&ref.path.toLowerCase().endsWith('.jsx')?parseDocument((await readOptional(join(workspace.root,ref.path)))!.toString()):undefined;
+  const resource=ref.kind==='path'&&/\.ya?ml$/i.test(ref.path)?parseResourceFile((await readOptional(join(workspace.root,ref.path)))!.toString()):undefined;
+  const id=ref.kind==='id'?ref.id:document?.metadata.id??resource?.id??workspace.lock?.files[ref.path]?.id;
+  if(!id)throw new CliError('identity_required',`The file ${args[0]} has no artifact id.`,'Use afbin push to publish it first, or pull an explicit artifact id.');
+  return[{id,...(ref.version?{version:ref.version}:{}),before:null}];
+ }
  const outputPath=output?await confinedPath(workspace.root,resolve(workspace.cwd,output)):undefined;
  const outputStat=outputPath?await stat(outputPath).catch(error=>{if(error.code==='ENOENT')return null;throw error;}):null;
  if(args.length>1&&outputStat&&!outputStat.isDirectory())throw new CliError('invalid_output','Multiple pull targets require an output directory.');
@@ -46,6 +59,41 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
   targets.push({id,...(ref.version?{version:ref.version}:{}),path,directory,before,...(prior&&prior[0]!==path?{previousPath:prior[0]}:{})});
  }
  return targets;
+}
+const RESOURCE_KINDS:Record<string,string>={markup:'artifact',folder:'folder',dataset:'dataset',image:'file',pdf:'file',file:'file'};
+export const resourceKind=(format?:string):string=>RESOURCE_KINDS[format??'']??'artifact';
+export function checkResourceType(requested:unknown,snapshot:Snapshot):void{
+ const kind=resourceKind(snapshot.format);
+ if(typeof requested==='string'&&requested!==kind)throw new CliError('type_mismatch',`${snapshot.id} is a ${kind}, not a ${requested}.`,'Omit --type, or select the kind this reference addresses.');
+}
+async function representation(snapshot:Snapshot,head:Snapshot,format:string|undefined,client:HttpClient):Promise<string>{
+ if(format==='yaml')return writeResourceFile(snapshotResource(snapshot,{type:resourceKind(snapshot.format)} as ArtifactResourceFile));
+ if(format==='jsx'&&snapshot.format!=='markup'||['csv','json'].includes(format??'')&&snapshot.format!=='dataset')throw new CliError('unsupported_format',`${snapshot.format} cannot be pulled as ${format}.`);
+ if(snapshot.format==='markup'||snapshot.format==='folder')return writeDocument(snapshotDocument({...snapshot,edit_id:head.edit_id,state:head.state}));
+ if(snapshot.format==='dataset'){
+  const content=await client.content(`/artifacts/${snapshot.id}/content?version=${snapshot.version}`);
+  if(!flatDataset(snapshot))return endLine(content.bytes.toString());
+  const rows=datasetRows(content.bytes);
+  return format==='csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n';
+ }
+ throw new CliError('unsupported_output',`A ${snapshot.format} artifact holds binary content.`,'Write it to a file with --output <path>.');
+}
+/** Stdout is a read: it converts one observed representation and establishes no tracking. */
+export async function pullToStdout(workspace:Workspace,args:string[],client:HttpClient,parsed:ParsedCommand,stdout:(value:string)=>void):Promise<Record<string,unknown>|undefined>{
+ const {flags}=parsed;
+ if(flags.json)throw new CliError('conflicting_output','--json cannot share stdout with pulled content.','Choose a file with --output, or omit --json.');
+ const [target]=await preparePull(workspace,args,false,client.connection.server,'-');
+ const head=await client.request<Snapshot>(`/artifacts/${target.id}`);
+ if(head.id!==target.id||typeof head.edit_id!=='string'||typeof head.state!=='string'||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');
+ checkResourceType(flags.type,head);
+ let snapshot=head;
+ if(target.version&&target.version!==head.version){
+  const history=await client.request<Record<string,unknown>>(`/artifacts/${target.id}/versions/${target.version}`);const meta=history.meta as Record<string,unknown>|undefined;
+  snapshot={...head,...history,id:head.id,version:target.version,edit_id:head.edit_id,state:head.state,theme:meta?.theme as string|null??head.theme,template:meta?.template as string|null??head.template} as Snapshot;
+ }
+ const text=await representation(snapshot,head,flags.format as string|undefined,client);
+ if(flags['dry-run'])return{dry_run:true,operations:[{id:head.id,version:snapshot.version,head_version:head.version,destination:'-',status:'would_write',bytes:Buffer.byteLength(text)}]};
+ stdout(text);return undefined;
 }
 export async function pull(workspace:Workspace,args:string[],client:HttpClient,options:{format?:string;output?:string;force?:boolean;dryRun?:boolean}={}){
  if(options.format&&options.format!=='original'&&options.output&&args.length===1){
@@ -94,11 +142,9 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
     }
    }else if(['dataset','image','pdf','file'].includes(snapshot.format??'')){
     const content=await client.content(`/artifacts/${target.id}/content?version=${snapshot.version}`);
-    if(snapshot.format==='dataset'){
-     let rows:unknown;try{rows=JSON.parse(content.bytes.toString());}catch{throw new CliError('invalid_response','Dataset content is not JSON.');}
-     if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_response','Dataset content must contain row objects.');
-     bytes=Buffer.from(extname(path).toLowerCase()==='.csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n');
-    }else bytes=content.bytes;
+    if(snapshot.format!=='dataset')bytes=content.bytes;
+    else if(!flatDataset(snapshot))bytes=Buffer.from(endLine(content.bytes.toString()));
+    else{const rows=datasetRows(content.bytes);bytes=Buffer.from(extname(path).toLowerCase()==='.csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n');}
    }else throw new CliError('unsupported_pull_format',`The ${snapshot.format} artifact has no local file representation.`,'Pull it as a dataset resource once definition retrieval is integrated.');
    const backup=options.force&&before&&!before.equals(bytes)?`.artifactbin/local-backups/${randomUUID()}/${basename(path)}`:undefined;
    operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:options.dryRun?'would_write':'pulled'});
