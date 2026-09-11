@@ -81,3 +81,14 @@ test('dry-run reports an installation it cannot update instead of refusing',asyn
   assert.match(result.binary.reason!,/install\.sh/);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('a download that stops delivering bytes is abandoned as stalled, not waited on forever',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-stall-')),exe=join(home,'afbin');await writeFile(exe,'old binary',{mode:0o755});
+ const stalled=async(input:unknown)=>{
+  const path=String(input);
+  if(path.endsWith('/afbin-darwin-arm64'))return new Response(new ReadableStream({start(controller){controller.enqueue(new Uint8Array([1]));}}));
+  return transport()(input);
+ };
+ await assert.rejects(updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],fetch:stalled as any,verifyExecutable:async()=>{},stallMs:100}),(error:any)=>error.code==='release_unavailable'&&/stalled/.test(error.message));
+ assert.equal((await readFile(exe,'utf8')),'old binary');
+});
