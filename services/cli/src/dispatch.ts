@@ -1,4 +1,4 @@
-import {accountPlan,localAccountCommand,remoteAccountCommand} from './account-workspace';
+import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
 import {remoteQuery} from './remote-query';
 import {batchCommand} from './batch';
 import {resultOutput} from './result-output';
@@ -76,7 +76,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
    const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout);return 0;}
   }
-  if(['comment','delete','log'].includes(command))for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
+  if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
   if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
   if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd);}
@@ -115,13 +115,14 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    for(const item of installed.installations)stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
   }
   const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
-  if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return 0;}
+  if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
   if(command==='query'){const result=await remoteQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='delete'){emit(await deleteArtifact(workspace,positionals[0],client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
   if(command==='diff'){emit(await compare(workspace,positionals[0],client.connection.server,!!flags.remote,client));return 0;}
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
+  if(command==='list'&&flags.type==='session'){await resultOutput(await listAccountCollection(parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='log'){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));emit(result.value);return result.exitCode;}
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
@@ -142,18 +143,17 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }
 }
 /** Seeded surface: the parser accepts these rows, and dispatch refuses them until their workstream lands. Each implementer deletes its own entries. */
-const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session','table'],delete:['folder','dataset','file','session','comment'],log:['artifact','folder','dataset','file']};
+const PENDING_TYPES:Record<string,readonly string[]>={list:['profile','table'],delete:['comment'],log:['artifact','folder','dataset','file']};
 function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
  if(['fork','export','open'].includes(command))pending(`afbin ${command}`);
  if(typeof flags.type==='string'&&PENDING_TYPES[command]?.includes(flags.type))pending(`afbin ${command} --type ${flags.type}`);
- for(const flag of ['restore','refresh','secret-env','session','page'])if(flags[flag]!==undefined)pending(`--${flag}`);
+ for(const flag of ['secret-env','session','page'])if(flags[flag]!==undefined)pending(`--${flag}`);
  if(command==='validate'&&flags.remote)pending('validate --remote');
  if(command==='diff'&&(flags.output!==undefined||positionals.length>1))pending('diff --output and multiple targets');
  if(command==='status'&&positionals.length)pending('status <ref>');
  if(command==='list'&&positionals.length)pending('list <ref>');
  if(command==='log'&&flags.filter!==undefined)pending('log --filter');
- if(command==='delete'&&positionals.length>1)pending('delete with multiple targets');
  if(['comment','query','update'].includes(command)&&flags['dry-run'])pending(`${command} --dry-run`);
  if(command==='help'&&(flags.format!==undefined||flags.output!==undefined))pending('help --format and --output');
 }
