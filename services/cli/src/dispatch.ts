@@ -24,7 +24,7 @@ import {localStatus,localDiff} from './local';
 import {helpTopics} from './teaching';
 import {loadConnection} from './config';
 import {browserAuthenticate,ApprovalRequired,type AuthOptions} from './browser-auth';
-import {HttpClient,apiUrl} from './http';
+import {HttpClient} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull} from './pull';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
@@ -46,6 +46,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(text===undefined)throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,'Run afbin help.');
    emit(json?{help:text}:text);return 0;
   }
+  pendingIntegration(parsed);
   let workspace=await loadWorkspace(context.cwd);
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
@@ -76,7 +77,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout);return 0;}
   }
   if(['comment','delete','log'].includes(command))for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
-  if(command==='api')apiUrl(positionals[0],selectedServer);
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
   if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
   if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd);}
@@ -84,11 +84,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const result=await finishLocalPush(workspace,positionals,!!flags.force);if(result){emit(result);return 0;}
   }
   if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined);if(!targets.length){emit({operations:[]});return 0;}}
-  let apiBody:unknown;
-  if(command==='api'&&typeof flags.input==='string'){
-   const input=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
-   try{apiBody=JSON.parse(input);}catch{throw new CliError('invalid_json','--input must contain JSON.');}
-  }
   let commentBody=typeof flags.body==='string'?flags.body:undefined;
   if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
   if(commentBody!==undefined&&(!commentBody.trim()||commentBody.length>100000))throw new CliError('invalid_comment','Comment text must contain 1–100000 characters.');
@@ -132,14 +127,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd);}
   if(command==='push'&&!account){emit(await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
-  if(command==='api'){
-   const result=await client.content(positionals[0],typeof flags.method==='string'?flags.method:'GET',apiBody);
-   if(/^(?:application\/json|[^;]+\+json)(?:;|$)/i.test(result.contentType)){
-    let value:unknown;try{value=JSON.parse(result.bytes.toString());}catch{throw new CliError('invalid_response','The API response is not valid JSON.');}emit(value);
-   }else if(json)emit({content_type:result.contentType,encoding:'base64',data:result.bytes.toString('base64')});
-   else (context.stdoutBytes??(bytes=>process.stdout.write(bytes)))(result.bytes);
-   return 0;
-  }
   if(command==='remote'){
    // The PTY graph is loaded only after the user selects remote execution.
    const {chooseLaunch}=await import('./launcher');const {runRemote}=await import('./runner');
@@ -153,5 +140,22 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   stderr(`${failure.code}: ${failure.message}${'fix'in failure?`\n${failure.fix}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
  }
+}
+/** Seeded surface: the parser accepts these rows, and dispatch refuses them until their workstream lands. Each implementer deletes its own entries. */
+const PENDING_TYPES:Record<string,readonly string[]>={pull:['token','session'],push:['token','session'],status:['token','session'],diff:['session'],list:['profile','token','session','user','table','activity','analytics'],delete:['folder','dataset','file','token','session','comment'],log:['artifact','folder','dataset','file']};
+function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
+ const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
+ if(['fork','export','open'].includes(command))pending(`afbin ${command}`);
+ if(typeof flags.type==='string'&&PENDING_TYPES[command]?.includes(flags.type))pending(`afbin ${command} --type ${flags.type}`);
+ for(const flag of ['restore','refresh','secret-env','session','page'])if(flags[flag]!==undefined)pending(`--${flag}`);
+ if(command==='validate'&&flags.remote)pending('validate --remote');
+ if(command==='diff'&&(flags.output!==undefined||positionals.length>1))pending('diff --output and multiple targets');
+ if(command==='status'&&positionals.length)pending('status <ref>');
+ if(command==='list'&&positionals.length)pending('list <ref>');
+ if(command==='list'&&Array.isArray(flags.filter)&&flags.filter.some(f=>/^state=/.test(f)))pending('list --filter state');
+ if(command==='log'&&flags.filter!==undefined)pending('log --filter');
+ if(command==='delete'&&positionals.length>1)pending('delete with multiple targets');
+ if(['comment','query','update'].includes(command)&&flags['dry-run'])pending(`${command} --dry-run`);
+ if(command==='help'&&(flags.format!==undefined||flags.output!==undefined))pending('help --format and --output');
 }
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}

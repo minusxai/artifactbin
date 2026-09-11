@@ -9,17 +9,13 @@ A dataset can expose multiple schemas, physical tables and notebook model output
 
 ## Password, discovery and notebook
 
-Bearer API (browser equivalents add `/my`):
+A connected dataset is a dataset resource whose `source` names a `.jsx` definition file holding one `<Dataset>` root. The password never enters the definition or the YAML: run `afbin push dataset.yaml --secret-env PGPASSWORD` and the CLI stores the secret for that exact connection, then writes the returned `passwordSecretId` into the definition. Replace a password the same way; a bound secret cannot be reused for another dataset.
 
-- `POST /api/secrets` with `{value,connection,datasetId?}` returns only `{secret:{id}}`. `connection` is `{host,port,database,username,ssl}`. Use `datasetId` when replacing credentials for an existing dataset.
-- `POST /api/datasets/discover` with `{connection,datasetId?}` discovers raw schemas, tables and columns. `connection` includes `passwordSecretId`.
-- `POST /api/datasets/notebook/preview` with `{connection,notebook,cellId,datasetId?}` runs one named cell and its dependencies before whitelisting.
+- `afbin list --type table --in dataset.yaml` discovers raw schemas, tables and columns for the definition's connection.
+- `afbin query dataset.yaml --name <cell>` runs one notebook cell and its dependencies before whitelisting; `afbin query dataset.yaml` reads the exposed tables.
+- `afbin pull <id> --type dataset` retrieves the current definition; `afbin push` publishes it conditionally.
 
-For a new dataset, omit `datasetId`: the secret remains pending and belongs to its creator. Use that reference for discovery and notebook previews, then publish the dataset to bind it. A bound secret cannot be reused for another dataset. For an existing dataset, pass its `datasetId` when creating a replacement secret and on discovery/preview requests; update the definition with the new reference. Changing any connection setting requires a matching new secret. Send plaintext only as `value` to the secret endpoint, never in dataset markup.
-
-Use `afbin api <path> --method POST --input request.json` for these operations. Dataset editors control the connection, notebook and whitelist.
-
-Dataset secret, discovery and notebook operation failures return `error: "dataset_error"` with a `details` array. HTTP status `400` means invalid or refused input/query; `403` means credentials or access are outside the permitted scope; `404` means the dataset is unavailable to the actor; `503` means stored credentials cannot be decrypted, for example after key rotation. Earlier HTTP authentication, body validation and not-found checks can return other error codes; inspect the status and details together.
+Dataset secret, discovery and notebook failures report `dataset_error` with a `details` array. `400` means invalid or refused input/query; `403` means credentials or access are outside the permitted scope; `404` means the dataset is unknown or unreadable.
 
 Postgres datasets cannot carry their bound password into a fork. Stored datasets remain forkable by readers.
 

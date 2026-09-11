@@ -40,11 +40,3 @@ test('comment selects listing, anchored creation, or a combined reply and resolu
   }
  }finally{await rm(root,{recursive:true,force:true});}
 });
-test('advanced api preserves binary results in an explicit JSON envelope',async()=>{
- const root=await mkdtemp(join(tmpdir(),'afbin-api-bytes-'));const bytes=Buffer.from([255,0,10]);
- try{
-  await saveConnection({server:'https://example.com',token:'test-token'},root);const out:string[]=[];
-  const code=await runCli(['api','/artifacts/abc123/export','--json','--server','https://example.com'],{cwd:root,home:root,interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async()=>new Response(bytes,{headers:{'Content-Type':'image/png'}})});
-  assert.equal(code,0,out.join(''));assert.deepEqual(JSON.parse(out[0]),{content_type:'image/png',encoding:'base64',data:bytes.toString('base64')});
- }finally{await rm(root,{recursive:true,force:true});}
-});

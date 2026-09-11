@@ -1,5 +1,7 @@
 # CLI completion work
 
+Revision 2 of [cli-full-spec.md](cli-full-spec.md) (2026-09-11) supersedes the checkpoints below: it records the verified baseline, the resolved design decisions, the seeded parser and todo tests, and the four workstream briefs. This file is retained as the earlier module-boundary record.
+
 The [command table](cli-full-spec.md) is the implementation contract. This record tracks module boundaries,
 risk-first validation and observed results; a parser accepting a flag is not feature completion.
 

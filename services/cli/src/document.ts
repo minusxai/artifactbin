@@ -7,7 +7,7 @@ import {CliError} from './commands';
 export type DocumentMetadata = ResourceMetadata;
 export interface LocalDocument {metadata:DocumentMetadata;body:string}
 export const identityFields=['id','edit_id','head_version','state','version'] as const;
-export const metadataFields=['title','description','colorMode','theme','template','visibility','link','folder','shares'] as const;
+export const metadataFields=['title','description','colorMode','theme','template','visibility','link','folder','shares','forked_from'] as const;
 export function parseDocument(source:string):LocalDocument {
  if(!/^---\r?\n/.test(source))return{metadata:{},body:source};
  const first=source.indexOf('\n')+1;

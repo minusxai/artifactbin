@@ -150,8 +150,8 @@ checks, including Codex, remain early gates.
 The shared command schema, diagnostic catalog and examples generate -h/--help, local topic help,
 man pages and installed skill references. Errors carry stable codes and safe next commands;
 validate the examples as executable fixtures. Local teaching surfaces never fetch documentation.
-Advanced `afbin api` covers long-tail HTTP operations so removing MCP loses no capability while
-keeping the common command grammar small. The complete operation mapping is an early audit.
+Long-tail HTTP operations were once exposed as `afbin api`; that escape hatch was removed on 2026-09-11 in favor of
+native commands and typed YAML, keeping the command grammar small. The complete operation mapping is in cli-full-spec.md.
 
 
 ## Fireworks follow-up

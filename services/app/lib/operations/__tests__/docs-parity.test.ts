@@ -1,12 +1,10 @@
-/** One API registry projected into the versioned local bundle. */
+/** The command registry is projected into the versioned local bundle; HTTP operations are not taught. */
 import {expect,it} from 'vitest';
-import {OPERATIONS} from '../registry';
+import {commands,commandHelp} from '../../../../cli/src/commands';
 import teaching from '../../../../cli/src/generated/teaching.json';
-it('documents every operation address and recovery code in local help',()=>{
- const api=teaching.files['references/api.md'];
- for(const op of OPERATIONS){
-  expect(api,op.name).toContain(`${op.http.method} ${op.http.path}`);
-  for(const error of op.errors)expect(api,`${op.name}:${error.code}`).toContain(error.code);
- }
- expect(api).not.toMatch(/MCP|\/docs\//);
+it('documents every command and flag in local help without HTTP or remote-skill teaching',()=>{
+ const reference=teaching.files['references/commands.md'];
+ for(const command of commands)expect(reference,command.name).toContain(commandHelp(command.name));
+ for(const [file,text] of Object.entries(teaching.files))expect(text,file).not.toMatch(/afbin api|--method|MCP|\/docs\/|api\.md/);
+ expect(Object.keys(teaching.files)).not.toContain('references/api.md');
 });

@@ -4,10 +4,8 @@ import {parseCommand, commandHelp, commands} from '../src/commands';
 
 test('one flag vocabulary works before or after the command and aliases normalize',()=>{
  assert.deepEqual(parseCommand(['--json','push','a.jsx','-ny']),{command:'push',positionals:['a.jsx'],flags:{json:true,'dry-run':true,yes:true}});
- assert.equal(parseCommand(['ls','--limit','12']).command,'list');
- assert.equal(parseCommand(['rm','abc123']).command,'delete');
+ for(const retired of ['ls','rm','api'])assert.throws(()=>parseCommand([retired,'x']),/unknown_command|Unknown command/);
  assert.deepEqual(parseCommand(['setup','--harness','pi','--harness=opencode','-y']).flags,{harness:['pi','opencode'],yes:true});
- assert.deepEqual(parseCommand(['api','/artifacts','-XPOST','--input','-']).flags,{method:'POST',input:'-'});
  assert.deepEqual(parseCommand(['remote','--name','Work','pi','--model','deepseek','-h']).positionals,['pi','--model','deepseek','-h']);
  assert.deepEqual(parseCommand(['push','--','-report.jsx']).positionals,['-report.jsx']);
 });

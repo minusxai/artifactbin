@@ -1,7 +1,7 @@
 # CLI and HTTP operation coverage
 
 All 15 operation implementations retain HTTP access and authorization. The MCP route and SDK are removed.
-The shared operation schema generates `afbin api` guidance in the local help and skill bundle.
+The raw HTTP command was removed on 2026-09-11; every operation is reached through a native command or typed YAML (see cli-full-spec.md).
 Real-handler coverage: `advanced-http-parity`, `cli-advanced-http`, `cli-comments`, `cli-pages`,
 `cli-preconditions`, and `cli-sync-integration`.
 

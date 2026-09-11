@@ -11,7 +11,7 @@ export const examples:Record<string,string>={
 const referenceTopics=Object.fromEntries(Object.entries(localSkillFiles).filter(([path])=>path.startsWith('references/')).map(([path,text])=>[path.slice('references/'.length,-3),text]));
 export const helpTopics:Record<string,string>={
  ...referenceTopics,
- data:referenceTopics['markup-data'],operations:referenceTopics.api,
+ data:referenceTopics['markup-data'],
  themes:`Available themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice. Use help themes-<name> for a detailed guide.`,
  templates:`Available templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> to print a local example.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),

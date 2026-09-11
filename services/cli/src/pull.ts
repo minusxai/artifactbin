@@ -99,7 +99,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
      if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_response','Dataset content must contain row objects.');
      bytes=Buffer.from(extname(path).toLowerCase()==='.csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n');
     }else bytes=content.bytes;
-   }else throw new CliError('unsupported_pull_format',`The ${snapshot.format} artifact has no local file representation.`,'Use afbin api to inspect its definition.');
+   }else throw new CliError('unsupported_pull_format',`The ${snapshot.format} artifact has no local file representation.`,'Pull it as a dataset resource once definition retrieval is integrated.');
    const backup=options.force&&before&&!before.equals(bytes)?`.artifactbin/local-backups/${randomUUID()}/${basename(path)}`:undefined;
    operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:options.dryRun?'would_write':'pulled'});
    if(options.dryRun)continue;

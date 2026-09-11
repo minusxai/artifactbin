@@ -99,14 +99,19 @@ same stored-byte and artifact quotas as other assets.
 afbin push scene.glb
 ```
 
-Use the advanced API when JSON or images must remain generic file bytes.
-Write this JSON to request.json, then run `afbin api /artifacts --method POST --input request.json`:
+When JSON or images must remain generic file bytes, describe them as a file resource and push the YAML:
 
-```json
-{ "file": { "filename": "note.txt", "contentType": "text/plain", "base64": "SGVsbG8K" } }
+```yaml
+type: file
+source: note.txt
+title: Release note
 ```
 
-The reply includes `id`, `rawUrl`, `filename`, `contentType`, and `bytes`.
+```bash
+afbin push note.yaml
+```
+
+The result includes `id`, `url`, `filename`, `contentType`, and `bytes`.
 The file's page offers a download; arbitrary formats do not get a custom
 preview. Account-owned files default to unlisted, like other byte assets.
 Private files remain private: author scripts always resolve them as not found.

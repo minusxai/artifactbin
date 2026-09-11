@@ -17,7 +17,7 @@ test('local commands and malformed invocations never load credentials, call the 
   await assert.rejects(stat(join(root,'.artifactbin')),{code:'ENOENT'});
  }finally{await rm(root,{recursive:true,force:true});}
 });
-test('malformed remote references and API paths fail before authentication',async()=>{
+test('malformed remote references fail before authentication',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-invalid-remote-'));
  try{
   await writeFile(join(root,'doc.jsx'),'<p>Hello</p>');
@@ -26,8 +26,6 @@ test('malformed remote references and API paths fail before authentication',asyn
    [['comment','doc.jsx@2'],'version_not_writable'],
    [['delete','doc.jsx'],'unpublished_file'],
    [['log','missing.jsx'],'invalid_reference'],
-   [['api','https://elsewhere.test/api/artifacts'],'invalid_api_path'],
-   [['api','/../oauth/token'],'invalid_api_path'],
   ] as Array<[string[],string]>){
    const output:string[]=[];
    await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,stdout:x=>output.push(x),stderr:()=>{},fetch:async()=>assert.fail('network before local validation')});

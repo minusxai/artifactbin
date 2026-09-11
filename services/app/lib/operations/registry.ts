@@ -6,6 +6,8 @@ import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/datasets/policy/http';
 import {updateMetadataFromBody} from '@/lib/metadata-wire';
 import {decodePage, encodeCursor} from '@/lib/pagination';
 import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
+import {ACCOUNT_OPERATIONS} from './account';
+import {SESSION_OPERATIONS} from './sessions';
 /** Shared HTTP operations and schemas, projected into the CLI's bundled API reference.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
@@ -631,7 +633,7 @@ const queryResourceOp:Operation={
 };
 
 export const OPERATIONS: Operation[] = [
-  ...DATASET_OPERATIONS,queryResourceOp,
+  ...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...SESSION_OPERATIONS,queryResourceOp,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
