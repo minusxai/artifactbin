@@ -41,6 +41,19 @@ This file is the handoff; no conversation history or extra planning document is 
 | Release state | GitHub release `afbin-v0.1.6` (2026-09-11) carries `afbin-darwin-arm64`, `afbin-darwin-x64`, `afbin-linux-arm64`, `afbin-linux-x64`, manifests, `SHA256SUMS`, `afbin.1`, `afbin-skills.json`, `afbin-skills.tar.gz`. `publish-cli.yml` builds on a four-runner matrix from `afbin-v*` tags; `publish-plugin.yml` is manual dispatch. |
 | Eval prerequisites | `evals/lib/harness/{opencode,pi,codex,claude-code}.ts` exist; model ids `accounts/fireworks/models/glm-5p3-flash` and `accounts/fireworks/models/deepseek-v4-flash-0731` are already referenced; the Fireworks key is present in the authorized env file. `npm run eval -- --help` errors with "unknown argument --help"; use `evals/lib/args.ts` for the argument list. |
 
+### Integration results (2026-09-11, branch head after A, B, C and D merged)
+
+| Check | Observed |
+| --- | --- |
+| CLI unit suite | `node --import tsx --test services/cli/test/*.test.ts`: 164 pass, 0 fail, 0 todo. Every seed is green. |
+| Full suite | `npm test`: API 1471 pass; Node 3864 pass, 1 skipped after aligning three teaching tests to native commands; UI 1383 pass. The Postgres catalog test times out under the full parallel run and passes standalone. |
+| Type check and residual names | `npm run validate` passes. |
+| Production build | `npm run build` passes. |
+| Native binary | `npm run build:binary -w services/cli` builds `afbin-darwin-arm64`; `npm run test:binary -w services/cli` passes offline help, validation, status, diff, bound local SQL, zero requests and the PTY round trip outside the checkout. Other platforms build on CI runners. |
+| Browser gates | `npm run test:gates -- --only=annotations,comment-targets,dataset-policies,export-slice,fork`: 5 of 5 passed. |
+| Pull request | minusxai/artifactbin #94, empty body, CI running at the time of writing. |
+| Agent familiarity | See the eval record below. |
+
 ### What the seed changed
 
 - Parser: `fork`, `export`, `open` registered; `--restore`, `--refresh`, `--secret-env`, `--page`, `--session` added; `--type` and `--format` choices are per-command tables (`COMMAND_TYPES`, `FORMATS`); cross-flag rules from the footnotes enforced; `status`, `diff`, `list`, `delete` accept multiple refs; `query --write` takes `--input` or `--name`.
