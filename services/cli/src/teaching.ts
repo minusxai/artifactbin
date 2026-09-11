@@ -1,5 +1,9 @@
+import {resolve} from 'node:path';
 import teaching from './generated/teaching.json';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
+import {commands,commandHelp,CliError} from './commands';
+import {manPage} from './man';
+import {atomicWrite,readOptional} from './files';
 export {manPage} from './man';
 export const localSkillFiles:Readonly<Record<string,string>>=teaching.files;
 export const examples:Record<string,string>={
@@ -16,3 +20,28 @@ export const helpTopics:Record<string,string>={
  templates:`Available templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> to print a local example.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
+const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
+/** One bundled documentation set: help, the manual and the installed skills render the same registry. */
+export function helpDocument(topic?:string,format='text'):string{
+ if(format==='man'){
+  if(!isCommand(topic))throw new CliError('unsupported_format',`The manual documents commands, not the ${topic} topic.`,'Read topic guidance with --format text or markdown.');
+  return manPage(topic);
+ }
+ if(!isCommand(topic)){
+  const text=helpTopics[topic as string];
+  if(text===undefined)throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,'Run afbin help.');
+  return text;
+ }
+ if(format!=='markdown')return commandHelp(topic);
+ const section=(name:string,heading:string)=>`${heading}\n\n\`\`\`text\n${commandHelp(name)}\`\`\`\n`;
+ if(topic)return section(topic,`# afbin ${topic}`);
+ return `# afbin\n\nLocal files and published artifacts. Every command is offline unless it names a remote resource.\n\n`
+  +commands.map(command=>section(command.name,`## ${command.name}`)).join('\n');
+}
+/** --output never replaces an existing file: help has no overwrite permission. */
+export async function writeHelp(text:string,destination:string,cwd:string,format:string):Promise<{format:string;output:string;bytes:number}>{
+ const path=resolve(cwd,destination);
+ if(await readOptional(path)!==null)throw new CliError('destination_exists',`${destination} already exists.`,'Choose a free destination; afbin help never replaces a file.');
+ await atomicWrite(path,text);
+ return {format,output:path,bytes:Buffer.byteLength(text)};
+}
