@@ -424,6 +424,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
+  const initialRuntimeVersion = useMemo(() => version, [id]);
   const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
     nodes: storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
     dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
@@ -434,7 +435,23 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);
   useEffect(() => {
-    if (!live?.nodes || !runtimeRef.current) return;
+    if (editing || !runtimeRef.current) return;
+    // A route refresh can catch up with the stream before the lazy runtime
+    // mounts. Adopt that prepared document without remounting the reader's
+    // store, whose interactive values must survive document revisions.
+    if (!live?.nodes) {
+      if (version <= initialRuntimeVersion || !props.runtime) return;
+      const prepared = props.runtime;
+      runtimeRef.current.update({
+        type: STORY_DOCUMENT_MESSAGE, nodes: prepared.data.nodes,
+        refData: prepared.data.refData,
+        ...(prepared.data.dataflow ? {dataflow: {flow: prepared.data.dataflow.flow}} : {}),
+        compiledCss: prepared.compiledCss, authorCss: prepared.authorCss,
+        authorScript: prepared.authorScript, theme: prepared.theme,
+        ...(prepared.data.colorMode ? {colorMode: prepared.data.colorMode} : {}),
+      });
+      return;
+    }
     runtimeRef.current.update({
       type: STORY_DOCUMENT_MESSAGE, nodes: live.nodes,
       ...(live.dataflow ? {dataflow: live.dataflow} : {}),
@@ -442,7 +459,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       authorScript: live.authorScript, theme: live.theme,
       ...(live.colorMode ? { colorMode: live.colorMode } : {}),
     });
-  }, [live, sessionNonce]);
+  }, [live, sessionNonce, editing, version, initialRuntimeVersion, props.runtime]);
   useEffect(() => subscribeDocument({runtimeRef}, event => {
     if (!sessionNonce || !isValuesMessage(event.data, sessionNonce)) return;
     const flow = live?.dataflow?.flow ?? dataflow?.flow;

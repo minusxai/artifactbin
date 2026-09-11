@@ -8,7 +8,7 @@
  * of the same document, and loses all of it the moment the owner demotes them.
  *
  *   1. owner invites B from the share menu and promotes them to `can edit`
- *   2. B's /a/<id> is the SHELL with an edit button; sharing offers social preview but no access controls
+ *   2. B's /a/<id> is the SHELL with an edit button; sharing offers social preview and access controls
  *   3. B and the owner type into different paragraphs; both land, no reload
  *   4. B's dashboard names the document and their role
  *   5. demoted to `can view`, B's next flush is refused and a reload serves
@@ -123,11 +123,12 @@ await editor.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 await openArtifactControls(editor);
 const editBtn = editor.locator('[aria-label="Edit artifact"]');
 check((await editBtn.count()) === 1, 'the editor sees the edit button (the shell, not the served document)');
-// Editors can frame the social preview from sharing; access remains owner-only.
+// Editors manage sharing and social preview through the same dialog.
 await editor.getByLabel('Document actions').getByLabel('Share', { exact: true }).click();
 await editor.locator('[role="dialog"][aria-label="Sharing"]').waitFor();
 check((await editor.locator('[aria-label="Edit social preview"]').count()) === 1, 'the editor can configure social preview from sharing');
-check((await editor.locator('[aria-label="Make public"]').count()) === 0 && (await editor.locator('[aria-label="Invite email"]').count()) === 0, 'sharing does not expose access controls to the editor');
+await editor.getByLabel('Invite email').waitFor();
+check((await editor.locator('[aria-label="Make public"]').count()) === 1, 'sharing exposes access controls to the editor');
 const sharingAttempt = await editor.evaluate(async ({ id }) => {
   const r = await fetch(`/api/my/artifacts/${id}/sharing`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -135,7 +136,7 @@ const sharingAttempt = await editor.evaluate(async ({ id }) => {
   });
   return r.status;
 }, { id: doc.id });
-check(sharingAttempt === 404, `the editor cannot change sharing permissions (${sharingAttempt})`);
+check(sharingAttempt === 200, `the editor can change sharing permissions (${sharingAttempt})`);
 await editor.click('[aria-label="Close sharing"]');
 
 // ── 3. both edit, different paragraphs, no reload ─────────────────────────
