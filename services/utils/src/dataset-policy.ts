@@ -199,9 +199,10 @@ export function policyValue(
 ): Scalar {
   if (typeof value === 'string' && /^x-hasura-/i.test(value)) {
     const key = value.toLowerCase();
-    if (!Object.hasOwn(session, key))
+    const resolved = session[key];
+    if (!Object.hasOwn(session, key) || resolved === undefined)
       bad(key, 'required server session variable is unavailable');
-    return session[key];
+    return resolved as Scalar;
   }
   return value;
 }

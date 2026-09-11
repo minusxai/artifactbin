@@ -15,7 +15,7 @@
     "dev:app": "node scripts/dev-app.mjs",
     "build": "npm run build -w services/app && node scripts/build-server.mjs dist/proxy-server.mjs",
     "start": "NODE_ENV=production node dist/proxy-server.mjs",
-    "validate": "npm run check:residual-names && npm run validate -w services/app",
+    "validate": "npm run check:residual-names && npm run validate -w services/app && npm run validate:shared",
     "test": "npm test -w services/app && npm test -w services/cli",
     "test:watch": "vitest",
     "mint": "node scripts/mint.mjs",
@@ -31,7 +31,8 @@
     "eval:report": "tsx evals/report-cli.ts",
     "generate:routes": "npm run generate:routes -w services/app",
     "render:schema": "node scripts/render-schema.mjs",
-    "check:residual-names": "node scripts/check-residual-names.mjs"
+    "check:residual-names": "node scripts/check-residual-names.mjs",
+    "validate:shared": "tsc --noEmit -p services/utils/tsconfig.strict.json"
   },
   "dependencies": {
     "@artifactbin/browser": "0.1.0",

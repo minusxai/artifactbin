@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "../contracts/src/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/__tests__/**",
+    "../contracts/src/**/__tests__/**"
+  ]
+}

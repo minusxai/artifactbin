@@ -8,5 +8,6 @@ export function artifactIdFromSegment(segment:string):string|null{
 export function artifactIdFromPath(pathname:string):string|null{
  const match=/^\/(?:a|@[^/]+)\/([^/]+)\/?$/.exec(pathname);
  if(!match)return null;
- try{return artifactIdFromSegment(decodeURIComponent(match[1]));}catch{return null;}
+ const segment=match[1];if(segment===undefined)return null;
+ try{return artifactIdFromSegment(decodeURIComponent(segment));}catch{return null;}
 }
