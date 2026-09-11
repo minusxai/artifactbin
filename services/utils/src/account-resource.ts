@@ -12,7 +12,7 @@ export function parseAccountResource(input:unknown):AccountResource{
   if(key==='liked'||key==='following'){
    const pattern=key==='liked'?/^[A-Za-z0-9]{6,12}$/:/^usr_[A-Za-z0-9_-]+$/;
    if(!Array.isArray(item)||item.length>1000||!item.every(id=>typeof id==='string'&&pattern.test(id))||new Set(item).size!==item.length)throw new Error(`${key} must contain at most 1000 distinct exact IDs.`);
-  }else if(key==='id'){if(typeof item!=='string'||!(value.type==='profile'?/^usr_[A-Za-z0-9_-]+$/:/^tok_[A-Za-z0-9_-]+$/).test(item))throw new Error('Invalid account resource ID.');}
+  }else if(key==='id'){if(typeof item!=='string'||!(value.type==='profile'?/^usr_[A-Za-z0-9_-]+$/:/^[A-Za-z0-9_-]{1,128}$/).test(item))throw new Error('Invalid account resource ID.');}
   else if(key==='state'){if(typeof item!=='string'||!/^[a-f0-9]{64}$/.test(item))throw new Error('Invalid observed state.');}
   else if(key==='status'){if(typeof item!=='string'||!['online','offline','exited'].includes(item.toLowerCase()))throw new Error('Invalid session status.');value[key]=item.toLowerCase();}
   else if(key==='cols'||key==='rows'){if(!Number.isSafeInteger(item)||Number(item)<2||Number(item)>300)throw new Error(`${key} must be an integer from 2 to 300.`);}

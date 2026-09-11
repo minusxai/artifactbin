@@ -44,6 +44,27 @@ import { ancestorsForMove, notifyParent, parentOf } from '@/lib/folders';
 const SUBTREE = '(id = $1 OR ancestor_ids @> ARRAY[$1])';
 
 /**
+ * The pre-read that authorizes a delete or a restore BEFORE an idempotency
+ * receipt is claimed — the third reader these trashed rows are kept for.
+ *
+ * It reads past `LIVE_ARTIFACT_SQL` for the same reason the trash listing does:
+ * the state an authorization check sees flips as the operation runs (delete
+ * makes the row trashed, restore makes it live), so a check that only saw live
+ * rows would refuse exactly the retry it exists to let through. Ownership, not
+ * liveness, is the question; null means unknown or foreign.
+ */
+export async function ownedArtifactState(actor: TokenActor, id: string): Promise<{ deleted: boolean } | null> {
+  const db = await getDb();
+  const scope = ownerPredicate(actor);
+  const found = await db.query<{ deleted_at: string | null }>(
+    `SELECT deleted_at FROM artifacts WHERE id = $1 AND (${scope.where('$2')})`,
+    [id, scope.val],
+  );
+  const row = found.rows[0];
+  return row ? { deleted: row.deleted_at !== null } : null;
+}
+
+/**
  * `SET deleted_at = now()` on the row — and, for a folder, over its whole
  * subtree in ONE statement, which is what makes deleting a folder full of
  * documents an ordinary write rather than a refusal to be forced past.

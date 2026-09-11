@@ -128,7 +128,10 @@ test('delete dry-run preserves tracking and confirmed delete keeps the local fil
   const original=await readFile(join(root,'doc.jsx'));const lock=await readFile(join(root,'afbin.lock'));
   assert.equal((await invoke(['delete','doc.jsx','--dry-run'])).code,0);assert.deepEqual(await readFile(join(root,'afbin.lock')),lock);
   const deleted=await invoke(['delete','doc.jsx']);assert.equal(deleted.code,0,JSON.stringify(deleted.result));assert.deepEqual(await readFile(join(root,'doc.jsx')),original);assert.deepEqual(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files,{});
-  assert.deepEqual(calls,['GET /api/artifacts/abc123','POST /api/artifacts/preflight','DELETE /api/artifacts/abc123']);
+  // The second head read is the delete's own pre-read: it names the kind being
+  // deleted for --type, reports the delete capability, and identifies the
+  // account before the durable operation record claims its key.
+  assert.deepEqual(calls,['GET /api/artifacts/abc123','POST /api/artifacts/preflight','GET /api/artifacts/abc123','DELETE /api/artifacts/abc123']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('an untracked file with complete fence conditions never replaces them with a fresh head',async()=>{

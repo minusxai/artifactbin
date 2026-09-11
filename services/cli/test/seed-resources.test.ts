@@ -14,7 +14,6 @@ import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 
-const todo={todo:'workstream A: resources'};
 async function harness(prefix:string){
  const root=await mkdtemp(join(tmpdir(),prefix));
  await saveConnection({server:'https://example.com',token:'test-token'},root);
@@ -30,7 +29,7 @@ async function harness(prefix:string){
 }
 const account=(response:Response)=>{response.headers.set('X-Artifactbin-Account','usr_seed');return response;};
 
-test('push --restore restores explicit ids through a durable operation and a live row reports already restored',todo,async()=>{
+test('push --restore restores explicit ids through a durable operation and a live row reports already restored',async()=>{
  const h=await harness('afbin-seed-restore-');
  try{
   let restores=0;
@@ -48,7 +47,7 @@ test('push --restore restores explicit ids through a durable operation and a liv
  }finally{await h.cleanup();}
 });
 
-test('push --refresh reports changed, unchanged and failed assets per target',todo,async()=>{
+test('push --refresh reports changed, unchanged and failed assets per target',async()=>{
  const h=await harness('afbin-seed-refresh-');
  try{
   const code=await h.invoke(['push','--refresh','abc123','def456'],({body})=>account(Response.json((body as {id:string}).id==='abc123'?{refreshed:['https://x/a.png'],unchanged:[],failed:[]}:{refreshed:[],unchanged:[],failed:[{url:'https://x/b.png',code:'rate_limited',fix:'Retry later.'}]})));
@@ -58,7 +57,7 @@ test('push --refresh reports changed, unchanged and failed assets per target',to
  }finally{await h.cleanup();}
 });
 
-test('sessions list as a collection, pull as read-only YAML and terminate through delete',todo,async()=>{
+test('sessions list as a collection, pull as read-only YAML and terminate through delete',async()=>{
  const h=await harness('afbin-seed-sessions-');
  try{
   const session={id:'rs_1',name:'pi',harness:'pi',machine:'laptop',cwd:'/work',status:'online',cols:120,rows:40,controller:'local',created_at:'2026-09-11T00:00:00Z'};
@@ -75,7 +74,7 @@ test('sessions list as a collection, pull as read-only YAML and terminate throug
  }finally{await h.cleanup();}
 });
 
-test('delete accepts multiple typed targets, reports every returned identity and keeps local files',todo,async()=>{
+test('delete accepts multiple typed targets, reports every returned identity and keeps local files',async()=>{
  const h=await harness('afbin-seed-typed-delete-');
  try{
   await writeFile(join(h.root,'notes.yaml'),'type: file\nid: fil123\nsource: notes.txt\n');await writeFile(join(h.root,'notes.txt'),'keep me\n');
@@ -86,7 +85,7 @@ test('delete accepts multiple typed targets, reports every returned identity and
  }finally{await h.cleanup();}
 });
 
-test('a workspace tracking artifacts and a profile accepts a bare status, diff and push without mixed_resource_batch',todo,async()=>{
+test('a workspace tracking artifacts and a profile accepts a bare status, diff and push without mixed_resource_batch',async()=>{
  const h=await harness('afbin-seed-mixed-');
  try{
   await writeFile(join(h.root,'report.jsx'),`---\nid: abc123\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\n---\n<p>Hi</p>\n`);

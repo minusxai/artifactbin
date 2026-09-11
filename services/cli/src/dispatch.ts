@@ -1,4 +1,4 @@
-import {accountPlan,localAccountCommand,remoteAccountCommand} from './account-workspace';
+import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
 import {forkResources} from './fork';
 import {exportResources} from './export';
 import {openResources} from './open';
@@ -21,7 +21,7 @@ import {homedir} from 'node:os';
 import {parseCommand,CliError,type ParsedCommand} from './commands';
 import {loadWorkspace} from './workspace';
 import {validateFiles} from './validation';
-import {deleteArtifact,deleteComments} from './delete';
+import {deleteComments} from './delete';
 import {diffCommand,remoteStatus} from './comparison';
 import {localStatus} from './local';
 import {helpDocument,writeHelp} from './teaching';
@@ -50,7 +50,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    emit(json?{help:text}:text);return 0;
   }
-  pendingIntegration(parsed);
   let workspace=await loadWorkspace(context.cwd);
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
@@ -86,7 +85,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
    const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout);return 0;}
   }
-  if(['comment','delete','log'].includes(command)&&!(command==='delete'&&flags.type==='comment'))for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
+  if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
   if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
   if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd);}
@@ -125,17 +124,18 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    for(const item of installed.installations)stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
   }
   const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
-  if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return 0;}
+  if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
   if(command==='export'){await exportResources(workspace,positionals,{...exportOptions(),client});return 0;}
   if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
   if(command==='query'){const result=await mixedQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='validate'){const remote=await push(workspace,positionals,client,{dryRun:true});const valid=!!localValidation?.valid&&remote.operations.every(op=>!('error' in op));emit({...localValidation,valid,remote:remote.operations});return valid?0:2;}
   if(command==='delete'&&flags.type==='comment'){const result=await deleteComments(workspace,String(flags.in),positionals,client,{dryRun:!!flags['dry-run']});emit(result.value);return result.exitCode;}
-  if(command==='delete'){emit(await deleteArtifact(workspace,positionals[0],client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
   if(command==='diff'){const result=await diffCommand(workspace,parsed,client.connection.server,!!flags.remote,stdout,client);if(result)emit(result);return 0;}
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
+  if(command==='list'&&flags.type==='profile'){await resultOutput(await client.request('/account/profile'),parsed,workspace.cwd,emit,stdout);return 0;}
+  if(command==='list'&&flags.type==='session'){await resultOutput(await listAccountCollection(parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='list'&&flags.type==='table'){await resultOutput(await discoverTables(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
   if(command==='list'&&positionals.length){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
@@ -162,13 +162,5 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   stderr(`${failure.code}: ${failure.message}${'fix'in failure?`\n${failure.fix}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
  }
-}
-/** Seeded surface: the parser accepts these rows, and dispatch refuses them until their workstream lands. Each implementer deletes its own entries. */
-const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session'],delete:['folder','dataset','file','session']};
-function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
- const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
- if(typeof flags.type==='string'&&PENDING_TYPES[command]?.includes(flags.type))pending(`afbin ${command} --type ${flags.type}`);
- for(const flag of ['restore','refresh'])if(flags[flag]!==undefined)pending(`--${flag}`);
- if(command==='delete'&&positionals.length>1)pending('delete with multiple targets');
 }
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}
