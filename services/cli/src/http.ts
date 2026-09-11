@@ -7,8 +7,8 @@ export class HttpClient {
  connection:Connection;
  account?:string;
  constructor(private options:HttpOptions){this.connection={...options.connection,server:normalizeServer(options.connection.server)};this.account=options.account;}
- async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number;readOnly?:boolean}={}):Promise<T>{
-  return this.perform(path,method,body,headers,false,options.timeoutMs,options.readOnly) as Promise<T>;
+ async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number;readOnly?:boolean;signal?:AbortSignal}={}):Promise<T>{
+  return this.perform(path,method,body,headers,false,options.timeoutMs,options.readOnly,apiUrl,options.signal) as Promise<T>;
  }
  async content(path:string,method='GET',body?:unknown):Promise<{bytes:Buffer;contentType:string}>{
   return this.perform(path,method,body,{},true) as Promise<{bytes:Buffer;contentType:string}>;
@@ -21,18 +21,22 @@ export class HttpClient {
  async view(path:string,timeoutMs=60000):Promise<{bytes:Buffer;contentType:string}>{
   return this.perform(path,'GET',undefined,{},true,timeoutMs,true,viewerUrl) as Promise<{bytes:Buffer;contentType:string}>;
  }
- private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl):Promise<unknown>{
+ private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl,signal?:AbortSignal):Promise<unknown>{
   const url=address(path,this.connection.server);
   if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight')throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
   let refreshed=false,authenticated=false;
   for(let attempt=0;attempt<3;attempt++){
    let response:Response;
-   try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:'error',signal:AbortSignal.timeout(timeoutMs),headers:{
+   try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{
     ...headers,Authorization:`Bearer ${this.connection.token}`,'X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),
     ...(body!==undefined?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
     ...(this.options.readOnly?{'X-Artifactbin-Dry-Run':'1'}:{}),
    },...(body!==undefined?{body:JSON.stringify(body)}:{})});}
-   catch{throw new CliError((readOnly||['GET','HEAD'].includes(method))?'transport_error':'outcome_unknown',`The ${method} request did not return a confirmed response.`,(readOnly||['GET','HEAD'].includes(method))?'Check the server connection and retry.':'Keep the pending request journal; retry the same frozen operation to recover its result.');}
+   catch(error){
+    if(signal?.aborted)throw new CliError('cancelled','The request was cancelled.');
+    if(readOnly||['GET','HEAD','DELETE'].includes(method))throw transportFailure(this.connection.server,error);
+    throw new CliError('outcome_unknown',`The ${method} request to ${this.connection.server} did not return a confirmed response (${transportFailure(this.connection.server,error).message}).`);
+   }
    if(response.status===401){
     if(!this.options.readOnly&&!refreshed&&this.connection.refreshToken&&this.connection.clientId){
      refreshed=true;try{await this.refresh();continue;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;}
@@ -42,7 +46,7 @@ export class HttpClient {
      if(normalizeServer(next.server)!==this.connection.server)throw new CliError('wrong_server','Browser authentication returned a different server origin.');
      this.connection=next;continue;
     }
-    throw new CliError('auth_required','auth_required: sign-in is required.','Run afbin setup, or set ARTIFACTBIN_TOKEN for the selected server.');
+    throw new CliError('auth_required','auth_required: sign-in is required.','Run afbin setup, or set ARTIFACTBIN_TOKEN for the selected server.',{http_status:401});
    }
    const account=response.headers.get('X-Artifactbin-Account');
    if(account){if(this.account&&this.account!==account)throw new CliError('account_mismatch','The server account differs from this workspace.','Use the workspace account credentials.');this.account=account;}
@@ -55,7 +59,7 @@ export class HttpClient {
    if(!data||typeof data!=='object')throw new CliError('invalid_response','The server returned an incomplete JSON response.','Keep pending recovery state before retrying a write.');
    return data;
   }
-  throw new CliError('auth_required','Run afbin setup to sign in again.');
+  throw new CliError('auth_required','Run afbin setup to sign in again.',undefined,{http_status:401});
  }
  private async refresh():Promise<void>{
   // The lock dependency is loaded only for credential mutation, never local help or validation.
@@ -71,6 +75,18 @@ export class HttpClient {
    await saveConnection(this.connection,home,{ARTIFACTBIN_HOME:this.options.env?.ARTIFACTBIN_HOME});
   });
  }
+}
+
+/** The refusal for a request that never reached the server: the cause, and the origin the caller can fix. */
+export function transportFailure(server:string,error:unknown):CliError{
+ const cause=error instanceof Error&&error.cause instanceof Error?error.cause.message:error instanceof Error?error.message:String(error);
+ return new CliError('transport_error',`Cannot reach ${server} (${cause}).`);
+}
+
+/** The HTTP status behind a server refusal, for callers that key reconnect behaviour on it. */
+export function httpStatus(error:unknown):number|undefined{
+ const status=error instanceof CliError&&error.details&&typeof error.details==='object'?(error.details as {http_status?:unknown}).http_status:undefined;
+ return typeof status==='number'?status:undefined;
 }
 
 export function apiUrl(path:string,server:string):URL{

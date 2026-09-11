@@ -12,6 +12,7 @@ export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
  output_exists:{meaning:'The destination is taken; fork and export never replace a source or an existing file.',fix:'Choose a free --output path, or use export --force to replace it after a recoverable backup.'},
  type_mismatch:{meaning:'--type disagrees with the type the named source actually is.',fix:'Remove --type, or name a source of that type.'},
  session_disconnected:{meaning:'The remote session was removed; a replacement is never created silently.',fix:'Start a new session with afbin remote <command>.'},
+ transport_error:{meaning:'The selected server could not be reached, so no request was answered.',fix:'Check the server URL (--server or ARTIFACTBIN_URL) and your network, then retry; afbin setup --server <url> changes the default server.'},
  auth_required:{meaning:'This remote operation needs credentials for the selected origin.',fix:'Run afbin setup, or set ARTIFACTBIN_TOKEN and ARTIFACTBIN_URL for the selected server.'},
  approval_required:{meaning:'Browser approval is pending; --yes cannot approve it.',fix:'Open verification_url, approve the request, then rerun afbin setup before expires_at.'},
  access_denied:{meaning:'Browser approval was denied.',fix:'Run afbin setup only when you intend to start a new approval request.'},

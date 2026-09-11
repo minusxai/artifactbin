@@ -5,6 +5,7 @@ import {randomBytes,createHash,timingSafeEqual} from 'node:crypto';
 import {homedir} from 'node:os';
 import {normalizeServer,saveConnection,type Connection} from './config';
 import {CliError} from './commands';
+import {transportFailure} from './http';
 
 interface Options {home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;open:(url:string)=>Promise<void>;notify?:(message:string)=>void;timeoutMs?:number}
 export async function loopbackAuthenticate(origin:string,options:Options):Promise<Connection>{
@@ -30,7 +31,7 @@ export async function loopbackAuthenticate(origin:string,options:Options):Promis
  redirectUri=`http://127.0.0.1:${address.port}/callback`;
  const timer=setTimeout(()=>refuse(new CliError('approval_expired','Browser approval timed out.','Run afbin setup again.')),Math.min(options.timeoutMs??300000,300000));
  const post=async(path:string,body:Record<string,unknown>)=>{
-  const response=await(options.fetch??fetch)(`${server}${path}`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const response=await(options.fetch??fetch)(`${server}${path}`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(error=>{throw transportFailure(server,error);});
   const data=await response.json().catch(()=>null);
   if(!response.ok||!data||typeof data!=='object')throw new CliError('auth_failed',`Browser authentication failed (HTTP ${response.status}).`,'Run afbin setup again.');
   return data as Record<string,unknown>;

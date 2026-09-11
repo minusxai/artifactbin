@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { runRemote } from "../src/runner";
+import { HttpClient } from "../src/http";
 test("real PTY delivers a remote line and relays output and exit, acknowledging each input once", async () => {
   let output = "",
     ack = 0;
@@ -42,7 +43,7 @@ test("real PTY delivers a remote line and relays output and exit, acknowledging 
   const address = server.address() as { port: number };
   try {
     const code = await runRemote({
-      connection: { server: `http://127.0.0.1:${address.port}`, token: "test" },
+      client: new HttpClient({ connection: { server: `http://127.0.0.1:${address.port}`, token: "test" } }),
       command: "/bin/sh",
       args: ["-c", 'read line; printf "received:%s\\n" "$line"; exit 7'],
       interactive: false,
@@ -77,7 +78,7 @@ test("exits promptly when the relay hangs after the child exits", async () => {
   const start = Date.now();
   try {
     const code = await runRemote({
-      connection: { server: `http://127.0.0.1:${address.port}`, token: "test" },
+      client: new HttpClient({ connection: { server: `http://127.0.0.1:${address.port}`, token: "test" } }),
       command: "/bin/sh",
       args: ["-c", "sleep 0.1; exit 0"],
       interactive: false,
@@ -123,7 +124,7 @@ test("interactive exit detaches late input and resize while flushing the final e
     return Response.json({ controller: "local", inputs: [] });
   });
   const code = await runRemote({
-    connection: { server: "https://example.com", token: "test" },
+    client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
     command: "/bin/sh", args: ["-c", "exit 0"], interactive: true,
     onOutput: () => {},
   });
@@ -163,7 +164,7 @@ test("mobile dimensions survive local terminal replies and typing", async (t) =>
       : [] });
   });
   const code = await runRemote({
-    connection: { server: "https://example.com", token: "test" },
+    client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
     command: "/bin/sh", args: ["-c", "sleep 1; exit 0"], interactive: true,
     onOutput: () => {},
   });
@@ -208,7 +209,7 @@ test("retries the same batch after a lost response and recreates a missing sessi
     return Response.json({ controller: "local", inputs: body.ack ? [] : [{ id: 1, kind: "input", data: "second\r" }] });
   });
   const code = await runRemote({
-    connection: { server: "https://example.com", token: "test" },
+    client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
     command: "/bin/sh", args: ["-c", 'read a; read b; printf "result:%s:%s\\n" "$a" "$b"'],
     interactive: false, onOutput: data => { local += data; }, onSession: url => urls.push(url),
     signal: AbortSignal.timeout(10000),
@@ -234,7 +235,7 @@ test("output overflow keeps the local PTY running and the relay reconnecting", a
     return Response.json({ controller: "local", inputs: body.ack ? [] : [{ id: 1, kind: "input", data: "done\r" }] });
   });
   const code = await runRemote({
-    connection: { server: "https://example.com", token: "test" },
+    client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
     command: process.execPath,
     args: ["-e", "process.stdout.write('x'.repeat(2 * 1024 * 1024)); process.stdin.once('data', () => process.exit(0));"],
     interactive: false, onOutput: data => { bytes += data.length; },
@@ -255,7 +256,7 @@ for (const status of [401, 403, 410]) test(`HTTP ${status} stops retries but let
     return Response.json({ error: "Unauthorized" }, { status });
   });
   const code = await runRemote({
-    connection: { server: "https://example.com", token: "test" },
+    client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
     command: "/bin/sh", args: ["-c", "sleep 0.3; echo still-local"],
     interactive: false, onOutput: data => { local += data; },
     signal: AbortSignal.timeout(5000),
@@ -275,7 +276,7 @@ test("child exit interrupts reconnect backoff promptly", async (t) => {
   });
   const start = Date.now();
   const code = await runRemote({
-    connection: { server: "https://example.com", token: "test" },
+    client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
     command: "/bin/sh", args: ["-c", "sleep 1.7; exit 0"],
     interactive: false, onOutput: () => {},
     signal: AbortSignal.timeout(6000),
@@ -319,7 +320,7 @@ test("relay restart restores acknowledged history at the original link, includin
     return Response.json(await registry.exchange("owner", originalId, payload));
   });
   const code = await runRemote({
-    connection: { server: "https://example.com", token: "test" },
+    client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
     command: "/bin/sh", args: ["-c", 'printf "BEFORE-RESTART\\n"; read line; echo AFTER-RECOVERY'],
     interactive: false, onOutput: () => {}, signal: AbortSignal.timeout(10000),
   });
