@@ -39,6 +39,7 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
+import { developmentViteOptions } from './services/app/lib/dev-vite';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, resolvePolicyFilePath, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
@@ -150,7 +151,7 @@ async function main(): Promise<void> {
       appType: 'custom',
       // Vite pre-bundles what the SPA imports; the server-only trees (vega, duckdb,
       // playwright, PGLite) are the app's, never the browser's.
-      optimizeDeps: { entries: ['web/main.tsx'] },
+      ...developmentViteOptions(process.cwd(), port),
     });
   }
   /*

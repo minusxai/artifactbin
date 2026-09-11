@@ -41,6 +41,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    emit(json?{help:text}:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd);
+  const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.lock?.server??(context.env??process.env).ARTIFACTBIN_URL;
   const pendingFiles=await readOptional(join(workspace.root,'.artifactbin','pending-files.json'));
   if(pendingFiles&&['push','pull','delete'].includes(command)&&!flags['dry-run']){
    await withProcessLock(workspace.root,()=>recoverFiles(workspace.root));workspace=await loadWorkspace(context.cwd);
@@ -56,19 +57,19 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='validate'){const result=await validateFiles(workspace,positionals,!!flags.fix);emit(result);return result.valid?0:2;}
   if(command==='status'&&!flags.remote){emit(await localStatus(workspace));return 0;}
   if(command==='diff'&&!flags.remote){
-   try{emit(positionals.length?await compare(workspace,positionals[0],typeof flags.server==='string'?flags.server:workspace.lock?.server??'https://artifactbin.dev',false):await localDiff(workspace));return 0;}
+   try{emit(positionals.length?await compare(workspace,positionals[0],serverOrigin()??'https://artifactbin.dev',false):await localDiff(workspace));return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
-  const selectedServer=typeof flags.server==='string'?flags.server:workspace.lock?.server??'https://artifactbin.dev';
+  const selectedServer=serverOrigin()??'https://artifactbin.dev';
   if(['comment','delete','log'].includes(command))await artifactReference(workspace,positionals[0],selectedServer,command!=='log');
   if(command==='api')apiUrl(positionals[0],selectedServer);
   if(command==='push')for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
   if(command==='push'&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
-  if(command==='push'&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,typeof flags.server==='string'?flags.server:workspace.lock?.server);if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd);}
+  if(command==='push'&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd);}
   if(command==='push'&&!flags['dry-run']&&!await readPendingRequest(workspace.root)){
    const result=await finishLocalPush(workspace,positionals,!!flags.force);if(result){emit(result);return 0;}
   }
-  if(command==='pull'){const targets=await preparePull(workspace,positionals,!!flags.force,typeof flags.server==='string'?flags.server:workspace.lock?.server);if(!targets.length){emit({operations:[]});return 0;}}
+  if(command==='pull'){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin());if(!targets.length){emit({operations:[]});return 0;}}
   let apiBody:unknown;
   if(command==='api'&&typeof flags.input==='string'){
    const input=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
@@ -77,7 +78,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   let commentBody=typeof flags.body==='string'?flags.body:undefined;
   if(command==='comment'&&typeof flags['body-file']==='string')commentBody=flags['body-file']==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags['body-file']),'utf8');
   if(commentBody!==undefined&&(!commentBody.trim()||commentBody.length>100000))throw new CliError('invalid_comment','Comment text must contain 1–100000 characters.');
-  const server=typeof flags.server==='string'?flags.server:workspace.lock?.server;
+  const server=serverOrigin();
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
   if(command==='update'){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
