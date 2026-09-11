@@ -1,8 +1,82 @@
-# Proposed afbin commands and flags
+# afbin CLI implementation contract and handoff
+
+## Receiving-agent instructions
+
+This file is the handoff; no conversation history or extra planning document is required. Follow repository AGENTS.md and relevant design notes for implementation conventions. The required CLI behavior is the command table plus its footnotes. Preserve the minimal command surface; do not add command families, raw API escape hatches, compatibility aliases, or remote skill/MCP dependencies to make implementation easier. Internal HTTP transport is expected. Existing UI/domain authorization remains authoritative.
+
+**Repository and baseline:** Product work is in `/Users/ppsreejith/projects/artifact-bin-prod/services/artifactbin`, branch `feat/cli-full-surface`. Production wrapper is its parent repository. The original implementation worktree `/Users/ppsreejith/projects/artifactbin-cli-full` is detached and must not be used as the active branch. Start with `git status --short --branch` and `git log -8 --oneline`; preserve any later user changes. Fetch the feature branch on another machine. Do not reset to the historical main baseline. Local main names and paths are not proof of deployment.
+
+**Delivery:** Finish all command-table requirements, update each status with its test evidence, and prepare one OSS PR with an empty body for the user to review. Do not merge that PR or advance the committed production pin before review. Distribution repository changes needed for plugin parity must be identified separately with exact repository/revision and review status; do not claim they are covered by the OSS commit or deployed merely because local files changed.
+
+**Authority:** If you receive this entire document as the replacement primary agent, you inherit orchestration and all unassigned integration work; you are not limited to one subagent column. If delegated one workstream, follow that ownership boundary. The three named subagents have not yet launched. Missing interface skeletons/core failure tests have not yet been seeded: this is an explicit first task for the primary, not completed preparation. A single replacement agent may implement all work without artificial delegation waits.
+
+### Existing code to extend
+
+| Boundary | Starting points (repository-relative) |
+| --- | --- |
+| Command vocabulary and execution | `services/cli/src/commands.ts`, `arguments.ts`, `dispatch.ts`; `runCli(argv, CliContext)` is the real CLI integration-test entry. |
+| Local/account workflows | `workspace.ts`, `account-workspace.ts`, `resource-file.ts`, `resource-pull.ts`, `pull.ts`, `sync.ts`. AccountPlan/localAccountCommand/remoteAccountCommand are partial account handlers, not a second dispatcher. |
+| Safe edits and recovery | `reconcile.ts`, `conflict-state.ts`, `journal.ts`, `recoverable-operation.ts`, `pending-request.ts`; server mutation receipts and shared node editing are existing foundations. |
+| Native queries | CLI `local-document-query.ts`, `remote-query.ts`, `mutation-command.ts`; app `lib/resource-query.ts`, shared dataflow evaluator and dataset policy validation. |
+| Account contracts | `services/contracts/src/account-resource.ts`, `services/utils/src/account-resource.ts`, app `lib/account-profile.ts`, `lib/relations.ts`, `lib/users.ts`. Only relations.ts owns relation-table SQL. |
+| Existing behavioral seeds | `services/cli/test/{automatic-auth,pull-merge,mixed-push,inflight-reconcile,resource-workflows,account-workflows,local-query}.test.ts`; app `__tests__/cli-account-resources.test.ts`. Existing checks must be extended, not replaced by mocks mirroring implementation. |
+| Distribution | `services/app/public/chat/install.sh`, `components/GetStarted.tsx`, `app/llms.txt/route.ts`, `lib/plugin-package.ts`; `services/cli/scripts`, `services/cli/skill`, `scripts/__tests__/cli-install.test.mjs`, `cli-release.test.mjs`. App paths in this cell are relative to services/app. |
+
+### Known gaps that must not disappear during handoff
+
+- Profile work is partial: mixed artifact/account workspaces currently reject; type flags can be accepted without fully enforced semantics. Finish mixed tracking, pending file recovery ordering, in-flight edits, readonly-field validation and safe output representations. Token schema existence is not token implementation.
+- Finish token creation/metadata/revocation and protected one-time credential delivery, connection/multi-table/notebook dataset definitions, session edit/attach/termination, user relationships, trash, activity and analytics. Inspect existing UI handlers for their exact supported operations; map each to table commands/YAML. Do not guess unsupported server capabilities or claim parity from endpoint counts.
+- Complete durable recovery beyond direct SQL/comment creation/profile: declared mutations, deletion/restoration/refresh and token/session operations. Preserve operation identity across unknown outcomes; never expire uncertainty into permission to repeat billable work. Do not persist bearer secrets in workspace state, journals or output.
+- Finish local/remote draft queries, mixed/batch reads, historical handling, missing dependencies, pull stdout/conversions and artifact-YAML source node merging. A remote fallback must execute the requested draft, never silently execute another published version.
+- Implement fork/export/open and package the required local renderer/assets. Connected data stays subject to server policy; local-first is not permission to bypass it. Complete terminal attachment in remote, owned centrally; session domain handlers belong to Resources.
+- Remove api/method and ls/rm after native coverage. Old comment flags and positional pull destinations are already removed: retain regression checks, do not reintroduce compatibility. Generate help/man/examples from final command/schema definitions.
+- Fix stale npm guidance in homepage, llms.txt, plugin package and CLI README. `/chat/install.sh` installs CLI; `/install.sh` installs the self-hosted server. Verify download/version/checksum/PATH behavior before documenting the one-line command. Inspect both `minusxai/artifactbin-plugins` and `minusxai/artifactbin-oss-plugins`; establish the supported mirror and synchronize or retire stale distribution explicitly. Resolve CLI/plugin version compatibility and publisher/deploy wiring; a local bundle build is not external publication.
+
+### Required acceptance scenarios
+
+| Gate | Required observation |
+| --- | --- |
+| Local-first | With network disabled and an isolated home: help/version/validate/status/diff/local SQL and unchanged ordinary push succeed without auth, polling or unexpected writes. |
+| Forgiving auth | Fresh no-TTY command opens approval, waits boundedly and resumes once; existing setup plus expired credentials also resumes; denial/unavailable browser/concurrent approval/localhost server selection covered. --no-browser prints and waits; dry-run never creates credentials. |
+| Reconciliation | Two writers change unrelated nodes/fields and both survive; overlap retains both proposals; force is conditional with recoverable backup; edits during a response survive; content+governance is atomic or rejected before any writes. |
+| Authorization and retry | Viewer/editor/owner behavior matches UI; revoked access and stale policy/state fail safely; response loss and process restart produce one logical mutation, one invitation/event, and no leaked credentials. |
+| Surface consistency | Each row has parser plus behavior tests: mixed-case fixed enums, exact IDs/data, unsupported flags, ambiguous refs, no ignored flags, batch partial failures, 20-result defaults, cursor binding, stdout/file conflicts and nonzero failures. |
+| UI parity | Inventory current user-visible workflows and map each to native command/YAML plus a passing real-handler check. Record unresolved gaps in this file; do not mark complete while required functionality lacks a mapping. |
+| Distribution | Clean standalone install and update outside checkout; integrity failure preserves working install; all four local skill destinations; help/man/skills agree; no npm-404/MCP/raw-API teaching; record each available native platform and actual validation. |
+| Agent familiarity | OpenCode with GLM-5p3-flash and pi with current DeepSeek perform publish/edit/query/share/comment/recover tasks using bundled CLI guidance alone. Record exact provider model IDs, attempts, mistakes and reruns. Timeouts or missing auth are unresolved checks, not passes. |
+
+Use isolated test homes/data and free ports; never touch the user's running servers. The user authorized the Fireworks key from `/Users/ppsreejith/projects/artifactbin/.env` for these evals only; do not print or copy it into source/reports. If unavailable to a receiving agent, report the specific missing live-eval prerequisite and continue independent deterministic validation.
+
+### Reproducible focused checks and evidence format
+
+Run these from the OSS repository root after installing its pinned dependencies with `npm ci` if needed. These commands identify existing checks; the missing acceptance scenarios above still require new behavioral tests. Do not report a source-inspection status as a passing test.
+
+```sh
+# CLI auth, reconciliation and resource/account baseline
+node --import tsx --test services/cli/test/automatic-auth.test.ts services/cli/test/pull-merge.test.ts services/cli/test/mixed-push.test.ts services/cli/test/inflight-reconcile.test.ts services/cli/test/resource-workflows.test.ts services/cli/test/account-workflows.test.ts services/cli/test/local-query.test.ts
+# Real account API handler baseline
+npm exec -- vitest run --config vitest.config.ts --project=api services/app/__tests__/cli-account-resources.test.ts
+# Installer/release assembly baseline (Vitest, not node --test)
+npm exec -- vitest run --config vitest.config.ts --project=node scripts/__tests__/cli-install.test.mjs scripts/__tests__/cli-release.test.mjs
+# Regenerate final CLI teaching after command integration
+npm run generate:teaching -w services/cli
+```
+
+For every new scenario record: command-table row, fixture/setup, invoked native command, expected output/exit, local/remote state assertion, test file, exact check command, tested commit and observed result. For retries, count committed effects rather than merely checking the response. For offline tests, make unexpected fetches fail and inspect filesystem changes. For secret tests, scan captured output/journals/tracked YAML for fixture credentials. For subprocess tests, use the freshly built CLI and isolated home/workspace, not an older installed afbin.
+
+The receiving primary owns unresolved design details: resource schema fields and editable/read-only classification, format/type support matrix, collection filter keys, credential input/delivery and renderer lifecycle. Resolve these against existing UI/domain contracts, add the concrete schemas to bundled help and acceptance tests, and update this spec before marking those rows complete. This handoff defines the required outcomes; it does not falsely claim those missing schemas or tests already exist.
+
+### Execution and completion procedure
+
+1. Verify checkout and read this entire contract. Inspect the named modules and compare existing UI capabilities to the table. Resolve missing schemas/format/filter matrices in this file using existing domain semantics before implementing; unresolved design choices stay explicit.
+2. Seed shared interfaces and failure assertions for permissions, merges, recovery and secret handling. Observe the intended behavioral failure. Delegate the independent owned scopes below; do not create a new planning document. Implement broad cohesive batches, using focused checks while developing.
+3. Integrate only reviewed commits into feat/cli-full-surface. Reproduce implementer checks; central owner wires dispatch/contracts and regenerates teaching. Never treat an implementer's report alone as validation.
+4. From OSS root run `npm run validate`, `npm test`, `npm run build`; build CLI with `npm run build -w services/cli`. Discover gates using `npm run test:gates -- --list`, run affected gates against the fresh build and final required gates. Native build/test entry points are `npm run build:binary -w services/cli` and `npm run test:binary -w services/cli`; inspect platform support before claiming cross-platform results. Run installer/release checks and the named harness evaluations. Record exact commands, revision, outcomes and limitations here.
+5. Update table statuses only after acceptance evidence. Confirm clean tracked tree, pushed branch, one empty-body review PR and its CI. Final report identifies the PR, remaining external release actions and actual verification. Never call the entire rollout done before required plugin publishing and production checks are complete; these occur after authorized review/merge.
 
 ## Execution checkpoint — 2026-09-11
 
-The remaining scope is frozen to the command table below. Earlier row audits are historical where superseded by this checkpoint; accepting a flag does not count as completing its behavior. No percentage estimate is used until every row has been re-audited.
+The command table and its normative footnotes define the required final behavior. Status entries describe implementation evidence, not permission to omit unfinished requirements. Historical test checkpoints are identified separately; accepting a flag does not count as completing its behavior. No percentage estimate substitutes for acceptance evidence.
 
 | Workstream | Current evidence | Remaining delivery and acceptance |
 | --- | --- | --- |
@@ -27,20 +101,20 @@ The primary checkout is `services/artifactbin` inside the production repository,
 | `-f, --force` | Explicitly permit the documented overwrite for this command. [^global] | **Partial (working branch)** — Pull now preserves overwritten bytes in recoverable backups. Export overwrite support remains pending. | Only explicit overwrite permission; preserve recovery and enforce authorization. |
 | `--remote` | Refresh the remote observations used by an otherwise local operation. [^global] | **Partial** — Supported on status and diff only. | Omitted → local observations where supported; requested → refresh only. |
 | `--no-browser` | Suppress browser launch; print approval/view URLs instead. [^setup] | **Partial (working branch)** — Auth suppression/waiting is implemented; open/remote behavior remains pending. [^implementation] | Print usable URLs; do not infer this flag from missing TTY. Auth waits remain bounded. [^setup] |
-| `--type <type>` | Select the kind of resource being addressed or listed. [^global] | **No** — Proposed flag is not implemented. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
-| `--input <path\|->` | Read command input from a local file, or stdin for `-`. [^global] | **Partial (working branch)** — SQL input is implemented; comment migration and raw API removal remain. | Read stdin only with explicit -; never hang waiting for unspecified input. |
-| `-o, --output <path\|->` | Write resulting content to a file/directory, or stdout for `-`. [^global] | **No** — Proposed flag is not implemented. | Suggest a free destination; reject ambiguous multiple outputs and unrelated-file overwrite. |
-| `--format <format>` | Select the content representation, such as JSX, YAML, CSV, JSON, HTML, or PNG, where that resource supports it. [^global] | **No** — Proposed flag is not implemented. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
-| `--in <ref>` | Scope the operation to a containing resource: a folder, artifact, or dataset. [^global] | **No** — Proposed flag is not implemented. | Infer only from unambiguous tracking; otherwise require the containing resource. |
-| `--filter <field=value>` | Apply a typed filter; repeat to combine filters. [^global] | **No** — Proposed flag is not implemented. | No filters → documented collection default; invalid fields/values → supported choices. |
+| `--type <type>` | Select the kind of resource being addressed or listed. [^global] | **Partial** — Artifact discovery and profile-aware commands accept type; token/connection/session coverage and consistent enforcement remain. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
+| `--input <path\|->` | Read command input from a local file, or stdin for `-`. [^global] | **Partial** — SQL and comment input work; raw API removal remains. | Read stdin only with explicit -; never hang waiting for unspecified input. |
+| `-o, --output <path\|->` | Write resulting content to a file/directory, or stdout for `-`. [^global] | **Partial** — Pull and query/list outputs exist; remaining commands and batch/stdout edges remain. | Suggest a free destination; reject ambiguous multiple outputs and unrelated-file overwrite. |
+| `--format <format>` | Select the content representation, such as JSX, YAML, CSV, JSON, HTML, or PNG, where that resource supports it. [^global] | **Partial** — Pull/query/list representations exist; complete format matrix remains. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
+| `--in <ref>` | Scope the operation to a containing resource: a folder, artifact, or dataset. [^global] | **Partial** — Artifact folder scoping exists; other containers remain. | Infer only from unambiguous tracking; otherwise require the containing resource. |
+| `--filter <field=value>` | Apply a typed filter; repeat to combine filters. [^global] | **Partial** — Artifact discovery and comment filters exist; other collections remain. | No filters → documented collection default; invalid fields/values → supported choices. |
 | `--limit <n>` | Return at most `n` results in a page, from 1 to 100. [^global] | **Yes** — Validated range 1–100 on list/log/comment. | Default to 20 results; accept 1–100. Include next cursor when more results exist. |
 | `--cursor <cursor>` | Continue the same query using its returned cursor. [^global] | **Yes** — Passed through list/log/comment pagination. | Omitted → first page. Reject mismatched/expired cursors; explain how to restart. |
-| `afbin pull [<ref> ...]` | Retrieve editable files and reconcile tracked changes using shared node-scoped merge rules. [^pull] [^latest-main] | **Partial (working branch)** — Node-scoped local merging and force backups now pass focused tests. Typed resource coverage, full sharing and explicit conflict resolution remain. [^implementation] | No refs → tracked files. Merge unrelated edits; retain local work on conflict. [^defaults] |
-| `--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>` | Interpret the targets as the selected resource type; default `artifact`. [^pull] | **No** — This command does not accept this proposed flag. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
+| `afbin pull [<ref> ...]` | Retrieve editable files and reconcile tracked changes using shared node-scoped merge rules. [^pull] [^latest-main] | **Partial** — Shared merge, conflict records, force backups and native YAML source tracking exist; stdout/conversion and remaining resource kinds remain. | No refs → tracked files. Merge unrelated edits; retain local work on conflict. [^defaults] |
+| `--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>` | Interpret the targets as the selected resource type; default `artifact`. [^pull] | **Partial** — Profile workflow exists with focused tests; other accepted type values need consistent enforcement; token/connection/session remain. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
 | `-o, --output <path\|->` | Destination file/directory. [^pull] | **Partial (working branch)** — --output replaces positional destinations; batch directories work. Stdout and representation conversion remain. | Suggest a free destination; reject ambiguous multiple outputs and unrelated-file overwrite. |
-| `--format <jsx\|yaml\|csv\|json\|original>` | Select a supported editable local representation; default to the resource’s native representation. [^pull] | **No** — Representation is currently inferred. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
+| `--format <jsx\|yaml\|csv\|json\|original>` | Select a supported editable local representation; default to the resource’s native representation. [^pull] | **Partial** — Native YAML/source retrieval exists; full editable conversion and stdout remain. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
 | `-f, --force` | Replace locally changed tracked content after preserving a recoverable local copy. [^pull] | **Yes (working branch)** — Overwritten local bytes are backed up before replacement; pending proposals are archived. | Only explicit overwrite permission; preserve recovery and enforce authorization. |
-| `-n, --dry-run` | Show what would be retrieved, converted, or replaced without writing files or changing tracking. [^pull] | **Partial** — Current pull fetches without writing; proposed merges/types are absent. | No side effects or auth setup; report missing credentials/capabilities clearly. |
+| `-n, --dry-run` | Show what would be retrieved, converted, or replaced without writing files or changing tracking. [^pull] | **Partial** — Read-only retrieval/planning exists; all resource/merge previews still need coverage. | No side effects or auth setup; report missing credentials/capabilities clearly. |
 | `afbin fork <ref> [<ref> ...]` | Create a distinct local draft; publish it later with push. [^fork] [^latest-main] | **No** — Native command does not exist. | Require source; suggest a free destination. Default to private; never publish implicitly. |
 | `--type <artifact\|folder\|dataset\|file>` | Select the source resource type when it cannot be inferred. [^fork] | **No** — Command and flag are proposed. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
 | `-o, --output <path>` | Destination for the new editable draft; defaults to a collision-checked suggested filename. [^fork] | **No** — Command and flag are proposed. | Choose a free destination; never overwrite a source or existing draft. |
@@ -53,8 +127,8 @@ The primary checkout is `services/artifactbin` inside the production repository,
 | `--page <n>` | Select a 1-based slide/page for a paginated document, with the same meaning as in `open`. [^export] | **No** — Command and flag are proposed. | 1-based; reject out-of-range values with valid range. Omitted → documented whole-resource view/export. |
 | `-f, --force` | Replace an existing untracked export destination after preserving a recoverable copy. [^export] | **No** — Command and flag are proposed. | Only explicit overwrite permission; preserve recovery and enforce authorization. |
 | `-n, --dry-run` | Validate export inputs and report destinations and required capabilities without rendering or writing output. [^export] | **No** — Command and flag are proposed. | No side effects or auth setup; report missing credentials/capabilities clearly. |
-| `afbin push [<ref> ...]` | Publish local content and YAML settings, including sharing; preserve node-scoped rebasing. [^push] [^latest-main] | **Partial (working branch)** — Mixed metadata/content edits now reconcile before conditional writes. Atomic sharing/policy coverage and broader recovery remain. [^implementation] | No refs → changed tracked files; unchanged → offline success. Authenticate/resume automatically; recover writes without duplication. [^defaults] |
-| `--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>` | Select the type when it cannot be determined from a typed file or tracking. [^push] | **No** — This command does not accept this proposed flag. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
+| `afbin push [<ref> ...]` | Publish local content and YAML settings, including sharing; preserve node-scoped rebasing. [^push] [^latest-main] | **Partial** — Content/shares and metadata/policy updates are atomic; combined content+policy delta is refused. Remaining resources and mutation recovery remain. | No refs → changed tracked files; unchanged → offline success. Authenticate/resume automatically; recover writes without duplication. [^defaults] |
+| `--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>` | Select the type when it cannot be determined from a typed file or tracking. [^push] | **Partial** — Profile workflow exists; consistent enforcement and token/connection/session remain. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
 | `--restore` | Restore the selected soft-deleted resources, preserving identity and applicable permissions. [^push] | **No** — This command does not accept this proposed flag. | Require explicit targets; retry the same restore safely. Never infer bulk restoration. |
 | `--refresh` | Refresh the selected resources' declared external data or imported assets. [^push] | **No** — This command does not accept this proposed flag. | Require explicit targets; report changed/unchanged/failed resources independently. |
 | `-n, --dry-run` | Validate content, dependencies, permissions, sharing deltas, and the proposed operation without committing. [^push] | **Partial** — Local checks plus remote preflight exist for current types. | No side effects or auth setup; report missing credentials/capabilities clearly. |
@@ -63,20 +137,20 @@ The primary checkout is `services/artifactbin` inside the production repository,
 | `--fix` | Apply explicitly documented mechanical corrections locally. [^validate] | **Yes** — Mechanical formatting is local. | Omitted → report only. Never invent content or permission changes. |
 | `--remote` | Additionally check server-dependent constraints without persisting a preview or mutation. [^validate] | **No** — This command does not accept this proposed flag. | Omitted → local observations where supported; requested → refresh only. |
 | `afbin status [<ref> ...]` | Report local changes, conflicts and installation state; refresh remote observations only when requested. [^status] [^latest-main] | **Partial** — Default workspace status is local and labels remote state last observed. Positional targets and the full installation/account summary are missing. | No refs → workspace/installation summary. No workspace → useful setup status; no authentication just to report status. |
-| `--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>` | Restrict the tracked resources being reported. [^status] | **No** — This command does not accept this proposed flag. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
+| `--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>` | Restrict the tracked resources being reported. [^status] | **Partial** — Profile tracking exists; mixed workspaces and full resource filtering remain. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
 | `--remote` | Refresh remote status, authorization, and resource conditions. [^status] | **Partial** — Fetches and caches tracked artifact snapshots. | Omitted → local observations where supported; requested → refresh only. |
 | `afbin diff [<ref> ...]` | Compare working files against saved, historical or explicitly refreshed remote state. [^diff] [^latest-main] | **Partial** — Ordinary diff is local; historical comparisons use cache then fetch missing versions. At most one explicit ref is accepted. | No refs → changed files. Unchanged → empty success; fetch only explicitly requested missing remote/history data. |
-| `--type <artifact\|folder\|dataset\|file\|profile\|connection\|session>` | Select the resource type when it is not inferable. [^diff] | **No** — This command does not accept this proposed flag. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
+| `--type <artifact\|folder\|dataset\|file\|profile\|connection\|session>` | Select the resource type when it is not inferable. [^diff] | **Partial** — Profile comparison exists; mixed workspaces and full type coverage remain. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
 | `--remote` | Refresh the comparison base from the server. [^diff] | **Yes** — Fetches remote content and compares locally without moving the accepted base. | Omitted → local observations where supported; requested → refresh only. |
 | `-o, --output <path\|->` | Write the diff; defaults to stdout. [^diff] | **No** — This command does not accept this proposed flag. | Default to stdout; explicit file output must not overwrite unrelated content silently. |
-| `afbin list [<ref> ...]` | List resources or summaries, with consistent types, filters and pagination. [^list] [^latest-main] | **Partial** — Remote artifact listing with pagination exists; typed collections, explicit refs and filters are missing. | Default to accessible artifacts and bounded pagination. Empty collection → success; automatically authenticate if needed. [^defaults] |
-| `--type <artifact\|folder\|dataset\|file\|user\|token\|connection\|session\|activity\|analytics>` | Select a resource collection or read-only view; default `artifact`. [^list] | **No** — This command does not accept this proposed flag. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
-| `--in <ref>` | Scope to a folder, artifact, user, or other supported container. [^list] | **No** — This command does not accept this proposed flag. | Infer only from unambiguous tracking; otherwise require the containing resource. |
-| `--filter <field=value>` | Filter by supported fields such as search text, visibility, ownership/shared status, trash state, relationship, event kind, or date interval. [^list] | **No** — This command does not accept this proposed flag. | No filters → documented collection default; invalid fields/values → supported choices. |
+| `afbin list [<ref> ...]` | List resources or summaries, with consistent types, filters and pagination. [^list] [^latest-main] | **Partial** — Owned/shared discovery, filters, folder scoping and output work; exact refs and additional collections remain. | Default to accessible artifacts and bounded pagination. Empty collection → success; automatically authenticate if needed. [^defaults] |
+| `--type <artifact\|folder\|dataset\|file\|user\|token\|connection\|session\|activity\|analytics>` | Select a resource collection or read-only view; default `artifact`. [^list] | **Partial** — Artifact/folder/dataset/file implemented; user/token/connection/session/activity/analytics remain. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
+| `--in <ref>` | Scope to a folder, artifact, user, or other supported container. [^list] | **Partial** — Folder scoping implemented; other containers remain. | Infer only from unambiguous tracking; otherwise require the containing resource. |
+| `--filter <field=value>` | Filter by supported fields such as search text, visibility, ownership/shared status, trash state, relationship, event kind, or date interval. [^list] | **Partial** — Search/visibility/relationship filters implemented; trash and additional collection filters remain. | No filters → documented collection default; invalid fields/values → supported choices. |
 | `--limit <n>` | Page size. [^list] | **Yes** — Works for artifact listing. | Default to 20 results; accept 1–100. Include next cursor when more results exist. |
-| `--cursor <cursor>` | Continue the same filtered collection. [^list] | **Partial** — Works for artifact listing, without proposed filters. | Omitted → first page. Reject mismatched/expired cursors; explain how to restart. |
-| `-o, --output <path\|->` | Write the listing; defaults to stdout. [^list] | **No** — This command does not accept this proposed flag. | Default to stdout; reject conflicting output modes or ambiguous multiple results. |
-| `--format <table\|csv\|json\|yaml>` | Representation of the returned collection. [^list] | **No** — This command does not accept this proposed flag. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
+| `--cursor <cursor>` | Continue the same filtered collection. [^list] | **Yes, artifact collections** — Cursor binds account and filter set; new collections need equivalent checks. | Omitted → first page. Reject mismatched/expired cursors; explain how to restart. |
+| `-o, --output <path\|->` | Write the listing; defaults to stdout. [^list] | **Yes, current collections** — Private exclusive files/stdout supported; broader batch summaries remain. | Default to stdout; reject conflicting output modes or ambiguous multiple results. |
+| `--format <table\|csv\|json\|yaml>` | Representation of the returned collection. [^list] | **Yes, current collections** — Table/CSV/JSON/YAML with conflicting stdout modes rejected. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
 | `afbin log <ref> [<ref> ...]` | Read version history for one or more resources. [^log] | **Partial (working branch)** — Batch history and per-target failures work; type/date/author filtering remains. | Require target; default to newest history and bounded pagination. Explain missing/inaccessible targets. [^defaults] |
 | `--type <artifact\|folder\|dataset\|file>` | Select a versioned resource type; default inferred/artifact. [^log] | **No** — This command does not accept this proposed flag. | Infer from typed file/tracking; otherwise use the documented command default. Conflicts → error, never reinterpret. Enum values ignore case. [^syntax] |
 | `--filter <field=value>` | Filter supported history fields such as author or date interval. [^log] | **No** — This command does not accept this proposed flag. | No filters → documented collection default; invalid fields/values → supported choices. |
@@ -94,31 +168,31 @@ The primary checkout is `services/artifactbin` inside the production repository,
 | `--node <node-id>` | Anchor a new thread to an existing persistent node. [^comment] | **Yes** — Persistent-node anchoring exists. | Validate the exact persistent node; stale/missing anchor → actionable error. |
 | `--quote <text>` | Anchor a new thread to a uniquely matching quote; mutually exclusive with `--node`. [^comment] | **Yes** — Quote anchoring and node/quote exclusivity exist. | Require a unique match; report ambiguity without posting. |
 | `--state <open\|resolved>` | Reopen or resolve the thread selected by `--thread`; can accompany a reply. [^comment] | **Yes (working branch)** — Explicit open/resolved transitions normalize enum case; --resolve is removed. | Require explicit open/resolved and a thread; unchanged state → safe success. Enum values ignore case. [^syntax] |
-| `--filter <field=value>` | Filter listed threads by supported fields, including state and author. [^comment] | **No** — This command does not accept this proposed flag. | No filters → documented collection default; invalid fields/values → supported choices. |
+| `--filter <field=value>` | Filter listed threads by supported fields, including state and author. [^comment] | **Yes** — State and exact author filters bind pagination. | No filters → documented collection default; invalid fields/values → supported choices. |
 | `--limit <n>` | Thread page size. [^comment] | **Yes** — Listing-only pagination exists. | Default to 20 results; accept 1–100. Include next cursor when more results exist. |
 | `--cursor <cursor>` | Continue one artifact's thread listing. [^comment] | **Yes** — One-artifact listing pagination exists. | Omitted → first page. Reject mismatched/expired cursors; explain how to restart. |
 | `-n, --dry-run` | Check anchors, thread state, permissions, and proposed changes without posting. [^comment] | **No** — This command does not accept this proposed flag. | No side effects or auth setup; report missing credentials/capabilities clearly. |
 | `afbin query <ref> [<ref> ...]` | Run reads or explicit mutations; execute locally when engines and inputs permit. [^query] [^latest-main] | **Partial (working branch)** — Local and remote dataset/declared-query reads work; direct writes recover. Declared mutations and remaining draft/batch edges remain. | Default to reads and available local inputs. Require explicit writes; bind parameters and explain missing inputs. |
 | `--input <path\|->` | Read SQL from a local file or stdin. [^query] | **Yes (working branch)** — File/stdin SQL input for local reads and direct dataset writes. | Read stdin only with explicit -; never hang waiting for unspecified input. |
-| `--name <name>` | Select a declared query, named table, or—with `--write`—a declared mutation. [^query] | **No** — Command and flag are proposed. | Require an existing name when selecting; explain available names. No guessed query/mutation. |
-| `--param <name=value>` | Supply a typed query/mutation parameter; repeat for multiple parameters. [^query] | **Partial (working branch)** — Scalar binding and duplicate rejection work; declared-value validation remains. | Use declared defaults; report missing required parameters. Reject unknown or invalid values. |
+| `--name <name>` | Select a declared query, named table, or—with `--write`—a declared mutation. [^query] | **Partial** — Named reads implemented; declared mutation selection remains. | Require an existing name when selecting; explain available names. No guessed query/mutation. |
+| `--param <name=value>` | Supply a typed query/mutation parameter; repeat for multiple parameters. [^query] | **Partial** — Scalar binding and declared read defaults/types work; declared mutation validation remains. | Use declared defaults; report missing required parameters. Reject unknown or invalid values. |
 | `--write` | Explicitly execute a supported row mutation. [^query] | **Partial (working branch)** — Direct dataset SQL uses a frozen operation, durable receipt and observed-state commit. | Omitted → read-only. Never infer permission to mutate from SQL or a query name. |
-| `--remote` | Refresh remote observations/inputs for a read before execution. [^query] | **No** — Command and flag are proposed. | Omitted → local observations where supported; requested → refresh only. |
+| `--remote` | Refresh remote observations/inputs for a read before execution. [^query] | **Partial** — Remote reads exist; draft freshness and mixed-source semantics remain. | Omitted → local observations where supported; requested → refresh only. |
 | `-n, --dry-run` | Validate a requested mutation and report its planned effect without applying it. [^query] | **No** — Command and flag are proposed. | No side effects or auth setup; report missing credentials/capabilities clearly. |
 | `--limit <n>` | Bound a returned read page. [^query] | **Yes (working branch)** — Local and remote read pages default to 20; stale-input cursors are rejected. | Default to 20 results; accept 1–100. Include next cursor when more results exist. |
 | `--cursor <cursor>` | Continue one read result where supported. [^query] | **Yes (working branch)** — Local and remote read pages default to 20; stale-input cursors are rejected. | Omitted → first page. Reject mismatched/expired cursors; explain how to restart. |
-| `-o, --output <path\|->` | Write results; defaults to stdout. [^query] | **No** — Command and flag are proposed. | Default to stdout; reject conflicting output modes or ambiguous multiple results. |
-| `--format <table\|csv\|json\|yaml>` | Result representation. [^query] | **No** — Command and flag are proposed. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
+| `-o, --output <path\|->` | Write results; defaults to stdout. [^query] | **Partial** — File/stdout output works; multi-result/directory behavior remains. | Default to stdout; reject conflicting output modes or ambiguous multiple results. |
+| `--format <table\|csv\|json\|yaml>` | Result representation. [^query] | **Yes, current reads** — Table/CSV/JSON/YAML; remaining query modes need integration. | Infer only where documented; reject unsupported or contradictory representations locally. Enum values ignore case. [^syntax] |
 | `afbin open <ref> [<ref> ...]` | Open published resources or preview local drafts without publishing. [^open] | **No** — Native command/local preview workflow does not exist. | Local path → local preview; remote ref → published view. Failed browser launch → usable URL. |
 | `--remote` | Open the published version of a tracked local resource instead of previewing the working file. [^open] | **No** — Command and flag are proposed. | Default to local preview for local paths; this flag selects the published version. |
 | `--no-browser` | Return preview/view URLs without launching a browser. [^open] | **No** — Command and flag are proposed. | Return a usable URL without launching a browser; preserve preview/session lifecycle. |
 | `--page <n>` | Open a selected 1-based slide/page. [^open] | **No** — Command and flag are proposed. | 1-based; reject out-of-range values with valid range. Omitted → documented whole-resource view/export. |
 | `afbin setup` | Automatically authenticate and prepare local skills when needed; resume the requested operation after browser approval. [^setup] | **Partial (working branch)** — Agent invocations now authenticate, wait and resume; concurrent approval is shared. Full harness/browser/release validation remains. [^implementation] | No TTY still allows browser approval; wait and resume original operation. Reuse valid credentials and saved selections. [^setup] |
-| `--harness <claude\|codex\|pi\|opencode\|none>` | Select a local skill destination; repeat for several. [^setup] | **Partial** — Selection works; enum normalization must be added. | Reuse saved selections, otherwise detected defaults; none is exclusive. No terminal checklist for agent calls. [^setup] Enum values ignore case. [^syntax] |
+| `--harness <claude\|codex\|pi\|opencode\|none>` | Select a local skill destination; repeat for several. [^setup] | **Yes, selection** — Case-normalized harness choices; full release/harness validation remains. | Reuse saved selections, otherwise detected defaults; none is exclusive. No terminal checklist for agent calls. [^setup] Enum values ignore case. [^syntax] |
 | `--no-browser` | Emit the approval URL without launching a browser. [^setup] | **Partial (working branch)** — Auth suppression/waiting is implemented; open/remote behavior remains pending. [^implementation] | Print usable URLs; do not infer this flag from missing TTY. Auth waits remain bounded. [^setup] |
-| `-n, --dry-run` | Report configuration, authentication needs, skill destinations, and proposed changes without initiating approval or modifying local state. [^setup] | **No** — This command does not accept this proposed flag. | No side effects or auth setup; report missing credentials/capabilities clearly. |
+| `-n, --dry-run` | Report configuration, authentication needs, skill destinations, and proposed changes without initiating approval or modifying local state. [^setup] | **Yes, current setup** — Reports without approval or local writes; retain across added setup behavior. | No side effects or auth setup; report missing credentials/capabilities clearly. |
 | `afbin update` | Explicitly update the compatible binary and skills; report plugin refresh requirements. [^update] | **Partial** — Explicit compatible binary/skill update, checksum verification and binary backups exist. Plugin reporting/integration and dry-run are missing. | Reuse saved harnesses; already current → success. Verify downloads and preserve recoverable installation. [^defaults] |
-| `--harness <claude\|codex\|pi\|opencode\|none>` | Same selection semantics as `setup`. [^update] | **Partial** — Selection works; enum normalization must be added. | Reuse saved selections, otherwise detected defaults; none is exclusive. No terminal checklist for agent calls. [^setup] Enum values ignore case. [^syntax] |
+| `--harness <claude\|codex\|pi\|opencode\|none>` | Same selection semantics as `setup`. [^update] | **Yes, selection** — Same normalized choices as setup; final update integration remains. | Reuse saved selections, otherwise detected defaults; none is exclusive. No terminal checklist for agent calls. [^setup] Enum values ignore case. [^syntax] |
 | `-n, --dry-run` | Resolve the compatible release and report binary/skill changes without installing them. [^update] | **No** — This command does not accept this proposed flag. | No side effects or auth setup; report missing credentials/capabilities clearly. |
 | `afbin remote [<command> [args ...]]` | Launch a local terminal with browser access, or attach to an existing session. [^remote] | **Partial** — Local terminal launch and browser access exist; session attachment and typed management are missing. | Interactive omission → picker; agent invocation needs explicit command/session. Preserve session identity on reconnect. |
 | `--name <name>` | Name a newly created terminal session. [^remote] | **Yes** — Names a new terminal session. | Optional for new sessions; choose a non-colliding default. Reject when attaching to an existing session. |
@@ -130,13 +204,13 @@ The primary checkout is `services/artifactbin` inside the production repository,
 | `afbin api <path>` | Remove after native command/YAML coverage is verified. [^removals] | **Present — removal required.** | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
 | `-X, --method <method>` (old `api`) | Remove HTTP-method selection. [^removals] | **Present — removal required.** | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
 | `--input <path\|->` (old `api`) | Remove raw request-body input; retain domain input elsewhere. [^removals] | **Present — old behavior must be removed.** | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
-| `--body-file <path\|->` (old `comment`) | Replace with --input. [^removals] | **Present — removal required.** | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
-| `--reply <thread-id>` (old `comment`) | Replace with --thread. [^removals] | **Present — removal required.** | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
-| `--resolve` (old `comment`) | Replace with --state resolved/open. [^removals] | **Present — removal required.** | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
+| `--body-file <path\|->` (old `comment`) | Replace with --input. [^removals] | **Removed** — Canonical input/thread/state flags implemented. | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
+| `--reply <thread-id>` (old `comment`) | Replace with --thread. [^removals] | **Removed** — Canonical input/thread/state flags implemented. | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
+| `--resolve` (old `comment`) | Replace with --state resolved/open. [^removals] | **Removed** — Canonical input/thread/state flags implemented. | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
 | `afbin ls`, `afbin rm` (aliases) | Remove aliases; retain list and delete. [^removals] | **Present — removal required.** | Reject retired syntax with the canonical replacement; no compatibility alias or silent reinterpretation. |
-| `afbin pull <ref> <destination>` (old positional form) | Replace destination positional with --output. [^removals] [^latest-main] | **Removed on working branch.** | Retired destinations are no longer interpreted; use --output. |
+| `afbin pull <ref> <destination>` (old positional form) | Replace destination positional with --output. [^removals] [^latest-main] | **Partial** — Shared merge, conflict records, force backups and native YAML source tracking exist; stdout/conversion and remaining resource kinds remain. | Retired destinations are no longer interpreted; use --output. |
 
-[^audit]: Status is based on source inspection at OSS commit `c99cd6e4` (production repository main `81da2b9`), not a fresh runtime or deployment verification. **Yes** means the described existing scope is implemented; extensions can still be listed as work. **Partial** means some required behavior is missing. **No** means the proposed command or flag is absent.
+[^audit]: Status reconciled against implementation code through `133620ff` (subsequent commits before this handoff changed documentation only). **Yes** describes the stated bounded behavior; **Partial** leaves the named gaps open; **No** means missing. These are not claims of fresh end-to-end validation. Footnote acceptance requirements still apply even where a bounded behavior is marked Yes. See the handoff evidence and risk register for exact verification limits.
 
 [^global]: **Common behavior — behavior and required work.**
 
@@ -150,71 +224,71 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Repeat positional references for multiple targets. Omitted targets select only the explicitly documented defaults below. Multiple writes are independently conditional and recoverable; results identify each target and partial completion. A failed batch is not reported as globally atomic.
 
-    **Work:** Complete consistent resource resolution, batch semantics and domain schemas. Keep validation, ordinary diff/status/help and unchanged ordinary push local; fetch only needed remote inputs and label cached observations. Apply the same vocabulary to parser, help, man pages, errors, skills and plugins. Remove obsolete surfaces without compatibility aliases. Verify every UI operation has a native command/YAML representation and test agent task completion without raw API use.
+    **Acceptance / remaining work:** Complete consistent resource resolution, batch semantics and domain schemas. Keep validation, ordinary diff/status/help and unchanged ordinary push local; fetch only needed remote inputs and label cached observations. Apply the same vocabulary to parser, help, man pages, errors, skills and plugins. Remove obsolete surfaces without compatibility aliases. Verify every UI operation has a native command/YAML representation and test agent task completion without raw API use.
 
     **`-h, --help`:** Print bundled help for this command. Offline; no authentication or writes.
 
-    **Work:** Retain offline execution; document the completed command set.
+    **Acceptance / remaining work:** Retain offline execution; document the completed command set.
 
     **`--version`:** Print the installed CLI version and protocol version. Offline.
 
-    **Work:** Include protocol in plain output as described.
+    **Acceptance / remaining work:** Include protocol in plain output as described.
 
     **`--json`:** Emit structured command results to stdout; diagnostics go to stderr. File contents selected with `--output` are separate from this result envelope.
 
-    **Work:** Define result envelopes, partial failures and output-file/stdout interactions consistently.
+    **Acceptance / remaining work:** Define result envelopes, partial failures and output-file/stdout interactions consistently.
 
     **`--server <origin>`:** Select the server. Explicit flag overrides the tracked workspace origin, then `ARTIFACTBIN_URL`, then saved configuration/default. Credentials remain origin-scoped.
 
-    **Work:** Retain precedence across new commands; cover localhost in validation.
+    **Acceptance / remaining work:** Retain precedence across new commands; cover localhost in validation.
 
     **`-y, --yes`:** Accept the command's stated confirmation defaults without terminal prompts. Never approves browser authentication or bypasses permissions.
 
-    **Work:** Reuse for new confirmation flows without adding implicit privileges.
+    **Acceptance / remaining work:** Reuse for new confirmation flows without adding implicit privileges.
 
     **`-n, --dry-run`:** Describe and validate the proposed changes without applying them, changing local tracking, installing files, refreshing credentials, or sending invitations. Contact the server only when authoritative validation is necessary.
 
-    **Work:** Add only to the mutation/export/install commands listed below and preserve no-write/no-auth-refresh guarantees.
+    **Acceptance / remaining work:** Add only to the mutation/export/install commands listed below and preserve no-write/no-auth-refresh guarantees.
 
     **`-f, --force`:** Explicitly permit the documented overwrite for this command. Never bypass validation, permissions, or conditional-write checks.
 
-    **Work:** Implement each documented overwrite/backup contract without bypassing conditional writes.
+    **Acceptance / remaining work:** Implement each documented overwrite/backup contract without bypassing conditional writes.
 
     **`--remote`:** Refresh the remote observations used by an otherwise local operation. Never change remote content.
 
-    **Work:** Add explicit refresh behavior to the other listed commands.
+    **Acceptance / remaining work:** Add explicit refresh behavior to the other listed commands.
 
     **`--type <type>`:** Select the kind of resource being addressed or listed. The same type names apply across commands.
 
-    **Work:** Implement shared parsing/validation and the per-command behavior below.
+    **Acceptance / remaining work:** Implement shared parsing/validation and the per-command behavior below.
 
     **`--input <path\|->`:** Read command input from a local file, or stdin for `-`. The command defines its domain format; never an HTTP payload.
 
-    **Work:** Implement domain text/SQL inputs and remove raw API payload semantics.
+    **Acceptance / remaining work:** Implement domain text/SQL inputs and remove raw API payload semantics.
 
     **`-o, --output <path\|->`:** Write resulting content to a file/directory, or stdout for `-`. Multiple outputs require a directory. Never silently overwrite an unrelated file.
 
-    **Work:** Implement shared parsing/validation and the per-command behavior below.
+    **Acceptance / remaining work:** Implement shared parsing/validation and the per-command behavior below.
 
     **`--format <format>`:** Select the content representation, such as JSX, YAML, CSV, JSON, HTML, or PNG, where that resource supports it. Distinct from `--json`, which formats the command result.
 
-    **Work:** Implement shared parsing/validation and the per-command behavior below.
+    **Acceptance / remaining work:** Implement shared parsing/validation and the per-command behavior below.
 
     **`--in <ref>`:** Scope the operation to a containing resource: a folder, artifact, or dataset.
 
-    **Work:** Implement shared parsing/validation and the per-command behavior below.
+    **Acceptance / remaining work:** Implement shared parsing/validation and the per-command behavior below.
 
     **`--filter <field=value>`:** Apply a typed filter; repeat to combine filters. Supported fields are documented per resource type; unknown fields and invalid values fail locally.
 
-    **Work:** Implement shared parsing/validation and the per-command behavior below.
+    **Acceptance / remaining work:** Implement shared parsing/validation and the per-command behavior below.
 
     **`--limit <n>`:** Return at most `n` results in a page, from 1 to 100.
 
-    **Work:** Reuse this validation in new paginated operations.
+    **Acceptance / remaining work:** Reuse this validation in new paginated operations.
 
     **`--cursor <cursor>`:** Continue the same query using its returned cursor.
 
-    **Work:** Bind cursors to the same target/filter/query and reject ambiguous multi-target continuation.
+    **Acceptance / remaining work:** Bind cursors to the same target/filter/query and reject ambiguous multi-target continuation.
 
 [^pull]: **`afbin pull` — behavior and required work.**
 
@@ -224,79 +298,79 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     For an existing tracked copy, reconcile local document edits with remote changes using the same shared node-scoped splice/rebase rules as the server and browser editor. Rebase edits affecting unrelated source spans; overlapping node spans conflict. Do not introduce a separate line-based merge strategy or infer conflicts solely from persistent node IDs. Preserve both proposals in .artifactbin/conflicts.json on conflict and report affected regions; status reports conflicted and ordinary push stays blocked. Resolve the working file, then use push --force to conditionally accept that proposal, or pull --force to accept remote content with a recoverable local backup. Archive resolved conflict records. Merge YAML metadata by field against its saved base: preserve one-sided changes, accept identical changes, and require resolution for divergent changes to the same field. Treat sharing lists as permission state, never automatically union them or silently broaden access. Binary conflicts require an explicit choice. An unchanged remote head leaves local edits untouched. Export and fork use their own commands. An explicit `ref@version` retrieves that historical content instead of merging it into the current content; refuse locally modified targets unless `--force` is supplied. Inspect the resulting diff, then push conditionally against the observed current head to revert.
 
-    **Work:** Reuse shared node-scoped rebasing locally, preserve both proposals on conflict, and integrate conflict state with push. Add field-aware YAML reconciliation, typed account/resource files, full authorized sharing state, multiple targets and the listed output flags. Retain safe conditional historical restoration; cache observations/content and avoid fetching cached immutable versions again.
+    **Acceptance / remaining work:** Reuse shared node-scoped rebasing locally, preserve both proposals on conflict, and integrate conflict state with push. Add field-aware YAML reconciliation, typed account/resource files, full authorized sharing state, multiple targets and the listed output flags. Retain safe conditional historical restoration; cache observations/content and avoid fetching cached immutable versions again.
 
     **`--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>`:** Interpret the targets as the selected resource type; default `artifact`. Secret values are never returned.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`-o, --output <path\|->`:** Destination file/directory. Defaults to the tracked path, otherwise a collision-checked suggested filename. Stdout does not establish tracking.
 
-    **Work:** Replace positional destination with --output and implement safe stdout/multi-target behavior.
+    **Acceptance / remaining work:** Replace positional destination with --output and implement safe stdout/multi-target behavior.
 
     **`--format <jsx\|yaml\|csv\|json\|original>`:** Select a supported editable local representation; default to the resource’s native representation. Rendered output uses `export`.
 
-    **Work:** Add explicit supported editable formats.
+    **Acceptance / remaining work:** Add explicit supported editable formats.
 
     **`-f, --force`:** Replace locally changed tracked content after preserving a recoverable local copy. Never erase an uncertain pending write.
 
-    **Work:** Add recoverable backup and protect unresolved/pending work.
+    **Acceptance / remaining work:** Add recoverable backup and protect unresolved/pending work.
 
     **`-n, --dry-run`:** Show what would be retrieved, converted, or replaced without writing files or changing tracking.
 
-    **Work:** Add preview of merge/conflict and typed-resource retrieval.
+    **Acceptance / remaining work:** Add preview of merge/conflict and typed-resource retrieval.
 
 [^fork]: **`afbin fork` — behavior and required work.**
 
     Create new editable local drafts from existing resources or local drafts. Remove source write identity and invitations, preserve dependency references and source lineage, and use safe private sharing defaults. Nothing is published until `push`; the first push creates a distinct resource. Explicit targets are required.
 
-    **Work:** Implement local draft creation, safe identity/permission stripping, retained lineage and dependencies, multiple targets, and conditional first-push creation. Reuse local source files; retrieve only missing remote source data.
+    **Acceptance / remaining work:** Implement local draft creation, safe identity/permission stripping, retained lineage and dependencies, multiple targets, and conditional first-push creation. Reuse local source files; retrieve only missing remote source data.
 
     **`--type <artifact\|folder\|dataset\|file>`:** Select the source resource type when it cannot be inferred. Fork only the selected resource; folder children and referenced resources are not recursively copied.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`-o, --output <path>`:** Destination for the new editable draft; defaults to a collision-checked suggested filename. Multiple sources require a directory. Never overwrite a source or existing destination.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`-n, --dry-run`:** Show new local files, retained dependencies, and sharing defaults without creating files or resources.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
 [^export]: **`afbin export` — behavior and required work.**
 
     Export screenshots, rendered documents, dataset results, or original asset bytes. Local paths export working content without publishing; IDs/URLs export the selected remote version. Reuse local engines and available inputs where possible; report missing rendering capabilities or remote inputs explicitly. Exports do not establish or replace editable tracking.
 
-    **Work:** Implement supported render/data/original-byte exports, deterministic format selection, local engines, explicit missing-capability diagnostics and safe output handling. Cover the product’s existing screenshot capture modes and selectors in bundled export schemas/help; do not silently publish drafts or upload them for rendering.
+    **Acceptance / remaining work:** Implement supported render/data/original-byte exports, deterministic format selection, local engines, explicit missing-capability diagnostics and safe output handling. Cover the product’s existing screenshot capture modes and selectors in bundled export schemas/help; do not silently publish drafts or upload them for rendering.
 
     **`--type <artifact\|folder\|dataset\|file>`:** Select the resource type when it cannot be inferred. Unsupported resource/format combinations fail with the supported choices.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--format <html\|png\|csv\|json\|yaml\|original>`:** Select the export representation. Infer it from a recognized output extension; otherwise require this flag. A conflicting extension is an error.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`-o, --output <path\|->`:** Write exported content; default to a collision-checked filename. Multiple outputs require a directory. Stdout supports one output and is incompatible with `--json`, which emits a separate result envelope.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--name <name>`:** Select a named table/query result, with the same meaning as in `query`.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--page <n>`:** Select a 1-based slide/page for a paginated document, with the same meaning as in `open`.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`-f, --force`:** Replace an existing untracked export destination after preserving a recoverable copy. Never overwrite tracked source files.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`-n, --dry-run`:** Validate export inputs and report destinations and required capabilities without rendering or writing output.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
 [^push]: **`afbin push` — behavior and required work.**
 
@@ -310,27 +384,27 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     `--restore` and `--refresh` are mutually exclusive. Unchanged ordinary pushes perform no network requests. All remote mutations use durable recovery records; secret-bearing operations use redacted records and an operation identifier instead of persisting secrets. There is no separate metadata, sharing, invitation, like, follow, folder-create, or connection-create command.
 
-    **Work:** Retain node-scoped rebasing when metadata accompanies edits; commit content/governance atomically. Add typed folders, datasets/connections, profile, token, session and personal-state YAML, sharing invitations/access, restore and refresh. Define explicit secret input/output and one-time token delivery without journaling secrets. Extend durable recovery to every mutation and handle local edits made while a response is in flight without losing either writer.
+    **Acceptance / remaining work:** Retain node-scoped rebasing when metadata accompanies edits; commit content/governance atomically. Add typed folders, datasets/connections, profile, token, session and personal-state YAML, sharing invitations/access, restore and refresh. Define explicit secret input/output and one-time token delivery without journaling secrets. Extend durable recovery to every mutation and handle local edits made while a response is in flight without losing either writer.
 
     **`--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>`:** Select the type when it cannot be determined from a typed file or tracking. A conflicting file type is an error.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--restore`:** Restore the selected soft-deleted resources, preserving identity and applicable permissions. For a local file, restore first and apply its desired state conditionally. No target means no action, not bulk restoration.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--refresh`:** Refresh the selected resources' declared external data or imported assets. Requires explicit targets; reports what changed and preserves the resource identity.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`-n, --dry-run`:** Validate content, dependencies, permissions, sharing deltas, and the proposed operation without committing.
 
-    **Work:** Extend preflight to full sharing/resources and shared merge semantics.
+    **Acceptance / remaining work:** Extend preflight to full sharing/resources and shared merge semantics.
 
     **`-f, --force`:** Observe the current remote head and conditionally replace it with the local proposal. A race after observation still fails. Never fixes invalid content or overrides ownership checks.
 
-    **Work:** Extend consistently to supported resource kinds.
+    **Acceptance / remaining work:** Extend consistently to supported resource kinds.
 
 [^validate]: **`afbin validate` — behavior and required work.**
 
@@ -338,29 +412,29 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Use `push --dry-run` when checking the exact proposed publication and its conditions.
 
-    **Work:** Add shared typed-resource, permission and query validation locally; add explicit read-only remote checks. Reuse server validation rules without importing server boot/database dependencies.
+    **Acceptance / remaining work:** Add shared typed-resource, permission and query validation locally; add explicit read-only remote checks. Reuse server validation rules without importing server boot/database dependencies.
 
     **`--fix`:** Apply explicitly documented mechanical corrections locally. Never invent permissions, change sharing intent, or publish.
 
-    **Work:** Preserve narrow safe fixes while expanding schemas.
+    **Acceptance / remaining work:** Preserve narrow safe fixes while expanding schemas.
 
     **`--remote`:** Additionally check server-dependent constraints without persisting a preview or mutation. If authentication is needed, report how to authenticate rather than modifying credentials.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^status]: **`afbin status` — behavior and required work.**
 
     Report local changes, observed remote versions, pending recovery, selected account/server, and installed CLI/skill versions. With no references, summarize the current workspace and installation. Default output uses local state and explicitly labels remote information as last observed.
 
-    **Work:** Add target/type selection, pending/conflict reporting and local account/CLI/skill/plugin version provenance. Keep default status network-free; make remote refresh explicit and clearly distinguish observed from current state.
+    **Acceptance / remaining work:** Add target/type selection, pending/conflict reporting and local account/CLI/skill/plugin version provenance. Keep default status network-free; make remote refresh explicit and clearly distinguish observed from current state.
 
     **`--type <artifact\|folder\|dataset\|file\|profile\|token\|connection\|session>`:** Restrict the tracked resources being reported.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--remote`:** Refresh remote status, authorization, and resource conditions. Does not publish or update the CLI/skills.
 
-    **Work:** Extend to listed resource/authorization conditions without installing updates.
+    **Acceptance / remaining work:** Extend to listed resource/authorization conditions without installing updates.
 
 [^diff]: **`afbin diff` — behavior and required work.**
 
@@ -368,19 +442,19 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Binary resources report metadata and byte-level change summaries rather than fabricated text diffs. Secret values are always redacted.
 
-    **Work:** Add multiple targets, typed resource/permission/personal-state differences, output handling and redaction. Show actionable node-scoped conflict regions while retaining familiar text diffs. Keep remote comparisons from changing the accepted write base.
+    **Acceptance / remaining work:** Add multiple targets, typed resource/permission/personal-state differences, output handling and redaction. Show actionable node-scoped conflict regions while retaining familiar text diffs. Keep remote comparisons from changing the accepted write base.
 
     **`--type <artifact\|folder\|dataset\|file\|profile\|connection\|session>`:** Select the resource type when it is not inferable.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--remote`:** Refresh the comparison base from the server.
 
-    **Work:** Extend to new types and multiple targets.
+    **Acceptance / remaining work:** Extend to new types and multiple targets.
 
     **`-o, --output <path\|->`:** Write the diff; defaults to stdout.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^list]: **`afbin list` — behavior and required work.**
 
@@ -388,57 +462,57 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     `list --type artifact --filter state=deleted` is the trash view. `list --type user --filter relationship=following` is the following view. Tokens are listed by safe metadata, never bearer values. There is no separate search, trash, activity, analytics, or account-token-list command.
 
-    **Work:** Add all listed collections, exact-ref summaries, shared/owned discovery, typed filters, scoped listing and output formats. Include UI-visible account/activity/analytics views. Fetch summaries rather than full artifacts; validate filters locally.
+    **Acceptance / remaining work:** Add all listed collections, exact-ref summaries, shared/owned discovery, typed filters, scoped listing and output formats. Include UI-visible account/activity/analytics views. Fetch summaries rather than full artifacts; validate filters locally.
 
     **`--type <artifact\|folder\|dataset\|file\|user\|token\|connection\|session\|activity\|analytics>`:** Select a resource collection or read-only view; default `artifact`. Analytics includes the metrics and time-series data available to the same user in the UI.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--in <ref>`:** Scope to a folder, artifact, user, or other supported container.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--filter <field=value>`:** Filter by supported fields such as search text, visibility, ownership/shared status, trash state, relationship, event kind, or date interval. Filter schemas are local help content.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--limit <n>`:** Page size.
 
-    **Work:** Reuse across typed collections.
+    **Acceptance / remaining work:** Reuse across typed collections.
 
     **`--cursor <cursor>`:** Continue the same filtered collection.
 
-    **Work:** Bind to selected type/container/filters.
+    **Acceptance / remaining work:** Bind to selected type/container/filters.
 
     **`-o, --output <path\|->`:** Write the listing; defaults to stdout.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--format <table\|csv\|json\|yaml>`:** Representation of the returned collection. `--json` selects the structured result envelope, including pagination.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^log]: **`afbin log` — behavior and required work.**
 
     Read version history for the selected versioned resources. `@version` starts at that version or earlier. Account-wide activity is `list --type activity`.
 
-    **Work:** Add multiple targets, supported versioned resource types and typed filters; enforce per-target pagination. Cache immutable history entries where useful without presenting a cached head as current.
+    **Acceptance / remaining work:** Add multiple targets, supported versioned resource types and typed filters; enforce per-target pagination. Cache immutable history entries where useful without presenting a cached head as current.
 
     **`--type <artifact\|folder\|dataset\|file>`:** Select a versioned resource type; default inferred/artifact.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--filter <field=value>`:** Filter supported history fields such as author or date interval.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--limit <n>`:** Page size per target.
 
-    **Work:** Apply independently to each target.
+    **Acceptance / remaining work:** Apply independently to each target.
 
     **`--cursor <cursor>`:** Continue one target's history; incompatible with multiple targets.
 
-    **Work:** Retain single-target restriction.
+    **Acceptance / remaining work:** Retain single-target restriction.
 
 [^delete]: **`afbin delete` — behavior and required work.**
 
@@ -446,23 +520,23 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Repeated deletion/revocation of the same owned resource is recoverable and does not affect another resource. Permanent deletion is exposed only if the product provides it, through an explicit future contract rather than overloading `--force`.
 
-    **Work:** Add typed token/connection/session/comment actions, multiple targets and durable operation identities. Preserve enough identity/state for restoration and reconcile descendants/dependencies. Specify supported permanent deletion only after checking the product contract; never hide it behind force.
+    **Acceptance / remaining work:** Add typed token/connection/session/comment actions, multiple targets and durable operation identities. Preserve enough identity/state for restoration and reconcile descendants/dependencies. Specify supported permanent deletion only after checking the product contract; never hide it behind force.
 
     **`--type <artifact\|folder\|dataset\|file\|token\|connection\|session\|comment>`:** Select the resource type; default inferred/artifact.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--in <ref>`:** Identify the containing artifact when deleting comments.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`-n, --dry-run`:** Show affected resources, descendants, dependencies, and authorization checks without applying deletion/revocation.
 
-    **Work:** Extend to all supported typed actions and affected descendants/dependencies.
+    **Acceptance / remaining work:** Extend to all supported typed actions and affected descendants/dependencies.
 
     **`-f, --force`:** Permit deleting an asset that is still referenced, after reporting affected references. Does not bypass permissions, active-operation checks, or make a soft deletion permanent.
 
-    **Work:** Retain narrow meaning across added resource actions.
+    **Acceptance / remaining work:** Retain narrow meaning across added resource actions.
 
 [^comment]: **`afbin comment` — behavior and required work.**
 
@@ -470,47 +544,47 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     New threads require `--node` or `--quote`; replies retain the thread's anchor. Posting and resolving use durable operation identities so retries do not duplicate comments. Deleting a comment uses `delete --type comment --in <artifact> <comment-id>`.
 
-    **Work:** Add --thread, --input, --state, filtering, dry-run and multi-target behavior. Route comment deletion through delete. Persist operation identities for posts/replies/state changes; enforce anchor validation and authorization. Remove --body-file, --reply and --resolve after teaching their replacements.
+    **Acceptance / remaining work:** Add --thread, --input, --state, filtering, dry-run and multi-target behavior. Route comment deletion through delete. Persist operation identities for posts/replies/state changes; enforce anchor validation and authorization. Remove --body-file, --reply and --resolve after teaching their replacements.
 
     **`--body <text>`:** Comment/reply text.
 
-    **Work:** Reuse for multiple targets; add durable write recovery.
+    **Acceptance / remaining work:** Reuse for multiple targets; add durable write recovery.
 
     **`--input <path\|->`:** Read comment/reply text from a file or stdin; mutually exclusive with `--body`.
 
-    **Work:** Replace --body-file with --input; preserve file/stdin and exclusivity checks.
+    **Acceptance / remaining work:** Replace --body-file with --input; preserve file/stdin and exclusivity checks.
 
     **`--thread <thread-id>`:** Select an existing thread for a reply and/or state change. Requires exactly one artifact.
 
-    **Work:** Replace --reply with --thread for both replying and state changes.
+    **Acceptance / remaining work:** Replace --reply with --thread for both replying and state changes.
 
     **`--node <node-id>`:** Anchor a new thread to an existing persistent node.
 
-    **Work:** Reuse in dry-run and batch validation.
+    **Acceptance / remaining work:** Reuse in dry-run and batch validation.
 
     **`--quote <text>`:** Anchor a new thread to a uniquely matching quote; mutually exclusive with `--node`.
 
-    **Work:** Reuse in dry-run and batch validation.
+    **Acceptance / remaining work:** Reuse in dry-run and batch validation.
 
     **`--state <open\|resolved>`:** Reopen or resolve the thread selected by `--thread`; can accompany a reply.
 
-    **Work:** Replace --resolve with --state open/resolved.
+    **Acceptance / remaining work:** Replace --resolve with --state open/resolved.
 
     **`--filter <field=value>`:** Filter listed threads by supported fields, including state and author. Listing only.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--limit <n>`:** Thread page size. Listing only.
 
-    **Work:** Retain mutation-mode rejection.
+    **Acceptance / remaining work:** Retain mutation-mode rejection.
 
     **`--cursor <cursor>`:** Continue one artifact's thread listing. Listing only; one target.
 
-    **Work:** Retain single-target/listing-only restriction.
+    **Acceptance / remaining work:** Retain single-target/listing-only restriction.
 
     **`-n, --dry-run`:** Check anchors, thread state, permissions, and proposed changes without posting. Mutation mode only.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^query]: **`afbin query` — behavior and required work.**
 
@@ -518,67 +592,67 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Mutation permissions and dataset read-only policies apply equally to UI and CLI. Writes use conditional, recoverable transactions. Connection creation/configuration uses YAML with `push`; source discovery is `list --type dataset --in <connection>`.
 
-    **Work:** Implement local execution for available engines/inputs and explicit remote execution when required; define cache freshness. Cover declared reads, parameters, dataset reads/mutations and notebook cell/dependency previews. Use shared query validation and conditional recoverable writes; keep read-only execution the default.
+    **Acceptance / remaining work:** Implement local execution for available engines/inputs and explicit remote execution when required; define cache freshness. Cover declared reads, parameters, dataset reads/mutations and notebook cell/dependency previews. Use shared query validation and conditional recoverable writes; keep read-only execution the default.
 
     **`--input <path\|->`:** Read SQL from a local file or stdin. SQL addresses the selected dataset's named tables, not HTTP routes. Requires one dataset target.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--name <name>`:** Select a declared query, named table, or—with `--write`—a declared mutation.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--param <name=value>`:** Supply a typed query/mutation parameter; repeat for multiple parameters. Bind parameters rather than interpolate SQL text.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--write`:** Explicitly execute a supported row mutation. Requires one target and either a declared mutation name or supported SQL input. Read-only execution is the default.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--remote`:** Refresh remote observations/inputs for a read before execution. Cannot accompany `--write`.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`-n, --dry-run`:** Validate a requested mutation and report its planned effect without applying it. Requires `--write`; never executes arbitrary side effects to simulate them.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--limit <n>`:** Bound a returned read page. Does not silently limit which rows a mutation changes.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--cursor <cursor>`:** Continue one read result where supported.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`-o, --output <path\|->`:** Write results; defaults to stdout. Multiple named/target results require a directory or structured JSON output.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--format <table\|csv\|json\|yaml>`:** Result representation.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
 [^open]: **`afbin open` — behavior and required work.**
 
     Open an existing artifact in the browser, or preview a local draft without publishing it. Browser layout, drag gestures, and interactive viewing remain browser operations; their underlying content, state, and data are accessible through the other commands.
 
-    `--json` implies `--no-browser`. A local preview serves only its declared workspace resources and never publishes, changes permissions, or grants broader filesystem access. Export preview content with `export <local-path>`.
+    For `open` only, `--json` suppresses launching the resulting preview/view URL. It does not suppress browser authentication needed to resolve an authorized remote resource; only explicit `--no-browser` does that. A local preview serves only its declared workspace resources and never publishes, changes permissions, or grants broader filesystem access. Export preview content with `export <local-path>`.
 
-    **Work:** Implement local draft preview and published view opening, bounded filesystem access, page selection and no-browser output. Share rendering with export and validation; no implicit publish.
+    **Acceptance / remaining work:** Implement local draft preview and published view opening, bounded filesystem access, page selection and no-browser output. Share rendering with export and validation; no implicit publish.
 
     **`--remote`:** Open the published version of a tracked local resource instead of previewing the working file.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--no-browser`:** Return preview/view URLs without launching a browser.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
     **`--page <n>`:** Open a selected 1-based slide/page.
 
-    **Work:** Implement this flag with the described semantics; reuse shared parsing and validation.
+    **Acceptance / remaining work:** Implement this flag with the described semantics; reuse shared parsing and validation.
 
 [^setup]: **`afbin setup` — behavior and required work.**
 
@@ -586,19 +660,19 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     `--yes` accepts selected local installation changes, not browser approval. Store credentials under `~/.artifactbin/` with private permissions. A plugin can invoke this same setup flow after ensuring that the compatible binary is installed; it does not introduce a different authentication command.
 
-    **Work:** Decouple browser availability and approval waiting from TTY detection. Add automatic first-use setup and browser reauthentication to agent-invoked commands, preserving their original arguments and safe write identity. Coalesce concurrent authentication requests by server so multiple agents reuse one approval rather than opening duplicate tabs. Resume the original operation after approval; preserve account/origin checks and do not replay writes with unknown outcomes blindly. Keep progress on stderr and final results on stdout. For an unavailable browser, emit an actionable approval URL; for denial, expiry or interruption, return structured status and retain valid resumable state without looping indefinitely. Add explicit no-browser and dry-run. Complete plugin bootstrap using the same compatible binary/setup flow. Verify first use, valid credentials, refresh success/failure, no TTY with a desktop browser, headless use, denial, timeout, concurrent invocations, interruption, wrong-account approval and nonduplicating write resumption across supported harnesses. Never treat --yes as browser consent.
+    **Acceptance / remaining work:** Decouple browser availability and approval waiting from TTY detection. Add automatic first-use setup and browser reauthentication to agent-invoked commands, preserving their original arguments and safe write identity. Coalesce concurrent authentication requests by server so multiple agents reuse one approval rather than opening duplicate tabs. Resume the original operation after approval; preserve account/origin checks and do not replay writes with unknown outcomes blindly. Keep progress on stderr and final results on stdout. For an unavailable browser, emit an actionable approval URL; for denial, expiry or interruption, return structured status and retain valid resumable state without looping indefinitely. Add explicit no-browser and dry-run. Complete plugin bootstrap using the same compatible binary/setup flow. Verify first use, valid credentials, refresh success/failure, no TTY with a desktop browser, headless use, denial, timeout, concurrent invocations, interruption, wrong-account approval and nonduplicating write resumption across supported harnesses. Never treat --yes as browser consent.
 
     **`--harness <claude\|codex\|pi\|opencode\|none>`:** Select a local skill destination; repeat for several. `none` is exclusive. Otherwise use saved selections, or preselect detected harnesses in an interactive checklist.
 
-    **Work:** Reuse selection for plugin bootstrap without duplicate unmanaged installs.
+    **Acceptance / remaining work:** Reuse selection for plugin bootstrap without duplicate unmanaged installs.
 
     **`--no-browser`:** Emit the approval URL without launching a browser; continue bounded approval waiting and resume the operation if approved. No TTY alone must not imply this flag. Apply the flag consistently to commands that may need browser authentication; it must not disable silent token refresh.
 
-    **Work:** Expose browser suppression independently of terminal mode and share its parsing with all authentication-capable commands.
+    **Acceptance / remaining work:** Expose browser suppression independently of terminal mode and share its parsing with all authentication-capable commands.
 
     **`-n, --dry-run`:** Report configuration, authentication needs, skill destinations, and proposed changes without initiating approval or modifying local state.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^update]: **`afbin update` — behavior and required work.**
 
@@ -606,15 +680,15 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Normal authoring commands do not check for updates. Installed plugin and standalone skill copies must report their source/version consistently; update does not silently edit a harness-owned immutable plugin cache.
 
-    **Work:** Add dry-run, plugin-copy provenance and owning-harness refresh guidance. Wire compatible plugin publication into release/deployment, keep plugin versions monotonic, and replace unpublished npm instructions with the verified installer. Keep ordinary authoring free of update polls and remove obsolete npm update paths.
+    **Acceptance / remaining work:** Add dry-run, plugin-copy provenance and owning-harness refresh guidance. Wire compatible plugin publication into release/deployment, keep plugin versions monotonic, and replace unpublished npm instructions with the verified installer. Keep ordinary authoring free of update polls and remove obsolete npm update paths.
 
     **`--harness <claude\|codex\|pi\|opencode\|none>`:** Same selection semantics as `setup`.
 
-    **Work:** Retain saved selections and consistent destination reporting.
+    **Acceptance / remaining work:** Retain saved selections and consistent destination reporting.
 
     **`-n, --dry-run`:** Resolve the compatible release and report binary/skill changes without installing them.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^remote]: **`afbin remote` — behavior and required work.**
 
@@ -622,19 +696,19 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Flags after the command belong to the child command. Streaming terminal output does not support `--json` or pretend to be a paginated result. List sessions with `list --type session`, edit supported session configuration through YAML and `push`, and terminate a session with `delete --type session`.
 
-    **Work:** Add attach/no-browser flags, deterministic noninteractive requirements and typed session read/edit/terminate support through existing commands. Reuse authentication and keep terminal streaming separate from structured command output.
+    **Acceptance / remaining work:** Add attach/no-browser flags, deterministic noninteractive requirements and typed session read/edit/terminate support through existing commands. Reuse authentication and keep terminal streaming separate from structured command output.
 
     **`--name <name>`:** Name a newly created terminal session.
 
-    **Work:** Reject alongside session attachment.
+    **Acceptance / remaining work:** Reject alongside session attachment.
 
     **`--session <ref>`:** Attach to an existing authorized session instead of launching a new command; mutually exclusive with a command and `--name`.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`--no-browser`:** Print the session URL without opening a browser.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^help]: **`afbin help` — behavior and required work.**
 
@@ -642,33 +716,33 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     `afbin <command> -h`, `afbin help <command>`, generated man pages, installed skills, and plugin guidance describe the same flags and examples.
 
-    **Work:** Generate command/flag documentation, domain/YAML schemas, man pages and examples from shared definitions. Remove endpoint teaching and obsolete commands from all local skills, discovery pages and plugin packages. Align errors and validations with the same recovery instructions and verify agents can complete tasks from bundled guidance.
+    **Acceptance / remaining work:** Generate command/flag documentation, domain/YAML schemas, man pages and examples from shared definitions. Remove endpoint teaching and obsolete commands from all local skills, discovery pages and plugin packages. Align errors and validations with the same recovery instructions and verify agents can complete tasks from bundled guidance.
 
     **`--format <text\|markdown\|man>`:** Select a bundled documentation representation.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
     **`-o, --output <path\|->`:** Write the requested help; defaults to stdout.
 
-    **Work:** Add the flag and described behavior, using shared validation and help definitions.
+    **Acceptance / remaining work:** Add the flag and described behavior, using shared validation and help definitions.
 
 [^removals]: **Retired surfaces — behavior and required work.**
 
-    **`afbin api <path>`:** **Work:** Remove the raw HTTP escape hatch after native command/YAML coverage is implemented and verified. Migrate all generated help, skills, plugin packages, examples and errors; do not retain a compatibility alias.
+    **`afbin api <path>`:** **Acceptance / remaining work:** Remove the raw HTTP escape hatch after native command/YAML coverage is implemented and verified. Migrate all generated help, skills, plugin packages, examples and errors; do not retain a compatibility alias.
 
-    **`-X, --method <method>` (old `api`):** **Work:** Remove with api; agents select domain commands rather than HTTP methods.
+    **`-X, --method <method>` (old `api`):** **Acceptance / remaining work:** Remove with api; agents select domain commands rather than HTTP methods.
 
-    **`--input <path\|->` (old `api`):** **Work:** Remove raw JSON request-body behavior with api. The shared --input flag remains for documented comment/SQL domain input.
+    **`--input <path\|->` (old `api`):** **Acceptance / remaining work:** Remove raw JSON request-body behavior with api. The shared --input flag remains for documented comment/SQL domain input.
 
-    **`--body-file <path\|->` (old `comment`):** **Work:** Remove; replace with comment --input. Update all teaching and errors without a compatibility alias.
+    **`--body-file <path\|->` (old `comment`):** **Acceptance / remaining work:** Remove; replace with comment --input. Update all teaching and errors without a compatibility alias.
 
-    **`--reply <thread-id>` (old `comment`):** **Work:** Remove; replace with comment --thread for replies and state transitions.
+    **`--reply <thread-id>` (old `comment`):** **Acceptance / remaining work:** Remove; replace with comment --thread for replies and state transitions.
 
-    **`--resolve` (old `comment`):** **Work:** Remove; replace with comment --state resolved, and support --state open for reopening.
+    **`--resolve` (old `comment`):** **Acceptance / remaining work:** Remove; replace with comment --state resolved, and support --state open for reopening.
 
-    **`afbin ls`, `afbin rm` (aliases):** **Work:** Remove redundant aliases; teach and accept list and delete as the single canonical command names.
+    **`afbin ls`, `afbin rm` (aliases):** **Acceptance / remaining work:** Remove redundant aliases; teach and accept list and delete as the single canonical command names.
 
-    **`afbin pull <ref> <destination>` (old positional form):** **Work:** Remove the destination positional form; use pull <ref> --output <path>. Repeated positionals then consistently identify sources.
+    **`afbin pull <ref> <destination>` (old positional form):** **Acceptance / remaining work:** Remove the destination positional form; use pull <ref> --output <path>. Repeated positionals then consistently identify sources.
 
 
 [^defaults]: **Forgiving defaults are a required contract, not a claim that they already work.** The implementation column records current command coverage; default/recovery behavior must also be verified before a row is considered complete.
@@ -692,10 +766,10 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     Keep data on stdout, progress on stderr, stable structured errors and nonzero failure exits. Reject contradictory output selections locally: --json may accompany file output, but never mix a separate result envelope with exported bytes on stdout. For collection commands without a file destination, --json selects the structured JSON result; incompatible non-JSON --format choices must be rejected. Document resource/format support and defaults in the same bundled schemas used by validation.
 
-    **Work:** Implement normalization once in shared typed argument/schema validation and reuse it across commands, YAML, filters, help and diagnostics. Verify mixed-case enums are accepted while case-sensitive identities and data remain byte-for-byte unchanged. These are required semantics, not a claim about the current binary.
+    **Acceptance / remaining work:** Implement normalization once in shared typed argument/schema validation and reuse it across commands, YAML, filters, help and diagnostics. Verify mixed-case enums are accepted while case-sensitive identities and data remain byte-for-byte unchanged. These are required semantics, not a claim about the current binary.
 
 
-[^latest-main]: **Rechecked against latest main: OSS `c99cd6e4`, production composition `81da2b9`.** The CLI runtime/parser/auth code is unchanged from the earlier audit; generated teaching changed. Main now includes dataset data policies, model-backed SQL mutations and editor-access sharing management. These expand the required parity work, rather than making the missing native commands implemented.
+[^latest-main]: **Historical main baseline: OSS `c99cd6e4`, production composition `81da2b9`.** This paragraph describes the starting baseline, not the current feature branch. Main now includes dataset data policies, model-backed SQL mutations and editor-access sharing management. These expand the required parity work, rather than making the missing native commands implemented.
 
     **Pull/push:** Round-trip authorized dataset policy configuration in typed YAML using the existing shared policy schema: table permissions, row predicates, allowed columns, presets, execution/function restrictions and generation model/call/token/document limits. Track the separate policy revision and use conditional policy writes; do not treat artifact version alone as the governance condition. Preserve server-derived actor roles/session values rather than accepting caller impersonation. Content, sharing and policy updates must have an explicit atomic contract; otherwise refuse the combined write before any partial changes.
 
@@ -705,7 +779,7 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     **Query:** Cover existing model-backed SQL mutations through --write and the selected document/dataset context. Preserve declared parameters, output schemas, policy checks, generation limits and usage reporting. Model/provider execution follows the server’s configured capability and authorization contract; local-first is not permission to bypass policy or copy server credentials locally. Dry-run validates without invoking a model or charging for generation.
 
-    **Timeout/recovery:** The server allows 180 seconds of generation plus 20 seconds of mutation reply overhead; the current CLI request timeout is 30 seconds. Implement operation-aware bounded waiting and durable status/recovery for these writes. A timed-out client must not automatically rerun billable generation. Existing per-invocation server reuse is not evidence of durable idempotency across independent client retries; verify and implement that separately.
+    **Timeout/recovery:** The server allows 180 seconds of generation plus 20 seconds of mutation reply overhead; the baseline CLI request timeout was 30 seconds. Direct dataset mutation waiting/recovery now exists; extend operation-aware bounded waiting and durable recovery to remaining writes. A timed-out client must not automatically rerun billable generation. Existing per-invocation server reuse is not evidence of durable idempotency across independent client retries; verify and implement that separately.
 
     **Fork/restore/replace:** Main refuses some replacement/revert paths for policy-managed datasets. Respect those constraints and specify authorized copying/restoration behavior explicitly; never strip governance as a workaround. A local fork proposal must retain the policy restrictions needed to validate its eventual publication, independently of stripping source invitations and write identity.
 
@@ -718,13 +792,11 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
     A local filename locates bytes using filesystem rules; the embedded/tracked ID determines the remote artifact. A local rename must not create a new remote artifact. Reject contradictory or duplicate identities with a clear fix instead of guessing. Explicit fork creates a new identity. Non-artifact identifiers such as query/table/model names follow their own domain contracts and cannot be assumed to be decorative.
 
-    **Current gap/work:** The CLI already ignores username/title spelling in the pretty URLs its regex accepts, but its URL grammar is narrower than the server parser. Share the canonical parser and cover renamed/stale decorative labels, exact IDs, local renames and wrong-origin URLs. Keep only the intended canonical reference forms; this is not authorization to add legacy aliases or accept arbitrary URL routes as artifact references.
+    **Implemented foundation / acceptance:** A shared pure reference parser now handles artifact identity. Preserve coverage for renamed/stale decorative labels, exact IDs, local renames and wrong-origin URLs. Keep only the intended canonical reference forms; this is not authorization to add legacy aliases or accept arbitrary URL routes as artifact references.
 
-[^implementation]: **Implementation in progress on `feat/cli-full-surface`, based on c99cd6e4.** Automatic agent authentication, bounded approval waiting, same-operation resumption, coalesced browser approval, setup dry-run, shared node-scoped reconciliation and force backups are implemented locally. Sharing lists now commit atomically with content/metadata and invalidate stale observations. Viewer reads enforce the existing read ACL while withholding invitations and connection definitions. Local CSV/JSON SQL reads and recoverable direct dataset mutations are implemented; declared queries/mutations and the rest of the table remain pending.
+[^implementation]: **Implementation is incomplete and not deployed.** Foundation commit `253c6746` introduced automatic auth, shared reconciliation and direct SQL recovery; `67871468` added recovery/YAML foundations; `9ebe2f8e` added pull destinations/native sources; `895f66ee` added native policy/query/comment/discovery workflows; `133620ff` checkpointed partial account/profile work. Continue this branch rather than rebuilding these modules.
 
-    **Observed validation:** CLI suite 120 passing; API suite 1,438 passing; Node suite 3,856 passing/1 skipped; UI suite 1,383 passing on rerun; production build and macOS ARM64 standalone binary build pass. The binary executes bound local SQL and a PTY round trip outside the checkout. Real-handler tests recover a lost mutation response without duplicate rows, coalesce concurrent model calls, roll back data when receipt storage fails, and reject stale/governance-raced writes. A fresh noninteractive binary push with --no-browser completed browser login/approval through Neo, installed all four local skills into an isolated test home, saved credentials at mode 0600, and resumed publication. Automatic browser launch itself is covered by injected-opener tests. The browser check caught and fixed a server-runtime import entering the login bundle.
-
-    The first foundation checkpoint is committed and pushed as 253c6746; subsequent recovery and resource work is in progress. Nothing on this branch is merged or deployed. Remaining checks include final full-suite reconciliation, browser gates, Linux/x64 binaries, agent familiarity and all incomplete command/resource rows. See docs/cli-full-implementation.md in the implementation checkout for open risks.
+    **Observed evidence:** The resource checkpoint passed API 1,446 tests; Node 3,856 with one skip; UI 1,383; CLI 138. Type checks and CLI build passed. Earlier foundation production build, macOS ARM64 binary SQL/PTY and a fresh noninteractive browser-auth publication flow passed; these do not validate the later account changes or final release. Profile API and CLI lost-response recovery checks and type checks passed separately. No full suite for the account checkpoint, final browser gates, Linux/x64 release validation or requested model/harness evaluation has completed.
 
 ## Parallel implementation assignments
 
