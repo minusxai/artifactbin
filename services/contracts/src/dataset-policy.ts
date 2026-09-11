@@ -35,11 +35,6 @@ export interface DatasetPolicy {
   version: 1;
   enforcement: 'enabled';
   tables: DatasetTablePolicy[];
-  delegated_mutations?: {
-    audience: 'anyone';
-    operations: DatasetOperation[];
-    via: 'declared_mutation';
-  };
   execution?: {
     functions?: { allow?: string[]; deny?: string[] };
     generation?: {
@@ -53,7 +48,7 @@ export interface DatasetPolicy {
 /** Only the app constructs this context; clients cannot supply their role/session. */
 export interface DatasetMutationPolicy {
   table: DatasetTablePolicy;
-  role: 'editor' | 'visitor';
+  role: string;
   session: Record<string, Scalar>;
   operations: DatasetOperation[];
   execution?: DatasetPolicy['execution'];

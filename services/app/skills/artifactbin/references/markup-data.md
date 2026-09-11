@@ -70,7 +70,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   naming one dataset in your edit scope. Runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
   `<script>`; dry-run at publish, so a button that could not work is a `400`
-  naming the fix. Only viewers with dataset edit permission can run it, supplying VALUES only.
+  naming the fix. Data policies permit viewer actions; without a policy only editors write. Callers supply VALUES only.
   Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
   row its own id and timestamp.
 

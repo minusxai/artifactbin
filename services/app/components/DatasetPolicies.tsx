@@ -14,6 +14,7 @@ import { Button } from '@/components/ui';
 
 type Table = { schema: string; name: string; columns: Array<{ name: string }> };
 type State = {
+  canManage?: boolean;
   policy: DatasetPolicy | null;
   revision: number;
   tables: Table[];
@@ -124,7 +125,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
   const [state, setState] = useState<State | null>(null);
   const [draft, setDraft] = useState<DatasetPolicy | null>(null);
   const [source, setSource] = useState<string | null>(null);
-  const [role, setRole] = useState<'visitor' | 'editor'>('visitor');
+  const role = 'viewer';
   const [tableIndex, setTableIndex] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -134,13 +135,15 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
     void fetch(`/api/my/artifacts/${encodeURIComponent(artifactId)}/policy`)
       .then(async (r) => {
         if (!r.ok)
-          throw Error('Access policies are available to the dataset owner.');
+          throw Error(
+            'Dataset edit access is required to inspect its data rules.',
+          );
         return r.json() as Promise<State>;
       })
       .then((s) => {
         if (active) {
           setState(s);
-          setDraft(s.policy);
+          setDraft(s.policy ?? initial(s.tables));
         }
       })
       .catch((e) => {
@@ -200,10 +203,11 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
       className="space-y-4 border-t border-edge pt-4 text-sm"
     >
       <div>
-        <h2 className="font-semibold">Access policies</h2>
+        <h2 className="font-semibold">Data actions</h2>
         <p className="mt-1 text-xs text-muted">
-          Write permissions apply after artifact access and the dataset’s
-          read/write setting. They do not hide existing data.
+          Sharing decides who can view this dataset. These rules apply equally
+          to viewers, commenters, editors and owners. They do not hide existing
+          data.
         </p>
       </div>
       {error && (
@@ -216,63 +220,18 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
           {notice}
         </p>
       )}
-      {state && (
+      {state?.canManage === false && (
+        <div>
+          <p>Only the dataset owner can change these rules.</p>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">
+            {pretty(state.policy)}
+          </pre>
+        </div>
+      )}
+      {state && state.canManage !== false && (
         <>
-          <label className="flex items-center gap-2">
-            <input
-              aria-label="Enable write policies"
-              type="checkbox"
-              checked={!!draft}
-              onChange={(e) =>
-                change(e.target.checked ? initial(state.tables) : null)
-              }
-            />
-            Enable write policies
-          </label>
-          {!draft && (
-            <p className="text-xs text-muted">
-              Existing artifact permissions apply. Saving with policies disabled
-              also removes the public mutation grant.
-            </p>
-          )}
           {draft && source === null && (
             <div className="space-y-4">
-              <label className="flex items-center gap-2">
-                <input
-                  aria-label="Allow public mutations"
-                  type="checkbox"
-                  checked={!!draft.delegated_mutations}
-                  onChange={(e) => {
-                    const next = { ...draft };
-                    if (e.target.checked)
-                      next.delegated_mutations = {
-                        audience: 'anyone',
-                        operations: [...operations],
-                        via: 'declared_mutation',
-                      };
-                    else delete next.delegated_mutations;
-                    change(next);
-                  }}
-                />
-                Allow public mutations
-              </label>
-              <p className="text-xs text-muted">
-                Anyone, including signed-out visitors, may run declared
-                mutations that pass the visitor policy. This grants no artifact
-                editing or policy administration.
-              </p>
-              <label className="grid gap-1">
-                Audience
-                <select
-                  aria-label="Policy audience"
-                  className={inputClass}
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as typeof role)}
-                >
-                  <option value="visitor">Visitors</option>
-                  <option value="editor">Existing editors and owner</option>
-                </select>
-              </label>
               <label className="grid gap-1">
                 Table
                 <select

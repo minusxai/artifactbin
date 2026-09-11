@@ -64,15 +64,10 @@ async function fixture() {
       {
         table: { schema: 'public', name: 'rows' },
         insert_permissions: [
-          { role: 'visitor', permission: { columns: '*', check: {} } },
+          { role: 'viewer', permission: { columns: '*', check: {} } },
         ],
       },
     ],
-    delegated_mutations: {
-      audience: 'anyone',
-      operations: ['insert'],
-      via: 'declared_mutation',
-    },
     execution: {
       generation: { models: ['default'], max_calls: 1, max_tokens: 100 },
     },

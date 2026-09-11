@@ -53,24 +53,26 @@ Human tour for your user: `[[ base ]]/docs-human`.
 
 ## Dataset access policies
 
-Owners manage write policies through `GET` / `PUT [[ base ]]/api/artifacts/<id>/policy`
+Owners change write policies through `GET` / `PUT [[ base ]]/api/artifacts/<id>/policy`
 (`get_dataset_policy` / `set_dataset_policy` over MCP). GET returns the current
-policy, revision, columns and dependent actions. PUT accepts
+policy, revision, columns and dependent actions. Editors can inspect policies;
+GET includes `canManage`. PUT accepts
 `{ "policy": {…}, "expectedPolicyRevision": 0 }`; use the revision you just read.
 `400 invalid_policy` identifies an unsupported field or invalid value;
 `409 policy_changed` requires reading the current policy before saving again.
 
 Version 1 uses Hasura write-permission entries: `insert_permissions`,
 `update_permissions`, `delete_permissions`, with `role`, `permission`, `columns`,
-`filter`, `check`, and trusted `set` presets. The effective roles are `editor`
-(including the owner) and `visitor`. Missing operations or roles deny writes.
-Existing datasets without policy retain their current behavior. Read-only remains
-absolute, and write policies do not hide data or filter reads.
+`filter`, `check`, and trusted `set` presets. Use `role: "viewer"` for everyone
+with dataset view access, including commenters, editors and owners. Missing
+operations deny writes. Sharing is the only audience control; there is no
+separate mutation grant or audience selector. Public/unlisted datasets allow
+anonymous readers to execute declared actions permitted by these rules; private
+datasets require a share. A public app does not bypass private dataset access.
+Existing datasets without policy retain editor-only writes. Read-only remains
+absolute. Write policies do not hide data or filter reads.
 
-A separate `delegated_mutations` grant with `audience: "anyone"`,
-`via: "declared_mutation"`, and an `operations` array allows anonymous visitors
-to execute published actions that pass their visitor policy. It grants no raw SQL,
-artifact editing, or policy administration. Public visibility alone grants no writes.
+Policy actions grant no raw SQL submission, artifact editing or policy administration.
 Policy refusals return `403 policy_denied`. To replace or revert the entire file,
 the owner must explicitly remove its policy first (`policy: null`); ordinary
 editors cannot bypass row rules through those paths.

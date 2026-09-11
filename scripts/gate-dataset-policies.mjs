@@ -46,8 +46,6 @@ try {
   await owner
     .getByRole('button', { name: 'Manage access policies', exact: true })
     .click();
-  await owner.getByLabel('Enable write policies').check();
-  await owner.getByLabel('Allow public mutations').check();
   await owner.getByLabel('Allow insert', { exact: true }).check();
   await owner
     .getByRole('button', { name: 'Save access policies', exact: true })
@@ -73,7 +71,7 @@ try {
     await guest.waitForTimeout(50);
   assert(
     !(await scriptAction.isDisabled()),
-    'managed scripts receive the public grant',
+    'managed scripts receive the data policy',
   );
   await guest
     .getByRole('button', { name: 'Append branch', exact: true })
@@ -97,7 +95,7 @@ try {
     raw.status >= 400,
     'editor without a matching policy cannot bypass it',
   );
-  await owner.getByLabel('Allow public mutations').uncheck();
+  await owner.getByLabel('Allow insert', {exact:true}).uncheck();
   await owner
     .getByRole('button', { name: 'Save access policies', exact: true })
     .click();

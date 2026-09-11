@@ -298,7 +298,7 @@ export default function ShareLink({
                   </div>
                   <p className="mt-2 leading-relaxed text-muted">
                     {writable
-                      ? 'Dataset editors can write rows. Visitors need an explicit public mutation grant. Access policies constrain both, and each saved write creates a version.'
+                      ? 'Sharing controls who can view and manage this dataset. Data rules below control which actions everyone with view access may run. Without a data policy, only dataset editors may write rows.'
                       : 'Documents can only read this dataset. A <Mutation> naming it is refused when you publish.'}
                   </p>
                   {writers.length > 0 && (
@@ -338,7 +338,6 @@ export default function ShareLink({
                   )}
                 </div>
               )}
-              {format === 'dataset' && !postgres && artifactId && <DatasetPolicies artifactId={artifactId} />}
               {/* PEOPLE — under every visibility. `can view` on a public
                   document grants nothing the link does not, and says so;
                   `can edit` is the whole reason the list is here at all. */}
@@ -399,6 +398,7 @@ export default function ShareLink({
                     </button>
                   </form>
               </div>
+              {format === 'dataset' && !postgres && artifactId && <DatasetPolicies artifactId={artifactId} />}
             </>
           )}
         </SharePanel>

@@ -10,6 +10,7 @@ import {
   setAccessFor,
   updateSharingFor,
 } from '@/lib/artifacts';
+import { GET as readPolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { mintToken } from '@/lib/tokens';
 import { agentCookie, request, useAppHarness } from './harness';
@@ -40,17 +41,12 @@ async function fixture() {
         table: { schema: 'public', name: 'rows' },
         insert_permissions: [
           {
-            role: 'visitor',
+            role: 'viewer',
             permission: { columns: '*', check: { n: { _gt: 0 } } },
           },
         ],
       },
     ],
-    delegated_mutations: {
-      audience: 'anyone',
-      operations: ['insert'],
-      via: 'declared_mutation',
-    },
   };
   const write = (mutation = 'add', n = 2) =>
     mutate(
@@ -62,7 +58,7 @@ async function fixture() {
     );
   return { owner, actor, ds, doc, policy, write };
 }
-it('requires explicit public mutation authority, then applies row and operation constraints', async () => {
+it('applies one data policy to everyone with view access', async () => {
   const f = await fixture();
   expect((await f.write()).status).toBe(403);
   expect(await setDatasetPolicy(f.actor, f.ds, f.policy, 0)).toMatchObject({
@@ -75,7 +71,7 @@ it('requires explicit public mutation authority, then applies row and operation 
   await setAccessFor(f.actor, f.ds, 'read');
   expect((await f.write()).status).toBe(403);
 });
-it('fences administration by owner and revision, and removing delegation revokes writes', async () => {
+it('fences administration by owner and revision, and removing a policy revokes viewer writes', async () => {
   const f = await fixture();
   const stranger = await mintToken('stranger');
   expect(
@@ -92,14 +88,9 @@ it('fences administration by owner and revision, and removing delegation revokes
   expect(await setDatasetPolicy(f.actor, f.ds, f.policy, 0)).toMatchObject({
     conflict: true,
   });
-  expect(
-    await setDatasetPolicy(
-      f.actor,
-      f.ds,
-      { ...f.policy, delegated_mutations: undefined },
-      1,
-    ),
-  ).toMatchObject({ revision: 2 });
+  expect(await setDatasetPolicy(f.actor, f.ds, null, 1)).toMatchObject({
+    revision: 2,
+  });
   expect((await f.write()).status).toBe(403);
 });
 it('cannot evade active policy through ordinary file replacement', async () => {
@@ -127,29 +118,74 @@ it('returns per-mutation capability previews without executing a write', async (
   expect((await getArtifactById(f.ds))?.version).toBe(1);
 });
 
-it('does not reuse editor policy after demotion to a delegated visitor at commit', async () => {
-  const f = await fixture(),
-    friend = await mintToken('policy-editor'),
-    user = await createUser({ email: 'mxmx_test_policy_editor@example.com' });
-  await claimToken(user.id, friend.token);
-  const cookie = await agentCookie([friend.id]);
-  await updateSharingFor(f.actor, f.ds, {
-    shares: [{ email: user.email, role: 'editor' }],
+async function sharedFixture(
+  role: 'viewer' | 'commenter' | 'editor' = 'viewer',
+) {
+  const f = await fixture();
+  const owner = await createUser({ email: 'mxmx_test_data_owner@example.com' });
+  await claimToken(owner.id, f.owner.token);
+  const actor = { tokenId: f.owner.id, userId: owner.id };
+  const user = await createUser({ email: 'mxmx_test_data_reader@example.com' }),
+    token = await mintToken('reader');
+  await claimToken(user.id, token.token);
+  const cookie = await agentCookie([token.id]);
+  await updateSharingFor(actor, f.ds, {
+    visibility: 'private',
+    shares: [{ email: user.email, role }],
   });
-  await setDatasetPolicy(
-    f.actor,
-    f.ds,
-    {
-      ...f.policy,
-      tables: [
-        {
-          ...f.policy.tables[0],
-          delete_permissions: [{ role: 'editor', permission: { filter: {} } }],
-        },
-      ],
-    },
-    0,
+  const write = () =>
+    mutate(
+      request(`/a/${f.doc}/mutate`, {
+        method: 'POST',
+        cookie,
+        json: { mutation: 'add', values: { n: 3 } },
+      }),
+      { params: Promise.resolve({ id: f.doc }) },
+    );
+  return { ...f, actor, user, token, cookie, write };
+}
+it.each(['viewer', 'commenter', 'editor'] as const)(
+  'lets a shared %s use the same policy without a separate grant',
+  async (role) => {
+    const f = await sharedFixture(role);
+    await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
+    expect((await f.write()).status).toBe(200);
+    expect(
+      await setDatasetPolicy(
+        { tokenId: f.token.id, userId: f.user.id },
+        f.ds,
+        null,
+        1,
+      ),
+    ).toBeNull();
+    const ownerResponse = await mutate(
+      request(`/a/${f.doc}/mutate`, {
+        method: 'POST',
+        cookie: await agentCookie([f.owner.id]),
+        json: { mutation: 'remove' },
+      }),
+      { params: Promise.resolve({ id: f.doc }) },
+    );
+    expect(ownerResponse.status).toBe(403);
+    await updateSharingFor(f.actor, f.ds, { shares: [] });
+    expect((await f.write()).status).toBe(403);
+  },
+);
+it('requires dataset view access even when its declared app is public', async () => {
+  const f = await sharedFixture();
+  await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
+  const response = await mutate(
+    request(`/a/${f.doc}/mutate`, {
+      method: 'POST',
+      json: { mutation: 'add', values: { n: 3 } },
+    }),
+    { params: Promise.resolve({ id: f.doc }) },
   );
+  expect(response.status).toBe(403);
+});
+it('rechecks dataset sharing inside the commit even after successful execution', async () => {
+  const f = await sharedFixture();
+  await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const db = await getDb(),
     original = db.query.bind(db);
   let revoked = false;
@@ -169,17 +205,24 @@ it('does not reuse editor policy after demotion to a delegated visitor at commit
       return original(sql, values);
     });
   try {
-    const response = await mutate(
-      request(`/a/${f.doc}/mutate`, {
-        method: 'POST',
-        cookie,
-        json: { mutation: 'remove' },
-      }),
-      { params: Promise.resolve({ id: f.doc }) },
-    );
-    expect(response.status).toBe(403);
+    expect((await f.write()).status).toBe(403);
+    expect(revoked).toBe(true);
     expect((await getArtifactById(f.ds))?.version).toBe(1);
   } finally {
     spy.mockRestore();
   }
+});
+
+it('lets editors inspect policies without granting policy administration', async () => {
+  const f = await sharedFixture('editor');
+  await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
+  const response = await readPolicy(
+    request(`/api/my/artifacts/${f.ds}/policy`, { cookie: f.cookie }),
+    { params: Promise.resolve({ id: f.ds }) },
+  );
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    canManage: false,
+    policy: f.policy,
+  });
 });

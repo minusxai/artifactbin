@@ -8,7 +8,6 @@ import { getDb } from '@/lib/db';
 import {
   getOwnedArtifactFor,
   ownerPredicate,
-  effectiveRole,
   canWriteDataset,
   getArtifactById,
   getArtifactFor,
@@ -19,17 +18,32 @@ import {
   type RoleActor,
 } from '@/lib/artifacts';
 import { catalogOf } from '@/lib/datasets/catalog';
-import { canEdit } from '@/lib/share-roles';
 
-export function publicMutationGrant(dataset: ArtifactRow): boolean {
+/** One read-access fence for policy actions: sharing remains the only audience.
+ * Identifiers/placeholders are owned by this module and its caller. */
+export function policyReaderSql(user = '$13', token = '$14'): string {
+  return `(artifacts.visibility<>'private' OR artifacts.user_id=${user} OR artifacts.token_id=${token}
+   OR EXISTS (SELECT 1 FROM artifact_shares policy_reader WHERE policy_reader.artifact_id=artifacts.id
+     AND (policy_reader.user_id=${user} OR (policy_reader.user_id IS NULL AND
+       policy_reader.email=(SELECT email FROM users WHERE id=${user})))))`;
+}
+export async function canUseDataPolicy(
+  dataset: ArtifactRow,
+  actor: RoleActor,
+): Promise<boolean> {
+  if (!dataset.dataset_policy) return false;
   try {
-    return (
-      !!dataset.dataset_policy &&
-      !!parseDatasetPolicy(dataset.dataset_policy).delegated_mutations
-    );
+    parseDatasetPolicy(dataset.dataset_policy);
   } catch {
     return false;
   }
+  const db = await getDb();
+  const result = await db.query(
+    `SELECT id FROM artifacts WHERE id=$1 AND deleted_at IS NULL
+   AND policy_revision=$4 AND (${policyReaderSql('$2', '$3')})`,
+    [dataset.id, actor.userId, actor.tokenId, dataset.policy_revision ?? 0],
+  );
+  return result.rows.length > 0;
 }
 export async function setDatasetPolicy(
   actor: TokenActor,
@@ -64,6 +78,10 @@ export async function setDatasetPolicy(
         ...(t.update_permissions ?? []),
         ...(t.delete_permissions ?? []),
       ]) {
+        if (entry.role !== 'viewer')
+          throw new Error(
+            'Data policies use the viewer role for everyone with dataset access',
+          );
         const p = entry.permission;
         if (
           'columns' in p &&
@@ -130,11 +148,17 @@ export async function mutationPolicy(
 ): Promise<DatasetMutationPolicy | undefined> {
   if (!dataset.dataset_policy) return undefined;
   const policy = parseDatasetPolicy(dataset.dataset_policy);
-  const role = canEdit(await effectiveRole(dataset, actor))
-    ? 'editor'
-    : 'visitor';
-  if (role === 'visitor' && (!declared || !policy.delegated_mutations))
-    throw new Error('Public mutation permission is required');
+  if (
+    !declared &&
+    !(await getArtifactFor(
+      { userId: actor.userId, tokenId: actor.tokenId ?? '' },
+      dataset.id,
+    ))
+  )
+    throw new Error('Direct SQL requires dataset edit access');
+  if (!(await canUseDataPolicy(dataset, actor)))
+    throw new Error('Dataset view access is required');
+  const role = 'viewer';
   const selected = policy.tables.find(
     (t) => t.table.schema === table.schema && t.table.name === table.name,
   );
@@ -146,10 +170,7 @@ export async function mutationPolicy(
       'x-hasura-role': role,
       ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
     },
-    operations:
-      role === 'visitor'
-        ? policy.delegated_mutations!.operations
-        : ['insert', 'update', 'delete'],
+    operations: ['insert', 'update', 'delete'],
     execution: policy.execution,
   };
 }

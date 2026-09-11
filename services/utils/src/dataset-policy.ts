@@ -73,11 +73,7 @@ export function parseDatasetPolicy(value: unknown): DatasetPolicy {
   if (JSON.stringify(value)?.length > 64_000)
     bad('policy', 'maximum size is 64 KB');
   const p = object(value, 'policy');
-  keys(
-    p,
-    ['version', 'enforcement', 'tables', 'delegated_mutations', 'execution'],
-    'policy',
-  );
+  keys(p, ['version', 'enforcement', 'tables', 'execution'], 'policy');
   if (p.version !== 1 || p.enforcement !== 'enabled')
     bad('policy', 'expected version 1 and enabled enforcement');
   if (!Array.isArray(p.tables) || p.tables.length > 64)
@@ -161,19 +157,6 @@ export function parseDatasetPolicy(value: unknown): DatasetPolicy {
       });
     }
   });
-  if (p.delegated_mutations !== undefined) {
-    const d = object(p.delegated_mutations, 'delegated_mutations');
-    keys(d, ['audience', 'operations', 'via'], 'delegated_mutations');
-    if (d.audience !== 'anyone' || d.via !== 'declared_mutation')
-      bad('delegated_mutations', 'unsupported audience or execution path');
-    strings(d.operations, 'delegated_mutations.operations');
-    if (
-      (d.operations as string[]).some(
-        (x) => !['insert', 'update', 'delete'].includes(x),
-      )
-    )
-      bad('delegated_mutations.operations', 'unsupported operation');
-  }
   if (p.execution !== undefined) {
     const e = object(p.execution, 'execution');
     keys(e, ['functions', 'generation'], 'execution');

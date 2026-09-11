@@ -1,14 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { GenerationRequest, DatasetPolicy } from '@artifactbin/contracts';
 import { parseDatasetPolicy } from '@artifactbin/utils';
-import { canEdit } from '@/lib/share-roles';
 import { getDb } from '@/lib/db';
 import { GENERATION_PUBLIC_POOLS } from '@/lib/config';
-import {
-  effectiveRole,
-  type ArtifactRow,
-  type RoleActor,
-} from '@/lib/artifacts';
+import { type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import { recheckMutation, type MutationDocument } from './index';
 
 export function generationGrant(
@@ -51,14 +46,8 @@ export function generationAuthorization(
   document?: MutationDocument,
 ) {
   const requestId = randomUUID();
-  const role = effectiveRole(dataset, actor).then((r) => canEdit(r));
   return async (request: GenerationRequest) => {
-    const current = await recheckMutation(dataset, actor, document);
-    if (
-      dataset.dataset_policy &&
-      (await role) !== canEdit(await effectiveRole(current, actor))
-    )
-      throw new Error('Policy role changed');
+    await recheckMutation(dataset, actor, document);
     if (!dataset.dataset_policy) return;
     const policy = parseDatasetPolicy(dataset.dataset_policy),
       grant = generationGrant(policy, request, document);
@@ -90,9 +79,7 @@ export function generationAuthorization(
         `request:${requestId}:${request.key}`,
       ]);
     });
-    const latest = await recheckMutation(dataset, actor, document);
-    if ((await role) !== canEdit(await effectiveRole(latest, actor)))
-      throw new Error('Policy role changed');
+    await recheckMutation(dataset, actor, document);
   };
 }
 export async function throttlePublicMutation(datasetId: string) {

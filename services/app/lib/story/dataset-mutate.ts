@@ -1,5 +1,5 @@
 import {generationAuthorization,throttlePublicMutation} from '@/lib/datasets/policy/usage';
-import {mutationPolicy,recheckMutation,publicMutationGrant,type MutationDocument} from '@/lib/datasets/policy';
+import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
@@ -98,7 +98,7 @@ export async function mutateDataset(
   // One result cache per invocation, outside the CAS loop: replaying storage
   // must not generate a different answer or charge for the same prompt again.
   const generation=createGenerationInvocation(services().generation,{beforeCall:generationAuthorization(dataset,actor,guard.document)});
-  if(guard.document && publicMutationGrant(dataset) && await canWriteDataset(dataset,actor)){
+  if(guard.document && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
     try{await throttlePublicMutation(dataset.id);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Public mutation limit reached'};}
   }
 
@@ -167,8 +167,7 @@ export async function mutateDataset(
           WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${LIVE_ARTIFACT_SQL}
             AND policy_revision=$16 AND (
               ($20::text IS NULL AND (${scope.where('$15')})) OR
-              ($20='editor' AND (${scope.where('$15')})) OR
-              ($20='visitor' AND $19::boolean AND NOT (${scope.where('$15')}))
+              ($20='viewer' AND (${policyReaderSql()}) AND ($19::boolean OR (${scope.where('$15')})))
             )
             AND ($17::text IS NULL OR EXISTS (
               SELECT 1 FROM artifacts d WHERE d.id=$17 AND d.edit_id=$18 AND d.deleted_at IS NULL
@@ -202,7 +201,7 @@ export async function mutateDataset(
         dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
         current.version, current.title, current.description, current.format, current.content, current.source,
         JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
-        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&publicMutationGrant(current),policy?.role??null,
+        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&!!policy,policy?.role??null,
       ],
     );
 

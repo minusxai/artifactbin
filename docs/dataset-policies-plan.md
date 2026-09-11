@@ -1,84 +1,53 @@
-# Dataset write policies
+# Dataset data policies
 
-## Contracts and boundaries
+## Boundaries and contract
 
-Artifact access and the readwrite flag establish reachability and write authority.
-An owner-controlled public declared-mutation grant extends authority to visitors;
-Hasura-compatible table permissions narrow that authority, including editors.
-No policy preserves legacy behavior. Policy roles are server-selected: editor or visitor.
+Sharing is the only audience control. Everyone who can view a dataset—including
+commenters, editors, owners and anonymous readers of public/unlisted data—uses
+one data policy. There is no separate grant, audience selection or group system.
+Owners manage sharing and policies; editors can inspect policies. Editing a
+backing dataset's definition is distinct from executing its declared data actions.
 
-Shared contracts own the versioned metadata and SQL execution policy. Shared pure
-utilities validate Hasura permission syntax and compile bounded typed predicates.
-The app dataset policy module owns administration, authority, revision fencing,
-and paid-generation grants. SQL owns bound-plan analysis and atomic pre/post checks.
-Settings consume the same canonical parser and capability decisions.
+The Hasura permission entries use one role, `viewer`, for every dataset reader.
+An allowed INSERT/UPDATE/DELETE entry grants that action; columns, filter, check,
+set presets and function restrictions constrain it. Missing operations deny.
+Read-only datasets remain unwritable. Datasets without a policy retain legacy
+editor-only writes. Raw SQL submission still requires edit access. Removing a
+policy restores those defaults, and only an owner can do so.
 
-## Risk order and evidence
+The pure shared parser owns supported Hasura syntax. The app owns reader
+admission and policy administration. One server-owned reader predicate runs both
+at admission and inside the atomic dataset CAS, along with policy revision and
+document revision checks. Removing a private dataset share or changing visibility
+while execution is in flight prevents persistence. Every provider dispatch also
+rechecks authorization; a call already dispatched cannot be unspent.
 
-1. Probe native DuckDB analysis, function resolution and changed-row capture.
-   Observed: json_serialize_sql only accepts SELECT; json_serialize_plan supports
-   INSERT/UPDATE/DELETE and reports bound target columns, expanded expressions and
-   function names, including parameterized statements. Do not use SQL regexes as
-   an authorization boundary. Unsupported constructs must be rejected explicitly.
-2. Establish baseline, then failing Hasura DSL and SQL enforcement tests.
-   Initial baseline could not load the PR's pi-ai dependency; repairing with npm ci.
-3. Persist policy/revision, close alternate write paths, fence commits and provider calls.
-4. Add public grants, settings and per-mutation live capabilities.
-5. Validate full suites, production build, browser flows and PR CI.
+SQL uses DuckDB's bound DML plan and native SELECT AST, typed staged candidates,
+server presets and pre/post row predicates. All rows pass before any write is
+applied. SQL NULL semantics come from DuckDB. Supported forms are INSERT
+VALUES/SELECT (including source CTEs), ordinary UPDATE SET/WHERE and DELETE WHERE.
+RETURNING, upserts, CTE-prefixed writes, UPDATE FROM and opaque table functions
+are explicitly rejected in policy mode. Function checks inspect resolved bound
+dependencies and syntactic calls that DuckDB lowers or expands.
 
-Read permissions, remote PostgreSQL writes, relationship predicates, raw policy SQL
-and full Hasura metadata APIs remain out of scope. Generation must use operator
-connections and enforce a reserved usage allowance; no paid live probe by default.
+Read confidentiality, relationship predicates, connected PostgreSQL writes and
+full Hasura metadata APIs remain outside this change. Policies govern writes;
+they do not filter reads. Connected PostgreSQL datasets remain read-only.
 
-Reference: https://hasura.io/docs/2.0/api-reference/metadata-api/permission/
+## Validation evidence
 
-## Implementation evidence
+The revised API tests first failed without a separate grant and with different
+editor/visitor policies. They now cover identical policy behavior for viewer,
+commenter and editor shares; owner constraints; private dataset admission;
+share revocation at the final CAS; policy removal; atomic checks; and owner-only
+administration. The editor inspection test first returned 404, then passed with
+read-only policy access. UI tests assert there are no audience/grant/enforcement
+controls, and that editors have no policy save controls.
 
-The existing stored-mutation and SQL mutation baseline passed (27 tests).
-The initial compatibility suite failed because the parser did not exist, then
-all 8 compatibility tests passed. All 14 local/HTTP policy behavior tests failed
-against the old engine. Native plan analysis plus staged candidates made all 14
-pass, including bound columns, presets, mixed-batch checks, filtered updates and
-resolved nested function denial. The anonymous API first returned 403 despite
-an explicit grant; after integration, public inserts and revocation tests pass.
-The generation allowance test first observed an unauthorized provider dispatch;
-a pre-dispatch reservation boundary now rejects it without any provider call.
+Generation uses deterministic fixtures, separate operator connection/call/token
+allowances and owner-approved execution capabilities. Failed dispatched calls
+remain charged; the invocation cache avoids duplicate calls on CAS retries.
+No paid provider is used for these checks.
 
-DuckDB JSON AST positions include uint64 sentinels outside JavaScript's integer
-range. Positions are nonsemantic and normalized before deserialization. The
-supported envelope is INSERT VALUES/SELECT (including source CTEs), ordinary
-UPDATE SET/WHERE and DELETE WHERE, with quoted names and aliases. Policy mode
-rejects RETURNING, upsert/conflict handling, CTE-prefixed writes and UPDATE FROM.
-Predicates are separate native AST nodes. Proposed rows are staged in a typed
-table; trusted presets and SQL three-valued post-checks run before applying the
-whole result. There is no fallback to ungoverned execution on analysis failure.
-
-Generation dispatches require an operator-configured per-dataset daily call pool
-and token ceiling, plus the owner's model grant and cumulative call allowance.
-These are enforceable call/token bounds, not a dollar cap. Failed dispatched
-calls remain charged. The existing invocation cache handles dataset CAS retries;
-a fresh HTTP mutation is a fresh request and may charge again. No live paid
-provider was used for validation.
-
-Further regression tests observed and fixed: editor-to-visitor demotion during
-commit; function names lowered by DuckDB (COALESCE); mixed-case insert column
-references; managed-script capability delivery and tombstone removal. The managed
-generation browser fixture now waits for permission readiness before invoking
-its declared mutation. Public controls also receive grant revocation live.
-
-Validation: API 174 files / 1,367 tests; Node 370 files / 3,949 passed and one
-existing skipped test; UI 177 files / 1,341 tests; CLI 25 tests. Type checks and
-production build passed. The full-suite Node run intentionally overlapped the
-mixed-case regression's red phase; the subsequent complete Node run passed.
-Browser validation uses deterministic generation fixtures, with no paid calls.
-
-After merging main: the complete npm test command passed (API 1,369; Node 4,010
-plus one existing skip; UI 1,385; CLI 25), as did validate and build. All six
-focused production gates passed: dataset policies, generation mutations,
-mutation permissions, managed iframe, author-script isolation and local SQL state.
-The extended public-policy gate needed two fixture corrections: a supported
-iframe height and traversal through the existing nested sandbox. Its final run
-passed in nine seconds, including live grant/revocation in the managed script.
-The broader local browser run was interrupted to merge main; GitHub CI checks
-its complete browser matrix. BrowserOS also verified an owner saving public
-insert permissions through the running app's sharing dialog.
+Runnable checks: npm run validate; npm test; npm run build;
+npm run test:gates -- --only=dataset-policies,generation-mutations,mutation-permissions,managed-iframe --servers=1.

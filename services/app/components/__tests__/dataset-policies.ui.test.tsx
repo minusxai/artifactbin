@@ -11,7 +11,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-it('keeps public authority separate from allowed operations and saves canonical metadata', async () => {
+it('offers only data actions, using sharing for audience', async () => {
   const fetch = vi.fn(
     async (_url: string, options?: RequestInit) =>
       new Response(
@@ -45,9 +45,14 @@ it('keeps public authority separate from allowed operations and saves canonical 
   fireEvent.click(
     screen.getByRole('button', { name: 'Manage access policies' }),
   );
-  fireEvent.click(await screen.findByLabelText('Enable write policies'));
-  expect(screen.getByLabelText('Allow public mutations')).not.toBeChecked();
-  fireEvent.click(screen.getByLabelText('Allow public mutations'));
+  await screen.findByLabelText('Allow insert');
+  expect(
+    screen.queryByLabelText('Allow public mutations'),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Policy audience')).not.toBeInTheDocument();
+  expect(
+    screen.queryByLabelText('Enable write policies'),
+  ).not.toBeInTheDocument();
   fireEvent.click(screen.getByLabelText('Allow insert'));
   expect(screen.getByText('Support form')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save access policies' }));
@@ -59,11 +64,10 @@ it('keeps public authority separate from allowed operations and saves canonical 
   expect(body).toMatchObject({
     expectedPolicyRevision: 0,
     policy: {
-      delegated_mutations: { audience: 'anyone', via: 'declared_mutation' },
       tables: [
         {
           insert_permissions: [
-            { role: 'visitor', permission: { columns: '*', check: {} } },
+            { role: 'viewer', permission: { columns: '*', check: {} } },
           ],
         },
       ],
@@ -89,8 +93,9 @@ it('reports unsupported DSL fields before saving', async () => {
   fireEvent.click(
     screen.getByRole('button', { name: 'Manage access policies' }),
   );
-  fireEvent.click(await screen.findByLabelText('Enable write policies'));
-  fireEvent.click(screen.getByRole('button', { name: 'Edit JSON / YAML' }));
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Edit JSON / YAML' }),
+  );
   fireEvent.change(screen.getByLabelText('Policy JSON or YAML'), {
     target: {
       value:
@@ -109,7 +114,7 @@ it('edits Hasura insert defaults without losing permission comments', async () =
         table: { schema: 'public', name: 'rows' },
         insert_permissions: [
           {
-            role: 'visitor',
+            role: 'viewer',
             comment: 'Public append',
             permission: { check: {} },
           },
@@ -157,4 +162,32 @@ it('edits Hasura insert defaults without losing permission comments', async () =
     comment: 'Public append',
     permission: { columns: [] },
   });
+});
+
+it('shows editors a read-only policy without management controls', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            canManage: false,
+            policy: { version: 1, enforcement: 'enabled', tables: [] },
+            revision: 1,
+            tables: [],
+            writtenBy: [],
+          }),
+        ),
+    ),
+  );
+  render(<DatasetPolicies artifactId="ds123" />);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Manage access policies' }),
+  );
+  expect(
+    await screen.findByText('Only the dataset owner can change these rules.'),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: 'Save access policies' }),
+  ).not.toBeInTheDocument();
 });

@@ -108,8 +108,8 @@ A dataset carries a write ACL beside its visibility: `"access": "read"` (the
 default — documents may only read it) or `"access": "readwrite"`. Set it on
 create or PUT with your bearer token, or your user flips it from the
 document's share menu in the browser (`/api/my/*` is a browser-session
-surface and answers a bearer token 401). Mutations require dataset edit permission or explicit public delegation. Share the dataset
-with an editor, as you would any artifact; document editing grants no dataset access.
+surface and answers a bearer token 401). Data policies allow dataset viewers to run permitted actions. Without a policy,
+only editors can write; document editing grants no dataset access.
 
 A document writes it by declaring a `<Mutation>` in `<Helmet>` — a `<Query>`
 that writes — and running it with `<Button run="$name">` or

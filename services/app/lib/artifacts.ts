@@ -42,7 +42,7 @@ import { dryRunDataflow } from '@/lib/story/data-checks';
 import { mutationUsesRow } from '@/lib/story/row-scope';
 import {generationUnavailable} from '@/lib/datasets/policy/usage';
 import { compileStoredMutation } from '@/lib/datasets/stored-mutation';
-import { publicMutationGrant, mutationPolicy } from '@/lib/datasets/policy';
+import { canUseDataPolicy, mutationPolicy } from '@/lib/datasets/policy';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import { runDataflow, type DatasetTables } from '@/lib/sql/run-dataflow';
 import { runMutation } from '@/lib/sql/engine';
@@ -1866,7 +1866,7 @@ export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, de
   // An unreachable dataset is reported as read-only, never as "not yours":
   // the caller answers a uniform 404 for anything it could not resolve, and
   // this one it could — the document names it, so its existence is not news.
-  if (!canEdit(await effectiveRole(dataset, actor)) && !(declared && publicMutationGrant(dataset))) return 'dataset_read_only';
+  if (!canEdit(await effectiveRole(dataset, actor)) && !(declared && await canUseDataPolicy(dataset, actor))) return 'dataset_read_only';
   return dataset.access === 'readwrite' ? null : 'dataset_read_only';
 }
 
@@ -2036,7 +2036,7 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleA
     if(m.scope==='local')return [m.name,null];
     const actor=viewer??{userId:null,tokenId:null};
     const dataset=await getArtifactFor(writerFor(doc),m.target);
-    if(!dataset||await canWriteDataset(dataset,actor,true))return [m.name,'You need edit access or public mutation permission on a writable dataset.'];
+    if(!dataset||await canWriteDataset(dataset,actor,true))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
     if(!dataset.dataset_policy)return [m.name,null];
     try {
       const name=`ref_${dataset.id}`,catalog=catalogOf(dataset);

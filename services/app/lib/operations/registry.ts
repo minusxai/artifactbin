@@ -421,14 +421,14 @@ const restoreArtifactOp: Operation = {
 const getDatasetPolicyOp: Operation = {
   name:'get_dataset_policy', title:'Read dataset access policies',
   http:{method:'GET',path:'/api/artifacts/{id}/policy'},
-  description:'Read a dataset you own: Hasura-style write permissions, public declared-mutation authority, current policy revision, table columns and dependent actions. Policies constrain writes; they do not filter reads.',
+  description:'Inspect a dataset you own or can edit: Hasura-style write permissions for everyone with dataset access, current policy revision, table columns and dependent actions. Policies constrain writes; they do not filter reads.',
   input:{id:z.string()}, annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
   async run(ctx,input){return fromResponse(await readDatasetPolicy(ctx.actor,String(input.id)));},
 };
 const setDatasetPolicyOp: Operation = {
   name:'set_dataset_policy',title:'Set dataset access policies',
   http:{method:'PUT',path:'/api/artifacts/{id}/policy'},
-  description:'Owner-only: replace version 1 dataset write policy with revision compare-and-swap. Use Hasura insert_permissions/update_permissions/delete_permissions entries with role, permission, columns, filter, check and set. Roles are editor (including owner) and visitor. Public mutation authority is a separate delegated_mutations grant. Unsupported fields fail explicitly. Set policy to null to remove policy enforcement and public mutation delegation.',
+  description:'Owner-only: replace version 1 dataset write policy with revision compare-and-swap. Use Hasura insert_permissions/update_permissions/delete_permissions entries with role, permission, columns, filter, check and set. Use role viewer for everyone with dataset view access, including commenters, editors and owners. Sharing controls the audience; there is no separate mutation grant. Unsupported fields fail explicitly. Set policy to null to restore legacy editor-only writes.',
   input:{id:z.string(),policy:z.record(z.string(),z.unknown()).nullable(),expectedPolicyRevision:z.number().int().min(0)},
   annotations:{},example:{input:{id:'aB3xK9',expectedPolicyRevision:0,policy:{version:1,enforcement:'enabled',tables:[]}}},
   errors:[NOT_FOUND,{status:400,code:'invalid_policy',fix:'correct the field identified in detail'},{status:409,code:'policy_changed',fix:'read the current policy and revision before saving'}],
