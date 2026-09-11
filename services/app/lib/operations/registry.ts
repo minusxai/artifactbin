@@ -295,16 +295,18 @@ const listVersionsOp: Operation = {
   title: 'List an artifact\'s versions',
   http: { method: 'GET', path: '/api/artifacts/{id}/versions' },
   description: 'An artifact\'s version history (every save, newest first), no content — read one with get_version.',
-  input: { id: z.string(), limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional(), version: z.number().int().positive().optional() },
+  input: { id: z.string(), limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional(), version: z.number().int().positive().optional(), author: z.string().optional().describe('only versions saved by this username'), since: z.string().optional().describe('ISO-8601 lower bound on the save time'), until: z.string().optional().describe('ISO-8601 upper bound on the save time') },
   annotations: { readOnly: true },
   example: { input: { id: 'aB3xK9' } },
   errors: [NOT_FOUND],
   async run(ctx, input) {
     const page = decodePage(input, 'versions');
+    for(const key of ['since','until'])if(input[key]!==undefined&&(typeof input[key]!=='string'||!Number.isFinite(Date.parse(String(input[key])))))return reply({error:'invalid_filter',field:key,hint:'Use an ISO-8601 timestamp.'},400);
+    if(input.author!==undefined&&typeof input.author!=='string')return reply({error:'invalid_filter',field:'author'},400);
     if (page instanceof Response) return fromResponse(page);
     const version=input.version===undefined?undefined:Number(input.version);
     if(version!==undefined&&(!Number.isSafeInteger(version)||version<1))return reply({error:'invalid_version',hint:'Use a positive integer version.'},400);
-    const result = await listVersionPageFor(ctx.actor, String(input.id), page.limit, page.cursor?.version as number | undefined,version);
+    const result = await listVersionPageFor(ctx.actor, String(input.id), page.limit, page.cursor?.version as number | undefined,version,{author:input.author as string|undefined,since:input.since as string|undefined,until:input.until as string|undefined});
     if (!result) return reply({ error: 'not_found' }, 404);
     return reply({ versions: result.rows, next_cursor: result.next ? encodeCursor('versions', {version: result.next}) : null });
   },
@@ -450,7 +452,8 @@ const mutateDatasetOp: Operation = {
   description: 'Run one INSERT, UPDATE or DELETE against a dataset you own (selected by the path ID; SQL names a catalog table such as public.rows, scalars bound via $params in values) — append or fix rows without re-sending the whole table. The dataset must be access: readwrite. Answers the new version and how many rows were affected; documents charting the dataset update live.',
   input: {
     id: z.string(),
-    sql: z.string().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
+    sql: z.string().optional().describe('one INSERT/UPDATE/DELETE naming a catalog table such as public.rows; bind scalars as $name, never interpolate'),
+    name: z.string().optional().describe('instead of sql: a mutation the document declares by name; the id is then the document, and values bind its $params'),
     values: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   },
   annotations: {},

@@ -22,6 +22,7 @@ import {DatasetError} from '@/lib/datasets/errors';
 import {
   DATASET_ACCESS, SHARE_ROLES, artifactQuotaExceeded, byteQuotaFor, canReadArtifact, canWriteDataset, createArtifact, fontResolver, findDependentsFor, getArtifactById, getArtifactFor, getOwnedArtifactFor, assetImporterFor, isVersionConflict, refLoaderForActor, refreshWarningsFor, replaceArtifactFor, setMetadataFor, writerFor,
   type ArtifactInput, type ArtifactRow, type ArtifactSummary, type DatasetAccess, type EditInput, type EditOutcome, type ReplaceOpts, type ShareEntry, type ShareRole, type TokenActor, type Visibility,
+  declarationsForRow, runDocumentMutation,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
 import { hasAmbiguousLegacyAliases, stampNodeIds } from '@/lib/story/node-ids';
@@ -195,6 +196,9 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           template: m.template ?? null,
           colorMode: design.colorMode,
           refs: (meta as { refs?: unknown }).refs ?? [],
+          // Declared mutations by name and parameter, so a CLI can validate a
+          // `--name --write` call before it sends anything.
+          mutations: (declarationsForRow(row)?.flow.mutations ?? []).filter((decl) => decl.scope !== 'local').map((decl) => ({ name: decl.name, params: decl.params.map((name) => ({ name })) })),
         }
       : {}),
     theme: design.theme,
@@ -752,12 +756,41 @@ const isScalar = (v: unknown): v is Scalar =>
  * table, and `access` still governs (`readwrite` required even for the owner —
  * the toggle is the one place that says a dataset is writable).
  */
+/** A document's declared mutation, run by name with bound values — the bearer twin of the page door. */
+async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
+  const row = await getArtifactById(id);
+  if (!row || row.deleted_at || !(row.token_id === actor.tokenId || (await canReadArtifact(row, actor.userId ? { userId: actor.userId, email: null } : null)))) return json({ error: 'not_found' }, 404);
+  const values: Record<string, Scalar> = {};
+  if (body.values !== undefined) {
+    if (!body.values || typeof body.values !== 'object' || Array.isArray(body.values)) return json({ error: 'invalid_values', details: ['values must be an object of scalars'] }, 400);
+    for (const [k, v] of Object.entries(body.values as Record<string, unknown>)) {
+      if (!isScalar(v)) return json({ error: 'invalid_values', details: [`value "${k}" must be a string, number, boolean or null`] }, 400);
+      values[k] = v;
+    }
+  }
+  const result = await runDocumentMutation(row, String(body.name), values, undefined, { userId: actor.userId, tokenId: actor.tokenId }, undefined, receipt);
+  if (!result.ok) {
+    switch (result.reason) {
+      case 'unknown_mutation': return json({ error: 'unknown_mutation', details: [`this document declares no <Mutation name="${String(body.name)}">`] }, 400);
+      case 'invalid_row': return json({ error: 'invalid_row', details: [result.detail ?? ''] }, 400);
+      case 'row_changed': case 'row_not_unique': return json({ error: result.reason, details: [result.detail ?? ''] }, 409);
+      case 'dataset_full': return json({ error: 'dataset_full', details: [result.detail ?? ''] }, 409);
+      case 'contended': return json({ error: 'dataset_busy', details: [result.detail ?? ''] }, 503, { 'Retry-After': '1' });
+      case 'policy_denied': return json({ error: 'policy_denied', details: [result.detail ?? ''] }, 403);
+      case 'invalid_sql': return json({ error: 'mutation_failed', details: [result.detail ?? ''] }, 400);
+      default: return json({ error: 'dataset_read_only', details: ['You need edit access to a writable dataset to make this change.'] }, 403);
+    }
+  }
+  if ('local' in result) return json({ ok: true, local: result.local });
+  return json({ id: result.dataset.id, version: result.dataset.version, affected: result.affected, rowCount: result.rowCount });
+}
 export async function respondToMutate(
   actor: TokenActor,
   id: string,
   body: Record<string, unknown> | null,
   receipt?:MutationReceipt,
 ): Promise<Response> {
+  if (body && typeof body.name === 'string') return respondToDeclaredMutation(actor, id, body, receipt);
   const dataset = await getArtifactFor(actor, id);
   if (!dataset) return json({ error: 'not_found' }, 404);
 

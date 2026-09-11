@@ -1,3 +1,4 @@
+import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
 import {artifactState} from './artifact-state';
@@ -1814,7 +1815,7 @@ export function applyEditFor(actor: TokenActor, id: string, input: EditInput, op
   return applyEditScoped(actor, id, input, opts);
 }
 
-export async function listVersionPageFor(actor: TokenActor, id: string, limit: number, before?: number, through?:number): Promise<{rows: VersionSummary[]; next?: number} | null> {
+export async function listVersionPageFor(actor: TokenActor, id: string, limit: number, before?: number, through?:number, filters:{author?:string;since?:string;until?:string}={}): Promise<{rows: VersionSummary[]; next?: number} | null> {
   const scope = editorScope(actor);
   const db = await getDb();
   // Keep authorization and the head/history snapshot in one statement.
@@ -1828,8 +1829,10 @@ export async function listVersionPageFor(actor: TokenActor, id: string, limit: n
     )
     SELECT h.version,h.title,h.description,h.format,u.username AS by,h.created_at,true AS visible
     FROM history h LEFT JOIN users u ON u.id=h.actor_user_id
-    WHERE ($4::bigint IS NULL OR h.version < $4) AND ($5::bigint IS NULL OR h.version <= $5) ORDER BY h.version DESC LIMIT $3`,
-    [id, scope.val, limit + 1, before ?? null,through??null]);
+    WHERE ($4::bigint IS NULL OR h.version < $4) AND ($5::bigint IS NULL OR h.version <= $5)
+      AND ($6::text IS NULL OR u.username = $6) AND ($7::timestamptz IS NULL OR h.created_at >= $7) AND ($8::timestamptz IS NULL OR h.created_at <= $8)
+    ORDER BY h.version DESC LIMIT $3`,
+    [id, scope.val, limit + 1, before ?? null,through??null,filters.author??null,filters.since??null,filters.until??null]);
   if (!result.rows.length) {
     const visible = await db.query(`SELECT 1 FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id, scope.val]);
     if (!visible.rows.length) return null;
@@ -2003,6 +2006,7 @@ export async function runDocumentMutation(
   row?: Record<string, Scalar>,
   actor: RoleActor = {userId:null,tokenId:null},
   localTables?: Record<string, Row[]>,
+  receipt?: MutationReceipt,
 ): Promise<DocumentMutationOutcome> {
   if (doc.format !== 'markup' || !doc.source) return { ok: false, reason: 'unknown_mutation' };
   const parsed = parseJsx(doc.source);
@@ -2056,7 +2060,7 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id} });
+  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}) });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }

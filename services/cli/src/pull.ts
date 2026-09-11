@@ -95,7 +95,7 @@ export async function pullToStdout(workspace:Workspace,args:string[],client:Http
  if(flags['dry-run'])return{dry_run:true,operations:[{id:head.id,version:snapshot.version,head_version:head.version,destination:'-',status:'would_write',bytes:Buffer.byteLength(text)}]};
  stdout(text);return undefined;
 }
-export async function pull(workspace:Workspace,args:string[],client:HttpClient,options:{format?:string;output?:string;force?:boolean;dryRun?:boolean}={}){
+export async function pull(workspace:Workspace,args:string[],client:HttpClient,options:{format?:string;output?:string;force?:boolean;dryRun?:boolean;type?:string}={}){
  if(options.format&&options.format!=='original'&&options.output&&args.length===1){
   const extension=extname(options.output).toLowerCase().slice(1);
   if(['jsx','yaml','yml','csv','json'].includes(extension)&&(extension==='yml'?'yaml':extension)!==options.format)throw new CliError('invalid_format','--format and the output filename disagree.');
@@ -110,6 +110,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
   const operations=[];
   for(const target of targets){
    const head=await client.request<Snapshot>(`/artifacts/${target.id}`);
+   checkResourceType(options.type,head);
    if(head.id!==target.id||typeof head.edit_id!=='string'||typeof head.state!=='string'||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');
    const previous=target.path?workspace.lock?.files[target.path]:undefined;
    let selected:Snapshot|undefined;
