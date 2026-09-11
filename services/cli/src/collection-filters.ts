@@ -3,7 +3,7 @@ import {CliError} from './errors';
 /** Filter schemas are finite; values belonging to users retain their exact spelling. */
 export function collectionFilters(command:string,entries:string[]=[]):Record<string,string>{
  const schemas:Record<string,Record<string,readonly string[]|null>>={
-  list:{search:null,visibility:['private','unlisted','public'],relationship:['all','owned','shared'],state:['active','deleted']},
+  list:{search:null,visibility:['private','unlisted','public'],relationship:['all','owned','shared']},
   comment:{state:['open','resolved','all'],author:null},
  };
  const schema=schemas[command]??{};const result:Record<string,string>={};

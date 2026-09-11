@@ -142,7 +142,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }
 }
 /** Seeded surface: the parser accepts these rows, and dispatch refuses them until their workstream lands. Each implementer deletes its own entries. */
-const PENDING_TYPES:Record<string,readonly string[]>={pull:['token','session'],push:['token','session'],status:['token','session'],diff:['session'],list:['profile','token','session','user','table','activity','analytics'],delete:['folder','dataset','file','token','session','comment'],log:['artifact','folder','dataset','file']};
+const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session','table'],delete:['folder','dataset','file','session','comment'],log:['artifact','folder','dataset','file']};
 function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
  if(['fork','export','open'].includes(command))pending(`afbin ${command}`);
@@ -152,7 +152,6 @@ function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  if(command==='diff'&&(flags.output!==undefined||positionals.length>1))pending('diff --output and multiple targets');
  if(command==='status'&&positionals.length)pending('status <ref>');
  if(command==='list'&&positionals.length)pending('list <ref>');
- if(command==='list'&&Array.isArray(flags.filter)&&flags.filter.some(f=>/^state=/.test(f)))pending('list --filter state');
  if(command==='log'&&flags.filter!==undefined)pending('log --filter');
  if(command==='delete'&&positionals.length>1)pending('delete with multiple targets');
  if(['comment','query','update'].includes(command)&&flags['dry-run'])pending(`${command} --dry-run`);

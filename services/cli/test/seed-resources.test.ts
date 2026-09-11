@@ -1,13 +1,14 @@
 /**
  * Workstream A (Resources) seeds. Each test is `todo` until its row is implemented; the owner
- * removes the todo option, never the assertion. Rows: list/push/delete --type token, session,
- * list --filter state=deleted, push --restore, push --refresh, list --type activity|analytics,
- * delete --type folder. Server operations are stubbed here; real-handler coverage belongs in
- * services/app/__tests__/cli-account-resources.test.ts and cli-mutation-recovery.test.ts.
+ * removes the todo option, never the assertion. Rows: push --restore, push --refresh, sessions
+ * (list, pull, delete), typed delete with multiple targets, mixed batches. Server operations are
+ * stubbed here; real-handler coverage belongs in services/app/__tests__/cli-account-resources.test.ts
+ * and cli-mutation-recovery.test.ts. Tokens, trash listing, activity and analytics are deferred:
+ * the server exposes them to browser sessions only, and bearer operations can be added later.
  */
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm,writeFile,readFile,readdir} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
@@ -29,48 +30,20 @@ async function harness(prefix:string){
 }
 const account=(response:Response)=>{response.headers.set('X-Artifactbin-Account','usr_seed');return response;};
 
-test('list --type token returns safe metadata only and never a bearer value',todo,async()=>{
- const h=await harness('afbin-seed-tokens-');
+test('push --restore restores explicit ids through a durable operation and a live row reports already restored',todo,async()=>{
+ const h=await harness('afbin-seed-restore-');
  try{
-  const code=await h.invoke(['list','--type','token'],()=>account(Response.json({tokens:[{id:'tok_1',name:'ci',status:'active',created_at:'2026-09-01T00:00:00Z',expires_at:null,last_used_at:null}],next_cursor:null})));
-  assert.equal(code,0,h.out.join(''));
-  assert.deepEqual(h.calls.map(c=>[c.method,c.path]),[['GET','/api/account/tokens']]);
-  const result=h.last();assert.equal(result.tokens[0].id,'tok_1');assert.ok(!JSON.stringify(result).includes('mx_'));
- }finally{await h.cleanup();}
-});
-
-test('push --type token creates a token, delivers the bearer once and keeps it out of YAML, journals and lock files',todo,async()=>{
- const h=await harness('afbin-seed-token-create-');
- try{
-  await writeFile(join(h.root,'ci.yaml'),'type: token\nname: ci\nexpires_in: 86400\n');
-  const code=await h.invoke(['push','ci.yaml'],({method,path})=>method==='POST'&&path==='/api/account/tokens'?account(Response.json({id:'tok_new',name:'ci',token:'mx_SECRETVALUE',expires_at:'2026-09-12T00:00:00Z',status:'active',state:'a'.repeat(64)},{status:201})):account(Response.json({error:'not_found'},{status:404})));
-  assert.equal(code,0,h.out.join(''));
-  const create=h.calls.find(c=>c.method==='POST');assert.ok(create?.headers['idempotency-key'],'token creation is a durable operation');
-  assert.equal(h.last().operations[0].token,'mx_SECRETVALUE','the bearer is delivered exactly once in the command result');
-  const yaml=await readFile(join(h.root,'ci.yaml'),'utf8');assert.ok(!yaml.includes('mx_SECRETVALUE'));assert.match(yaml,/id: tok_new/);
-  for(const file of await readdir(join(h.root,'.artifactbin'),{recursive:true}) as string[]){const bytes=await readFile(join(h.root,'.artifactbin',file)).catch(()=>Buffer.alloc(0));assert.ok(!bytes.includes('mx_SECRETVALUE'),`${file} must not persist the bearer`);}
- }finally{await h.cleanup();}
-});
-
-test('delete --type token revokes through a durable operation and a repeat is a safe no-op',todo,async()=>{
- const h=await harness('afbin-seed-token-revoke-');
- try{
-  let revocations=0;
-  const respond=({method,path}:{method:string;path:string})=>{if(method==='DELETE'&&path==='/api/account/tokens/tok_1'){revocations++;return account(Response.json({id:'tok_1',status:'revoked'}));}return account(Response.json({error:'not_found'},{status:404}));};
-  assert.equal(await h.invoke(['delete','--type','token','tok_1'],respond),0,h.out.join(''));
-  assert.equal(await h.invoke(['delete','--type','token','tok_1'],respond),0,h.out.join(''));
-  assert.equal(revocations,2);assert.equal(h.last().operations[0].status,'revoked');
-  assert.ok(h.calls.every(c=>c.method!=='DELETE'||c.headers['idempotency-key']));
- }finally{await h.cleanup();}
-});
-
-test('list --filter state=deleted is the trash view and push --restore restores by explicit id only',todo,async()=>{
- const h=await harness('afbin-seed-trash-');
- try{
-  assert.equal(await h.invoke(['list','--filter','state=deleted'],({path})=>account(Response.json({artifacts:[{id:'abc123',title:'Old',deleted_at:'2026-09-01T00:00:00Z'}],next_cursor:null,requested:path}))),0,h.out.join(''));
-  assert.match(h.calls[0].path,/state=deleted/);
-  assert.equal(await h.invoke(['push','--restore','abc123'],({method,path})=>method==='POST'&&path==='/api/artifacts/abc123/restore'?account(Response.json({id:'abc123',url:'/a/abc123',parent_id:null,ancestor_ids:[]})):account(Response.json({error:'not_found'},{status:404}))),0,h.out.join(''));
+  let restores=0;
+  const respond=({method,path}:{method:string;path:string})=>{
+   if(method==='POST'&&path==='/api/artifacts/abc123/restore'){restores++;return account(restores===1?Response.json({id:'abc123',url:'/a/abc123',parent_id:null,ancestor_ids:[]}):Response.json({error:'not_found'},{status:404}));}
+   if(method==='GET'&&path==='/api/artifacts/abc123')return account(Response.json({id:'abc123',deleted_at:restores?null:'2026-09-01T00:00:00Z',capabilities:{restore:true}}));
+   return account(Response.json({error:'not_found'},{status:404}));
+  };
+  assert.equal(await h.invoke(['push','--restore','abc123'],respond),0,h.out.join(''));
   assert.equal(h.last().operations[0].status,'restored');
+  assert.ok(h.calls.find(c=>c.method==='POST')?.headers['idempotency-key'],'restore is a durable operation');
+  assert.equal(await h.invoke(['push','--restore','abc123'],respond),0,h.out.join(''));
+  assert.equal(h.last().operations[0].status,'already_restored');
   const bare=await h.invoke(['push','--restore'],()=>{throw new Error('no network for an invalid invocation');});assert.notEqual(bare,0);
  }finally{await h.cleanup();}
 });
@@ -81,25 +54,48 @@ test('push --refresh reports changed, unchanged and failed assets per target',to
   const code=await h.invoke(['push','--refresh','abc123','def456'],({body})=>account(Response.json((body as {id:string}).id==='abc123'?{refreshed:['https://x/a.png'],unchanged:[],failed:[]}:{refreshed:[],unchanged:[],failed:[{url:'https://x/b.png',code:'rate_limited',fix:'Retry later.'}]})));
   assert.equal(code,0,h.out.join(''));
   const ops=h.last().operations;assert.equal(ops.length,2);assert.equal(ops[0].refreshed.length,1);assert.equal(ops[1].failed[0].code,'rate_limited');
+  assert.ok(h.calls.every(c=>c.headers['idempotency-key']),'refresh is a durable operation');
  }finally{await h.cleanup();}
 });
 
-test('sessions list and terminate through typed commands; activity and analytics are read-only collections',todo,async()=>{
+test('sessions list as a collection, pull as read-only YAML and terminate through delete',todo,async()=>{
  const h=await harness('afbin-seed-sessions-');
  try{
-  assert.equal(await h.invoke(['list','--type','session'],()=>account(Response.json({sessions:[{id:'rs_1',name:'pi',harness:'pi',status:'online'}]}))),0,h.out.join(''));
+  const session={id:'rs_1',name:'pi',harness:'pi',machine:'laptop',cwd:'/work',status:'online',cols:120,rows:40,controller:'local',created_at:'2026-09-11T00:00:00Z'};
+  assert.equal(await h.invoke(['list','--type','session'],()=>account(Response.json({sessions:[session]}))),0,h.out.join(''));
   assert.equal(h.last().sessions[0].id,'rs_1');
-  assert.equal(await h.invoke(['delete','--type','session','rs_1'],({method})=>account(Response.json(method==='DELETE'?{ok:true}:{error:'not_found'},{status:method==='DELETE'?200:404}))),0,h.out.join(''));
-  assert.equal(await h.invoke(['list','--type','activity','--filter','feed=following'],()=>account(Response.json({events:[{kind:'publish',artifact_id:'abc123'}],next_cursor:null}))),0,h.out.join(''));
-  assert.equal(await h.invoke(['list','--type','analytics'],()=>account(Response.json({views:12,likes:3,followers:1,forks:0,views_over_time:[]}))),0,h.out.join(''));
-  assert.equal(h.last().views,12);
+  assert.equal(await h.invoke(['pull','--type','session','rs_1','--output','pi.yaml'],({path})=>account(Response.json(path==='/api/remote/sessions'?{sessions:[session]}:{session,generation:1,seq:0,frames:[],snapshot:''}))),0,h.out.join(''));
+  const yaml=await readFile(join(h.root,'pi.yaml'),'utf8');assert.match(yaml,/type: session/);assert.match(yaml,/id: rs_1/);
+  await writeFile(join(h.root,'pi.yaml'),yaml.replace('name: pi','name: renamed'));
+  assert.notEqual(await h.invoke(['push','pi.yaml'],()=>{throw new Error('session YAML is read-only; no request may be sent');}),0);
+  assert.equal(h.last().error.code,'readonly_resource');
+  let deletes=0;
+  assert.equal(await h.invoke(['delete','--type','session','rs_1'],({method})=>{if(method==='DELETE')deletes++;return account(Response.json(method==='DELETE'?{ok:true}:{session}));}),0,h.out.join(''));
+  assert.equal(deletes,1);assert.equal(h.last().operations[0].status,'terminated');
  }finally{await h.cleanup();}
 });
 
-test('delete --type folder deletes the subtree and reports every returned identity',todo,async()=>{
- const h=await harness('afbin-seed-folder-delete-');
+test('delete accepts multiple typed targets, reports every returned identity and keeps local files',todo,async()=>{
+ const h=await harness('afbin-seed-typed-delete-');
  try{
-  const code=await h.invoke(['delete','--type','folder','fld123'],({method})=>account(Response.json(method==='DELETE'?{ok:true,deleted_ids:['fld123','abc123']}:{id:'fld123',format:'folder',capabilities:{delete:true}})));
-  assert.equal(code,0,h.out.join(''));assert.deepEqual(h.last().deleted_ids,['fld123','abc123']);
+  await writeFile(join(h.root,'notes.yaml'),'type: file\nid: fil123\nsource: notes.txt\n');await writeFile(join(h.root,'notes.txt'),'keep me\n');
+  const code=await h.invoke(['delete','--type','folder','fld123','notes.yaml'],({method,path})=>account(Response.json(method==='DELETE'?{ok:true,deleted_ids:path.includes('fld123')?['fld123','abc123']:['fil123']}:{id:path.split('/').pop(),format:path.includes('fld')?'folder':'file',capabilities:{delete:true}})));
+  assert.equal(code,0,h.out.join(''));
+  const results=h.last().results;assert.equal(results.length,2);assert.deepEqual(results[0].result.deleted_ids,['fld123','abc123']);assert.deepEqual(results[1].result.deleted_ids,['fil123']);
+  assert.equal(await readFile(join(h.root,'notes.txt'),'utf8'),'keep me\n');assert.equal(await readFile(join(h.root,'notes.yaml'),'utf8'),'type: file\nid: fil123\nsource: notes.txt\n');
+ }finally{await h.cleanup();}
+});
+
+test('a workspace tracking artifacts and a profile accepts a bare status, diff and push without mixed_resource_batch',todo,async()=>{
+ const h=await harness('afbin-seed-mixed-');
+ try{
+  await writeFile(join(h.root,'report.jsx'),`---\nid: abc123\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\n---\n<p>Hi</p>\n`);
+  await writeFile(join(h.root,'profile.yaml'),'type: profile\nid: usr_seed\nusername: sree\n');
+  assert.equal(await h.invoke(['pull','--type','profile','--output','profile.yaml','--force'],()=>account(Response.json({type:'profile',id:'usr_seed',username:'sree',email:'s@example.com',name:null,liked:[],following:[],state:'b'.repeat(64)}))),0,h.out.join(''));
+  assert.equal(await h.invoke(['status'],()=>{throw new Error('status is local');}),0,h.out.join(''));
+  const types=new Set(h.last().files.map((f:{type:string})=>f.type));assert.ok(types.has('profile'));assert.ok(types.has('artifact'));
+  assert.equal(await h.invoke(['diff'],()=>{throw new Error('diff is local');}),0,h.out.join(''));
+  assert.equal(await h.invoke(['push'],()=>{throw new Error('unchanged push is offline');}),0,h.out.join(''));
+  assert.ok(h.last().operations.every((op:{status:string})=>op.status==='unchanged'));
  }finally{await h.cleanup();}
 });

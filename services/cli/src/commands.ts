@@ -5,7 +5,7 @@ export {CliError} from './errors';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
- type:{value:'TYPE',description:'Select the resource kind: artifact, folder, dataset, file, profile, token or session; list adds user, table, activity and analytics; delete adds comment. Fixed names ignore case.'},
+ type:{value:'TYPE',description:'Select the resource kind: artifact, folder, dataset, file, profile or session; list adds table; delete adds comment. Fixed names ignore case.'},
  in:{value:'REF',description:'Scope to a containing folder, artifact or dataset.'},
  filter:{value:'FIELD=VALUE',repeat:true,description:'Combine supported filters; run afbin help filters for each collection.'},
  restore:{description:'Restore the selected soft-deleted resources; requires explicit targets.'},
@@ -31,13 +31,13 @@ export const flags: Record<string,Flag> = {
  name:{value:'NAME',description:'Select a named query/table, or name a remote terminal session.'},
 };
 /** Resource kinds are one vocabulary; each command accepts the subset it can address. */
-export const RESOURCE_TYPES=['artifact','folder','dataset','file','profile','token','session'] as const;
+export const RESOURCE_TYPES=['artifact','folder','dataset','file','profile','session'] as const;
 const VERSIONED_TYPES=['artifact','folder','dataset','file'] as const;
 export const COMMAND_TYPES:Record<string,readonly string[]>={
  pull:RESOURCE_TYPES,push:RESOURCE_TYPES,status:RESOURCE_TYPES,
  diff:['artifact','folder','dataset','file','profile','session'],
- list:[...RESOURCE_TYPES,'user','table','activity','analytics'],
- delete:[...VERSIONED_TYPES,'token','session','comment'],
+ list:[...RESOURCE_TYPES,'table'],
+ delete:[...VERSIONED_TYPES,'session','comment'],
  fork:VERSIONED_TYPES,export:VERSIONED_TYPES,log:VERSIONED_TYPES,
 };
 export const FORMATS:Record<string,readonly string[]>={
@@ -56,7 +56,7 @@ export const commands: Command[] = [
  {name:'status',usage:'[<ref> ...]',description:'Report local changes, conflicts and installation state; remote state is last observed.',min:0,max:Infinity,flags:['type','remote'],examples:['afbin status','afbin status --remote']},
  {name:'diff',usage:'[<ref> ...]',description:'Compute changes locally against the saved, historical or refreshed base.',min:0,max:Infinity,flags:['type','remote','output'],examples:['afbin diff report.jsx','afbin diff --remote report.jsx']},
  {name:'log',usage:'<ref> [<ref> ...]',description:'List versions, newest first; @version starts at that version or earlier.',min:1,max:Infinity,flags:['type','filter','limit','cursor'],examples:['afbin log report.jsx --limit 10']},
- {name:'list',usage:'[<ref> ...]',description:'List resources or summaries; default accessible artifacts, newest first.',min:0,max:Infinity,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json','afbin list --type token','afbin list --filter state=deleted']},
+ {name:'list',usage:'[<ref> ...]',description:'List resources or summaries; default accessible artifacts, newest first.',min:0,max:Infinity,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json','afbin list --type session','afbin list --type table --in orders.yaml']},
  {name:'delete',usage:'<ref> [<ref> ...]',description:'Soft-delete resources, revoke tokens, terminate sessions or delete comments; keep local files.',min:1,max:Infinity,flags:['type','in','dry-run','force'],examples:['afbin delete report.jsx --dry-run','afbin delete --type comment --in abc123 ann_123']},
  {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
  {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --no-browser.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --no-browser --json']},
