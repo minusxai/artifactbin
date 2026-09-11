@@ -42,7 +42,9 @@ Run commands from this repository root (the submodule root in a downstream check
 - `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition; default http://localhost:3030.
 - `npm run dev:app` — app with local SQL/browser, without the proxy; same default port.
-- `npm run validate` — residual-name guard and TypeScript, including unused declarations/parameters.
+- `npm run validate` — residual-name guard and TypeScript, including unused declarations/parameters, plus
+  `validate:shared`: `services/utils` and `services/contracts` under `noUncheckedIndexedAccess`, since
+  downstream consumers compile these packages with that flag.
 - `npm test` — API, Node, UI and CLI tests. `test:api`, `test:node`, `test:ui` select Vitest projects.
 - `npm run build` — browser bundles and the production server. Type checks do not replace this check.
 - `npm run test:gates -- --list` — discover current browser gates; do not copy gate counts into docs.
