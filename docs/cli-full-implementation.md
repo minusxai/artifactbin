@@ -96,3 +96,5 @@ The primary checkout is `services/artifactbin` inside the production repository,
 
 
 Profile checkpoint: account schema/domain/route, typed local tracking and generic operation finalization are committed as in-progress work. Focused API and CLI recovery checks and type checks passed before this checkpoint; the full suite has not been rerun for these account changes. Mixed artifact/account workspaces, token implementation and broader account integration remain open.
+
+Concrete parallel assignments and ownership: [CLI workstreams](cli-full-workstreams.md).
