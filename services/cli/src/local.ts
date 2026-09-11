@@ -10,9 +10,9 @@ export function snapshotDocument(snapshot:Snapshot):LocalDocument{
   ...(snapshot.visibility?{visibility:snapshot.visibility}:{}),link:snapshot.link_role??'viewer',folder:snapshot.parent_id??null,
   edit_id:snapshot.edit_id,head_version:snapshot.version,state:snapshot.state},body:snapshot.markup??''};
 }
-export async function localStatus(workspace:Workspace){
+export async function localStatus(workspace:Workspace,paths?:string[]){
  const conflicts=await readConflicts(workspace.root);
- return{remote:'last_observed',server:workspace.lock?.server??null,files:(await inspectWorkspace(workspace)).map(file=>({path:file.path,status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})}))};
+ return{remote:'last_observed',server:workspace.lock?.server??null,files:(await inspectWorkspace(workspace,paths)).map(file=>({path:file.path,status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id??file.document?.metadata.id??file.resource?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})}))};
 }
 export async function localDiff(workspace:Workspace,paths?:string[]){
  const files=await inspectWorkspace(workspace,paths);

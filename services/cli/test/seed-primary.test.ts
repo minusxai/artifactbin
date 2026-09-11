@@ -10,7 +10,6 @@ import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 
-const todo={todo:'primary: integration rows'};
 async function harness(prefix:string){
  const root=await mkdtemp(join(tmpdir(),prefix));
  await saveConnection({server:'https://example.com',token:'test-token'},root);
@@ -19,7 +18,7 @@ async function harness(prefix:string){
  return {root,out,calls,invoke,last:()=>JSON.parse(out[out.length-1]),cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 
-test('comment --dry-run validates anchors and permissions without posting',todo,async()=>{
+test('comment --dry-run validates anchors and permissions without posting',async()=>{
  const h=await harness('afbin-seed-comment-dry-');
  try{
   await writeFile(join(h.root,'doc.yaml'),'type: artifact\nid: abc123\n');
@@ -28,7 +27,7 @@ test('comment --dry-run validates anchors and permissions without posting',todo,
  }finally{await h.cleanup();}
 });
 
-test('delete --type comment --in removes a thread through the bearer door',todo,async()=>{
+test('delete --type comment --in removes a thread through the bearer door',async()=>{
  const h=await harness('afbin-seed-comment-delete-');
  try{
   const code=await h.invoke(['delete','--type','comment','--in','abc123','ann_1'],({method,path})=>method==='DELETE'&&path==='/api/artifacts/abc123/annotations/ann_1'?Response.json({ok:true}):Response.json({id:'abc123',capabilities:{comment:true}}));
@@ -36,16 +35,17 @@ test('delete --type comment --in removes a thread through the bearer door',todo,
  }finally{await h.cleanup();}
 });
 
-test('validate --remote adds read-only server checks and never mutates or refreshes credentials',todo,async()=>{
+test('validate --remote adds read-only server checks and never mutates or refreshes credentials',async()=>{
  const h=await harness('afbin-seed-validate-remote-');
  try{
   await writeFile(join(h.root,'report.jsx'),'---\nid: abc123\n---\n<p>Hi</p>\n');
-  const code=await h.invoke(['validate','report.jsx','--remote'],({method,path})=>method==='POST'&&path==='/api/artifacts/preflight'?Response.json({ok:true,diagnostics:[]}):Response.json({error:'unexpected'},{status:500}));
-  assert.equal(code,0,h.out.join(''));assert.equal(h.last().valid,true);assert.ok(h.calls.every(c=>c.path==='/api/artifacts/preflight'));
+  const head={id:'abc123',version:1,edit_id:'e1',state:'a'.repeat(64),format:'markup',markup:'<p>Old</p>',capabilities:{read:true,edit:true}};
+  const code=await h.invoke(['validate','report.jsx','--remote'],({method,path})=>method==='POST'&&path==='/api/artifacts/preflight'?Response.json({...head,dry_run:true}):method==='GET'?Response.json(head):Response.json({error:'unexpected'},{status:500}));
+  assert.equal(code,0,h.out.join(''));assert.equal(h.last().valid,true);assert.ok(h.calls.every(c=>c.method==='GET'||c.path==='/api/artifacts/preflight'),'only reads and the preflight');
  }finally{await h.cleanup();}
 });
 
-test('status and list accept explicit refs and report exact summaries',todo,async()=>{
+test('status and list accept explicit refs and report exact summaries',async()=>{
  const h=await harness('afbin-seed-status-ref-');
  try{
   await writeFile(join(h.root,'report.jsx'),'---\nid: abc123\n---\n<p>Hi</p>\n');
@@ -56,11 +56,11 @@ test('status and list accept explicit refs and report exact summaries',todo,asyn
  }finally{await h.cleanup();}
 });
 
-test('remote --session attaches to an existing session as a controller and never creates a replacement',todo,async()=>{
+test('remote --session attaches to an existing session as a controller and never creates a replacement',async()=>{
  const h=await harness('afbin-seed-remote-attach-');
  try{
   let created=0;
-  const code=await runCli(['remote','--session','rs_1','--no-browser','--server','https://example.com'],{cwd:h.root,home:h.root,env:{},interactive:false,stdout:s=>h.out.push(s),stderr:()=>{},fetch:async(input,init)=>{const request=new Request(input,init);const path=new URL(request.url).pathname;if(request.method==='POST'&&path==='/api/remote/sessions')created++;if(path==='/api/remote/sessions/rs_1')return Response.json({session:{id:'rs_1',status:'exited',exitCode:0},generation:1,seq:0,frames:[],snapshot:''});return Response.json({error:'not_found'},{status:404});}});
+  const code=await runCli(['remote','--session','rs_1','--no-browser','--server','https://example.com'],{cwd:h.root,home:h.root,env:{},interactive:false,stdout:s=>h.out.push(s),stderr:()=>{},fetch:async(input,init)=>{const request=new Request(input,init);const path=new URL(request.url).pathname;if(request.method==='POST'&&path==='/api/remote/sessions')created++;if(path==='/api/remote/sessions/rs_1')return Response.json({session:{id:'rs_1',name:'pi',harness:'pi',cwd:'/w',machine:'m',cols:80,rows:24,online:false,exitCode:0,controller:'local',createdAt:'2026-09-11T00:00:00Z'},generation:'g1',seq:0,frames:[],snapshot:''});return Response.json({error:'not_found'},{status:404});}});
   assert.equal(code,0,h.out.join(''));assert.equal(created,0);
  }finally{await h.cleanup();}
 });

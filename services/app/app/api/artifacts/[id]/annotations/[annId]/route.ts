@@ -5,6 +5,10 @@
  * an unknown annotation or an unreachable artifact — indistinguishable on
  * purpose.
  *
+ * DELETE erases a thread (root + replies) for an ACCOUNT-CLAIMED bearer with
+ * governing rights, the same ACL as the browser door; an anonymous token is
+ * refused with account_required.
+ *
  * There is deliberately no bearer CREATE: an annotation is made from the
  * owner's selection in the browser; the agent's side of the loop is read
  * (inlined on the artifact GET), reply, resolve. Only the ATTRIBUTION is
@@ -15,6 +19,7 @@ import { withTokenAuth } from '@/lib/auth';
 import { runOperation } from '@/lib/operations/http';
 import { json, readJson } from '@/lib/http';
 import { annotationAuthorForRequest } from '@/lib/annotation-author';
+import { deleteAnnotationFor } from '@/lib/annotations';
 
 export const POST = withTokenAuth(async (request: Request, { tokenId, userId, params, credential, clientHarness }) => {
   const body = await readJson(request);
@@ -28,4 +33,10 @@ export const POST = withTokenAuth(async (request: Request, { tokenId, userId, pa
       ? { kind: 'human', label: null, transport: 'browser' }
       : annotationAuthorForRequest(request, clientHarness),
   );
+});
+
+export const DELETE = withTokenAuth(async (_request: Request, { tokenId, userId, params }) => {
+  if (!userId) return json({ error: 'account_required', hint: 'Use a token claimed by your artifactbin account.' }, 403);
+  const deleted = await deleteAnnotationFor({ tokenId, userId }, params.id, params.annId);
+  return deleted ? json({ ok: true }) : json({ error: 'not_found' }, 404);
 });

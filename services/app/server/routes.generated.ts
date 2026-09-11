@@ -101,7 +101,7 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/account/profile", dir: "/api/account/profile", methods: ["GET","PATCH"], module: r11 },
   { path: "/api/admin/dataset-catalog", dir: "/api/admin/dataset-catalog", methods: ["POST"], module: r12 },
   { path: "/api/admin/node-identity", dir: "/api/admin/node-identity", methods: ["POST"], module: r13 },
-  { path: "/api/artifacts/:id/annotations/:annId", dir: "/api/artifacts/[id]/annotations/[annId]", methods: ["POST"], module: r14 },
+  { path: "/api/artifacts/:id/annotations/:annId", dir: "/api/artifacts/[id]/annotations/[annId]", methods: ["POST","DELETE"], module: r14 },
   { path: "/api/artifacts/:id/annotations", dir: "/api/artifacts/[id]/annotations", methods: ["GET","POST"], module: r15 },
   { path: "/api/artifacts/:id/content", dir: "/api/artifacts/[id]/content", methods: ["GET"], module: r16 },
   { path: "/api/artifacts/:id/edits", dir: "/api/artifacts/[id]/edits", methods: ["POST"], module: r17 },

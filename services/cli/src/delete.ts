@@ -23,3 +23,17 @@ export async function deleteArtifact(workspace:Workspace,input:string,client:Htt
   return{...result,id:ref.id,status:'deleted',local_file:'preserved'};
  });
 }
+
+/** Comment deletion is the owner's verb; the container artifact is explicit, never inferred. */
+export async function deleteComments(workspace:Workspace,container:string,ids:string[],client:HttpClient,options:{dryRun?:boolean}){
+ const ref=await artifactReference(workspace,container,client.connection.server,true);
+ const operations:Array<Record<string,unknown>>=[];let failed=false;
+ for(const id of ids){
+  if(!/^[A-Za-z0-9_-]+$/.test(id)){operations.push({id,artifact:ref.id,error:{code:'invalid_thread',message:'Use the thread id returned by afbin comment.'}});failed=true;continue;}
+  try{
+   if(options.dryRun){const head=await client.request<{capabilities?:{delete?:boolean;comment?:boolean}}>(`/artifacts/${ref.id}`);if(head.capabilities&&head.capabilities.delete===false)throw new CliError('forbidden','Only the owner can delete comments.');operations.push({id,artifact:ref.id,status:'would_delete'});continue;}
+   await client.request(`/artifacts/${ref.id}/annotations/${id}`,'DELETE');operations.push({id,artifact:ref.id,status:'deleted'});
+  }catch(error){failed=true;operations.push({id,artifact:ref.id,error:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)}});}
+ }
+ return {value:{...(options.dryRun?{dry_run:true}:{}),operations},exitCode:failed?1:0};
+}
