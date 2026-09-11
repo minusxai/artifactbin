@@ -46,7 +46,7 @@ test('fork --dry-run reports the destination and sharing defaults without writin
  }finally{await h.cleanup();}
 });
 
-test('export converts local data offline and renders published heads through the server export route',todo,async()=>{
+test('export converts local data offline and renders published heads through the server export route',async()=>{
  const h=await harness('afbin-seed-export-');
  try{
   await writeFile(join(h.root,'rows.csv'),'name,n\na,1\n');
@@ -71,7 +71,7 @@ test('export refuses to render a modified local draft or a historical version as
  }finally{await h.cleanup();}
 });
 
-test('open prints the published URL with --no-browser and refuses untracked drafts',todo,async()=>{
+test('open prints the published URL with --no-browser and refuses untracked drafts',async()=>{
  const h=await harness('afbin-seed-open-');
  try{
   await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Hello</p>'));
