@@ -374,6 +374,14 @@ export interface LedgerEntry {
   error: string | null;
   /** Response body size in bytes — counted for every response, never retained. Absent on ledgers written before it existed. */
   bytes?: number;
+  /**
+   * A device pairing the agent's CLI started (`POST /oauth/device` answered 200): the user code the
+   * driver approves on the person's behalf. The ledger is the driver's own file, so this is how the
+   * approver sees a pairing without reading the agent's private home (unreadable under `--run-as`).
+   */
+  userCode?: string;
+  /** When that pairing expires (ms since epoch), from the door's `expires_in`. */
+  pairingExpiresAt?: number;
   /** MCP operation metadata; absent in older ledgers. */
   /** Which content tier a write declared (`markup` | `dataset` | `viz` | `image`) — how a dataset upload is told from a document. */
   reqFormat?: string;

@@ -1,23 +1,32 @@
 /**
- * The human at the other end of `afbin setup`, for the `cold` treatment.
+ * The human at the other end of `afbin setup`, for the flows where the driver stands in for the person.
  *
- * The CLI persists a pending device pairing at `~/.artifactbin/pairing-<hash>.json` with the user
- * code it printed, then polls for approval. A person would open the approval page and press
- * "approve" with their browser session; this does the same with the driver's session cookie, through
- * the agent's proxy so the origin the pairing was minted for is the one the approval names. The agent
- * never sees a token: the CLI receives its credential from the device door exactly as it would for a
- * person, and saves it itself.
+ * The CLI starts a device pairing (`POST /oauth/device`), prints the user code, and polls for approval.
+ * A person would open the approval page and press "approve" with their browser session; this does the
+ * same with the driver's session cookie, through the agent's proxy so the origin the pairing was minted
+ * for is the one the approval names. The agent never sees a token: the CLI receives its credential from
+ * the device door exactly as it would for a person, and saves it itself.
  *
- * Only pairings the CLI has already accepted are approved — the file exists only after the CLI
- * validated the pairing against the selected origin — and each user code is approved once.
+ * Two ways to see a pairing, because two people start them:
+ *  - `ledgerPath`: the AGENT ran `afbin setup`. Its traffic crossed the driver's recording proxy, whose
+ *    ledger row for the device door carries the user code (lib/proxy). The ledger is the driver's own
+ *    file — the agent's `~/.artifactbin` is 0700 and, under `--run-as`, unreadable by the driver, which
+ *    is why reading the pairing file there silently approved nothing.
+ *  - `homeDir`: the DRIVER ran `afbin setup` itself (the installed flow's precondition, lib/setup), in a
+ *    home it owns, and its traffic need not cross a proxy; the CLI's pending-pairing file is the signal.
+ *
+ * Each user code is approved once; an expired pairing is left alone.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { DRIVER_HEADER } from './proxy';
+import type { LedgerEntry } from './contracts';
 
-export interface ApproverOptions {
-  /** The agent's HOME: the pairing file lives under its `.artifactbin`. */
-  homeDir: string;
+export type PairingSource =
+  | { /** The recording proxy's ledger for this task: pairings the agent's CLI started. */ ledgerPath: string; homeDir?: undefined }
+  | { /** The HOME of a driver-run `afbin setup`: its pending-pairing file. */ homeDir: string; ledgerPath?: undefined };
+
+export type ApproverOptions = PairingSource & {
   /** Where the agent talks to the product; approvals go through the same proxy so the ledger stays honest. */
   agentBase: string;
   /** The origin the product believes it is served from; the approval door checks `Origin` against it. */
@@ -27,18 +36,47 @@ export interface ApproverOptions {
   fetch?: typeof fetch;
   log?: (message: string) => void;
   intervalMs?: number;
-}
+};
 export interface Approver {
   /** User codes approved so far, in order. */
   readonly approved: string[];
   stop(): void;
 }
 
+interface Pairing { code: string; expiresAt: number | null }
 interface PendingFile { userCode?: unknown; server?: unknown; expiresAt?: unknown }
+
+/** Pairings the CLI persisted under a home the driver can read. */
+export function pairingsFromHome(homeDir: string): Pairing[] {
+  const dir = path.join(homeDir, '.artifactbin');
+  let names: string[] = [];
+  try { names = fs.readdirSync(dir).filter((n) => /^pairing-[0-9a-f]{16}\.json$/.test(n)); } catch { return []; }
+  const out: Pairing[] = [];
+  for (const name of names) {
+    let pending: PendingFile;
+    try { pending = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as PendingFile; } catch { continue; }
+    if (typeof pending.userCode === 'string') out.push({ code: pending.userCode, expiresAt: typeof pending.expiresAt === 'number' ? pending.expiresAt : null });
+  }
+  return out;
+}
+
+/** Pairings the recording proxy saw the agent start (`POST /oauth/device` → 200 with a user code). */
+export function pairingsFromLedger(ledgerPath: string): Pairing[] {
+  let text: string;
+  try { text = fs.readFileSync(ledgerPath, 'utf8'); } catch { return []; }
+  const out: Pairing[] = [];
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    let entry: LedgerEntry;
+    try { entry = JSON.parse(line) as LedgerEntry; } catch { continue; }
+    if (typeof entry.userCode === 'string') out.push({ code: entry.userCode, expiresAt: typeof entry.pairingExpiresAt === 'number' ? entry.pairingExpiresAt : null });
+  }
+  return out;
+}
 
 export function startApprover(opts: ApproverOptions): Approver {
   const call = opts.fetch ?? fetch;
-  const dir = path.join(opts.homeDir, '.artifactbin');
+  const pending = opts.ledgerPath !== undefined ? () => pairingsFromLedger(opts.ledgerPath) : () => pairingsFromHome(opts.homeDir);
   const approved: string[] = [];
   const seen = new Set<string>();
   let busy = false;
@@ -46,14 +84,9 @@ export function startApprover(opts: ApproverOptions): Approver {
     if (busy) return;
     busy = true;
     try {
-      let names: string[] = [];
-      try { names = fs.readdirSync(dir).filter((n) => /^pairing-[0-9a-f]{16}\.json$/.test(n)); } catch { return; }
-      for (const name of names) {
-        let pending: PendingFile;
-        try { pending = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as PendingFile; } catch { continue; }
-        const code = typeof pending.userCode === 'string' ? pending.userCode : '';
+      for (const { code, expiresAt } of pending()) {
         if (!code || seen.has(code)) continue;
-        if (typeof pending.expiresAt === 'number' && pending.expiresAt < Date.now()) continue;
+        if (expiresAt !== null && expiresAt < Date.now()) continue;
         seen.add(code);
         const response = await call(`${opts.agentBase}/oauth/device/approve`, {
           method: 'POST',
