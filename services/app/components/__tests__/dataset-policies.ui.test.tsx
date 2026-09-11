@@ -209,3 +209,21 @@ it('edits and removes individual nested conditions without dropping presets or s
   const saved=JSON.parse(String(fetch.mock.calls.find(([,o])=>o?.method==='PUT')![1]!.body)).policy;
   expect(saved.tables[0].insert_permissions[0]).toEqual({role:'viewer',comment:'Keep this',permission:{columns:'*',set:{status:'submitted'},check:{_and:[{quantity:{_lte:8}}]}}});
 });
+
+it('keeps separators while typing function and model lists', async () => {
+  const fetch=vi.fn(async (_url:string, options?:RequestInit)=>new Response(JSON.stringify(options?.method==='PUT' ? {revision:1,policy:JSON.parse(String(options.body)).policy} : {canManage:true,policy:null,revision:0,tables:[],writtenBy:[]})));
+  vi.stubGlobal('fetch',fetch);
+  render(<DatasetPolicies artifactId="ds123" expanded/>);
+  const functions=await screen.findByLabelText('Denied functions');
+  fireEvent.change(functions,{target:{value:'lower,'}});
+  expect(functions).toHaveValue('lower,');
+  fireEvent.change(functions,{target:{value:'lower, llm'}});
+  fireEvent.click(screen.getByLabelText('Allow model generation'));
+  const models=screen.getByLabelText('Approved models');
+  fireEvent.change(models,{target:{value:'default,'}});
+  expect(models).toHaveValue('default,');
+  fireEvent.change(models,{target:{value:'default, other'}});
+  fireEvent.click(screen.getByRole('button',{name:'Save access policies'}));
+  await waitFor(()=>expect(fetch.mock.calls.some(([,o])=>o?.method==='PUT')).toBe(true));
+  expect(JSON.parse(String(fetch.mock.calls.find(([,o])=>o?.method==='PUT')![1]!.body)).policy.execution).toMatchObject({functions:{deny:['lower','llm']},generation:{models:['default','other']}});
+});

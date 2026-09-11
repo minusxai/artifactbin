@@ -27,6 +27,42 @@ type State = {
 };
 const inputClass =
   "w-full min-w-0 rounded-lg border border-edge bg-surface px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none";
+const parseList = (text: string) =>
+  text
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+/** Keep the user's in-progress separators while the policy stores parsed names. */
+function CommaListInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string[];
+  onChange: (value: string[]) => void;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState(value.join(", "));
+  const serialized = JSON.stringify(value);
+  useEffect(() => {
+    if (JSON.stringify(parseList(text)) !== serialized)
+      setText(value.join(", "));
+  }, [serialized]);
+  return (
+    <input
+      aria-label={label}
+      className={inputClass}
+      placeholder={placeholder}
+      value={text}
+      onChange={(event) => {
+        setText(event.target.value);
+        onChange(parseList(event.target.value));
+      }}
+    />
+  );
+}
 const operations: DatasetOperation[] = ["insert", "update", "delete"];
 const pretty = (v: unknown) => JSON.stringify(v, null, 2);
 const initial = (tables: Table[]): DatasetPolicy => ({
@@ -263,24 +299,18 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
                     <h3 className="font-medium">Functions & generation</h3>
                     <label className="grid gap-2 text-xs text-muted">
                       Blocked functions
-                      <input
-                        aria-label="Denied functions"
-                        className={inputClass}
+                      <CommaListInput
+                        label="Denied functions"
                         placeholder="e.g. llm, lower"
-                        value={
-                          draft.execution?.functions?.deny?.join(", ") ?? ""
-                        }
-                        onChange={(e) =>
+                        value={draft.execution?.functions?.deny ?? []}
+                        onChange={(deny) =>
                           change({
                             ...draft,
                             execution: {
                               ...draft.execution,
                               functions: {
                                 ...draft.execution?.functions,
-                                deny: e.target.value
-                                  .split(",")
-                                  .map((x) => x.trim())
-                                  .filter(Boolean),
+                                deny,
                               },
                             },
                           })
@@ -315,21 +345,17 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
                         </p>
                         <label className="grid gap-2 text-xs text-muted">
                           Approved models
-                          <input
-                            aria-label="Approved models"
-                            className={inputClass}
-                            value={draft.execution.generation.models.join(", ")}
-                            onChange={(e) =>
+                          <CommaListInput
+                            label="Approved models"
+                            value={draft.execution.generation.models}
+                            onChange={(models) =>
                               change({
                                 ...draft,
                                 execution: {
                                   ...draft.execution,
                                   generation: {
                                     ...draft.execution!.generation!,
-                                    models: e.target.value
-                                      .split(",")
-                                      .map((x) => x.trim())
-                                      .filter(Boolean),
+                                    models,
                                   },
                                 },
                               })
