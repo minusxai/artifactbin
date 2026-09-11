@@ -18,7 +18,7 @@ test('YAML pull round-trips authorized governance and separate data, preserving 
  try{
   await saveConnection({server:'https://example.com',token:'test'},root);
   const pulled=await invoke(['pull','data123','--format','YAML','--output','sales.yaml']);assert.equal(pulled.code,0,JSON.stringify(pulled.result));
-  const file=parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8'));assert.equal(file.type,'dataset');if(file.type!=='dataset')assert.fail();assert.equal(file.access,'readwrite');assert.equal(file.policy_revision,0);assert.deepEqual(file.shares,head.shares);assert.equal(file.source,'./sales.json');
+  const file=parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8'));assert.equal(file.type,'dataset');if(file.type!=='dataset')assert.fail();assert.equal(file.access,'readwrite');assert.equal(file.policy_revision,0);assert.deepEqual(file.shares,head.shares);assert.equal(file.source,'sales.json');
   assert.deepEqual(JSON.parse(await readFile(join(root,'sales.json'),'utf8')),[{score:42}]);
   await writeFile(join(root,'sales.json'),'[{"score":43}]\n');await writeFile(join(root,'sales.yaml'),(await readFile(join(root,'sales.yaml'),'utf8')).replace('Sales','My sales'));
   const refreshed=await invoke(['pull','sales.yaml']);assert.equal(refreshed.code,0,JSON.stringify(refreshed.result));assert.equal(contentReads,1,'unchanged immutable content uses its saved bytes');

@@ -11,7 +11,6 @@ import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 
-const todo={todo:'workstream C: read and query edges'};
 const head=(id:string,extra:Record<string,unknown>={})=>({id,version:2,edit_id:'e2',state:'b'.repeat(64),format:'markup',title:'Report',visibility:'unlisted',markup:'<p>Remote</p>',capabilities:{read:true,edit:true,mutation_receipts:true},...extra});
 async function harness(prefix:string){
  const root=await mkdtemp(join(tmpdir(),prefix));
@@ -26,7 +25,7 @@ async function harness(prefix:string){
  return {root,out,calls,invoke,last:()=>JSON.parse(out[out.length-1]),cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 
-test('pull --output - writes the editable representation to stdout without establishing tracking',todo,async()=>{
+test('pull --output - writes the editable representation to stdout without establishing tracking',async()=>{
  const h=await harness('afbin-seed-pull-stdout-');
  try{
   const code=await h.invoke(['pull','abc123','--output','-'],({path})=>path.startsWith('/api/artifacts/abc123')?Response.json(head('abc123')):Response.json({error:'not_found'},{status:404}));
@@ -36,7 +35,7 @@ test('pull --output - writes the editable representation to stdout without estab
  }finally{await h.cleanup();}
 });
 
-test('pull --format csv converts a flat dataset and a connected dataset pulls its .jsx definition beside typed YAML',todo,async()=>{
+test('pull --format csv converts a flat dataset and a connected dataset pulls its .jsx definition beside typed YAML',async()=>{
  const h=await harness('afbin-seed-pull-dataset-');
  try{
   assert.equal(await h.invoke(['pull','ds0001','--format','csv','--output','rows.csv','--json'],({path})=>path.includes('/content')?new Response(JSON.stringify([{name:'a',n:1}]),{headers:{'Content-Type':'application/json'}}):Response.json(head('ds0001',{format:'dataset',markup:undefined}))),0,h.out.join(''));
@@ -48,7 +47,7 @@ test('pull --format csv converts a flat dataset and a connected dataset pulls it
  }finally{await h.cleanup();}
 });
 
-test('push --secret-env stores a connection password once and never writes its value to YAML, definition, journal or output',todo,async()=>{
+test('push --secret-env stores a connection password once and never writes its value to YAML, definition, journal or output',async()=>{
  const h=await harness('afbin-seed-secret-env-');
  try{
   await writeFile(join(h.root,'orders.jsx'),'<Dataset kind="postgres">\n  <Connection host="db.example.com" port={5432} database="commerce" username="reader" ssl={true} />\n</Dataset>\n');
@@ -66,7 +65,7 @@ test('push --secret-env stores a connection password once and never writes its v
  }finally{await h.cleanup();}
 });
 
-test('diff accepts multiple targets and --output, and log filters by author per target',todo,async()=>{
+test('diff accepts multiple targets and --output, and log filters by author per target',async()=>{
  const h=await harness('afbin-seed-diff-log-');
  try{
   await writeFile(join(h.root,'a.jsx'),'<p>A</p>\n');await writeFile(join(h.root,'b.jsx'),'<p>B</p>\n');
@@ -77,7 +76,7 @@ test('diff accepts multiple targets and --output, and log filters by author per 
  }finally{await h.cleanup();}
 });
 
-test('query --write --dry-run validates a declared mutation without executing it, and --name --write runs it durably',todo,async()=>{
+test('query --write --dry-run validates a declared mutation without executing it, and --name --write runs it durably',async()=>{
  const h=await harness('afbin-seed-declared-mutation-');
  try{
   await writeFile(join(h.root,'doc.yaml'),'type: artifact\nid: abc123\n');

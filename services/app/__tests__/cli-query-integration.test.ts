@@ -75,3 +75,46 @@ it('native remote reads share dataset SQL, paginate, reject stale cursors and en
   expect((await invoke(['--cursor',cursor])).result.error.code).toBe('invalid_cursor');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+it('a dry-run write validates against the real head and leaves every row where it was',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-cli-dry-write-'));
+ try{
+  const token=await mintToken('mxmx_test_cli_dry_write');await saveConnection({server:'http://localhost:3000',token:token.token},root);
+  const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1}],access:'readwrite'}}));const doc=await made.json();
+  const context={params:Promise.resolve({id:doc.id})};const calls:string[]=[];
+  await writeFile(join(root,'change.sql'),'insert into public.rows (n) values (2)');
+  const transport:typeof fetch=async(input,init)=>{
+   const req=new Request(input,init);calls.push(`${req.method} ${new URL(req.url).pathname}`);
+   return new URL(req.url).pathname.endsWith('/mutate')?mutate(req,context):read(req,context);
+  };
+  const out:string[]=[];
+  const code=await runCli(['query',doc.id,'--write','--input','change.sql','--dry-run','--json'],{cwd:root,home:root,env:{},interactive:false,fetch:transport,stdout:s=>out.push(s),stderr:()=>{}});
+  const result=JSON.parse(out.join(''));expect(code,JSON.stringify(result)).toBe(0);
+  expect(result.dry_run).toBe(true);expect(result.mutation).toBe('sql');expect(result.applied).toBe(false);
+  expect(calls.every(call=>call.startsWith('GET '))).toBe(true);
+  const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),context);expect((await state.json()).rows).toEqual([{n:1}]);
+  await expect(readFile(join(root,'.artifactbin','pending-operation.json'))).rejects.toThrow();
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+it('a mixed batch read runs each target on its own engine and reports failures per target',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-cli-mixed-read-'));
+ try{
+  const token=await mintToken('mxmx_test_cli_mixed_read');await saveConnection({server:'http://localhost:3000',token:token.token},root);
+  const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:7}]}}));const doc=await made.json();
+  await writeFile(join(root,'sales.csv'),'n\n1\n2\n');
+  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+   const req=new Request(input,init);const id=new URL(req.url).pathname.split('/')[3];
+   return new URL(req.url).pathname.endsWith('/query')?queryRead(req,{params:Promise.resolve({id})}):read(req,{params:Promise.resolve({id})});
+  }});return{code,result:JSON.parse(out.join(''))};};
+  const mixed=await invoke(['query','sales.csv',doc.id]);expect(mixed.code,JSON.stringify(mixed)).toBe(0);
+  expect(mixed.result.results).toHaveLength(2);
+  expect(mixed.result.results[0].result.results[0].execution).toBe('local');
+  expect(mixed.result.results[0].result.results[0].rows).toEqual([{n:1},{n:2}]);
+  expect(mixed.result.results[1].result.results[0].execution).toBe('remote');
+  expect(mixed.result.results[1].result.results[0].rows).toEqual([{n:7}]);
+  const partial=await invoke(['query','sales.csv','aB3xK9']);expect(partial.code).toBe(1);
+  expect(partial.result.results[0].result.results[0].execution).toBe('local');
+  expect(partial.result.results[1].error.code).toBeTruthy();
+ }finally{await rm(root,{recursive:true,force:true});}
+});

@@ -37,8 +37,18 @@ export async function readCommand(workspace:Workspace,parsed:ParsedCommand,clien
   return client.request(`/artifacts${query.size?'?'+query:''}`);
  }
  const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server);
+ // History is read per target: the page, the filters and any cursor belong to this reference alone.
  const query=new URLSearchParams(pageQuery(parsed.flags));if(ref.version!==undefined)query.set('version',String(ref.version));
+ if(parsed.flags.type!==undefined)checkTrackedType(workspace,ref.path,String(parsed.flags.type));
+ for(const [key,value] of Object.entries(collectionFilters('log',parsed.flags.filter as string[]|undefined)))query.set(key,value);
  return client.request(`/artifacts/${ref.id}/versions${query.size?'?'+query:''}`);
+}
+const RESOURCE_KINDS:Record<string,string>={markup:'artifact',folder:'folder',dataset:'dataset',image:'file',pdf:'file',file:'file'};
+/** A typed target is checked against what tracking already knows; nothing is fetched to decide it. */
+export function checkTrackedType(workspace:Workspace,path:string|undefined,requested:string):void{
+ const tracked=path?workspace.lock?.files[path]:undefined;
+ const kind=tracked?RESOURCE_KINDS[String(tracked.snapshot.format)]??'artifact':undefined;
+ if(kind&&kind!==requested)throw new CliError('type_mismatch',`${path} tracks a ${kind}, not a ${requested}.`,'Omit --type, or select the kind this reference addresses.');
 }
 
 export async function commentCommand(workspace:Workspace,parsed:ParsedCommand,client:HttpClient,body?:string){

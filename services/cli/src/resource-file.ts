@@ -77,6 +77,11 @@ export async function resourceContent(resource:ArtifactResourceFile,path:string,
   if(extension!=='.jsx')throw new CliError('invalid_resource_source','An artifact source must be a JSX file.');
   return {markup:parseDocument(bytes.toString()).body};
  }
+ if(resource.type==='dataset'&&extension==='.jsx'){
+  const text=bytes.toString();
+  if(!text.trimStart().startsWith('<Dataset'))throw new CliError('invalid_resource_source','A dataset .jsx source must hold one <Dataset> definition.','Name a CSV or JSON file for stored rows.');
+  return {dataset:text};
+ }
  if(resource.type==='dataset'&&!['.csv','.json'].includes(extension)||resource.type==='file'&&['.csv','.json','.jsx','.yaml','.yml'].includes(extension))throw new CliError('invalid_resource_source',`The source format does not match type ${resource.type}.`);
  return assetInput(source,bytes);
 }
