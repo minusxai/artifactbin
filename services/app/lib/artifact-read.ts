@@ -25,5 +25,5 @@ export async function readArtifactSnapshot(actor:TokenActor,id:string,base:strin
    wire.meta={catalog:publicCatalogOf(row)};
   }
  }
- return {...wire,capabilities:{mutation_receipts:true,read:true,edit:editable,comment:canAnnotate(role),sharing:editable,delete:role==='owner',restore:role==='owner'}};
+ return {...wire,capabilities:{comment_receipts:true,mutation_receipts:true,read:true,edit:editable,comment:canAnnotate(role),sharing:editable,delete:role==='owner',restore:role==='owner'}};
 }

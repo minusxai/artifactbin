@@ -1,7 +1,7 @@
 import {getDb} from '@/lib/db';
 import {expect,it} from 'vitest';
 import {request,useAppHarness} from './harness';
-import {POST as create} from '@/app/api/artifacts/route';
+import {POST as create,GET as list} from '@/app/api/artifacts/route';
 import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
 import {GET as content} from '@/app/api/artifacts/[id]/content/route';
 import {mintToken} from '@/lib/tokens';
@@ -42,4 +42,16 @@ it('editing another invitation preserves an existing grant bound to an account a
  expect((await read(request(path,{token:reader.token}),context)).status).toBe(200);
  const newcomer=await createUser({email:readerUser.email}),token=await mintToken('mxmx_test_reused_email');await claimToken(newcomer.id,token.token);
  expect((await read(request(path,{token:token.token}),context)).status).toBe(404);
+});
+
+it('native collections include explicit viewer shares and filter before paging without listing unrelated public resources',async()=>{
+ const owner=await mintToken('mxmx_test_collection_owner'),reader=await mintToken('mxmx_test_collection_reader');
+ const ownerUser=await createUser({email:'mxmx_test_collection_owner@example.com'}),readerUser=await createUser({email:'mxmx_test_collection_reader@example.com'});
+ await claimToken(ownerUser.id,owner.token);await claimToken(readerUser.id,reader.token);
+ const shared=await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{dataset:[{n:1}],title:'Quarterly Sales',visibility:'private',shares:[{email:readerUser.email,role:'viewer'}]}}));expect(shared.status).toBe(201);const sharedId=(await shared.json()).id;
+ await create(request('/api/artifacts',{method:'POST',token:owner.token,json:{markup:'<p>Unrelated public</p>',visibility:'public'}}));
+ await create(request('/api/artifacts',{method:'POST',token:reader.token,json:{markup:'<p>Owned</p>',title:'Owned'}}));
+ const filtered=await list(request('/api/artifacts?type=dataset&relationship=shared&search=sales&limit=1',{token:reader.token}));expect(filtered.status).toBe(200);expect((await filtered.json()).artifacts.map((r:{id:string})=>r.id)).toEqual([sharedId]);
+ const all=await list(request('/api/artifacts',{token:reader.token}));expect((await all.json()).artifacts).toHaveLength(2);
+ const invalid=await list(request('/api/artifacts?relationship=everyone',{token:reader.token}));expect(invalid.status).toBe(400);
 });

@@ -7,13 +7,13 @@ export class HttpClient {
  connection:Connection;
  account?:string;
  constructor(private options:HttpOptions){this.connection={...options.connection,server:normalizeServer(options.connection.server)};this.account=options.account;}
- async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number}={}):Promise<T>{
-  return this.perform(path,method,body,headers,false,options.timeoutMs) as Promise<T>;
+ async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number;readOnly?:boolean}={}):Promise<T>{
+  return this.perform(path,method,body,headers,false,options.timeoutMs,options.readOnly) as Promise<T>;
  }
  async content(path:string,method='GET',body?:unknown):Promise<{bytes:Buffer;contentType:string}>{
   return this.perform(path,method,body,{},true) as Promise<{bytes:Buffer;contentType:string}>;
  }
- private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000):Promise<unknown>{
+ private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false):Promise<unknown>{
   const url=apiUrl(path,this.connection.server);
   if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight')throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
   let refreshed=false,authenticated=false;
@@ -24,7 +24,7 @@ export class HttpClient {
     ...(body!==undefined?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
     ...(this.options.readOnly?{'X-Artifactbin-Dry-Run':'1'}:{}),
    },...(body!==undefined?{body:JSON.stringify(body)}:{})});}
-   catch{throw new CliError(['GET','HEAD'].includes(method)?'transport_error':'outcome_unknown',`The ${method} request did not return a confirmed response.`,['GET','HEAD'].includes(method)?'Check the server connection and retry.':'Keep the pending request journal; retry the same frozen operation to recover its result.');}
+   catch{throw new CliError((readOnly||['GET','HEAD'].includes(method))?'transport_error':'outcome_unknown',`The ${method} request did not return a confirmed response.`,(readOnly||['GET','HEAD'].includes(method))?'Check the server connection and retry.':'Keep the pending request journal; retry the same frozen operation to recover its result.');}
    if(response.status===401){
     if(!this.options.readOnly&&!refreshed&&this.connection.refreshToken&&this.connection.clientId){
      refreshed=true;try{await this.refresh();continue;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;}

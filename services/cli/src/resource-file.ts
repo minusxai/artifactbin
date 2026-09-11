@@ -12,7 +12,7 @@ import type {Snapshot} from './workspace';
 import {snapshotDocument} from './local';
 import {isDeepStrictEqual} from 'node:util';
 
-export interface ResourceSource {path:string;bytes:string}
+export interface ResourceSource {path:string;bytes:string;version?:number}
 export type ResourceReconciliation={ok:true;resource:ArtifactResourceFile}|{ok:false;fields:string[]};
 export function reconcileResource(base:ArtifactResourceFile,local:ArtifactResourceFile,remote:ArtifactResourceFile):ResourceReconciliation{
  if(base.type!==local.type||base.type!==remote.type)return {ok:false,fields:['type']};

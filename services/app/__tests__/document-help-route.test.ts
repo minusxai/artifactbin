@@ -17,16 +17,13 @@ const BASE = 'http://localhost:3000';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 describe('GET /a/:id (the document itself)', () => {
-  it('gives route-specific guidance for a guessed query API without claiming the document exists', async () => {
+  it('the native query door authenticates before revealing whether a document exists', async () => {
     const app = createAppServer();
-    for (const method of ['GET', 'POST']) {
-      const res = await app.request(`${BASE}/api/artifacts/zzzzzz/query`, { method });
-      expect(res.status).toBe(404);
-      expect(await res.json()).toMatchObject({
-        error: 'not_found', help: 'afbin help publishing-query',
-        details: [expect.stringContaining('/a/<documentId>/query')],
-      });
-    }
+    const anonymous = await app.request(`${BASE}/api/artifacts/zzzzzz/query`, {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    expect(anonymous.status).toBe(401);
+    const token=await mintToken('mxmx_test_query_help');
+    const missing=await app.request(`${BASE}/api/artifacts/zzzzzz/query`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token.token}`},body:'{}'});
+    expect(missing.status).toBe(404);expect(await missing.json()).toMatchObject({error:'not_found'});
   });
 
   it('carries Link: <base>/llms.txt; rel="help" and the head pointer, on the request base', async () => {

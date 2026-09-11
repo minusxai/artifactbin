@@ -3,7 +3,8 @@ import {CliError} from './commands';
 import {resolve} from 'node:path';
 import {resolveReference} from './reference';
 import {writeDocument} from './document';
-import {snapshotDocument} from './local';
+import {snapshotDocument,localSourceDiff} from './local';
+import {snapshotResource,writeResourceFile} from './resource-file';
 import {digest} from './files';
 import {recoverFiles,stageFiles} from './journal';
 import {withProcessLock} from './process-lock';
@@ -55,17 +56,20 @@ export async function compare(workspace:Workspace,input:string|undefined,server:
    const meta=value.meta as Record<string,unknown>|undefined;
    snapshot={...tracked.snapshot,...value,version,theme:meta?.theme as string|null??null,template:meta?.template as string|null??null};
   }
-  let before=file.document?Buffer.from(tracked.baseline,'base64').toString():tracked.baseline;
+  const textual=!!(file.document||file.resource);
+  let before=textual?Buffer.from(tracked.baseline,'base64').toString():tracked.baseline;
   if(remote||version){
-   if(file.document){const document=snapshotDocument(snapshot!);before=writeDocument(document);}
+   if(file.resource)before=writeResourceFile(snapshotResource(snapshot!,file.resource));
+   else if(file.document){const document=snapshotDocument(snapshot!);before=writeDocument(document);}
    else if(typeof snapshot?.content_base64==='string')before=snapshot.content_base64;
    else if(client){before=(await client.content(`/artifacts/${tracked.id}/content?version=${snapshot!.version}`)).bytes.toString('base64');snapshot={...snapshot!,content_base64:before};fetched=true;}
    else throw new CliError('network_required','Historical binary content is not cached.');
   }
   if(version&&fetched)await cacheVersion(workspace,file.path,snapshot!);
-  const after=file.document?file.bytes?.toString()??'':file.bytes?.toString('base64')??'';
-  if(file.document)diffs.push({path:file.path,diff:createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,before,after,remote?'remote head':version?`version ${version}`:'last observed','working file',{context:3})});
+  const after=textual?file.bytes?.toString()??'':file.bytes?.toString('base64')??'';
+  if(textual)diffs.push({path:file.path,diff:createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,before,after,remote?'remote head':version?`version ${version}`:'last observed','working file',{context:3})});
   else diffs.push({path:file.path,diff:before===after?'':`Binary file ${file.path} differs`});
+  if(!remote&&!version){const source=await localSourceDiff(workspace,file);if(source)diffs.push(source);}
  }
  return{remote:remote?'current':'last_observed',diffs};
 }

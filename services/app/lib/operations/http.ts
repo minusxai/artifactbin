@@ -1,3 +1,5 @@
+import {readableArtifact} from '@/lib/artifact-read';
+import {canAnnotate} from '@/lib/share-roles';
 import {durableMutation} from '@/lib/mutation-receipt';
 import {getArtifactFor} from '@/lib/artifacts';
 /**
@@ -43,8 +45,9 @@ export async function runOperation(
 ): Promise<Response> {
   const ctx: OpContext = { actor, base: baseUrl(request), request, author };
   const key=request.headers.get('Idempotency-Key');
-  if(name==='mutate_dataset'&&key){
-    if(!await getArtifactFor(actor,String(input.id)))return json({error:'not_found'},404);
+  if(['mutate_dataset','annotate'].includes(name)&&key){
+    if(name==='annotate'){const access=await readableArtifact(actor,String(input.id));if(!access||!canAnnotate(access.role))return json({error:'not_found'},404);}
+    else if(!await getArtifactFor(actor,String(input.id)))return json({error:'not_found'},404);
     const result=await durableMutation(actor,ctx.base,key,{name,input},receipt=>operation(name).run({...ctx,mutationReceipt:receipt},input));
     const terminal=!['operation_pending','outcome_unknown','idempotency_mismatch','invalid_idempotency_key'].includes(String(result.body.error));
     return opResponse({...result,...(terminal?{headers:{'X-Artifactbin-Mutation-Receipt':key}}:{})});

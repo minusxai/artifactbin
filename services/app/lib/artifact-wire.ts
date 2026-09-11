@@ -365,6 +365,7 @@ export async function replaceArtifactWithBody(
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
+  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish content first, then change policy in the dataset YAML without replacing content.'},400);
   // Sharing settings use edit access; filing under an owner's folder still checks placement.
   const owned = body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   const owner = writerFor(current);
@@ -541,6 +542,7 @@ export async function createArtifactFromBody(
   request?: Request,
   options: {dryRun?:boolean; loadRef?:RefLoader} = {},
 ): Promise<Response> {
+  if(Object.hasOwn(body,'policy')||Object.hasOwn(body,'expectedPolicyRevision'))return json({error:'combined_policy_write',hint:'Publish the dataset first, pull its YAML, then change its policy.'},400);
   let responseBody: ((row: ArtifactRow) => Record<string,unknown>) = row => createdArtifactWire(row,base,body.markup);
   let operation;
   try {operation = creationOperation(actor,base,request?.headers.get('Idempotency-Key'),body,row=>({status:201,body:responseBody(row)}));}
@@ -714,11 +716,12 @@ export async function respondToAnnotationAction(
   author: AnnotationAuthor,
   id: string,
   annId: string,
+  receipt?:MutationReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   const action = parseAnnotationAction(body);
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
-  const wire = await actOnAnnotationFor(actor, id, annId, action, author);
+  const wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt);
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);

@@ -1,3 +1,4 @@
+import {localDocumentQuery} from './local-document-query';
 import {extname,join} from 'node:path';
 import {createSql} from '@artifactbin/sql/local';
 import {inferColumns} from '@artifactbin/utils/shape';
@@ -9,6 +10,7 @@ import {resolveReference} from './reference';
 import {readOptional,digest} from './files';
 import {CliError,type ParsedCommand} from './commands';
 import type {Workspace} from './workspace';
+import {parseResourceFile,readResourceSource} from './resource-file';
 
 export function queryParameters(values:string[]=[]):Record<string,Scalar>{
  const params:Record<string,Scalar>=Object.create(null);
@@ -29,10 +31,22 @@ export async function localQuery(workspace:Workspace,parsed:ParsedCommand,sql:st
  const sources=[];
  for(const input of positionals){
   const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server});
-  if(ref.kind!=='path'||ref.version||!['.csv','.json'].includes(extname(ref.path).toLowerCase()))return null;
-  const bytes=await readOptional(join(workspace.root,ref.path));if(!bytes)throw new CliError('missing_file',`Missing dataset: ${input}.`);
+  if(ref.kind!=='path'||ref.version)return null;
+  let path=ref.path,bytes=await readOptional(join(workspace.root,path));if(!bytes)throw new CliError('missing_file',`Missing dataset: ${input}.`);
+  if(/\.jsx$/i.test(path)){
+   if(sql!==undefined)throw new CliError('invalid_query','Use --name to select a declared document query; SQL input applies to datasets.');
+   if(positionals.length!==1)throw new CliError('invalid_query','Select one local document per query invocation.');
+   return localDocumentQuery(workspace,path,bytes,flags,params);
+  }
+  if(/\.ya?ml$/i.test(path)){
+   const resource=parseResourceFile(bytes.toString());if(!['dataset','artifact'].includes(resource.type))return null;
+   const source=await readResourceSource(resource,path,workspace.root);if(!source)return null;
+   if(resource.type==='artifact'){if(sql!==undefined)throw new CliError('invalid_query','Use --name for a declared document query.');return localDocumentQuery(workspace,path,Buffer.from(source.bytes,'base64'),flags,params);}
+   path=source.path;bytes=Buffer.from(source.bytes,'base64');
+  }
+  if(!['.csv','.json'].includes(extname(path).toLowerCase()))return null;
   let rows:unknown;
-  if(extname(ref.path).toLowerCase()==='.csv'){const csv=parseCsv(bytes.toString());rows=coerceRows(csv.headers,csv.rows);}
+  if(extname(path).toLowerCase()==='.csv'){const csv=parseCsv(bytes.toString());rows=coerceRows(csv.headers,csv.rows);}
   else try{rows=JSON.parse(bytes.toString());}catch{throw new CliError('invalid_dataset',`${input} must contain JSON row objects.`);}
   if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_dataset',`${input} must contain an array of row objects.`);
   sources.push({path:ref.path,bytes,rows:rows as Record<string,unknown>[]});

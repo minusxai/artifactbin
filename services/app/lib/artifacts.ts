@@ -21,6 +21,8 @@ import { sourceWithoutAnchors } from './annotation-anchors';
 import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
+import type {DatasetPolicy} from '@artifactbin/contracts';
+import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
 import { isDocumentFormat, parseContentInput, type ArtifactFormat } from './story/input';
@@ -978,6 +980,7 @@ export function isVersionConflict(r: ArtifactRow | null | VersionConflict): r is
 }
 
 export interface ReplaceOpts {
+  expectedPolicyRevision?:number;
   shares?:ShareEntry[];
   annotationOps?: AnnotationOperation[];
   expectedState?: string;
@@ -1781,18 +1784,22 @@ export function getOwnedArtifactFor(actor: TokenActor, id: string): Promise<Arti
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
-export async function listArtifactPageFor(actor: TokenActor, limit: number, cursor?: {created: string; id: string}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
-  const scope = ownerScope(actor);
-  const db = await getDb();
-  const values: unknown[] = [scope.val, limit + 1];
-  if (cursor) values.push(cursor.created, cursor.id);
-  const result = await db.query<ArtifactSummary & {page_created: string}>(
-    `SELECT ${SUMMARY_COLS}, created_at::text AS page_created FROM artifacts WHERE ${scope.where('$1')}
-      ${cursor ? 'AND (created_at, id) < ($3::timestamptz, $4)' : ''}
-      ORDER BY created_at DESC, id DESC LIMIT $2`, values);
-  const rows = result.rows.slice(0, limit);
-  const last = rows.at(-1);
-  return {rows, ...(result.rows.length > limit && last ? {next: {created: last.page_created, id: last.id}} : {})};
+export interface ArtifactCollectionFilters {type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
+export async function listArtifactPageFor(actor: TokenActor, limit: number, cursor?: {created: string; id: string}, filters:ArtifactCollectionFilters={}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
+  const owner=ownerPredicate(actor);const values:unknown[]=[owner.val,limit+1];
+  const shared=actor.userId?SHARE_PREDICATE(['viewer','commenter','editor'],'$1'):'FALSE';
+  const relationship=filters.relationship??'all';
+  const reach=relationship==='owned'?owner.where('$1'):relationship==='shared'?`(${shared} AND NOT (${owner.where('$1')}))`:`(${owner.where('$1')} OR ${shared})`;
+  const predicates=[LIVE_ARTIFACT_SQL,`(${reach})`];
+  const bind=(value:unknown)=>{values.push(value);return '$'+values.length;};
+  if(cursor)predicates.push(`(created_at,id)<(${bind(cursor.created)}::timestamptz,${bind(cursor.id)})`);
+  if(filters.type)predicates.push(`format=ANY(${bind(filters.type==='file'?['image','pdf','file']:[filters.type==='artifact'?'markup':filters.type])}::text[])`);
+  if(filters.visibility)predicates.push(`visibility=${bind(filters.visibility)}`);
+  if(filters.search)predicates.push(`position(lower(${bind(filters.search)}) in lower(COALESCE(title,'')))>0`);
+  if(filters.parent_id)predicates.push(`ancestor_ids[array_length(ancestor_ids,1)]=${bind(filters.parent_id)}`);
+  const result=await (await getDb()).query<ArtifactSummary & {page_created:string}>(`SELECT ${SUMMARY_COLS},created_at::text AS page_created FROM artifacts WHERE ${predicates.join(' AND ')} ORDER BY created_at DESC,id DESC LIMIT $2`,values);
+  const rows=result.rows.slice(0,limit),last=rows.at(-1);
+  return {rows,...(result.rows.length>limit&&last?{next:{created:last.page_created,id:last.id}}:{})};
 }
 
 export function listArtifactsFor(actor: TokenActor): Promise<ArtifactSummary[]> {
@@ -1876,6 +1883,7 @@ export async function setTitleFor(actor: TokenActor, id: string, title: string):
 
 /** What a METADATA write may change: policy ABOUT a row, never its content. */
 export interface MetadataPatch {
+  policy?:DatasetPolicy|null;
   shares?:ShareEntry[];
   title?: string | null;
   description?: string | null;
@@ -1900,6 +1908,8 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
     if (!current) return null;
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) return {conflict:true,currentVersion:current.version};
+    if(patch.policy!==undefined&&current.policy_revision!==opts.expectedPolicyRevision)return {conflict:true,reason:'state_conflict',currentVersion:current.version,currentState:artifactState(current)};
+    const policy=patch.policy===undefined?undefined:validateDatasetPolicyForRow(current,patch.policy);
     if (patch.access && (current.format !== 'dataset' || (patch.access === 'readwrite' && catalogOf(current)?.kind === 'postgres'))) return null;
     const meta = {...current.meta};
     for (const key of ['theme','template','colorMode'] as const) if (patch[key] !== undefined) meta[key] = patch[key];
@@ -1914,6 +1924,15 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
     ])).rows[0];
     if(patch.shares!==undefined)Object.assign(updated,await writeShares(tx,id,patch.shares));
     else updated.shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
+    if(policy!==undefined){
+     const changed=await tx.query<{dataset_policy:DatasetPolicy|null;policy_revision:number}>(`WITH changed AS (
+      UPDATE artifacts SET dataset_policy=$2::jsonb,policy_revision=policy_revision+1 WHERE id=$1 RETURNING *
+     ), audit AS (
+      INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)
+      SELECT id,policy_revision,dataset_policy,$3,$4 FROM changed
+     ) SELECT dataset_policy,policy_revision FROM changed`,[id,JSON.stringify(policy),actor.userId,actor.tokenId]);
+     Object.assign(updated,changed.rows[0]);
+    }
     if (patch.ancestor_ids && current.format === 'folder') {
       const swap = ancestorsForMove(current,patch.ancestor_ids);
       await tx.query(swap.sql,swap.params);
@@ -1924,7 +1943,7 @@ export async function setMetadataFor(actor: TokenActor, id: string, patch: Metad
   if (result && !isVersionConflict(result) && !opts.dryRun) {
     if (moved) {await wakeParents(moved);sayMoved(actor,id,moved);}
     else await notifyParent(parentOf(result));
-    if (patch.access || patch.visibility || patch.link_role || patch.shares) await db.query('SELECT pg_notify($1,$2)',[channelFor(id),result.edit_id]);
+    if (patch.access || patch.visibility || patch.link_role || patch.shares || patch.policy!==undefined) await db.query('SELECT pg_notify($1,$2)',[channelFor(id),result.edit_id]);
   }
   return result;
 }

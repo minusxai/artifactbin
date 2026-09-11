@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {queryResourceForRequest} from '@/lib/resource-query';
 import type {MutationReceipt} from '@/lib/mutation-receipt';
 import {readArtifactSnapshot} from '@/lib/artifact-read';
 import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/datasets/policy/http';
@@ -259,7 +261,7 @@ const annotateOp: Operation = {
     { status: 400, code: 'invalid_annotation_action', fix: 'send at least one of reply/resolve/reopen, and never resolve with reopen' },
   ],
   async run(ctx, input) {
-    return fromResponse(await respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id)));
+    return fromResponse(await respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt));
   },
 };
 
@@ -268,15 +270,21 @@ const listArtifactsOp: Operation = {
   title: 'List your artifacts',
   http: { method: 'GET', path: '/api/artifacts' },
   description: 'List your artifacts (newest first): id, title, format, version, url, parent_id, ancestor_ids — no content. Folders are artifacts too — a title and a place, with no content of their own — so they list here beside documents; filter by parent_id (or an empty ancestor_ids for your root) to see one folder\'s contents. A claimed token lists the whole account.',
-  input: { limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional() },
+  input: { limit: z.number().int().min(1).max(100).optional(), cursor: z.string().optional(),type:z.enum(['artifact','folder','dataset','file']).optional(),visibility:z.enum(['private','unlisted','public']).optional(),relationship:z.enum(['all','owned','shared']).optional(),search:z.string().optional(),parent_id:z.string().optional() },
   annotations: { readOnly: true },
   example: { input: {} },
   errors: [],
   async run(ctx, input) {
     const page = decodePage(input, 'artifacts');
     if (page instanceof Response) return fromResponse(page);
-    const result = await listArtifactPageFor(ctx.actor, page.limit, page.cursor as {created: string; id: string} | undefined);
-    return reply({ artifacts: result.rows.map((r) => artifactSummaryToWire(r, ctx.base)), next_cursor: result.next ? encodeCursor('artifacts', result.next) : null });
+    for(const [key,allowed] of Object.entries({type:['artifact','folder','dataset','file'],visibility:['private','unlisted','public'],relationship:['all','owned','shared']}))if(input[key]!==undefined&&!allowed.includes(String(input[key])))return reply({error:'invalid_filter',field:key},400);
+    if(input.parent_id!==undefined&&(typeof input.parent_id!=='string'||!/^[A-Za-z0-9]{6,12}$/.test(input.parent_id)))return reply({error:'invalid_container'},400);
+    if(input.search!==undefined&&(typeof input.search!=='string'||input.search.length>1000))return reply({error:'invalid_filter',field:'search'},400);
+    const filters={...(input.type?{type:input.type as 'artifact'|'folder'|'dataset'|'file'}:{}),...(input.visibility?{visibility:input.visibility as 'private'|'unlisted'|'public'}:{}),relationship:(input.relationship??'all') as 'all'|'owned'|'shared',...(input.search?{search:String(input.search)}:{}),...(input.parent_id?{parent_id:String(input.parent_id)}:{})};
+    const scope=createHash('sha256').update(JSON.stringify([ctx.actor.userId??ctx.actor.tokenId,filters])).digest('hex');
+    if(page.cursor&&page.cursor.scope!==scope)return reply({error:'invalid_cursor',hint:'Restart this collection without --cursor; the filters changed.'},400);
+    const result = await listArtifactPageFor(ctx.actor, page.limit, page.cursor as {created: string; id: string} | undefined,filters);
+    return reply({ artifacts: result.rows.map((r) => artifactSummaryToWire(r, ctx.base)), next_cursor: result.next ? encodeCursor('artifacts', {...result.next,scope}) : null });
   },
 };
 
@@ -326,7 +334,8 @@ const updateMetadataOp: Operation = {
  description:'Change only the supplied metadata fields, conditional on expectedState from the observed head. Omitted fields stay unchanged; null clears nullable fields. This does not archive content or change version/edit_id. Sharing and folder placement require ownership. The response is the complete canonical artifact, including its new state.',
  input:{id:z.string(),expectedState:z.string().regex(/^[a-f0-9]{64}$/),expectedVersion:z.number().int().positive().optional(),
   title:z.string().nullable().optional(),description:z.string().nullable().optional(),theme:z.string().nullable().optional(),template:z.string().nullable().optional(),colorMode:z.enum(['light','dark']).nullable().optional(),
-  visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional()},
+  visibility:z.enum(['public','unlisted','private']).optional(),linkRole:z.enum(['viewer','commenter','editor']).optional(),parent_id:z.string().nullable().optional(),access:z.enum(['read','readwrite']).optional(),
+  shares:CONTENT_FIELDS.shares,policy:z.record(z.string(),z.unknown()).nullable().optional(),expectedPolicyRevision:z.number().int().min(0).optional()},
  annotations:{},example:{input:{id:'aB3xK9',title:'Updated title',expectedState:'a'.repeat(64)}},
  errors:[NOT_FOUND,OWNER_ONLY,{status:400,code:'state_required',fix:'Read the current artifact and send its state as expectedState.'},{status:409,code:'state_conflict',fix:'Read the current metadata, reconcile your changes and retry with the new state.'}],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await updateMetadataFromBody(ctx.actor,String(id),body,ctx.base));},
@@ -613,8 +622,16 @@ const refreshAssetOp: Operation = {
   },
 };
 
+const queryResourceOp:Operation={
+ name:'query_resource',title:'Query dataset rows or declared document queries',http:{method:'POST',path:'/api/artifacts/{id}/query'},
+ description:'Read bounded dataset SQL or selected declared document queries, with scalar parameters and state-bound pagination. Never mutates rows.',
+ input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
+ annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},errors:[NOT_FOUND],
+ async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
+};
+
 export const OPERATIONS: Operation[] = [
-  ...DATASET_OPERATIONS,
+  ...DATASET_OPERATIONS,queryResourceOp,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

@@ -26,7 +26,8 @@ export async function queryMutation(workspace:Workspace,parsed:ParsedCommand,sql
   if(raw){
    try{saved=JSON.parse(raw.toString());}catch{throw new CliError('invalid_journal','The pending operation is not valid JSON.');}
    const {checksum:claimed,...value}=saved;
-   if(saved.version!==1||claimed!==checksum(value)||!saved.account||!saved.key)throw new CliError('invalid_journal','The pending operation checksum is invalid.');
+   if(claimed!==checksum(value)||!saved.account||!saved.key)throw new CliError('invalid_journal','The pending operation checksum is invalid.');
+   if(saved.version!==1)throw new CliError('pending_recovery','Another native operation is pending.','Repeat its original command and inputs to recover it.');
    if(saved.path!==`/artifacts/${ref.id}/mutate`||digest(JSON.stringify({id:ref.id,sql:saved.body?.sql,values:saved.body?.values}))!==saved.intent||typeof saved.body.expectedState!=='string'||!/^[a-f0-9]{64}$/.test(saved.body.expectedState))throw new CliError('invalid_journal','The saved request does not match its declared mutation intent.');
    if(saved.intent!==intent||saved.server!==client.connection.server)throw new CliError('pending_recovery','A different operation is still pending.','Restore its original SQL and arguments, then repeat the same command to recover it.');
    if(client.account&&client.account!==saved.account)throw new CliError('account_mismatch','The pending mutation belongs to another account.');

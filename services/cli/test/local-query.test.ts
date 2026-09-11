@@ -12,6 +12,8 @@ test('local SQL uses bound parameters, supports mixed-case file extensions, and 
   await writeFile(join(root,'Sales.CSV'),'Region,Amount\nEast,12\nWest,24\n');
   await writeFile(join(root,'read.sql'),'select "Region", "Amount" from public.rows where "Amount" > $Minimum order by "Amount"');
   const query=await invoke(['query','Sales.CSV','--input','read.sql','--param','Minimum=15']);assert.equal(query.code,0,JSON.stringify(query));assert.deepEqual(query.result.results[0].rows,[{Region:'West',Amount:24}]);
+  await writeFile(join(root,'sales.yaml'),'type: dataset\nsource: ./Sales.CSV\n');
+  const resource=await invoke(['query','sales.yaml','--input','read.sql','--param','Minimum=15']);assert.equal(resource.code,0,JSON.stringify(resource));assert.deepEqual(resource.result.results[0].rows,[{Region:'West',Amount:24}]);
   await writeFile(join(root,'read.sql'),"delete from public.rows");const denied=await invoke(['query','Sales.CSV','--input','read.sql']);assert.notEqual(denied.code,0);assert.match(denied.result.error.message,/read|select/i);
   assert.equal(await readFile(join(root,'Sales.CSV'),'utf8'),'Region,Amount\nEast,12\nWest,24\n');assert.equal(network,0);
  }finally{await rm(root,{recursive:true,force:true});}

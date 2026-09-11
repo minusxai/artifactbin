@@ -26,6 +26,7 @@ test('YAML dataset push publishes content and access together, tracks source byt
   const resource=parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8'));assert.equal(resource.id,'data123');
   const count=requests;assert.equal((await invoke(['push'])).code,0);assert.equal(requests,count);
   await writeFile(join(root,'sales.csv'),'score\n43\n');assert.equal((await invoke(['status'])).result.files[0].status,'modified');
+  const diff=await invoke(['diff']);assert.equal(diff.code,0);assert.equal(diff.result.diffs[0].path,'sales.csv');assert.match(diff.result.diffs[0].diff,/\+43/);
   const changed=await invoke(['push']);assert.equal(changed.code,0,JSON.stringify(changed.result));assert.equal(writes[1].dataset,'score\n43\n');
   const finalCount=requests;assert.equal((await invoke(['push'])).code,0);assert.equal(requests,finalCount);
   const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.deepEqual(Object.keys(lock.files),['sales.yaml']);
@@ -44,5 +45,25 @@ test('resource edits made during publication retain new settings while acknowled
   }});
   assert.equal(code,0,out.join(''));const local=parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8'));assert.equal(local.id,'data123');assert.equal(local.title,'While publishing');
   const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.equal(parseResourceFile(Buffer.from(lock.files['sales.yaml'].baseline,'base64').toString()).title,'Before');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('YAML metadata push reconciles an unrelated remote field before its conditional write',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-resource-remote-'));let head:Record<string,unknown>={},writes=0;
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
+  if(init?.method==='POST'){head={id:'data123',format:'dataset',title:'Before',description:'Before',version:1,edit_id:'one',state:digest('one')};}
+  if(init?.method==='PATCH'){
+   writes++;const body=JSON.parse(String(init.body));if(body.expectedState!==head.state)return Response.json({error:'state_conflict'},{status:409});assert.equal(body.title,'Local title');assert.equal(body.description,undefined);head={...head,title:body.title,state:digest('three')};
+  }
+  return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
+ }});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'test'},root);await writeFile(join(root,'sales.csv'),'score\n42\n');await writeFile(join(root,'sales.yaml'),'type: dataset\nsource: ./sales.csv\ntitle: Before\n');
+  assert.equal((await invoke(['push','sales.yaml'])).code,0);
+  await writeFile(join(root,'sales.yaml'),(await readFile(join(root,'sales.yaml'),'utf8')).replace('title: Before','title: Local title'));
+  head={...head,description:'Remote description',version:2,edit_id:'two',state:digest('two')};
+  const result=await invoke(['push','sales.yaml']);assert.equal(result.code,0,JSON.stringify(result.result));assert.equal(writes,1);assert.equal(parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8')).description,'Remote description');
+  const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.equal(lock.files['sales.yaml'].source.version,1,'metadata acknowledgement must not relabel old data as the new content version');
+  await writeFile(join(root,'sales.csv'),'score\n43\n');assert.equal((await invoke(['push','sales.yaml'])).result.error.code,'merge_conflict');
  }finally{await rm(root,{recursive:true,force:true});}
 });

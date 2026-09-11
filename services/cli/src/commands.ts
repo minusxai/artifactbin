@@ -1,9 +1,13 @@
+import {collectionFilters} from './collection-filters';
 import {enumArgument} from './arguments';
 import {CliError} from './errors';
 export {CliError} from './errors';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ type:{value:'TYPE',description:'Select artifact, folder, dataset or file; fixed type names ignore case.'},
+ in:{value:'REF',description:'Scope the collection to a containing folder.'},
+ filter:{value:'FIELD=VALUE',repeat:true,description:'Combine supported filters: list search/visibility/relationship; comment state/author.'},
  output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
  'no-browser':{description:'Print browser URLs without launching a browser; authentication still waits for approval.'},
@@ -12,8 +16,8 @@ export const flags: Record<string,Flag> = {
  server:{value:'URL',description:'Use this HTTPS server origin.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; browser approval is still required.'},
  'dry-run':{short:'n',description:'Validate the operation without changing local or remote state.'},force:{short:'f',description:'Overwrite local changes on pull, or observe and conditionally replace a stale head on push. On delete, allow referenced assets.'},
  remote:{description:'Fetch current remote state; comparison still runs locally.'},fix:{description:'Apply mechanical local fixes. Push never fixes source.'},
- body:{value:'TEXT',description:'Post this comment text.'},'body-file':{value:'PATH',description:'Read comment text from a file; use - for stdin.'},reply:{value:'THREAD',description:'Reply to this thread on the selected artifact.'},
- node:{value:'ID',description:'Anchor a new thread to this node.'},quote:{value:'TEXT',description:'Anchor a new thread to this quote.'},resolve:{description:'Resolve the thread selected by --reply; may accompany a reply.'},
+ body:{value:'TEXT',description:'Post this comment text.'},thread:{value:'ID',description:'Select an existing thread for a reply or state change.'},state:{value:'STATE',description:'Set the selected thread to open or resolved; fixed names ignore case.'},
+ node:{value:'ID',description:'Anchor a new thread to this node.'},quote:{value:'TEXT',description:'Anchor a new thread to this quote.'},
  limit:{value:'N',description:'Maximum results in this page (1–100).'},cursor:{value:'CURSOR',description:'Continue from a returned next_cursor.'},
  method:{short:'X',value:'METHOD',description:'HTTP method; defaults to GET.'},input:{value:'PATH',description:'Read command input from a local file; use - for stdin.'},
  harness:{value:'NAME',repeat:true,description:'Select a skill installation target: claude, codex, pi, opencode; repeat to select several, or use none.'},
@@ -24,16 +28,16 @@ export const flags: Record<string,Flag> = {
 const globalFlags=['help','version','json','server','yes','no-browser'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
- {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
+ {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','output','format'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
  {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts and reconcile tracked files.',min:0,max:Infinity,flags:['output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2']},
  {name:'push',usage:'[path ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['dry-run','force'],examples:['afbin push report.jsx','afbin push --dry-run']},
  {name:'validate',usage:'[path ...]',description:'Check local files without network access.',min:0,max:Infinity,flags:['fix'],examples:['afbin validate report.jsx','afbin validate --fix report.jsx']},
  {name:'status',usage:'',description:'Compare local files with saved state; remote state is last observed.',min:0,max:0,flags:['remote'],examples:['afbin status','afbin status --remote']},
  {name:'diff',usage:'[<ref>]',description:'Compute changes locally against the saved base.',min:0,max:1,flags:['remote'],examples:['afbin diff report.jsx','afbin diff --remote report.jsx']},
- {name:'log',usage:'<ref>',description:'List artifact versions, newest first; @version starts at that version or earlier.',min:1,max:1,flags:['limit','cursor'],examples:['afbin log report.jsx --limit 10']},
- {name:'list',aliases:['ls'],usage:'',description:'List your artifacts, newest first.',min:0,max:0,flags:['limit','cursor'],examples:['afbin list --json']},
+ {name:'log',usage:'<ref> [<ref> ...]',description:'List artifact versions, newest first; @version starts at that version or earlier.',min:1,max:Infinity,flags:['limit','cursor'],examples:['afbin log report.jsx --limit 10']},
+ {name:'list',aliases:['ls'],usage:'',description:'List owned and explicitly shared resources, newest first.',min:0,max:0,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json']},
  {name:'delete',aliases:['rm'],usage:'<ref>',description:'Soft-delete the artifact and forget tracking; keep its local file.',min:1,max:1,flags:['dry-run','force'],examples:['afbin delete report.jsx --dry-run']},
- {name:'comment',usage:'<ref>',description:'List threads, post an anchored comment, reply or resolve.',min:1,max:1,flags:['body','body-file','reply','node','quote','resolve','limit','cursor'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --reply ann_123 --body "Fixed" --resolve']},
+ {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['body','input','thread','node','quote','state','filter','limit','cursor'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
  {name:'help',usage:'[topic]',description:'Read bundled markup, data, themes, templates or command help.',min:0,max:1,flags:[],examples:['afbin help markup','afbin help dashboard']},
  {name:'api',usage:'<path>',description:'Call an advanced HTTP operation; GET by default. See afbin help operations.',min:1,max:1,flags:['method','input'],examples:['afbin api /artifacts','afbin api /artifacts/abc123/fork --method POST --input request.json']},
  {name:'setup',usage:'',description:'Authenticate in your browser and install selected local skills.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin setup','afbin setup --harness pi --harness opencode --yes --json']},
@@ -79,7 +83,14 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(result.flags.help||result.flags.version)return result;
  if(result.positionals.length<command.min||result.positionals.length>command.max)throw new CliError('invalid_arguments',`Usage: afbin ${command.name} ${command.usage}`.trim());
  const f=result.flags;
+ if(f.type!==undefined)f.type=enumArgument(f.type,['artifact','folder','dataset','file'],'type');
+ if(f.filter)collectionFilters(command.name,f.filter as string[]);
+ if(command.name==='list'&&f.format!==undefined)f.format=enumArgument(f.format,['table','csv','json','yaml'],'format');
  if(command.name==='pull'&&f.format!==undefined)f.format=enumArgument(f.format,['jsx','yaml','csv','json','original'],'format');
+ if(command.name==='query'&&f.format!==undefined)f.format=enumArgument(f.format,['table','csv','json','yaml'],'format');
+ if(f.state!==undefined)f.state=enumArgument(f.state,['open','resolved'],'state');
+ if(f.json&&f.format&&f.format!=='json'&&(!f.output||f.output==='-'))throw new CliError('conflicting_output','--json cannot share stdout with another representation.','Choose a file with --output, or omit --json.');
+ if(['log','comment'].includes(command.name)&&result.positionals.length>1&&f.cursor)throw new CliError('invalid_cursor','--cursor requires one target.');
  if(f.limit!==undefined&&(!/^\d+$/.test(String(f.limit))||Number(f.limit)<1||Number(f.limit)>100))throw new CliError('invalid_limit','--limit must be an integer from 1 to 100.');
  if(f.method&&!['GET','POST','PUT','PATCH','DELETE','HEAD'].includes(String(f.method)))throw new CliError('invalid_method','--method must be GET, POST, PUT, PATCH, DELETE or HEAD.');
  if(command.name==='api'&&f.input&&(!f.method||f.method==='GET'||f.method==='HEAD'))throw new CliError('invalid_input','--input requires an explicit write --method.');
@@ -88,15 +99,17 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(command.name==='query'&&f.write&&(f.remote||f.limit||f.cursor||result.positionals.length!==1||!f.input))throw new CliError('invalid_arguments','--write requires one target and --input; --remote, --limit and --cursor apply to reads.');
  if(command.name==='query'&&result.positionals.length>1&&(f.input||f.cursor||f.name))throw new CliError('invalid_arguments','--input, --name and --cursor require one query target.');
  if(command.name==='comment'){
-  if(f.body!==undefined&&f['body-file']!==undefined)throw new CliError('invalid_comment','Use --body or --body-file, once.');
-  if(f.resolve&&!f.reply)throw new CliError('invalid_comment','--resolve requires --reply THREAD.');
-  if(f.reply&&(f.node||f.quote))throw new CliError('invalid_comment','A reply uses the existing thread anchor.');
+  const body=f.body!==undefined||f.input!==undefined;
+  if(f.body!==undefined&&f.input!==undefined)throw new CliError('invalid_comment','Use --body or --input, once.');
+  if(f.state&&!f.thread)throw new CliError('invalid_comment','--state requires --thread ID.');
+  if(f.thread&&(!/^[A-Za-z0-9_-]+$/.test(String(f.thread))||result.positionals.length!==1))throw new CliError('invalid_thread','--thread requires a valid thread ID and exactly one artifact.');
+  if(f.thread&&(f.node||f.quote))throw new CliError('invalid_comment','A reply uses the existing thread anchor.');
   if(f.node&&f.quote)throw new CliError('invalid_comment','Use --node or --quote to anchor a new thread.');
-  const body=f.body!==undefined||f['body-file']!==undefined;
-  if((body||f.resolve)&&(f.limit!==undefined||f.cursor!==undefined))throw new CliError('invalid_comment','--limit and --cursor apply only when listing comments.','Run afbin comment <ref> --limit 20 to list a page.');
-  if(body&&!f.reply&&!f.node&&!f.quote)throw new CliError('invalid_comment','A new thread requires --node ID or --quote TEXT.');
-  if(!body&&(f.node||f.quote||f.reply&&!f.resolve))throw new CliError('invalid_comment','Posting requires --body or --body-file.');
+  if((body||f.state)&&(f.limit!==undefined||f.cursor!==undefined||f.filter!==undefined))throw new CliError('invalid_comment','--limit and --cursor apply only when listing comments.');
+  if(body&&!f.thread&&!f.node&&!f.quote)throw new CliError('invalid_comment','A new thread requires --node ID or --quote TEXT.');
+  if(!body&&(f.node||f.quote||f.thread&&!f.state))throw new CliError('invalid_comment','Posting requires --body or --input.');
  }
+
  return result;
 }
 export function commandHelp(name?:string):string {

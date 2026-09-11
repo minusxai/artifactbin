@@ -1,3 +1,6 @@
+import {remoteQuery} from './remote-query';
+import {batchCommand} from './batch';
+import {resultOutput} from './result-output';
 import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
@@ -44,7 +47,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   let workspace=await loadWorkspace(context.cwd);
   const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.lock?.server??(context.env??process.env).ARTIFACTBIN_URL;
-  if(['push','pull','delete'].includes(command)&&!flags['dry-run']&&await readOptional(join(workspace.root,'.artifactbin','pending-operation.json')))throw new CliError('pending_recovery','Recover the pending row mutation before changing this workspace.','Repeat the original afbin query --write command.');
+  if(['push','pull','delete'].includes(command)&&!flags['dry-run']&&await readOptional(join(workspace.root,'.artifactbin','pending-operation.json')))throw new CliError('pending_recovery','Recover the pending operation before changing this workspace.','Repeat the original command and inputs.');
   const pendingFiles=await readOptional(join(workspace.root,'.artifactbin','pending-files.json'));
   if(pendingFiles&&['push','pull','delete'].includes(command)&&!flags['dry-run']){
    await withProcessLock(workspace.root,()=>recoverFiles(workspace.root));workspace=await loadWorkspace(context.cwd);
@@ -67,9 +70,9 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='query'){
    queryParameters(flags.param as string[]|undefined);
    querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
-   const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){emit(result);return 0;}
+   const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout);return 0;}
   }
-  if(['comment','delete','log'].includes(command))await artifactReference(workspace,positionals[0],selectedServer,command!=='log');
+  if(['comment','delete','log'].includes(command))for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
   if(command==='api')apiUrl(positionals[0],selectedServer);
   if(command==='push')for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
   if(command==='push'&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
@@ -84,7 +87,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    try{apiBody=JSON.parse(input);}catch{throw new CliError('invalid_json','--input must contain JSON.');}
   }
   let commentBody=typeof flags.body==='string'?flags.body:undefined;
-  if(command==='comment'&&typeof flags['body-file']==='string')commentBody=flags['body-file']==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags['body-file']),'utf8');
+  if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
   if(commentBody!==undefined&&(!commentBody.trim()||commentBody.length>100000))throw new CliError('invalid_comment','Comment text must contain 1–100000 characters.');
   const server=serverOrigin();
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
@@ -115,11 +118,13 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
+  if(command==='query'){const result=await remoteQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='delete'){emit(await deleteArtifact(workspace,positionals[0],client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
   if(command==='diff'){emit(await compare(workspace,positionals[0],client.connection.server,!!flags.remote,client));return 0;}
-  if(command==='comment'){emit(await commentCommand(workspace,parsed,client,commentBody));return 0;}
-  if(command==='list'||command==='log'){emit(await readCommand(workspace,parsed,client));return 0;}
+  if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
+  if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
+  if(command==='log'){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));emit(result.value);return result.exitCode;}
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}
   if(command==='push'&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd);}
   if(command==='push'){emit(await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}));return 0;}

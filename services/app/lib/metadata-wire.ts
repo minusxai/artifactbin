@@ -4,15 +4,20 @@ import {getArtifactFor,getOwnedArtifactFor,isVersionConflict,setMetadataFor,writ
 import {resolveParent,isParentRefusal} from './folders';
 import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from './validation/atlas-schemas';
 import {json} from './http';
+import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Record<string,unknown>,base:string,dryRun=false):Promise<Response>{
  const current=await getArtifactFor(actor,id);if(!current)return json({error:'not_found'},404);
  const expected=parseExpectedVersion(body,false);if(expected instanceof Response)return expected;
  if(!expected.expectedState)return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
- const allowed=new Set(['expectedState','expectedVersion','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access','shares']);
+ const allowed=new Set(['expectedState','expectedVersion','expectedPolicyRevision','policy','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access','shares']);
  if(Object.keys(body).some(key=>!allowed.has(key)))return json({error:'invalid_metadata',allowed:[...allowed]},400);
  const governs='parent_id' in body;
  if(governs&&!await getOwnedArtifactFor(actor,id))return json({error:'owner_only'},403);
  const patch:MetadataPatch={};
+ if(Object.hasOwn(body,'policy')){
+  if(!Number.isSafeInteger(body.expectedPolicyRevision)||Number(body.expectedPolicyRevision)<0)return json({error:'policy_revision_required'},400);
+  try{patch.policy=validateDatasetPolicyForRow(current,body.policy);}catch(error){return json({error:'invalid_policy',detail:error instanceof Error?error.message:'Invalid policy'},400);}
+ }else if(body.expectedPolicyRevision!==undefined)return json({error:'invalid_metadata',field:'expectedPolicyRevision'},400);
  const shares=parseShareEntries(body.shares);if(shares instanceof Response)return shares;if(shares!==undefined)patch.shares=shares;
  for(const key of ['title','description','theme','template','colorMode'] as const){
   const value=body[key];if(value===undefined)continue;
@@ -29,7 +34,7 @@ export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Rec
  const parent=parseParentField(body);if(parent instanceof Response)return parent;
  if(parent!==undefined){const placement=await resolveParent(writerFor(current),parent,{id,format:current.format});if(isParentRefusal(placement))return json(placement,400);patch.ancestor_ids=placement.ancestor_ids;}
  if(!Object.keys(patch).length)return json({error:'empty_metadata'},400);
- const row=await setMetadataFor(actor,id,patch,{...expected,allowEditor:!governs,dryRun});
+ const row=await setMetadataFor(actor,id,patch,{...expected,expectedPolicyRevision:body.expectedPolicyRevision as number|undefined,allowEditor:!governs,dryRun});
  if(!row)return json({error:'not_found'},404);
  if(isVersionConflict(row))return json({error:row.reason??'version_conflict',currentState:row.currentState,currentVersion:row.currentVersion},409);
  return dryRun?json({valid:true,dry_run:true,state:artifactState(current),commit_checks:['authorization','observed_state']}):json(await artifactToWire(row,base));

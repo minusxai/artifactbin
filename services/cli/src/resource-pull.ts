@@ -20,14 +20,14 @@ export async function prepareResourcePull(root:string,path:string,snapshot:Snaps
   const sourcePath=previous?.source?.path??join(dirname(path),basename(path,extname(path))+extension);
   const absolute=await confinedPath(root,sourcePath);
   const local=await readOptional(absolute);
-  const same=previous?.snapshot.version===snapshot.version&&previous.source?.path===sourcePath;
+  const same=(previous?.source?.version??previous?.snapshot.version)===snapshot.version&&previous?.source?.path===sourcePath;
   let bytes=same?Buffer.from(previous!.source!.bytes,'base64'):type==='artifact'?Buffer.from(snapshot.markup??''):(await client.content(`/artifacts/${snapshot.id}/content?version=${snapshot.version}`)).bytes;
   if(type==='dataset'&&!same){
    let rows:unknown;try{rows=JSON.parse(bytes.toString());}catch{throw new CliError('invalid_response','Dataset content must be JSON rows.');}
    if(!Array.isArray(rows)||rows.some(row=>!row||typeof row!=='object'||Array.isArray(row)))throw new CliError('invalid_response','Dataset content must contain row objects.');
    bytes=Buffer.from(extname(sourcePath).toLowerCase()==='.csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n');
   }
-  source={path:sourcePath,bytes:bytes.toString('base64')};
+  source={path:sourcePath,bytes:bytes.toString('base64'),version:snapshot.version};
   prototype={type,source:'./'+relative(dirname(path),sourcePath)} as ArtifactResourceFile;
   const changed=local&&(!previous?.source||!local.equals(Buffer.from(previous.source.bytes,'base64')));
   if(changed&&!same&&!force){
