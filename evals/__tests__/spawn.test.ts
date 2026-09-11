@@ -435,6 +435,30 @@ describe('runInvocation gives the run directory back', () => {
   beforeEach(() => { runRoot = fs.mkdtempSync(path.join(fs.realpathSync('/tmp'), 'eval-spawn-runas-')); });
   afterEach(() => { fs.rmSync(runRoot, { recursive: true, force: true }); });
 
+  it('keeps the staged CLI available after sudo replaces PATH', async () => {
+    const root = path.join(runRoot, 'ws');
+    const bin = path.join(root, 'home', 'bin');
+    fs.mkdirSync(bin, { recursive: true });
+    fs.writeFileSync(path.join(bin, 'afbin'), '#!/bin/sh\necho staged-cli\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(bin, 'sudo'), `#!${process.execPath}
+const {spawnSync} = require('node:child_process');
+const args = process.argv.slice(2);
+const start = args.indexOf('--') + 1;
+const result = spawnSync(args[start], args.slice(start + 1), {
+  env: {...process.env, PATH: '/usr/bin:/bin'}, stdio: 'inherit'
+});
+process.exit(result.status ?? 1);
+`, { mode: 0o755 });
+    const r = await runInvocation(node("console.log(require('node:child_process').execFileSync('afbin', ['--version'], {encoding:'utf8'}).trim())"), {
+      cwd: path.join(root, 'cwd'), homeDir: path.join(root, 'home'), workspaceRoot: root,
+      runAs: 'agent', exec: () => {},
+      baseEnv: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` },
+      timeoutMs: 20_000, ...paths(),
+    });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.trim()).toBe('staged-cli');
+  });
+
   it('hands over before the child and reclaims after it has exited', async () => {
     const root = path.join(runRoot, 'ws');
     const cwd = path.join(root, 'cwd');
