@@ -6,8 +6,7 @@ import type {
 import { parseDatasetPolicy, compilePolicyPredicate } from '@artifactbin/utils';
 import { getDb } from '@/lib/db';
 import {
-  getOwnedArtifactFor,
-  ownerPredicate,
+  editorScope,
   canWriteDataset,
   getArtifactById,
   getArtifactFor,
@@ -53,7 +52,7 @@ export async function setDatasetPolicy(
 ): Promise<
   { revision: number; policy: DatasetPolicy | null } | { conflict: true } | null
 > {
-  const row = await getOwnedArtifactFor(actor, id);
+  const row = await getArtifactFor(actor, id);
   if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres')
     return null;
   if (!Number.isSafeInteger(revision) || revision < 0)
@@ -118,7 +117,7 @@ export async function setDatasetPolicy(
     }
   }
   const db = await getDb(),
-    scope = ownerPredicate(actor);
+    scope = editorScope(actor);
   const result = await db.query<{ policy_revision: number }>(
     `WITH updated AS (
  UPDATE artifacts SET dataset_policy=$3::jsonb,policy_revision=policy_revision+1

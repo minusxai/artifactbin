@@ -1,5 +1,4 @@
 import {
-  getOwnedArtifactFor,
   getArtifactFor,
   getSharingFor,
   type TokenActor,
@@ -16,7 +15,7 @@ export async function readDatasetPolicy(
   if (!row || row.format !== 'dataset')
     return json({ error: 'not_found' }, 404);
   return json({
-    canManage: !!(await getOwnedArtifactFor(actor, id)),
+    canManage: true,
     policy: row.dataset_policy ?? null,
     revision: row.policy_revision ?? 0,
     generationCalls: row.generation_calls ?? 0,

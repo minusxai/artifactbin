@@ -219,11 +219,11 @@ describe('the SQL scopes admit the link — the doors, not just the predicate', 
     expect(refused, 'a commenter link is not an edit link').toBeNull();
   });
 
-  it('never lets the link reach GOVERNANCE — sharing stays the owner\'s', async () => {
+  it('lets an authenticated link editor manage sharing', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     const stranger = await account('mxmx_test_stranger@example.com');
     const row = await docOf(owner, 'public', 'editor');
-    expect(await getSharingFor({ tokenId: stranger.token.id, userId: stranger.user.id }, row.id)).toBeNull();
-    expect(await updateSharingFor({ tokenId: stranger.token.id, userId: stranger.user.id }, row.id, { visibility: 'private' })).toBeNull();
+    expect(await getSharingFor({ tokenId: stranger.token.id, userId: stranger.user.id }, row.id)).not.toBeNull();
+    expect(await updateSharingFor({ tokenId: stranger.token.id, userId: stranger.user.id }, row.id, { visibility: 'private' })).not.toBeNull();
   });
 });

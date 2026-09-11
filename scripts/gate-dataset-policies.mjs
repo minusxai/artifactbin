@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startDocument, becomeOwner } from './lib/start-doc.mjs';
+import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 const base = process.argv[2] ?? 'http://localhost:3030';
 const seed = await startDocument(base);
 const publish = async (body) => {
@@ -23,6 +24,7 @@ const doc = await publish({
   markup: `<Helmet><Value name="branch" default="new branch"/><Query name="tree" source="ref:${dataset.id}">{\`select * from public.rows\`}</Query><Mutation name="append" source="ref:${dataset.id}">{\`insert into public.rows values ($branch)\`}</Mutation><Mutation name="delete" source="ref:${dataset.id}">{\`delete from public.rows\`}</Mutation></Helmet><h1>Shared policy tree</h1><Button run="$append">Append branch</Button><Button run="$delete">Delete tree</Button><DataTable data="$tree"/><Iframe title="Policy action" height={120}><button id="action" disabled>Script append</button><script>{\`const action=document.getElementById('action');const sync=()=>{action.disabled=!mx.canMutate('append');};mx.data.subscribe(sync);sync();action.onclick=()=>mx.mutate('append');\`}</script></Iframe>`,
 });
 const browser = await chromium.launch();
+const sink = await startMailSink();
 try {
   const owner = await browser.newPage();
   await becomeOwner(owner, base, seed.token);
@@ -38,19 +40,31 @@ try {
       .getByRole('button', { name: 'Append branch', exact: true })
       .isDisabled(),
   );
-  await owner.goto(dataset.url);
-  await owner
+  const editor = await browser.newPage();
+  const email = `mxmx_test_policy_editor_${Date.now()}@example.com`;
+  await loginViaEmail(editor, base, sink, email);
+  const grant = await owner.request.put(`${base}/api/my/artifacts/${dataset.id}/sharing`, {data:{shares:[{email,role:'editor'}]}});
+  assert.equal(grant.status(),200);
+  await editor.goto(dataset.url);
+  await editor
     .getByRole('button', { name: 'Open artifact controls', exact: true })
     .click();
-  await owner.getByRole('button', { name: 'Share', exact: true }).click();
-  await owner
+  await editor.getByRole('button', { name: 'Share', exact: true }).click();
+  const recipient='mxmx_test_policy_recipient@example.com';
+  await editor.getByLabel('Invite email').fill(recipient);
+  await editor.getByLabel('Add email').click();
+  await editor.getByLabel(`Role for ${recipient}`).click();
+  await editor.getByRole('option',{name:/can edit/}).click();
+  const sharing=await editor.request.get(`${base}/api/my/artifacts/${dataset.id}/sharing`);
+  assert((await sharing.json()).shares.some(s=>s.email===recipient&&s.role==='editor'));
+  await editor
     .getByRole('button', { name: 'Manage access policies', exact: true })
     .click();
-  await owner.getByLabel('Allow insert', { exact: true }).check();
-  await owner
+  await editor.getByLabel('Allow insert', { exact: true }).check();
+  await editor
     .getByRole('button', { name: 'Save access policies', exact: true })
     .click();
-  await owner.getByText('Access policies saved.', { exact: true }).waitFor();
+  await editor.getByText('Access policies saved.', { exact: true }).waitFor();
   await guest.waitForFunction(() =>
     [...document.querySelectorAll('button')].some(
       (b) => b.textContent === 'Append branch' && !b.disabled,
@@ -95,8 +109,8 @@ try {
     raw.status >= 400,
     'editor without a matching policy cannot bypass it',
   );
-  await owner.getByLabel('Allow insert', {exact:true}).uncheck();
-  await owner
+  await editor.getByLabel('Allow insert', {exact:true}).uncheck();
+  await editor
     .getByRole('button', { name: 'Save access policies', exact: true })
     .click();
   await guest.waitForFunction(() =>
@@ -115,4 +129,5 @@ try {
   );
 } finally {
   await browser.close();
+  await sink.close();
 }

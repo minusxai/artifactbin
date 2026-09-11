@@ -12,7 +12,7 @@
  *   'viewer' — may read it when private (every share that predates roles).
  *   'commenter' — may also annotate: open threads, reply, resolve. Never edit.
  *   'editor' — may also edit, PUT, revert and read history (and annotate).
- *              Never delete, share, move or open writes: those stay the owner's.
+ *              May manage sharing and dataset data actions. Deletion and restoration stay the owner's.
  */
 export type ShareRole = 'viewer' | 'commenter' | 'editor';
 export const SHARE_ROLES: readonly ShareRole[] = ['viewer', 'commenter', 'editor'];

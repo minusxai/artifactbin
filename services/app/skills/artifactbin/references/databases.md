@@ -76,7 +76,7 @@ The default schema is fixed after creation. A bare `events` resolves only there;
 
 `source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
 
-Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Writable datasets use one data policy for everyone with view access (Hasura role `viewer`); sharing sets the audience. Owners configure rules through `set_dataset_policy`; editors can inspect with `get_dataset_policy`. No policy means editor-only writes. Postgres writes are unavailable.
+Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Writable datasets use one data policy for everyone with view access (Hasura role `viewer`); sharing sets the audience. Editors and owners configure rules with `set_dataset_policy` and read them with `get_dataset_policy`. No policy means editor-only writes. Postgres writes are unavailable.
 
 ## Preview and freshness
 

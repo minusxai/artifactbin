@@ -222,7 +222,7 @@ function DatasetPolicyEditor({ artifactId }: { artifactId: string }) {
       )}
       {state?.canManage === false && (
         <div>
-          <p>Only the dataset owner can change these rules.</p>
+          <p>Dataset edit access is required to change these rules.</p>
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-xs">
             {pretty(state.policy)}
           </pre>

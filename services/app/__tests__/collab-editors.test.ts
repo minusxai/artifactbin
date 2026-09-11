@@ -112,7 +112,7 @@ describe('a viewer share is read-only, exactly as before', () => {
 });
 
 describe('an editor edits through every write door, and nothing else', () => {
-  it('session: reach, edits, PUT, revert and versions answer; delete, sharing, moving do not', async () => {
+  it('session: reach, edits, PUT, revert and versions answer; sharing answers too; delete and moving do not', async () => {
     const w = await world();
     await inviteEditor(w);
     asSession({ id: w.bob.id, email: w.bob.email });
@@ -137,8 +137,8 @@ describe('an editor edits through every write door, and nothing else', () => {
 
     // Owner-only surfaces: the uniform 404, never "exists but not yours".
     expect((await deleteMineRoute(await jreq(`/api/my/artifacts/${id}`, 'DELETE'), params({ id }))).status).toBe(404);
-    expect((await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).status).toBe(404);
-    expect((await share(id, [{ email: 'carol@x.com', role: 'editor' }])).status).toBe(404);
+    expect((await getSharingRoute(await jreq(`/api/my/artifacts/${id}/sharing`, 'GET'), params({ id }))).status).toBe(200);
+    expect((await share(id, [{email:w.bob.email,role:'editor'}, { email: 'carol@x.com', role: 'editor' }])).status).toBe(200);
     // An editor can patch content metadata, but receives owner_only for placement.
     expect((await patchMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PATCH', { parent_id: null }), params({ id }))).status).toBe(403);
     expect(await head(id)).toBeTruthy();
@@ -167,44 +167,17 @@ describe('an editor edits through every write door, and nothing else', () => {
     expect((await head(id)).version).toBe(before);
   });
 
-  it('governance is the owner\'s on the replace door too — both credentials', async () => {
-    /*
-     * `visibility` and `access` sit on canGovern's list beside sharing and
-     * placement: they decide WHO MAY READ the document and who may write its
-     * rows, and an editor was invited to write the document, not to change who
-     * else can. The replace door is the only one they could reach — it runs
-     * under editorScope, where every other governance surface is owner-scoped
-     * and answers them the uniform 404 — so it is the only door that has to
-     * say this out loud.
-     *
-     * Refused WHOLE, before the content is even parsed: a 403 that had already
-     * published the new markup would be an editor's write landing under a
-     * refusal, and the caller could not tell what took.
-     */
+  it('editors change visibility through both content replacement credentials', async () => {
     const w = await world(PROSE, 'private');
     await inviteEditor(w);
     const id = w.doc.id;
-    const before = (await head(id)).version;
-    asSession({ id: w.bob.id, email: w.bob.email });
-    for (const governing of [{ visibility: 'unlisted' }, { access: 'readwrite' }]) {
-      const refused = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, ...governing }), params({ id }));
-      expect(refused.status, await refused.clone().text()).toBe(403);
-      expect(await refused.json()).toMatchObject({ error: 'owner_only' });
-    }
+    asSession({id:w.bob.id,email:w.bob.email});
+    const browser = await putMineRoute(await jreq(`/api/my/artifacts/${id}`,'PUT',{markup:PROSE2,visibility:'unlisted'}),params({id}));
+    expect(browser.status,await browser.clone().text()).toBe(200);
     noSession();
-    const refusedBearer = await putArtifactRoute(await jreq(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2, visibility: 'unlisted' }, w.tb.token), params({ id }));
-    expect(refusedBearer.status, await refusedBearer.clone().text()).toBe(403);
-    expect(await refusedBearer.json()).toMatchObject({ error: 'owner_only' });
-    // Nothing took: not the visibility it asked for, and not the markup it rode in on.
-    const row = (await getArtifactById(id))!;
-    expect([row.visibility, row.version]).toEqual(['private', before]);
-    expect(row.source).toContain('hello');
-    expect(row.source).not.toContain('again');
-    // The same body from the OWNER is the ordinary write it always was.
-    asSession({ id: w.owner.id, email: w.owner.email });
-    const mine = await putMineRoute(await jreq(`/api/my/artifacts/${id}`, 'PUT', { markup: PROSE2, visibility: 'unlisted' }), params({ id }));
-    expect(mine.status, await mine.clone().text()).toBe(200);
-    expect((await getArtifactById(id))!.visibility).toBe('unlisted');
+    const bearer = await putArtifactRoute(await jreq(`/api/artifacts/${id}`,'PUT',{markup:PROSE2,visibility:'public'},w.tb.token),params({id}));
+    expect(bearer.status,await bearer.clone().text()).toBe(200);
+    expect((await getArtifactById(id))!.visibility).toBe('public');
   });
 
   it('bearer: the editor\'s CLAIMED token edits; an anonymous token and a stranger\'s token do not', async () => {

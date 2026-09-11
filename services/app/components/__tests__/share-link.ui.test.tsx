@@ -41,8 +41,8 @@ describe('ShareLink', () => {
     expect(screen.queryByLabelText('Copy link')).toBeNull();
   });
 
-  it('opens ONE centered dialog for a session owner: copy link, flip visibility, invite an email', async () => {
-    render(<ShareLink className="x" artifactId="Ab3xK9" owner />);
+  it.each(['owner','editor'] as const)('opens the sharing controls for %s: copy link, visibility and invitations', async role => {
+    render(<ShareLink className="x" artifactId="Ab3xK9" owner={role === 'owner'} editable={role === 'editor'} />);
 
     // The old second button is gone — Share itself opens the dialog.
     expect(screen.queryByLabelText('Sharing options')).toBeNull();

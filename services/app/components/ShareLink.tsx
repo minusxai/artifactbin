@@ -56,6 +56,7 @@ export default function ShareLink({
   artifactId,
   title,
   owner = false,
+  editable = false,
   format,
   datasetKind,
   variant = 'chip',
@@ -68,8 +69,10 @@ export default function ShareLink({
   artifactId?: string;
   /** The displayed name of the artifact being shared. */
   title?: string | null;
-  /** This viewer OWNS the artifact — only an owner manages its ACL; editors may still configure the social preview. */
+  /** This viewer OWNS the artifact — owners and editors manage its ACL. */
   owner?: boolean;
+  /** Editors and owners may manage sharing. */
+  editable?: boolean;
   /** The artifact's format — the writes row exists for a dataset and nothing else. */
   format?: string;
   /** Known before sharing loads; the API also supplies this for shelf callers. */
@@ -98,7 +101,7 @@ export default function ShareLink({
     return () => clearTimeout(t);
   }, [copied]);
 
-  const canManage = owner && !!artifactId;
+  const canManage = (owner || editable) && !!artifactId;
 
   // Loaded on MOUNT, not on open: the button itself carries the verdict
   // ("share: public"), so it must know the answer before any click.

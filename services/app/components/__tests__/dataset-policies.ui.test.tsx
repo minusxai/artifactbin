@@ -164,17 +164,17 @@ it('edits Hasura insert defaults without losing permission comments', async () =
   });
 });
 
-it('shows editors a read-only policy without management controls', async () => {
+it('shows the visual policy controls to editors', async () => {
   vi.stubGlobal(
     'fetch',
     vi.fn(
       async () =>
         new Response(
           JSON.stringify({
-            canManage: false,
-            policy: { version: 1, enforcement: 'enabled', tables: [] },
-            revision: 1,
-            tables: [],
+            canManage: true,
+            policy: null,
+            revision: 0,
+            tables: [{schema:'public',name:'rows',columns:[{name:'n'}]}],
             writtenBy: [],
           }),
         ),
@@ -184,10 +184,11 @@ it('shows editors a read-only policy without management controls', async () => {
   fireEvent.click(
     screen.getByRole('button', { name: 'Manage access policies' }),
   );
+  expect(await screen.findByLabelText('Allow insert')).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('Allow insert'));
+  expect(screen.getByLabelText('insert check column')).toBeInTheDocument();
+  expect(screen.getByLabelText('insert check operator')).toBeInTheDocument();
   expect(
-    await screen.findByText('Only the dataset owner can change these rules.'),
+    screen.getByRole('button', { name: 'Save access policies' }),
   ).toBeInTheDocument();
-  expect(
-    screen.queryByRole('button', { name: 'Save access policies' }),
-  ).not.toBeInTheDocument();
 });

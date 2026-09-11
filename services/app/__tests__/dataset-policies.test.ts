@@ -10,7 +10,7 @@ import {
   setAccessFor,
   updateSharingFor,
 } from '@/lib/artifacts';
-import { GET as readPolicy } from '@/app/api/my/artifacts/[id]/policy/route';
+import { GET as readPolicy, PUT as writePolicy } from '@/app/api/my/artifacts/[id]/policy/route';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { mintToken } from '@/lib/tokens';
 import { agentCookie, request, useAppHarness } from './harness';
@@ -71,7 +71,7 @@ it('applies one data policy to everyone with view access', async () => {
   await setAccessFor(f.actor, f.ds, 'read');
   expect((await f.write()).status).toBe(403);
 });
-it('fences administration by owner and revision, and removing a policy revokes viewer writes', async () => {
+it('fences administration by edit access and revision, and removing a policy revokes viewer writes', async () => {
   const f = await fixture();
   const stranger = await mintToken('stranger');
   expect(
@@ -150,14 +150,6 @@ it.each(['viewer', 'commenter', 'editor'] as const)(
     const f = await sharedFixture(role);
     await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
     expect((await f.write()).status).toBe(200);
-    expect(
-      await setDatasetPolicy(
-        { tokenId: f.token.id, userId: f.user.id },
-        f.ds,
-        null,
-        1,
-      ),
-    ).toBeNull();
     const ownerResponse = await mutate(
       request(`/a/${f.doc}/mutate`, {
         method: 'POST',
@@ -213,7 +205,7 @@ it('rechecks dataset sharing inside the commit even after successful execution',
   }
 });
 
-it('lets editors inspect policies without granting policy administration', async () => {
+it('lets editors open the visual policy editor', async () => {
   const f = await sharedFixture('editor');
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const response = await readPolicy(
@@ -222,7 +214,53 @@ it('lets editors inspect policies without granting policy administration', async
   );
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({
-    canManage: false,
+    canManage: true,
     policy: f.policy,
   });
+});
+
+
+it.each(['viewer', 'commenter', 'editor'] as const)(
+  'allows policy administration only with edit access: %s',
+  async (role) => {
+    const f = await sharedFixture(role);
+    const save = (policy: unknown, revision: number) => writePolicy(
+      request(`/api/my/artifacts/${f.ds}/policy`, {method:'PUT', cookie:f.cookie,
+        json:{policy,expectedPolicyRevision:revision}}),
+      {params:Promise.resolve({id:f.ds})},
+    );
+    const created = await save(f.policy, 0);
+    expect(created.status).toBe(role === 'editor' ? 200 : 404);
+    if (role !== 'editor') {
+      expect((await getArtifactById(f.ds))?.policy_revision).toBe(0);
+      return;
+    }
+    expect((await save(f.policy, 0)).status).toBe(409);
+    const changed = {...f.policy, execution:{functions:{deny:['lower']}}};
+    expect((await save(changed, 1)).status).toBe(200);
+    expect((await getArtifactById(f.ds))?.dataset_policy).toEqual(changed);
+    expect((await save(null, 2)).status).toBe(200);
+    const audit = await (await getDb()).query('SELECT actor_user_id FROM dataset_policy_audit WHERE dataset_id=$1 ORDER BY revision',[f.ds]);
+    expect(audit.rows).toEqual(Array(3).fill({actor_user_id:f.user.id}));
+    await updateSharingFor(f.actor,f.ds,{shares:[{email:f.user.email,role:'viewer'}]});
+    expect((await save(f.policy, 3)).status).toBe(404);
+  },
+);
+it('rechecks edit access when committing a policy change', async () => {
+  const f = await sharedFixture('editor');
+  const db = await getDb(), original = db.query.bind(db);
+  let revoked = false;
+  const spy = vi.spyOn(db,'query').mockImplementation(async (sql:string,values?:unknown[]) => {
+    if (!revoked && sql.includes('UPDATE artifacts SET dataset_policy=')) {
+      revoked = true;
+      await original('DELETE FROM artifact_shares WHERE artifact_id=$1',[f.ds]);
+    }
+    return original(sql,values);
+  });
+  try {
+    const result = await setDatasetPolicy({userId:f.user.id,tokenId:f.token.id},f.ds,f.policy,0);
+    expect(revoked).toBe(true);
+    expect(result).toEqual({conflict:true});
+    expect((await getArtifactById(f.ds))?.policy_revision).toBe(0);
+  } finally {spy.mockRestore();}
 });
