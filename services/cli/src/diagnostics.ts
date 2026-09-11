@@ -1,5 +1,14 @@
 /** Shared recovery vocabulary for runtime errors, local help, the manual and skills. */
 export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
+ image_fetch_failed:{meaning:'The server could not fetch an external image URL named by the document.',fix:'Check the URL is public and reachable, or upload the image as a file.'},
+ dataset_read_only:{meaning:'The dataset does not accept row mutations: Postgres datasets are read-only and stored datasets need access: readwrite.',fix:'Set access: readwrite in the dataset YAML for stored datasets; Postgres datasets cannot be written.'},
+ renderer_unavailable:{meaning:'Rendering photographs a published head, and this target is not one.',fix:'Push the draft, or export csv, json, yaml or original.'},
+ unsupported_version_export:{meaning:'A historical version has no rendering; only the current head is photographed.',fix:'Export csv, json, yaml or original for a historical version.'},
+ unpublished_draft:{meaning:'The viewer shows published documents; there is no local draft preview and drafts are never uploaded.',fix:'Publish it with afbin push, then open it.'},
+ not_forkable:{meaning:'A folder names the original children and a Postgres dataset keeps its bound secret.',fix:'Fork a document, dataset rows or a file.'},
+ output_exists:{meaning:'The destination is taken; fork and export never replace a source or an existing file.',fix:'Choose a free --output path, or use export --force to replace it after a recoverable backup.'},
+ type_mismatch:{meaning:'--type disagrees with the type the named source actually is.',fix:'Remove --type, or name a source of that type.'},
+ session_disconnected:{meaning:'The remote session was removed; a replacement is never created silently.',fix:'Start a new session with afbin remote <command>.'},
  auth_required:{meaning:'This remote operation needs credentials for the selected origin.',fix:'Run afbin setup, or set ARTIFACTBIN_TOKEN and ARTIFACTBIN_URL for the selected server.'},
  approval_required:{meaning:'Browser approval is pending; --yes cannot approve it.',fix:'Open verification_url, approve the request, then rerun afbin setup before expires_at.'},
  access_denied:{meaning:'Browser approval was denied.',fix:'Run afbin setup only when you intend to start a new approval request.'},

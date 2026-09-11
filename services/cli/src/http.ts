@@ -13,8 +13,16 @@ export class HttpClient {
  async content(path:string,method='GET',body?:unknown):Promise<{bytes:Buffer;contentType:string}>{
   return this.perform(path,method,body,{},true) as Promise<{bytes:Buffer;contentType:string}>;
  }
- private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false):Promise<unknown>{
-  const url=apiUrl(path,this.connection.server);
+ /**
+  * The viewer routes under /a/<id> — the rendered image and the standalone page — serve bytes
+  * the API surface has no equivalent for. Same origin, same credential, same refusal handling:
+  * one transport, addressed at the other half of the server's own URL space.
+  */
+ async view(path:string,timeoutMs=60000):Promise<{bytes:Buffer;contentType:string}>{
+  return this.perform(path,'GET',undefined,{},true,timeoutMs,true,viewerUrl) as Promise<{bytes:Buffer;contentType:string}>;
+ }
+ private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl):Promise<unknown>{
+  const url=address(path,this.connection.server);
   if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight')throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
   let refreshed=false,authenticated=false;
   for(let attempt=0;attempt<3;attempt++){
@@ -69,5 +77,12 @@ export function apiUrl(path:string,server:string):URL{
   if(!path.startsWith('/')||path.startsWith('//')||path.includes('\\')||path.includes('#'))throw new CliError('invalid_api_path','Use an API path beginning with /; full URLs are not allowed.');
   const url=new URL(path.startsWith('/api/')?path:`/api${path}`,server);
   if(url.origin!==server||!url.pathname.startsWith('/api/'))throw new CliError('invalid_api_path','The path must remain inside the selected server API.');
+ return url;
+}
+
+export function viewerUrl(path:string,server:string):URL{
+  if(!path.startsWith('/a/')||path.includes('\\')||path.includes('#'))throw new CliError('invalid_view_path','Use a viewer path beginning with /a/.');
+  const url=new URL(path,server);
+  if(url.origin!==server||!url.pathname.startsWith('/a/'))throw new CliError('invalid_view_path','The path must remain inside the selected server.');
  return url;
 }

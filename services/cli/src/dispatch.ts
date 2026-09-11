@@ -1,4 +1,7 @@
 import {accountPlan,localAccountCommand,remoteAccountCommand} from './account-workspace';
+import {forkResources} from './fork';
+import {exportResources} from './export';
+import {openResources} from './open';
 import {remoteQuery} from './remote-query';
 import {batchCommand} from './batch';
 import {resultOutput} from './result-output';
@@ -23,7 +26,7 @@ import {compare,remoteStatus} from './comparison';
 import {localStatus,localDiff} from './local';
 import {helpTopics} from './teaching';
 import {loadConnection} from './config';
-import {browserAuthenticate,ApprovalRequired,type AuthOptions} from './browser-auth';
+import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
 import {preparePull,pull} from './pull';
@@ -72,6 +75,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
   const selectedServer=serverOrigin()??'https://artifactbin.dev';
+  const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer});
+  const exportOptions=()=>({type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
+  if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
+  if(command==='open'){emit(await openResources(workspace,positionals,{server:selectedServer,noBrowser:!!flags['no-browser'],json,launch:context.auth?.open??openBrowser}));return 0;}
+  if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
   if(command==='query'){
    queryParameters(flags.param as string[]|undefined);
    querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
@@ -117,6 +125,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   const client=new HttpClient({connection,home,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return 0;}
+  if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
+  if(command==='export'){await exportResources(workspace,positionals,{...exportOptions(),client});return 0;}
   if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
   if(command==='query'){const result=await remoteQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='validate'){const remote=await push(workspace,positionals,client,{dryRun:true});const valid=!!localValidation?.valid&&remote.operations.every(op=>!('error' in op));emit({...localValidation,valid,remote:remote.operations});return valid?0:2;}
@@ -153,9 +163,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
 const PENDING_TYPES:Record<string,readonly string[]>={pull:['session'],push:['session'],status:['session'],diff:['session'],list:['profile','session','table'],delete:['folder','dataset','file','session'],log:['artifact','folder','dataset','file']};
 function pendingIntegration({command,positionals,flags}:ParsedCommand):void{
  const pending=(feature:string)=>{throw new CliError('command_integration_pending',`${feature} is not integrated yet.`,'See docs/cli-full-spec.md for the owning workstream.',{feature});};
- if(['fork','export','open'].includes(command))pending(`afbin ${command}`);
  if(typeof flags.type==='string'&&PENDING_TYPES[command]?.includes(flags.type))pending(`afbin ${command} --type ${flags.type}`);
- for(const flag of ['restore','refresh','secret-env','page'])if(flags[flag]!==undefined)pending(`--${flag}`);
+ for(const flag of ['restore','refresh','secret-env'])if(flags[flag]!==undefined)pending(`--${flag}`);
  if(command==='diff'&&(flags.output!==undefined||positionals.length>1))pending('diff --output and multiple targets');
  if(command==='log'&&flags.filter!==undefined)pending('log --filter');
  if(command==='delete'&&positionals.length>1)pending('delete with multiple targets');

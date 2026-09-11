@@ -11,7 +11,6 @@ import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 
-const todo={todo:'workstream B: fork, export, open'};
 const tracked=(id:string,markup:string)=>`---\nid: ${id}\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\ntitle: Report\nvisibility: unlisted\nshares:\n  - email: a@example.com\n    role: editor\n---\n${markup}\n`;
 async function harness(prefix:string){
  const root=await mkdtemp(join(tmpdir(),prefix));
@@ -21,7 +20,7 @@ async function harness(prefix:string){
  return {root,out,bytes,calls,invoke,network:()=>network,last:()=>JSON.parse(out[out.length-1]),cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 
-test('fork copies a local draft offline: no identity, forked_from set, private, no shares, source untouched',todo,async()=>{
+test('fork copies a local draft offline: no identity, forked_from set, private, no shares, source untouched',async()=>{
  const h=await harness('afbin-seed-fork-');
  try{
   await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Hello</p>'));
@@ -36,7 +35,7 @@ test('fork copies a local draft offline: no identity, forked_from set, private, 
  }finally{await h.cleanup();}
 });
 
-test('fork --dry-run reports the destination and sharing defaults without writing',todo,async()=>{
+test('fork --dry-run reports the destination and sharing defaults without writing',async()=>{
  const h=await harness('afbin-seed-fork-dry-');
  try{
   await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Hello</p>'));
@@ -46,7 +45,7 @@ test('fork --dry-run reports the destination and sharing defaults without writin
  }finally{await h.cleanup();}
 });
 
-test('export converts local data offline and renders published heads through the server export route',todo,async()=>{
+test('export converts local data offline and renders published heads through the server export route',async()=>{
  const h=await harness('afbin-seed-export-');
  try{
   await writeFile(join(h.root,'rows.csv'),'name,n\na,1\n');
@@ -59,7 +58,7 @@ test('export converts local data offline and renders published heads through the
  }finally{await h.cleanup();}
 });
 
-test('export refuses to render a modified local draft or a historical version as an image, with actionable codes',todo,async()=>{
+test('export refuses to render a modified local draft or a historical version as an image, with actionable codes',async()=>{
  const h=await harness('afbin-seed-export-refuse-');
  try{
   await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Edited locally</p>'));
@@ -71,7 +70,7 @@ test('export refuses to render a modified local draft or a historical version as
  }finally{await h.cleanup();}
 });
 
-test('open prints the published URL with --no-browser and refuses untracked drafts',todo,async()=>{
+test('open prints the published URL with --no-browser and refuses untracked drafts',async()=>{
  const h=await harness('afbin-seed-open-');
  try{
   await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Hello</p>'));

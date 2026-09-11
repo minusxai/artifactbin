@@ -122,7 +122,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(command.name==='export'&&f.output==='-'&&f.json)throw new CliError('conflicting_output','--json cannot share stdout with exported bytes.','Choose a file with --output, or omit --json.');
  if(command.name==='fork'&&f.output==='-')throw new CliError('unsupported_output','fork writes an editable local draft; choose a file or directory with --output.');
  if(f.state!==undefined)f.state=enumArgument(f.state,['open','resolved'],'state');
- if(f.json&&f.format&&f.format!=='json'&&(!f.output||f.output==='-'))throw new CliError('conflicting_output','--json cannot share stdout with another representation.','Choose a file with --output, or omit --json.');
+ if(command.name!=='export'&&f.json&&f.format&&f.format!=='json'&&(!f.output||f.output==='-'))throw new CliError('conflicting_output','--json cannot share stdout with another representation.','Choose a file with --output, or omit --json.');
  if(['log','comment'].includes(command.name)&&result.positionals.length>1&&f.cursor)throw new CliError('invalid_cursor','--cursor requires one target.');
  if(f.limit!==undefined&&(!/^\d+$/.test(String(f.limit))||Number(f.limit)<1||Number(f.limit)>100))throw new CliError('invalid_limit','--limit must be an integer from 1 to 100.');
  if(f.harness){const targets=(f.harness as string[]).map(value=>enumArgument(value,['claude','codex','pi','opencode','none'],'harness'));f.harness=targets;if(targets.some(x=>!['claude','codex','pi','opencode','none'].includes(x))||(targets.includes('none')&&targets.length>1)||new Set(targets).size!==targets.length)throw new CliError('invalid_harness','Choose unique harness names; none must be used alone.');}
