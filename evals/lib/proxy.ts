@@ -203,19 +203,21 @@ export function rewriteInstallerForLocal(body: string, from: string, to: string)
   return body.split(from).join(to).replace(/--proto '=https' --proto-redir '=https' --tlsv1\.2 /g, '');
 }
 
-const RELEASE_ASSET = /^[A-Za-z0-9._-]+$/;
+/** The only files the proxy will ever serve; a request selects one of these constants or nothing. */
+const RELEASE_BINARIES = ['afbin-darwin-arm64', 'afbin-darwin-x64', 'afbin-linux-arm64', 'afbin-linux-x64'] as const;
 function serveLocalRelease(pathname: string, release: LocalRelease, res: http.ServerResponse): void {
-  const asset = pathname.split('/').pop() ?? '';
-  if (!RELEASE_ASSET.test(asset)) { res.writeHead(404); res.end(); return; }
-  if (asset === 'SHA256SUMS') {
-    const lines = fs.readdirSync(release.distDir).filter((n) => /^afbin-(darwin|linux)-(arm64|x64)$/.test(n))
+  const requested = pathname.split('/').pop() ?? '';
+  if (requested === 'SHA256SUMS') {
+    const lines = RELEASE_BINARIES.filter((n) => fs.existsSync(path.join(release.distDir, n)))
       .map((n) => `${createHash('sha256').update(fs.readFileSync(path.join(release.distDir, n))).digest('hex')}  ${n}`);
     const body = lines.join('\n') + '\n';
     res.writeHead(200, { 'content-type': 'text/plain', 'content-length': String(Buffer.byteLength(body)) });
     res.end(body); return;
   }
-  const file = path.join(release.distDir, asset);
-  if (!/^afbin-(darwin|linux)-(arm64|x64)$/.test(asset) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+  // The path is built from the allowlist constant, never from the request string.
+  const name = RELEASE_BINARIES.find((n) => n === requested);
+  const file = name ? path.join(release.distDir, name) : null;
+  if (!file || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   res.writeHead(200, { 'content-type': 'application/octet-stream', 'content-length': String(fs.statSync(file).size) });
   fs.createReadStream(file).pipe(res);
 }
