@@ -1,5 +1,6 @@
 /** Shared recovery vocabulary for runtime errors, local help, the manual and skills. */
 export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
+ approval_origin_mismatch:{meaning:'The selected server advertises its browser approval page on a different origin, so the pairing cannot be trusted for the selected origin.',fix:'Select the server by its public origin with --server; credentials are never sent to an origin you did not select.'},
  unmanaged_installation:{meaning:'This afbin was not installed as a verified standalone executable.',fix:'Install it with https://artifactbin.dev/chat/install.sh, then rerun afbin update.'},
  compatible_release_unavailable:{meaning:'No published release matches the version and protocol the selected server named.',fix:'Retry after a compatible CLI release is published; afbin update --dry-run reports what it resolved.'},
  image_fetch_failed:{meaning:'The server could not fetch an external image URL named by the document.',fix:'Check the URL is public and reachable, or upload the image as a file.'},

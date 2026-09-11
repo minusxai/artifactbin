@@ -50,9 +50,22 @@ This file is the handoff; no conversation history or extra planning document is 
 | Type check and residual names | `npm run validate` passes. |
 | Production build | `npm run build` passes. |
 | Native binary | `npm run build:binary -w services/cli` builds `afbin-darwin-arm64`; `npm run test:binary -w services/cli` passes offline help, validation, status, diff, bound local SQL, zero requests and the PTY round trip outside the checkout. Other platforms build on CI runners. |
-| Browser gates | `npm run test:gates -- --only=annotations,comment-targets,dataset-policies,export-slice,fork`: 5 of 5 passed. |
-| Pull request | minusxai/artifactbin #94, empty body, CI running at the time of writing. |
+| Browser gates | `npm run test:gates -- --only=dataflow,annotations,comment-targets,dataset-policies,export-slice,fork`: 6 of 6 passed. The dataflow gate had failed on the branch because it still shared with a bare address while the sharing door now requires explicit roles; the gate sends `{email, role}`. |
+| Pull request | minusxai/artifactbin #94, empty body. CI failed once on the stale dataflow gate and reruns on the fix. |
 | Agent familiarity | See the eval record below. |
+
+### Eval record (2026-09-11)
+
+Both legs ran the CI smoke set (`--ci`: cli, comment, data, edit, no-token) against a locally booted production build with the dev-outbox login, from this checkout, with the Fireworks key exported from the authorized env file and never printed.
+
+| Leg | Model id as invoked | cli | comment | data | edit | no-token |
+| --- | --- | --- | --- | --- | --- | --- |
+| pi | `fireworks/accounts/fireworks/models/deepseek-v4-flash-0731` (bare Fireworks ids are refused; pi needs the provider prefix) | pass, 17 turns, 23 tool calls | pass, 11 turns | pass, 14 turns | pass, 8 turns | unresolved: timed out after 15 minutes on both attempts (107 tool calls) |
+| OpenCode | `fireworks-ai/accounts/fireworks/models/glm-5p2` | pass, 10 tool calls | pass, 10 | pass, 15 | pass, 9 | see below |
+
+Mistakes and reruns: the first OpenCode and pi runs used the bare Fireworks ids from the earlier eval notes and failed before any tool call (pi: "Model not found"; OpenCode: "Unexpected server error", which its debug log shows is `ProviderModelNotFoundError`). OpenCode was rerun with `fireworks/` (still unknown to it) and then `fireworks-ai/`, its own provider name. A fresh OpenCode catalog does not list GLM-5p3-flash at all, only GLM-5p2, GLM-5p3 and routers, so GLM-5p2 was substituted and is recorded as such; the spec's named GLM-5p3-flash could not be run through OpenCode from a clean home.
+
+The no-token flow is unresolved for a reason outside the CLI's contract: the harness fronts the leg server with a per-task proxy on a random port and tells the agent that port is the server, while the OAuth device door advertises the configured public origin (`services/proxy/src/routes/oauth.ts` `baseUrlOf`, "the configured public origin wins"). The CLI correctly refuses a pairing whose approval page is on another origin, so the agent never received an approval URL to hand back. The refusal now names both origins with the code `approval_origin_mismatch` instead of `invalid_response`. Making the flow measurable needs the harness to set the leg's public origin to the per-task proxy or to point the agent at the origin the server advertises; that is recorded for workstream D's follow-up, not claimed done.
 
 ### What the seed changed
 

@@ -70,7 +70,11 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     if (!response.ok) throw new CliError('auth_failed',`Could not start browser authentication (HTTP ${response.status}).`);
     pending = {server, deviceCode:data.device_code,userCode:data.user_code,verificationUrl:data.verification_uri_complete,
       expiresAt:clock()+Math.min(300, data.expires_in)*1000,interval:Math.max(5,data.interval)*1000};
-    if (!validPending(pending,server)) throw new CliError('invalid_response','Authentication server returned invalid pairing details.');
+    if (!validPending(pending,server)) {
+      let advertised='';try{advertised=new URL(String(data.verification_uri_complete)).origin;}catch{/* malformed */}
+      if(advertised&&advertised!==server)throw new CliError('approval_origin_mismatch',`The selected server ${server} asks for approval at ${advertised}, a different origin.`,`Run the command with --server ${advertised} if that is the server you meant; credentials are never sent to an origin you did not select.`);
+      throw new CliError('invalid_response','Authentication server returned invalid pairing details.');
+    }
     await privateDirectory(join(home,'.artifactbin'));
     await atomicWrite(file,JSON.stringify(pending));
   }
