@@ -37,9 +37,9 @@ main() {
   release="https://github.com/minusxai/artifactbin/releases/download/afbin-v$version"
   echo "Downloading afbin $version ($platform/$arch)…"
   for file in "$asset" SHA256SUMS; do
-    curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --retry 2 \
-      --connect-timeout 10 --max-time 180 "$release/$file" -o "$download_dir/$file" || {
-      echo "Download failed. Check that release afbin-v$version includes $asset." >&2; return 1;
+    curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --retry 3 --continue-at - \
+      --connect-timeout 10 --speed-limit 4096 --speed-time 60 "$release/$file" -o "$download_dir/$file" || {
+      echo "Download of $file failed (network error, or release afbin-v$version does not include it)." >&2; return 1;
     }
   done
   expected=$(awk -v asset="$asset" '$2 == asset { print $1 }' "$download_dir/SHA256SUMS")

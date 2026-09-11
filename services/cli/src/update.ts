@@ -21,7 +21,7 @@ interface ReleasePointer {version:string;protocol:number}
 interface ReleaseManifest {version:string;protocol:number;platform:string;arch:string;binary:{file:string;sha256:string};skills:{file:string;sha256:string}}
 interface SkillBundle {version:string;protocol:number;files:Record<string,string>}
 interface PendingUpdate {schema:1;installation:Installation;manifest:ReleaseManifest;skills:string;selected:SkillHarness[];before?:string;mode?:number;backup?:string}
-interface UpdateOptions {home:string;server:string;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
+interface UpdateOptions {home:string;server:string;stallMs?:number;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
 export interface UpdatePreview {dry_run:true;server:string;release:ReleasePointer;binary:{installation:'standalone'|'unmanaged';path?:string;current:string;available:string;change:'update'|'current'|'unavailable';reason?:string;asset?:string};skills:SkillPlan[]}
 export interface UpdateResult {version:string;protocol:number;recovered:boolean;backup?:string;installations:SkillInstallation[];harnesses:SkillHarness[]}
 const semver=(value:unknown):value is string=>typeof value==='string'&&/^\d+\.\d+\.\d+$/.test(value);
@@ -39,14 +39,26 @@ function verifySkills(bytes:Buffer,manifest:ReleaseManifest):SkillBundle{
  if(bundle.version!==manifest.version||bundle.protocol!==manifest.protocol||!bundle.files||typeof bundle.files!=='object'||!bundle.files['SKILL.md']||Object.entries(bundle.files).some(([path,value])=>!safeSkillPath(path)||typeof value!=='string'))throw new CliError('invalid_release','Skill bundle does not match the release.');
  return bundle;
 }
-async function download(url:string,fetcher:typeof fetch,maxBytes:number):Promise<Buffer>{
- const response=await fetcher(url,{redirect:'follow',signal:AbortSignal.timeout(180000),headers:{Accept:'application/json','User-Agent':'afbin-update'}});
+/** Downloads abort when no bytes arrive for `stallMs`, never on total duration: a slow link may take as long as it needs. */
+export const DOWNLOAD_STALL_MS=60_000;
+async function download(url:string,fetcher:typeof fetch,maxBytes:number,stallMs=DOWNLOAD_STALL_MS):Promise<Buffer>{
+ const control=new AbortController();let watchdog=setTimeout(()=>control.abort(),stallMs);
+ const progressed=()=>{clearTimeout(watchdog);watchdog=setTimeout(()=>control.abort(),stallMs);};
+ try{return await downloadWith(url,fetcher,maxBytes,control.signal,progressed);}
+ catch(error){
+  if(control.signal.aborted)throw new CliError('release_unavailable',`Release download stalled for ${Math.round(stallMs/1000)} seconds.`,'Retry afbin update after checking connectivity.');
+  throw error;
+ }finally{clearTimeout(watchdog);}
+}
+async function downloadWith(url:string,fetcher:typeof fetch,maxBytes:number,signal:AbortSignal,progressed:()=>void):Promise<Buffer>{
+ const response=await fetcher(url,{redirect:'follow',signal,headers:{Accept:'application/json','User-Agent':'afbin-update'}});
  if(!response.ok)throw new CliError('release_unavailable',`Release download returned HTTP ${response.status}.`,'Retry afbin update after checking connectivity.');
  if(url.startsWith('https:')&&response.url&&new URL(response.url).protocol!=='https:')throw new CliError('invalid_release','Release download redirected outside HTTPS.');
  if(Number(response.headers.get('content-length'))>maxBytes)throw new CliError('invalid_release','Release download exceeds its size limit.');
  if(!response.body)throw new CliError('invalid_release','Release download is empty.');
  const reader=response.body.getReader(),chunks:Buffer[]=[];let length=0;
- try{for(;;){const {done,value}=await reader.read();if(done)break;length+=value.byteLength;if(length>maxBytes){await reader.cancel();throw new CliError('invalid_release','Release download exceeds its size limit.');}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
+ const aborted=new Promise<never>((_,reject)=>signal.addEventListener('abort',()=>{reject(new Error('aborted'));reader.cancel().catch(()=>{});},{once:true}));
+ try{for(;;){const {done,value}=await Promise.race([reader.read(),aborted]);if(done)break;progressed();length+=value.byteLength;if(length>maxBytes){await reader.cancel();throw new CliError('invalid_release','Release download exceeds its size limit.');}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
  return Buffer.concat(chunks);
 }
 /** Only the verified standalone executable is self-updating; nothing else is replaced in place. */
@@ -60,7 +72,7 @@ async function executableVersion(path:string,version:string,protocol:number):Pro
  if(value.version!==version||value.protocol!==protocol)throw new CliError('invalid_release','Downloaded executable version/protocol differs from its manifest.');
 }
 async function releasePointerOf(options:UpdateOptions,fetcher:typeof fetch):Promise<ReleasePointer>{
- const value=JSON.parse((await download(`${normalizeServer(options.server)}${releasePointer}`,fetcher,65536)).toString());
+ const value=JSON.parse((await download(`${normalizeServer(options.server)}${releasePointer}`,fetcher,65536,options.stallMs)).toString());
  verifyPointer(value);return {version:value.version,protocol:value.protocol};
 }
 /** Resolve the release and report what would change. Nothing is downloaded, locked or written. */
@@ -99,11 +111,11 @@ export async function updateCli(options:UpdateOptions){
   const release=await releasePointerOf(options,fetcher);
   if(compare(release.version,options.version??CLI_VERSION)<0)throw new CliError('compatible_release_unavailable','The selected server names an older release than the installed CLI.','Retry after a compatible CLI release is published.');
   const base=`${downloads}/afbin-v${release.version}`;
-  const manifest=JSON.parse((await download(`${base}/afbin-${platform}-${arch}.manifest.json`,fetcher,65536)).toString());verifyManifest(manifest,platform,arch);
+  const manifest=JSON.parse((await download(`${base}/afbin-${platform}-${arch}.manifest.json`,fetcher,65536,options.stallMs)).toString());verifyManifest(manifest,platform,arch);
   if(manifest.version!==release.version||manifest.protocol!==release.protocol)throw new CliError('compatible_release_unavailable','The published release does not match the protocol the selected server named.','Retry after a compatible CLI release is published.');
-  const skillBytes=await download(`${base}/${manifest.skills.file}`,fetcher,4194304);verifySkills(skillBytes,manifest);
+  const skillBytes=await download(`${base}/${manifest.skills.file}`,fetcher,4194304,options.stallMs);verifySkills(skillBytes,manifest);
   if(manifest.version!==(options.version??CLI_VERSION)){
-   bytes=await download(`${base}/${manifest.binary.file}`,fetcher,268435456);
+   bytes=await download(`${base}/${manifest.binary.file}`,fetcher,268435456,options.stallMs);
    if(digest(bytes)!==manifest.binary.sha256)throw new CliError('checksum_mismatch','Executable checksum mismatch; nothing was installed.');
   }
   pending={schema:1,installation,manifest,skills:skillBytes.toString(),selected:options.harnesses};
