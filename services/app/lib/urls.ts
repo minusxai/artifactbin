@@ -55,3 +55,7 @@ export function canonicalArtifactPath(
   const slug = titleSlug(doc.title);
   return `/@${ownerUsername}/${slug ? `${doc.id}-${slug}` : doc.id}`;
 }
+
+/** Edit is a route mode on the artifact's address. */
+export const artifactViewPath = (pathname: string): string => pathname.replace(/\/edit\/?$/, '');
+export const artifactEditPath = (id: string): string => `/a/${encodeURIComponent(id)}/edit`;

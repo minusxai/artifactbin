@@ -10,7 +10,7 @@ export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Rec
  if(!expected.expectedState)return json({error:'state_required',hint:'Read the artifact and send its state as expectedState.'},400);
  const allowed=new Set(['expectedState','expectedVersion','title','description','theme','template','colorMode','visibility','linkRole','parent_id','access']);
  if(Object.keys(body).some(key=>!allowed.has(key)))return json({error:'invalid_metadata',allowed:[...allowed]},400);
- const governs=['visibility','linkRole','parent_id','access'].some(key=>key in body);
+ const governs='parent_id' in body;
  if(governs&&!await getOwnedArtifactFor(actor,id))return json({error:'owner_only'},403);
  const patch:MetadataPatch={};
  for(const key of ['title','description','theme','template','colorMode'] as const){
@@ -22,7 +22,7 @@ export async function updateMetadataFromBody(actor:TokenActor,id:string,body:Rec
   Object.assign(patch,{[key]:value});
  }
  if(body.visibility===null||body.linkRole===null)return json({error:'invalid_metadata',hint:'visibility and linkRole cannot be null.'},400);
- const visibility=parseVisibilityValue(body.visibility,!!actor.userId);if(visibility instanceof Response)return visibility;if(visibility)patch.visibility=visibility;
+ const visibility=parseVisibilityValue(body.visibility,!!current.user_id);if(visibility instanceof Response)return visibility;if(visibility)patch.visibility=visibility;
  const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;if(link)patch.link_role=link;
  const access=parseAccessValue(body.access,current.format);if(access instanceof Response)return access;if(access)patch.access=access;
  const parent=parseParentField(body);if(parent instanceof Response)return parent;

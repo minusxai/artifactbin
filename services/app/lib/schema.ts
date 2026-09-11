@@ -93,6 +93,9 @@ const ARTIFACTS: Table = {
     // predates this column is already correct and there is nothing to backfill.
     // A NULL here is a fact about when the row was written, never a missing
     // value. `linkRoleOf` is the only reader.
+    { name: 'dataset_policy', type: 'JSONB' },
+    { name: 'policy_revision', type: 'INTEGER', notNull: true, default: '0' },
+    { name: 'generation_calls', type: 'INTEGER', notNull: true, default: '0' },
     { name: 'link_role', type: 'TEXT' },
     // The WRITE ACL, the sibling of `visibility` — datasets only: 'read' (the
     // default, every dataset that predates it) or 'readwrite' (documents the
@@ -541,7 +544,23 @@ const ARTIFACT_CREATION_OPERATIONS: Table = {
  * re-qualify (a rename's DO block names its own schema twice) is exactly what
  * that indirection could not survive.
  */
-export const TABLES: Table[] = [USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
+const DATASET_POLICY_AUDIT: Table = {
+  name: 'dataset_policy_audit',
+  columns: [
+    {name:'dataset_id',type:'TEXT',notNull:true},
+    {name:'revision',type:'INTEGER',notNull:true},
+    {name:'policy',type:'JSONB'},
+    {name:'actor_user_id',type:'TEXT'},
+    {name:'actor_token_id',type:'TEXT'},
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  ], primaryKey:['dataset_id','revision'],
+};
+const DATASET_USAGE: Table = {
+  name:'dataset_usage',
+  columns:[{name:'bucket',type:'TEXT',notNull:true},{name:'calls',type:'INTEGER',notNull:true,default:'0'}],
+  primaryKey:['bucket'],
+};
+export const TABLES: Table[] = [DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

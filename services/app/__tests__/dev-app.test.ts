@@ -13,7 +13,7 @@
  * spawns, and the shim sees exactly what the spawned server would see.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -152,11 +152,13 @@ describe('scripts/dev-app.mjs', () => {
    */
   const shimDir = mkdtempSync(path.join(os.tmpdir(), 'dev-app-shim-'));
   const shimOut = path.join(shimDir, 'spawned.json');
+  const manifest = path.join(APP_ROOT, 'public/story/manifest.json');
+  let manifestModified: number;
   let res: ReturnType<typeof spawnSync>;
   let spawned: { argv: string[]; cwd: string; env: Record<string, string | null> };
 
   beforeAll(() => {
-    writeFileSync(path.join(shimDir, 'npx'), `#!/usr/bin/env node
+    writeFileSync(path.join(shimDir, 'npx'), `#!${process.execPath}
 const fs = require('node:fs');
 const pick = ['SQL__SERVICE_URL', 'BROWSER__SERVICE_URL', 'APP__PORT', 'APP__HMR_PORT', 'NODE_ENV', 'PROXY__RATE_LIMIT_CONFIG_FILE'];
 fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
@@ -166,6 +168,11 @@ fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
 }, null, 2));
 `);
     chmodSync(path.join(shimDir, 'npx'), 0o755);
+    // Observe the runner's server invocation without rebuilding shared assets
+    // underneath other API workers. The suite's global setup owns that build.
+    writeFileSync(path.join(shimDir, 'node'), '#!/bin/sh\nexit 0\n');
+    chmodSync(path.join(shimDir, 'node'), 0o755);
+    manifestModified = statSync(manifest).mtimeMs;
     res = spawnSync(process.execPath, [DEV_APP], {
       cwd: ROOT,
       encoding: 'utf8',
@@ -186,6 +193,10 @@ fs.writeFileSync(${JSON.stringify(shimOut)}, JSON.stringify({
   }, 60_000);
 
   afterAll(() => { rmSync(shimDir, { recursive: true, force: true }); });
+
+  it('leaves the shared test runtime intact', () => {
+    expect(statSync(manifest).mtimeMs).toBe(manifestModified);
+  });
 
   it('spawns `tsx server.ts --app-only` with cwd services/app, the derived ports, and the service URLs unset', () => {
     expect(res.error).toBeUndefined();

@@ -1,5 +1,5 @@
 import {observedRequest} from '@/__tests__/conditional-request';
-/** P3 (seeded RED) — visibility and access are the OWNER's; an editor's PUT carrying either is refused whole. */
+/** Editors can manage sharing through the content replacement API too. */
 import { describe, expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
@@ -14,7 +14,7 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function person(name: string) { const t = await mintToken(name); const u = await createUser({ email: `${name}@example.com` }); await claimToken(u.id, t.token); return { token: t.token, email: `${name}@example.com` }; }
 
 describe('governance on the replace door', () => {
-  it('a named editor may replace the content but not the visibility or the access', async () => {
+  it('a named editor may replace content and change visibility', async () => {
     const owner = await person('owner');
     const editor = await person('editor');
     const r = await createRoute(request('/api/artifacts', { method: 'POST', json: { markup: '<p>v1</p>', visibility: 'private' }, token: owner.token }));
@@ -23,11 +23,10 @@ describe('governance on the replace door', () => {
     const ok = await putRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', json: { markup: '<p>v2</p>' }, token: editor.token }), params(id));
     expect(ok.status, await ok.clone().text()).toBe(200);
     const refused = await putRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', json: { markup: '<p>v3</p>', visibility: 'unlisted' }, token: editor.token }), params(id));
-    expect(refused.status).toBe(403);
-    expect(((await refused.json()) as { error: string }).error).toBe('owner_only');
+    expect(refused.status).toBe(200);
     const row = (await getArtifactById(id))!;
-    expect(row.visibility).toBe('private');
-    expect(row.source).toContain('v2');
+    expect(row.visibility).toBe('unlisted');
+    expect(row.source).toContain('v3');
     const mine = await putRoute(await observedRequest(`/api/artifacts/${id}`, { method: 'PUT', json: { markup: '<p>v4</p>', visibility: 'unlisted' }, token: owner.token }), params(id));
     expect(mine.status).toBe(200);
     expect((await getArtifactById(id))!.visibility).toBe('unlisted');

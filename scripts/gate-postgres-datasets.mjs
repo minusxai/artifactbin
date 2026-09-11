@@ -181,6 +181,7 @@ try {
   await owner.getByLabel('Expose schema sales', { exact: true }).uncheck();
   await owner.getByLabel('Expose schema support', { exact: true }).uncheck();
   await owner.getByLabel('Default schema', { exact: true }).selectOption('models');
+  await owner.getByRole('button', { name: 'Data preview', exact: true }).click();
   await owner.getByLabel('SQL view', { exact: true }).click();
   await owner.getByLabel('Dataset SQL', { exact: true }).fill('select * from models.region_totals');
   await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 200, { sql: 'select * from models.region_totals' });
@@ -189,6 +190,7 @@ try {
   const deniedDraft = await uiResponse(owner, '/api/my/datasets/preview', () => owner.getByLabel('Run dataset SQL', { exact: true }).click(), 'POST', 400, { sql: 'select * from sales.orders' });
   assert.ok(deniedDraft.error);
   assert.equal(await owner.getByLabel('Dataset SQL', { exact: true }).inputValue(), 'select * from sales.orders');
+  await owner.getByRole('button', { name: 'Source & models', exact: true }).click();
   await owner.getByLabel('Edit dataset source', { exact: true }).click();
   const source = await owner.getByLabel('Dataset source', { exact: true }).inputValue();
   assert.match(source, /<Dataset/); assert.match(source, /raw_orders/); secretFree(source);

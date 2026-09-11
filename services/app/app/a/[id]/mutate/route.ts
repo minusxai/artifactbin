@@ -15,7 +15,7 @@ const CORS = {
  * stored document. Dataset edit permission belongs to the requesting actor,
  * independently of the document's role. Check it on every write.
  * Cookie credentials require same-site requests; bearers do not carry CSRF.
- * Anonymous opaque documents can read data but cannot execute mutations.
+ * Anonymous visitors may execute explicitly delegated declared mutations.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -49,6 +49,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       case 'contended':
         // Not the caller's fault and not permanent: say so, and say when.
         return json({ error: 'dataset_busy', detail: result.detail }, 503, { ...CORS, 'Retry-After': '1' });
+      case 'policy_denied':
+        return json({error:'policy_denied',detail:result.detail},403,CORS);
       case 'invalid_sql':
         return json({ error: 'mutation_failed', detail: result.detail }, 400, CORS);
       default:

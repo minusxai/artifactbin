@@ -424,6 +424,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const readerMode = readerModeOverride ?? resolveStoryMode(shownTheme, shownColorMode);
   // Signal changes update this document's store and route, never its initial
   // seed. Only a new artifact identity receives a new runtime and URL seed.
+  const initialRuntimeVersion = useMemo(() => version, [id]);
   const initialRuntimeData = useMemo(() => props.runtime?.data ?? {
     nodes: storyUpdateParts(source ?? '')?.nodes ?? [], refData: {},
     dataflow: dataflow ? {...dataflow, values:{...dataflow.values,...readUrlValues(search,dataflow.flow)}} : undefined,
@@ -434,7 +435,23 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     runtimeRef.current?.send({ type: STORY_READER_MODE_MESSAGE, mode });
   }, []);
   useEffect(() => {
-    if (!live?.nodes || !runtimeRef.current) return;
+    if (editing || !runtimeRef.current) return;
+    // A route refresh can catch up with the stream before the lazy runtime
+    // mounts. Adopt that prepared document without remounting the reader's
+    // store, whose interactive values must survive document revisions.
+    if (!live?.nodes) {
+      if (version <= initialRuntimeVersion || !props.runtime) return;
+      const prepared = props.runtime;
+      runtimeRef.current.update({
+        type: STORY_DOCUMENT_MESSAGE, nodes: prepared.data.nodes,
+        refData: prepared.data.refData,
+        ...(prepared.data.dataflow ? {dataflow: {flow: prepared.data.dataflow.flow}} : {}),
+        compiledCss: prepared.compiledCss, authorCss: prepared.authorCss,
+        authorScript: prepared.authorScript, theme: prepared.theme,
+        ...(prepared.data.colorMode ? {colorMode: prepared.data.colorMode} : {}),
+      });
+      return;
+    }
     runtimeRef.current.update({
       type: STORY_DOCUMENT_MESSAGE, nodes: live.nodes,
       ...(live.dataflow ? {dataflow: live.dataflow} : {}),
@@ -442,7 +459,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       authorScript: live.authorScript, theme: live.theme,
       ...(live.colorMode ? { colorMode: live.colorMode } : {}),
     });
-  }, [live, sessionNonce]);
+  }, [live, sessionNonce, editing, version, initialRuntimeVersion, props.runtime]);
   useEffect(() => subscribeDocument({runtimeRef}, event => {
     if (!sessionNonce || !isValuesMessage(event.data, sessionNonce)) return;
     const flow = live?.dataflow?.flow ?? dataflow?.flow;
@@ -458,7 +475,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // history move only changes the fragment, so hashchange is the signal.
   useEffect(() => {
     const sync = () => {
-      if (window.location.hash === '#edit') { setEditing(true); return; }
+      if (route.pathname.endsWith('/edit') || window.location.hash === '#edit') { setEditing(true); return; }
       setInitialEditSelectionPath(null);
       // Leaving edit mode UNMOUNTS the editor, and its pending save is a timer
       // inside it — the unmount cancels the save. `done` drains before it calls
@@ -471,7 +488,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     sync();
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
-  }, [route.hash]);
+  }, [route.hash, route.pathname]);
 
   /*
    * Fetch the editor bundle while the reader is still reading, so pressing edit
@@ -592,7 +609,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       pushedEdit.current = false;
       history.back();
     } else {
-      void navigate(window.location.pathname + window.location.search, {replace:true, state:route.state});
+      void navigate(window.location.pathname.replace(/\/edit$/, '') + window.location.search, {replace:true, state:route.state});
       setEditing(false);
     }
   }, []);
@@ -665,7 +682,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * direct action in the reader bar (and the mobile action rail). */
   const documentControls = (close: () => void) => (
     <div className="space-y-4">
-      {(props.author?.forkedFrom || (canAnnotate && format === 'markup') || (canEdit && isDocumentFormat)) && <section aria-label="Document actions">
+      {(props.author?.forkedFrom || (canAnnotate && format === 'markup') || canEdit) && <section aria-label="Document actions">
         <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">Artifact</h2>
         {props.author?.forkedFrom && <p data-mx-forked-from className="px-2 py-2 font-mono text-xs text-muted">
           forked from {props.author.forkedFrom.href
@@ -702,10 +719,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               <Pencil size={14} strokeWidth={1.75} />
               edit artifact
             </button>
-            {!owner && shownSource !== null && format === 'markup' && (
-              <ShareLink artifactId={id} title={shownTitle} format={format} variant="menu" className="" onSocialPreview={() => { close(); setSocialPreviewOpen(true); }} />
-            )}
+
           </>
+        )}
+        {canEdit && !owner && (
+          <ShareLink artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
         {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the
             document because the document is sandboxed at an opaque origin and

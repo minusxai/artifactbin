@@ -1,6 +1,7 @@
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
+import { parseGenerationModels, parsePublicGenerationPools } from './generation/configuration';
 
 /**
  * The ONLY file that reads process.env (minusx convention — keeps runtime
@@ -35,6 +36,14 @@ export function env(module: string, name: string): string | undefined {
   asked.add(key);
   return process.env[key];
 }
+
+/** Operator-owned model destinations and credentials, never document data. */
+export const GENERATION_MODELS = parseGenerationModels(env('GENERATION', 'MODELS'), (name) => {
+  const separator = name.indexOf('__');
+  return env(name.slice(0, separator), name.slice(separator + 2));
+});
+
+export const GENERATION_PUBLIC_POOLS = parsePublicGenerationPools(env('GENERATION', 'PUBLIC_POOLS'));
 
 /**
  * The flat names this project used to accept, and what replaced them. Kept as

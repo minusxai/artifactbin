@@ -76,11 +76,11 @@ The default schema is fixed after creation. A bare `events` resolves only there;
 
 `source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
 
-Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. The dataset must be writable and the viewer must have edit permission. Postgres writes are unavailable.
+Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Writable datasets use one data policy for everyone with view access (Hasura role `viewer`); sharing sets the audience. Editors and owners configure rules with `set_dataset_policy` and read them with `get_dataset_policy`. No policy means editor-only writes. Postgres writes are unavailable.
 
 ## Preview and freshness
 
-At `/datasets/new`: Connection → Data models notebook → Whitelist → Table view / Run SQL. Edit at `/datasets/<id>/edit`. Run cells to inspect output columns before exposing them; changing a cell invalidates affected downstream output previews. The final SQL editor runs only when you choose Run SQL. Saved datasets offer exposed schema/table selection, paginated rows and Refresh; draft previews are limited to 50 rows without pagination.
+Create at `/datasets/new`; edit at `/a/<id>/edit` or a pretty artifact address plus `/edit`. Tabs separate Data actions, Data preview, and Source & models. Run notebook cells before exposing outputs; edits invalidate downstream previews. Run SQL executes only on request. Saved data supports pagination and refresh; draft previews show up to 50 rows.
 
 `POST /a/<id>/tables` takes `{sql,limit?,offset?,refresh?}` and returns `{rows,columns,truncated?,refreshedAt}` after dataset read authorization, and queries only final-whitelist tables and columns. It cannot query hidden notebook helpers or unexposed raw sources. `refresh:true` bypasses cached results. `refreshSeconds:0` disables caching; otherwise it is the cache lifetime. External database writes do not emit Artifactbin live events: use Refresh or rerun the document query. Database edits never create dataset definition versions.
 

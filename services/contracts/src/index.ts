@@ -2,6 +2,7 @@ export type { Part, Upstream } from './part';
 export { ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ACTOR_TTL_SECONDS, ANONYMOUS, CREDENTIALS, type Actor, type Credential } from './actor';
 export type { Queryable } from './db';
 export * from './sql';
+export * from './generation';
 export * from './browser';
 export * from './events';
 export * from './relations';
@@ -12,5 +13,6 @@ export * from './routes';
 export * from './artifact-reference';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';
 export type { Column, Index, Table } from './schema';
+export * from './dataset-policy';
 
 export * from './cli-auth';

@@ -29,7 +29,6 @@ export function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/datasets/new" element={<DatasetEditorPage />} />
-          <Route path="/datasets/:id/edit" element={<DatasetEditorPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
           <Route path="/tokens/new" element={<TokensNewPage />} />
           <Route path="/trash" element={<TrashPage />} />
@@ -38,6 +37,7 @@ export function App() {
           <Route path="/docs-human" element={<DocsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
+        <Route path="/a/:id/edit" element={<ProfilePage />} />
         <Route path="/a/:id" element={<ProfilePage />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>

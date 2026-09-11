@@ -15,3 +15,6 @@ export { sqlClient, browserClient, eventsClient, queryBounds, type QueryCaps, ty
 export { serviceSecretForServer } from './service-auth';
 export { envelope, type EventSubject, type EventObject } from './events';
 export { parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from './assets-origin';
+
+export { generationOptions, generationCallConfig } from './generation-options';
+export * from './dataset-policy';

@@ -1,22 +1,8 @@
-/**
- * The ACL surface for one artifact — owner-only, and BROWSER-only (a bearer
- * agent sets visibility and access on create/PUT instead): sharing is a human
- * act. GET reads it; PUT updates the read ACL (visibility, the invited-email
- * list — full-replace, the dialog always sends the whole list) and, for a
- * dataset, the WRITE ACL (`access`).
- *
- * Either browser credential authorizes, through the OWNER scope (an editor
- * — artifact_shares.role — reaches the document but never its ACL), the same
- * `*For` family as every other /api/my route: an account session, or the agent-session
- * cookie naming an anonymous token. That widening is what `access` needs — a
- * write anchors on the creating token, not on an account, so an anonymous
- * owner must be able to open their own dataset for writes. `private` still
- * needs an account to anchor an ACL, and asking for it without one is the same
- * 400 the create door gives, never a silent downgrade.
- *
- * Uniform 404 for unknown/foreign ids, same as every other /api/my read.
+/** Browser sharing uses edit access for named grants, link access and dataset writes.
+ * Ownership is independent of the share list. Deletion/restoration retain their
+ * owner-only routes. The domain transaction rechecks authorization under a lock.
  */
-import { getOwnedArtifactFor, getSharingFor, updateSharingFor, type SharingPatch } from '@/lib/artifacts';
+import { getArtifactFor, getSharingFor, updateSharingFor, type SharingPatch } from '@/lib/artifacts';
 import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue } from '@/lib/artifact-wire';
 import { browserActor } from '@/lib/auth';
 import { json, readJson, unauthorized } from '@/lib/http';
@@ -53,11 +39,11 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   // `access` on a document and answered 200 for a write the SQL then dropped,
   // where the others answer 400 — and the two preview refusals read
   // differently for one error code.
-  const current = await getOwnedArtifactFor(scoped, id);
+  const current = await getArtifactFor(scoped, id);
   if (!current) return json({ error: 'not_found' }, 404);
 
   const patch: SharingPatch = {};
-  const visibility = parseVisibilityValue(body.visibility, !!scoped.userId);
+  const visibility = parseVisibilityValue(body.visibility, !!current.user_id);
   if (visibility instanceof Response) return visibility;
   if (visibility) patch.visibility = visibility;
 

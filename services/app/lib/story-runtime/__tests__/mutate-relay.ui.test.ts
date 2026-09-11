@@ -37,10 +37,21 @@ function wire() {
 
 const setup = () => {
   const w = wire();
-  return { ...w, transport: createRelayTransport(w.target, ORIGIN, w.source, 50) };
+  return { ...w, transport: createRelayTransport(w.target, ORIGIN, w.source, 50, 50) };
 };
 
 describe('relay transport — mutate', () => {
+  it('allows a model-backed mutation to outlast the ordinary query deadline',async()=>{
+    vi.useFakeTimers();
+    try{
+      const w=wire();const transport=createRelayTransport(w.target,ORIGIN,w.source);
+      let settled=false;
+      const done=transport.mutate!({},'step').then(()=>{settled=true;},()=>{settled=true;});
+      await vi.advanceTimersByTimeAsync(21_000);expect(settled).toBe(false);
+      w.answer({type:STORY_MUTATE_RESULT_MESSAGE,id:w.posted[0].message.id,ok:true,dataset:'abc123'});
+      await done;expect(settled).toBe(true);
+    }finally{vi.useRealTimers();}
+  });
   it('carries local table snapshots on query runs', async () => {
     const { transport, posted, answer } = setup();
     const done = transport.run({}, ['total'], { cart: [{ id: 1 }] });

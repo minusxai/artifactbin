@@ -1,3 +1,5 @@
+import {generationAuthorization,throttlePublicMutation} from '@/lib/datasets/policy/usage';
+import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
 import {catalogOf} from '@/lib/datasets/catalog';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
@@ -36,6 +38,9 @@ import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
 import type { Scalar } from './dataflow';
 import { newEditId } from './splice';
+import {createGenerationInvocation} from '@/lib/generation/executor';
+import {services} from '@/lib/services';
+import type {MutationOutcome,DatasetMutationPolicy} from '@artifactbin/contracts';
 
 /** How long after the last archived version a write reuses that snapshot (matches the edit protocol). */
 const WRITE_SNAPSHOT_WINDOW_MS = 120_000;
@@ -58,7 +63,7 @@ export interface MutationRefused {
    * the honest answer is "try again". (Unreachable on PGLite, which serializes
    * every operation; reachable on Postgres.)
    */
-  reason: 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only';
+  reason: 'policy_denied' | 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only';
   detail: string;
 }
 
@@ -85,11 +90,17 @@ export async function mutateDataset(
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected'> = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean;document?:MutationDocument} = {},
 ): Promise<MutationApplied | MutationRefused> {
   const db = await getDb();
   const table = 'dataset_rows';
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
+  // One result cache per invocation, outside the CAS loop: replaying storage
+  // must not generate a different answer or charge for the same prompt again.
+  const generation=createGenerationInvocation(services().generation,{beforeCall:generationAuthorization(dataset,actor,guard.document)});
+  if(guard.document && await canUseDataPolicy(dataset,actor) && await canWriteDataset(dataset,actor)){
+    try{await throttlePublicMutation(dataset.id);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Public mutation limit reached'};}
+  }
 
   for (let attempt = 0; ; attempt++) {
     // Re-read on every attempt: attempt 0 uses the row we were handed, and a
@@ -100,8 +111,9 @@ export async function mutateDataset(
     // Deleted under us — the write has nothing to apply to. Reported as a
     // refusal rather than thrown: the caller answers the uniform 404 anyway.
     if (!current) return { reason: 'invalid_sql', detail: 'the dataset no longer exists' };
-    if (await canWriteDataset(current, actor)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
+    if ((current.policy_revision??0)!==(dataset.policy_revision??0) || await canWriteDataset(current, actor,!!guard.document)) return {reason:'dataset_read_only',detail:'You no longer have edit access to a writable dataset.'};
 
+    if(guard.document){try{await recheckMutation(current,actor,guard.document);}catch(error){return {reason:'dataset_read_only',detail:error instanceof Error?error.message:'Mutation access changed'};}}
     const catalog=catalogOf(current);
     let selected:import('@/lib/datasets/types').DatasetTable|undefined;
     let executedSql=sql;
@@ -111,7 +123,13 @@ export async function mutateDataset(
     }
     const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
     const rows = await loadDatasetRows(selected?{content:'',meta:{objectKey:selected.objectKey}}:current);
-    const out = await runMutation({ table: { name: table, rows, columns }, sql:executedSql, params, ...guard, limit: datasetRowCap() });
+    const {source:_,document:__,...mutationGuard}=guard;
+    let out:MutationOutcome;
+    let policy:DatasetMutationPolicy|undefined;
+    try{
+      policy=await mutationPolicy(current,actor,selected??{schema:'public',name:'rows'},!!guard.document);
+      out = await generation.run({ policy, table: { name: table, rows, columns }, sql:executedSql, params, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
+    }catch(error){return {reason:current.dataset_policy?'policy_denied':'invalid_sql',detail:error instanceof Error?error.message:'Model generation failed'};}
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
     }
@@ -146,7 +164,27 @@ export async function mutateDataset(
       `WITH updated AS (
          UPDATE artifacts
             SET content = '', meta = $3::jsonb, version = version + 1, edit_id = $4, updated_at = now(), actor_user_id = $13, actor_token_id = $14
-          WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${scope.where('$15')}
+          WHERE id = $1 AND edit_id = $2 AND access = 'readwrite' AND ${LIVE_ARTIFACT_SQL}
+            AND policy_revision=$16 AND (
+              ($20::text IS NULL AND (${scope.where('$15')})) OR
+              ($20='viewer' AND (${policyReaderSql()}) AND ($19::boolean OR (${scope.where('$15')})))
+            )
+            AND ($17::text IS NULL OR EXISTS (
+              SELECT 1 FROM artifacts d WHERE d.id=$17 AND d.edit_id=$18 AND d.deleted_at IS NULL
+              AND (
+                (d.user_id IS NULL AND artifacts.token_id=d.token_id) OR
+                (d.user_id IS NOT NULL AND (artifacts.user_id=d.user_id OR
+                  (artifacts.visibility<>'private' AND artifacts.link_role='editor') OR EXISTS (
+                    SELECT 1 FROM artifact_shares writer_share WHERE writer_share.artifact_id=artifacts.id
+                    AND writer_share.role='editor' AND (writer_share.user_id=d.user_id OR
+                      (writer_share.user_id IS NULL AND writer_share.email=(SELECT email FROM users WHERE id=d.user_id)))
+                  )))
+              )
+              AND (d.visibility <> 'private' OR d.user_id=$13 OR d.token_id=$14 OR EXISTS (
+                SELECT 1 FROM artifact_shares s WHERE s.artifact_id=d.id AND
+                (s.user_id=$13 OR (s.user_id IS NULL AND s.email=(SELECT email FROM users WHERE id=$13)))
+              ))
+            ))
           RETURNING *
        ), archived AS (
          INSERT INTO artifact_versions (artifact_id, version, title, description, format, content, source, meta)
@@ -163,7 +201,7 @@ export async function mutateDataset(
         dataset.id, current.edit_id, JSON.stringify(meta), newEditId(),
         current.version, current.title, current.description, current.format, current.content, current.source,
         JSON.stringify(current.meta), WRITE_SNAPSHOT_WINDOW_MS,
-        actor.userId, actor.tokenId, scope.val,
+        actor.userId, actor.tokenId, scope.val, current.policy_revision??0,guard.document?.id??null,guard.document?.editId??null,!!guard.document&&!!policy,policy?.role??null,
       ],
     );
 

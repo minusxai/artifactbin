@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { render } from '@/test/helpers/surface-ui';
+import { storyUpdateParts } from '@/lib/story/update-parts';
 import { router, resetRouter } from '@/test/setup/router';
 import { useLayoutEffect } from 'react';
 import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
@@ -136,7 +137,8 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Copy agent instructions')).toBeInTheDocument();
   });
 
-  it('offers social-preview framing inside sharing to markup owners and editors, but not commenters or viewers', () => {
+  it('offers social-preview framing inside sharing to markup owners and editors, but not commenters or viewers', async () => {
+    vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({visibility:'private',linkRole:'viewer',shares:[]}))));
     for (const role of ['owner', 'editor'] as const) {
       render(<ArtifactShell role={role}><ArtifactSurface {...surfaceProps({ source: '<p>hi</p>' })} /></ArtifactShell>);
       openDocumentControls();
@@ -144,8 +146,8 @@ describe('the surface header buttons are owner chrome', () => {
       fireEvent.click(within(screen.getByLabelText(role === 'owner' ? 'Owner actions' : 'Document actions')).getByLabelText('Share'));
       expect(screen.getByRole('dialog', { name: 'Sharing' }), role).toContainElement(screen.getByLabelText('Edit social preview'));
       if (role === 'editor') {
-        expect(screen.queryByLabelText('Make public')).not.toBeInTheDocument();
-        expect(screen.queryByLabelText('Invite email')).not.toBeInTheDocument();
+        expect(await screen.findByLabelText('Make public')).toBeInTheDocument();
+        expect(screen.getByLabelText('Invite email')).toBeInTheDocument();
       }
       cleanup();
     }
@@ -634,4 +636,22 @@ describe('the fork row', () => {
         .toBe(`/login?callbackUrl=${encodeURIComponent('/a/story1?$region=west&intent=fork')}`);
     }, '?$region=west');
   });
+});
+
+it('dataset editors can open sharing controls', async () => {
+  vi.stubGlobal('fetch',vi.fn(async()=>new Response(JSON.stringify({visibility:'private',linkRole:'viewer',shares:[],access:'readwrite'}))));
+  render(<ArtifactShell role="editor"><ArtifactSurface {...surfaceProps({format:'dataset'})} /></ArtifactShell>);
+  openDocumentControls();
+  fireEvent.click(within(screen.getByLabelText('Document actions')).getByLabelText('Share'));
+  expect(await screen.findByLabelText('Invite email')).toBeInTheDocument();
+});
+
+it('updates the retained runtime when refreshed server props advance the document', async () => {
+  const initial=surfaceProps({source:'<p>old</p>',version:1});
+  const view=render(<ArtifactShell role="owner"><ArtifactSurface {...initial} /></ArtifactShell>);
+  const nodes=storyUpdateParts('<p>new document</p>')!.nodes;
+  const runtime={title:'Updated document',data:{nodes,refData:{},colorMode:'light' as const},baseCss:'',compiledCss:null,authorCss:null,authorScript:null,theme:null};
+  view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...initial} source="<p>new document</p>" version={2} editId="edit_2" runtime={runtime} /></ArtifactShell>);
+  await waitFor(()=>expect(runtimes.at(-1)!.update).toHaveBeenCalledWith(expect.objectContaining({nodes})));
+  expect(runtimes).toHaveLength(1);
 });

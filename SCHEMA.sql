@@ -32,6 +32,38 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.dataset_policy_audit (
+  dataset_id TEXT NOT NULL,
+  revision INTEGER NOT NULL,
+  policy JSONB,
+  actor_user_id TEXT,
+  actor_token_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (dataset_id, revision)
+);
+
+ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS dataset_id TEXT NOT NULL;
+
+ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL;
+
+ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS policy JSONB;
+
+ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS actor_user_id TEXT;
+
+ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
+
+ALTER TABLE app.dataset_policy_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE TABLE IF NOT EXISTS app.dataset_usage (
+  bucket TEXT NOT NULL,
+  calls INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bucket)
+);
+
+ALTER TABLE app.dataset_usage ADD COLUMN IF NOT EXISTS bucket TEXT NOT NULL;
+
+ALTER TABLE app.dataset_usage ADD COLUMN IF NOT EXISTS calls INTEGER NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS app.users (
   id TEXT NOT NULL,
   email TEXT NOT NULL,
@@ -115,6 +147,9 @@ CREATE TABLE IF NOT EXISTS app.artifacts (
   token_id TEXT NOT NULL,
   user_id TEXT,
   visibility TEXT NOT NULL DEFAULT 'public',
+  dataset_policy JSONB,
+  policy_revision INTEGER NOT NULL DEFAULT 0,
+  generation_calls INTEGER NOT NULL DEFAULT 0,
   link_role TEXT,
   access TEXT NOT NULL DEFAULT 'read',
   ancestor_ids TEXT[] NOT NULL DEFAULT '{}',
@@ -142,6 +177,12 @@ ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS user_id TEXT;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'public';
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS dataset_policy JSONB;
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS policy_revision INTEGER NOT NULL DEFAULT 0;
+
+ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS generation_calls INTEGER NOT NULL DEFAULT 0;
 
 ALTER TABLE app.artifacts ADD COLUMN IF NOT EXISTS link_role TEXT;
 

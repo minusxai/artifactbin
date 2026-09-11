@@ -16,6 +16,7 @@
  * address explicitly. The ACL
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
+import { artifactEditPath } from '@/lib/urls';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';
@@ -55,6 +56,7 @@ export default function ShareLink({
   artifactId,
   title,
   owner = false,
+  editable = false,
   format,
   datasetKind,
   variant = 'chip',
@@ -67,8 +69,10 @@ export default function ShareLink({
   artifactId?: string;
   /** The displayed name of the artifact being shared. */
   title?: string | null;
-  /** This viewer OWNS the artifact — only an owner manages its ACL; editors may still configure the social preview. */
+  /** This viewer OWNS the artifact — owners and editors manage its ACL. */
   owner?: boolean;
+  /** Editors and owners may manage sharing. */
+  editable?: boolean;
   /** The artifact's format — the writes row exists for a dataset and nothing else. */
   format?: string;
   /** Known before sharing loads; the API also supplies this for shelf callers. */
@@ -97,7 +101,7 @@ export default function ShareLink({
     return () => clearTimeout(t);
   }, [copied]);
 
-  const canManage = owner && !!artifactId;
+  const canManage = (owner || editable) && !!artifactId;
 
   // Loaded on MOUNT, not on open: the button itself carries the verdict
   // ("share: public"), so it must know the answer before any click.
@@ -297,7 +301,7 @@ export default function ShareLink({
                   </div>
                   <p className="mt-2 leading-relaxed text-muted">
                     {writable
-                      ? 'Any document you publish with a <Mutation> on this dataset can add, change and remove rows — for everyone who can read that document. Every write is a version you can revert.'
+                      ? 'Sharing controls who can view and manage this dataset. Data rules below control which actions everyone with view access may run. Without a data policy, only dataset editors may write rows.'
                       : 'Documents can only read this dataset. A <Mutation> naming it is refused when you publish.'}
                   </p>
                   {writers.length > 0 && (
@@ -397,6 +401,7 @@ export default function ShareLink({
                     </button>
                   </form>
               </div>
+              {format === 'dataset' && !postgres && artifactId && <a aria-label="Manage access policies" onClick={() => { setOpen(false); onClose?.(); }} href={artifactEditPath(artifactId)} className="mt-4 block rounded-lg border border-edge px-3 py-2 text-sm text-muted hover:border-accent hover:text-fg">Manage data actions ↗</a>}
             </>
           )}
         </SharePanel>

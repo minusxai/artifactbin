@@ -14,6 +14,8 @@ import type { AccountWorkspace } from '@/lib/workspace';
 import { ShellFrame } from '@/web/Shell';
 import { PageLoading } from '@/web/PageLoading';
 import { FolderPage } from './Folder';
+import { routePages } from '../route-pages';
+import { canEdit } from '@/lib/share-roles';
 import { NotFoundPage } from './NotFound';
 
 /**
@@ -45,21 +47,27 @@ export function ArtifactPage({ id: given }: { id?: string } = {}) {
 function ArtifactDocument({ id }: { id: string }) {
   const location = useLocation();
   const { search } = location;
+  const editingRoute = location.pathname.endsWith('/edit');
   const navigate = useNavigate();
   // The server may have inlined this page's data (server/app): render from it at once.
   const initialSearch = useRef(search).current;
   const url = `/api/page/artifact/${id}${initialSearch}`;
-  const { data: transport, error, refresh } = usePageData<TransportPage>(url, { refreshMounted: false, pauseRevalidation: location.hash === '#edit', seed: () => takeBootstrap<TransportPage>(window.location.pathname, 'artifact') });
+  const { data: transport, error, refresh } = usePageData<TransportPage>(url, { refreshMounted: false, pauseRevalidation: editingRoute || location.hash === '#edit', seed: () => takeBootstrap<TransportPage>(window.location.pathname, 'artifact') });
   // Decode once at consumption, regardless of whether JSON came from SSR,
   // a cached navigation, or a network read. The cache keeps the compact shape.
   const page = useMemo(() => transport ? decodePage(transport) : null, [transport]);
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
-    if (page && !page.surface?.captureKey && page.canonical !== location.pathname) {
-      void navigate(page.canonical + search + location.hash, { replace: true, state: location.state });
+    if (page && !page.surface?.captureKey && page.canonical + (editingRoute ? '/edit' : '') !== location.pathname) {
+      void navigate(page.canonical + (editingRoute ? '/edit' : '') + search + location.hash, { replace: true, state: location.state });
     }
-  }, [page, search, location.pathname, location.hash, location.state, navigate]);
+  }, [page, editingRoute, search, location.pathname, location.hash, location.state, navigate]);
   if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
+  if (editingRoute && !canEdit(page.role)) return <NotFoundPage />;
+  if (editingRoute && page.surface?.format === 'dataset') {
+    const { DatasetEditorPage } = routePages;
+    return <DatasetEditorPage artifactId={id} onSaved={() => refresh(true)} />;
+  }
   // A folder is a listing, not a document: no ArtifactShell and no surface
   // (there is no inline story runtime). Every folder gets the normal PAGE frame;
   // account-wide dashboard data is still supplied only to its owner.

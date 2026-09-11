@@ -29,3 +29,9 @@ describe('author state delivery contract',()=>{
     expect(authorStateDelta(base,{...base,values:{...base.values,view:'dag'}},{values:['open'],tables:[]})).toBeNull();
   });
 });
+it('sends per-mutation capability changes and removals without account identity',()=>{
+ const base={values:{},tables:{},errors:{},mutationAccess:{save:null}};
+ expect(authorStateDelta(null,base)).toMatchObject({mutationAccess:{save:null}});
+ expect(authorStateDelta(base,{...base,mutationAccess:{save:'Permission revoked'}})).toEqual({mutationAccess:{save:'Permission revoked'}});
+ expect(authorStateDelta(base,{...base,mutationAccess:{}})).toEqual({mutationAccess:{save:undefined}});
+});

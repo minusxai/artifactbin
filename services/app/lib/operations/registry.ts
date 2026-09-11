@@ -1,3 +1,4 @@
+import {readDatasetPolicy,writeDatasetPolicy} from '@/lib/datasets/policy/http';
 import {updateMetadataFromBody} from '@/lib/metadata-wire';
 import {decodePage, encodeCursor} from '@/lib/pagination';
 import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
@@ -121,10 +122,10 @@ const FOLDER_RETIRED: OperationError = { status: 400, code: 'folder_retired', fi
  * GOVERNANCE IS THE OWNER'S. The replace door runs under `editorScope`, so a
  * named editor reaches it — and `visibility`/`access` decide who else may read
  * the document and write its rows, which is not what they were invited to do.
- * Every other governance surface is owner-scoped and answers them the uniform
+ * Folder placement is owner-scoped and answers them the uniform
  * 404 instead, which is why this code exists on exactly one door.
  */
-const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "visibility and access belong to the artifact's owner — you hold an editor share on it, so send the update without them" };
+const OWNER_ONLY: OperationError = { status: 403, code: 'owner_only', fix: "folder placement requires ownership; editors may change sharing and dataset data policies" };
 
 const NOT_FORKABLE: OperationError = { status: 400, code: 'not_forkable', fix: "a folder cannot be forked — create your own with {\"format\":\"folder\"} and file documents under it with parent_id. A Postgres dataset must have a usable connection" };
 
@@ -411,6 +412,23 @@ const restoreArtifactOp: Operation = {
   },
 };
 
+const getDatasetPolicyOp: Operation = {
+  name:'get_dataset_policy', title:'Read dataset access policies',
+  http:{method:'GET',path:'/api/artifacts/{id}/policy'},
+  description:'Inspect a dataset you own or can edit: Hasura-style write permissions for everyone with dataset access, current policy revision, table columns and dependent actions. Policies constrain writes; they do not filter reads.',
+  input:{id:z.string()}, annotations:{readOnly:true},example:{input:{id:'aB3xK9'}},errors:[NOT_FOUND],
+  async run(ctx,input){return fromResponse(await readDatasetPolicy(ctx.actor,String(input.id)));},
+};
+const setDatasetPolicyOp: Operation = {
+  name:'set_dataset_policy',title:'Set dataset access policies',
+  http:{method:'PUT',path:'/api/artifacts/{id}/policy'},
+  description:'Editors and owners: replace version 1 dataset write policy with revision compare-and-swap. Use Hasura insert_permissions/update_permissions/delete_permissions entries with role, permission, columns, filter, check and set. Use role viewer for everyone with dataset view access, including commenters, editors and owners. Sharing controls the audience; there is no separate mutation grant. Unsupported fields fail explicitly. Set policy to null to restore legacy editor-only writes.',
+  input:{id:z.string(),policy:z.record(z.string(),z.unknown()).nullable(),expectedPolicyRevision:z.number().int().min(0)},
+  annotations:{},example:{input:{id:'aB3xK9',expectedPolicyRevision:0,policy:{version:1,enforcement:'enabled',tables:[]}}},
+  errors:[NOT_FOUND,{status:400,code:'invalid_policy',fix:'correct the field identified in detail'},{status:409,code:'policy_changed',fix:'read the current policy and revision before saving'}],
+  async run(ctx,input){return fromResponse(await writeDatasetPolicy(ctx.actor,String(input.id),input));},
+};
+
 const mutateDatasetOp: Operation = {
   name: 'mutate_dataset',
   title: 'Write rows into a dataset',
@@ -595,6 +613,6 @@ const refreshAssetOp: Operation = {
 export const OPERATIONS: Operation[] = [
   ...DATASET_OPERATIONS,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
-  listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, mutateDatasetOp,
+  listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,
 ];

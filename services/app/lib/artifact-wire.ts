@@ -383,29 +383,8 @@ export async function replaceArtifactWithBody(
   // they could never own. Unreachable is the uniform 404, before any parse.
   const current = await getArtifactFor(actor, id);
   if (!current) return json({ error: 'not_found' }, 404);
-  /*
-   * GOVERNANCE IS THE OWNER'S, AND THIS IS THE ONLY DOOR THAT HAS TO SAY SO.
-   *
-   * `visibility` and `access` sit on `canGovern`'s list beside sharing and
-   * placement — they decide who may READ the document and who may write its
-   * rows — and every other way to set them is owner-scoped, so a named editor
-   * meets the uniform 404 long before the value is read. This door runs under
-   * `editorScope`, which is the whole point of it: an editor may rewrite the
-   * document. They were not invited to change who else can see it.
-   *
-   * Asked by KEY PRESENCE, not by the parsed value: "carrying either" is the
-   * contract, and an editor re-sending the visibility the row already has is
-   * still asking for a decision that is not theirs — answering 200 to it would
-   * mean the refusal depends on what the owner happened to have set.
-   *
-   * Refused HERE, above `parseContentInput`, because that parse FETCHES: a
-   * refused write must not import the caller's images, and must not leave the
-   * markup half-applied under a 403 nobody can interpret. One ownership read,
-   * shared with the placement check below, and only when something asked for it.
-   */
-  const governs = 'visibility' in body || 'access' in body || 'linkRole' in body;
-  const owned = governs || body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
-  if (governs && !owned) return json({ error: 'owner_only' }, 403);
+  // Sharing settings use edit access; filing under an owner's folder still checks placement.
+  const owned = body.parent_id !== undefined ? await getOwnedArtifactFor(actor, id) : null;
   const owner = writerFor(current);
   const sentMarkup = body.markup;
   const annotationOps=body.annotation_ops===undefined?[]:parseAnnotationOperations(body.annotation_ops);
@@ -808,7 +787,7 @@ export async function respondToMutate(
 
   const result = await mutateDataset(dataset, actor, body.sql, values);
   if (isMutationRefused(result)) {
-    if (result.reason === 'dataset_read_only') return json({error:result.reason,details:[result.detail]},403);
+    if (result.reason === 'dataset_read_only' || result.reason === 'policy_denied') return json({error:result.reason,details:[result.detail]},403);
     if (result.reason === 'dataset_full') return json({ error: 'dataset_full', details: [result.detail] }, 409);
     // Contention is retryable, not an author error — never a 400.
     if (result.reason === 'contended') return json({ error: 'dataset_busy', details: [result.detail] }, 503, { 'Retry-After': '1' });
