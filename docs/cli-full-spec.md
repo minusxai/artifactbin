@@ -51,7 +51,7 @@ This file is the handoff; no conversation history or extra planning document is 
 | Production build | `npm run build` passes. |
 | Native binary | `npm run build:binary -w services/cli` builds `afbin-darwin-arm64`; `npm run test:binary -w services/cli` passes offline help, validation, status, diff, bound local SQL, zero requests and the PTY round trip outside the checkout. Other platforms build on CI runners. |
 | Browser gates | `npm run test:gates -- --only=dataflow,annotations,comment-targets,dataset-policies,export-slice,fork`: 6 of 6 passed. The dataflow gate had failed on the branch because it still shared with a bare address while the sharing door now requires explicit roles; the gate sends `{email, role}`. |
-| Pull request | minusxai/artifactbin #94, empty body. CI failed once on the stale dataflow gate and reruns on the fix. |
+| Pull request | minusxai/artifactbin #94, empty body. CI failed once on the stale dataflow gate; after the fix all 27 checks pass. |
 | Agent familiarity | See the eval record below. |
 
 ### Eval record (2026-09-11)
@@ -61,7 +61,7 @@ Both legs ran the CI smoke set (`--ci`: cli, comment, data, edit, no-token) agai
 | Leg | Model id as invoked | cli | comment | data | edit | no-token |
 | --- | --- | --- | --- | --- | --- | --- |
 | pi | `fireworks/accounts/fireworks/models/deepseek-v4-flash-0731` (bare Fireworks ids are refused; pi needs the provider prefix) | pass, 17 turns, 23 tool calls | pass, 11 turns | pass, 14 turns | pass, 8 turns | unresolved: timed out after 15 minutes on both attempts (107 tool calls) |
-| OpenCode | `fireworks-ai/accounts/fireworks/models/glm-5p2` | pass, 10 tool calls | pass, 10 | pass, 15 | pass, 9 | see below |
+| OpenCode | `fireworks-ai/accounts/fireworks/models/glm-5p2` | pass, 10 tool calls | pass, 10 | pass, 15 | pass, 9 | unresolved: timed out after 15 minutes on both attempts (101 tool calls), same cause as pi |
 
 Mistakes and reruns: the first OpenCode and pi runs used the bare Fireworks ids from the earlier eval notes and failed before any tool call (pi: "Model not found"; OpenCode: "Unexpected server error", which its debug log shows is `ProviderModelNotFoundError`). OpenCode was rerun with `fireworks/` (still unknown to it) and then `fireworks-ai/`, its own provider name. A fresh OpenCode catalog does not list GLM-5p3-flash at all, only GLM-5p2, GLM-5p3 and routers, so GLM-5p2 was substituted and is recorded as such; the spec's named GLM-5p3-flash could not be run through OpenCode from a clean home.
 
