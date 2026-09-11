@@ -11,7 +11,8 @@
     "./shape": "./src/shape.ts",
     "./rate-limits": "./src/rate-limits.ts",
     "./dataset-policy": "./src/dataset-policy.ts",
-    "./artifact-reference": "./src/artifact-reference.ts"
+    "./artifact-reference": "./src/artifact-reference.ts",
+    "./account-resource": "./src/account-resource.ts"
   },
   "files": [
     "src"

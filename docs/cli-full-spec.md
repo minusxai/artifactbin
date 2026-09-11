@@ -1,5 +1,20 @@
 # Proposed afbin commands and flags
 
+## Execution checkpoint — 2026-09-11
+
+The remaining scope is frozen to the command table below. Earlier row audits are historical where superseded by this checkpoint; accepting a flag does not count as completing its behavior. No percentage estimate is used until every row has been re-audited.
+
+| Workstream | Current evidence | Remaining delivery and acceptance |
+| --- | --- | --- |
+| Resource and account workflows | Policy/query/comment/discovery checkpoint passed the full suite. Profile YAML, CAS and lost-response recovery passed focused checks only. | Complete profile/token/connection/session resources, collection views, mixed batches and durable mutations. Verify permissions, atomicity, conflict preservation and retry without duplicate effects against real handlers. |
+| Commands and local execution | Shared node merging, offline checks and local SQL exist; command coverage is partial. | Finish fork/export/open, query and pull edges, consistent type/format/output/batch behavior. Remove api and legacy aliases. Verify every command-table row, including offline defaults and actionable errors. |
+| Distribution and teaching | Standalone installer exists at /chat/install.sh; homepage, llms.txt and plugin guidance still contain stale npm instructions. | Unify binary bootstrap, update skills/plugins/help/man/errors and release wiring. Verify clean install/update, available platform binaries, and OpenCode GLM-5p3-flash / pi DeepSeek familiarity. |
+| Integration (primary agent) | No final PR or deployment. | Review and integrate all workstreams into one feature branch; run the full suite/build and browser gates once the batch is integrated, fix failures, and open one OSS PR with an empty body. Production pin advances only after OSS merge. |
+
+Execution: use independently owned worktrees for parallel implementation; no two implementers edit the same checkout. Shared contracts, dispatch integration and final verification have one owner. Seed bounded briefs and behavioral checks before delegation. Run focused risk checks during implementation and broad checks at integration boundaries, rather than repeating them after each small edit. Do not expand scope beyond this table without identifying the unmet requirement.
+
+The primary checkout is `services/artifactbin` inside the production repository, on `feat/cli-full-surface`. The former `artifactbin-cli-full` worktree is retained detached as a checkpoint. Production main and its committed submodule pin remain unchanged; the local submodule checkout intentionally shows the feature work for review.
+
 | Command / flag | Description | Implemented now?[^audit] | Defaults & recovery (required behavior)[^defaults] |
 | --- | --- | --- | --- |
 | `afbin [command]` | Run setup by default; resolve artifacts by ID, tolerating decorative names. Keep local work offline. [^global] [^syntax] [^identity] | **Partial** — Default setup/common flags and artifact references exist; batch/recovery coverage varies. Case normalization is not consistently implemented. | No command → setup. Local work stays offline; remote work automatically authenticates and resumes. [^defaults] |

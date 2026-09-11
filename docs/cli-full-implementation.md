@@ -78,3 +78,21 @@ Open risks before completing later phases: persistent conflict resolution; depen
 - Consolidated verification passes: API 1,446; Node 3,856 with one skip; UI 1,383; CLI 138. Type checks and CLI build pass. The production build passed earlier in the block and is being repeated at the final checkpoint. Browser gates and distribution verification remain for final integration.
 
 Remaining work is substantial: profile/token/connection/session YAML and account views; all remaining collection kinds/filters; declared mutations; generalized delete/restore/refresh/session/token recovery; remote/draft and multi-source query edges; pull stdout/conversion and connected dataset definitions; fork/export/open/local rendering; the complete type/flag surface; retirement of raw API and remaining aliases; distribution/plugin updates; multi-platform binaries, browser gates and requested harness validation. No final PR has been created, merged or deployed.
+
+## Execution checkpoint — 2026-09-11
+
+The remaining scope is frozen to the command table in cli-full-spec.md. Earlier row audits are historical where superseded by this checkpoint; accepting a flag does not count as completing its behavior. No percentage estimate is used until every row has been re-audited.
+
+| Workstream | Current evidence | Remaining delivery and acceptance |
+| --- | --- | --- |
+| Resource and account workflows | Policy/query/comment/discovery checkpoint passed the full suite. Profile YAML, CAS and lost-response recovery passed focused checks only. | Complete profile/token/connection/session resources, collection views, mixed batches and durable mutations. Verify permissions, atomicity, conflict preservation and retry without duplicate effects against real handlers. |
+| Commands and local execution | Shared node merging, offline checks and local SQL exist; command coverage is partial. | Finish fork/export/open, query and pull edges, consistent type/format/output/batch behavior. Remove api and legacy aliases. Verify every command-table row, including offline defaults and actionable errors. |
+| Distribution and teaching | Standalone installer exists at /chat/install.sh; homepage, llms.txt and plugin guidance still contain stale npm instructions. | Unify binary bootstrap, update skills/plugins/help/man/errors and release wiring. Verify clean install/update, available platform binaries, and OpenCode GLM-5p3-flash / pi DeepSeek familiarity. |
+| Integration (primary agent) | No final PR or deployment. | Review and integrate all workstreams into one feature branch; run the full suite/build and browser gates once the batch is integrated, fix failures, and open one OSS PR with an empty body. Production pin advances only after OSS merge. |
+
+Execution: use independently owned worktrees for parallel implementation; no two implementers edit the same checkout. Shared contracts, dispatch integration and final verification have one owner. Seed bounded briefs and behavioral checks before delegation. Run focused risk checks during implementation and broad checks at integration boundaries, rather than repeating them after each small edit. Do not expand scope beyond this table without identifying the unmet requirement.
+
+The primary checkout is `services/artifactbin` inside the production repository, on `feat/cli-full-surface`. The former `artifactbin-cli-full` worktree is retained detached as a checkpoint. Production main and its committed submodule pin remain unchanged; the local submodule checkout intentionally shows the feature work for review.
+
+
+Profile checkpoint: account schema/domain/route, typed local tracking and generic operation finalization are committed as in-progress work. Focused API and CLI recovery checks and type checks passed before this checkpoint; the full suite has not been rerun for these account changes. Mixed artifact/account workspaces, token implementation and broader account integration remain open.

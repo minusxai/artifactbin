@@ -38,9 +38,9 @@ const journalPath = (root: string) => join(root, '.artifactbin', 'pending-files.
 
 async function fileDestination(root: string, path: string): Promise<string> {
   const destination = await confinedPath(root, path);
-  // User files and afbin.lock may be committed; internal recovery state may not.
+  // User files and resource tracking may be committed; pending recovery state may not.
   const internal = join(await realpath(root), '.artifactbin');
-  if (destination === internal || inside(internal, destination)) throw new Error(`Reserved recovery path: ${path}`.toLowerCase());
+  if (destination !== join(internal,'accounts.json') && (destination === internal || inside(internal, destination))) throw new Error(`Reserved recovery path: ${path}`.toLowerCase());
   return destination;
 }
 

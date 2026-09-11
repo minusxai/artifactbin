@@ -29,11 +29,11 @@ const globalFlags=['help','version','json','server','yes','no-browser'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
  {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','output','format'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
- {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts and reconcile tracked files.',min:0,max:Infinity,flags:['output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2']},
- {name:'push',usage:'[path ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['dry-run','force'],examples:['afbin push report.jsx','afbin push --dry-run']},
+ {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts and reconcile tracked files.',min:0,max:Infinity,flags:['type','output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2']},
+ {name:'push',usage:'[path ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['type','dry-run','force'],examples:['afbin push report.jsx','afbin push --dry-run']},
  {name:'validate',usage:'[path ...]',description:'Check local files without network access.',min:0,max:Infinity,flags:['fix'],examples:['afbin validate report.jsx','afbin validate --fix report.jsx']},
- {name:'status',usage:'',description:'Compare local files with saved state; remote state is last observed.',min:0,max:0,flags:['remote'],examples:['afbin status','afbin status --remote']},
- {name:'diff',usage:'[<ref>]',description:'Compute changes locally against the saved base.',min:0,max:1,flags:['remote'],examples:['afbin diff report.jsx','afbin diff --remote report.jsx']},
+ {name:'status',usage:'',description:'Compare local files with saved state; remote state is last observed.',min:0,max:0,flags:['type','remote'],examples:['afbin status','afbin status --remote']},
+ {name:'diff',usage:'[<ref>]',description:'Compute changes locally against the saved base.',min:0,max:1,flags:['type','remote'],examples:['afbin diff report.jsx','afbin diff --remote report.jsx']},
  {name:'log',usage:'<ref> [<ref> ...]',description:'List artifact versions, newest first; @version starts at that version or earlier.',min:1,max:Infinity,flags:['limit','cursor'],examples:['afbin log report.jsx --limit 10']},
  {name:'list',aliases:['ls'],usage:'',description:'List owned and explicitly shared resources, newest first.',min:0,max:0,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json']},
  {name:'delete',aliases:['rm'],usage:'<ref>',description:'Soft-delete the artifact and forget tracking; keep its local file.',min:1,max:1,flags:['dry-run','force'],examples:['afbin delete report.jsx --dry-run']},
@@ -83,7 +83,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(result.flags.help||result.flags.version)return result;
  if(result.positionals.length<command.min||result.positionals.length>command.max)throw new CliError('invalid_arguments',`Usage: afbin ${command.name} ${command.usage}`.trim());
  const f=result.flags;
- if(f.type!==undefined)f.type=enumArgument(f.type,['artifact','folder','dataset','file'],'type');
+ if(f.type!==undefined)f.type=enumArgument(f.type,(command.name==='list'?['artifact','folder','dataset','file']:['artifact','folder','dataset','file','profile']),'type');
  if(f.filter)collectionFilters(command.name,f.filter as string[]);
  if(command.name==='list'&&f.format!==undefined)f.format=enumArgument(f.format,['table','csv','json','yaml'],'format');
  if(command.name==='pull'&&f.format!==undefined)f.format=enumArgument(f.format,['jsx','yaml','csv','json','original'],'format');

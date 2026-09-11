@@ -31,7 +31,7 @@ export async function loadWorkspace(cwd=process.cwd()):Promise<Workspace>{
    }
    return{root,cwd,lock,raw};
   }
-  if(await readOptional(join(root,'.artifactbin','conflicts.json'))||await readOptional(join(root,'.artifactbin','pending-operation.json'))||await readOptional(join(root,'.artifactbin','pending-request.json'))||await readOptional(join(root,'.artifactbin','pending-files.json')))return{root,cwd,lock:null,raw:null};
+  if(await readOptional(join(root,'.artifactbin','accounts.json'))||await readOptional(join(root,'.artifactbin','conflicts.json'))||await readOptional(join(root,'.artifactbin','pending-operation.json'))||await readOptional(join(root,'.artifactbin','pending-request.json'))||await readOptional(join(root,'.artifactbin','pending-files.json')))return{root,cwd,lock:null,raw:null};
   const parent=dirname(root);if(parent===root)return{root:cwd,cwd,lock:null,raw:null};root=parent;
  }
 }
