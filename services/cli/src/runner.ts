@@ -4,14 +4,14 @@ import serialize from "@xterm/addon-serialize";
 import { hostname } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 import { pty } from "./pty";
-import { api, ApiError } from "./client";
-import type { Connection } from "./config";
+import { httpStatus, type HttpClient } from "./http";
 import type {
   RemoteExchange,
   RemoteExchangeResult,
 } from "../../contracts/src/remote";
 export interface RunOptions {
-  connection: Connection;
+  /** The shared client: every session request rides its refresh-and-sign-in ladder. */
+  client: HttpClient;
   command: string;
   args: string[];
   name?: string;
@@ -23,7 +23,7 @@ export interface RunOptions {
 }
 /** Owns the PTY lifecycle; usable from another CLI without installing global commands. */
 export async function runRemote(options: RunOptions): Promise<number> {
-  const { connection, command, args, signal } = options;
+  const { client, command, args, signal } = options;
   const interactive = options.interactive ?? true;
   if (interactive && !process.stdin.isTTY)
     throw new Error("afbin remote requires an interactive terminal.");
@@ -31,11 +31,11 @@ export async function runRemote(options: RunOptions): Promise<number> {
   let rows = Math.max(2, Math.min(120, process.stdout.rows || 24));
   const cwd = options.cwd ?? process.cwd();
   const recoveryKey = randomBytes(32).toString("hex");
-  const register = (signal?: AbortSignal) => api<{ id: string; runnerKey: string }>(
-    connection, "", "POST", {
+  const register = (signal?: AbortSignal) => client.request<{ id: string; runnerKey: string }>(
+    "/remote/sessions", "POST", {
       name: options.name ?? command, harness: command, cwd,
       machine: hostname(), cols, rows, recoveryKey,
-    }, signal,
+    }, {}, { signal, timeoutMs: 10000 },
   );
   let session = await register(signal);
   let child: import("node-pty").IPty;
@@ -48,13 +48,13 @@ export async function runRemote(options: RunOptions): Promise<number> {
       env: { ...process.env },
     });
   } catch (error) {
-    await api(connection, `/${session.id}`, "DELETE").catch(() => {});
+    await client.request(`/remote/sessions/${session.id}`, "DELETE", undefined, {}, { timeoutMs: 10000 }).catch(() => {});
     throw error;
   }
   const history = new headless.Terminal({ cols, rows, scrollback: 1000, allowProposedApi: true });
   const serializer = new serialize.SerializeAddon();
   history.loadAddon(serializer);
-  options.onSession?.(`${connection.server}/chat?session=${session.id}`);
+  options.onSession?.(`${client.connection.server}/chat?session=${session.id}`);
   let replay = "";
   let buffer = "",
     ack = 0,
@@ -151,9 +151,9 @@ export async function runRemote(options: RunOptions): Promise<number> {
             replay = serializer.serialize() + (batch?.output ?? "") + replay;
             batch = undefined;
             history.reset();
-            options.onSession?.(`${connection.server}/chat?session=${session.id}`);
+            options.onSession?.(`${client.connection.server}/chat?session=${session.id}`);
             if (interactive)
-              process.stderr.write(`\r\n[afbin: Restoring remote session at ${connection.server}/chat?session=${session.id}]\r\n`);
+              process.stderr.write(`\r\n[afbin: Restoring remote session at ${client.connection.server}/chat?session=${session.id}]\r\n`);
           }
           if (!batch) {
             // Never split a UTF-16 surrogate pair across JSON batches.
@@ -174,12 +174,12 @@ export async function runRemote(options: RunOptions): Promise<number> {
             if (replay) replay = replay.slice(length);
             else buffer = buffer.slice(length);
           }
-          const result = await api<RemoteExchangeResult>(
-            connection,
-            `/${session.id}/exchange`,
+          const result = await client.request<RemoteExchangeResult>(
+            `/remote/sessions/${session.id}/exchange`,
             "POST",
             batch,
-            shutdown.signal,
+            {},
+            { signal: shutdown.signal, timeoutMs: 10000 },
           );
           controller = result.controller;
           if (controller === "local" && interactive) resize();
@@ -214,7 +214,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
           if (finished) break;
         } catch (error) {
           if (exitCode !== undefined) break;
-          const status = error instanceof ApiError ? error.status : undefined;
+          const status = httpStatus(error);
           if (status === 410) {
             remote = false;
             buffer = "";
@@ -224,7 +224,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
           } else if (status === 401 || status === 403) {
             remote = false;
             if (interactive)
-              process.stderr.write(`\r\n[afbin: Remote authentication failed (HTTP ${status}). ${command} is still running locally. Start afbin remote --server ${connection.server} in another terminal to sign in and launch a new remote session.]\r\n`);
+              process.stderr.write(`\r\n[afbin: Remote authentication failed (HTTP ${status}). ${command} is still running locally. Start afbin remote --server ${client.connection.server} in another terminal to sign in and launch a new remote session.]\r\n`);
             buffer = "";
             replay = "";
             batch = undefined;

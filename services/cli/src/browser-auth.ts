@@ -1,5 +1,6 @@
 import {configDir} from './config';
 import {CliError} from './commands';
+import {transportFailure} from './http';
 /** Browser consent and bounded polling, independent of terminal prompts and command dispatch. */
 import {loopbackAuthenticate} from './loopback-auth';
 import { execFile } from 'node:child_process';
@@ -57,7 +58,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   const file = join(configDir(home,options.env), `pairing-${digest(server).slice(0,16)}.json`);
   const post = async (path: string, body?: unknown) => {
     const response = await request(`${server}${path}`, {method:'POST', redirect:'error', signal:AbortSignal.timeout(15000),
-      headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
+      headers:{'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})}).catch(error => { throw transportFailure(server, error); });
     const data = await response.json().catch(()=>null);
     if (!data || typeof data !== 'object') throw new CliError('invalid_response','Authentication server returned an invalid response.');
     return {response,data};

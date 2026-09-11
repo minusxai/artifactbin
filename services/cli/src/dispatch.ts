@@ -152,13 +152,13 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='push'&&!account){emit({...await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;}
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');
-   return attachRemote({connection,id:flags.session,interactive,fetch:context.fetch,stdout,onSession:url=>stderr(`Remote session: ${url}\n`)});
+   return attachRemote({client,id:flags.session,interactive,stdout,onSession:url=>stderr(`Remote session: ${url}\n`)});
   }
   if(command==='remote'){
    // The PTY graph is loaded only after the user selects remote execution.
    const {chooseLaunch}=await import('./launcher');const {runRemote}=await import('./runner');
    const launch=positionals.length?{command:positionals[0],args:positionals.slice(1)}:await chooseLaunch();
-   return runRemote({connection,...launch,name:typeof flags.name==='string'?flags.name:undefined,onSession:url=>stderr(`Remote session: ${url}\n`)});
+   return runRemote({client,...launch,name:typeof flags.name==='string'?flags.name:undefined,onSession:url=>stderr(`Remote session: ${url}\n`)});
   }
   throw new CliError('command_integration_pending',`The ${command} command is still being integrated.`);
  }catch(error){
