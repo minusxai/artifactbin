@@ -95,3 +95,24 @@ it('binds a connection password from the environment and writes only its secret 
   await expect(resolveDatasetConnection({...target,passwordSecretId:secretId!},{tokenId:other.id,userId:null})).rejects.toBeInstanceOf(DatasetError);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+it('a reader pulls a flat dataset as rows, because the served representation decides, not the stripped catalog',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-definition-reader-'));
+ const calls:string[]=[];const transport=transportFor(calls);
+ try{
+  const owner=await mintToken('definition-rows-owner');
+  const made=await create(new Request('http://localhost:3000/api/artifacts',{method:'POST',headers:{authorization:`Bearer ${owner.token}`,'content-type':'application/json'},body:JSON.stringify({dataset:[{n:1},{n:2}],visibility:'unlisted'})}));
+  expect(made.status).toBe(201);const doc=await made.json();
+  // A reader's catalog has no objectKey: only the response representation can tell rows from a definition.
+  const reader=await mintToken('definition-rows-reader');
+  const head=await(await read(new Request(`http://localhost:3000/api/artifacts/${doc.id}`,{headers:{authorization:`Bearer ${reader.token}`}}),{params:Promise.resolve({id:doc.id})})).json();
+  expect(head.capabilities.edit).toBe(false);expect(head.meta.catalog.tables[0].objectKey).toBeUndefined();
+  await saveConnection({server:'http://localhost:3000',token:reader.token},root);
+  const output:string[]=[];
+  const code=await runCli(['pull',doc.id,'--format','yaml','--output','sales.yaml','--json'],{cwd:root,home:root,interactive:false,fetch:transport,stdout:s=>output.push(s),stderr:()=>{}});
+  expect(code,output.join('')).toBe(0);
+  const pulled=parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8'));
+  expect(pulled.type==='dataset'&&pulled.source).toBe('sales.json');
+  expect(JSON.parse(await readFile(join(root,'sales.json'),'utf8'))).toEqual([{n:1},{n:2}]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

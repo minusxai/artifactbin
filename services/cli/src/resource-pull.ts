@@ -5,7 +5,7 @@ import type {HttpClient} from './http';
 import {confinedPath,type FileChange} from './journal';
 import {digest,readOptional} from './files';
 import {CliError} from './errors';
-import {datasetRows,endLine,flatDataset} from './dataset-source';
+import {datasetRows,endLine} from './dataset-source';
 import {rowsCsv} from './tabular';
 import {parseResourceFile,reconcileResource,snapshotResource,writeResourceFile,type ResourceSource} from './resource-file';
 
@@ -17,14 +17,17 @@ export async function prepareResourcePull(root:string,path:string,snapshot:Snaps
  let source:ResourceSource|undefined;
  let prototype={type} as ArtifactResourceFile;
  if(type!=='folder'){
-  // A connected or multi-table dataset's source is its <Dataset> definition, not rows.
-  const definition=type==='dataset'&&!flatDataset(snapshot);
+  const previousPath=previous?.source?.path;
+  const same=!!previous?.source&&(previous.source.version??previous.snapshot.version)===snapshot.version;
+  const fetched=same||type==='artifact'?undefined:await client.content(`/artifacts/${snapshot.id}/content?version=${snapshot.version}`);
+  // A dataset's source is its rows when the server serves rows, and its <Dataset> definition otherwise.
+  // The served representation is the only discriminator every actor can see; a reader's catalog is stripped.
+  const definition=type==='dataset'&&(fetched?!fetched.contentType.startsWith('application/json'):extname(previousPath??'').toLowerCase()==='.jsx');
   const extension=type==='dataset'?definition?'.jsx':'.json':type==='artifact'?'.jsx':snapshot.format==='pdf'?'.pdf':typeof snapshot.filename==='string'?extname(snapshot.filename):'.bin';
-  const sourcePath=previous?.source?.path??join(dirname(path),basename(path,extname(path))+extension);
+  const sourcePath=previousPath??join(dirname(path),basename(path,extname(path))+extension);
   const absolute=await confinedPath(root,sourcePath);
   const local=await readOptional(absolute);
-  const same=(previous?.source?.version??previous?.snapshot.version)===snapshot.version&&previous?.source?.path===sourcePath;
-  let bytes=same?Buffer.from(previous!.source!.bytes,'base64'):type==='artifact'?Buffer.from(snapshot.markup??''):(await client.content(`/artifacts/${snapshot.id}/content?version=${snapshot.version}`)).bytes;
+  let bytes=same?Buffer.from(previous!.source!.bytes,'base64'):type==='artifact'?Buffer.from(snapshot.markup??''):fetched!.bytes;
   if(type==='dataset'&&!same)bytes=definition?Buffer.from(endLine(bytes.toString())):Buffer.from(extname(sourcePath).toLowerCase()==='.csv'?rowsCsv(datasetRows(bytes)):JSON.stringify(datasetRows(bytes),null,2)+'\n');
   source={path:sourcePath,bytes:bytes.toString('base64'),version:snapshot.version};
   prototype={type,source:relative(dirname(path),sourcePath)} as ArtifactResourceFile;

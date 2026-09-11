@@ -8,14 +8,8 @@ import {atomicWrite,readOptional} from './files';
 import {confinedPath} from './journal';
 import {parseResourceFile} from './resource-file';
 import type {HttpClient} from './http';
-import type {Snapshot,Workspace} from './workspace';
+import type {Workspace} from './workspace';
 
-/** The dataset's local source: rows for one stored table, a `<Dataset>` definition for everything else. */
-export function flatDataset(snapshot:Snapshot):boolean{
- const catalog=(snapshot.meta as {catalog?:{kind?:string;tables?:Array<{objectKey?:string}>}}|undefined)?.catalog;
- if(!catalog)return true;
- return catalog.kind==='stored'&&(catalog.tables?.length??0)<=1&&!!catalog.tables?.[0]?.objectKey;
-}
 export const endLine=(text:string):string=>text.endsWith('\n')?text:text+'\n';
 export function datasetRows(bytes:Buffer):Record<string,unknown>[]{
  let rows:unknown;try{rows=JSON.parse(bytes.toString());}catch{throw new CliError('invalid_response','Dataset content must be JSON rows.');}
@@ -75,7 +69,9 @@ export async function bindDatasetSecret(workspace:Workspace,paths:string[],clien
  if(!connection)throw new CliError('no_connection','The definition declares no <Connection> to bind a password to.','Add the connection first, or publish without --secret-env.');
  const value=env[variable];
  if(typeof value!=='string'||!value)throw new CliError('missing_secret',`The environment variable ${variable} is empty.`,'Export the password in the environment; it is never read from a file or an argument.');
- if(dryRun)return{secret:{source:variable,status:'would_create'},connection:connection.target,source:resource.source};
+ // A dry run creates no credential, so an unbound definition cannot be validated against the server either.
+ if(dryRun)return connection.secretId?{secret:{source:variable,status:'bound',id:connection.secretId},source:resource.source}
+  :{dry_run:true,secret:{source:variable,status:'would_create'},connection:connection.target,operations:[{path:paths[0],status:'skipped',reason:'secret_binding_required'}]};
  const created=await client.request<{secret?:{id?:unknown}}>('/secrets','POST',{value,connection:connection.target,...(resource.id?{datasetId:resource.id}:{})});
  const id=created.secret?.id;
  if(typeof id!=='string'||!id)throw new CliError('invalid_response','The secret door did not return a secret id.');

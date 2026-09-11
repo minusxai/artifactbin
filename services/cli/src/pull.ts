@@ -1,6 +1,6 @@
 import {rowsCsv} from './tabular';
 import type {ArtifactResourceFile} from '@artifactbin/contracts';
-import {datasetRows,endLine,flatDataset} from './dataset-source';
+import {datasetRows,endLine} from './dataset-source';
 import {snapshotResource,writeResourceFile} from './resource-file';
 import type {ParsedCommand} from './commands';
 import {persistConflict,clearConflict} from './conflict-state';
@@ -72,7 +72,7 @@ async function representation(snapshot:Snapshot,head:Snapshot,format:string|unde
  if(snapshot.format==='markup'||snapshot.format==='folder')return writeDocument(snapshotDocument({...snapshot,edit_id:head.edit_id,state:head.state}));
  if(snapshot.format==='dataset'){
   const content=await client.content(`/artifacts/${snapshot.id}/content?version=${snapshot.version}`);
-  if(!flatDataset(snapshot))return endLine(content.bytes.toString());
+  if(!content.contentType.startsWith('application/json'))return endLine(content.bytes.toString());
   const rows=datasetRows(content.bytes);
   return format==='csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n';
  }
@@ -143,7 +143,8 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    }else if(['dataset','image','pdf','file'].includes(snapshot.format??'')){
     const content=await client.content(`/artifacts/${target.id}/content?version=${snapshot.version}`);
     if(snapshot.format!=='dataset')bytes=content.bytes;
-    else if(!flatDataset(snapshot))bytes=Buffer.from(endLine(content.bytes.toString()));
+    // A connected or multi-table dataset has no rows to keep beside a bare file; its source belongs to typed YAML.
+    else if(!content.contentType.startsWith('application/json'))throw new CliError('unsupported_pull_format','This dataset is defined by a <Dataset> definition, not rows.','Pull it as a typed resource: afbin pull <ref> --format yaml.');
     else{const rows=datasetRows(content.bytes);bytes=Buffer.from(extname(path).toLowerCase()==='.csv'?rowsCsv(rows):JSON.stringify(rows,null,2)+'\n');}
    }else throw new CliError('unsupported_pull_format',`The ${snapshot.format} artifact has no local file representation.`,'Pull it as a dataset resource once definition retrieval is integrated.');
    const backup=options.force&&before&&!before.equals(bytes)?`.artifactbin/local-backups/${randomUUID()}/${basename(path)}`:undefined;
