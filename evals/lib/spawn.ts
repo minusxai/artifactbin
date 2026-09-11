@@ -62,10 +62,13 @@ const DEFAULT_MAX_STDOUT_BYTES = 32 * 1024 * 1024;
  *   its `secure_path`, which does not contain the runner's tool cache, and a CLI
  *   installed there would simply vanish ("command not found") under the switch.
  */
-export function wrapRunAs(inv: HarnessInvocation, user: string, resolve: (cmd: string) => string): HarnessInvocation {
+export function wrapRunAs(inv: HarnessInvocation, user: string, resolve: (cmd: string) => string, searchPath?: string): HarnessInvocation {
   const [cmd, ...rest] = inv.argv;
   const exe = path.isAbsolute(cmd) ? cmd : resolve(cmd);
-  return { ...inv, argv: ['sudo', '-n', '-u', user, '-E', '--', exe, ...rest] };
+  // sudo's secure_path overrides PATH even with -E. Restore the staged CLI path
+  // after switching users, so the harness and its shell tools use the same build.
+  const command = searchPath === undefined ? [exe, ...rest] : ['/usr/bin/env', `PATH=${searchPath}`, exe, ...rest];
+  return { ...inv, argv: ['sudo', '-n', '-u', user, '-E', '--', ...command] };
 }
 
 /** macOS children inherit this kernel-enforced denial, including shell tools and symlink reads. */
@@ -265,7 +268,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   }
 
   try {
-    if (opts.runAs) argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH)).argv;
+    if (opts.runAs) argv = wrapRunAs(inv, opts.runAs, (cmd) => resolveOnPath(cmd, env.PATH), env.PATH).argv;
     else if (opts.checkoutRoots?.length) argv = wrapCheckoutSandbox(argv, opts.checkoutRoots);
 
     const secrets = (inv.redact ?? []).filter((s) => s.length > 0);
