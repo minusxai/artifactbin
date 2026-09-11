@@ -35,7 +35,8 @@ import { legFromArgs, type Leg } from './lib/leg';
 import { discoverTasks, parseShard, selectTasks, shardTasks } from './lib/task-set';
 import { checksToRecord, gatedChecks, verdictFor } from './lib/score/verdict';
 import { buildPrompt, needsStartDocument, planAccess } from './lib/tasks';
-import { actionTransport, installsSkills, planTransport } from './lib/mode';
+import { actionTransport, installsSkills, planTransport, providesConnection } from './lib/mode';
+import { startApprover } from './lib/approver';
 import { materializePlugin } from './lib/plugin-kit';
 import {materializeCli} from './lib/cli-kit';
 import { taskCost } from './lib/price';
@@ -177,7 +178,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
       // The agent is given the DEPLOYMENT's own address; its traffic is caught by where it SENDS.
       return { agentBase: config.deployment, agentEnv: agentProxyEnv(mitm.url, mitm.ca), ledgerPath, stop: mitm.stop };
     }
-    const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath });
+    const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath, rewriteDeviceOrigin: true });
     log(`${leg.label}/${taskId}: proxy :${proxy.port}`);
     // The agent is given the PROXY's address; the server mints its links from it.
     return { agentBase: proxy.url, agentEnv: {}, ledgerPath, stop: proxy.stop };
@@ -298,7 +299,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const installed = installsSkills(leg.mode.run);
   const plan = planAccess({ task, base: r.agentBase, start, credential: r.credential });
   if (plan.seed) await seedDocument(r.agentBase, plan.seed.id, plan.seed.token, plan.seed.markup);
-  if (plan.connectionToken) writeArtifactbinEnv(homeDir, r.agentBase, plan.connectionToken);
+  if (plan.connectionToken && providesConnection(leg.mode.run)) writeArtifactbinEnv(homeDir, r.agentBase, plan.connectionToken);
   const access = plan.access;
   // THE ONE CREDENTIAL THE DRIVER HOLDS for this task, read back OFF the plan rather than decided a
   // second time beside it: `planAccess` answers `kind: 'token'` in exactly the cases the driver was
@@ -352,6 +353,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
   // beside the spawn, rather than read off the ledger — whose first entry is already past the agent's
   // boot, and therefore only a floor. After `prepare`, which is the driver's setup, not the agent's time.
+  // The `cold` treatment: the driver stands in for the person who approves `afbin setup`, but only when
+  // this task was meant to have an account at all — the token-less task keeps its wall.
+  const approver = !providesConnection(leg.mode.run) && r.credential?.cookie && plan.access.kind === 'token'
+    ? startApprover({ homeDir, agentBase: r.agentBase, publicOrigin: new URL(r.productUrl).origin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
+    : null;
   const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
@@ -367,6 +373,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     checkoutRoots: r.protectedRoots,
     ...(r.runAs ? { runAs: r.runAs } : {}),
   });
+  approver?.stop();
   const result = adapter.reduce(spawned.stdout);
   if (spawned.timedOut) { result.ok = false; result.error = `timed out after ${config.run.timeoutMs} ms`; }
   fs.writeFileSync(path.join(runDir, 'result.json'), JSON.stringify({ ...result, exitCode: spawned.exitCode, timedOut: spawned.timedOut, truncated: spawned.truncated }, null, 2));
@@ -453,6 +460,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const cost = taskCost(result, leg.price);
   rec.record(task.id, 'cost_usd', cost.usd);
   rec.record(task.id, 'duration_s', Math.round(spawned.durationMs / 100) / 10);
+  // How many device pairings the driver approved on the agent's behalf (`cold` only); null when none could be.
+  rec.record(task.id, 'approvals', approver ? approver.approved.length : null, 'number');
   // Every number the ledger answers, `versions` included, built in ONE pure place (`ledgerRows`) so
   // the count and its caller are one thing to break.
   for (const row of ledgerRows(ledger)) rec.record(task.id, row.metric, row.value);

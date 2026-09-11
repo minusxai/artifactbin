@@ -17,7 +17,7 @@ name costs, retries, skips and incomplete runs rather than treating them as equi
 CI retries failed smoke tasks once when enabled; creative comparisons do not inherit that retry policy.
 
 `.github/workflows/ci.yml` runs the smoke task matrix only when `AGENT_SMOKE_ENABLED` is exactly `true`
-and secrets are available to the trusted job. Its sole mode, `cli`, stages the built CLI and installs the same local skill bundle shipped to users.
+and secrets are available to the trusted job. Its two modes are treatments of the CLI: `installed` stages the built CLI, the same local skill bundle shipped to users and the account connection before the agent starts; `cold` stages only the CLI, so the agent must run `afbin setup`, and the driver approves the device pairing with its own session (`evals/lib/approver.ts`) so the flow completes headlessly and the agent never sees a token. The task proxy rewrites the device door's advertised origin to itself for that purpose (`evals/lib/proxy.ts`). The token-less task gets no approver in either mode.
 MCP and remotely fetched skill modes are refused. The job is currently outside the required test roll-up. Do not infer that it ran from `npm test`.
 The eval harness's unit tests are included in the Vitest Node project.
 

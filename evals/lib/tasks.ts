@@ -30,7 +30,8 @@ export function buildPrompt(task:Task,access:Access,opts:PromptOptions={}):strin
  if(access.kind==='start-link')parts.push(access.startPrompt);
  else{
   parts.push(`Use afbin and the installed artifactbin skill. The server is ${access.base}. Read afbin help for local command and authoring guidance.`);
-  if(access.kind==='token')parts.push(`The connection is saved in ~/.artifactbin/.env. Work on artifact ${access.id} with afbin pull, local edits, afbin validate and afbin push.`);
+  if(access.kind==='token'&&opts.mode==='cold')parts.push(`afbin is installed but not set up on this machine: run afbin setup --server ${access.base} --yes first; it opens browser approval and installs the local skills, and it tells you where. Then work on artifact ${access.id} with afbin pull, local edits, afbin validate and afbin push.`);
+  else if(access.kind==='token')parts.push(`The connection is saved in ~/.artifactbin/.env. Work on artifact ${access.id} with afbin pull, local edits, afbin validate and afbin push.`);
   else parts.push('You have not been given a token or a document.');
  }
  return parts.join('\n\n');

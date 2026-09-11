@@ -11,7 +11,7 @@ import teaching from '../../services/cli/src/generated/teaching.json';
 let root:string,kit:PluginKit;
 beforeAll(()=>{root=fs.mkdtempSync(path.join(os.tmpdir(),'afbin-local-skills-'));kit=materializePlugin(path.join(root,'bundle'),'https://example.test');});
 afterAll(()=>fs.rmSync(root,{recursive:true,force:true}));
-const ctx=(harness:Harness):HarnessRunContext=>({leg:{harness,model:'m',envVar:'TEST_KEY',apiKey:'k',label:harness,price:null,vision:true,mode:planMode(harness,'cli')},prompt:'Use afbin',cwd:root,homeDir:path.join(root,'home'),apiKey:'k',maxTurns:5,maxBudgetUsd:1,plugin:kit});
+const ctx=(harness:Harness):HarnessRunContext=>({leg:{harness,model:'m',envVar:'TEST_KEY',apiKey:'k',label:harness,price:null,vision:true,mode:planMode(harness,'installed')},prompt:'Use afbin',cwd:root,homeDir:path.join(root,'home'),apiKey:'k',maxTurns:5,maxBudgetUsd:1,plugin:kit});
 it('stages every released local skill file, with no remote server config',()=>{
  expect(fs.existsSync(path.join(kit.pluginDir,'.mcp.json'))).toBe(false);
  for(const [name,text] of Object.entries(teaching.files))expect(fs.readFileSync(path.join(kit.skillDirs[0],name),'utf8')).toBe(text);

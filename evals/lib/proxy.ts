@@ -53,10 +53,19 @@ export function transportFor(target: string): typeof http | typeof https {
  */
 export const DRIVER_HEADER = 'x-eval-driver';
 
+/**
+ * One JSON reply whose text is rewritten on the way back: the product mints its OAuth device
+ * approval URL from its configured public origin (the LEG's proxy), while the agent was told THIS
+ * proxy is the server. The CLI rightly refuses an approval page on an origin the caller did not
+ * select, so the task proxy substitutes itself, exactly as a public host in front of the product would
+ * be the origin in production.
+ */
+export interface BodyRewrite { path: string; from: string; to: string }
+
 export function forwardExchange(
   req: http.IncomingMessage,
   res: http.ServerResponse,
-  opts: { target: URL; transport: typeof http | typeof https; rewriteHost: boolean; record: (e: LedgerEntry) => void },
+  opts: { target: URL; transport: typeof http | typeof https; rewriteHost: boolean; record: (e: LedgerEntry) => void; rewriteBody?: BodyRewrite },
 ): void {
   const { target, transport, rewriteHost } = opts;
   const record = req.headers[DRIVER_HEADER] === undefined ? opts.record : () => {};
@@ -74,7 +83,9 @@ export function forwardExchange(
   const upstream = transport.request(
     { host: target.hostname, port: target.port || undefined, method, path: url, headers, servername: target.hostname },
     (up) => {
-      res.writeHead(up.statusCode ?? 502, up.headers);
+      const rewrite = opts.rewriteBody && url.split('?')[0] === opts.rewriteBody.path && isJson(up.headers) ? opts.rewriteBody : null;
+      if (!rewrite) res.writeHead(up.statusCode ?? 502, up.headers);
+      const rewriteChunks: Buffer[] = [];
       // A response body is retained for a failure (its `error` code) or a write (its echo + the artifact id).
       const keepRes = isJson(up.headers) && ((up.statusCode ?? 0) >= 400 || keepReq);
       const resChunks: Buffer[] = [];
@@ -84,9 +95,15 @@ export function forwardExchange(
       up.on('data', (chunk: Buffer) => {
         resBytes += chunk.length;
         if (keepRes && resSize < BODY_CAP) { resChunks.push(chunk); resSize += chunk.length; }
+        if (rewrite) rewriteChunks.push(chunk);
       });
-      up.pipe(res);
+      if (!rewrite) up.pipe(res);
       up.on('end', () => {
+        if (rewrite) {
+          const body = Buffer.from(Buffer.concat(rewriteChunks).toString('utf8').split(rewrite.from).join(rewrite.to));
+          res.writeHead(up.statusCode ?? 502, { ...up.headers, 'content-length': String(body.length) });
+          res.end(body);
+        }
         const status = up.statusCode ?? 502;
         const entry: LedgerEntry = {
           t: started, ms: Date.now() - started, method, path: url, status,
@@ -137,20 +154,22 @@ export function createRecorder(ledgerPath: string): (e: LedgerEntry) => void {
   return (entry: LedgerEntry) => fs.appendFileSync(ledgerPath, JSON.stringify(entry) + '\n');
 }
 
-export async function startProxy(opts: { port: number; target: string; ledgerPath: string; rewriteHost?: boolean }): Promise<RunningProxy> {
+export async function startProxy(opts: { port: number; target: string; ledgerPath: string; rewriteHost?: boolean; rewriteDeviceOrigin?: boolean }): Promise<RunningProxy> {
   const target = new URL(opts.target);
   const transport = transportFor(opts.target);
   const record = createRecorder(opts.ledgerPath);
+  let self = '';
   const server = http.createServer((req, res) =>
-    forwardExchange(req, res, { target, transport, rewriteHost: !!opts.rewriteHost, record }));
+    forwardExchange(req, res, { target, transport, rewriteHost: !!opts.rewriteHost, record, ...(opts.rewriteDeviceOrigin && self ? { rewriteBody: { path: '/oauth/device', from: target.origin, to: self } } : {}) }));
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(opts.port, '127.0.0.1', () => resolve());
   });
   const port = (server.address() as { port: number }).port;
+  self = `http://127.0.0.1:${port}`;
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: self,
     port,
     // Bounded: `close()` calls back only when every connection is gone, and one that never is
     // would hold the whole run open. See `lib/shutdown.ts`.

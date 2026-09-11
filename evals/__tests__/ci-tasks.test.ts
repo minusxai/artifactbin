@@ -32,7 +32,7 @@ describe('the agent-smoke matrix', () => {
 
   it('runs the CLI with installed local skills', () => {
     expect(ROWS).toHaveLength(1);
-    expect(ROWS[0].mode).toBe('cli');
+    expect(ROWS[0].mode).toBe('installed');
     expect(tasksOf(ROWS[0])).toEqual(expect.arrayContaining(['cli', 'data', 'edit', 'no-token']));
   });
 
@@ -44,7 +44,7 @@ describe('the agent-smoke matrix', () => {
 
   it('and every row can actually PLAN every task it names — the general form of the rule above', () => {
     for (const r of ROWS) {
-      expect(parseMode(r.mode)).toBe('cli');
+      expect(parseMode(r.mode)).toBe('installed');
       for (const id of tasksOf(r)) {
         const task = byId.get(id)!;
         const start = needsStartDocument(task) ? { id: 'abc123', prompt: 'Help me edit my artifact at http://x.test/a/abc123 using this token: mx_paste' } : null;

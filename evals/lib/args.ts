@@ -78,7 +78,7 @@ Runs ONE leg — one harness, one model — over the selected tasks and writes a
                             $ per 1M tokens, for cost reporting.
   --price-web-search <dollars>  $ per provider-side web-search call.
   --no-vision               Tell the leg its model cannot read images.
-  --mode <mode>             How the agent reaches the product (see lib/mode.ts).
+  --mode <mode>             installed (skills and connection staged) or cold (afbin on PATH, agent runs setup; see lib/mode.ts).
   --credential <source>     Where this leg's token comes from (see lib/credential.ts).
   --tasks <id,id>           Run only these task ids.
   --shard <i/n>             Run shard i of n; a task is never split.
