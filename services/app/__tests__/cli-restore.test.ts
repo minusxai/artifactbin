@@ -145,3 +145,36 @@ it('refresh reports each url on its own and a retried refresh answers the record
  const refused=await refresh(request('/api/artifacts/assets/refresh',{method:'POST',token:stranger.token,json:{id:created.id},headers:{'Idempotency-Key':'refresh-stranger-000000001'}}));
  expect(refused.status).toBe(404);
 });
+
+it('the real CLI refreshes each named target durably and reports their outcomes separately',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-handler-refresh-'));const calls:string[]=[];const keys:Array<string|null>=[];
+ const recorded:typeof fetch=async(input,init)=>{
+  const message=new Request(input,init);
+  if(message.method==='POST'&&new URL(message.url).pathname==='/api/artifacts/assets/refresh')keys.push(message.headers.get('Idempotency-Key'));
+  return transport(calls)(message);
+ };
+ const invoke=async(args:string[])=>{
+  const output:string[]=[];
+  const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,fetch:recorded,stdout:s=>output.push(s),stderr:()=>{}});
+  return {code,result:JSON.parse(output.join(''))};
+ };
+ try{
+  const token=await mintToken('mxmx_test_cli_refresh');
+  await saveConnection({server:'http://localhost:3000',token:token.token},root);
+  const first=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>One</p>'}}))).json();
+  const second=await(await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>Two</p>'}}))).json();
+  expect((await invoke(['pull',first.id,'--output','one.jsx'])).code).toBe(0);
+
+  const refreshed=await invoke(['push','--refresh',first.id,second.id]);
+  expect(refreshed.code,JSON.stringify(refreshed.result)).toBe(0);
+  // Each target is reported on its own, with the changed, unchanged and failed
+  // urls the server answered for that document alone.
+  expect(refreshed.result.operations).toEqual([
+   {id:first.id,refreshed:[],unchanged:[],failed:[],status:'unchanged',operation:expect.any(String)},
+   {id:second.id,refreshed:[],unchanged:[],failed:[],status:'unchanged',operation:expect.any(String)},
+  ]);
+  expect(keys).toHaveLength(2);
+  expect(keys.every(key=>!!key)).toBe(true);
+  expect(new Set(keys).size).toBe(2);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
