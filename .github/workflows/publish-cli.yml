@@ -35,6 +35,8 @@ jobs:
           git merge-base --is-ancestor "$sha" origin/main
           version=$(git show "$sha:services/cli/package.json" | jq -r .version)
           test "$RELEASE_TAG" = "afbin-v$version"
+          git show "$sha:services/app/public/chat/install.sh" | grep -Fxq "  version=$version"
+          test "$(git show "$sha:services/app/public/chat/release.json" | jq -r .version)" = "$version"
           passed=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$sha" --status success --json headSha --jq length)
           test "$passed" -gt 0 || { echo 'CI must pass on this exact commit before release.' >&2; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
@@ -91,3 +93,12 @@ jobs:
           # Draft until every asset is attached; do not overwrite an existing release.
           gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+
+  # Same canary wiring as the automatic release path; production stays a dispatch.
+  plugin:
+    needs: [verify, publish]
+    uses: ./.github/workflows/publish-plugin.yml
+    with:
+      channel: staging
+      source_sha: ${{ needs.verify.outputs.sha }}
+    secrets: inherit

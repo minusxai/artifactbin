@@ -26,6 +26,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
       SOURCE_RUN: ${{ github.event.workflow_run.id }}
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
     steps:
       # No checkout or execution of downloaded code in this privileged workflow.
       - name: Identify the tested release
@@ -43,6 +46,9 @@ jobs:
           tag="afbin-v$version"
           installer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/install.sh?ref=$SOURCE_SHA" --jq .content | base64 --decode)
           grep -Fxq "  version=$version" <<< "$installer"
+          # The pointer the CLI resolves its release from ships with the same commit.
+          pointer=$(gh api "repos/$GITHUB_REPOSITORY/contents/services/app/public/chat/release.json?ref=$SOURCE_SHA" --jq .content | base64 --decode)
+          test "$(jq -r .version <<< "$pointer")" = "$version"
           # Existing published versions are immutable; unrelated merges are no-ops.
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
             if [ "$(cat draft.txt)" = false ]; then exit 0; fi
@@ -50,6 +56,7 @@ jobs:
             cat release-error.txt >&2; exit 1
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Download the binaries tested by this CI run
         if: steps.release.outputs.tag != ''
@@ -96,3 +103,14 @@ jobs:
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
           fi
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
+
+  # The canary plugin channel carries the skill bundle of the release just published.
+  # Production follows its deployment's smoke checks, so it stays an explicit dispatch.
+  plugin:
+    needs: release
+    if: needs.release.outputs.tag != ''
+    uses: ./.github/workflows/publish-plugin.yml
+    with:
+      channel: staging
+      source_sha: ${{ needs.release.outputs.sha }}
+    secrets: inherit

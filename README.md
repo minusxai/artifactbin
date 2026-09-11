@@ -9,7 +9,7 @@ Hosted instance: https://artifactbin.dev · Apache-2.0.
 Install the CLI and set up browser authentication and local agent skills:
 
 ```sh
-npm install -g @artifactbin/cli
+curl -fsSL https://artifactbin.dev/chat/install.sh | sh
 afbin setup
 ```
 
