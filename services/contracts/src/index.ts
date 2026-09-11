@@ -17,3 +17,4 @@ export type { Column, Index, Table } from './schema';
 export * from './dataset-policy';
 
 export * from './cli-auth';
+export * from './resource-file';

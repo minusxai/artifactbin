@@ -7,6 +7,7 @@ import {inspectWorkspace,type Workspace} from './workspace';
 import {assetInput,planDependencies,substituteDependencies} from './dependencies';
 import {atomicWrite,digest,readOptional} from './files';
 import {CliError} from './commands';
+import {resourceContent} from './resource-file';
 export interface Diagnostic {code:string;message:string;fix?:string;start?:number;end?:number;severity?:'error'|'notice'}
 export async function validateFiles(workspace:Workspace,paths?:string[],fix=false,options:{skipMissingTracked?:boolean}={}){
  const files:Array<{path:string;valid:boolean;fixed:boolean;diagnostics:Diagnostic[]}>=[];
@@ -32,6 +33,9 @@ export async function validateFiles(workspace:Workspace,paths?:string[],fix=fals
       await atomicWrite(path,next,{mode:(await stat(path)).mode&0o777});fixed=true;
      }
     }
+   }else if(file.resource){
+    const content=await resourceContent(file.resource,file.path,workspace.root);
+    if(typeof content.markup==='string')diagnostics.push(...validateMarkupStructure(content.markup).errors.map(error=>({code:'invalid_markup',message:error.message,start:error.start,end:error.end})));
    }else assetInput(file.path,file.bytes);
   }catch(error){diagnostics.push({code:error instanceof CliError?error.code:'validation_failed',message:error instanceof Error?error.message:String(error),...(error instanceof CliError&&error.fix?{fix:error.fix}:{})});}
   files.push({path:file.path,valid:!diagnostics.some(x=>x.severity!=='notice'),fixed,diagnostics});

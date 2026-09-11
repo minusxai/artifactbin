@@ -36,8 +36,12 @@ test('overlapping pull preserves the working file and accepted base and reports 
   await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','doc.jsx'])).code,0);
   const local=(await readFile(join(root,'doc.jsx'),'utf8')).replace('Original','Local');await writeFile(join(root,'doc.jsx'),local);
   const base=await readFile(join(root,'afbin.lock'),'utf8');changed=true;
+  assert.equal((await invoke(['pull','doc.jsx','--dry-run'])).code,3);await assert.rejects(readFile(join(root,'.artifactbin','conflicts.json')),{code:'ENOENT'});
   const result=await invoke(['pull','doc.jsx']);assert.equal(result.code,3);assert.equal(result.result.error.code,'merge_conflict');
   assert.deepEqual(result.result.error.details.fields,['content']);assert.match(result.result.error.details.remote,/Remote/);
   assert.equal(await readFile(join(root,'doc.jsx'),'utf8'),local);assert.equal(await readFile(join(root,'afbin.lock'),'utf8'),base);
+  assert.equal((await invoke(['status'])).result.files[0].status,'conflicted');
+  assert.equal((await invoke(['push'])).result.error.code,'merge_conflict');
+  assert.equal((await invoke(['pull','doc.jsx','--force'])).code,0);assert.equal((await invoke(['status'])).result.files[0].status,'unchanged');
  }finally{await rm(root,{recursive:true,force:true});}
 });

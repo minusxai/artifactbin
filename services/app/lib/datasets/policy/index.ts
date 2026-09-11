@@ -122,6 +122,7 @@ export async function setDatasetPolicy(
     `WITH updated AS (
  UPDATE artifacts SET dataset_policy=$3::jsonb,policy_revision=policy_revision+1
  WHERE id=$1 AND ${scope.where('$2')} AND policy_revision=$4 AND deleted_at IS NULL
+ AND version=$7 AND edit_id=$8 AND sharing_revision=$9
  RETURNING *), audit AS (
  INSERT INTO dataset_policy_audit(dataset_id,revision,policy,actor_user_id,actor_token_id)
  SELECT id,policy_revision,dataset_policy,$5,$6 FROM updated)
@@ -133,6 +134,9 @@ export async function setDatasetPolicy(
       revision,
       actor.userId,
       actor.tokenId,
+      row.version,
+      row.edit_id,
+      row.sharing_revision ?? 0,
     ],
   );
   return result.rows[0]

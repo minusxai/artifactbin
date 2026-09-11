@@ -1,3 +1,4 @@
+import {persistConflict,clearConflict} from './conflict-state';
 import {randomUUID} from 'node:crypto';
 import {join,relative,resolve,extname,basename,dirname} from 'node:path';
 import {CliError} from './commands';
@@ -62,7 +63,10 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
     baseline=Buffer.from(writeDocument(document));bytes=baseline;
     if(before&&previous&&!options.force&&!target.version&&digest(before)!==digest(Buffer.from(previous.baseline,'base64'))){
      const merged=reconcileDocument(parseDocument(Buffer.from(previous.baseline,'base64').toString()),parseDocument(before.toString()),document);
-     if(!merged.ok)throw new CliError('merge_conflict',`${path} has overlapping local and remote changes.`,'Preserve your proposal and resolve the reported regions before publishing. Use pull --force only to explicitly accept remote content.',{path,fields:merged.fields,base:Buffer.from(previous.baseline,'base64').toString(),local:before.toString(),remote:baseline.toString(),head},3);
+     if(!merged.ok){
+      const error=new CliError('merge_conflict',`${path} has overlapping local and remote changes.`,'Preserve your proposal and resolve the reported regions before publishing.',{path,fields:merged.fields,base:Buffer.from(previous.baseline,'base64').toString(),local:before.toString(),remote:baseline.toString(),head},3);
+      throw options.dryRun?error:await persistConflict(workspace.root,target.id,path,error);
+     }
      bytes=Buffer.from(writeDocument(merged.document));
     }
    }else if(['dataset','image','pdf','file'].includes(snapshot.format??'')){
@@ -91,6 +95,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
   }
   const recovery=pending?await archivePendingRequest(workspace.root,pending,await readOptional(await confinedPath(workspace.root,pending.file.path))):undefined;
   if(lock&&files.length){files.push({path:'afbin.lock',before:workspace.raw?digest(workspace.raw):null,data:Buffer.from(JSON.stringify(lock,null,2)+'\n')});await stageFiles(workspace.root,files);await recoverFiles(workspace.root);}
+  if(lock&&files.length)for(const target of targets)await clearConflict(workspace.root,target.id);
   if(pending&&lock&&files.length)await clearPendingRequest(workspace.root);
   return{...(options.dryRun?{dry_run:true}:{}),...(recovery?{recovered_request:recovery}:{}),operations};
  };

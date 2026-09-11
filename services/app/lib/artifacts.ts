@@ -743,8 +743,10 @@ async function writeShares(tx:Queryable,id:string,shares:ShareEntry[]):Promise<{
  const normalized=[...new Map(shares.map(entry=>[entry.email.trim().toLowerCase(),entry.role])).entries()].sort(([a],[b])=>a.localeCompare(b)).map(([email,role])=>({email,role}));
  const current=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
  if(JSON.stringify(current)!==JSON.stringify(normalized)){
-  await tx.query('DELETE FROM artifact_shares WHERE artifact_id=$1',[id]);
-  for(const entry of normalized)await tx.query('INSERT INTO artifact_shares (artifact_id,email,role) VALUES ($1,$2,$3)',[id,entry.email,entry.role]);
+  // Retained invitations keep their resolved account identity, even after an
+  // email change. Recreating them would transfer access to a reused address.
+  await tx.query('DELETE FROM artifact_shares WHERE artifact_id=$1 AND NOT (email=ANY($2::text[]))',[id,normalized.map(entry=>entry.email)]);
+  for(const entry of normalized)await tx.query('INSERT INTO artifact_shares (artifact_id,email,role) VALUES ($1,$2,$3) ON CONFLICT (artifact_id,email) DO UPDATE SET role=EXCLUDED.role',[id,entry.email,entry.role]);
   await tx.query('UPDATE artifacts SET sharing_revision=sharing_revision+1 WHERE id=$1',[id]);
  }
  const row=(await tx.query<{sharing_revision:number}>('SELECT sharing_revision FROM artifacts WHERE id=$1',[id])).rows[0];

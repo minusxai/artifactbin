@@ -47,3 +47,13 @@ Implementation and validation remain in progress; no completion claim is implied
 - A fresh binary push with no saved home credentials and no TTY printed approval (--no-browser), completed local email login and explicit approval, installed skills into the isolated home, saved credentials at 0600 and resumed the same push. The published page rendered in Neo; the next unchanged push skipped normally.
 
 Open risks before completing later phases: persistent conflict resolution; dependency reconciliation and local edits during an in-flight response; atomic policy/YAML governance; declared mutation receipts and remaining resource mutation kinds; full command/flag coverage and raw API retirement; local renderer/export packaging; Linux/x64 release checks; generated skills/plugins and requested multi-model harness validation. No final PR has been created.
+
+## Recovery and resource checkpoint (in progress)
+
+- First foundation commit 253c6746 is pushed on the implementation branch; no final PR yet.
+- Persistent conflict records now block ordinary publication, preserve both proposals and archive explicit resolutions. Dry runs leave no conflict state.
+- In-flight local edits reconcile with remote nodes instead of discarding them. First-create node stamping has a guarded normalization path; arbitrary remote changes still require reconciliation.
+- Dependency-bearing mixed pushes reconcile before preflight/upload and again against the final head from immutable local changes. A focused test changes the remote head during upload.
+- Sharing list updates preserve retained account-bound grants, including after an email change. Policy saves now conditionally verify the content and sharing revision used during validation. Both fixes have observed failing-then-passing tests.
+- Typed YAML parsing/validation is shared with JSX metadata and the existing dataset policy parser. CSV/JSON and asset bytes remain separate local source files. Initial dataset YAML push tracks its source bytes under one resource identity and detects source changes offline. In-flight YAML edits now reconcile fields against the confirmed response; policy publication remains incomplete and refuses before content/settings changes.
+- Full suite after recovery changes: API 1,440 passing; Node 3,856 passing/1 skipped; UI 1,383 passing; CLI 129 passing. Subsequent resource checks: CLI 131 passing, type checks and CLI build pass; real-handler YAML publication followed by a SQL mutation passes. Root production build passed. Broader resource/release work remains incomplete.
