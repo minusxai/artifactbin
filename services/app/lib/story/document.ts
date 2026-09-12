@@ -23,7 +23,7 @@
  * somehow carries `</script` is DROPPED — emitting it would let text escape the
  * script element, and mutating code silently is worse than omitting it.
  */
-import {agentDiscoveryHead,type AgentDiscovery} from '../agent-discovery';
+import {agentDiscoveryHead,agentDiscoveryTail,type AgentDiscovery} from '../agent-discovery';
 import { prepareStoryParts } from './prepare-runtime.server';
 import { loadStorySsr } from './ssr.server';
 import type { WebAssetBox } from '@/lib/story/asset-url';
@@ -594,6 +594,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
      */
     (anchorSrc ? `<script type="module" src="${escapeHtml(anchorSrc)}" crossorigin async></script>` : '') +
     authorScript +
+    (help ? agentDiscoveryTail(help) : '') +
     `</body></html>`
   );
 }
