@@ -7,7 +7,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { Badge, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, VisibilityPill } from '@/components/ui';
 import { ViewsMark } from '@/components/ViewsMark';
 import ShareLink from '@/components/ShareLink';
-import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
+import RowMenu, { useDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
 import type { Visibility } from '@/lib/artifacts';
@@ -131,6 +131,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
    */
   embedded?: boolean;
 }) {
+  const { confirmDeleteArtifact, confirmation } = useDeleteArtifact();
   // Folder moves land as local overrides — a metadata PATCH is too small a
   // change to justify reloading the page the way delete does.
   const [movedFolders, setMovedFolders] = useState<Record<string, string>>({});
@@ -276,6 +277,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
 
   return (
     <div className={PANEL}>
+      {confirmation}
       {!embedded && (
       <div className="flex flex-wrap items-center gap-2 border-b border-edge px-4 py-2">
         <Search size={13} className="shrink-0 text-faint" />

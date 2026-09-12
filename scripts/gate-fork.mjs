@@ -103,6 +103,7 @@ check(true, 'the reader action bar offers Fork directly');
 
 // ── 4. the ask survives the top navigation into /login ────────────────────
 await forkAnchor.click();
+await forker.getByLabel('Confirm fork', { exact: true }).click();
 await forker.waitForURL((u) => u.pathname.startsWith('/login'), { timeout: 20000 });
 check(
   decodeURIComponent(new URL(forker.url()).searchParams.get('callbackUrl') ?? '').includes('intent=fork'),

@@ -32,7 +32,7 @@ import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/
 import AnnotationLayer from '@/components/AnnotationLayer';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
 import RefreshAssets from '@/components/RefreshAssets';
-import ForkArtifact, { ForkConfirm, ForkRefusal, useForkArtifact } from '@/components/ForkArtifact';
+import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent, withIntent } from '@/lib/intent';
@@ -225,7 +225,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [railOpen, setRailOpen] = useState(false);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
-  const forkAction = useForkArtifact(id);
   /** Naming a new folder under THIS one — the shell's only folder-specific act. */
   const [namingFolder, setNamingFolder] = useState(false);
   const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
@@ -780,10 +779,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome pinned={editing} input={{artifactId:id, title:shownTitle, forkBusy:forkAction.busy, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome pinned={editing} input={{artifactId:id, title:shownTitle, forkBusy:false, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
-          else if (action === 'fork') forkAction.fork();
+          else if (action === 'fork') setForkAsked(true);
           else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
           else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
@@ -882,7 +881,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             onComment={canEdit ? commentOnSelection : undefined}
           />
         )}
-        {forkAction.refusal && <div className="fixed right-3 top-14 z-50 w-72"><ForkRefusal lines={forkAction.refusal} onDismiss={forkAction.dismiss} /></div>}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
         {namingFolder && canEdit && isFolder && (
           <NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} />
@@ -905,7 +903,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // or an image inside the app's own measure.
   return (
     <>
-      <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls" actions={<ForkArtifact id={id} variant="bar" />}>
+      <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls" actions={<ForkArtifact id={id} title={shownTitle} variant="bar" />}>
         {documentControls}
       </PageChrome>
       <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">

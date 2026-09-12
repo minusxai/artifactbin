@@ -25,7 +25,7 @@ beforeEach(() => {
   refresh.mockClear();
   rejected = [];
   failFor = [];
-  window.confirm = () => true;
+
   global.fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (u.endsWith('/api/tokens/claimable')) return { ok: true, status: 200, json: async () => ({ claimable: OFFERS }) };
@@ -45,6 +45,8 @@ describe('rejecting an offered token', () => {
     render(<ClaimBanner />);
     await screen.findByText('Alpha draft');
     fireEvent.click(await screen.findByLabelText('Reject tok_a'));
+    expect(rejected).toEqual([]);
+    fireEvent.click(screen.getByLabelText('Confirm reject'));
     await waitFor(() => expect(rejected).toEqual(['tok_a']));
     await waitFor(() => expect(screen.queryByText('Alpha draft')).toBeNull());
     expect(screen.getByText('Beta draft')).toBeTruthy();
@@ -52,10 +54,10 @@ describe('rejecting an offered token', () => {
   });
 
   it('asks before rejecting, and a declined confirm posts nothing', async () => {
-    window.confirm = () => false;
+
     render(<ClaimBanner />);
     fireEvent.click(await screen.findByLabelText('Reject tok_a'));
-    await new Promise((r) => setTimeout(r, 20));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(rejected).toEqual([]);
     expect(screen.getByText('Alpha draft')).toBeTruthy();
   });
@@ -64,6 +66,7 @@ describe('rejecting an offered token', () => {
     failFor = ['tok_b'];
     render(<ClaimBanner />);
     fireEvent.click(await screen.findByLabelText('Reject tok_b'));
+    fireEvent.click(screen.getByLabelText('Confirm reject'));
     await waitFor(() => expect(rejected).toEqual(['tok_b']));
     expect(await screen.findByText(/could not reject/i)).toBeTruthy();
     expect(screen.getByText('Beta draft')).toBeTruthy();
@@ -72,8 +75,10 @@ describe('rejecting an offered token', () => {
   it('rejecting the last offer takes the banner away', async () => {
     render(<ClaimBanner />);
     fireEvent.click(await screen.findByLabelText('Reject tok_a'));
+    fireEvent.click(screen.getByLabelText('Confirm reject'));
     await waitFor(() => expect(screen.queryByText('Alpha draft')).toBeNull());
     fireEvent.click(await screen.findByLabelText('Reject tok_b'));
+    fireEvent.click(screen.getByLabelText('Confirm reject'));
     await waitFor(() => expect(screen.queryByLabelText('Unclaimed drafts')).toBeNull());
   });
 });

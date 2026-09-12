@@ -13,6 +13,7 @@
  * what lets the assets band offer a strict subset without a flag threaded
  * through for each one.
  */
+import { useConfirmation } from './ConfirmDialog';
 import { Ellipsis } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
@@ -82,6 +83,7 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
               disabled={item.disabled}
               className={`flex w-full items-center gap-2 rounded-[4px] px-2 py-1 text-left text-muted disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent enabled:cursor-pointer enabled:hover:bg-raised ${item.danger ? 'enabled:hover:text-danger' : 'enabled:hover:text-fg'}`}
               onClick={() => {
+                box.current?.querySelector<HTMLButtonElement>('button')?.focus();
                 setOpen(false);
                 item.onSelect();
               }}
@@ -108,12 +110,17 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
  * used to read "the link dies and history is erased", written when a delete
  * WAS one hard DELETE; with the trash under it, only the first half is true.
  */
-export async function confirmDeleteArtifact(id: string, name: string, inside = 0): Promise<boolean> {
-  const message = inside > 0
-    ? `Delete ${name} and the ${inside} item${inside === 1 ? '' : 's'} inside it? They go to the trash, and you can restore them any time.`
-    : `Delete "${name}"? The link stops working. It goes to the trash, where you can restore it any time.`;
-  if (!confirm(message)) return false;
-  const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
-  if (res.ok) pageDataChanged();
-  return res.ok;
+export function useDeleteArtifact() {
+  const { confirmAction, confirmation } = useConfirmation();
+  const confirmDeleteArtifact = (id: string, name: string, inside = 0): Promise<boolean> => {
+    const message = inside > 0
+      ? `Delete ${name} and the ${inside} item${inside === 1 ? '' : 's'} inside it? They go to the trash, and you can restore them any time.`
+      : `Delete "${name}"? The link stops working. It goes to the trash, where you can restore it any time.`;
+    return confirmAction({ title: `Delete “${name}”?`, description: message, action: 'Move to trash', confirmLabel: 'Confirm delete', danger: true }, async () => {
+      const res = await fetch(`/api/my/artifacts/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Could not move this artifact to trash. Try again.');
+      pageDataChanged();
+    });
+  };
+  return { confirmDeleteArtifact, confirmation };
 }

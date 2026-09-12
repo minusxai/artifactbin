@@ -153,7 +153,7 @@ ok((await p.getByText('Connected artifact').count()) > 0, 'what the connection p
 await p.goto(`${B}/account`, { waitUntil: 'load' }); await p.waitForTimeout(800);
 const revoke = p.locator('[aria-label^="Revoke token"]').first();
 if (await revoke.count()) {
-  await revoke.click(); await p.waitForTimeout(2500);
+  await revoke.click(); await p.getByLabel('Confirm revoke', { exact: true }).click(); await p.waitForTimeout(2500);
   ok((await fetch(`${B}/api/artifacts`, { headers: { Authorization: `Bearer ${accountToken}` } })).status === 401, 'a revoked connection stops working');
 } else ok(false, 'the connections panel offers revoke');
 await openMenu(p);
