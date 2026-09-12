@@ -12,7 +12,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { POST as refreshRoute } from '@/app/api/artifacts/assets/refresh/route';
 import { POST as myRefreshRoute } from '@/app/api/my/artifacts/[id]/assets/refresh/route';
 import { POST as createArtifact } from '@/app/api/artifacts/route';

@@ -20,7 +20,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/tokens';
 import { createAppServer } from '../app';
 import { request, useAppHarness } from '@/__tests__/harness';
-import { readRawResponse, withHttpServer } from '@/__tests__/net';
+import { readRawResponse, withHttpServer } from '@artifactbin/test-support/net';
 
 useAppHarness();
 

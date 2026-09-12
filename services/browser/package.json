@@ -10,7 +10,10 @@
     ".": "./src/index.ts",
     "./local": "./src/local.ts"
   },
-  "files": ["src", "CONTRACT.md"],
+  "files": [
+    "src",
+    "CONTRACT.md"
+  ],
   "dependencies": {
     "@artifactbin/contracts": "*",
     "@artifactbin/utils": "*",
@@ -18,6 +21,7 @@
     "sharp": "0.35.4"
   },
   "devDependencies": {
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "@artifactbin/test-support": "*"
   }
 }

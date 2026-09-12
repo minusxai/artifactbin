@@ -19,7 +19,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { useAppHarness } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
