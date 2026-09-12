@@ -10,7 +10,7 @@ import { existingPaste } from '@/lib/agent-copy';
 const B = 'https://x.test';
 const ID = 'ab3cd9';
 const STARTER =
-  'Help me edit my artifact at https://x.test/a/ab3cd9. Use the afbin CLI to operate artifactbin, or (curl -fsSL https://x.test/chat/install.sh | sh) if not installed. Run afbin help first. Pass --server https://x.test to every afbin server command.';
+  'Edit my artifact at https://x.test/a/ab3cd9 in place, not as a new document. Use the afbin CLI to operate artifactbin, or (curl -fsSL https://x.test/chat/install.sh | sh) if not installed. Run afbin help first. Pass --server https://x.test to every afbin server command.';
 
 describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {

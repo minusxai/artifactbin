@@ -15,6 +15,7 @@
   ],
   "checks": [
     "published",
+    "used_cli",
     "responded",
     "resolved",
     "urls_kept",

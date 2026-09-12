@@ -37,7 +37,7 @@ import { legFromArgs, type Leg } from './lib/leg';
 import { discoverTasks, parseShard, selectTasks, shardTasks } from './lib/task-set';
 import { checksToRecord, gatedChecks, verdictFor } from './lib/score/verdict';
 import { buildPrompt, planAccess } from './lib/tasks';
-import { actionTransport, cliPreinstalled, planTransport, vocabularyInstalled } from './lib/mode';
+import { actionTransport, cliPreinstalled, planTransport } from './lib/mode';
 import { approverNeeded, startApprover } from './lib/approver';
 import { skillKit } from './lib/skill-kit';
 import { CLI_VERSION } from '../services/cli/src/version';
@@ -511,8 +511,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     no_unknown_endpoints: lm.inventedEndpoints === 0,
     canonical_stable: lm.canonicalStable,
     has_title: pm.hasTitle,
-    // Hardcore never names the start document, so the question has no answer there (verdict.ts).
-    used_start_document: leg.promptLevel === 'hardcore' ? null : targetId === start.id,
+    used_start_document: targetId === start.id,
     harness_ok: result.ok,
     no_console_errors: inspection ? inspection.consoleErrors.length === 0 : null,
     no_failed_responses: inspection ? inspection.failedResponses.length === 0 : null,
@@ -532,8 +531,6 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // canonicalized the agent's markup, not a failure of the flow.
   const gated = gatedChecks(checked.ok ? [...task.checks] : task.checks.filter((c) => !checked.ungated.includes(c)), {
     trafficObserved: lm.observed,
-    vocabularyInstalled: vocabularyInstalled(leg.mode.run),
-    startUnnamed: leg.promptLevel === 'hardcore',
     transportSubstituted: transport.substitutedWhy !== null || leg.mode.substitutedWhy !== null,
     // The same signal `checkoutReads` was computed from: a harness that emitted no tool calls
     // cannot be asked what it read, so `no_local_checkout_reads` stops gating (verdict.ts).
