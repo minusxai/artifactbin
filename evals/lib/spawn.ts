@@ -279,11 +279,26 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   for (const key of Object.keys(env)) {
     if (/^npm_/i.test(key) || key === 'INIT_CWD' || key === 'NODE_PATH') delete env[key];
   }
+  const isUnder = (entry: string, root: string) => {
+    const relative = path.relative(path.resolve(root), path.resolve(entry));
+    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  };
   if (env.PATH && opts.checkoutRoots?.length) {
-    env.PATH = env.PATH.split(path.delimiter).filter((entry) => !opts.checkoutRoots!.some((root) => {
-      const relative = path.relative(path.resolve(root), path.resolve(entry));
-      return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
-    })).join(path.delimiter);
+    env.PATH = env.PATH.split(path.delimiter).filter((entry) => !opts.checkoutRoots!.some((root) => isUnder(entry, root))).join(path.delimiter);
+  }
+  // NEVER A FOREIGN afbin. The not-installed flow measures whether the agent can find and install the
+  // CLI, and the installed flow measures THIS checkout's build — so a developer machine's own afbin
+  // must not be reachable from either. On a local not-installed leg `which afbin` answered the global
+  // ~/.local/bin/afbin (v0.1.8) and the agent never installed anything. Every PATH entry that holds an
+  // executable named afbin is dropped unless it sits under the run home, which is where the driver
+  // stages the CLI and where the installer puts it.
+  if (env.PATH) {
+    const home = opts.homeDir ? path.resolve(opts.homeDir) : null;
+    env.PATH = env.PATH.split(path.delimiter).filter((entry) => {
+      if (!entry) return false;
+      if (home && isUnder(entry, home)) return true;
+      try { return !(fs.statSync(path.join(entry, 'afbin')).mode & 0o111); } catch { return true; }
+    }).join(path.delimiter);
   }
 
   // The privileged half of the switch — the one step that needs a sudoer. Injectable so the hand-over and

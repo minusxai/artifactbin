@@ -74,6 +74,21 @@ describe('runInvocation', () => {
     expect(fs.readFileSync(path.join(cwd, 'output.csv'), 'utf8')).toBe('value\n1');
   });
 
+  it('drops every PATH entry that carries a foreign afbin and keeps the run home\'s own (a local not-installed leg found ~/.local/bin/afbin and installed nothing)', async () => {
+    const foreign = path.join(dir, 'foreign-bin'); const home = path.join(dir, 'home'); const staged = path.join(home, 'bin'); const plain = path.join(dir, 'plain-bin');
+    for (const d of [foreign, staged, plain]) fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(foreign, 'afbin'), '#!/bin/sh\necho foreign\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(staged, 'afbin'), '#!/bin/sh\necho staged\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(plain, 'other-tool'), '#!/bin/sh\n', { mode: 0o755 });
+    const result = await runInvocation(node('console.log(process.env.PATH)'), {
+      cwd: dir, homeDir: home, baseEnv: { ...process.env, PATH: [foreign, staged, plain, process.env.PATH ?? ''].join(path.delimiter) }, timeoutMs: 20_000, ...paths(),
+    });
+    const entries = result.stdout.trim().split(path.delimiter);
+    expect(entries).not.toContain(foreign);
+    expect(entries).toContain(staged);
+    expect(entries).toContain(plain);
+  });
+
   it.skipIf(process.platform !== 'darwin')('hides eval records and the real connection while the staged plugin and task connection remain readable', async () => {
     const records = path.join(dir, 'records');
     const workspace = path.join(dir, 'workspace');
