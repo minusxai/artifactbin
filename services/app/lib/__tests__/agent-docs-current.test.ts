@@ -263,28 +263,14 @@ describe('the addresses agents guess', () => {
 });
 
 /**
- * THE SAME DEFECT, THREE TIMES IN ONE DAY — so it gets a guard rather than a
- * fourth fix.
+ * AN AGENT-FACING SURFACE MUST NEVER FORBID A LOOK, OR CLAIM TO BE COMPLETE.
  *
- * An agent-facing surface must never FORBID a look, and must never CLAIM to be
- * complete. Both read as helpful compression and both cost far more than they
- * save, because a prohibition does not stop an agent needing something — it
- * stops it asking, and it improvises instead:
- *
- *  - the start brief said "for a document of prose, slides or sections, do not
- *    fetch anything". Claude Code wanted a deck's component list, did not
- *    fetch, and guessed `/api/docs`, `/api/components`,
- *    `/api/artifacts/<id>/schema` and `/llms.txt` — failing
- *    `no_unknown_endpoints` and reaching `/docs/llm` on its tenth request.
- *  - the eval's plugins prompt said the skills "carry the whole protocol, so
- *    use them rather than fetching documentation". They did not carry it (they
- *    had been trimmed), and `edit` failed `used_edits_endpoint` for every agent
- *    that ran it, against four passes in copy-text where nothing said that.
- *  - an earlier "Fetch no docs" line sent pi hunting for `/api/openapi.json`
- *    and `/api/swagger.json`.
- *
- * Saying a sheet is USUALLY enough is fine and stays — it is the absolutism
- * that goes, and the pointer that must always be within reach.
+ * This guard exists because the same defect keeps coming back in new wording.
+ * Both phrasings read as helpful compression and both cost far more than they
+ * save: a prohibition does not stop an agent needing something — it stops it
+ * asking, so it improvises, guesses endpoints that do not exist, and burns its
+ * turns failing. Saying a sheet is USUALLY enough is fine and stays; it is the
+ * absolutism that goes, and the pointer that must always be within reach.
  */
 describe('no agent-facing surface forbids a look or claims to be complete', () => {
   const surfaces: Array<[string, string]> = [

@@ -1,28 +1,25 @@
 /**
- * Codex — `codex exec --json`. Two things learned by running it: the key does
- * NOT ride the environment (a fresh `CODEX_HOME` with `OPENAI_API_KEY` set gets
- * a 401 on the Responses websocket) — `prepare()` runs `codex login
- * --with-api-key` from stdin into that home instead; and it reads stdin unless
- * stdin is closed, so the driver spawns it with stdin ignored. A THIRD was found
- * by running the matrix: `--sandbox workspace-write` denies NETWORK access by
- * default, so the agent could not reach the product at all — both its tasks ended
- * after one turn with zero HTTP calls. `sandbox_workspace_write.network_access`
- * turns it on; an eval agent must be able to publish. Usage comes per
- * turn on `turn.completed`; OpenAI counts BOTH cached and cache-written tokens
- * INSIDE `input_tokens` (its own formula: ordinary + cached × rate + written × rate),
- * so both are subtracted to get the ordinary figure — subtracting only cached
- * billed every cache write twice, which on a Codex turn is nearly all of it.
- * It reports no cost, and a `web_search` item is a per-call fee the usage
- * object never carries, so those are counted for `taskCost` to price.
+ * Codex — `codex exec --json`. Four constraints this adapter exists for:
  *
- * A FOURTH: what this adapter reports as `turns` is NOT Codex's own turn count.
- * Codex emits exactly one `turn.started`/`turn.completed` pair per user prompt,
- * so a whole run read `turns: 1` beside 16 tool calls (production run 33702277600,
- * 2026-09-03) — meaningless beside Claude Code's `turns`, which is its count of
- * assistant messages. The comparable Codex figure is the number of assistant
- * ITEMS it emitted (`ASSISTANT_ITEMS` below), so that is what the report gets.
- * `turn.completed` still drives token accumulation and `ok`: turns is telemetry,
- * `ok` is completion, and neither is read off the other.
+ *  - the key does NOT ride the environment (a fresh `CODEX_HOME` with
+ *    `OPENAI_API_KEY` set gets a 401 on the Responses websocket), so `prepare()`
+ *    runs `codex login --with-api-key` from stdin into that home;
+ *  - it reads stdin unless stdin is closed, so the driver spawns it with stdin ignored;
+ *  - `--sandbox workspace-write` denies NETWORK access by default, which leaves the
+ *    agent unable to reach the product at all. `sandbox_workspace_write.network_access`
+ *    turns it on; an eval agent must be able to publish;
+ *  - OpenAI counts BOTH cached and cache-written tokens INSIDE `input_tokens`
+ *    (ordinary + cached × rate + written × rate), so both are subtracted to get the
+ *    ordinary figure — subtracting only cached bills every cache write twice, which on
+ *    a Codex turn is nearly all of it. It reports no cost, and a `web_search` item is a
+ *    per-call fee the usage object never carries, so those are counted for `taskCost`.
+ *
+ * `turns` here is NOT Codex's own turn count: it emits one `turn.started`/`turn.completed`
+ * pair per user prompt, so a whole run reads `turns: 1` beside a dozen tool calls —
+ * meaningless beside Claude Code's count of assistant messages. The comparable figure is
+ * the number of assistant ITEMS (`ASSISTANT_ITEMS` below). `turn.completed` still drives
+ * token accumulation and `ok`: turns is telemetry, `ok` is completion, and neither is
+ * read off the other.
  */
 import { countDocsReads, type ToolInvocation } from '../docs-reads';
 import { spawn } from 'node:child_process';

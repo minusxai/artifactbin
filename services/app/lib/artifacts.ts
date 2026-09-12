@@ -464,33 +464,20 @@ export interface ForkOverrides {
 /**
  * FORK — the same artifact under a NEW OWNER and a new id, and nothing else.
  *
- * What travels is the CONTENT: format, title, description, visibility, access,
- * the whole meta (theme, template, compiled CSS, refs, dataset columns and
- * object key, image dimensions). Object-store bytes are REFERENCED rather than
- * re-uploaded — every key is content-addressed, so the copy's row names the
- * same one and a fork of a 27 MB sheet costs no bytes.
+ * Which parts of a document travel and which belong to the original's life is stated once, in
+ * [serving and security](../../../docs/serving-and-security.md). Two things the doc cannot say:
+ * object-store bytes are REFERENCED rather than re-uploaded (every key is content-addressed, so a
+ * fork of a 27 MB sheet costs no bytes), and a Postgres catalog copies only when the forker owns
+ * its live connection.
  *
- * What does not travel belongs to the ORIGINAL'S LIFE rather than its content:
- * version history (the copy is version 1 with its own genesis edit), comments
- * (every `data-annotation-anchor` is stripped — a copy starts with no
- * conversation), shares, and the folder it was filed in.
+ * A markup document is RE-PUBLISHED as the forker rather than row-copied, and that is the whole
+ * point of the function: refs resolve through `refLoaderForActor(actor)`, so a document whose
+ * <Mutation> writes the original owner's dataset, or which reads their private image, is refused
+ * BY NAME at this door instead of publishing and failing every write at run time. The refusal
+ * Response passes through verbatim.
  *
- * A markup document is RE-PUBLISHED as the forker rather than row-copied, and
- * that is the whole point of the function: refs are resolved through
- * `refLoaderForActor(actor)` — the person taking the copy — so a document whose
- * <Mutation> writes the original owner's dataset is refused BY NAME at this
- * door instead of publishing and then failing every write at run time
- * (`writerFor` resolves as the document's owner, which the copy no longer is),
- * and one reading the owner's PRIVATE image or dataset is refused rather than
- * rendering broken for its new owner. The refusal Response passes through
- * verbatim. Stored data-tier content is immutable bytes behind a key and copies
- * directly; a Postgres catalog copies only when the forker owns its live connection.
- *
- * `overrides` are the three things a forker changes FIRST (the browser door
- * passes none; the agent operation passes what its caller sent, already
- * validated by the shared parsers). They are applied to the copy's stored
- * state rather than written afterwards: a post-hoc title would be a second
- * write, rotating the `edit_id` the create reply just handed back.
+ * `overrides` are applied to the copy's stored state rather than written afterwards: a post-hoc
+ * title would be a second write, rotating the `edit_id` the create reply just handed back.
  */
 export async function forkArtifact(
   actor: TokenActor,

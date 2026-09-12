@@ -1,10 +1,10 @@
 /**
  * THE CREATE BUTTON IS A BROWSER DOOR.
  *
- * MEASURED on production: the real page sends `origin: https://artifactbin.dev` +
- * `sec-fetch-site: same-origin` on its fetch, both survive this proxy to the upstream, and a bare curl
- * with none of them used to be served anyway. `POST /api/start` is the web page's own button — an agent
- * that posts it instead of running afbin is mid-mistake, and the refusal is where we hand it the CLI.
+ * A real page sends `origin: <the deployment's own origin>` and `sec-fetch-site: same-origin` on its
+ * fetch, and both survive this proxy to the upstream untouched; a bare HTTP client sends neither.
+ * `POST /api/start` is the web page's own button — an agent that posts it instead of running afbin
+ * is mid-mistake, and the refusal is where we hand it the CLI.
  * The GET shape of the same path is NOT gated: only the create is.
  */
 import { describe, it, expect } from 'vitest';
@@ -87,19 +87,19 @@ describe('the create-button door', () => {
   });
 
   /**
-   * The production shape, and the one that would have silently blocked the real page: behind TLS
-   * termination the browser says `origin: https://artifactbin.dev` while this hop received plain http.
+   * The deployed shape, and the one that would silently block the real page: behind TLS
+   * termination the browser says `origin: https://<host>` while this hop received plain http.
    * The check compares HOSTS for exactly this reason.
    */
   it('lets the real page through behind a TLS-terminating hop', async () => {
     let reached = false;
     const proxy = assemble(await proxyParts(await testProxyOptions({
-      env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'https://artifactbin.dev' },
+      env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'https://docs.example' },
       upstream: async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); },
     })));
     const res = await proxy.fetch(new Request('http://localhost/api/start', {
       method: 'POST',
-      headers: { origin: 'https://artifactbin.dev', 'sec-fetch-site': 'same-origin' },
+      headers: { origin: 'https://docs.example', 'sec-fetch-site': 'same-origin' },
     }));
     expect(reached).toBe(true);
     expect(res.status).toBe(201);

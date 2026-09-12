@@ -188,8 +188,8 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   }
 
   // What this column costs BEFORE it does anything: one turn, one word, no product. It opens the
-  // report because a per-task total hides it, which is how a matrix once read an 18,454-token-per-turn
-  // harness flag as "the plugin is 3.4× more expensive". Reported, never subtracted (lib/baseline.ts).
+  // report because a per-task total hides a fixed per-turn overhead and lets it read as product
+  // cost. Reported, never subtracted (lib/baseline.ts).
   try {
     const baseDir = path.join(legDir, 'baseline');
     const baseWorkspace = createWorkspace(leg.label, 'baseline');

@@ -251,10 +251,10 @@ function drawsChart(nodes: JsxNode[]): boolean {
  * lib/story/__tests__/history-prelude.test.ts), and hydration does not route.
  */
 /*
- * SPIKE S2 (F2 — the reader's `<Value>` selections in the URL, risk R5).
+ * THE ONE WINDOW IN THE FREEZE — the reader's `<Value>` selections in the URL.
  *
- * The freeze above is exactly what a reader-facing URL needs, and F2 needs the
- * URL to change anyway: someone who picks "west" must be able to copy the
+ * The freeze above is exactly what a reader-facing URL needs, and reader
+ * controls need the URL to change anyway: someone who picks "west" must be able to copy the
  * address bar and hand another person the document they are looking at. So the
  * prelude keeps every door shut and opens ONE WINDOW, `window.__mxValues`.
  *

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * THE COMPOSE WALK (P3 CORE TEST 4) — the split shape, end to end, over HTTP.
+ * THE COMPOSE WALK — the split shape, end to end, over HTTP.
  *
  *   docker compose -f docker-compose.lean.yml up -d --build
  *   node scripts/test-compose-lean.mjs [base]        # default http://127.0.0.1:5440
@@ -34,19 +34,13 @@
  *      way CI addresses it — COMPOSE_FILE / COMPOSE_PROJECT_NAME from the
  *      environment, defaulting to this repo's lean file.
  *
- * NO EXPORT LEG, deliberately. Measured on this compose (P3b-Y): Chromium
- * HTTPS-UPGRADES the plain-http container URL — `http://app:3000` navigates
- * as `https` and dies `ERR_SSL_PROTOCOL_ERROR`, while `http://127.0.0.1:*`
- * (the full image's default origin) is upgrade-exempt and renders fine. The
- * fix is a launch-arg in services/browser/src/local.ts (`chromium.launch`
- * carries no `args` today), which is that package's to make — not this
- * walk's to paper over. Re-add the leg when it lands:
- *   GET /a/<id>/export → image/png (the app image has no Chromium; the
- *   browser container rendered it).
- *
- * The login leg (a code from a mail sink) is deliberately NOT here: it needs
- * a mailbox, which CI does not have — it is walked by hand against the same
- * compose file (the phase report carries it).
+ * NO EXPORT LEG, deliberately: Chromium HTTPS-upgrades a plain-http container
+ * URL, so `http://app:3000` dies `ERR_SSL_PROTOCOL_ERROR` while the full
+ * image's `http://127.0.0.1:*` origin is upgrade-exempt. The fix is a launch
+ * arg in services/browser/src/local.ts, that package's to make rather than
+ * this walk's to paper over; re-add `GET /a/<id>/export → image/png` when it
+ * lands. The login leg needs a mailbox CI does not have, so it is walked by
+ * hand against the same compose file.
  */
 import { execFileSync } from 'node:child_process';
 import { connectAgent } from './lib/cli-connection.mjs';

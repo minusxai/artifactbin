@@ -15,24 +15,9 @@
  * THIS MODULE, which reads past the gate through `ownerPredicate`, because the
  * trash listing and restore are the readers the rows are kept for.
  *
- * Three consequences worth stating, each of which is why this is a module and
- * not three statements spread over the doors:
- *
- *  - A FOLDER IS ONE STATEMENT, not a walk. Placement is `ancestor_ids`, so
- *    "this row and everything under it" is `id = $1 OR ancestor_ids @> ARRAY[$1]`,
- *    and the owner predicate rides in the same WHERE — a stranger's document
- *    filed under this folder is left alone rather than deleted on the way past.
- *  - RESTORE REVERSES THE ACT, not the containment. One UPDATE stamps one
- *    `now()` across the subtree, so the rows of one delete share a timestamp
- *    exactly; restore takes back the rows carrying THAT stamp. A document
- *    trashed last week that happened to live in the folder stays in the trash,
- *    where its owner put it.
- *  - A RESTORED ROW WHOSE PARENT IS STILL TRASHED LANDS AT ROOT, and its own
- *    subtree comes with it (the same prefix swap a move runs), because
- *    `ancestor_ids = parent.ancestor_ids || parent.id` is an invariant a test
- *    pins and re-rooting only the named row would break it one level down.
- *
- * Plan: ~/projects/artifactbin-folders.md.
+ * A delete acts on a SUBTREE in one statement (placement is `ancestor_ids`), and restore reverses
+ * the ACT rather than the containment: one delete stamps one `now()`, and restore takes back only
+ * the rows carrying that stamp. The queries below state the rest.
  */
 import { trackEvent } from '@/lib/analytics';
 import { LIVE_ARTIFACT_SQL, ownerPredicate, type TokenActor } from '@/lib/artifacts';

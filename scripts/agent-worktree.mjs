@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * HAND A DELEGATED AGENT ITS OWN TREE. The orchestrator runs this, never the
- * agent: a git worktree on `split-<phase>`, a free 100-port block written to
- * `.env` (which `npm run dev` loads), and the brief at `.agent/BRIEF.md` with
- * that block appended — so the brief in the plan, the brief in the tree and
- * the env the servers boot with are one source. `.agent/` and `.env` can never
- * be committed (`info/exclude`, `.gitignore`).
+ * HAND A DELEGATED AGENT ITS OWN TREE: a git worktree on `split-<phase>`, a
+ * free 100-port block written to `.env` (which `npm run dev` loads), and the
+ * brief at `.agent/BRIEF.md` with that block appended — so the brief in the
+ * plan, the brief in the tree and the env the servers boot with are one
+ * source. `.agent/` and `.env` can never be committed (`info/exclude`,
+ * `.gitignore`). The handoff procedure is in docs/agent-workflows.md.
  *
  *   node scripts/agent-worktree.mjs --phase p2 --brief ../p2-brief.md            # from the repo the agent works in
  *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule <path>=<commit>
@@ -15,11 +15,9 @@
  *          --reuse (resume an existing task tree) · --from <port> (first block to try) · --secrets (append fresh AUTH__SECRET / CONTRACT__ACTOR_SECRET)
  *          --harness claude|codex|pi (print the exact launch line for that coding agent, lessons baked in)
  *
- * Harness launch and handoff guidance lives in docs/agent-workflows.md: codex needs
- * `< /dev/null` (it blocks on "Reading additional input from stdin"
- * otherwise) and `--approve-for-me` (implies workspace-write; `-s` cannot be
- * combined with it); pi takes the key by indirection so no value is ever
- * printed; claude runs through the Agent tool and reports by task notification.
+ * `--harness` prints a launch line per coding agent. Those lines encode CLI
+ * quirks that move with the CLI, so check the installed help before trusting
+ * one; docs/agent-workflows.md says the same about version-specific commands.
  */
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';

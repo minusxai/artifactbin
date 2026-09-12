@@ -1,30 +1,12 @@
 /**
  * A CI flow that fails gets ONE more turn, alone, and is NAMED when it passes there.
  *
- * The gates learned this first (scripts/gates.mjs): "retrying blindly would hide
- * a real intermittent bug, so the retry is REPORTED". The agent smoke jobs need
- * the same rule for a different reason. A gate loses a race; an agent smoke run
- * loses a COIN TOSS — its verdict is a model's behaviour, not the product's. One
- * measured example: `data` failed on master with `query_ran` and
- * `chart_marks_drawn` false — OpenCode published the document and never wrote a
- * working query — while the identical job had passed on that commit's own
- * pre-merge head and on the two commits before it. Nothing about the product was
- * learned and master went red.
- *
- * Two rules make the retry honest rather than a way to launder red:
- *
- * 1. **CI ONLY.** The comparison matrix (`*.eval.json`) is a MEASUREMENT — its
- *    numbers are the deliverable, and re-rolling a column until it looks better
- *    is how a comparison stops meaning anything. The CI set (`<id>.json`) is a
- *    product guard with one right answer, where "did this work" is the only
- *    question and asking twice is legitimate.
- * 2. **REPORTED.** A flow that needed the second attempt is named in the summary
- *    line and in the job summary, and its first attempt's artifacts are kept
- *    (`runs/<id>@1`) so the failure can still be read. A flow that fails twice
- *    fails the job.
- *
- * Deliberately one extra attempt, not a loop: two independent failures of a
- * two-state guard is evidence, and each attempt is a paid agent run.
+ * An agent smoke run's verdict is a model's behaviour, not the product's, so a single red says
+ * nothing. Two rules keep the retry from laundering it: **CI ONLY** — the comparison matrix
+ * (`*.eval.json`) is a measurement and re-rolling a column would void it, while the CI set
+ * (`<id>.json`) is a product guard where asking twice is legitimate — and **REPORTED**, with the
+ * flow named in the summary and the first attempt's artifacts kept at `runs/<id>@1`. Twice fails
+ * the job. One extra attempt, not a loop: each attempt is a paid agent run. See docs/evals.md.
  */
 import fs from 'node:fs';
 import path from 'node:path';
