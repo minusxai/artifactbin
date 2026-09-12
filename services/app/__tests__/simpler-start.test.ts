@@ -14,7 +14,7 @@ vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: ses
 import { GET as startBrief, POST as startClaim } from '@/app/a/[id]/start/route';
 import { POST as apiStart } from '@/app/api/start/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
-import { anonymousPaste, ownedPaste } from '@/lib/agent-copy';
+import { existingPaste } from '@/lib/agent-copy';
 import { issueStartHandle } from '@/lib/start-links';
 import { createUser } from '@/lib/users';
 
@@ -24,7 +24,8 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 /**
  * Create an anonymous start doc, then issue a handle directly for tests of the
- * alternative start-link protocol.
+ * alternative start-link protocol. The PASTE is tokenless now, but the JSON
+ * response still carries the anonymous `token` for exactly this plumbing.
  */
 async function start() {
   const res = await apiStart(request('/api/start', { method: 'POST' }));
@@ -42,23 +43,24 @@ beforeEach(() => {
 });
 
 describe('the paste', () => {
-  it('is the anonymous one-line paste with the returned token inline', async () => {
-    const s = await start();
-    expect(s.prompt).toBe(anonymousPaste(BASE, s.id, s.token));
-    expect(s.prompt).toContain(s.token);
-    expect(s.prompt).toContain('afbin help');
-    expect(s.prompt.split('\n')).toHaveLength(1);
-    expect(s.prompt.length).toBeLessThan(600); // a line, not an essay
-    expect(s.token).toMatch(/^mx_/);
+  it('is the tokenless one-line paste — no token, no token page', async () => {
+    const res = await apiStart(request('/api/start', { method: 'POST' }));
+    const body = await res.json();
+    expect(body.prompt).toBe(existingPaste(BASE, body.id));
+    expect(body.prompt).not.toContain('mx_');
+    expect(body.prompt).not.toContain('/tokens/new');
+    expect(body.prompt).toContain('afbin help');
+    expect(body.prompt.split('\n')).toHaveLength(1);
+    expect(body.prompt.length).toBeLessThan(600); // a line, not an essay
   });
 
-  it('uses the owned paste for a signed-in session without exposing a token', async () => {
+  it('uses the same tokenless paste for a signed-in session', async () => {
     const user = await createUser({ email: 'owned-start@example.com' });
     sessionUser.id = user.id;
     const res = await apiStart(request('/api/start', { method: 'POST' }));
     const body = await res.json();
 
-    expect(body.prompt).toBe(ownedPaste(BASE, body.id));
+    expect(body.prompt).toBe(existingPaste(BASE, body.id));
     expect(body.prompt).not.toContain('mx_');
     expect(body.prompt).not.toContain('/tokens/new');
     expect(body).not.toHaveProperty('token');
