@@ -1,15 +1,22 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkTableGeometry } from './lib/table-geometry.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
-/** Full served-document test: real cell writes, two readers, conflict, portals and virtual rows. */
+/**
+ * Full served-document test: real cell writes, two readers, conflict, portals
+ * and virtual rows — and then the same editors under every permission the
+ * sharing seam can put a reader in: anonymous, invited editor, demoted viewer,
+ * read-only document.
+ */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { createEditableTableFixture } from './lib/editable-table-fixture.mjs';
-import { becomeOwner } from './lib/start-doc.mjs';
+import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const fixture = await createEditableTableFixture(base);
 const browser = await chromium.launch();
+const sink = await startMailSink();
 const errors = [];
 const check = (name) => console.log(`  ok ${name}`);
 try {
@@ -195,5 +202,67 @@ try {
 
   assert.deepEqual(errors,[]);
   check('menu escapes table overflow; no hydration/runtime errors');
+
+  /*
+   * WHO MAY WRITE — the same editors, under every permission the sharing seam
+   * can put them in. `mutation-permissions.test.ts` covers the state machine;
+   * what needs a browser is that a permission CHANGE reaches cells that are
+   * already on screen, without a reload and without discarding what the person
+   * was typing. A small fixture of its own, so the 500-row table above keeps
+   * its state.
+   */
+  const shared = await createEditableTableFixture(base, 2, { seed: await startDocument(base) });
+  const guest = await browser.newPage();
+  await guest.goto(shared.url);
+  await guest.getByLabel('Item 1', { exact: true }).waitFor();
+  assert.equal(await guest.getByLabel('Item 1', { exact: true }).isDisabled(), true);
+  const forged = await guest.request.post(`${shared.url}/mutate`, { data: {
+    mutation: 'set_item',
+    values: { _value: 'forged' },
+    row: { id: 1, item: 'Task 1', owner: 'TBD', hours: 2, depends_on: '[]', tags: '[]', status: 'backlog', sprint: '' },
+  } });
+  assert.equal(forged.status(), 403);
+  check('an anonymous reader gets disabled cells, and a forged mutation is refused');
+
+  const sharedOwner = await browser.newPage();
+  await becomeOwner(sharedOwner, base, shared.token);
+  const friend = await browser.newPage();
+  const email = `mxmx_test_dataset_friend_${Date.now().toString(36)}@example.com`;
+  await loginViaEmail(friend, base, sink, email);
+  await friend.goto(shared.url);
+  await friend.locator('[data-mx-inline-story]').waitFor();
+  const friendDoc = friend.locator('[data-mx-inline-story]');
+  await friendDoc.getByLabel('Item 1', { exact: true }).waitFor();
+  assert.equal(await friendDoc.getByLabel('Item 1', { exact: true }).isDisabled(), true);
+
+  const share = async (patch) => {
+    const response = await sharedOwner.request.put(`${base}/api/my/artifacts/${shared.datasetId}/sharing`, { data: patch });
+    assert.equal(response.status(), 200, await response.text());
+  };
+  await share({ shares: [{ email, role: 'editor' }] });
+  await friendDoc.locator('[aria-label="Item 1"]:enabled').waitFor();
+  await friendDoc.getByLabel('Item 1', { exact: true }).fill('Shared edit');
+  await friendDoc.getByLabel('Item 1', { exact: true }).press('Enter');
+  await guest.waitForFunction(() => document.querySelector('[aria-label="Item 1"]')?.value === 'Shared edit');
+  assert.equal(await guest.getByLabel('Item 1', { exact: true }).isDisabled(), true);
+  check('promotion to editor enables the open page live, and its write reaches a reader who still cannot write');
+
+  // A draft in flight when the grant is taken away must not be thrown away.
+  await friendDoc.getByLabel('Item 2', { exact: true }).fill('Unsaved draft');
+  await share({ shares: [{ email, role: 'viewer' }] });
+  await friendDoc.locator('[aria-label="Item 2"]:disabled').waitFor();
+  assert.equal(await friendDoc.getByLabel('Item 2', { exact: true }).inputValue(), 'Unsaved draft');
+  await share({ shares: [{ email, role: 'editor' }] });
+  await friendDoc.locator('[aria-label="Item 2"]:enabled').waitFor();
+  await share({ access: 'read' });
+  await friendDoc.locator('[aria-label="Item 2"]:disabled').waitFor();
+  check('demotion disables the same cells live and preserves the draft in them');
+
+  // Read-only is not inert: the table still filters.
+  await friendDoc.getByLabel('Filter status', { exact: true }).click();
+  await friend.getByRole('option', { name: 'backlog', exact: true }).click();
+  await friendDoc.getByLabel('Item 1', { exact: true }).waitFor();
+  check('and a read-only reader can still filter');
+
   console.log(`all good: ${fixture.url}`);
-} finally { await browser.close(); }
+} finally { await browser.close(); await sink.close(); }

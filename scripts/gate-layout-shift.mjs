@@ -16,6 +16,11 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  * sticky only sticks vertically — a document that overflows by a pixel drags
  * its own navigation off the screen.
  *
+ * Leg 7 is a deck's NAVIGATION, absorbed from the deck-chrome gate: the rail
+ * rows, the present bar and the chromeless capture render all live inside the
+ * served document — the parent cannot reach into it — so only a browser can
+ * drive them, and this gate already knows how to build a deck.
+ *
  * Measured the way a reader experiences it — the canvas's own left edge,
  * sampled from the first paint through settling. A single moved sample is the
  * bug. The browser's layout-shift entries are collected too, because that is
@@ -33,6 +38,26 @@ const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(lin
 
 const slide = (n) => `<Slide title="Slide ${n}"><h1 className="text-5xl font-bold">Heading ${n}</h1>`
   + `<p className="mt-4 text-lg">Body copy for slide ${n}.</p></Slide>`;
+/*
+ * Leg 7's deck is its own: navigating between slides needs slides a reader can
+ * actually scroll BETWEEN (full-height, centred — the shape a deck is written
+ * in), and the Icon is load-bearing because the rail is a render path of its
+ * own that once shipped with the text present and a hole where the icon goes.
+ */
+const NAV_DECK = `<Helmet><title>Deck gate</title></Helmet>
+<SlideDeck>
+  <Slide title="Cover" className="flex flex-col items-center justify-center gap-4 text-center">
+    <h1 className="text-5xl font-bold">The Cover Slide</h1>
+    <Icon name="chart-column" />
+    <p className="text-muted-foreground">First slide body copy.</p>
+  </Slide>
+  <Slide title="Middle" className="flex flex-col items-center justify-center gap-4 text-center">
+    <h1 className="text-5xl font-bold">The Middle Slide</h1>
+  </Slide>
+  <Slide title="Close" className="flex flex-col items-center justify-center gap-4 text-center">
+    <h1 className="text-5xl font-bold">The Closing Slide</h1>
+  </Slide>
+</SlideDeck>`;
 const DECK = `<SlideDeck>${slide(1)}${slide(2)}${slide(3)}${slide(4)}</SlideDeck>`;
 const PLAIN = '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Ordinary</h1>'
   + '<p className="mt-4 text-lg">No slides here.</p></div>';
@@ -251,6 +276,61 @@ const mismatch = await mint(MISMATCH);
 const mm = await measureBleed(mismatch.id, mismatch.token);
 ok(mm.bleedLeft !== null, 'mismatch: the overshooting element is there — otherwise this proves nothing');
 ok(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${mm.overflow}px of horizontal overflow)`);
+
+// ── 7. the deck's navigation chrome, which lives INSIDE the document ───────
+/*
+ * The parent cannot reach into the served document, so the rail and the
+ * present bar are the document's own — and the same deck that proved it never
+ * shifts (leg 1) is the honest place to prove it NAVIGATES. Previews are
+ * checked for their glyphs as well as their text: the rail is a render path of
+ * its own and shipped once with the text present and a hole where the icon
+ * goes, which innerText cannot see.
+ */
+{
+  const navDeck = await mint(NAV_DECK);
+  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  await becomeOwner(page, B, navDeck.token);
+  await page.goto(`${B}/a/${navDeck.id}`, { waitUntil: 'load' });
+  const frame = page.mainFrame();
+  // SCOPED to the document column: the rail's previews are real <Slide>
+  // elements too (that is what makes them faithful), so an unscoped query
+  // measures a miniature.
+  const SLIDES = '.mx-doc [data-mx-slide]';
+  await frame.waitForSelector(SLIDES, { timeout: 20_000 });
+  const slideTop = (index) => frame.evaluate(
+    ([selector, i]) => Math.abs(document.querySelectorAll(selector)[i].getBoundingClientRect().top),
+    [SLIDES, index],
+  );
+
+  ok(await frame.evaluate(() => !!document.querySelector('.mx-rail')), 'the rail is in the served document');
+  ok(await frame.evaluate(() => document.querySelector('.mx-rail-thumb')?.innerText.includes('The Cover Slide')),
+    'rail previews render the slide content');
+  ok(await frame.evaluate(() => !!document.querySelector('.mx-rail-thumb svg')),
+    "rail previews draw the slide's icons too (server-resolved glyphs reach the rail)");
+  ok(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row').length === 3), 'one rail row per slide');
+
+  await frame.click('[aria-label="Go to slide 3: Close"]');
+  await page.waitForTimeout(1500);
+  ok(await slideTop(2) < 60, 'clicking a rail row scrolls to that slide');
+  await page.waitForTimeout(500);
+  ok(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row')[2].getAttribute('aria-current') === 'true'),
+    'the active row follows the reader');
+
+  await frame.click('[aria-label="Go to slide 1: Cover"]');
+  await page.waitForTimeout(1200);
+  await frame.evaluate(() => document.querySelector('.mx-present').scrollIntoView());
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(1500);
+  ok(await slideTop(1) < 60, 'ArrowRight pages to the next slide');
+  ok(await frame.evaluate(() => document.querySelector('[aria-label="Slide position"]').innerText.trim()) === '2 / 3',
+    'the counter tracks position');
+
+  // The CAPTURE render — what /export screenshots — carries no chrome at all.
+  const bare = await (await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`)).text();
+  ok(!bare.includes('Slide controls') && !bare.includes('mx-rail'), 'the capture render (?chrome=0) has no chrome');
+  ok(bare.includes('The Cover Slide'), 'and still carries the document');
+  await page.close();
+}
 
 await checkViewportGeometry(B, browser, ok);
 await browser.close();

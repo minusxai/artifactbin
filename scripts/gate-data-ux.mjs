@@ -38,6 +38,18 @@ const made = await (await fetch(`${B}/api/artifacts`, { method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
   body: JSON.stringify({ title: 'Q3 Revenue', dataset: csv }) })).json();
 ok(!!made.id, `the dataset lands with a usable reference (${made.ref})`);
+/*
+ * The create response must TELL the agent how to consume the dataset. A bare
+ * id is not usable, and omitting the `ref:` prefix is exactly the mistake that
+ * shipped a blank chart. (Type inference and leading-zero STORAGE cases are
+ * data-ingest-routes.test.ts's; what is checked here is the handshake.)
+ */
+ok(made.ref === `ref:${made.id}`, `the create response carries the ref form (${made.ref})`);
+ok((made.usage ?? '').includes(`<Query name="rows" source="ref:${made.id}">`)
+  && /from\s+"public"\."rows"/i.test(made.usage ?? '')
+  && /data="\$rows"/.test(made.usage ?? ''),
+'and a canonical source query over public.rows + embed bound as data="$rows"');
+ok(/vega-lite/.test(made.usage ?? ''), 'with a viz spec bound to the real columns');
 
 // ── the dataset PAGE: the bug from the screenshot ───────────────────────────
 await p.goto(`${B}/a/${made.id}`, { waitUntil: 'load' });
@@ -69,6 +81,40 @@ ok(changed.status === 200, 'a stored row mutation succeeds');
 if (!changed.ok) throw new Error(`Mutate rows: ${changed.status} ${await changed.text()}`);
 await p.getByLabel('Table preview', { exact: true }).getByText('125', { exact: true }).waitFor();
 ok((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'rows', 'live rows refresh without navigating or losing table selection');
+
+// ── the whole seam: uploaded values reach a real Vega scale ────────────────
+/*
+ * The two halves are individually unit-tested; what no unit test covers is a
+ * dataset created through ingest, referenced by id from a story, and RENDERED
+ * through Vega with the uploaded values. It is also the only place a coercion
+ * mistake becomes visible: a `revenue` column left as text produces a chart
+ * that draws and is wrong, so the assertion is a tick only a numeric domain
+ * could produce.
+ */
+{
+  const st = await startDocument(B);
+  const ingested = await (await fetch(`${B}/api/artifacts`, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
+    body: JSON.stringify({ title: 'sales', dataset: 'month,revenue,zip\n2026-01,120,01234\n2026-02,150,09876\n2026-03,190,01234' }) })).json();
+  const markup = `<Helmet><Query name="rows" source="ref:${ingested.id}">{\`select * from public.rows\`}</Query></Helmet>`
+    + '<div data-design="tw" className="@container p-10"><h1 className="text-4xl font-bold">Sales</h1>'
+    + '<Question title="Revenue by month" data="$rows" '
+    + 'viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"month","type":"nominal"},"y":{"field":"revenue","type":"quantitative"}}}}} '
+    + 'height="430px" /></div>';
+  const put = await fetch(`${B}/api/artifacts/${st.id}`, { method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
+    body: JSON.stringify({ title: 'Sales', markup, theme: 'modernist' }) });
+  ok(put.status === 200, `the story accepts a Query over the uploaded dataset (${put.status})`);
+
+  await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
+  await p.waitForTimeout(6000);
+  const surface = p.mainFrame();
+  ok((await surface.locator('svg.marks, canvas').count()) > 0, 'a real Vega chart rendered (not a fallback table)');
+  const text = await surface.locator('body').innerText();
+  ok(/2026-01/.test(text), 'the x axis carries values from the uploaded CSV');
+  ok(/revenue/i.test(text), 'the y axis is labelled from the CSV header');
+  ok(/\b(150|190|200)\b/.test(text), 'the y scale is numeric — coercion survived into Vega');
+}
 
 // ── a chart must render in EDIT mode too ───────────────────────────────────
 // View mode resolves refs on the server; the editor resolves them client-side

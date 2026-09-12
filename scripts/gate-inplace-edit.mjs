@@ -10,6 +10,11 @@
  * of timing luck can fake: the frame and the chart embed are the same objects
  * from reading, through typing and an agent's write, and back out again.
  *
+ * The third section is the concurrency corner of the same promise: uncommitted
+ * typing must survive a remote edit landing, and pressing edit after watching
+ * an agent write must open on the live document rather than rewind to the one
+ * the page was rendered with.
+ *
  * The second half is the trust model. The author's <script> shares the frame's
  * realm with the editor, so a document that tries to forge an edit must write
  * nothing: the runtime mints its session nonce before that script exists
@@ -221,6 +226,93 @@ const browser = await chromium.launch();
   const lede = /<p id="lede">([^<]*)<\/p>/.exec(now.markup)?.[1] ?? '(gone)';
   ok(lede === 'the author wrote this', `nothing the author script forged reached the document ("${lede}")`);
   ok(now.version === at.version, `and it spent no versions trying (v${at.version} → v${now.version})`);
+  await page.close();
+}
+
+// ── 3. A human typing while an agent writes ─────────────────────────────────
+/*
+ * The dangerous window: text the human has typed but NOT yet committed — the
+ * engine commits on blur — while a remote change lands over the live stream.
+ * Adopting the remote document then would remount the canvas and silently
+ * discard what they were typing. The second half is the reverse entry order: a
+ * reader can watch an agent write for minutes before pressing edit, so the
+ * editor has to open on what they are LOOKING AT rather than on the markup the
+ * page was server-rendered with.
+ */
+{
+  const start = await publish('<div className="p-8"><h1>Concurrent edit</h1>'
+    + '<p>First paragraph.</p><p>Second paragraph.</p></div>');
+  const read = async () => (await api(start.id, start.token, '', {})).json();
+  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  await becomeOwner(page, BASE, start.token);
+  // Seeding BEFORE the first navigation is load-bearing: `/a/<id>#edit` differs
+  // from `/a/<id>` only by a hash, so a later visit would be a client-side hash
+  // change with no re-render and the editor would seed the stale placeholder.
+  await page.goto(`${BASE}/a/${start.id}#edit`, { waitUntil: 'load' });
+  // Wait for the canvas to POPULATE, then let it settle: the editor runs the
+  // document's dataflow on load and remounts the canvas once when it completes,
+  // so a click inside that window hits a detached frame.
+  await page.waitForFunction(
+    () => (document.querySelector('[data-mx-inline-story]')?.querySelectorAll('p').length ?? 0) >= 2,
+    null, { timeout: 30000 },
+  ).catch(() => {});
+  await sleep(6000);
+  const surface = () => page.mainFrame();
+
+  await surface().locator('p').nth(1).click();
+  await page.keyboard.type(' Typed by the human.');
+  ok(/Typed by the human\./.test(await surface().locator('body').innerText()), 'the typing is in the editor DOM');
+
+  // The agent edits a DIFFERENT node while that text is still uncommitted.
+  const head = await read();
+  const agentResult = await (await api(start.id, start.token, '/edits', {
+    method: 'POST',
+    body: JSON.stringify({
+      edit_id: head.edit_id,
+      old_string: 'First paragraph.',
+      new_string: 'First paragraph, revised by the agent.',
+    }),
+  })).json();
+  ok(agentResult.markup.includes('revised by the agent'), 'the agent edit applied server-side');
+  await sleep(2500);
+  ok(/Typed by the human\./.test(await surface().locator('body').innerText()),
+    'uncommitted typing SURVIVES a remote edit arriving');
+
+  // Now commit (blur) and let the buffer drain.
+  await surface().locator('h1').first().click();
+  await sleep(3000);
+  const persisted = await read();
+  ok(persisted.markup.includes('Typed by the human.'), "the human's text reached the server");
+  ok(persisted.markup.includes('revised by the agent'), "the agent's text is still there");
+  ok(/Typed by the human\./.test(await surface().locator('body').innerText()),
+    'the editor still shows the human text');
+
+  const viewer = await browser.newPage();
+  await becomeOwner(viewer, BASE, start.token);
+  await viewer.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await sleep(2500);
+  const watched = await read();
+  await api(start.id, start.token, '/edits', {
+    method: 'POST',
+    // Append, so the later check can still anchor on the original text.
+    body: JSON.stringify({
+      edit_id: watched.edit_id,
+      old_string: 'Second paragraph.',
+      new_string: 'Second paragraph. Written while watching.',
+    }),
+  });
+  await sleep(3000);
+  ok(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+    'the viewer saw the live edit');
+  // Reading is chromeless until the artifact controls are opened.
+  await openArtifactControls(viewer);
+  await viewer.click('[aria-label="Edit artifact"]');
+  await sleep(4000);
+  ok(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+    'the editor opens on the LIVE document, not the page it was rendered with');
+  const headNow = await read();
+  ok(headNow.version >= 2, `the document is on a real, advanced version (v${headNow.version})`);
+  await viewer.close();
   await page.close();
 }
 

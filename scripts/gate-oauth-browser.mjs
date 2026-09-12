@@ -15,7 +15,14 @@
  * arrive at a real listener on the client side.
  *
  * Connecting the CLI now requires an ACCOUNT, so the gate also logs in the way
- * a user does: email → one-time code, read from the development mail outbox:
+ * a user does, and the whole email-code door is proved on the way through:
+ * no password field, a send response that carries no code, the change-email
+ * escape hatch sending exactly one mail per request, a wrong code refused, and
+ * the session cookie actually landing. The unit tests cover the code store and
+ * the form's state machine separately; the seam between them — the send route,
+ * the Better Auth round trip, the cookie, and the consent screen recognising
+ * that session — is what this gate is for. The code comes from the development
+ * mail outbox written by the real send path:
  *
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
 
@@ -80,17 +87,51 @@ check(cspViolations.length === 0, `no CSP violation blocks the submission${cspVi
 // ── Now do it as a real account: log in with an emailed code, then approve. ──
 {
   const email = `mxmx_test_oauth_${Date.now().toString(36)}@example.com`;
+  /*
+   * Parallel gates share one outbox, so the inbox is not ours alone; the
+   * unique address is the ownership boundary.
+   */
+  const mine = () => sink.inbox.filter((m) => m.to === email);
+
   await page.goto(`${BASE}/login`, { waitUntil: 'load' });
+  await page.getByLabel('Email', { exact: true }).waitFor({ state: 'visible' });
+  check(await page.locator('[aria-label="Email"]').isVisible(), 'the login page asks for an email');
+  check((await page.locator('[aria-label="Password"]').count()) === 0, 'there is no password field anywhere');
+
   await page.fill('[aria-label="Email"]', email);
+  const codeResponse = page.waitForResponse((r) => r.url().includes('/api/auth/email-otp/send-verification-otp'));
+  await page.click('[aria-label="Log in with email"]');
+  const requested = await codeResponse;
+  const requestedBody = await requested.text();
+  check(requested.status() === 200, `the OTP door answered 200 (${requested.status()})`);
+  // The code exists only in the mail the real send path wrote: no endpoint in
+  // the app reveals a live one, not even to an admin.
+  check(!/\d{6}/.test(requestedBody), `the response body carries NO code (${requestedBody})`);
+  await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
+
+  // The typo escape hatch, and the send-once rule that goes with it.
+  await page.click('[aria-label="Change email"]');
+  await page.waitForSelector('[aria-label="Email"]');
+  check(await page.inputValue('[aria-label="Email"]') === email, 'change email returns to a prefilled, editable field');
   await page.click('[aria-label="Log in with email"]');
   await page.waitForSelector('[aria-label="Login code"]', { timeout: 10_000 });
 
   const code0 = sink.lastCode(email);
-  check(!!code0, 'the login code arrived by email');
+  check(/^\d{6}$/.test(code0 ?? ''), 'a 6-digit code arrived by email');
+  check(mine().length === 2, `one email per request, including the re-send after change-email (${mine().length})`);
+
+  // A wrong code must not log anyone in.
+  await page.fill('[aria-label="Login code"]', code0 === '000000' ? '111111' : '000000');
+  await page.click('[aria-label="Verify code"]');
+  await page.waitForTimeout(1500);
+  check(page.url().includes('/login'), 'a wrong code keeps you on the login page');
+
   await page.fill('[aria-label="Login code"]', code0 ?? '');
   await page.click('[aria-label="Verify code"]');
   await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 15_000 }).catch(() => {});
   check(!new URL(page.url()).pathname.startsWith('/login'), 'logged in with the code');
+  const cookies = await page.context().cookies();
+  check(cookies.some((c) => /better-auth.*session_token|authjs.session-token/.test(c.name)), 'a session cookie was set');
 
   const before = callbacks.length;
   const v2 = randomBytes(32).toString('base64url');

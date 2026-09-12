@@ -30,10 +30,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'public-home-stars', start: 'shared', needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 90_000 },
   { name: 'seamless-navigation', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   { name: 'managed-iframe', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
-  { name: 'author-script-isolation', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'libraries', start: 'custom', why: 'Uploads a textured GLB and publishes scripts that load it through the optional library registry.', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
   { name: 'postgres-datasets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 180_000 },
-  { name: 'mutation-permissions', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   // measured: implementer 9s; orchestrator 7s
   { name: 'annotations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   { name: 'node-identity', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
@@ -47,10 +45,6 @@ export const GATE_SPECS = Object.freeze([
     why: 'Uses two logged-in browser contexts and one mail sink to prove editor collaboration and immediate demotion.',
     needsMail: true, needsClipboard: false, timeoutMs: 75_000,
   },
-  // measured: implementer 55s; orchestrator 55s
-  { name: 'concurrent-edit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 165_000 },
-  // measured: implementer 8s; orchestrator 10s
-  { name: 'data-ingest', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 6s; orchestrator 7s
   { name: 'data-ux', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 4s; orchestrator 83s
@@ -59,23 +53,16 @@ export const GATE_SPECS = Object.freeze([
     why: 'Publishes its own dataset and dataflow documents, then logs in a private reader to exercise direct and relayed queries.',
     needsMail: true, needsClipboard: false, timeoutMs: 249_000,
   },
-  // measured: implementer 9s; orchestrator 8s
-  { name: 'deck-chrome', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 34s; orchestrator 33s
   { name: 'editor-exit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 102_000 },
   // measured: implementer 35s; orchestrator 36s
   { name: 'editor-v2', start: 'shared', needsMail: false, needsClipboard: true, serialGroup:'clipboard', timeoutMs:180_000 },
   { name: 'editor-flow', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 108_000 },
   // measured: orchestrator 30s, including two readers, owner relay and PNG export
-  { name: 'editable-table', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'editable-table', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   // Table/DAG/Sprint navigation and sprint creation through the shared dialog.
   { name: 'roadmap-views', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
   // measured: implementer 2s; orchestrator 2s
-  {
-    name: 'email-login', start: 'custom',
-    why: 'Runs the real email-code login and OAuth-session seam using its own Resend-compatible mail sink.',
-    needsMail: true, needsClipboard: false, timeoutMs: 60_000,
-  },
   // measured: implementer 8s; orchestrator 13s
   { name: 'export-slice', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 5s; orchestrator 5s
