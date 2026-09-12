@@ -1,10 +1,15 @@
 /**
- * Users tier: accounts, anonymous tokens, claiming, and user-scoped listing.
- * Same harness as api.test.ts — real handlers / libs against in-memory PGLite.
+ * Users tier: accounts, anonymous connections, claiming, and user-scoped
+ * listing. Same harness as api.test.ts — real handlers / libs against
+ * in-memory PGLite.
+ *
+ * The mint is INTERNAL now (the proxy spends it after a human approves the
+ * CLI's device pairing), so these tests call that route the way the proxy
+ * does — there is no public door left to call.
  */
 import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { POST as anonymousMintRoute } from '@/app/api/tokens/anonymous/route';
+import { POST as internalMintRoute } from '@/app/api/internal/tokens/route';
 
 
 import { claimToken, createUser, getUserByEmail, listArtifactsByUser } from '@/lib/users';
@@ -14,7 +19,7 @@ const harness = useAppHarness();
 
 
 async function anonMint(ip = '10.0.0.1'): Promise<{ id: string; token: string }> {
-  const res = await anonymousMintRoute(request('/api/tokens/anonymous', { method: 'POST', headers: { ...(ip ? { 'x-forwarded-for': ip } : {}) } }));
+  const res = await internalMintRoute(request('/api/internal/tokens', { method: 'POST', headers: { ...(ip ? { 'x-forwarded-for': ip } : {}) } }));
   expect(res.status).toBe(201);
   return res.json();
 }
@@ -43,8 +48,8 @@ describe('accounts', () => {
   });
 });
 
-describe('anonymous tokens + claiming', () => {
-  it('mints an anonymous token that can publish; artifacts are unowned', async () => {
+describe('anonymous connections + claiming', () => {
+  it('mints an anonymous credential that can publish; artifacts are unowned', async () => {
     const { id, token } = await anonMint();
     expect(token).toMatch(/^mx_/);
     const art = await publish(token, 'anon-page');
@@ -57,12 +62,12 @@ describe('anonymous tokens + claiming', () => {
     expect(named.name).toMatch(/^api-[0-9a-z]{6}$/);
   });
 
-  it('carries no in-process mint valve — the proxy\'s ANON_MINT door is the only count', async () => {
+  it('carries no in-process valve — the proxy\'s OAuth doors are the only count', async () => {
     // P2 §H: a door is enforced in exactly one place. The app route serves the
-    // mint; the proxy in front counts it, so a caller reaching this handler
-    // directly (in-process, no proxy) is never refused here.
+    // mint; the proxy counts the approval doors in front of it, so a caller
+    // reaching this handler directly is never refused here.
     for (let i = 0; i < 12; i++) {
-      const res = await anonymousMintRoute(request('/api/tokens/anonymous', { method: 'POST', headers: { 'x-forwarded-for': '10.9.9.9' } }));
+      const res = await internalMintRoute(request('/api/internal/tokens', { method: 'POST', headers: { 'x-forwarded-for': '10.9.9.9' } }));
       expect(res.status, `mint ${i + 1} of 12`).toBe(201);
     }
   });

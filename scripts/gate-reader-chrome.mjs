@@ -32,7 +32,7 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 import { revealReaderChrome } from './lib/reveal-chrome.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -52,7 +52,7 @@ const browser = await chromium.launch();
 const ownerCtx = await browser.newContext({ viewport: DESKTOP });
 const owner = await ownerCtx.newPage();
 await loginViaEmail(owner, BASE, sink, EMAIL);
-const anon = await mintAnon(BASE);
+const anon = await connectAgent(BASE);
 const claimed = await owner.evaluate(
   async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
   anon.token,

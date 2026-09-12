@@ -1,15 +1,17 @@
 'use client';
 
 /**
- * The get-started strip. One click mints a real, empty document and hands over
- * the instruction to paste into an agent — then opens that document, so the
- * page in front of the user is the one the agent is about to write.
+ * The get-started strip. One click creates a real, empty document and hands
+ * over the instruction to paste into an agent — then opens that document, so
+ * the page in front of the user is the one the agent is about to write. The
+ * instruction carries no credential: the agent reaches the server through the
+ * afbin CLI, which authenticates itself in the browser.
  *
  * ONE BEHAVIOUR, EVERY SURFACE. The landing hero used to opt out of the
  * navigation (a `reveal` prop that showed the instruction and stayed put)
  * while the landing FOOTER, the docs page and the signed-in home all
  * navigated — the same button, drawn three times on two pages, meaning two
- * different things. There is no prop for it now: mint, copy, say so, count
+ * different things. There is no prop for it now: create, copy, say so, count
  * the reader down, go. The instruction is on the document page too
  * (`CopyAgentPrompt`), which is where the clipboard-failed wording already
  * sent people, so arriving there loses nothing.
@@ -21,7 +23,7 @@
  * told about before it happened.
  *
  * The document is created on CLICK, never on page view: creating one per
- * visitor would burn the anonymous-mint rate limit on people who are only
+ * visitor would burn the start door's rate limit on people who are only
  * reading. Until then this is just a button.
  */
 import { Check, Copy, Loader2 } from 'lucide-react';
@@ -71,13 +73,13 @@ export default function AgentLink({
   const start = async () => {
     // Idle or a failed attempt may be clicked; a run in flight and a document
     // already counting down may not — a second click on a visible countdown
-    // would mint a second document and abandon the first.
+    // would create a second document and abandon the first.
     if (state === 'working' || state === 'done') return;
     setState('working');
     try {
-      // The cookie rides along, so the server can attribute the new document
-      // to this browser (and skip the stranger rate limit) — the document
-      // still gets its own fresh token, appended to the cookie's list.
+      // Whatever this browser already holds rides along, so a signed-in
+      // visitor's document is stamped with their account. Nothing comes back
+      // but the document and the line to paste.
       const res = await fetch('/api/start', { method: 'POST' });
       const body = (await res.json().catch(() => ({}))) as StartResponse;
       if (!res.ok) {

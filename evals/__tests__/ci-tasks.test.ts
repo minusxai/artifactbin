@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { discoverTasks, selectTasks } from '../lib/task-set';
-import { needsStartDocument, planAccess } from '../lib/tasks';
+import { planAccess } from '../lib/tasks';
 import { parseMode } from '../lib/mode';
+import { approverNeeded } from '../lib/approver';
 
 const ROOT = path.resolve(__dirname, '../..');
 const ci = yaml.parse(fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8')) as {
@@ -30,10 +31,24 @@ describe('the agent-smoke matrix', () => {
     expect(steps.some((step) => step.with?.path === '${{ runner.temp }}/agent-smoke-metrics/')).toBe(true);
   });
 
-  it('runs the CLI with installed local skills', () => {
-    expect(ROWS).toHaveLength(1);
-    expect(ROWS[0].mode).toBe('installed');
-    expect(tasksOf(ROWS[0])).toEqual(expect.arrayContaining(['cli', 'data', 'edit', 'no-token']));
+  /**
+   * BOTH FLOWS OF THE ONE CREDENTIAL PATH. `installed` is a driver that ran `afbin auth` before the
+   * turn; `not-installed` is an agent that installs afbin and authenticates ITSELF, with the driver
+   * approving the pairing as the person would. Only the second exercises that half, and it was not
+   * being run at all — so a break in the agent's own auto-auth would have reached production green.
+   */
+  it('runs both CLI flows: staged-and-authenticated, and the agent doing it for itself', () => {
+    const byMode = new Map(ROWS.map((r) => [r.mode, r]));
+    expect([...byMode.keys()].sort()).toEqual(['installed', 'not-installed']);
+    expect(tasksOf(byMode.get('installed')!)).toEqual(expect.arrayContaining(['cli', 'data', 'edit', 'comment']));
+    // Two tasks are enough for the flow that is being exercised; each one is a paid agent run.
+    expect(tasksOf(byMode.get('not-installed')!)).toEqual(expect.arrayContaining(['cli', 'comment']));
+  });
+
+  it('the not-installed leg gets the approver its agent cannot run without', () => {
+    // The agent starts its own device pairing mid-turn and nobody else can approve it; the driver
+    // must, and the predicate that decides is `lib/approver approverNeeded` (pinned in its own suite).
+    for (const r of ROWS) expect(approverNeeded(parseMode(r.mode)), r.mode).toBe(r.mode === 'not-installed');
   });
 
   it('names only tasks that exist AND are in the CI set — never a comparison brief', () => {
@@ -44,12 +59,12 @@ describe('the agent-smoke matrix', () => {
 
   it('and every row can actually PLAN every task it names — the general form of the rule above', () => {
     for (const r of ROWS) {
-      expect(parseMode(r.mode)).toBe('installed');
+      // The row's mode is one the driver knows; which one is the matrix's business, not this test's.
+      expect(() => parseMode(r.mode), r.mode).not.toThrow();
       for (const id of tasksOf(r)) {
         const task = byId.get(id)!;
-        const start = needsStartDocument(task) ? { id: 'abc123', prompt: 'Help me edit my artifact at http://x.test/a/abc123 using this token: mx_paste' } : null;
         expect(
-          () => planAccess({ task, base: 'http://x.test', start, credential: { token: 'mx_account' } }),
+          () => planAccess({ task, base: 'http://x.test', start: { id: 'abc123' }, credential: { token: 'mx_account' } }),
           `${r.mode} × ${id}`,
         ).not.toThrow();
       }

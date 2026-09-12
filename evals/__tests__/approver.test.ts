@@ -8,11 +8,28 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { pairingsFromHome, pairingsFromLedger, startApprover } from '../lib/approver';
+import { approverNeeded, pairingsFromHome, pairingsFromLedger, startApprover } from '../lib/approver';
+import { EVAL_MODES } from '../lib/mode';
 import { DRIVER_HEADER } from '../lib/proxy';
 
 const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 const row = (extra: Record<string, unknown>) => JSON.stringify({ t: Date.now(), ms: 1, method: 'POST', path: '/oauth/device', status: 200, ua: 'node', auth: null, error: null, ...extra }) + '\n';
+
+/**
+ * WHICH FLOW NEEDS ONE. `not-installed` is the flow where the AGENT runs `afbin auth` mid-turn, and
+ * nobody but the driver can approve that pairing — a leg without this watcher is a leg whose agent
+ * never gets a credential, which once looked like fifteen minutes of a model failing to publish.
+ * `installed` approved its own pairing before the turn (`lib/auth.ts`) and has nothing left to watch.
+ */
+describe('approverNeeded', () => {
+  it('is true for the flow whose agent authenticates itself, and false for the pre-authenticated one', () => {
+    expect(approverNeeded('not-installed')).toBe(true);
+    expect(approverNeeded('installed')).toBe(false);
+  });
+  it('answers for every mode there is, so a new flow cannot silently ship without an approver decision', () => {
+    for (const mode of EVAL_MODES) expect(typeof approverNeeded(mode), mode).toBe('boolean');
+  });
+});
 
 describe('pairing sources', () => {
   it('reads user codes and expiries off ledger rows, ignoring rows without one and unparseable lines', () => {

@@ -37,7 +37,7 @@ describe('a rate limit is enforced in exactly one place', () => {
   it('the file names the policies, and the app\'s auth helpers count none of them', () => {
     const policies = policyNames();
     // the vocabulary was READ, not guessed — and it is the one the proxy enforces
-    expect(policies).toContain('anon_mint');
+    expect(policies).toContain('start_doc');
     expect(policies.length).toBeGreaterThan(5);
     const authSrc = fs.readFileSync(path.join(ROOT, 'services/app/lib/auth.ts'), 'utf8');
     for (const policy of policies) {
@@ -48,10 +48,10 @@ describe('a rate limit is enforced in exactly one place', () => {
     expect(limiterCalls(path.join(ROOT, 'services/app/lib/auth.ts'))).toEqual([]);
   });
 
-  it('the app\'s anonymous mint route carries no limiter call — the proxy counts the anon_mint policy', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'services/app/app/api/tokens/anonymous/route.ts'), 'utf8');
+  it('the app\'s internal mint route carries no limiter call — the proxy counts its own doors', () => {
+    const src = fs.readFileSync(path.join(ROOT, 'services/app/app/api/internal/tokens/route.ts'), 'utf8');
     expect(src).not.toMatch(/\.limit\(|\.check\(/);
-    expect(src).not.toMatch(/anonMintRateLimited|mutationRateLimited|rateLimited/);
+    expect(src).not.toMatch(/mutationRateLimited|rateLimited/);
   });
 
   it('the app holds no rate-limit engine of its own any more', () => {

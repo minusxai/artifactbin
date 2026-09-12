@@ -39,23 +39,6 @@ export function Input({ className = '', ...props }: InputHTMLAttributes<HTMLInpu
   );
 }
 
-/**
- * An mx_ token field: masked like a password, invisible to the password
- * manager. type="password" made Chrome treat these as site credentials and
- * offer to save/update them — for a value that is pasted once and exchanged
- * for an httpOnly cookie, never stored by the page.
- */
-export function TokenInput({ className = '', ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <Input
-      type="text"
-      autoComplete="off"
-      spellCheck={false}
-      className={`[-webkit-text-security:disc] ${className}`}
-      {...props}
-    />
-  );
-}
 
 export function Badge({ children, tone = 'default' }: { children: React.ReactNode; tone?: 'default' | 'accent' | 'dim' }) {
   const tones = {

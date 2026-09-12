@@ -20,7 +20,7 @@ describe('targetArtifactId', () => {
 
   it('follows the agent to an artifact it created itself', () => {
     const entries = [
-      e({ method: 'GET', path: '/a/start1/start?k=x' }),
+      e({ method: 'GET', path: '/a/start1' }),
       e({ method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'newOne' }),
       e({ method: 'POST', path: '/api/artifacts/newOne/edits', status: 200, artifactId: 'newOne' }),
     ];

@@ -12,7 +12,7 @@
  * only shapes, lengths and statuses. The address is masked to its domain.
  *
  * Side effects on the target deployment are intended and small: one login, one OAuth client, one or
- * two tokens, one or two unlisted placeholder documents.
+ * one token, one or two unlisted placeholder documents.
  */
 import { callbackCode, codeFromMail, pickLoginMail, pkcePair, type InboundMail } from '../lib/credential';
 
@@ -186,26 +186,13 @@ const createDoc = (headers: Record<string, string>) => fetch(`${BASE}/api/artifa
   line('PROBE oauth token → POST /api/artifacts', res.status, at, body.replace(/\s+/g, ' '));
 }
 
-let accountToken = '';
+let docId = '';
 {
   const at = t0();
-  const res = await fetch(`${BASE}/api/tokens/anonymous`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', cookie: cookieHeader(), origin: BASE },
-    body: JSON.stringify({ expiresInHours: 6 }),
-  });
-  const body = await res.json().catch(() => ({})) as { token?: string };
-  accountToken = body.token ?? '';
-  line('PROBE session cookie → POST /api/tokens/anonymous', res.status, at, `token ${accountToken ? `mx_… (${accountToken.length} chars)` : 'MISSING'}`);
-}
-
-let docId = '';
-if (accountToken) {
-  const at = t0();
-  const res = await createDoc({ authorization: `Bearer ${accountToken}` });
+  const res = await createDoc({ authorization: `Bearer ${oauthToken}` });
   const body = await res.json().catch(() => ({})) as { id?: string; visibility?: string; error?: string };
   docId = body.id ?? '';
-  line('PROBE account token → POST /api/artifacts {visibility: unlisted}', res.status, at, `id ${docId || 'MISSING'} · visibility ${body.visibility ?? body.error ?? '?'}`);
+  line('PROBE oauth token → POST /api/artifacts {visibility: unlisted}', res.status, at, `id ${docId || 'MISSING'} · visibility ${body.visibility ?? body.error ?? '?'}`);
 }
 
 if (docId) {
@@ -222,8 +209,8 @@ if (docId) {
   line('PROBE session cookie → POST /api/artifacts', res.status, at, body.replace(/\s+/g, ' '));
 }
 
-// Ownership: an ACCOUNT-owned markup document is born `private`, an anonymous one `public`
-// (lib/artifacts.ts) — so the DEFAULT visibility says which account, if any, a token belongs to.
+// Ownership: an ACCOUNT-owned markup document is born `private` (lib/artifacts.ts), so the DEFAULT
+// visibility is what says the granted token belongs to the account the driver logged in as.
 {
   const at = t0();
   const res = await fetch(`${BASE}/api/artifacts`, {

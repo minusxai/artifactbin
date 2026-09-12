@@ -21,7 +21,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
@@ -40,7 +40,7 @@ const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 
 // ── an anonymous visitor makes two documents ────────────────────────────────
-const anon = await mintAnon(B);
+const anon = await connectAgent(B);
 const doc = async (title) => api('/api/artifacts', {
   method: 'POST',
   body: JSON.stringify({ title, markup: `<div data-design="tw" className="p-8"><h1 className="text-3xl font-bold">${title}</h1></div>` }),
@@ -68,12 +68,12 @@ const banner = await p.locator('[aria-label="Unclaimed drafts"]').count();
 ok(banner === 1, 'the dashboard offers the drafts made before signing in');
 const text = banner ? await p.locator('[aria-label="Unclaimed drafts"]').innerText() : '';
 ok(/Quarterly Review/.test(text), 'and names them, so you can tell whose they are');
-// A token from ANOTHER machine has no cookie to be offered by, so pasting it
-// must stay reachable. Manual claiming is account management now, rather than
-// a competing call to action on the dashboard.
+// And there is NOWHERE to paste a credential: the account page lists CLI
+// connections to revoke, and nothing anywhere asks a person for a token.
 await p.goto(`${B}/account`, { waitUntil: 'load' });
-await p.waitForSelector('[aria-label="Token to claim"]', { timeout: 10_000 }).catch(() => {});
-ok((await p.locator('[aria-label="Token to claim"]').count()) === 1, 'the account page offers a way to paste a token from elsewhere');
+await p.waitForTimeout(1000);
+ok((await p.locator('[aria-label="Token to claim"]').count()) === 0, 'the account page asks for no pasted token');
+ok(!/mx_\.\.\./.test(await p.locator('body').innerText()), 'and offers no token field at all');
 
 // Return to the dashboard offer before exercising its opt-in controls.
 await p.goto(B, { waitUntil: 'load' });
@@ -119,7 +119,7 @@ ok((await p.locator('[aria-label="Unclaimed drafts"]').count()) === 0,
   'and the banner does not nag again once the drafts are claimed');
 
 // ── someone else's token is never offered ───────────────────────────────────
-const stranger = await mintAnon(B);
+const stranger = await connectAgent(B);
 await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Not Yours', markup: '<div data-design="tw" className="p-8"><h1 className="text-3xl">x</h1></div>' }) }, stranger.token);
 const claimable = await (await fetch(`${B}/api/tokens/claimable`, {
   method: 'POST',

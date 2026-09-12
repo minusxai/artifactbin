@@ -37,10 +37,9 @@ export interface Args {
   /** The prompt SHAPE — `starter` (default) or `hardcore`; see `lib/tasks.ts`. Independent of `mode`. */
   promptLevel: PromptLevel;
   /**
-   * WHERE this leg's token comes from, overriding what the mode would choose (`lib/credential.ts`):
-   * `paste` (the product's own copy-text handoff), `inbox-oauth` (log in with a code from the eval's
-   * Resend inbox and grant like an MCP client), `outbox-oauth` (the same login, with the code read out
-   * of a locally booted server's dev outbox) or `secret` (a pre-provisioned `EVAL_ACCOUNT_TOKEN`).
+   * WHERE this leg's account comes from, overriding what the run would choose (`lib/credential.ts`):
+   * `inbox-oauth` (log in with a code from the eval's Resend inbox and grant like an MCP client) or
+   * `outbox-oauth` (the same login, with the code read out of a locally booted server's dev outbox).
    */
   credential?: CredentialSource;
   tasks?: string[];
@@ -83,7 +82,7 @@ Runs ONE leg — one harness, one model — over the selected tasks and writes a
   --no-vision               Tell the leg its model cannot read images.
   --mode <mode>             installed (the driver installs afbin and runs its setup first) or not-installed (the agent installs it); see lib/mode.ts.
   --prompt <level>          Prompt shape: starter (default, teaches the afbin CLI) or hardcore (brief and bare base only); see lib/tasks.ts.
-  --credential <source>     Where this leg's token comes from (see lib/credential.ts).
+  --credential <source>     Which mailbox the leg's account login is read from (see lib/credential.ts).
   --tasks <id,id>           Run only these task ids.
   --shard <i/n>             Run shard i of n; a task is never split.
   --deployment <url>        Run against a live deployment instead of a booted server.

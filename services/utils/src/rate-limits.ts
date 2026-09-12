@@ -208,7 +208,7 @@ export function createRateLimiter(o: { file: PolicyFile; backend: LimiterBackend
     const p = policy(name);
     const max = id.holder ? p.max * p.burst : p.max;
     // A closed policy never reaches the backend, and a credential cannot rescue it (0 × n = 0). The WHOLE
-    // window is the wait, as the doors answered it — production's one closed policy is anon_mint, at 3600.
+    // window is the wait, as the doors answered it — production's one closed policy is start_doc, at 3600.
     if (max <= 0) return { allowed: false, retryAfter: p.windowSeconds || 60, door: name };
     const windowMs = p.windowSeconds * 1000;
     const { count, oldest } = await backend.hit(bucketFor(name, p, id), windowMs, max, now, {

@@ -38,8 +38,8 @@ it('serves the checkout release through the installer without the https-only fla
 it('gives both CLI-staging flows the same prompt: mode is not an input to buildPrompt',()=>{
  // `installed` and `not-installed` differ only in how the driver stages the CLI; the agent reads the
  // identical starter text either way. buildPrompt takes no mode, so this is the one starter prompt.
- const task={id:'t',brief:'Publish it.',handoff:'cli',checks:[]} as unknown as Task;
- const access={kind:'token',base:'http://127.0.0.1:1',token:'x',id:'abc123'} as const;
+ const task={id:'t',brief:'Publish it.',checks:[]} as unknown as Task;
+ const access={base:'http://127.0.0.1:1',id:'abc123'} as const;
  const p=buildPrompt(task,access,{promptLevel:'starter'});
  expect(p).toBe(buildPrompt(task,access));
  expect(p).toContain('afbin');

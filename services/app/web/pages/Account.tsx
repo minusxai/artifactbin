@@ -1,6 +1,5 @@
 import { usePageData } from '../use-page-data';
 import { Navigate } from 'react-router';
-import ClaimForm from '@/components/ClaimForm';
 import DatasetUpload from '@/components/DatasetUpload';
 import TokensPanel from '@/components/TokensPanel';
 import UsernameCard from '@/components/UsernameCard';
@@ -22,9 +21,8 @@ export function AccountPage() {
         * moment the answer lands (before anyone could have typed into it).
         */}
       <div className="mt-4"><UsernameCard key={data?.username ?? 'loading'} username={data?.username ?? null} /></div>
-      <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> tokens</h2>
-      <p className="mt-2 font-mono text-sm leading-relaxed text-muted">Each token is one agent. Revoke one and that agent stops; claim one and its artifacts join your library.</p>
-      <div className="mt-5"><ClaimForm /></div>
+      <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> connections</h2>
+      <p className="mt-2 font-mono text-sm leading-relaxed text-muted">Each row is one afbin CLI connection, made by approving it in this browser. Revoke one and that agent stops. Run <code>afbin auth</code> on a machine to add another.</p>
       <div className="mt-6"><TokensPanel /></div>
       <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> data</h2>
       <div className="mt-4"><DatasetUpload /></div>

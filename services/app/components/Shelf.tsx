@@ -23,7 +23,7 @@ import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, 
 import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
-import { ArtifactTable } from '@/components/TokenBrowser';
+import { ArtifactTable } from '@/components/ArtifactTable';
 import { Tooltip } from '@/components/Tooltip';
 import { MicroLabel, PANEL, VISIBILITY_TIPS, VisibilityPill } from '@/components/ui';
 import { ViewsMark } from '@/components/ViewsMark';

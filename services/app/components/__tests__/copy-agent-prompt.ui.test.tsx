@@ -1,14 +1,17 @@
 /**
  * CopyAgentPrompt is the top-level document button that puts the "hand this
  * document to an agent" instruction on the clipboard. ONE door: POST
- * /api/my/artifacts/<id>/agent-prompt parks a fresh token in a one-time start
- * handle and returns the finished paste — a start LINK, never a credential.
+ * /api/my/artifacts/<id>/agent-prompt returns the finished paste — the
+ * document's link and the afbin CLI, never a credential.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
+import { existingPaste } from '@/lib/agent-copy';
 
-const MINTED = { prompt: 'Help me edit my artifact. Follow instructions at http://localhost:3000/a/Ab3xK9/start?k=secret', url: 'http://localhost:3000/a/Ab3xK9' };
+// The server decides the wording (lib/agent-copy); this fixture answers with
+// the real thing rather than a second copy of it.
+const MINTED = { prompt: existingPaste('http://localhost:3000', 'Ab3xK9'), url: 'http://localhost:3000/a/Ab3xK9' };
 
 beforeEach(() => {
   localStorage.clear();

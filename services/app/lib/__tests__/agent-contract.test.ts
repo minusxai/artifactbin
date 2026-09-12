@@ -1,7 +1,6 @@
 import {expect,it} from 'vitest';
 import {agentContract} from '../agent-contract';
 import {existingPaste} from '../agent-copy';
-import {startBrief} from '../start-links';
 it('teaches local help, origin-scoped browser setup and the current private config directory',()=>{
  const contract=agentContract('https://example.test');
  expect(contract).toContain('afbin auth --server https://example.test');
@@ -10,11 +9,8 @@ it('teaches local help, origin-scoped browser setup and the current private conf
  expect(contract).toContain('browser approval');
  expect(contract).not.toMatch(/MCP|plugin|~\/\.artifactbin\.env|\/docs\//);
 });
-it('document handoff and one-use links teach pull, edit, validate and push with local references',()=>{
- for(const text of [existingPaste('https://example.test','abc123'),startBrief('https://example.test','abc123','one-use')]){
-  expect(text).toContain('afbin');expect(text).not.toMatch(/MCP|\/docs\/|No local SDK or CLI/);
- }
- const brief=startBrief('https://example.test','abc123','one-use');
- expect(brief).toContain('curl -X POST');
- expect(brief).toContain('afbin pull');expect(brief).toContain('afbin validate');expect(brief).toContain('afbin push');
+it('the document handoff names afbin and nothing else',()=>{
+ const text=existingPaste('https://example.test','abc123');
+ expect(text).toContain('afbin');
+ expect(text).not.toMatch(/MCP|\/docs\/|No local SDK or CLI/);
 });

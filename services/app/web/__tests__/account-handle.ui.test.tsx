@@ -35,10 +35,13 @@ describe('the account page', () => {
     });
   });
 
-  it('keeps account utilities together by offering data upload beside token management', () => {
+  it('keeps account utilities together by offering data upload beside connection management', () => {
     render(<MemoryRouter><AccountPage /></MemoryRouter>);
     expect(screen.getByText('Add data')).toBeInTheDocument();
     expect(screen.getByLabelText('Upload a CSV')).toBeInTheDocument();
-    expect(screen.getByLabelText('Token to claim')).toBeInTheDocument();
+    // Connections are LISTED and revoked here; nothing on the page asks a
+    // person for a credential, because there is none for them to hold.
+    expect(screen.queryByLabelText('Token to claim')).toBeNull();
+    expect(screen.getByText(/afbin CLI connection/)).toBeInTheDocument();
   });
 });

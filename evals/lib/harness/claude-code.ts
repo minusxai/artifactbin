@@ -30,6 +30,15 @@ export const claudeCode: HarnessAdapter = {
     return !line.startsWith('{"type":"stream_event"');
   },
 
+  /**
+   * One assistant message is one step. Claude's own `num_turns` also counts the user turns that carry
+   * tool results, so this is the smaller number of the two — which is what a BACKSTOP wants: the
+   * native `--max-turns` stops the run first, and the driver only fires if it did not.
+   */
+  countsAsTurn(line: string): boolean {
+    return line.startsWith('{"type":"assistant"');
+  },
+
   async prepare() {
     // Nothing: the key rides the environment and the config dir is created by the CLI.
   },

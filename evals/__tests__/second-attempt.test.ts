@@ -24,6 +24,16 @@ describe('planSecondAttempt', () => {
   it('never retries a flow that was deliberately not run, or one that passed', () => {
     expect(planSecondAttempt([null, true], { ci: true, enabled: true }).indexes).toEqual([]);
   });
+
+  /**
+   * …and never a RUNAWAY. The retry exists for a coin toss; a run the driver had to kill (the turn cap,
+   * or the wall clock) will loop the same way on the second attempt, so it would buy a second paid
+   * agent run and no information. It stays red.
+   */
+  it('never retries a runaway — a structural failure is not a flake', () => {
+    expect(planSecondAttempt(['runaway', false], { ci: true, enabled: true }).indexes).toEqual([1]);
+    expect(planSecondAttempt(['runaway'], { ci: true, enabled: true }).indexes).toEqual([]);
+  });
   it('asks for nothing when everything passed', () => {
     expect(planSecondAttempt([true, true], { ci: true, enabled: true }).indexes).toEqual([]);
   });
@@ -37,6 +47,15 @@ describe('mergeSecondAttempt', () => {
     expect(merged.recovered).toEqual(['data']);
     expect(merged.failed).toEqual(['mcp']);
   });
+  it('a runaway is a failure, is never called flaky, and is never counted as a pass', () => {
+    const t = tasks('data', 'edit');
+    const merged = mergeSecondAttempt(t, ['runaway', true], new Map());
+    expect(merged.failed).toEqual(['data']);
+    expect(merged.recovered).toEqual([]);
+    // `'runaway'` is a non-empty string: a verdict line counting truthiness would call this 2/2 green.
+    expect(verdictLine(merged)).toBe('1/2 flows passed — FAILED: data');
+  });
+
   it('a flow that fails twice still fails', () => {
     const t = tasks('data');
     const merged = mergeSecondAttempt(t, [false], new Map<number, Outcome>([[0, false]]));

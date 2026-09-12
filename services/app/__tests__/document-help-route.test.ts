@@ -55,7 +55,7 @@ describe('GET /a/:id (the document itself)', () => {
     const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
     const refused = await app.request(`${BASE}/api/artifacts/${row.id}`);
     expect(refused.status).toBe(401);
-    expect(await refused.json()).toMatchObject({ error: 'unauthorized', help: 'Retry — afbin authenticates itself when it needs the server; there is nothing to paste.', guide: `${BASE}/llms.txt` });
+    expect(await refused.json()).toMatchObject({ error: 'unauthorized', help: `Retry — afbin authenticates itself when it needs the server; there is nothing to set up. Install it if it is missing: curl -fsSL ${BASE}/chat/install.sh | sh`, guide: `${BASE}/llms.txt` });
   });
   it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
     const t = await mintToken('t');

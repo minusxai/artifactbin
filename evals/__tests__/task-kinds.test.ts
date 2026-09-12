@@ -178,7 +178,7 @@ describe('the `comment` kind', () => {
   });
 
   it('is refused at load without the comment it posts', () => {
-    const base = { id: 'c', kind: 'comment', handoff: 'token', brief: 'b', seed: '<p>a</p>', checks: ['published'] };
+    const base = { id: 'c', kind: 'comment', brief: 'b', seed: '<p>a</p>', checks: ['published'] };
     expect(() => TaskSchema.parse(base)).toThrow(/comment/);
     expect(() => TaskSchema.parse({ ...base, comment: { path: '1', body: 'split it' } })).not.toThrow();
   });
@@ -191,7 +191,7 @@ describe('the `comment` kind', () => {
    * must be free of the other's data.
    */
   it('wants the paragraph `changed` grades — and only from the task that grades it', () => {
-    const base = { id: 'c', kind: 'comment', handoff: 'token', brief: 'b', seed: '<p>a</p>', comment: { path: '1', body: 'split it' } };
+    const base = { id: 'c', kind: 'comment', brief: 'b', seed: '<p>a</p>', comment: { path: '1', body: 'split it' } };
     expect(() => TaskSchema.parse({ ...base, checks: ['published', 'changed'] })).toThrow(/seedSplitText/);
     expect(() => TaskSchema.parse({ ...base, checks: ['published', 'changed'], seedSplitText: 'x' })).not.toThrow();
     expect(() => TaskSchema.parse({ ...base, checks: ['published'] })).not.toThrow();
@@ -200,7 +200,7 @@ describe('the `comment` kind', () => {
   it('wants the URLs the asset checks grade, and refuses one the comment never asked for', () => {
     const url = 'https://example.test/a.svg';
     const base = {
-      id: 'c', kind: 'comment', handoff: 'token', brief: 'b', seed: '<p>a</p>',
+      id: 'c', kind: 'comment', brief: 'b', seed: '<p>a</p>',
       comment: { path: '1', body: `add ${url} please` },
     };
     // Gating an asset check with nothing to grade would fail every run.
@@ -222,9 +222,9 @@ describe('the `comment` kind', () => {
     for (const url of t.assetUrls ?? []) expect(t.comment?.body).toContain(url);
   });
 
-  it('needs the token handoff — the driver must hold a credential to comment at all', () => {
-    const t = { id: 'c', kind: 'comment', brief: 'b', comment: { path: '1', body: 'x' }, seedSplitText: 'y', seed: '<p>a</p>', checks: ['published'] };
-    expect(() => TaskSchema.parse(t)).toThrow(/handoff/);
+  it('needs the seed it comments on — a comment has to be posted on something', () => {
+    const t = { id: 'c', kind: 'comment', brief: 'b', comment: { path: '1', body: 'x' }, seedSplitText: 'y', checks: ['published'] };
+    expect(() => TaskSchema.parse(t)).toThrow(/seed/);
   });
 });
 

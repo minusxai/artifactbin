@@ -21,6 +21,7 @@ const leg: Leg = {
 /** A harness that answers instantly, so the probe's own plumbing is what is under test. */
 const fake = (stdout: string): HarnessAdapter => ({
   harness: 'pi',
+  countsAsTurn: (line: string) => line.startsWith('{"type":"turn_end"'),
   async prepare() {},
   invocation() { return { argv: ['node', '-e', `process.stdout.write(${JSON.stringify(stdout)})`], env: {}, unsetEnv: [] }; },
   reduce() {

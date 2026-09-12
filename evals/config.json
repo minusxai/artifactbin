@@ -10,7 +10,7 @@
     "maxTurns": 40,
     "concurrency": 4,
     "maxBudgetUsd": 3,
-    "timeoutMs": 900000
+    "timeoutMs": 300000
   },
   "capture": {
     "sizes": [

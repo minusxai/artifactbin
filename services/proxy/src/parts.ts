@@ -5,7 +5,9 @@
  * the actor; `rateLimit` is the WHOLE of the rate limiting — the policy file's
  * verdict on every request, the browser-only refusal included (it is asked
  * BEFORE anything is counted, because a refusal must not spend the per-IP
- * budget its own advice sends the human back to use); `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
+ * budget its own advice sends the human back to use); `internalBoundary` is
+ * the 404 that keeps `/api/internal/*` (the mint) unreachable from outside;
+ * `loginRoutes` is Better Auth behind the invite gate; `oauthRoutes`
  * the CLI OAuth provider; `forwardedHeaders` owns the forwarding headers
  * (x-mx-actor and x-real-ip dropped inbound, x-forwarded-{for,host,proto}
  * ours); `forward` is LAST — everything not matched above reaches the app
@@ -19,6 +21,7 @@
  */
 import {
   ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
+  isInternalApiPath,
   type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
@@ -85,10 +88,11 @@ export type ProxyEnv = { Variables: { actor: Actor; limiter: RateLimiter } };
 export type ProxyApp = Hono<ProxyEnv>;
 
 /**
- * IS THIS A REAL BROWSER? MEASURED on production: Chromium on `/tokens/new` sends
- * `origin: <this origin>` and `sec-fetch-site: same-origin` on the mint fetch, and both survive this
- * proxy to the upstream untouched. A bare HTTP client sends neither. The anonymous mint is the ONLY
- * door this guards — `/api/start` shares its rate-limit door and is posted by agents with no browser.
+ * IS THIS A REAL BROWSER? MEASURED on production: Chromium sends
+ * `origin: <this origin>` and `sec-fetch-site: same-origin` on the home page's fetch, and both survive this
+ * proxy to the upstream untouched. A bare HTTP client sends neither. `POST /api/start` — the web page's
+ * create button — is the ONLY door this guards: an agent has no business pressing a button, and the
+ * refusal is where we hand it the CLI instead.
  *
  * HOSTS are compared, not whole origins: behind TLS termination the browser says
  * `origin: https://artifactbin.dev` while this hop's own request arrived over `http`, so full-origin
@@ -97,10 +101,10 @@ export type ProxyApp = Hono<ProxyEnv>;
  *
  * SEVERAL hosts may be ours, and that is the difference between a door and an outage: an instance reached on
  * `127.0.0.1` when `APP__PUBLIC_BASE_URL` says `localhost` (or on any alternate/preview hostname) would
- * otherwise refuse its OWN page, and the only symptom a person sees is "Could not generate a token".
+ * otherwise refuse its OWN page, and the only symptom a person sees is "could not start a document".
  *
  * Honestly: this is not a security boundary. Any client can type these two headers, and one that does gets
- * through. It is a door that TEACHES — it catches the agent mid-mistake and hands it the ladder — while the
+ * through. It is a door that TEACHES — it catches the agent mid-mistake and hands it the CLI — while the
  * real fix is that no agent-facing surface names this address any more (app `lib/agent-contract`).
  */
 export function isBrowserContext(headers: Headers, origin: string | readonly string[]): boolean {
@@ -117,15 +121,15 @@ const hostOf = (value: string): string | null => {
   try { return new URL(value).host.toLowerCase(); } catch { return null; }
 };
 
-/** Browser-only policy refuses before counting and teaches the CLI recovery path. */
-export function anonMintRefusal(origin: string): Response {
+/** Browser-only policy refuses before counting and hands the agent the CLI instead. */
+export function browserOnlyRefusal(origin: string): Response {
   return new Response(JSON.stringify({
     error: 'browser_only',
-    reason: 'This endpoint is the web page\'s own mint. An agent that mints its own token publishes documents its human cannot reach.',
+    reason: 'This is the web page\'s own create button, not an API. Agents drive artifactbin with the afbin CLI.',
     ladder: [
-      `Just run afbin against ${origin}; it authenticates itself in the browser when it needs the server (log in, or continue anonymously). There is no token page and nothing to paste.`,
-      `The CLI reads origin-scoped credentials from ~/.artifactbin/.env or the process environment.`,
-      `Agents can add --yes --json; browser approval is still required. Never mint an anonymous token yourself.`,
+      `Install it if it is missing: curl -fsSL ${origin}/chat/install.sh | sh`,
+      `Then just run afbin against ${origin}; it authenticates itself in the browser when it needs the server (log in, or continue anonymously). There is nothing to set up.`,
+      'Agents can add --yes --json; browser approval is still required.',
     ],
     help: 'afbin help publishing-auth',
   }), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
@@ -257,7 +261,7 @@ export function session(o: ProxyOptions): Part<ProxyEnv> {
  * an `Identity` and a `Decision` into a response, in three beats:
  *
  *  1. `browser_only` — asked BEFORE anything is counted, so the refusal never spends the budget its own
- *     advice sends the human back to use. The body is `anonMintRefusal`, unchanged, owned here.
+ *     advice sends the human back to use. The body is `browserOnlyRefusal`, owned here.
  *  2. an `email`-keyed policy needs the address the code would go to — read from the JSON body, lowercased;
  *     no address is 400 `email_invalid`, on ANY such route rather than the one login handler that used to
  *     do it by hand.
@@ -275,7 +279,7 @@ export function rateLimit(o: ProxyOptions): Part<ProxyEnv> {
         const configured = baseUrlOf(c.req.raw, trustedHops, readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
         const observed = baseUrlOf(c.req.raw, trustedHops);
         if (!isBrowserContext(c.req.raw.headers, [configured, observed])) {
-          return anonMintRefusal(configured);
+          return browserOnlyRefusal(configured);
         }
       }
       let email: string | null = null;
@@ -295,6 +299,31 @@ export function rateLimit(o: ProxyOptions): Part<ProxyEnv> {
       if (!decision.allowed) {
         void say(o.events, subjectOf(actor), 'denied', { kind: 'door', id: decision.door }, { door: decision.door });
         return denyResponse({ error: 'rate_limited', retryAfter: decision.retryAfter, door: decision.door });
+      }
+      await next();
+    }),
+  };
+}
+
+/**
+ * THE INTERNAL BOUNDARY — `/api/internal/*` is the app answering US, and
+ * nobody else. This part sits in front of `forward`, so a request that arrived
+ * from outside never reaches the app on that prefix; the calls that DO reach
+ * it (routes/oauth `mintFor`) are made on the upstream seam directly and are
+ * never seen by any part, this one included.
+ *
+ * The refusal is the app's own uniform 404: for a client, the surface does not
+ * exist — which is also true.
+ */
+export function internalBoundary(): Part<ProxyEnv> {
+  return {
+    name: 'internalBoundary',
+    mount: (app) => app.use('*', async (c, next) => {
+      if (isInternalApiPath(new URL(c.req.url).pathname)) {
+        return new Response(JSON.stringify({ error: 'not_found' }), {
+          status: 404,
+          headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+        });
       }
       await next();
     }),
@@ -376,7 +405,7 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
     try { return publicAssetResponse(await o.upstream(request, ANONYMOUS)); }
     catch { return new Response('asset upstream unavailable', { status: 502 }); }
   }) }] : [];
-  return [...assetBoundary, session(o), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  return [...assetBoundary, session(o), internalBoundary(), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
 }
 
 /** The proxy, assembled from its parts. */

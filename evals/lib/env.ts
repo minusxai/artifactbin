@@ -18,7 +18,7 @@ export function readDotEnv(file: string): Record<string, string> {
 }
 
 /**
- * WHERE A LEG'S CREDENTIAL COMES FROM — the only three names the driver reads for it, in one place
+ * WHERE A LEG'S CREDENTIAL COMES FROM — the only two names the driver reads for it, in one place
  * (`lib/credential` takes this shape and nothing else, so no module below it touches `process.env`):
  *
  * - `RESEND_EVAL_API_KEY` + `EVAL_LOGIN_EMAIL` — the eval's own inbound mailbox, which is what lets
@@ -26,16 +26,17 @@ export function readDotEnv(file: string): Record<string, string> {
  *   `EVAL_LOGIN_EMAIL` names the INBOX, not the account: against a deployment each harness signs in as
  *   its own `+<harness>` sub-address of it (`lib/credential deploymentLoginEmail`) — one catch-all
  *   mailbox, but a login door and an account per harness, since the door is five sends an hour per address.
- * - `EVAL_ACCOUNT_TOKEN` — a pre-provisioned account token, the fallback where no inbox is configured
- *   (a laptop, a fork's CI) so the plugin and MCP modes can still run.
+ *
+ * A server the driver BOOTS needs neither: it writes its mail to a file the driver reads instead
+ * (`lib/server devOutboxPath`). There is no pre-provisioned-token name, because a token names no
+ * session and a session is what approves the agent's device pairing.
  */
 export interface CredentialEnv {
   RESEND_EVAL_API_KEY?: string;
   EVAL_LOGIN_EMAIL?: string;
-  EVAL_ACCOUNT_TOKEN?: string;
 }
 
-export const CREDENTIAL_ENV_KEYS = ['RESEND_EVAL_API_KEY', 'EVAL_LOGIN_EMAIL', 'EVAL_ACCOUNT_TOKEN'] as const;
+export const CREDENTIAL_ENV_KEYS = ['RESEND_EVAL_API_KEY', 'EVAL_LOGIN_EMAIL'] as const;
 
 /** The credential names out of a key map (`.env` under the process environment), and nothing else. */
 export function credentialEnv(keys: Record<string, string | undefined>): CredentialEnv {

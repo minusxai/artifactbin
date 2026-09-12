@@ -2,6 +2,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
+import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
 import { createHumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { proxyParts, type ProxyOptions } from '../src/parts';
@@ -26,7 +27,7 @@ const optionsOf = async (): Promise<ProxyOptions> => {
       resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: true } : null,
     },
     upstream: async (request, actor) => {
-      if (new URL(request.url).pathname === '/api/tokens/anonymous' && actor.credential === 'session' && actor.userId) {
+      if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential === 'session' && actor.userId) {
         const requested = await request.json() as { audience?: string; scope?: string };
         const serial = String(++mintedCount);
         const token = `mx_${serial.padStart(40, 'x')}`;
@@ -36,7 +37,7 @@ const optionsOf = async (): Promise<ProxyOptions> => {
       }
       // The anonymous mint the app serves to a non-session actor: an unowned,
       // claimable token, with no audience/scope binding.
-      if (new URL(request.url).pathname === '/api/tokens/anonymous' && actor.credential !== 'session') {
+      if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential !== 'session') {
         const serial = String(++mintedCount);
         const token = `mx_${serial.padStart(40, 'x')}`;
         const id = `tok_oauth_${serial}`;

@@ -2,13 +2,15 @@
 
 import { useState } from 'react';
 import { Button, Input } from '@/components/ui';
-import { adoptToken } from '@/lib/browser-session';
 
 /**
  * The human path into the data tier.
  *
  * Reads the file in the browser and posts JSON `{title, dataset: "<csv text>"}`
- * — the same endpoint, shape and auth an agent uses. Deliberately NOT multipart:
+ * — the same endpoint, shape and auth an agent uses. It authenticates with the
+ * ACCOUNT SESSION and nothing else: this lives on the account page, which
+ * already requires one, so there is no credential to conjure and none to hold.
+ * Deliberately NOT multipart:
  * the app has no `formData()` plumbing anywhere, and inventing it here would add
  * a second upload contract for no gain.
  *
@@ -43,35 +45,10 @@ export default function DatasetUpload({
   const [copied, setCopied] = useState(false);
   const [preview, setPreview] = useState<Record<string, unknown>[] | null>(null);
 
-  /**
-   * Uploading needs a credential and a fresh browser has none — a bare 401 is
-   * all it could get. Mint one on demand instead: the same zero-friction deal
-   * /api/start gives the agent flow, and the mint binds to the session when
-   * there is one, so a logged-in person's data lands in their dashboard.
-   */
-  const ensureSession = async (): Promise<void> => {
-    // Already credentialed? The cookie rides every same-origin request, so a
-    // cheap authorized read is the whole test.
-    if ((await fetch('/api/my/artifacts')).ok) return;
-    const res = await fetch('/api/tokens/anonymous', { method: 'POST' });
-    if (!res.ok) {
-      // Failing quietly here produced an unauthenticated upload and a generic
-      // "Upload failed" — the mint is rate-limited per IP, so say so.
-      throw new Error(res.status === 429
-        ? 'Too many new sessions from this network. Wait a few minutes, or log in.'
-        : 'Could not start a session for the upload.');
-    }
-    const { token } = await res.json();
-    // Straight into the httpOnly cookie: the mint is the only moment this page
-    // ever touches the secret, and it does not keep it.
-    if (typeof token === 'string' && token) await adoptToken(token);
-  };
-
   const publish = async (body: Record<string, unknown>) => {
     setBusy(true);
     setError(null);
     try {
-      await ensureSession();
       const res = await fetch('/api/my/artifacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

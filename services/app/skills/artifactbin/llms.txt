@@ -10,6 +10,6 @@ Install:   curl -fsSL [[ base ]]/chat/install.sh | sh
 Then:      afbin pull <artifact url> --output report.jsx; edit the file; afbin validate report.jsx; afbin push report.jsx
 Reference: afbin help, afbin help <topic>, and the installed skill. Restart Claude Code or Codex after installing so they load it.
 
-Sign-in is automatic: the first time a command needs the server, afbin signs you in through a quick browser approval and saves the result privately — nothing to paste. In automation add --yes --json and afbin prints the approval URL to open, then continues once approved.
+Sign-in is automatic: the first time a command needs the server, afbin signs you in through a quick browser approval and saves the result privately — nothing to set up. In automation add --yes --json and afbin prints the approval URL to open, then continues once approved.
 
 Artifact URLs: [[ base ]]/a/<id> and [[ base ]]/@<user>/<id>-<slug> name the same artifact; afbin accepts either, or the bare id. Add @<version> for history.

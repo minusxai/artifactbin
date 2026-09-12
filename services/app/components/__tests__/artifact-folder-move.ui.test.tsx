@@ -13,7 +13,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ArtifactTable } from '@/components/TokenBrowser';
+import { ArtifactTable } from '@/components/ArtifactTable';
 
 const ROW = {
   id: 'Ab3xK9',

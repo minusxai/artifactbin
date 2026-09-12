@@ -11,6 +11,7 @@
 /** The proxy's public surface: the parts literal and what composes it. */
 export {
   proxyParts, createProxy, forward, forwardedHeaders, session, rateLimit, loginRoutes, oauthRoutes,
+  internalBoundary, browserOnlyRefusal,
   clientIpOf, peerIpOf, trustedHopsOf,
   type ProxyOptions, type SessionStore, type SessionInfo,
 } from './parts';

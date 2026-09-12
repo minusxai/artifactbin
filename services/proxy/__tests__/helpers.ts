@@ -57,12 +57,12 @@ export async function mintTestToken(o: { id: string; userId: string | null; pg: 
 }
 
 /**
- * What Chromium actually sends on the `/tokens/new` mint fetch (MEASURED on production). Any test that mints
- * through the composed proxy needs these now: the mint route is `browser_only` in every policy file, and the
- * proxy refuses that ONE path to a non-browser. Kept here rather than typed into each file, so the measured
- * shape has a single home.
+ * What Chromium actually sends on the home page's create fetch (MEASURED on production). Any test that
+ * posts `/api/start` through the composed proxy needs these: that route is `browser_only` in every policy
+ * file, and the proxy refuses it to anything that is not the page. Kept here rather than typed into each
+ * file, so the measured shape has a single home.
  */
-export const BROWSER_MINT_HEADERS: Readonly<Record<string, string>> = { origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
+export const PAGE_HEADERS: Readonly<Record<string, string>> = { origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
 
 /**
  * THE SUITE'S DEFAULT POLICY FILE — the shipped DEV one, whose anonymous mint is wide open, so a test that

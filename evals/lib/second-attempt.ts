@@ -30,8 +30,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Task } from './contracts';
 
-/** null = deliberately not run (a harness with no MCP client); it is not a failure. */
-export type Outcome = boolean | null;
+/**
+ * What one flow came to.
+ *
+ *  - `true` / `false` — it passed, or it failed and may have failed by coin toss.
+ *  - `null` — deliberately not run; it is not a failure.
+ *  - `'runaway'` — it failed AND the driver had to stop it: the turn cap fired, or the wall clock did
+ *    (`lib/spawn TurnCap`). That is structural, not flaky: the same prompt will loop the same way, so
+ *    the retry below would spend a second paid run to learn nothing. It stays red.
+ */
+export type Outcome = boolean | null | 'runaway';
 
 export interface SecondAttemptPlan {
   /** Indexes into the task list that get one more turn — empty when nothing should. */
@@ -44,6 +52,7 @@ export interface SecondAttemptPlan {
  */
 export function planSecondAttempt(verdicts: Outcome[], opts: { ci: boolean; enabled: boolean }): SecondAttemptPlan {
   if (!opts.ci || !opts.enabled) return { indexes: [] };
+  // `'runaway'` is excluded on purpose — see `Outcome`. Only an ordinary failure earns another turn.
   return { indexes: verdicts.flatMap((v, i) => (v === false ? [i] : [])) };
 }
 
@@ -59,7 +68,7 @@ export interface MergedVerdicts {
 export function mergeSecondAttempt(tasks: Task[], first: Outcome[], second: Map<number, Outcome>): MergedVerdicts {
   const verdicts = first.map((v, i) => (second.has(i) ? second.get(i)! : v));
   const recovered = [...second.entries()].filter(([, v]) => v === true).map(([i]) => tasks[i].id);
-  const failed = tasks.filter((_, i) => verdicts[i] === false).map((t) => t.id);
+  const failed = tasks.filter((_, i) => verdicts[i] === false || verdicts[i] === 'runaway').map((t) => t.id);
   return { verdicts, recovered, failed };
 }
 
@@ -69,8 +78,10 @@ export function mergeSecondAttempt(tasks: Task[], first: Outcome[], second: Map<
  * second attempt" is part of the verdict, never a footnote.
  */
 export function verdictLine({ verdicts, recovered, failed }: MergedVerdicts): string {
-  const ran = verdicts.filter((v) => v !== null) as boolean[];
-  const passed = ran.filter(Boolean).length;
+  const ran = verdicts.filter((v) => v !== null);
+  // `=== true`, never truthiness: a `'runaway'` is a non-empty string, and counting it as a pass is
+  // exactly the sort of green a job would then report for a run the driver had to kill.
+  const passed = ran.filter((v) => v === true).length;
   const parts = [`${passed}/${ran.length} flows passed`];
   if (recovered.length) parts.push(`FLAKY (passed on a second attempt): ${recovered.join(', ')}`);
   if (failed.length) parts.push(`FAILED: ${failed.join(', ')}`);

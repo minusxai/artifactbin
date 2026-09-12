@@ -26,10 +26,17 @@ describe('tasks/*.json', () => {
     expect(() => TaskSchema.parse({ id: 't', brief: 'x', checks: ['not_a_check'] })).toThrow();
   });
 
-  it('a token-handoff task that seeds a document says what must survive a targeted edit', () => {
+  it('a task that seeds a document says what must survive a targeted edit', () => {
     const edit = TaskSchema.parse(read('tasks/edit.json'));
-    expect(edit.handoff).toBe('token');
+    expect(edit.seed).toBeDefined();
     expect(edit.seed).toContain(edit.seedKeepText!);
+  });
+
+  it('a task declares no credential of its own — the mode authenticates every run', () => {
+    for (const file of fs.readdirSync(path.join(EVALS, 'tasks'))) {
+      const raw = read(`tasks/${file}`) as Record<string, unknown>;
+      expect(Object.keys(raw), file).not.toContain('handoff');
+    }
   });
 
   it('tasks do not choose transport, and every charted data task stages its own CSV', () => {
@@ -62,4 +69,17 @@ describe('config.json', () => {
     expect(JSON.stringify(config)).not.toMatch(/claude|codex|opencode|\bpi\b/i);
   });
 
+  /**
+   * BOTH BOUNDS ARE REAL BOUNDS. The measured tasks finish in 31–45 s; the timeout is the ceiling for a
+   * process that has HUNG, and the turn cap (`lib/spawn TurnCap`) is the one for a process that is
+   * looping. Fifteen minutes was neither: it let a runaway spend a quarter of an hour of paid tokens
+   * under the three harnesses with no `--max-turns` of their own, and it is the number to keep down.
+   */
+  it('bounds a run in minutes, not quarter-hours, and caps its turns', () => {
+    const config = EvalConfigSchema.parse(read('config.json'));
+    expect(config.run.timeoutMs).toBeLessThanOrEqual(300_000);
+    // …and still far above the slowest measured task, so a slow model is not scored as a hang.
+    expect(config.run.timeoutMs).toBeGreaterThanOrEqual(120_000);
+    expect(config.run.maxTurns).toBeGreaterThan(0);
+  });
 });

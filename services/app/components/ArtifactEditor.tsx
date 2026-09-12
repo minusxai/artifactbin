@@ -10,8 +10,8 @@
  * deciding whether this browser may write at all:
  *
  *   one GET /api/my/artifacts/<id>, authorized by whichever browser credential
- *   the cookie carries (account session or agent session), else the
- *   paste-a-token prompt.
+ *   the cookie carries (account session or agent session), else the locked
+ *   card below — there is no credential to paste, and nothing to paste it into.
  *
  * There is NO save button: changes persist through the concurrent-edit
  * protocol shortly after they stop arriving, and every way OUT drains first
@@ -23,9 +23,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import InPlaceEditor from '@/components/InPlaceEditor';
 import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
-import { Button, LINK, PANEL, TokenInput } from '@/components/ui';
+import { LINK, PANEL } from '@/components/ui';
 import type { EditorFlushRef } from '@/lib/story/use-live-edits';
-import { adoptToken } from '@/lib/browser-session';
 
 interface Loaded {
   id: string;
@@ -99,8 +98,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
   flushRef?: EditorFlushRef;
 }) {
   const [art, setArt] = useState<Loaded | null>(seed ?? null);
-  const [needsToken, setNeedsToken] = useState(false);
-  const [pasted, setPasted] = useState('');
+  const [locked, setLocked] = useState(false);
 
   // True until the background load has confirmed write access once.
   const seedRef = useRef(!!seed);
@@ -114,16 +112,16 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
     try {
       const res = await fetch(`/api/my/artifacts/${id}`);
       if (!res.ok) {
-        setNeedsToken(true);
+        setLocked(true);
         return;
       }
       setArt((await res.json()) as Loaded);
-      setNeedsToken(false);
+      setLocked(false);
       seedRef.current = false;
     } catch {
       // A load that cannot even reach the server falls to the unlock prompt,
       // never an unhandled rejection from the mount effect.
-      setNeedsToken(true);
+      setLocked(true);
     }
   }, [id]);
 
@@ -148,7 +146,7 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
    * A CARD in the middle of the page rather than a heading in the corner — this
    * is a dead end, and a dead end should look deliberate and offer its exits.
    */
-  if (needsToken) {
+  if (locked) {
     return (
       <main className="mx-auto mt-16 max-w-md px-6 pb-24">
         <div className={`${PANEL} px-6 py-5`}>
@@ -165,30 +163,13 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
             >
               log in
             </a>{' '}
-            if it&apos;s on your account, or paste the agent token that created it.
+            if it&apos;s on your account.
           </p>
-          <form
-            className="mt-4 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!pasted.trim()) return;
-              const token = pasted.trim();
-              setPasted('');
-              // The token goes to the SERVER and comes back as an httpOnly
-              // cookie; the page never keeps it.
-              void adoptToken(token).then(() => load());
-            }}
-          >
-            <TokenInput aria-label="Owning token" placeholder="mx_..." value={pasted} onChange={(e) => setPasted(e.target.value)} />
-            <Button type="submit" aria-label="Unlock editing">
-              unlock
-            </Button>
-          </form>
           {/* Says what is NOT locked: anyone who can read the page can keep
-              reading it — only writing needs the token. Without
+              reading it — only writing needs the account that owns it. Without
               this line "locked" reads as "you cannot see this either". */}
           <p className="mt-3 font-mono text-[11px] leading-relaxed text-faint">
-            reading stays open to anyone with the link — only editing needs the token.
+            reading stays open to anyone with the link — only editing needs the account it belongs to.
           </p>
         </div>
 

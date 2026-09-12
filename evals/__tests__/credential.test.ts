@@ -15,9 +15,12 @@ describe('credential source per mode', () => {
   it('uses the inbox when configured', () => {
     expect(credentialSourceFor('installed', inbox)).toBe('inbox-oauth');
   });
-  it('a pre-provisioned account token is the fallback, and no source at all is an error that names the env', () => {
-    expect(credentialSourceFor('installed', { EVAL_ACCOUNT_TOKEN: 'mx_abc' })).toBe('secret');
-    expect(() => credentialSourceFor('installed', {})).toThrow(/RESEND_EVAL_API_KEY|EVAL_ACCOUNT_TOKEN/);
+  it('no way to log in is an error that names the two there are — never a silent run with no credential', () => {
+    // A leg with no SESSION could not approve the agent's device pairing, so its agent would never be
+    // authenticated at all; that has to fail here, before an agent minute is spent, rather than look
+    // like a model that could not publish.
+    expect(() => credentialSourceFor('installed', {})).toThrow(/RESEND_EVAL_API_KEY/);
+    expect(() => credentialSourceFor('not-installed', {})).toThrow(/boot a local server/);
   });
 });
 
@@ -133,7 +136,7 @@ describe('acquireCredential', () => {
   it('logs in with the emailed code and comes back with an ACCOUNT token', async () => {
     const seen: Seen[] = [];
     const got = await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: env.EVAL_LOGIN_EMAIL, cookie: '__Secure-better-auth.session_token=sess_1' });
+    expect(got).toEqual({ token: 'mx_granted', email: env.EVAL_LOGIN_EMAIL, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: env.EVAL_LOGIN_EMAIL, type: 'sign-in' });
@@ -199,31 +202,17 @@ describe('acquireCredential', () => {
   });
 
   /**
-   * The cookie is not a detail of the login — it is the CREDENTIAL. An account's documents are born
-   * private, and the only door that makes one unlisted is the owner's own browser door
-   * (`/api/my/artifacts/<id>/sharing`), which takes a session and never a bearer. So the session the
-   * driver already held travels with the token. A pre-provisioned `EVAL_ACCOUNT_TOKEN` names no
-   * session at all — nothing was logged in — and says so by carrying no cookie.
+   * The cookie is not a detail of the login — it is half the CREDENTIAL. An account's documents are
+   * born private and the only door that makes one unlisted is the owner's own browser door
+   * (`/api/my/artifacts/<id>/sharing`), which takes a session and never a bearer; and the agent's
+   * device pairing is approved with that same session (`lib/auth.ts`, `lib/approver.ts`). So every
+   * credential this module hands out carries one — there is no source that skips the login.
    */
-  it('the OAuth credential carries the session cookie; a pre-provisioned token carries none', async () => {
+  it('every credential carries the session cookie the driver logged in with', async () => {
     const seen: Seen[] = [];
     const granted = await acquireCredential('inbox-oauth', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} });
-    expect(granted?.cookie).toBe('__Secure-better-auth.session_token=sess_1');
-    const pre = await acquireCredential('secret', { base: BASE, env: { EVAL_ACCOUNT_TOKEN: 'mx_pre' }, fetch: stubFetch(seen), sleep: async () => {} });
-    expect(pre?.cookie).toBeUndefined();
-  });
-
-  it('a pre-provisioned account token is used as-is, with no login at all', async () => {
-    const seen: Seen[] = [];
-    const got = await acquireCredential('secret', { base: BASE, env: { EVAL_ACCOUNT_TOKEN: 'mx_pre' }, fetch: stubFetch(seen), sleep: async () => {} });
-    expect(got).toEqual({ token: 'mx_pre', owner: 'account' });
-    expect(seen).toEqual([]);
-  });
-
-  it('the paste flow acquires nothing — the product hands the token to the agent itself', async () => {
-    const seen: Seen[] = [];
-    expect(await acquireCredential('paste', { base: BASE, env, fetch: stubFetch(seen), sleep: async () => {} })).toBeNull();
-    expect(seen).toEqual([]);
+    expect(granted.cookie).toBe('__Secure-better-auth.session_token=sess_1');
+    expect(granted.email).toBe(env.EVAL_LOGIN_EMAIL);
   });
 
   /**
@@ -248,7 +237,7 @@ describe('acquireCredential', () => {
     const got = await acquireCredential('outbox-oauth', {
       base: BASE, env: {}, localOutbox: outbox, email: address, fetch: stubFetch(seen), sleep: async () => {},
     });
-    expect(got).toEqual({ token: 'mx_granted', owner: 'account', email: address, cookie: '__Secure-better-auth.session_token=sess_1' });
+    expect(got).toEqual({ token: 'mx_granted', email: address, cookie: '__Secure-better-auth.session_token=sess_1' });
 
     const send = seen.find((s) => s.url.includes('send-verification-otp'))!;
     expect(JSON.parse(send.body)).toEqual({ email: address, type: 'sign-in' });
@@ -297,7 +286,7 @@ describe('acquireCredential', () => {
 describe('memoizeCredential', () => {
   const mint = () => {
     let n = 0;
-    return async (base: string) => ({ token: `mx_${++n}`, owner: 'account' as const, email: base });
+    return async (base: string) => ({ token: `mx_${++n}`, email: base, cookie: 'sess' });
   };
   it('a deployment outlives the run: one login, reused by every attempt', async () => {
     const once = memoizeCredential(mint(), { reusable: true });
@@ -317,11 +306,12 @@ describe('memoizeCredential', () => {
  * browser gates read. The driver logs in through that file — same OAuth dance, a different code reader. Seeded RED.
  */
 describe('a local server logs in through its dev outbox', () => {
-  it('the account modes pick outbox-oauth when the driver booted the server, before any inbox or secret', () => {
+  it('both modes pick outbox-oauth when the driver booted the server, before any inbox', () => {
     const local = { localOutbox: '/tmp/x/dev-mail.jsonl' };
     for (const m of ['installed', 'not-installed'] as const) {
       expect(credentialSourceFor(m, {}, local), m).toBe('outbox-oauth');
-      expect(credentialSourceFor(m, { EVAL_ACCOUNT_TOKEN: 'mx_abc' }, local), m).toBe('outbox-oauth');
+      // Even with an inbox configured: the local account is genuinely this run's own.
+      expect(credentialSourceFor(m, { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'e@x.test' }, local), m).toBe('outbox-oauth');
     }
   });
   it('reads the newest code addressed to the eval account that landed after the request', () => {
