@@ -122,6 +122,17 @@ describe('adopting a new version into the live surface', () => {
   expect(view.container.querySelector('[data-mx-inline-story]')).toBe(root);
   expect(screen.getByText('Document body')).toBeInTheDocument();
  });
+ it('warms editing code only for a viewer who may edit, and cancels it on permission loss',async()=>{
+  const idle=vi.fn(()=>42),cancel=vi.fn();
+  vi.stubGlobal('requestIdleCallback',idle);vi.stubGlobal('cancelIdleCallback',cancel);
+  const view=render(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+  await screen.findByText('Document body');
+  expect(idle).not.toHaveBeenCalled();
+  view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+  expect(idle).toHaveBeenCalledOnce();
+  view.rerender(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+  expect(cancel).toHaveBeenCalledWith(42);
+ });
 });
 
 /**
