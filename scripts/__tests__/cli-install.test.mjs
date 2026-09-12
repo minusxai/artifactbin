@@ -250,8 +250,9 @@ it('colours its output, draws a progress bar and hides the cursor while download
   expect(result.output).toContain('\u2500\u2500\u2500');
   expect(result.output).toContain('\u2588');
   expect(result.output).toMatch(/\d+%/);
-  // 100 columns leave a 20-cell bar next to the label, sizes, speed and time left.
-  expect(result.output).toMatch(/[\u2588\u2591]{20}\x1b\[0m \x1b\[1m {1,2}\d+%/);
+  // Count visible cells, not ANSI segments. CI may first observe a partly filled, gradient-coloured bar.
+  const plain = result.output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+  expect(plain).toMatch(/Downloading afbin-darwin-arm64 [\u2588\u2591]{20} +\d+%/);
   expect(result.output).toMatch(/\d+\/\d+ B/);
   expect(result.output).toMatch(/\d+ B\/s/);
   expect(result.output).toMatch(/\d+s left/);
