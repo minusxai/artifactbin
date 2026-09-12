@@ -34,6 +34,15 @@ const optionsOf = async (): Promise<ProxyOptions> => {
         await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope) VALUES ($1, $2, $3, $4, $5, $6)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null]);
         return new Response(JSON.stringify({ id, token, expiresAt: new Date(Date.now() + 21_600_000).toISOString() }), { status: 201, headers: { 'content-type': 'application/json' } });
       }
+      // The anonymous mint the app serves to a non-session actor: an unowned,
+      // claimable token, with no audience/scope binding.
+      if (new URL(request.url).pathname === '/api/tokens/anonymous' && actor.credential !== 'session') {
+        const serial = String(++mintedCount);
+        const token = `mx_${serial.padStart(40, 'x')}`;
+        const id = `tok_oauth_${serial}`;
+        await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope) VALUES ($1, $2, $3, $4, $5, $6)', [id, 'oauth', hashToken(token), null, null, null]);
+        return new Response(JSON.stringify({ id, token, expiresAt: new Date(Date.now() + 31_536_000_000).toISOString() }), { status: 201, headers: { 'content-type': 'application/json' } });
+      }
       return new Response(JSON.stringify({ credential: actor.credential }), { headers: { 'content-type': 'application/json' } });
     },
   });
@@ -262,6 +271,40 @@ it('pairs through browser consent without exposing tokens to the browser', async
   expect((await poll()).status).toBe(400);
   expect(await (await app.request(`${BASE}/api/artifacts`, { headers: { authorization: `Bearer ${credentials.access_token}` } })).json()).toMatchObject({ credential: 'bearer' });
   expect(await (await app.request(`${BASE}/api-other`, { headers: { authorization: `Bearer ${credentials.access_token}` } })).json()).toMatchObject({ credential: 'none' });
+});
+
+it('offers a logged-out visitor both a login and an anonymous path, and the anonymous path pairs the CLI with no account', async () => {
+  const started = await app.request('/oauth/device', { method: 'POST' });
+  const pair = await started.json() as { device_code: string; verification_uri_complete: string; user_code: string };
+  // The approval page a logged-OUT visitor sees offers BOTH paths, and shows
+  // the code so it can be matched against the terminal before approving.
+  session = null;
+  const consent = await app.request(pair.verification_uri_complete);
+  const html = await consent.text();
+  expect(html).toContain(pair.user_code);
+  expect(html).toMatch(/log in to connect/i);
+  expect(html).toMatch(/continue anonymously/i);
+  // Anonymous approval needs no session but is still origin-bound (CSRF).
+  const approveAnon = (origin: string) => app.request('/oauth/device/approve', {
+    method: 'POST',
+    headers: { origin, 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ user_code: pair.user_code, decision: 'anonymous' }),
+  });
+  expect((await approveAnon('https://evil.example')).status).toBe(403);
+  const approved = await approveAnon(BASE);
+  expect(approved.status).toBe(200);
+  expect(await approved.text()).not.toContain('mx_');
+  // The CLI receives a full credential, minted anonymously, over the same door.
+  const poll = () => app.request('/oauth/device/token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ device_code: pair.device_code }) });
+  const token = await poll();
+  expect(token.status).toBe(200);
+  const credentials = await token.json() as { access_token: string; refresh_token: string; client_id: string; expires_in: number };
+  expect(credentials).toMatchObject({ access_token: expect.stringMatching(/^mx_/), refresh_token: expect.stringMatching(/^mxr_/), client_id: expect.any(String) });
+  expect(credentials.expires_in).toBeGreaterThan(0);
+  expect((await poll()).status).toBe(400);
+  // The minted token belongs to no account — claimable later, like any anonymous mint.
+  const row = await pg.query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE token_hash = $1', [hashToken(credentials.access_token)]);
+  expect(row.rows[0]?.user_id ?? null).toBeNull();
 });
 
 it('requires same-origin browser consent and denial issues no authorization code',async()=>{

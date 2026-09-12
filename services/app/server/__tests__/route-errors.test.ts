@@ -48,12 +48,4 @@ describe('the token mint page', () => {
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(await res.text()).toContain('afbin-$platform-$arch');
   });
-  it('serves /tokens/new as a successful SPA page ahead of catch-all routing', async () => {
-    const app = createAppServer({ indexHtml: async () => '<!doctype html><main>app shell</main>' });
-    const res = await app.request('/tokens/new');
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/html');
-    expect(await res.text()).toContain('app shell');
-  });
 });
