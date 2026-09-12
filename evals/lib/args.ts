@@ -82,7 +82,7 @@ Runs ONE leg — one harness, one model — over the selected tasks and writes a
   --no-vision               Tell the leg its model cannot read images.
   --mode <mode>             installed (the driver installs afbin and runs its setup first) or not-installed (the agent installs it); see lib/mode.ts.
   --prompt <level>          Prompt shape: starter (default, teaches the afbin CLI) or hardcore (brief and bare base only); see lib/tasks.ts.
-  --credential <source>     Where this leg's token comes from (see lib/credential.ts).
+  --credential <source>     Which mailbox the leg's account login is read from (see lib/credential.ts).
   --tasks <id,id>           Run only these task ids.
   --shard <i/n>             Run shard i of n; a task is never split.
   --deployment <url>        Run against a live deployment instead of a booted server.

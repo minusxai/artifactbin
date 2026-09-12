@@ -3,13 +3,15 @@
  *
  *   npm run eval -- --harness <name> --model <id> --api-key-env <VAR> [--label L]
  *                   [--price-in N --price-out N] [--no-vision]
- *                   [--mode cli]
+ *                   [--mode installed|not-installed] [--prompt starter|hardcore]
  *                   [--tasks x,y] [--deployment https://…] [--out dir] [--no-report]
  *                   [--protect-path dir]   hide other local evidence directories (repeatable)
  *                   [--run-as user]   run the harness as another unix account (CI isolation)
  *   npm run eval -- --ci …          the CI task set, exit 1 on any failed flow. A failed
  *                                   flow gets ONE more turn and is NAMED when it passes
  *                                   there (lib/second-attempt); `--no-retry` turns that off.
+ *                                   A RUNAWAY — the turn cap or the wall clock stopped it — is not
+ *                                   retried: the same prompt loops the same way.
  *
  * ONE leg per run, described entirely on the command line, writing ONE run
  * directory. Which agents exist and which to compare belongs to the caller —
@@ -18,8 +20,8 @@
  *
  * Per RUN: either boot a product server from the prod build with a recording
  * reverse proxy in front, or point a recording MITM proxy at a live deployment.
- * Per TASK: mint a start document, hand the agent the brief plus the product's
- * own start line, run the harness CLI in a temp workspace outside this repo,
+ * Per TASK: create the document the agent works on as the eval account, hand the agent the brief plus
+ * the product's own handover line, run the harness CLI in a temp workspace outside this repo,
  * then score — the ledger (protocol), the served document (product truth),
  * Playwright (render guards + captures), `/export` (the product's own capture)
  * — into minusx-schema rows.
