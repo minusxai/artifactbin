@@ -14,7 +14,7 @@
  * while the SQL has focus (or a chip is hovered), asks the editor to spotlight
  * them in the document: an outline, not a selection, so the rail stays here.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { BoundEmbed, QueryCell } from '@/lib/story/query-notebook';
 import type { TableResult } from '@/lib/story/dataflow';
 
@@ -23,6 +23,8 @@ export interface QueryNotebookPanelProps {
   onSqlChange: (name: string, sql: string) => void;
   /** Outline these BODY paths in the document; [] clears. Absent when nothing can be pointed at. */
   onSpotlight?: (paths: string[]) => void;
+  /** The cell to land on (the chart inspector's "edit in queries"): scrolled to, its SQL focused. */
+  focus?: string | null;
 }
 
 /** What a reader calls the thing: the kit's tags in plain words, the rest as written. */
@@ -119,15 +121,23 @@ function ResultTable({ name, result }: { name: string; result: TableResult }) {
   );
 }
 
-function Cell({ cell, onSqlChange, onSpotlight }: {
-  cell: QueryCell; onSqlChange: QueryNotebookPanelProps['onSqlChange']; onSpotlight?: (paths: string[]) => void;
+function Cell({ cell, onSqlChange, onSpotlight, land }: {
+  cell: QueryCell; onSqlChange: QueryNotebookPanelProps['onSqlChange']; onSpotlight?: (paths: string[]) => void; land: boolean;
 }) {
   const [focused, setFocused] = useState(false);
+  const section = useRef<HTMLElement>(null);
+  // Landing focuses the SQL — which also spotlights what it powers, so the
+  // chart the reader came from lights up in the document.
+  useEffect(() => {
+    if (!land) return;
+    section.current?.scrollIntoView?.({ block: 'nearest' });
+    section.current?.querySelector('textarea')?.focus();
+  }, [land]);
   const all = cell.bound.map((b) => b.path);
   /** A chip's hover narrows to one; leaving it goes back to everything the focused SQL powers, or nothing. */
   const point = (paths: string[] | null) => onSpotlight?.(paths ?? (focused ? all : []));
   return (
-    <section aria-label={`Query $${cell.name}`} className="flex flex-col gap-1.5 py-4 first:pt-0">
+    <section ref={section} aria-label={`Query $${cell.name}`} className="flex flex-col gap-1.5 py-4 first:pt-0">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono text-xs text-fg">${cell.name}</span>
         <span className="flex items-baseline gap-2 font-mono text-[11px] text-faint">
@@ -161,11 +171,13 @@ function Cell({ cell, onSqlChange, onSpotlight }: {
   );
 }
 
-export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight }: QueryNotebookPanelProps) {
+export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, focus }: QueryNotebookPanelProps) {
   return (
     // One column, a rule between cells (and above the hint): the notebook's page breaks.
     <div className="flex flex-col divide-y divide-edge" aria-label="Query notebook">
-      {cells.map((cell) => <Cell key={cell.name} cell={cell} onSqlChange={onSqlChange} onSpotlight={onSpotlight} />)}
+      {cells.map((cell) => (
+        <Cell key={cell.name} cell={cell} onSqlChange={onSqlChange} onSpotlight={onSpotlight} land={focus === cell.name} />
+      ))}
       <p className="pt-3 font-sans text-[11px] text-faint">Edits apply when you leave a cell or press ⌘⏎; the document re-runs and charts bound to the query redraw.</p>
     </div>
   );

@@ -184,6 +184,8 @@ export default function InPlaceEditor({
   const [historyOpen, setHistoryOpen] = useState(false);
   /** The right rail's query notebook (components/views/story/QueryNotebookPanel). */
   const [queriesOpen, setQueriesOpen] = useState(false);
+  /** The cell the notebook lands on when opened FROM an embed's inspector; null once the rail has gone. */
+  const [queryFocus, setQueryFocus] = useState<string | null>(null);
   /** True from the moment a draft-data run is sent until its answer lands — the notebook's "running…". */
   const [dataflowPending, setDataflowPending] = useState(false);
   /** An older version, shown in the document itself. Read-only while it is up. */
@@ -639,10 +641,21 @@ export default function InPlaceEditor({
    * was focused when the rail closed, or when a selection handed the rail to
    * the inspector, gets no blur from React on unmount to clear it.
    */
-  const { spotlight } = edit;
+  const { spotlight, select } = edit;
   useEffect(() => {
-    if (!notebookVisible) spotlight([]);
+    if (notebookVisible) return;
+    spotlight([]);
+    setQueryFocus(null);
   }, [notebookVisible, spotlight]);
+  /** "edit in queries" from an inspector: the selection goes (the inspector holds the rail), the notebook lands on the cell. */
+  const onOpenQuery = useCallback(
+    (name: string) => {
+      select(null);
+      setQueryFocus(name);
+      setQueriesOpen(true);
+    },
+    [select],
+  );
 
   const deleteSelected = useCallback(() => {
     if (!selection) return;
@@ -1187,9 +1200,10 @@ export default function InPlaceEditor({
               tables={tables}
               onChange={onChartChange}
               onTitleChange={onChartTitleChange}
+              onOpenQuery={onOpenQuery}
             />
           ) : numberEmbed ? (
-            <NumberEditorPanel binding={numberEmbed} tables={tables} onChange={onNumberChange} />
+            <NumberEditorPanel binding={numberEmbed} tables={tables} onChange={onNumberChange} onOpenQuery={onOpenQuery} />
           ) : (
             <MermaidEditorPanel embed={mermaidEmbed!} onChange={onMermaidChange} />
           )}
@@ -1217,7 +1231,7 @@ export default function InPlaceEditor({
               close
             </button>
           </div>
-          <QueryNotebookPanel cells={queryNotebook} onSqlChange={onQuerySqlChange} onSpotlight={edit.spotlight} />
+          <QueryNotebookPanel cells={queryNotebook} onSqlChange={onQuerySqlChange} onSpotlight={edit.spotlight} focus={queryFocus} />
         </aside>
       )}
 

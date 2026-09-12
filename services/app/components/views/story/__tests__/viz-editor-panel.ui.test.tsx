@@ -8,7 +8,7 @@
  * chart type change that drops the fields, "table" not actually clearing.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import VizEditorPanel from '../VizEditorPanel';
 
 const COLUMNS = [
@@ -17,7 +17,7 @@ const COLUMNS = [
   { name: 'month', type: 'date' as const },
 ];
 const TABLES = [
-  { name: 'sales', kind: 'query' as const, columns: COLUMNS },
+  { name: 'sales', kind: 'query' as const, columns: COLUMNS, sql: 'select region, revenue, month from "public"."rows"' },
   { name: 'costs', kind: 'query' as const, columns: [{ name: 'item', type: 'string' as const }] },
 ];
 const BAR = {
@@ -323,5 +323,29 @@ describe('the raw spec surface', () => {
     fireEvent.change(screen.getByLabelText('Chart spec'), { target: { value: '{}' } });
     fireEvent.click(screen.getByLabelText('Apply chart spec'));
     expect(last().viz).toBeUndefined();
+  });
+});
+
+/**
+ * The query behind the data: a chart bound to a <Query> shows that query's SQL
+ * under the picker, read-only, and offers the notebook for editing it. A table
+ * <Value> has no query, so nothing is shown.
+ */
+describe('the bound query', () => {
+  it('shows the SQL of the query the chart is bound to, and opens it in the notebook', () => {
+    const onOpenQuery = vi.fn<(name: string) => void>();
+    panel({ onOpenQuery });
+    expect(screen.getByLabelText('Bound query SQL').textContent).toBe('select region, revenue, month from "public"."rows"');
+    fireEvent.click(screen.getByLabelText('Open $sales in queries'));
+    expect(onOpenQuery).toHaveBeenCalledWith('sales');
+  });
+
+  it('shows nothing for a table Value, and no opener when there is nowhere to open', () => {
+    panel({ tables: [{ name: 'sales', kind: 'value' as const, columns: COLUMNS }] });
+    expect(screen.queryByLabelText('Bound query SQL')).toBeNull();
+    cleanup();
+    panel();
+    expect(screen.getByLabelText('Bound query SQL')).toBeTruthy();
+    expect(screen.queryByLabelText('Open $sales in queries')).toBeNull();
   });
 });

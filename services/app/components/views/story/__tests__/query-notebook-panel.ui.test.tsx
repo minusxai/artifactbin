@@ -97,6 +97,22 @@ describe('what a cell powers', () => {
   });
 });
 
+describe('arriving from an embed', () => {
+  it('focuses the named cell so its SQL is ready to edit (and its embeds are spotlit)', () => {
+    const onSpotlight = vi.fn<(paths: string[]) => void>();
+    render(
+      <QueryNotebookPanel
+        cells={[cell(), cell({ name: 'costs', sql: 'select 1', bound: [{ tag: 'Question', label: null, path: '0.2' }] })]}
+        onSqlChange={onSqlChange}
+        onSpotlight={onSpotlight}
+        focus="costs"
+      />,
+    );
+    expect(document.activeElement).toBe(sqlField('costs'));
+    expect(onSpotlight).toHaveBeenLastCalledWith(['0.2']);
+  });
+});
+
 describe('editing a cell', () => {
   it('commits the SQL on blur, naming the query', () => {
     panel([cell(), cell({ name: 'costs', sql: 'select 1 as spend', source: null })]);

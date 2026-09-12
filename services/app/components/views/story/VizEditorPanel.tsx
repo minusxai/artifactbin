@@ -21,6 +21,7 @@
  */
 import { useMemo, useState } from 'react';
 import { SelectMenu } from '@/components/SelectMenu';
+import BoundQuery from '@/components/views/story/BoundQuery';
 import type { TableChoice } from '@/lib/story/table-catalog';
 import {
   getChannelField, setChannelField, getVizType, setVizType, zonesForVizType, isBlankSpec,
@@ -55,6 +56,11 @@ interface VizEditorPanelProps {
    * panel may not even be able to read (a dynamic expression). `null` = remove.
    */
   onTitleChange: (title: string | null) => void;
+  /**
+   * Open the named query in the notebook rail (InPlaceEditor). Absent where
+   * there is no rail to open — the inspector then shows the SQL and no opener.
+   */
+  onOpenQuery?: (name: string) => void;
 }
 
 /**
@@ -145,7 +151,7 @@ function SpecEditor({ specJson, onApply }: { specJson: string; onApply: (parsed:
   );
 }
 
-export default function VizEditorPanel({ viz, title, table, tables, onChange, onTitleChange }: VizEditorPanelProps) {
+export default function VizEditorPanel({ viz, title, table, tables, onChange, onTitleChange, onOpenQuery }: VizEditorPanelProps) {
   const bound = tables.find((d) => d.name === table) ?? null;
   const columns = useMemo(() => bound?.columns ?? [], [bound]);
 
@@ -228,6 +234,7 @@ export default function VizEditorPanel({ viz, title, table, tables, onChange, on
           ]}
         />
       </div>
+      <BoundQuery table={bound} onOpenQuery={onOpenQuery} />
       {table && !bound && (
         <p className="font-sans text-[11px] text-amber-600" aria-label="Missing table notice">
           This chart points at a table the document does not declare — add a &lt;Query&gt; or &lt;Value&gt; in &lt;Helmet&gt;.
