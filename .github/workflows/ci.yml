@@ -640,6 +640,15 @@ jobs:
             node_modules/.cache/cli-node/node
             node_modules/.cache/cli-node/recipe.json
           key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
+      # Bootstrap the durable runtime dependency from the already-verified build.
+      - name: Package reusable runtime
+        run: node services/cli/scripts/prepare-runtime.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli-node-${{ matrix.os }}
+          path: runtime-assets/*
+          if-no-files-found: error
+          retention-days: 90
       # Pure auth/client cases run once; filesystem, executable discovery and PTY
       # behavior still run on every OS/architecture, followed by the real binary smoke.
       - if: matrix.os == 'ubuntu-24.04'
