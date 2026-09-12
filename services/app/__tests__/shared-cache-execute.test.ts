@@ -10,7 +10,6 @@ import {executeCatalog} from '@/lib/datasets/execute';
 import type {DatasetCatalog} from '@/lib/datasets/types';
 import {POST as tables} from '@/app/a/[id]/tables/route';
 import {POST as draftQuery} from '@/app/api/query/route';
-import {GET as documentQuery} from '@/app/a/[id]/query/route';
 useAppHarness();
 beforeEach(()=>{upstream.query.mockReset().mockResolvedValue({rows:[{n:1}],columns:[{name:'n',type:'number'}]});});
 const target={host:'db.example',port:5432,database:'app',username:'reader',ssl:true};
@@ -79,12 +78,5 @@ it('direct queries reject narrowed catalog exposure during SQL',async()=>{
  const response=await pending;expect(response.status).toBe(404);expect(await response.text()).not.toContain('991991');
 });
 
-it('source queries cannot return data after their document is deleted',async()=>{
- const {row,token}=await setup();
- const doc=await createArtifact(token.id,null,{format:'markup',source:`<Helmet><Query name="q" source="ref:${row.id}">{\`select n from rows\`}</Query></Helmet><p>Test</p>`,content:'',meta:{},visibility:'public'});
- let finish!:(r:unknown)=>void,started!:()=>void;const begun=new Promise<void>(r=>{started=r;});
- upstream.query.mockImplementation(()=>{started();return new Promise(r=>{finish=r;});});
- const pending=documentQuery(request(`/a/${doc.id}/query?q=%7B%7D`),{params:Promise.resolve({id:doc.id})});
- await begun;await (await getDb()).query('UPDATE artifacts SET deleted_at=now() WHERE id=$1',[doc.id]);finish({rows:[{n:991991}],columns:[{name:'n',type:'number'}]});
- expect(await (await pending).text()).not.toContain('991991');
-});
+// A source query that must not return rows once its document is gone mid-fill is
+// speedup-cache-access.test.ts's case, which runs it for `private` as well as `deleted`.

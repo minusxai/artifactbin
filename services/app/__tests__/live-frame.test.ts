@@ -115,6 +115,10 @@ describe('GET /a/<id>/events is a PING stream', () => {
   it('sends the current head as {editId, version, by} and nothing a relay would have to understand', async () => {
     const { doc } = await publicDoc();
     const res = await eventsRoute(jreq(`/a/${doc.id}/events`), params(doc.id));
+    // The stream's own shape, from live-events.test.ts, which asserted this ping twice.
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toContain('text/event-stream');
+    expect(res.headers.get('Cache-Control')).toContain('no-store');
     const ping = await firstEvent(res.body!);
     expect(ping).toEqual({ editId: doc.edit_id, version: 1, by: null });
     expect(ping).not.toHaveProperty('nodes');

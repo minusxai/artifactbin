@@ -18,7 +18,6 @@
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeBrowser } from '@artifactbin/utils';
-import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { getArtifactById } from '@/lib/artifacts';
 import { GET as raw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -126,32 +125,6 @@ describe('/a/<id>/raw', () => {
   });
 });
 
-describe('/a/<id>/export', () => {
-  it(
-    'answers export-shaped for a document (real bytes: scripts/gate-full-kit.mjs)',
-    async () => {
-      // The route receives the exact bytes its BrowserService rendered. Real
-      // rasterization remains owned by scripts/gate-full-kit.mjs.
-      const { id } = await publish({ title: 'h', markup: HTML_DOC });
-      const res = await exportImage(request(`/a/${id}/export?format=png`), params(id));
-      expect(res.status).toBe(200);
-      expect(res.status).not.toBe(307);
-      expect(res.headers.get('Content-Type')).toBe('image/png');
-      expect(new Uint8Array(await res.arrayBuffer())).toEqual(EXPORT_BYTES);
-    },
-  );
-
-  it('rejects a format it cannot produce instead of guessing', async () => {
-    const { id } = await publish({ title: 'h', markup: HTML_DOC });
-    const res = await exportImage(request(`/a/${id}/export?format=gif`), params(id));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toBe('unknown_format');
-  });
-
-  it('404s an unknown id, well-formed or not', async () => {
-    for (const id of ['zzzzzz', 'zzzzzzzzzzzzzzzzzzz']) {
-      const res = await exportImage(request(`/a/${id}/export`), params(id));
-      expect(res.status).toBe(404);
-    }
-  });
-});
+// `/a/<id>/export` — the export-shaped answer, the refused format and the 404 —
+// is export.test.ts's subject, down to the same pair of unknown ids. What stays
+// here is the `/a/<id>/raw` cross-format matrix: one route, one id, every format.
