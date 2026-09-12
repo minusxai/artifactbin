@@ -202,10 +202,10 @@ describe('CI job shape', () => {
   it('runs one paid smoke leg on a pull request and the cold-start leg on a schedule', () => {
     const { jobs } = ci();
     expect(jobs['agent-smoke'].strategy.matrix.include.map((row) => row.mode)).toEqual(['installed']);
-    // The platform binary is only served to the leg that installs afbin itself. Named as the exact
-    // command, not as a substring anywhere in the job, so a comment cannot satisfy or break it.
+    // Both legs stage the platform binary (the bundle cannot resolve DuckDB from a run home). Named
+    // as the exact command, not as a substring anywhere in the job, so a comment cannot satisfy it.
     const binary = 'npm run build:binary -w services/cli';
-    expect(jobs['agent-smoke'].steps.some((step) => step.run?.trim() === binary)).toBe(false);
+    expect(jobs['agent-smoke'].steps.some((step) => step.run?.trim() === binary)).toBe(true);
 
     const night = nightly();
     expect(night.on.schedule?.[0]?.cron).toMatch(/^\S+( \S+){4}$/);

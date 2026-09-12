@@ -385,11 +385,11 @@ jobs:
           fi
       # The harness this job drives — one global npm package, no login.
       - run: npm i -g opencode-ai
-      # The JS build is what `installed` stages on PATH (evals/lib/cli-kit.ts materializes
-      # services/cli/dist/afbin.mjs). The PLATFORM BINARY is only wanted by the `not-installed`
-      # leg, whose agent curls the installer through the task proxy — so `build:binary` (11s, 14s
-      # measured) belongs in the nightly workflow that runs that leg, not on the PR path.
+      # `installed` stages the PLATFORM BINARY when it exists (evals/lib/cli-kit.ts prefers it: the
+      # .mjs bundle cannot resolve DuckDB from a run home, so the data task would fail on it). The
+      # binary build is 11–14 s measured; the bundle is still built for the CLI's own tests.
       - run: npm run build -w services/cli
+      - run: npm run build:binary -w services/cli
       - run: npm run build
       - run: |
           umask 077

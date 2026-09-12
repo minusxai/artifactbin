@@ -365,4 +365,15 @@ describe('the bundled teaching and the manual', () => {
    }finally{await rm(screenRoot,{recursive:true,force:true});}
   });
 
+
+  test('help themes and help templates print the overview that describes each choice, so the agent picks one instead of opening several guides (eval run 34696655937)',()=>{
+   const themes=helpDocument('themes');
+   assert.match(themes,/Pick ONE by the subject's mood/);
+   for(const name of ['modernist','organic','industry','terminal','manuscript','pop'])assert.match(themes,new RegExp('`'+name+'` — .+ → '),name);
+   assert.match(themes,/Available themes: .*modernist/);
+   const templates=helpDocument('templates');
+   assert.match(templates,/Pick ONE by the content's shape/);
+   assert.match(templates,/Run afbin help <template> to print a local starter/);
+  });
+
 });
