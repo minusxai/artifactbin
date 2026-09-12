@@ -1,6 +1,7 @@
+import type {PreflightDependencyResult} from '@artifactbin/contracts';
 import {readConflicts,persistConflict,clearConflict} from './conflict-state';
 import {isDeepStrictEqual} from 'node:util';
-import {extname,join} from 'node:path';
+import {extname} from 'node:path';
 import {canonicalizeMarkup} from '../../app/lib/story/canonical-source';
 import {stampNodeIds} from '../../app/lib/story/node-ids';
 import {CliError} from './commands';
@@ -30,8 +31,9 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   if(!file.bytes&&file.tracked){plans.push({file,dependencies:[],ids:{},body:{},mode:'missing',id:file.tracked.id});continue;}
   if(!file.bytes)throw new CliError('missing_file',`Missing ${file.path}.`);
   const dependencies=file.document?await planDependencies(file.document.body,file.path,workspace.root):[];
+  // Every asset enters publication as its placeholder; the server's hash preflight decides reuse.
   const ids:Record<string,string>={};
-  for(const dependency of dependencies){const tracked=workspace.lock?.files[dependency.path];const bytes=await readOptional(join(workspace.root,dependency.path));ids[dependency.path]=tracked&&bytes&&digest(bytes)===digest(Buffer.from(tracked.baseline,'base64'))?tracked.id:dependency.id;}
+  for(const dependency of dependencies)ids[dependency.path]=dependency.id;
   const source=file.document?substituteDependencies(file.document.body,dependencies,ids):undefined;
   const resourceSource=file.resource?await readResourceSource(file.resource,file.path,workspace.root):undefined;
   const resource=file.resource;
@@ -135,7 +137,9 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    plan=await reconcileMixed(plan,client);
    const mode=plan.mode==='none'?'replace':plan.mode;
    const input=plan.body;
-   results.push({path:plan.file.path,...await client.request('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(mode!=='create'?{mode}:{}),input,dependencies:plan.dependencies.filter(d=>plan.ids[d.path]===d.id).map(d=>({id:plan.ids[d.path],input:d.input}))})});
+   const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(mode!=='create'?{mode}:{}),input,dependencies:plan.dependencies.map(d=>d.format==='dataset'?{id:plan.ids[d.path],input:d.input}:{id:plan.ids[d.path],sha256:d.sha256,size:d.size,filename:d.filename})});
+   const reusable=new Map(((preflight.dependencies as PreflightDependencyResult[]|undefined)??[]).map(result=>[result.id,result.existing]));
+   results.push({path:plan.file.path,...preflight,...(plan.dependencies.length?{dependencies:plan.dependencies.map(d=>{const reused=reusable.get(plan.ids[d.path]);return{path:d.path,id:d.id,...(reused?{would_reuse:reused}:{would_upload:true})};})}:{})});
   }
   return{dry_run:true,operations:results};
  }
@@ -150,20 +154,18 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    if(plan.mode==='missing'){operations.push({path:plan.file.path,status:'skipped',reason:'missing_file'});continue;}
    if(plan.mode==='none'){if(localChanged(plan)){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}operations.push({path:plan.file.path,status:plan.file.renamedFrom?'renamed':'skipped',reason:'no_remote_changes'});continue;}
    plan=await observeConditions(plan,client,!!options.force);
-   // A preceding document in this batch may already have published these bytes.
-   for(const dependency of plan.dependencies){
-    const tracked=workspace.lock?.files[dependency.path];
-    if(tracked&&tracked.baseline===dependency.bytes.toString('base64'))plan.ids[dependency.path]=tracked.id;
-   }
    if(plan.dependencies.length&&plan.mode!=='metadata'){
     const source=substituteDependencies(plan.file.document!.body,plan.dependencies,plan.ids);
     plan.body={...plan.body,...(plan.mode==='edit'?{source}:{markup:source})};
    }
-   const changedDependencies=plan.dependencies.filter(dependency=>plan.ids[dependency.path]===dependency.id);
-   if(changedDependencies.length){
+   // One preflight per document decides, by hash, which assets the account already owns.
+   if(plan.dependencies.length&&plan.mode!=='metadata'){
     plan=await reconcileMixed(plan,client,workspace);
-    await client.request('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(plan.mode!=='create'?{mode:plan.mode}:{}),input:plan.body,dependencies:plan.dependencies.filter(d=>plan.ids[d.path]===d.id).map(d=>({id:plan.ids[d.path],input:d.input}))});
-    for(const dependency of changedDependencies){
+    const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(plan.mode!=='create'?{mode:plan.mode}:{}),input:plan.body,dependencies:plan.dependencies.map(d=>d.format==='dataset'?{id:plan.ids[d.path],input:d.input}:{id:plan.ids[d.path],sha256:d.sha256,size:d.size,filename:d.filename})});
+    const reusable=new Map(((preflight.dependencies as PreflightDependencyResult[]|undefined)??[]).map(result=>[result.id,result.existing]));
+    for(const dependency of plan.dependencies){
+     const reused=reusable.get(plan.ids[dependency.path]);
+     if(reused){plan.ids[dependency.path]=reused;operations.push({path:dependency.path,status:'reused',id:reused});continue;}
      await checkRetiredCreate(workspace.home,workspace.root,dependency.path);
      const bytes=dependency.bytes;
      const staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path:'/artifacts',method:'POST',body:dependency.input},file:{path:dependency.path,bytes:bytes.toString('base64')}});
