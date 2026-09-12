@@ -4,6 +4,7 @@ Algorithm: https://github.com/nodejs/node/blob/main/src/node_sea_bin.cc (InjectI
 Old postject/LIEF truncates symbol names for large GNU hash tables, breaking native addons.
 """
 import sys
+import struct
 from collections import Counter
 from pathlib import Path
 import lief
@@ -38,11 +39,21 @@ def inject(executable, resource):
     written = executable.read_bytes()
     assert written.count(sentinel) == 1, 'Injector changed the SEA fuse unexpectedly'
     executable.write_bytes(written.replace(sentinel, sentinel[:-1] + b'1', 1))
-    verified = lief.ELF.parse(str(executable))
+    # LIEF's note reader pads descriptions and limits large notes. Verify the
+    # standard ELF note header and exact payload directly, without that reader.
+    parser = lief.ELF.ParserConfig()
+    parser.parse_notes = False
+    verified = lief.ELF.parse(str(executable), parser)
     assert verified is not None
     assert Counter(symbol.name for symbol in verified.dynamic_symbols) == symbols, 'Injector changed dynamic symbol names'
-    notes = [note for note in verified.notes if is_sea_note(note)]
-    assert len(notes) == 1 and bytes(notes[0].description) == blob, 'Embedded SEA bytes changed'
+    section = verified.get_section('.note.node.sea')
+    assert section is not None, 'SEA note section is missing'
+    data = bytes(section.content)
+    name_size, blob_size, note_type = struct.unpack_from('<III', data)
+    assert note_type == 0 and data[12:12 + name_size] == b'NODE_SEA_BLOB\0'
+    offset = 12 + ((name_size + 3) & ~3)
+    assert blob_size == len(blob) and data[offset:offset + blob_size] == blob, 'Embedded SEA bytes changed'
+
 
 
 if __name__ == '__main__':
