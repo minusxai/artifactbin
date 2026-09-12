@@ -43,7 +43,7 @@ const paste = /\/a\/([A-Za-z0-9]+) using this token: (mx_[A-Za-z0-9_-]+)/.exec(p
 ok(!!paste, 'the copied paste carries the bearer token inline');
 ok(!/\/start\?k=/.test(prompt), 'and carries no start link');
 ok(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
-ok(prompt.includes(`afbin setup --server ${B}`), 'the paste points to local CLI setup and guidance');
+ok(prompt.includes('afbin help'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
 if (!paste) { console.log('cannot continue without the inline token'); process.exit(1); }
 const [, id, pasteToken] = paste;
 

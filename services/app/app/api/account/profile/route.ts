@@ -5,7 +5,7 @@ import {durableMutation} from '@/lib/mutation-receipt';
 
 export const GET=withTokenAuth(async(request,{userId,credential})=>{
  if(request.headers.has('authorization')&&credential!=='bearer')return json({error:'auth_required'},401);
- if(!userId)return json({error:'account_required',hint:'Sign in with an account using afbin setup.'},403);
+ if(!userId)return json({error:'account_required',hint:'Sign in with an account using `afbin auth`.'},403);
  const profile=await accountProfile(userId);return profile?json(profile):json({error:'not_found'},404);
 });
 export const PATCH=withTokenAuth(async(request,{tokenId,userId,credential})=>{

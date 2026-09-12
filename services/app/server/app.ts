@@ -47,7 +47,7 @@ import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
 
-/** The `<link rel="help">` and `<meta name="artifactbin:agent">` an agent that fetched any page reads, on the caller's base. */
+/** The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's base. */
 export function withAgentDiscovery(html: string, origin: string): string {
   return html.replace('</head>', () => `${agentDiscoveryHead(agentDiscovery(origin))}</head>`);
 }

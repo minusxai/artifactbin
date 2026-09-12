@@ -35,10 +35,11 @@ describe('the anonymous mint door', () => {
     const body = await res.json() as Record<string, unknown>;
     const text = JSON.stringify(body);
     expect(text).not.toMatch(/mcp|plugin/i);
-    expect(text).toContain('afbin setup --server http://localhost');
+    expect(text).toContain('afbin');
+    expect(text).toContain('authenticates itself');
     expect(text).toContain('afbin help');
-    expect(text).toContain('/tokens/new');
-    expect(text).toContain('source=claude-code');
+    // There is no token page any more: the refusal points at the CLI, not a URL to paste.
+    expect(text).not.toContain('/tokens/new');
   });
 
   it('lets the product\'s own page through', async () => {
@@ -100,19 +101,6 @@ describe('the anonymous mint door', () => {
     expect(res.status).toBe(201);
   });
 
-  it('an agent that named no harness still gets an untagged door, never a broken URL', async () => {
-    const proxy = await proxyFor();
-    const body = await (await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', { method: 'POST' }))).json() as { tokens: string };
-    expect(body.tokens).toBe('http://localhost/tokens/new');
-  });
-
-  it('ignores a harness it does not know, rather than reflecting it into a URL', async () => {
-    const proxy = await proxyFor();
-    const body = await (await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
-      method: 'POST', headers: { 'artifactbin-agent': 'evil"><script>' },
-    }))).json() as { tokens: string };
-    expect(body.tokens).toBe('http://localhost/tokens/new');
-  });
 });
 
 /**
@@ -120,8 +108,8 @@ describe('the anonymous mint door', () => {
  */
 describe('the door beside the limiter, and the hosts it calls its own', () => {
   it('does not spend the ANON_MINT budget its own advice sends the human back to use', async () => {
-    // The refusal says "ask your human for a token at /tokens/new". If the refusals themselves counted,
-    // an agent retrying a few times would 429 the human it just sent to that page — same IP, same NAT.
+    // The refusal tells the agent to just run afbin (which authenticates itself). If the refusals
+    // themselves counted, an agent retrying a few times would 429 the human on the same IP and NAT.
     const options = await testProxyOptions({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_2_burst_2.yml') } });
     const proxy = assemble(await proxyParts(options));
     for (let i = 0; i < 6; i += 1) {
@@ -157,14 +145,6 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
       method: 'POST', headers: { origin: 'https://evil.test', 'sec-fetch-site': 'same-origin' },
     }));
     expect(res.status).toBe(403);
-  });
-
-  it('tags a harness the app would tag, however it was spelled', async () => {
-    const proxy = await proxyFor();
-    const body = await (await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
-      method: 'POST', headers: { 'artifactbin-agent': 'Claude Code' },
-    }))).json() as { tokens: string };
-    expect(body.tokens).toBe('http://localhost/tokens/new?source=claude-code');
   });
 });
 

@@ -6,7 +6,6 @@ Publish and edit artifacts through local files, with offline help and validation
 
 ```sh
 curl -fsSL https://artifactbin.dev/chat/install.sh | sh
-afbin setup
 ```
 
 The installer needs only `curl` and a POSIX shell: it downloads the standalone executable for this
@@ -80,9 +79,10 @@ The browser retries temporary failures indefinitely with capped backoff and a â€
 
 ## Auth
 
-The first interactive authenticated command opens browser authentication automatically, saves the
-connection with owner-only permissions and resumes the command. Explicit `afbin setup` also manages
-local skills. `ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can supply a connection; saved credentials are
+The first command that needs the server opens browser authentication automatically, saves the
+connection with owner-only permissions and resumes the command. Run `afbin auth` to sign in
+deliberately; local skills install eagerly on first use and update with `afbin update`.
+`ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can supply a connection; saved credentials are
 used only for their matching server origin. HTTP is restricted to localhost development. Tokens are
 sent in authorization headers, never session URLs. No legacy credential file is read.
 
@@ -101,7 +101,7 @@ The CLI exports the same PTY lifecycle for another TypeScript/JavaScript CLI:
 ```ts
 import { loadConnection, runRemote } from '@artifactbin/cli';
 const connection = await loadConnection();
-if (!connection) throw new Error('Run afbin setup to sign in first');
+if (!connection) throw new Error('Run afbin auth to sign in first');
 const exitCode = await runRemote({
   connection, command: 'claude', args: ['--chrome'],
   onSession: url => console.error(url),

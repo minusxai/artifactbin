@@ -47,8 +47,6 @@ describe('/docs-human', () => {
   it('teaches CLI installation, browser setup and local skills', () => {
     render(DocsHuman());
     expect(screen.getByLabelText('Copy the CLI install command')).toBeTruthy();
-    expect(screen.getByLabelText('Copy the setup command')).toBeTruthy();
-    expect(text()).toContain('afbin setup');
     expect(text()).not.toContain('/plugin');
   });
 

@@ -4,7 +4,7 @@ import {existingPaste} from '../agent-copy';
 import {startBrief} from '../start-links';
 it('teaches local help, origin-scoped browser setup and the current private config directory',()=>{
  const contract=agentContract('https://example.test');
- expect(contract).toContain('afbin setup --server https://example.test');
+ expect(contract).toContain('afbin auth --server https://example.test');
  expect(contract).toContain('~/.artifactbin/.env');
  expect(contract).toContain('--yes --json');
  expect(contract).toContain('browser approval');

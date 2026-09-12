@@ -18,7 +18,7 @@
  * is no prefix list to drift.
  */
 import {
-  ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, AGENT_HEADER, ANONYMOUS, declaredAgentSlug, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
+  ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
   type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
@@ -118,18 +118,15 @@ const hostOf = (value: string): string | null => {
 };
 
 /** Browser-only policy refuses before counting and teaches the CLI recovery path. */
-export function anonMintRefusal(origin: string, agentHeader: string | null): Response {
-  const source = declaredAgentSlug(agentHeader);
-  const tokens = `${origin}/tokens/new${source ? `?source=${source}` : ''}`;
+export function anonMintRefusal(origin: string): Response {
   return new Response(JSON.stringify({
     error: 'browser_only',
     reason: 'This endpoint is the web page\'s own mint. An agent that mints its own token publishes documents its human cannot reach.',
     ladder: [
-      `Run afbin setup --server ${origin} to connect your account.`,
+      `Just run afbin against ${origin}; it authenticates itself in the browser when it needs the server (log in, or continue anonymously). There is no token page and nothing to paste.`,
       `The CLI reads origin-scoped credentials from ~/.artifactbin/.env or the process environment.`,
       `Agents can add --yes --json; browser approval is still required. Never mint an anonymous token yourself.`,
     ],
-    tokens,
     help: 'afbin help publishing-auth',
   }), { status: 403, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
 }
@@ -278,7 +275,7 @@ export function rateLimit(o: ProxyOptions): Part<ProxyEnv> {
         const configured = baseUrlOf(c.req.raw, trustedHops, readEnv(o.env, 'APP__PUBLIC_BASE_URL'));
         const observed = baseUrlOf(c.req.raw, trustedHops);
         if (!isBrowserContext(c.req.raw.headers, [configured, observed])) {
-          return anonMintRefusal(configured, c.req.raw.headers.get(AGENT_HEADER));
+          return anonMintRefusal(configured);
         }
       }
       let email: string | null = null;

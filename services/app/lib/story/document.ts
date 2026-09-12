@@ -87,7 +87,7 @@ export interface StoryDocumentInput {
   lazyChunks?: string[] | null;
   /**
    * Where an AGENT that fetched this document learns how to edit it (discover): rendered as
-   * `<link rel="help" href={llms} title="…">` and `<meta name="artifactbin:agent" content="{blurb} Guide: {llms}">`
+   * `<link rel="help" href={llms} title="…">` and `<meta name="afbin" content="{blurb} Guide: {llms}">`
    * in <head> (lib/agent-discovery), right after the platform's social tags. Null/absent ⇒ nothing.
    */
   help?: AgentDiscovery | null;

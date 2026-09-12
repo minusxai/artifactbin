@@ -91,7 +91,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       publishExample: '```sh\nafbin push report.jsx\n```',
       editExample: 'Edit the local JSX file, then run `afbin push report.jsx`.',
       readBackCall: '`afbin pull`',
-      authRule: 'Run `afbin setup` for browser approval and local skill selection.',
+      authRule: 'afbin authenticates itself in the browser when it needs the server; run `afbin auth` to sign in deliberately.',
       checkWork: 'Run `afbin validate report.jsx` locally before `afbin push report.jsx`. Use `afbin help operations` for image export.',
       docsMoreLine: 'Open the relevant local file in `references/` beside this skill.',
       docsIndexHint: 'all beside this file under `references/`',

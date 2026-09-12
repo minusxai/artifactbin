@@ -10,10 +10,9 @@ Install the CLI and set up browser authentication and local agent skills:
 
 ```sh
 curl -fsSL https://artifactbin.dev/chat/install.sh | sh
-afbin setup
 ```
 
-Setup offers detected Claude Code, Codex, pi and OpenCode integrations for your approval.
+afbin installs local skills for detected Claude Code, Codex, pi and OpenCode, and signs you in through your browser the first time it needs the server. Run `afbin auth` to sign in deliberately.
 Ask the agent to publish or edit with `afbin pull`, local edits, `validate` and `push`.
 Help, validation, status, diff and unchanged pushes work without server requests.
 See [CLI usage](services/cli/README.md) for automation and installation options.
@@ -81,7 +80,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the development flow.
 - [Ownership and accounts](docs/ownership.md)
 - [Operations and deployment](docs/operations.md)
 
-Agent skills are installed locally by `afbin setup` and updated explicitly with `afbin update`.
+Agent skills are installed locally by afbin on first use and updated explicitly with `afbin update`.
 `afbin help` reads the same bundled guidance offline.
 
 ## License

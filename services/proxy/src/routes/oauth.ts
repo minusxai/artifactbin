@@ -118,7 +118,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   });
   app.get('/oauth/device', async (c) => {
     const userCode = c.req.query('user_code') ?? '';
-    if (!await o.pairing.inspect(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin setup again.</p>', 400);
+    if (!await o.pairing.inspect(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin auth again.</p>', 400);
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) {
       const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
@@ -163,7 +163,7 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       return reply({ access_token: minted.token, refresh_token: refreshToken, client_id: clientId,
         token_type: 'Bearer', expires_in: minted.expiresIn, scope: ARTIFACT_SCOPE });
     } catch {
-      return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin setup to start a new approval.' }, 503);
+      return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin auth to start a new approval.' }, 503);
     }
   });
 

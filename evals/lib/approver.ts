@@ -1,5 +1,5 @@
 /**
- * The human at the other end of `afbin setup`, for the flows where the driver stands in for the person.
+ * The human at the other end of `afbin auth`, for the flows where the driver stands in for the person.
  *
  * The CLI starts a device pairing (`POST /oauth/device`), prints the user code, and polls for approval.
  * A person would open the approval page and press "approve" with their browser session; this does the
@@ -8,11 +8,11 @@
  * the device door exactly as it would for a person, and saves it itself.
  *
  * Two ways to see a pairing, because two people start them:
- *  - `ledgerPath`: the AGENT ran `afbin setup`. Its traffic crossed the driver's recording proxy, whose
+ *  - `ledgerPath`: the AGENT ran `afbin auth`. Its traffic crossed the driver's recording proxy, whose
  *    ledger row for the device door carries the user code (lib/proxy). The ledger is the driver's own
  *    file — the agent's `~/.artifactbin` is 0700 and, under `--run-as`, unreadable by the driver, which
  *    is why reading the pairing file there silently approved nothing.
- *  - `homeDir`: the DRIVER ran `afbin setup` itself (the installed flow's precondition, lib/setup), in a
+ *  - `homeDir`: the DRIVER ran `afbin auth` itself (the installed flow's precondition, lib/auth), in a
  *    home it owns, and its traffic need not cross a proxy; the CLI's pending-pairing file is the signal.
  *
  * Each user code is approved once; an expired pairing is left alone.
@@ -24,7 +24,7 @@ import type { LedgerEntry } from './contracts';
 
 export type PairingSource =
   | { /** The recording proxy's ledger for this task: pairings the agent's CLI started. */ ledgerPath: string; homeDir?: undefined }
-  | { /** The HOME of a driver-run `afbin setup`: its pending-pairing file. */ homeDir: string; ledgerPath?: undefined };
+  | { /** The HOME of a driver-run `afbin auth`: its pending-pairing file. */ homeDir: string; ledgerPath?: undefined };
 
 export type ApproverOptions = PairingSource & {
   /** Where the agent talks to the product; approvals go through the same proxy so the ledger stays honest. */

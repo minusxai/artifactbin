@@ -57,7 +57,7 @@ it('installs into a clean home outside the checkout by default, and names the ve
   expect(destination.startsWith(checkout)).toBe(false);
   expect(installed(destination)).toBe('afbin-test\n');
   expect(result.stdout).toContain(`Installed afbin ${version}`);
-  expect(result.stdout).toContain('afbin setup');
+  expect(result.stdout).toContain('afbin help');
 });
 it('updates a working installation in place when a newer release is requested', () => {
   expect(run().status).toBe(0);

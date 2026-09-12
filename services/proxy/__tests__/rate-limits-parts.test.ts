@@ -75,9 +75,9 @@ describe('browser_only is refused BEFORE anything is counted', () => {
     const app = await proxy();
     const res = await app.request(`${BASE}/api/tokens/anonymous`, { method: 'POST', headers: { 'artifactbin-agent': 'claude-code' } });
     expect(res.status).toBe(403);
-    const body = await res.json() as { error: string; reason: string; ladder: string[]; tokens: string; help: string };
+    const body = await res.json() as { error: string; reason: string; ladder: string[]; help: string };
     expect(body.error).toBe('browser_only');
-    expect(body.tokens).toBe(`${BASE}/tokens/new?source=claude-code`);
+    expect(JSON.stringify(body)).not.toContain('/tokens/new');
     expect(body.ladder).toHaveLength(3);
     expect(body.ladder[2]).toContain('browser approval');
     expect(body.help).toBe('afbin help publishing-auth');

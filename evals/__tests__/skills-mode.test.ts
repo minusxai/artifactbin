@@ -1,4 +1,4 @@
-/** Skills reach each harness only through `afbin setup`; the eval knows where that lands and nothing more. */
+/** Skills reach each harness only through the CLI's eager init; the eval knows where that lands and nothing more. */
 import {expect,it} from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -11,7 +11,7 @@ import {buildPrompt} from '../lib/tasks';
 import type {Harness,HarnessRunContext,Task} from '../lib/contracts';
 import {skillTargets} from '../../services/cli/src/skill-install';
 const ctx=(harness:Harness,home:string,installed:boolean):HarnessRunContext=>({leg:{harness,model:'m',envVar:'TEST_KEY',apiKey:'k',label:harness,price:null,vision:true,promptLevel:'starter',mode:planMode(harness,installed?'installed':'not-installed')},prompt:'p',cwd:home,homeDir:home,apiKey:'k',maxTurns:1,maxBudgetUsd:1,...(installed?{skills:skillKit(home,harness)}:{})});
-it('names the directory afbin setup installs to for each harness, under the environment the adapter passes',()=>{
+it('names the directory eager init installs to for each harness, under the environment the adapter passes',()=>{
  const home='/tmp/afbin-home';const map={'claude-code':'claude',codex:'codex',pi:'pi',opencode:'opencode'} as const;
  for(const h of ['claude-code','codex','pi','opencode'] as const)expect(skillKit(home,h).dir).toBe(skillTargets(home,harnessEnv(h,home))[map[h]]);
  expect(adapterFor('pi').invocation(ctx('pi',home,true)).argv).toContain(skillKit(home,'pi').dir);

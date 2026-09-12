@@ -186,9 +186,9 @@ describe('GET /a/<id>/start?k= — the brief', () => {
     expect(body).toMatch(/copied|mistyp|character/i);
     expect(body).not.toContain('tokens/anonymous');
     expect(body).toMatch(/your human|ask them/i);
-    expect(body).toContain('afbin setup');
+    expect(body).toContain('afbin auth');
     expect(body).not.toMatch(/MCP|\/docs\//);
-    expect(body).toContain('/tokens/new');
+    expect(body).not.toContain('/tokens/new');
     expect(body).toContain('afbin help publishing-auth');
   });
 
