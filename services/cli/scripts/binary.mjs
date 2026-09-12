@@ -1,5 +1,6 @@
+import {provisionRuntime} from './runtime.mjs';
 import {duckdbNative} from './duckdb-native.mjs';
-import {injectMacho} from './inject-macho.mjs';
+import {injectNative} from './inject-native.mjs';
 // Node SEA plus node-pty's platform-native files, built on the target OS/architecture.
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -18,7 +19,7 @@ import { execFileSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
 import { inject } from "postject";
 const require = createRequire(import.meta.url);
-const runtime = process.env.CLI__NODE ? resolve(process.env.CLI__NODE) : process.execPath;
+const runtime = process.env.CLI__NODE ? resolve(process.env.CLI__NODE) : await provisionRuntime();
 const root = dirname(require.resolve("node-pty/package.json"));
 execFileSync(process.execPath,["scripts/build.mjs"],{stdio:"inherit"});
 await mkdir("dist", { recursive: true });
@@ -109,7 +110,7 @@ if (process.platform === "darwin")
   execFileSync("codesign", ["--remove-signature", binary]);
 // Strip before injection: GNU strip rewrites ELF segments and can corrupt an injected SEA.
 execFileSync("strip", process.platform === "darwin" ? ["-x",binary] : ["--strip-all",binary]);
-if (process.platform === "darwin" && process.arch === "x64") injectMacho(binary,resolve("dist/sea.blob"));
+if (process.platform === 'linux' || process.platform === 'darwin' && process.arch === 'x64') injectNative(binary,resolve("dist/sea.blob"));
 else await inject(binary, "NODE_SEA_BLOB", await readFile("dist/sea.blob"), {
   sentinelFuse: "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2",
   ...(process.platform === "darwin" ? { machoSegmentName: "NODE_SEA" } : {}),

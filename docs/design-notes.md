@@ -241,13 +241,15 @@ upstream notices are versioned release assets; `runtime-lock.json` pins compress
 hashes. Ordinary CLI builds verify/download that dependency through `scripts/runtime.mjs`, then
 use the same runtime for SEA generation. Missing or corrupt release bytes fail promptly, never
 trigger source compilation. The Actions cache is an optional accelerator and may be evicted. Linux uses a digest-pinned manylinux 2.28 toolchain with
-static C++ support and the official Node ET_EXEC layout (avoiding the injector’s PIE symbol-table bug);
+static C++ support and the official Node ET_EXEC layout;
 CI rejects other ELF layouts and runtime GLIBC requirements above 2.28. `services/cli/scripts/binary.mjs` strips the executable before
 final signing and emits raw and gzip assets, with separate transport/executable hashes. Raw assets
 remain for existing installers and self-updaters; new clients prefer gzip and verify decoded bytes
-before atomic replacement. Intel Mac injection uses hash-pinned LIEF 0.17.6 Python wheels; the old
-postject writer corrupts TLS in these binaries (Node issue #59553). The injector verifies the unique
-SEA fuse and exact embedded bytes before signing. CI emits per-platform `.sizes.json` measurements.
+before atomic replacement. Linux and Intel Mac injection use hash-pinned LIEF 0.17.6 Python wheels;
+the old postject writer corrupts large ELF symbol tables and Intel TLS (postject PR #108, Node issue
+#59553). The injectors follow Node’s current algorithms, verify the unique SEA fuse and exact embedded
+bytes, and preserve ELF dynamic symbol names. ELF program headers move after BSS to keep load pages
+disjoint on older kernels. CI emits per-platform `.sizes.json` measurements.
 
 SQL's contract and in-process execution stay unchanged. The standalone composition redirects only
 the engine's sanctioned lazy native import. Its executable embeds a package manifest, not DuckDB;

@@ -693,57 +693,24 @@ jobs:
           node-version: 22.22.3
           cache: npm
       - run: npm ci
-      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: cli-runtime-cache
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: |
-            node_modules/.cache/cli-node/node
-            node_modules/.cache/cli-node/recipe.json
-          key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
-          # The script compares the complete platform recipe before accepting a fallback cache.
-          restore-keys: cli-small-node-${{ matrix.os }}-
-      - name: Build pinned small-ICU Node candidate
-        run: node services/cli/scripts/small-node.mjs --build-only
-      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
-        if: steps.cli-runtime-cache.outputs.cache-hit != 'true'
-        with:
-          path: |
-            node_modules/.cache/cli-node/node
-            node_modules/.cache/cli-node/recipe.json
-          key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
-      # Preserve the compiled candidate before verification; publication still requires passing checks.
-      - name: Preserve compiled runtime candidate
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: cli-node-candidate-${{ matrix.os }}
-          path: |
-            node_modules/.cache/cli-node/node
-            node_modules/.cache/cli-node/recipe.json
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 7
-      - name: Package reusable runtime
-        run: node services/cli/scripts/prepare-runtime.mjs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: cli-node-${{ matrix.os }}
-          path: runtime-assets/*
-          if-no-files-found: error
-          retention-days: 90
-      - name: Verify runtime compatibility
-        run: node services/cli/scripts/small-node.mjs --verify-only
+          path: node_modules/.cache/cli-prebuilt-node/node
+          key: cli-prebuilt-node-${{ matrix.os }}-${{ hashFiles('services/cli/runtime-lock.json') }}
+      - name: Download and verify pinned prebuilt Node
+        run: node services/cli/scripts/fetch-runtime.mjs
       # Run shared source behavior once on the release runtime. The packaged binary
       # is the per-platform contract, exercised by test:binary on all four targets.
       - name: Use release runtime for CLI source tests
         if: matrix.os == 'ubuntu-24.04'
-        run: echo "$GITHUB_WORKSPACE/node_modules/.cache/cli-node" >> "$GITHUB_PATH"
+        run: echo "$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node" >> "$GITHUB_PATH"
       - if: matrix.os == 'ubuntu-24.04'
         run: npm test -w services/cli
       - run: npm run build -w services/cli
       - name: Build compact standalone CLI
         run: npm run build:binary -w services/cli
         env:
-          CLI__NODE: ${{ github.workspace }}/node_modules/.cache/cli-node/node
+          CLI__NODE: ${{ github.workspace }}/node_modules/.cache/cli-prebuilt-node/node
       - run: npm run test:binary -w services/cli
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

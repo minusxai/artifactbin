@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "release": "cli-node-v22.22.3-r1",
+  "version": "22.22.3",
+  "platforms": {
+    "darwin-arm64": {
+      "sha256": "4eb6e9d4e9ccc5399225f92abc5df95c1cd2b3f08cdc7c6b2a9b848e24db0211",
+      "gzipSha256": "1b3d247455fa13f60d6ea8d56a0d2277658813fd3af6bbf354d1d8bb2fdb891a",
+      "size": 61634480,
+      "licenseSha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+      "recipe": {
+        "version": "22.22.3",
+        "checksum": "f3e6a578db1ab335a4a72785c1e87ad18a2cf6d2fc25747a1d741fb34af0bd0f",
+        "intl": "small-icu",
+        "platform": "darwin",
+        "arch": "arm64"
+      }
+    },
+    "darwin-x64": {
+      "sha256": "63d9318eae0ac8b8d6d5a88ab46055a627a3d58114670bf8dc2f592800df0a41",
+      "gzipSha256": "e461652e5adca83b8e15dad202e3ee3a7aa88f84ab6bd5203bdad6fc8e0d28ce",
+      "size": 63634320,
+      "licenseSha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+      "recipe": {
+        "version": "22.22.3",
+        "checksum": "f3e6a578db1ab335a4a72785c1e87ad18a2cf6d2fc25747a1d741fb34af0bd0f",
+        "intl": "small-icu",
+        "platform": "darwin",
+        "arch": "x64"
+      }
+    },
+    "linux-arm64": {
+      "sha256": "81bc70c95aae65c81b68d77822f8bd484111d2a29581efbb2688dcfb44cba862",
+      "gzipSha256": "513c107c6663bbf7aed8990633beb86917ca94dcb3e66f58769fda54ccc65cc1",
+      "size": 76553744,
+      "licenseSha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+      "recipe": {
+        "version": "22.22.3",
+        "checksum": "f3e6a578db1ab335a4a72785c1e87ad18a2cf6d2fc25747a1d741fb34af0bd0f",
+        "intl": "small-icu",
+        "platform": "linux",
+        "arch": "arm64",
+        "image": "quay.io/pypa/manylinux_2_28_aarch64@sha256:ad74e53b713f3b07d8c889c526dc0c6500da9827b45e38739570875fef52e28f",
+        "partlyStatic": true,
+        "elfType": "EXEC"
+      }
+    },
+    "linux-x64": {
+      "sha256": "1fad2dadd79f81535653141748f865b83ce059f88691c9b3ec1d5d88ac391e1e",
+      "gzipSha256": "9a1353ef4d050ff3dd7e020c6814dee34837b2a77bc4f77c5c8e8cbb89a1ce1a",
+      "size": 81202008,
+      "licenseSha256": "c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4",
+      "recipe": {
+        "version": "22.22.3",
+        "checksum": "f3e6a578db1ab335a4a72785c1e87ad18a2cf6d2fc25747a1d741fb34af0bd0f",
+        "intl": "small-icu",
+        "platform": "linux",
+        "arch": "x64",
+        "image": "quay.io/pypa/manylinux_2_28_x86_64@sha256:53390351aeb4688114b02c36a23b3e6ce1166ee9b7afc5df1a4f776354fc764c",
+        "partlyStatic": true,
+        "elfType": "EXEC"
+      }
+    }
+  }
+}

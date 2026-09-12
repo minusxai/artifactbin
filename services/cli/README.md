@@ -180,9 +180,9 @@ node services/cli/scripts/pin-runtime.mjs cli-node-v22.22.3-r2 /path/to/runtime-
 Review and commit the resulting `services/cli/runtime-lock.json`, then require the four-platform
 CLI CI to pass using those downloaded bytes. Existing runtime revisions are never overwritten.
 
-Intel Mac packaging also needs Python 3.8–3.14. The build creates a private virtual environment
-and installs hash-pinned LIEF 0.17.6 to avoid the old injector’s Mach-O TLS corruption. Python and
-LIEF are build tools.
+Linux and Intel Mac packaging also need Python 3.8–3.14. The build creates a private virtual
+environment and installs hash-pinned LIEF 0.17.6 to preserve ELF native symbol lookup and Mach-O
+TLS. Python and LIEF are build tools.
 
 ## V0 boundaries
 

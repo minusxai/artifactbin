@@ -43,8 +43,7 @@ await writeFile(join(root,'recipe.json'),JSON.stringify(recipe)+'\n');
 if(mode==='--build-only'){console.log(`Compiled runtime candidate: ${binary}`);process.exit(0);}
 execFileSync(binary,['-e',`const a=require('node:assert/strict');a.equal(process.version,'v${version}');a.equal(process.config.variables.icu_small,true);a.deepEqual(Intl.DateTimeFormat.supportedLocalesOf(['en','fr','ja']),['en']);a.equal('e\\u0301'.normalize(),'é');a.equal(new URL('https://bücher.example').hostname,'xn--bcher-kva.example');require('node:sqlite');require('node:sea');require('node:crypto').randomBytes(32);`],{stdio:'inherit'});
 if(process.platform==='linux'){
- // Match official Node's ET_EXEC layout; postject's old LIEF corrupts large GNU hashes in PIE.
- // https://github.com/nodejs/postject/pull/108
+ // Match official Node's ET_EXEC layout; the ELF injector keeps load pages disjoint on older Linux.
  verifyLinuxRuntime(binary);
 }
 console.log(`Verified small-ICU runtime: ${binary}`);
