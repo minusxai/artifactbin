@@ -24,6 +24,7 @@ try {
     if (args[i] === '-n' || args[i] === '--max') { i++; continue; }
     if (!args[i].startsWith('-')) refs.push(args[i]);
   }
+  if (label === 'test' && !refs.length && !args.includes('--files')) refs.push('HEAD');
   // A preview is not verification and must not produce a reusable pass.
   if (args.includes('--dry')) throw new Error('Agents should run npm test directly; discovery is already budgeted.');
   process.exitCode = runCheck({ root: path.resolve('.'), label, commands, env, refs, reuse });

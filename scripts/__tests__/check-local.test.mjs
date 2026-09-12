@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,6 +17,21 @@ function fixture(test) {
   try { test({ root, put, opts, runs }); } finally { rmSync(root, { recursive: true, force: true }); }
 }
 describe('successful local check evidence', () => {
+  it('invalidates the default --changed command when its Git baseline changes', () => fixture(({ root, put, opts, runs }) => {
+    put('scripts/test-changed.mjs', "import fs from 'node:fs'; fs.appendFileSync('.artifactbin/runs','x');");
+    const git = args => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
+    git(['add', '.']);
+    const commit = ['-c', 'user.name=Fixture', '-c', 'user.email=mxmx_test_evidence@example.com', 'commit', '--allow-empty', '-qm', 'baseline'];
+    git(commit);
+    const script = new URL('../check-local.mjs', import.meta.url).pathname;
+    const run = () => spawnSync(process.execPath, [script, 'test', '--reuse'], { cwd: root, env: opts.env, encoding: 'utf8' });
+    expect(run().status).toBe(0);
+    expect(run().stdout).toContain('Reused test');
+    expect(runs()).toBe(1);
+    git(commit);
+    expect(run().status).toBe(0);
+    expect(runs()).toBe(2);
+  }));
   it('reuses a real successful check and invalidates source, dependency and environment changes', () => fixture(({ put, opts, runs }) => {
     expect(runCheck(opts)).toBe(0); expect(runCheck(opts)).toBe(0); expect(runs()).toBe(1);
     put('source.ts', 'two'); runCheck(opts); expect(runs()).toBe(2);

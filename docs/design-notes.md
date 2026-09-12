@@ -155,7 +155,7 @@ unverified/deferred status. It reads structured Vitest output and fails closed o
 `scripts/lib/check-evidence.mjs` records only successful checks with stable inputs. Normal commands
 always execute. Explicit `--reuse` allows a parent in the same checkout to reuse evidence for one hour.
 Fingerprints include tracked/untracked sources, selected generated inputs, environment digests,
-runtime, command/ref selection and installed lock state. They contain no raw environment values.
+runtime, command/ref selection (including HEAD for default changed tests) and installed lock state. They contain no raw environment values.
 Dependencies must remain lockfile-managed; manual changes to ignored dependencies or external state
 require a fresh check. These receipts attest to the recorded command's scope, never branch-wide
 coverage. CI always executes and remains the merge authority.
