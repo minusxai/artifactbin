@@ -4,7 +4,7 @@
  * the assets table.
  */
 import { json, unauthorized } from '@/lib/http';
-import { listArtifactsByUser } from '@/lib/users';
+import { workspaceAssetsFor } from '@/lib/workspace-inventory';
 import { sessionActor } from '@/lib/viewer';
 
 export async function GET(request: Request) {
@@ -12,20 +12,13 @@ export async function GET(request: Request) {
   const userId = actor.credential === 'session' ? actor.viewer?.userId : null;
   if (!userId) return unauthorized(request);
 
-  const artifacts = await listArtifactsByUser(userId);
-  const row = (artifact: (typeof artifacts)[number]) => ({
-    id: artifact.id,
-    url: `/a/${artifact.id}`,
-    title: artifact.title,
-    format: artifact.format,
-    version: artifact.version,
-    ancestor_ids: artifact.ancestor_ids,
-    visibility: artifact.visibility,
-    updated_at: artifact.updated_at,
-  });
-
-  return json({
-    assets: artifacts.filter((artifact) => artifact.format !== 'markup' && artifact.format !== 'folder').map(row),
-    folders: artifacts.filter((artifact) => artifact.format === 'folder').map(row),
-  }, 200, { 'Cache-Control': 'no-store' });
+  const params = new URL(request.url).searchParams;
+  const rawPage = params.get('page') ?? '0';
+  if (!/^\d+$/.test(rawPage) || !Number.isSafeInteger(Number(rawPage))) {
+    return json({ error: 'invalid_page' }, 400, { 'Cache-Control': 'no-store' });
+  }
+  return json(await workspaceAssetsFor(userId, {
+    page: Number(rawPage), query: params.get('q') ?? '',
+    formats: params.getAll('formats'), visibilities: params.getAll('visibilities'),
+  }), 200, { 'Cache-Control': 'no-store' });
 }

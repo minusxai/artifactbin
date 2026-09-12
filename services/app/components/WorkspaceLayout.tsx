@@ -39,6 +39,7 @@ export default function WorkspaceLayout({
         <div className="lg:sticky lg:top-6">
           {loaded ? <><Dashboard
             rows={workspace.artifacts as never}
+            stats={loaded.stats}
             viewsOverTime={loaded.viewsOverTime}
             likes={loaded.likes}
             likesOverTime={loaded.likesOverTime}

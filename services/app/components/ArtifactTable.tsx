@@ -12,6 +12,7 @@ import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
 import type { Visibility } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import type { AssetSelection } from '@/lib/workspace-inventory';
 import { pageDataChanged } from '@/web/page-data-events';
 
 interface ArtifactSummary {
@@ -93,8 +94,13 @@ const ICON_ACTION =
 export const ARTIFACTS_PER_PAGE = 5;
 
 /** `manage` enables the session-scoped delete — dashboard only. History lives in the page's edit mode. */
-export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folders, manage, embedded, canEdit = true, showVisibility = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts' }: {
+export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folders, manage, embedded, canEdit = true, showVisibility = true, showViews = true, filtersInline = false, dates = 'relative', perPage = ARTIFACTS_PER_PAGE, searchLabel = 'Search artifacts', searchPlaceholder = 'search artifacts', remote }: {
   artifacts: ArtifactSummary[];
+  /** The caller owns server-side selection and supplies exactly one page. */
+  remote?: {
+    selection: AssetSelection; total: number; formats: string[]; visibilities: string[];
+    pending?: boolean; onChange: (selection: AssetSelection) => void;
+  };
   /** Complete local inventory for expandable folder rows; pagination counts roots. */
   treeRows?: ArtifactSummary[];
   includeAssets?: boolean;
@@ -182,25 +188,36 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
   // the picker that now knows the account's own names.
   const placeName = (id: string): string => pickable.find((f) => f.id === id)?.title ?? id;
 
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(0);
+  const [localQuery, setLocalQuery] = useState('');
+  const query = remote?.selection.query ?? localQuery;
+  const setQuery = (query: string) => remote ? remote.onChange({ ...remote.selection, query, page: 0 }) : setLocalQuery(query);
+  const [localPage, setLocalPage] = useState(0);
+  const page = remote?.selection.page ?? localPage;
+  const setPage = (page: number) => remote ? remote.onChange({ ...remote.selection, page }) : setLocalPage(page);
   // Quick filters: empty selection = no constraint. Within a group values OR,
   // the two groups AND — and both compose with the search query. The format
   // group starts on mx-markup (documents are the deliverable; datasets and
   // images are their supporting assets) — only when the group will actually
   // render AND markup rows exist, so an asset-only list is never born empty.
-  const [formatPicks, setFormatPicks] = useState<string[]>(() => {
+  const [localFormats, setFormatPicks] = useState<string[]>(() => {
     const formats = new Set(artifacts.map((a) => a.format ?? 'markup'));
     return formats.size >= 2 && formats.has('markup') ? ['markup'] : [];
   });
-  const [visibilityPicks, setVisibilityPicks] = useState<string[]>([]);
+  const [localVisibilities, setVisibilityPicks] = useState<string[]>([]);
+  const formatPicks = remote?.selection.formats ?? localFormats;
+  const visibilityPicks = remote?.selection.visibilities ?? localVisibilities;
+  const toggleRemote = (key: 'formats' | 'visibilities', value: string) => {
+    if (!remote) return;
+    const picks = remote.selection[key];
+    remote.onChange({ ...remote.selection, page: 0, [key]: picks.includes(value) ? picks.filter(p => p !== value) : [...picks, value] });
+  };
   const togglePick = (set: React.Dispatch<React.SetStateAction<string[]>>) => (v: string) =>
     set((picks) => (picks.includes(v) ? picks.filter((p) => p !== v) : [...picks, v]));
 
   // Chips are derived from the rows, so a group with nothing to split on
   // (all one format, or token rows carrying no visibility) shows no dead chips.
-  const formatChips = FORMAT_ORDER.filter((f) => artifacts.some((a) => (a.format ?? 'markup') === f));
-  const visibilityChips = VISIBILITY_ORDER.filter((v) => artifacts.some((a) => a.visibility === v));
+  const formatChips = FORMAT_ORDER.filter((f) => remote ? remote.formats.includes(f) : artifacts.some((a) => (a.format ?? 'markup') === f));
+  const visibilityChips = VISIBILITY_ORDER.filter((v) => remote ? remote.visibilities.includes(v) : artifacts.some((a) => a.visibility === v));
   const showFormatChips = formatChips.length >= 2;
   const showVisibilityChips = visibilityChips.length >= 2;
 
@@ -214,7 +231,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
 
   const q = query.trim().toLowerCase();
   const filtering = Boolean(q) || formatPicks.length > 0 || visibilityPicks.length > 0;
-  const visible = !embedded && filtering
+  const visible = !remote && !embedded && filtering
     ? artifacts.filter(
         (a) =>
           (!q || `${a.title ?? ''} ${a.format ?? ''}`.toLowerCase().includes(q)) &&
@@ -226,10 +243,11 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
   // Clamp rather than reset on search: the cursor is only ever read through this
   // derived value, so a filter that shrinks the list under it can't strand the
   // user on an empty page, and clearing the filter puts them back where they were.
-  const pageCount = Math.max(1, Math.ceil(visible.length / perPage));
+  const total = remote?.total ?? visible.length;
+  const pageCount = Math.max(1, Math.ceil(total / perPage));
   const current = Math.min(page, pageCount - 1);
   const start = current * perPage;
-  const rows = visible.slice(start, start + perPage);
+  const rows = remote ? visible : visible.slice(start, start + perPage);
   const displayRows: Array<{ row: ArtifactSummary; depth: number; message?: string }> = [];
   const appendRows = (items: ArtifactSummary[], depth: number, trail: string[] = []) => {
     for (const item of items) {
@@ -255,7 +273,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
             value={f}
             label={formatLabel(f)}
             active={formatPicks.includes(f)}
-            onToggle={togglePick(setFormatPicks)}
+            onToggle={remote ? v => toggleRemote('formats', v) : togglePick(setFormatPicks)}
           />
         ))}
       {showFormatChips && showVisibilityChips && <span aria-hidden="true" className="mx-1 h-3 w-px bg-edge" />}
@@ -265,7 +283,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
             key={v}
             value={v}
             active={visibilityPicks.includes(v)}
-            onToggle={togglePick(setVisibilityPicks)}
+            onToggle={remote ? v => toggleRemote('visibilities', v) : togglePick(setVisibilityPicks)}
             tip={VISIBILITY_TIPS[v]}
           >
             {VISIBILITY_GLYPHS[v]}
@@ -291,7 +309,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
             {filterControls}
           </span>
         )}
-        {filtering && (
+        {filtering && !remote && (
           <span className="shrink-0 font-mono text-[10px] text-faint">
             {visible.length} / {artifacts.length}
           </span>
@@ -493,17 +511,17 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
           ))}
         </tbody>
       </table>
-      {visible.length > perPage && (
+      {total > perPage && (
         <div className="flex items-center justify-between border-t border-edge px-4 py-2">
           <span aria-label="Page range" className="font-mono text-[10px] text-faint">
-            {start + 1}-{start + rows.length} of {visible.length}
+            {start + 1}-{start + rows.length} of {total}
           </span>
           <span className="inline-flex items-center gap-1">
             <Tooltip content="previous">
               <button
                 className={`${ICON_ACTION} enabled:hover:text-accent disabled:cursor-default disabled:text-faint disabled:opacity-40`}
                 aria-label="Previous page"
-                disabled={current === 0}
+                disabled={remote?.pending || current === 0}
                 onClick={() => setPage(current - 1)}
               >
                 <ChevronLeft size={13} />
@@ -513,7 +531,7 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
               <button
                 className={`${ICON_ACTION} enabled:hover:text-accent disabled:cursor-default disabled:text-faint disabled:opacity-40`}
                 aria-label="Next page"
-                disabled={current >= pageCount - 1}
+                disabled={remote?.pending || current >= pageCount - 1}
                 onClick={() => setPage(current + 1)}
               >
                 <ChevronRight size={13} />
