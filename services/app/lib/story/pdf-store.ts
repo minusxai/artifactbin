@@ -38,18 +38,28 @@ export interface PdfMeta {
   objectKey: string;
   bytes: number;
   contentType: string;
+  /**
+   * Lower-case hex sha256 of the bytes the client uploaded — what publication
+   * preflight matches a local PDF against. Nothing re-encodes a PDF, so here it
+   * happens to agree with the stored object's digest; it is written from the
+   * uploaded buffer anyway, because it is ONE rule across all three asset tiers
+   * and the image tier's two hashes genuinely differ. Absent only on rows
+   * written before the field existed.
+   */
+  sha256?: string;
   /** Absent when the file does not say it in the clear — see {@link pdfPageCount}. */
   pages?: number;
 }
 
 /** A row's PDF meta, or null when the row is not a stored PDF (a shape a legacy row could take). */
 export function pdfMetaOf(row: { meta: unknown }): PdfMeta | null {
-  const meta = row.meta as { objectKey?: unknown; bytes?: unknown; pages?: unknown; contentType?: unknown } | null;
+  const meta = row.meta as { objectKey?: unknown; bytes?: unknown; pages?: unknown; contentType?: unknown; sha256?: unknown } | null;
   if (typeof meta?.objectKey !== 'string' || !meta.objectKey) return null;
   return {
     objectKey: meta.objectKey,
     bytes: typeof meta.bytes === 'number' ? meta.bytes : 0,
     contentType: typeof meta.contentType === 'string' ? meta.contentType : PDF_CONTENT_TYPE,
+    ...(typeof meta.sha256 === 'string' ? { sha256: meta.sha256 } : {}),
     ...(typeof meta.pages === 'number' ? { pages: meta.pages } : {}),
   };
 }

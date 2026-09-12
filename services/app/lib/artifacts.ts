@@ -1784,6 +1784,50 @@ export function getOwnedArtifactFor(actor: TokenActor, id: string): Promise<Arti
   return getArtifactScoped(ownerScope(actor), id);
 }
 
+/** One local asset a publication preflight declared, by tier and by the hash of its bytes. */
+export interface DeclaredAsset { format: 'image' | 'pdf' | 'file'; sha256: string }
+
+/**
+ * WHICH OF THESE LOCAL FILES THE ACTOR HAS ALREADY PUBLISHED — one id per
+ * declared asset, in the order they were declared, null where there is no hit.
+ *
+ * This is the whole of asset dedupe: the CLI names a document's images, PDFs
+ * and files by `meta.sha256` (lib/story/file-store uploadedSha256) and uploads
+ * only the misses, so republishing a deck of screenshots costs one request
+ * instead of thirty.
+ *
+ * It runs on `ownerScope` — the SAME predicate `getOwnedArtifactFor` uses —
+ * and that is the security property, not an implementation detail. Reach is
+ * wider than ownership: an editor may rewrite someone else's document, and a
+ * public artifact is readable by anyone. Either of those in here would turn a
+ * hash into an ORACLE — "does a file with these bytes exist on this server" —
+ * answerable by anyone who can guess a file, and would hand a stranger's
+ * artifact id to a document that then depends on it. An anonymous token owns
+ * through `token_id` alone, so it dedupes only against its own uploads.
+ *
+ * The FORMAT is matched too, narrower than "any asset row": the same bytes can
+ * be published both as an `image` (re-encoded, measured) and as a generic
+ * `file`, and handing back the wrong one puts a `file` id where the document
+ * needs an `image` and fails reference validation at the real publish.
+ *
+ * Newest `updated_at` wins, with `id` breaking the tie so rows written in one
+ * transaction still resolve deterministically.
+ */
+export async function findOwnedAssetsFor(actor: TokenActor, declared: readonly DeclaredAsset[]): Promise<Array<string | null>> {
+  if (!declared.length) return [];
+  const scope = ownerScope(actor);
+  const db = await getDb();
+  const result = await db.query<{ format: string; sha256: string; id: string }>(
+    `SELECT DISTINCT ON (format, meta->>'sha256') format, meta->>'sha256' AS sha256, id
+       FROM artifacts
+      WHERE ${scope.where('$1')} AND format = ANY($2::text[]) AND meta->>'sha256' = ANY($3::text[])
+      ORDER BY format, meta->>'sha256', updated_at DESC, id DESC`,
+    [scope.val, [...new Set(declared.map((asset) => asset.format))], [...new Set(declared.map((asset) => asset.sha256))]],
+  );
+  const found = new Map(result.rows.map((row) => [`${row.format}:${row.sha256}`, row.id]));
+  return declared.map((asset) => found.get(`${asset.format}:${asset.sha256}`) ?? null);
+}
+
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
 export interface ArtifactCollectionFilters {type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
 export async function listArtifactPageFor(actor: TokenActor, limit: number, cursor?: {created: string; id: string}, filters:ArtifactCollectionFilters={}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {

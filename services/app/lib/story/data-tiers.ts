@@ -16,10 +16,11 @@ import type {ContentObjects} from './prepared-objects';
 import { json } from '../http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { storeDatasetRows } from './dataset-store';
-import { storeImage, IMAGE_CONTENT_TYPES } from './image-store';
+import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from './image-store';
+import { uploadedSha256 } from './file-store';
 import { sniffImageType } from '@/lib/web-ingest/sniff';
 import { optimiseImage } from '@/lib/images/optimise';
-import { PDF_CONTENT_TYPE, pdfPageCount, storePdf } from './pdf-store';
+import { PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta } from './pdf-store';
 import { sniffAssetType } from '@/lib/web-ingest/sniff';
 import type { StoredContent } from './input';
 import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
@@ -206,22 +207,26 @@ export async function storeImageContent(buffer: Buffer, contentType: string, obj
    * (lib/asset-quota) sums exactly that column. One upload, one number.
    */
   const small = fit.variant ? await storeImage(fit.variant.buffer, fit.variant.contentType, objects) : null;
-  return {
-    format: 'image',
-    content: '',
-    source: null,
-    meta: {
+  const meta: ImageMeta = {
       contentType: fit.contentType,
       objectKey: located.objectKey,
       bytes: located.bytes + (small?.bytes ?? 0),
+      /*
+       * THE HASH IS OF WHAT ARRIVED, and `buffer` — not `fit.buffer` — is what
+       * arrived. Publication preflight answers "you already own this picture"
+       * by matching a hash the CLI took of a file on someone's disk, and the
+       * bytes we store are that file re-encoded to webp. Hashing the optimised
+       * copy would produce a value no client can ever compute, so every upload
+       * would miss and the dedupe would be a silent no-op.
+       */
+      sha256: uploadedSha256(buffer),
       ...(small && fit.variant ? { smallObjectKey: small.objectKey, smallWidth: fit.variant.width } : {}),
       // The box the markup reserves, and the stand-in shown while the real
       // bytes travel. Absent when the bytes could not be decoded.
       ...(fit.width && fit.height ? { width: fit.width, height: fit.height } : {}),
       ...(fit.placeholder ? { placeholder: fit.placeholder } : {}),
-    },
-    derivedTitle: null,
   };
+  return { format: 'image', content: '', source: null, meta: { ...meta }, derivedTitle: null };
 }
 
 export async function publishImage(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
@@ -254,20 +259,18 @@ export async function storePdfContent(buffer: Buffer, objects?: ContentObjects):
     return json({ error: 'invalid_pdf', details: ['those bytes are not a PDF — the type comes from the file, never from its name or its Content-Type'] }, 400);
   }
   const located = await storePdf(buffer, objects);
-  return {
-    format: 'pdf',
-    content: '',
-    source: null,
-    meta: {
-      contentType: PDF_CONTENT_TYPE,
-      objectKey: located.objectKey,
-      bytes: located.bytes,
-      // Only when the file says so in the clear — a <File> card shows a page
-      // count it was told and never one it invented (lib/story/pdf-store).
-      ...(() => { const pages = pdfPageCount(buffer); return pages ? { pages } : {}; })(),
-    },
-    derivedTitle: null,
+  const meta: PdfMeta = {
+    contentType: PDF_CONTENT_TYPE,
+    objectKey: located.objectKey,
+    bytes: located.bytes,
+    // The hash of the uploaded bytes, the same rule the image and file doors
+    // follow, so publication preflight asks one question of all three tiers.
+    sha256: uploadedSha256(buffer),
+    // Only when the file says so in the clear — a <File> card shows a page
+    // count it was told and never one it invented (lib/story/pdf-store).
+    ...(() => { const pages = pdfPageCount(buffer); return pages ? { pages } : {}; })(),
   };
+  return { format: 'pdf', content: '', source: null, meta: { ...meta }, derivedTitle: null };
 }
 
 export async function publishPdf(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
