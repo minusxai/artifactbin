@@ -26,10 +26,14 @@ export async function connectAgent(base) {
   }
 
   // What the browser sends when a person clicks "Continue anonymously": the
-  // form, from the product's own origin (the route refuses any other).
+  // form, from the product's own origin (the route refuses any other). That is
+  // the origin the product ADVERTISES — carried in the pairing's verification
+  // URI — not whatever address this script dialed (127.0.0.1 vs localhost
+  // was a 403 invalid_origin in CI).
+  const advertised = new URL(pairing.verification_uri ?? pairing.verification_url ?? origin).origin;
   const approve = await fetch(`${origin}/oauth/device/approve`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', origin },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', origin: advertised },
     body: new URLSearchParams({ user_code: pairing.user_code, decision: 'anonymous' }),
   });
   if (!approve.ok) {
