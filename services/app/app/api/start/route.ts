@@ -1,40 +1,38 @@
 /**
  * POST /api/start — the zero-to-live-document button.
  *
- * Mints an anonymous token AND an empty markup artifact in one call, so the
- * home page can hand the user a paste for a real, watchable
- * document: they paste it to an agent, and the page they are looking at fills
- * in over the live stream.
+ * Creates an empty markup artifact and hands back the ONE agent starter
+ * (lib/agent-copy `existingPaste`), so the home page can give the user a paste
+ * for a real, watchable document: they paste it to an agent, and the page they
+ * are looking at fills in over the live stream.
  *
- * It composes two things that already exist (anonymous mint, create) rather
- * than adding a third way to do either — same IP rate limit, same artifact
- * shape. Signed-in callers get the artifact stamped with their account so it
- * appears in their dashboard immediately. No token is exposed to the agent:
- * every caller receives the same tokenless paste, and afbin authenticates
- * itself on demand. The anonymous mint and browser session still happen so the
- * document is watchable and later claimable.
+ * NOTHING IS MINTED HERE. The afbin CLI's device approval is the only way any
+ * client obtains a credential, so this route hands out no token, sets no
+ * agent cookie and names no expiry — the same body for a signed-in and a
+ * signed-out caller. A signed-in caller's document is stamped with their
+ * account (it appears in their dashboard, and the CLI connected to that
+ * account edits it); a signed-out caller's document is unowned and born
+ * public, which is what makes it watchable in the tab that created it and
+ * readable by whoever holds the link.
+ *
+ * A caller that already HAS a credential (an agent's bearer, a browser holding
+ * the agent cookie) keeps acting as it: the document it creates joins the ones
+ * that credential already reaches, exactly as any other create does.
  */
 import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
 import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json } from '@/lib/http';
-import { START_PLACEHOLDER_MARKUP } from '@/lib/start-links';
-import { mintToken, resolveToken } from '@/lib/tokens';
-import { withAgentSession } from '@/lib/agent-session';
+import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
+import { resolveToken } from '@/lib/tokens';
 import { sessionActor } from '@/lib/viewer';
 import { parseContentInput } from '@/lib/story/input';
 
-// The placeholder document lives with the start-link protocol
-// (lib/start-links): the brief's fill-vs-edit mode is derived from its
-// waiting-line anchor, so the markup and the check must not drift apart.
-const PLACEHOLDER = START_PLACEHOLDER_MARKUP;
-
 export async function POST(request: Request) {
-  // Anonymous-first: a session only decides OWNERSHIP, never access. If it
-  // cannot be resolved, fall back to an unowned document — the user can still
-  // claim its token later, which is exactly what claiming is for. (Failing
-  // open costs nothing here: no session means fewer privileges, not more.
-  // try/catch, not .catch(): auth() throws synchronously off-request.)
+  // A session only decides OWNERSHIP, never access. If it cannot be resolved,
+  // the document is simply unowned. (Failing open costs nothing here: no
+  // session means fewer privileges, not more. try/catch, not .catch(): auth()
+  // throws synchronously off-request.)
   let userId: string | null = null;
   try {
     userId = (await auth())?.user?.id ?? null;
@@ -42,26 +40,18 @@ export async function POST(request: Request) {
     userId = null;
   }
 
-  // An AGENT that sent its own bearer keeps acting as that token: the document
-  // it is about to write joins the ones it already reaches.
+  // Whatever credential the caller already presented — an agent's own bearer
+  // (afbin, after its browser approval), or the agent cookie a browser holds.
+  // It is never created here, only honoured: the document joins what that
+  // credential already reaches.
   const offered = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
-  const existing = offered ? await resolveToken(offered) : null;
-
-  // A BROWSER holds its tokens as ids in an httpOnly cookie, so there is no
-  // plaintext left to hand the agent — and an anonymous token only reaches what
-  // it created, so a start link carrying some OTHER token would produce a
-  // document its own agent could not edit. This document therefore gets a fresh
-  // token, which the agent receives through the link and the browser ADDS to
-  // what it holds — the cookie is a LIST precisely so a second document's
-  // token never orphans the first's.
-  const held = existing ? null : await sessionActor(request);
-  const minted: { id: string; token: string | null; expiresAt?: string | null } = existing
-    ? { id: existing.id, token: offered }
-    : await mintToken('agent-link');
-  const parsed = await parseContentInput({ markup: PLACEHOLDER }, {});
+  const bearer = offered ? await resolveToken(offered) : null;
+  const actor = bearer ? null : await sessionActor(request);
+  const tokenId = bearer?.id ?? actor?.tokenId ?? '';
+  const parsed = await parseContentInput({ markup: START_PLACEHOLDER_MARKUP }, {});
   if (parsed instanceof Response) return parsed; // unreachable: the placeholder is fixed and valid
 
-  const row = await createArtifact(minted.id, userId ?? existing?.userId ?? held?.viewer?.userId ?? null, {
+  const row = await createArtifact(tokenId, userId ?? bearer?.userId ?? actor?.viewer?.userId ?? null, {
     ...parsed,
     // NULL, not 'Untitled': unnamed must stay distinguishable from named-that,
     // because an unnamed document follows its own heading (lib/story/title.ts)
@@ -71,28 +61,13 @@ export async function POST(request: Request) {
   });
 
   const base = baseUrl(request);
-  const url = `${base}/a/${row.id}`;
-  const signedIn = userId !== null;
-  // The PASTE is tokenless for every caller — afbin signs itself in when it
-  // first needs the server, so the agent is never handed a token. The anonymous
-  // `token` field still rides the JSON response (for the browser session and the
-  // start-link/claim plumbing); it is simply not in the paste the agent copies.
-  const prompt = existingPaste(base, row.id);
-  const res = json(
+  return json(
     {
       id: row.id,
-      url,
+      url: `${base}/a/${row.id}`,
       edit_id: row.edit_id,
-      expiresAt: minted.expiresAt,
-      prompt,
-      ...(!signedIn ? { token: minted.token } : {}),
+      prompt: existingPaste(base, row.id),
     },
     201,
   );
-  // The BROWSER's copy of the capability also rides back as an httpOnly cookie,
-  // so this tab can edit the document it just made. Skipped for an agent's own
-  // bearer call: it has no cookie and needs none.
-  // A browser that started this document holds its token from here on — the
-  // proxy's cookie (by instruction) or the app's own, never both.
-  return existing ? res : withAgentSession(request, res, minted.id);
 }

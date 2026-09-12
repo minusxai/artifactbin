@@ -18,7 +18,6 @@ const buildSkillDoc = (base: string) => ['artifactbin/references/publishing.md',
 const buildMarkupDoc = (base: string) => ['artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-video.md'].map((p) => renderDoc(p, base)).join('\n');
 const buildDesignDoc = (base: string) => renderDoc('artifactbin/references/design.md', base);
 const buildTemplateDoc = (base: string, name: string) => renderDoc(`artifactbin/references/templates-${name}.md`, base);
-import { startBrief } from '../start-links';
 import { publishJsx } from '../story/jsx-tier';
 
 const BASE = 'https://example.test';
@@ -305,7 +304,7 @@ describe('template pages', () => {
   });
 });
 
-describe('the start brief and quick sheet', () => {
+describe('the quick sheet', () => {
   const sheet = buildQuickSheet(BASE);
   it('§9.a says a dangerous tag (form/iframe/meta…) is refused WITHOUT the allowlist', () => {
     expect(sheet).toMatch(/<form>|form,? iframe|iframe, ?meta|form\/iframe/i);
@@ -313,9 +312,8 @@ describe('the start brief and quick sheet', () => {
   it('§9.b a CDN script or external stylesheet is a 400, not a silent failure', () => {
     expect(sheet).not.toMatch(/silently fail/);
   });
-  it('§9.3 the brief and the sheet agree on the second write: /edits, not a whole-document PUT', () => {
-    const brief = startBrief(BASE, 'ABC123', 'secret');
-    expect(brief).not.toContain('simply replace');
+  it('§9.3 the sheet teaches the second write as /edits, not a whole-document PUT', () => {
+    expect(sheet).not.toContain('simply replace');
   });
 });
 

@@ -30,7 +30,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -66,7 +66,7 @@ await loginViaEmail(owner, BASE, sink, OWNER_EMAIL);
 check(Boolean((await ownerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'owner logged in');
 
 // ── 1. a public document, published by the owner's own claimed token ──────
-const anon = await mintAnon(BASE);
+const anon = await connectAgent(BASE);
 const claimed = await owner.evaluate(
   async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
   anon.token,

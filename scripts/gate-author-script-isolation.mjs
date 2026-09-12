@@ -3,11 +3,11 @@ import { artifactDocument } from './lib/artifact-document.mjs';
 /** Built-server security acceptance: authored JS has data capabilities, never renderer/account authority. */
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
 
 const base = process.argv[2] ?? 'http://127.0.0.1:5400';
-const token = await mintAnon(base);
+const token = await connectAgent(base);
 async function api(path, method, body) {
   const response = await fetch(base + path, { method, headers: { Authorization: `Bearer ${token.token}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
   assert(response.ok, `${method} ${path}: ${response.status} ${response.ok ? '' : await response.text()}`);

@@ -14,7 +14,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ArtifactTable } from '@/components/TokenBrowser';
+import { ArtifactTable } from '@/components/ArtifactTable';
 
 let seq = 0;
 const row = (over: Partial<Parameters<typeof ArtifactTable>[0]['artifacts'][number]>) => {

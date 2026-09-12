@@ -212,14 +212,14 @@ The web UI is a Vite SPA under `services/app/web/pages` calling the `/api/my/*` 
 | Dashboard metrics and engagement series (`Dashboard.tsx`) | none | Deferred |
 | Activity feed (`ActivityFeed.tsx`) | none | Deferred |
 | Shared with you (`SharedWithYou.tsx`) | `list --filter relationship=shared` | Exists |
-| Token list, revoke, mint with expiry, one-time display (`TokensPanel.tsx`, `TokensNew.tsx`) | none; `setup` obtains the CLI's own credential | Deferred |
+| Connection list and revoke (`TokensPanel.tsx`) | none; the CLI obtains its own credential through browser approval | Deferred |
 | Refresh external images (`RefreshAssets.tsx`) | `push --refresh <ref>` | A |
 | Fork (`ForkArtifact.tsx`) | `fork` then `push` | B |
 | Thumbnails and social cards (`Shelf.tsx`, `SocialPreviewDialog.tsx`) | `export --format png|jpg` full captures; social-card framing not offered | B |
 | Remote sessions list, attach, input, resize, remove (`Chat.tsx`) | `list --type session`, `remote --session`, `delete --type session` | A and primary |
 | Skills download and install text (`GetStarted.tsx`, `llms.txt`) | `setup`, `update`, `/chat/install.sh` | D |
 
-Recorded gaps, not offered by the CLI: claim and reject of browser-held anonymous tokens (cookie model), the one-time start link and agent prompt, social-preview crop framing, annotation area ranges, reader appearance override, permanent delete, session and token rename, followers and liked-by lists.
+Recorded gaps, not offered by the CLI: social-preview crop framing, annotation area ranges, reader appearance override, permanent delete, session rename, followers and liked-by lists.
 
 ## Required acceptance scenarios
 

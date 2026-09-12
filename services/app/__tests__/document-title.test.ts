@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { artifactMetadata } from '@/test/helpers/pages';
 import { POST as startRoute } from '@/app/api/start/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
+import { mintToken } from '@/lib/tokens';
 import { useAppHarness, request } from '@/__tests__/harness';
 
 useAppHarness();
@@ -22,12 +23,15 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 interface Start { id: string; token: string; edit_id: string }
 
 /**
- * A started anonymous document plus the token `/api/start` returns once.
+ * A started document, created BY an agent's own connection — `/api/start`
+ * hands out no credential, so the caller brings the one it already has and the
+ * document it creates is the one it can edit.
  */
 const start = async (): Promise<Start> => {
-  const res = await startRoute(request('/api/start', { method: 'POST', json: {} }));
+  const { token } = await mintToken('device-approval');
+  const res = await startRoute(request('/api/start', { method: 'POST', json: {}, token }));
   expect(res.status).toBe(201);
-  return (await res.json()) as Start;
+  return { ...(await res.json()) as Omit<Start, 'token'>, token };
 };
 
 /** Match the seeded heading text without depending on its freshly generated id. */

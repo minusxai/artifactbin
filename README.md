@@ -44,7 +44,7 @@ docker run --rm -it -v "$PWD/artifactbin:/work" ghcr.io/minusxai/artifactbin nod
 docker run -d --name artifactbin --restart unless-stopped -p 127.0.0.1:3030:3000 -v "$PWD/artifactbin/data:/app/data" --env-file artifactbin/.env ghcr.io/minusxai/artifactbin
 ```
 
-Data lives in `data/` (PGLite + objects). Email login needs `EMAIL__RESEND_API_KEY`; anonymous tokens work without it. Put a reverse proxy in front for TLS and set `APP__PUBLIC_BASE_URL` to the public URL.
+Data lives in `data/` (PGLite + objects). Email login needs `EMAIL__RESEND_API_KEY`; connecting the CLI anonymously works without it. Put a reverse proxy in front for TLS and set `APP__PUBLIC_BASE_URL` to the public URL.
 
 For the bundled Postgres instead, use `docker compose up -d`; see [operations](docs/operations.md).
 

@@ -26,7 +26,7 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -51,7 +51,7 @@ check(
   'two sessions (owner A, other B) and a session-less reader are up',
 );
 
-const anon = await mintAnon(BASE);
+const anon = await connectAgent(BASE);
 const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
 })).status, anon.token);
@@ -198,7 +198,7 @@ for (const path of ['/', '/tokens', '/login']) {
 }
 
 // ── 6. anonymous owner: token → httpOnly session, nothing in localStorage ──
-const anon2 = await mintAnon(BASE);
+const anon2 = await connectAgent(BASE);
 const anonDoc = await (await fetch(`${BASE}/api/artifacts`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon2.token}` },
   body: JSON.stringify({ title: 'Anon Owned', markup: '<h1>ANON-OWNED</h1>' }),
@@ -298,7 +298,7 @@ const HOSTILE = `<Helmet><title>Hostile</title><Value name="attack" type="string
 \`}</script></Helmet>
 <div className="p-8"><h1 className="text-3xl font-bold">HOSTILE-DOC</h1><pre id="h">{$attack}</pre></div>`;
 const hostile = await (await fetch(`${BASE}/api/artifacts`, {
-  method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${(await mintAnon(BASE)).token}` },
+  method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${(await connectAgent(BASE)).token}` },
   body: JSON.stringify({ title: 'Hostile', markup: HOSTILE, visibility: 'public' }),
 })).json();
 check(!!hostile.id, 'a hostile PUBLIC artifact is published by another party');
@@ -409,7 +409,7 @@ await rdrCtx.close();
 // The migration case: this browser holds its token the OLD way (localStorage)
 // and nothing reads it any more. Opening the app must exchange it for the
 // cookie once, delete it, and leave the browser owning its documents again.
-const legacy = await mintAnon(BASE);
+const legacy = await connectAgent(BASE);
 const legacyDoc = await (await fetch(`${BASE}/api/artifacts`, {
   method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${legacy.token}` },
   body: JSON.stringify({ title: 'Legacy Owned', markup: '<h1>LEGACY-OWNED</h1>' }),

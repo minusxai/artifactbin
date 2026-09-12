@@ -44,7 +44,7 @@ export function unauthorized(request: Request): Response {
   return json(
     {
       error: 'unauthorized',
-      help: 'Retry — afbin authenticates itself when it needs the server; there is nothing to paste.',
+      help: `Retry — afbin authenticates itself when it needs the server; there is nothing to set up. Install it if it is missing: curl -fsSL ${base}/chat/install.sh | sh`,
       guide: `${base}/llms.txt`,
     },
     401,

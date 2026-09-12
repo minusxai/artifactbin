@@ -53,7 +53,6 @@ export const GENERATION_PUBLIC_POOLS = parsePublicGenerationPools(env('GENERATIO
  */
 export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
   ADMIN_SECRET: 'ADMIN__SECRET',
-  ANON_MINT_MAX: 'PROXY__RATE_LIMIT_CONFIG_FILE (a policy file, not a knob)',
   ARTIFACT_QUOTA_PER_TOKEN: 'QUOTA__ARTIFACTS_PER_TOKEN',
   AUTH_SECRET: 'AUTH__SECRET',
   // Namespaced→namespaced, unlike every other row: the browser seam stopped

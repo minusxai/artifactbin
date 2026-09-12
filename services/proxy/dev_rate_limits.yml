@@ -16,8 +16,9 @@
 # always   : policies applied to every request before the route's. Empty: today nothing is global.
 
 policies:
-  # was DOORS.ANON_MINT — closed by default; a deployment that wants open minting ships its own file.
-  anon_mint:      { max: 2000, window: 1h, key: ip,    burst: 5 }
+  # the START door: how many documents one address may create from the web page. Closed by default;
+  # a deployment that wants the button open to strangers ships its own file.
+  start_doc:      { max: 2000, window: 1h, key: ip,    burst: 5 }
   # was DOORS.LOGIN_SEND — per ADDRESS, not per ip: an office behind one NAT is many people.
   login_send:     { max: 5,   window: 1h,  key: email }
   # was DOORS.LOGIN_VERIFY — generous; the guess cap per CODE is Better Auth's (5).
@@ -38,11 +39,10 @@ policies:
   publish:        { max: 600, window: 1m,  key: actor }
 
 routes:
-  # `browser_only` is the anonymous mint's OTHER verdict, and it is POST-only on purpose: `/api/start`
-  # shares the budget and is posted by an agent with no browser at all.
-  - { method: POST, path: "^/api/tokens/anonymous$", policies: [anon_mint], browser_only: true }
-  - { path: "^/api/tokens/anonymous$", policies: [anon_mint] }
-  - { path: "^/api/start$",            policies: [anon_mint] }
+  # `browser_only`: /api/start is the WEB PAGE's create button, and an agent that
+  # posts it instead of running afbin gets the refusal that teaches the CLI.
+  - { method: POST, path: "^/api/start$", policies: [start_doc], browser_only: true }
+  - { path: "^/api/start$",            policies: [start_doc] }
   - { method: POST, path: "^/api/auth/email-otp/send-verification-otp$", policies: [login_send] }
   - { path: "^/api/auth/sign-in",           policies: [login_verify] }
   - { path: "^/api/auth/email-otp/verify",  policies: [login_verify] }

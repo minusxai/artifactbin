@@ -4,7 +4,7 @@ import { Navigate } from 'react-router';
 import type { PickerFolder } from '@/components/FolderPicker';
 import type { ShelfRow } from '@/components/Shelf';
 import { SHELF_LIST_PER_PAGE } from '@/components/Shelf';
-import { ArtifactTable } from '@/components/TokenBrowser';
+import { ArtifactTable } from '@/components/ArtifactTable';
 import { MicroLabel, PANEL } from '@/components/ui';
 import { useSession } from '@/web/session';
 

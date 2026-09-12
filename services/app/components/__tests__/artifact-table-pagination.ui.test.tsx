@@ -12,7 +12,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 
-import { ArtifactTable, ARTIFACTS_PER_PAGE } from '@/components/TokenBrowser';
+import { ArtifactTable, ARTIFACTS_PER_PAGE } from '@/components/ArtifactTable';
 
 const make = (n: number) =>
   Array.from({ length: n }, (_, i) => ({

@@ -1,11 +1,11 @@
 /**
- * M2 — the anonymous mint is a BROWSER door.
+ * THE CREATE BUTTON IS A BROWSER DOOR.
  *
- * MEASURED on production before this was written: the real `/tokens/new` page sends
- * `origin: https://artifactbin.dev` + `sec-fetch-site: same-origin` on its mint fetch, both survive this
- * proxy to the upstream, and a bare curl with none of them gets a token anyway. That last part is what
- * closes here — for `/api/tokens/anonymous` ONLY. `/api/start` shares the ANON_MINT rate-limit door and
- * is posted by agents with no browser: gating it would kill the very flow we steer people toward.
+ * MEASURED on production: the real page sends `origin: https://artifactbin.dev` +
+ * `sec-fetch-site: same-origin` on its fetch, both survive this proxy to the upstream, and a bare curl
+ * with none of them used to be served anyway. `POST /api/start` is the web page's own button — an agent
+ * that posts it instead of running afbin is mid-mistake, and the refusal is where we hand it the CLI.
+ * The GET shape of the same path is NOT gated: only the create is.
  */
 import { describe, it, expect } from 'vitest';
 import { assemble } from '@artifactbin/utils';
@@ -20,16 +20,16 @@ const proxyFor = async (upstream?: (req: Request) => Promise<Response>) =>
     ...(upstream ? { upstream } : {}),
   })));
 
-describe('the anonymous mint door', () => {
+describe('the create-button door', () => {
   it('refuses a bare client — no origin, no sec-fetch-site, no browser', async () => {
     const proxy = await proxyFor();
-    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', { method: 'POST' }));
+    const res = await proxy.fetch(new Request('http://localhost/api/start', { method: 'POST' }));
     expect(res.status).toBe(403);
   });
 
-  it('teaches the ladder in the refusal instead of just saying no', async () => {
+  it('teaches the CLI in the refusal instead of just saying no', async () => {
     const proxy = await proxyFor();
-    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+    const res = await proxy.fetch(new Request('http://localhost/api/start', {
       method: 'POST', headers: { 'artifactbin-agent': 'claude-code' },
     }));
     const body = await res.json() as Record<string, unknown>;
@@ -38,29 +38,33 @@ describe('the anonymous mint door', () => {
     expect(text).toContain('afbin');
     expect(text).toContain('authenticates itself');
     expect(text).toContain('afbin help');
-    // There is no token page any more: the refusal points at the CLI, not a URL to paste.
+    // The refusal points at the CLI and at how to get it — never at a page to visit.
+    expect(text).toContain('/chat/install.sh');
     expect(text).not.toContain('/tokens/new');
+    for (const banned of ['token', 'paste', 'claim', 'mint', 'MCP', '/raw', '/docs/']) {
+      expect(text.toLowerCase(), `the refusal must not say "${banned}"`).not.toContain(banned.toLowerCase());
+    }
   });
 
   it('lets the product\'s own page through', async () => {
     let reached = false;
     const proxy = await proxyFor(async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); });
-    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', { method: 'POST', headers: BROWSER }));
+    const res = await proxy.fetch(new Request('http://localhost/api/start', { method: 'POST', headers: BROWSER }));
     expect(reached).toBe(true);
     expect(res.status).toBe(201);
   });
 
-  it('never touches /api/start — a start link is posted by an agent with no browser', async () => {
+  it('never touches a GET of the same path — only the create is a button', async () => {
     let reached = false;
     const proxy = await proxyFor(async () => { reached = true; return new Response('{"ok":true}'); });
-    const res = await proxy.fetch(new Request('http://localhost/api/start', { method: 'POST' }));
+    const res = await proxy.fetch(new Request('http://localhost/api/start'));
     expect(reached).toBe(true);
     expect(res.status).toBe(200);
   });
 
   it('leaves every other route alone, mint-shaped or not', async () => {
     const proxy = await proxyFor();
-    for (const path of ['/api/artifacts', '/api/tokens', '/api/tokens/claim', '/a/ab3cd9/start']) {
+    for (const path of ['/api/artifacts', '/api/tokens', '/api/tokens/claim', '/api/my/artifacts']) {
       const res = await proxy.fetch(new Request(`http://localhost${path}`, { method: 'POST' }));
       expect(res.status, path).not.toBe(403);
     }
@@ -68,7 +72,7 @@ describe('the anonymous mint door', () => {
 
   it('refuses a GET-only pretender: the headers, not the method, are what is checked', async () => {
     const proxy = await proxyFor();
-    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+    const res = await proxy.fetch(new Request('http://localhost/api/start', {
       method: 'POST', headers: { origin: 'http://localhost' },
     }));
     expect(res.status).toBe(403);
@@ -76,7 +80,7 @@ describe('the anonymous mint door', () => {
 
   it('refuses a cross-site browser fetch — sec-fetch-site tells us it is not our page', async () => {
     const proxy = await proxyFor();
-    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+    const res = await proxy.fetch(new Request('http://localhost/api/start', {
       method: 'POST', headers: { origin: 'https://evil.test', 'sec-fetch-site': 'cross-site' },
     }));
     expect(res.status).toBe(403);
@@ -93,7 +97,7 @@ describe('the anonymous mint door', () => {
       env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'https://artifactbin.dev' },
       upstream: async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); },
     })));
-    const res = await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', {
+    const res = await proxy.fetch(new Request('http://localhost/api/start', {
       method: 'POST',
       headers: { origin: 'https://artifactbin.dev', 'sec-fetch-site': 'same-origin' },
     }));
@@ -107,16 +111,16 @@ describe('the anonymous mint door', () => {
  * TWO DECISIONS TAKEN HERE, both of which fail SILENTLY if they go the other way.
  */
 describe('the door beside the limiter, and the hosts it calls its own', () => {
-  it('does not spend the ANON_MINT budget its own advice sends the human back to use', async () => {
+  it('does not spend the start budget its own advice sends the human back to use', async () => {
     // The refusal tells the agent to just run afbin (which authenticates itself). If the refusals
     // themselves counted, an agent retrying a few times would 429 the human on the same IP and NAT.
     const options = await testProxyOptions({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_2_burst_2.yml') } });
     const proxy = assemble(await proxyParts(options));
     for (let i = 0; i < 6; i += 1) {
-      expect((await proxy.fetch(new Request('http://localhost/api/tokens/anonymous', { method: 'POST' }))).status).toBe(403);
+      expect((await proxy.fetch(new Request('http://localhost/api/start', { method: 'POST' }))).status).toBe(403);
     }
     // The budget is untouched: the page still gets its two.
-    const page = () => proxy.fetch(new Request('http://localhost/api/tokens/anonymous', { method: 'POST', headers: BROWSER }));
+    const page = () => proxy.fetch(new Request('http://localhost/api/start', { method: 'POST', headers: BROWSER }));
     expect((await page()).status).not.toBe(429);
     expect((await page()).status).not.toBe(429);
     expect((await page()).status).toBe(429);
@@ -130,7 +134,7 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
       env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'http://localhost:5401' },
       upstream: async () => { reached = true; return new Response('{"token":"mx_x"}', { status: 201 }); },
     })));
-    const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/tokens/anonymous', {
+    const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/start', {
       method: 'POST', headers: { origin: 'http://127.0.0.1:5401', 'sec-fetch-site': 'same-origin' },
     }));
     expect(reached).toBe(true);
@@ -141,7 +145,7 @@ describe('the door beside the limiter, and the hosts it calls its own', () => {
     const proxy = assemble(await proxyParts(await testProxyOptions({
       env: { PROXY__RATE_LIMIT_CONFIG_FILE: RELAXED_POLICY_FILE, APP__PUBLIC_BASE_URL: 'http://localhost:5401' },
     })));
-    const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/tokens/anonymous', {
+    const res = await proxy.fetch(new Request('http://127.0.0.1:5401/api/start', {
       method: 'POST', headers: { origin: 'https://evil.test', 'sec-fetch-site': 'same-origin' },
     }));
     expect(res.status).toBe(403);

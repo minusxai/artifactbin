@@ -13,8 +13,9 @@
  *      it fronts reports the wrong process's health) — and /api/health, the
  *      whole stack's readiness, forwarded to the app, which probes sql and
  *      browser for real here because they are real containers.
- *   2. an anonymous start — the ANON_MINT door at the proxy and the token mint
- *      at the app, returned once in the paste and response.
+ *   2. a start — the `start_doc` browser door at the proxy and the document
+ *      the app creates, plus the CLI device approval that is the ONE way this
+ *      walk (or anyone) gets a credential to write with.
  *   3. a publish whose data is real: a `<Value type="table">` and a `<Query>`
  *      over it — the publish DRY RUN crosses the app→sql seam before the
  *      document is stored (a bad query is refused at publish, so a stored
@@ -48,6 +49,8 @@
  * compose file (the phase report carries it).
  */
 import { execFileSync } from 'node:child_process';
+import { connectAgent } from './lib/cli-connection.mjs';
+import { pageHeaders } from './lib/start-doc.mjs';
 
 const [baseArg] = process.argv.slice(2);
 const base = (baseArg ?? 'http://127.0.0.1:5440').replace(/\/$/, '');
@@ -161,20 +164,25 @@ async function main() {
     say('GET /api/health through the proxy — every service ready', res.status === 200 && blind, `${res.status} ${JSON.stringify(body)}`);
   }
 
-  // 2. Anonymous start — mint + one-time token, exactly as the paste carries it.
-  const start = await fetch(`${base}/api/start`, { method: 'POST' });
+  // 2. A start — the page's button at the proxy's browser-only door, and the
+  //    CLI's device approval, which is the only way a credential exists.
+  const bare = await fetch(`${base}/api/start`, { method: 'POST' });
+  say('POST /api/start refuses a client that is not the page (403)', bare.status === 403, `${bare.status}`);
+  const { token } = await connectAgent(base);
+  say('the CLI device approval issues the one credential', /^mx_/.test(token ?? ''), token ? 'mx_…' : 'none');
+  const start = await fetch(`${base}/api/start`, {
+    method: 'POST',
+    headers: { ...pageHeaders(base), authorization: `Bearer ${token}` },
+  });
   const startBody = await start.json().catch(() => null);
-  say('POST /api/start mints a start document', start.ok && !!startBody?.id, `${start.status}`);
-  const token = typeof startBody?.token === 'string' && /^mx_[A-Za-z0-9_-]+$/.test(startBody.token)
-    ? startBody.token
-    : null;
-  const pasteCarriesToken = typeof startBody?.prompt === 'string'
+  say('POST /api/start creates a start document', start.ok && !!startBody?.id, `${start.status}`);
+  const tokenless = typeof startBody?.prompt === 'string'
     && !startBody.prompt.includes('\n')
     && !startBody.prompt.includes('\r')
-    && !!token
-    && !startBody.prompt.includes('mx_');
-  say('the one-line paste is tokenless (afbin authenticates itself)', pasteCarriesToken, pasteCarriesToken ? 'ok' : 'a token leaked into the paste');
-  if (!token) throw new Error('POST /api/start handed out no token');
+    && !startBody.prompt.includes('mx_')
+    && !('token' in (startBody ?? {}));
+  say('the one-line paste and the response are tokenless (afbin authenticates itself)', tokenless, tokenless ? 'ok' : 'a credential leaked out of /api/start');
+  if (!startBody?.id) throw new Error('POST /api/start created no document');
   const id = startBody.id;
   const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
 

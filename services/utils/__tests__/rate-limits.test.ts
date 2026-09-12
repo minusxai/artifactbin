@@ -25,15 +25,15 @@ const url = (p: string) => `http://localhost:6601${p}`;
 const DOC = {
   policies: {
     ip_flood: { max: 600, window: '1m', key: 'ip' },
-    anon_mint: { max: 2, window: '1h', key: 'ip', burst: 3 },
+    start_doc: { max: 2, window: '1h', key: 'ip', burst: 3 },
     login_send: { max: 5, window: '1h', key: 'email' },
     export: { max: 30, window: '1m', key: 'actor' },
     card: { max: 20, window: '1m', key: 'actor', repeat: 20 },
     both: { max: 1, window: '1m', key: 'ip+actor' },
   },
   routes: [
-    { method: 'POST', path: '^/api/tokens/anonymous$', policies: ['anon_mint'], browser_only: true },
-    { path: '^/api/start$', policies: ['anon_mint'] },
+    { method: 'POST', path: '^/api/start$', policies: ['start_doc'], browser_only: true },
+    { path: '^/api/start$', policies: ['start_doc'] },
     { method: 'POST', path: '^/api/auth/email-otp/send-verification-otp$', policies: ['login_send'] },
     { method: 'GET', path: '^/a/[A-Za-z0-9]+/export$', query: { mode: 'card' }, policies: ['card'] },
     { method: ['GET', 'HEAD'], path: '^/a/[A-Za-z0-9]+/export$', policies: ['export'] },
@@ -60,7 +60,7 @@ describe('validatePolicyFile — a malformed file REFUSES, naming the offender',
   it('expands the shorthand: window to seconds, burst and repeat to 1', () => {
     const f = file();
     expect(f.policies.ip_flood).toEqual({ max: 600, windowSeconds: 60, burst: 1, key: 'ip', repeat: 1 });
-    expect(f.policies.anon_mint).toEqual({ max: 2, windowSeconds: 3600, burst: 3, key: 'ip', repeat: 1 });
+    expect(f.policies.start_doc).toEqual({ max: 2, windowSeconds: 3600, burst: 3, key: 'ip', repeat: 1 });
     expect(f.policies.card.repeat).toBe(20);
     expect(f.always).toEqual(['ip_flood']);
   });
@@ -97,9 +97,9 @@ describe('validatePolicyFile — a malformed file REFUSES, naming the offender',
 describe('routeFor — first match wins', () => {
   it('matches on method, path and query, in the file\'s order', () => {
     const f = file();
-    expect(routeFor(f, 'POST', url('/api/tokens/anonymous'))?.policies).toEqual(['anon_mint']);
-    expect(routeFor(f, 'GET', url('/api/tokens/anonymous'))).toBeNull();
-    expect(routeFor(f, 'DELETE', url('/api/start'))?.policies, 'no method = every method').toEqual(['anon_mint']);
+    expect(routeFor(f, 'POST', url('/api/start'))?.policies).toEqual(['start_doc']);
+    expect(routeFor(f, 'GET', url('/api/start'))?.policies, 'the GET row below it still matches').toEqual(['start_doc']);
+    expect(routeFor(f, 'DELETE', url('/api/start'))?.policies, 'no method = every method').toEqual(['start_doc']);
     expect(routeFor(f, 'GET', url('/a/abc123/export?mode=card'))?.policies, 'the query row is written first').toEqual(['card']);
     expect(routeFor(f, 'GET', url('/a/abc123/export'))?.policies).toEqual(['export']);
     expect(routeFor(f, 'GET', url('/a/abc123/export?mode=png'))?.policies).toEqual(['export']);
@@ -136,14 +136,14 @@ describe('the limiter', () => {
   });
 
   it('MAX=0 closes a policy for everyone, holder included — and answers the WHOLE window as retryAfter', async () => {
-    const closed = validatePolicyFile({ ...DOC, policies: { ...DOC.policies, anon_mint: { max: 0, window: '1h', key: 'ip', burst: 5 } } }, 'test.yml');
+    const closed = validatePolicyFile({ ...DOC, policies: { ...DOC.policies, start_doc: { max: 0, window: '1h', key: 'ip', burst: 5 } } }, 'test.yml');
     const l = limiter(closed);
     const stranger = await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP });
     expect(stranger.allowed).toBe(false);
     // PARITY with utils/src/doors.ts:107 — `retryAfter: cfg.windowSeconds || 60` reaches the 429 body, and
-    // production's ONE closed door is anon_mint at 3600. A rewrite answering 0 or 60 here is a silent change.
+    // production's ONE closed door is start_doc at 3600. A rewrite answering 0 or 60 here is a silent change.
     expect(stranger.retryAfter).toBe(3600);
-    expect(stranger.door).toBe('anon_mint');
+    expect(stranger.door).toBe('start_doc');
     const holder = await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP, holder: true });
     expect(holder.allowed).toBe(false);
     expect(holder.retryAfter).toBe(3600);
@@ -209,11 +209,11 @@ describe('the limiter', () => {
 
   it('browserOnly and needsEmail are asked BEFORE any counting, so a refusal spends no budget', async () => {
     const l = limiter();
-    expect(l.browserOnly({ method: 'POST', url: url('/api/tokens/anonymous') })).toBe(true);
-    expect(l.browserOnly({ method: 'POST', url: url('/api/start') }), '/api/start is posted by agents with no browser').toBe(false);
+    expect(l.browserOnly({ method: 'POST', url: url('/api/start') }), 'the create button is the page\'s').toBe(true);
+    expect(l.browserOnly({ method: 'GET', url: url('/api/start') }), 'only the POST is a button').toBe(false);
     expect(l.needsEmail({ method: 'POST', url: url('/api/auth/email-otp/send-verification-otp') })).toBe(true);
     expect(l.needsEmail({ method: 'POST', url: url('/api/start') })).toBe(false);
-    // nothing above counted: the anon_mint budget of 2 is still whole
+    // nothing above counted: the start_doc budget of 2 is still whole
     expect((await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP })).allowed).toBe(true);
     expect((await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP })).allowed).toBe(true);
     expect((await l.check({ method: 'POST', url: url('/api/start') }, { ip: IP })).allowed).toBe(false);

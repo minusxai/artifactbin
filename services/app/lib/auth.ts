@@ -34,7 +34,7 @@ type TokenHandler = (request: Request, ctx: TokenContext) => Promise<Response>;
 
 /*
  * A RATE LIMIT IS ENFORCED IN EXACTLY ONE PLACE (P2 §H): every policy the
- * proxy's file names — anon_mint, mutate, publish, query, edit, export, card
+ * proxy's file names — start_doc, mutate, publish, query, edit, export, card
  * and the login/oauth ones — is counted by the PROXY, before the request is
  * forwarded. The app helpers that used to count the same budgets in the same
  * process are gone (they halved every configured ceiling); what stays below is

@@ -25,7 +25,7 @@ import {
   touchToken,
 } from '@/lib/tokens';
 import { decodeAgentSessionEnvelope } from '@/lib/agent-session';
-import { POST as mintAnonymous } from '@/app/api/tokens/anonymous/route';
+import { POST as mintAnonymous } from '@/app/api/internal/tokens/route';
 import { POST as reject } from '@/app/api/tokens/reject/route';
 import { GET as listArtifacts } from '@/app/api/artifacts/route';
 import { agentCookie, cookieValue, request, useAppHarness } from './harness';
@@ -44,7 +44,7 @@ const setExpiry = async (id: string, msFromNow: number | null) => {
 describe('mint: expiry is a property of every token', () => {
   it('a minted token expires six hours from now by default, and the mint says so', async () => {
     const before = Date.now();
-    const res = await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' }));
+    const res = await mintAnonymous(request('/api/internal/tokens', { method: 'POST' }));
     expect(res.status).toBe(201);
     const body = await json(res);
     expect(typeof body.expiresAt).toBe('string');
@@ -55,16 +55,16 @@ describe('mint: expiry is a property of every token', () => {
   });
 
   it('expiresInHours is honoured inside [1, 8760] and refused outside it', async () => {
-    const one = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: 1 } })));
+    const one = await json(await mintAnonymous(request('/api/internal/tokens', { method: 'POST', json: { expiresInHours: 1 } })));
     expect(Math.abs(Date.parse(one.expiresAt as string) - (Date.now() + HOUR))).toBeLessThan(5_000);
-    const month = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: 720 } })));
+    const month = await json(await mintAnonymous(request('/api/internal/tokens', { method: 'POST', json: { expiresInHours: 720 } })));
     expect(Math.abs(Date.parse(month.expiresAt as string) - (Date.now() + 720 * HOUR))).toBeLessThan(5_000);
-    const yearResponse = await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: 8760 } }));
+    const yearResponse = await mintAnonymous(request('/api/internal/tokens', { method: 'POST', json: { expiresInHours: 8760 } }));
     expect(yearResponse.status).toBe(201);
     const year = await json(yearResponse);
     expect(Math.abs(Date.parse(year.expiresAt as string) - (Date.now() + 8760 * HOUR))).toBeLessThan(5_000);
     for (const bad of [0.5, 8761, -1, 'soon']) {
-      const res = await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: { expiresInHours: bad } }));
+      const res = await mintAnonymous(request('/api/internal/tokens', { method: 'POST', json: { expiresInHours: bad } }));
       expect(res.status, `expiresInHours=${bad}`).toBe(400);
     }
   });

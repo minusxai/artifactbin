@@ -9,14 +9,14 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 export const timeoutMs = 90_000;
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
 const ok = (condition, label) => { out.push(`${condition ? '  ok ' : 'FAIL'} ${label}`); return condition; };
 const json = async response => { const text = await response.text(); try { return JSON.parse(text); } catch { return {raw:text}; } };
-const token = (await mintAnon(B)).token;
+const token = (await connectAgent(B)).token;
 const headers = {Authorization:`Bearer ${token}`, 'Content-Type':'application/json'};
 const api = (path, body) => fetch(`${B}${path}`, {method:'POST', headers, body:JSON.stringify(body)});
 

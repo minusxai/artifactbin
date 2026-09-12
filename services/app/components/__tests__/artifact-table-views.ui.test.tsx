@@ -7,7 +7,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { ArtifactTable } from '@/components/TokenBrowser';
+import { ArtifactTable } from '@/components/ArtifactTable';
 
 describe('ArtifactTable — the views column follows the DATA, not the permission', () => {
   const bare = { id: 'aa', url: '/a/aa', title: 'Bare', format: 'markup', version: 1, updated_at: '2026-08-20T00:00:00.000Z' };

@@ -305,7 +305,7 @@ describe('a profile', () => {
 
 });
 
-// Ported here when the manual /tokens/new page was removed: this covers the
+// Ported here when the manual token page was removed: this covers the
 // HomePage anonymous-draft shelf, not the deleted page, so it belongs with the
 // other HomePage surface tests.
 describe('anonymous home drafts', () => {

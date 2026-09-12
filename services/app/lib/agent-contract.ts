@@ -7,7 +7,7 @@ afbin authenticates itself the first time a command needs \`${origin}\`: it open
 
 For unattended execution, add \`--yes --json\`. Browser approval is still required. If approval is pending, show the returned URL and expiry to the user, then it resumes once approved. On a refused or expired credential, run \`afbin auth\` to reconnect and resume.
 
-If the human explicitly supplies a token, use \`ARTIFACTBIN_URL=${origin}\` and \`ARTIFACTBIN_TOKEN\` in the process environment. Environment credentials override the saved connection. Never mint your own anonymous token, put a token in a URL, print it in logs or commit it. The CLI sends \`Authorization: Bearer\` only to the configured origin.
+Not installed? \`curl -fsSL ${origin}/chat/install.sh | sh\`. Never print a credential, put one in a URL, or commit one; the CLI keeps its own, scoped to \`${origin}\`, and sends it nowhere else.
 
 Read \`afbin help\` and the installed local skill. Help, validation and saved-state comparisons work offline.`;
 }

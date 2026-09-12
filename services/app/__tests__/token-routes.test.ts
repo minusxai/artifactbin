@@ -1,6 +1,11 @@
 /**
  * THE APP OWNS TOKENS. Every token route is served by the app itself, driven here as the real handlers, no proxy:
  * the actor arrives ATTACHED to the Request (utils attachActor), exactly as the proxy hands it over.
+ *
+ * The only route that ISSUES one is `/api/internal/tokens`, which the proxy
+ * spends after a human approved the CLI's device pairing (the operator's
+ * `/api/tokens` aside). It is unreachable from outside — proxy parts
+ * `internalBoundary` — so it is driven here the way the proxy drives it.
  */
 import { describe, expect, it } from 'vitest';
 
@@ -8,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { createUser } from '@/lib/users';
 import { POST as mintAdmin } from '@/app/api/tokens/route';
 import { DELETE as revokeAdmin } from '@/app/api/tokens/[id]/route';
-import { POST as mintAnonymous } from '@/app/api/tokens/anonymous/route';
+import { POST as mintInternal } from '@/app/api/internal/tokens/route';
 import { GET as listMine } from '@/app/api/my/tokens/route';
 import { DELETE as revokeMine } from '@/app/api/my/tokens/[id]/route';
 import { POST as adoptSession, DELETE as clearSession } from '@/app/api/session/token/route';
@@ -53,30 +58,30 @@ describe('token routes served by the app', () => {
     expect((await revokeAdmin(request(`/api/tokens/${id}`, { method: 'DELETE', token: ADMIN }), params({ id: String(id) }))).status).toBe(204);
     expect((await revokeAdmin(request(`/api/tokens/${id}`, { method: 'DELETE', token: ADMIN }), params({ id: String(id) }))).status).toBe(404);
   });
-  it('POST /api/tokens/anonymous mints anonymously, and binds to the user under a session actor', async () => {
-    const anon = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' })));
+  it('the internal mint issues anonymously, and binds to the user under a session actor', async () => {
+    const anon = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST' })));
     expect(anon.token).toMatch(/^mx_/);
     const user = await createUser({ email: 'a@example.com' });
-    const owned = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor: { credential: 'session', userId: user.id, email: 'a@example.com', emailVerified: true } })));
+    const owned = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST', actor: { credential: 'session', userId: user.id, email: 'a@example.com', emailVerified: true } })));
     const { rows } = await (await harness.db()).query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE id = $1', [owned.id]);
     expect(rows[0]?.user_id).toBe(user.id);
   });
   it('only a session mint may create an API audience-bound access token', async () => {
     const grant = { audience: 'https://artifactbin.example/api', scope: 'artifacts' };
-    expect((await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', json: grant }))).status).toBe(400);
+    expect((await mintInternal(request('/api/internal/tokens', { method: 'POST', json: grant }))).status).toBe(400);
     const user = await createUser({ email: 'oauth@example.com' });
     const actor = { credential: 'session' as const, userId: user.id, email: 'oauth@example.com', emailVerified: true };
-    const minted = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor, json: grant })));
+    const minted = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST', actor, json: grant })));
     const { rows } = await (await harness.db()).query<{ audience: string | null; scope: string | null }>('SELECT audience, scope FROM tokens WHERE id = $1', [minted.id]);
     expect(rows[0]).toEqual(grant);
-    expect((await mintAnonymous(request('/api/tokens/anonymous',{method:'POST',actor,json:{...grant,audience:'https://artifactbin.example/mcp'}}))).status).toBe(400);
+    expect((await mintInternal(request('/api/internal/tokens',{method:'POST',actor,json:{...grant,audience:'https://artifactbin.example/mcp'}}))).status).toBe(400);
   });
   it('GET /api/my/tokens lists only this account\'s live tokens; 401 without a session', async () => {
     expect((await listMine(request('/api/my/tokens'))).status).toBe(401);
     const user = await createUser({ email: 'b@example.com' });
     const actor = { credential: 'session' as const, userId: user.id, email: 'b@example.com', emailVerified: true };
-    await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor }));
-    await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' }));
+    await mintInternal(request('/api/internal/tokens', { method: 'POST', actor }));
+    await mintInternal(request('/api/internal/tokens', { method: 'POST' }));
     const list = await json(await listMine(request('/api/my/tokens', { actor })));
     expect((list.tokens as unknown[]).length).toBe(1);
   });
@@ -84,13 +89,13 @@ describe('token routes served by the app', () => {
     const a = await createUser({ email: 'c@example.com' }); const b = await createUser({ email: 'd@example.com' });
     const actorA = { credential: 'session' as const, userId: a.id, email: 'c@example.com', emailVerified: true };
     const actorB = { credential: 'session' as const, userId: b.id, email: 'd@example.com', emailVerified: true };
-    const { id } = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST', actor: actorA })));
+    const { id } = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST', actor: actorA })));
     expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorB }), params({ id: String(id) }))).status).toBe(404);
     expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorA, origin: 'https://evil.example', headers: { host: 'localhost' } }), params({ id: String(id) }))).status).toBe(403);
     expect((await revokeMine(request(`/api/my/tokens/${id}`, { method: 'DELETE', actor: actorA }), params({ id: String(id) }))).status).toBe(204);
   });
   it('POST /api/session/token adopts a token into the agent cookie; DELETE clears it', async () => {
-    const { token } = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' })));
+    const { token } = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST' })));
     const res = await adoptSession(request('/api/session/token', { method: 'POST', json: { token } }));
     expect(res.status).toBe(204);
     expect(cookieValue(res).value).not.toBeNull();
@@ -98,7 +103,7 @@ describe('token routes served by the app', () => {
     expect(cookieValue(cleared).cleared).toBe(true);
   });
   it('a token revoked here stops authorizing on the very next request', async () => {
-    const { id, token } = await json(await mintAnonymous(request('/api/tokens/anonymous', { method: 'POST' })));
+    const { id, token } = await json(await mintInternal(request('/api/internal/tokens', { method: 'POST' })));
     expect((await listArtifacts(request('/api/artifacts', { token: String(token) }))).status).toBe(200);
     await revokeAdmin(request(`/api/tokens/${id}`, { method: 'DELETE', token: ADMIN }), params({ id: String(id) }));
     expect((await listArtifacts(request('/api/artifacts', { token: String(token) }))).status).toBe(401);

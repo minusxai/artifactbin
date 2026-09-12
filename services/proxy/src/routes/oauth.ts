@@ -1,4 +1,4 @@
-import {API_RESOURCE_PATH} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
@@ -85,11 +85,14 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
   const anonymous = !grant.userId;
   const expiresIn = anonymous ? ANON_DEVICE_TOKEN_TTL_SECONDS : ACCESS_TOKEN_TTL_SECONDS;
   // The app refuses audience/scope on a non-session mint, so an anonymous
-  // credential is a general bearer — exactly what the anonymous door serves.
+  // credential is a general bearer — exactly what an anonymous approval means.
   const payload = anonymous
     ? { expiresInHours: expiresIn / 3600 }
     : { expiresInHours: expiresIn / 3600, audience: grant.resource, scope: grant.scope };
-  const mint = new Request(new URL('/api/tokens/anonymous', request.url), {
+  // The INTERNAL mint: the app's only credential-issuing route, refused at
+  // the edge (parts `internalBoundary`) and reached only here, on the upstream
+  // seam, after a human approved this connection in the browser.
+  const mint = new Request(new URL(INTERNAL_MINT_PATH, request.url), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),

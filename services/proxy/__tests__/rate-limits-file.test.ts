@@ -38,15 +38,15 @@ describe('where the default file is', () => {
 
 describe('the three shipped files', () => {
   const files = ['default_rate_limits.yml', 'selfhost_rate_limits.yml', 'dev_rate_limits.yml'] as const;
-  it('all parse, and differ ONLY in the anonymous mint\'s ceiling', () => {
+  it('all parse, and differ ONLY in the start door\'s ceiling', () => {
     const loaded = files.map((f) => loadPolicyFile(shipped(f)));
-    expect(loaded.map((f) => f.policies.anon_mint!.max)).toEqual([0, 10, 2000]);
+    expect(loaded.map((f) => f.policies.start_doc!.max)).toEqual([0, 10, 2000]);
     for (const f of loaded) {
       expect(Object.keys(f.policies).sort()).toEqual(Object.keys(loaded[0]!.policies).sort());
       expect(f.routes.map((r) => r.path)).toEqual(loaded[0]!.routes.map((r) => r.path));
       expect(f.always, 'nothing is metered globally today — see PLAN §2 R6').toEqual([]);
     }
-    const withoutMint = (f: (typeof loaded)[number]) => JSON.stringify({ ...f.policies, anon_mint: null }, (_k, v) => (v instanceof RegExp ? String(v) : v));
+    const withoutMint = (f: (typeof loaded)[number]) => JSON.stringify({ ...f.policies, start_doc: null }, (_k, v) => (v instanceof RegExp ? String(v) : v));
     expect(withoutMint(loaded[1]!)).toBe(withoutMint(loaded[0]!));
     expect(withoutMint(loaded[2]!)).toBe(withoutMint(loaded[0]!));
   });
@@ -63,9 +63,12 @@ describe('the three shipped files', () => {
  * an unfurl of one page is fetched by every reader who sees the link, and none of them asked for a render.
  */
 const PARITY: Array<[method: string, url: string, policy: string | null, max: number, windowSeconds: number, burst: number, key: string, browserOnly: boolean]> = [
-  ['POST', '/api/tokens/anonymous', 'anon_mint', 0, 3600, 5, 'ip', true],
-  ['GET', '/api/tokens/anonymous', 'anon_mint', 0, 3600, 5, 'ip', false],
-  ['POST', '/api/start', 'anon_mint', 0, 3600, 5, 'ip', false],
+  // The retired public mint is not a route at all any more, in the file or the app.
+  ['POST', '/api/tokens/anonymous', null, 0, 0, 0, '', false],
+  ['GET', '/api/tokens/anonymous', null, 0, 0, 0, '', false],
+  // The create button: `browser_only` on the POST, and only on the POST.
+  ['POST', '/api/start', 'start_doc', 0, 3600, 5, 'ip', true],
+  ['GET', '/api/start', 'start_doc', 0, 3600, 5, 'ip', false],
   ['POST', '/api/auth/email-otp/send-verification-otp', 'login_send', 5, 3600, 1, 'email', false],
   ['POST', '/api/auth/sign-in/email', 'login_verify', 60, 900, 1, 'ip', false],
   ['POST', '/api/auth/email-otp/verify-email', 'login_verify', 60, 900, 1, 'ip', false],
@@ -96,7 +99,7 @@ const PARITY: Array<[method: string, url: string, policy: string | null, max: nu
   ['GET', '/health', null, 0, 0, 0, '', false],
   ['GET', '/assets/app.js', null, 0, 0, 0, '', false],
   ['POST', '/api/tokens', null, 0, 0, 0, '', false],
-  ['GET', '/tokens/new', null, 0, 0, 0, '', false],
+  ['GET', '/account', null, 0, 0, 0, '', false],
   ['POST', '/api/artifacts/abc/versions', 'publish', 600, 60, 1, 'actor', false],
 ];
 
@@ -121,12 +124,12 @@ describe('the port is a NO-OP: default_rate_limits.yml reproduces every old door
       if (isBrowserOnly !== browserOnly) diffs.push(`${method} ${url}: browser_only ${isBrowserOnly}, expected ${browserOnly}`);
     }
     expect(diffs).toEqual([]);
-    expect(PARITY).toHaveLength(33);
+    expect(PARITY).toHaveLength(34);
   });
 
-  it('the vocabulary that `doorFor` never reached is GONE, not transcribed: no global, start_link or events_streams policy', () => {
+  it('the vocabulary is exactly the doors that exist: no global, start_link, events_streams — and no anonymous mint', () => {
     const file = loadPolicyFile(shipped('default_rate_limits.yml'));
-    expect(Object.keys(file.policies).sort()).toEqual(['anon_mint', 'card', 'edit', 'export', 'login_send', 'login_verify', 'mutate', 'oauth_register', 'oauth_token', 'publish', 'query']);
+    expect(Object.keys(file.policies).sort()).toEqual(['card', 'edit', 'export', 'login_send', 'login_verify', 'mutate', 'oauth_register', 'oauth_token', 'publish', 'query', 'start_doc']);
   });
 });
 

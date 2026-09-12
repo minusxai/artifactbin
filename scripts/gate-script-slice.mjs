@@ -19,13 +19,13 @@ import { artifactDocument } from './lib/artifact-document.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner } from './lib/start-doc.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
 const failures = [];
 const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
 
-const mint = await mintAnon(BASE);
+const mint = await connectAgent(BASE);
 const api = async (path, body, method = 'POST') => {
   const res = await fetch(`${BASE}${path}`, {
     method,

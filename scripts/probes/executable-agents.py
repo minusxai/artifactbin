@@ -1,5 +1,5 @@
 """Live executable planning eval. Grading and credentials remain outside sandboxed workspaces."""
-import pathlib, os, json, re, subprocess, tempfile, urllib.request, concurrent.futures, time, shutil, signal, argparse
+import pathlib, os, json, re, subprocess, tempfile, urllib.request, urllib.parse, concurrent.futures, time, shutil, signal, argparse
 parser=argparse.ArgumentParser()
 parser.add_argument('--base-url',required=True)
 parser.add_argument('--env-file',required=True)
@@ -10,15 +10,23 @@ MODEL = os.environ.get('PROBE_MODEL','accounts/fireworks/models/deepseek-v4-flas
 DEST = pathlib.Path(tempfile.mkdtemp(prefix='afbin-executable-results-'))
 key = next(re.match(r'^\s*(?:export\s+)?FIREWORKS_API_KEY\s*=\s*(.*?)\s*$', l)[1].strip('"\'') for l in pathlib.Path(args.env_file).read_text().splitlines() if re.match(r'^\s*(?:export\s+)?FIREWORKS_API_KEY\s*=',l))
 def api(path, token=None, data=None, method=None):
-    req = urllib.request.Request(BASE + path, data=json.dumps(data).encode() if data is not None else None, headers={'Content-Type':'application/json', **({'Origin':BASE,'Sec-Fetch-Site':'same-origin'} if path=='/api/tokens/anonymous' else {}), **({'Authorization':'Bearer '+token} if token else {})}, method=method)
+    req = urllib.request.Request(BASE + path, data=json.dumps(data).encode() if data is not None else None, headers={'Content-Type':'application/json', **({'Authorization':'Bearer '+token} if token else {})}, method=method)
     with urllib.request.urlopen(req,timeout=20) as r: return json.load(r)
+
+def connect():
+    """A credential the only way there is one: the CLI's device approval, approved anonymously."""
+    pairing = api('/oauth/device', data={})
+    form = urllib.parse.urlencode({'user_code': pairing['user_code'], 'decision': 'anonymous'}).encode()
+    approve = urllib.request.Request(BASE + '/oauth/device/approve', data=form, headers={'Content-Type':'application/x-www-form-urlencoded','Origin':BASE}, method='POST')
+    with urllib.request.urlopen(approve, timeout=20): pass
+    return api('/oauth/device/token', data={'device_code': pairing['device_code']})['access_token']
 
 def run(harness):
     work = pathlib.Path(tempfile.mkdtemp(prefix='afbin-executable-'+harness+'-'))
     (work/'bin').mkdir()
     shutil.copy(ROOT/'.artifactbin/probes/document-cli.mjs', work/'bin/cli.mjs')
     binary=work/'bin/afbin'; binary.write_text('#!/bin/sh\nexec '+shutil.which('node')+' "'+str(work/'bin/cli.mjs')+'" "$@"\n'); binary.chmod(0o755)
-    token=api('/api/tokens/anonymous',data={})['token']
+    token=connect()
     env={k:v for k,v in os.environ.items() if not any(x in k for x in ['TOKEN','API_KEY','SECRET'])}
     env.update(FIREWORKS_API_KEY=key, ARTIFACTBIN_URL=BASE, ARTIFACTBIN_TOKEN=token, PATH=str(work/'bin')+':'+os.environ['PATH'], PI_CODING_AGENT_DIR=str(work/'pi-state'), OPENCODE_CONFIG_DIR=str(work/'opencode-config'))
     (work/'tmp').mkdir(); env['TMPDIR']=str(work/'tmp'); env['TMP']=str(work/'tmp'); env['TEMP']=str(work/'tmp')

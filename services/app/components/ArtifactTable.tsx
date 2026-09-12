@@ -2,15 +2,14 @@
 
 import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { ChevronDown, ChevronLeft, ChevronRight, Folder, EyeOff, FolderInput, Globe, Lock, Pencil, Search, Share2, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
-import { Badge, Button, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, TokenInput, VisibilityPill } from '@/components/ui';
+import { Badge, dateStamp, FormatBadge, formatLabel, MicroLabel, PANEL, TABLE_ROW, timeAgo, VisibilityPill } from '@/components/ui';
 import { ViewsMark } from '@/components/ViewsMark';
 import ShareLink from '@/components/ShareLink';
 import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { parentOfRow } from '@/lib/shelf';
-import { adoptToken } from '@/lib/browser-session';
 import type { Visibility } from '@/lib/artifacts';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import { pageDataChanged } from '@/web/page-data-events';
@@ -75,89 +74,6 @@ function FilterChip({ value, label, active, onToggle, tip, children }: {
         {label ?? value}
       </button>
     </Tooltip>
-  );
-}
-
-/**
- * Logged-out fallback: paste a bearer token, see that token's artifacts.
- *
- * The token is handed to the SERVER (POST /api/session/token) and comes back
- * as an httpOnly cookie; this component never keeps it, and on a later visit
- * the list simply loads because the cookie is already there. httpOnly is the
- * point: no script on the origin can read the credential back.
- */
-export default function TokenBrowser() {
-  const [token, setToken] = useState('');
-  const [artifacts, setArtifacts] = useState<ArtifactSummary[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  /** List what the cookie authorizes. `quiet` = the on-mount probe, which must
-   *  say nothing when this browser simply holds no token. */
-  const load = useCallback(async (quiet = false) => {
-    setError(null);
-    try {
-      const res = await fetch('/api/my/artifacts');
-      if (res.status === 401) {
-        setArtifacts(null);
-        if (!quiet) setError('Invalid or revoked token.');
-        return;
-      }
-      if (!res.ok) {
-        setArtifacts(null);
-        if (!quiet) setError(`Failed to load (${res.status}).`);
-        return;
-      }
-      const body = (await res.json()) as { artifacts: ArtifactSummary[] };
-      setArtifacts(body.artifacts);
-    } catch {
-      // A probe that cannot even run — offline, or a test environment with no
-      // document origin for a relative fetch — is "nothing listed", never an
-      // unhandled rejection that crashes the mount.
-      setArtifacts(null);
-      if (!quiet) setError('Could not reach the server.');
-    }
-  }, []);
-
-  const submit = useCallback(async (t: string) => {
-    setError(null);
-    if (!(await adoptToken(t))) {
-      setArtifacts(null);
-      setError('Invalid or revoked token.');
-      return;
-    }
-    setToken('');
-    await load();
-  }, [load]);
-
-  useEffect(() => { void load(true); }, [load]);
-
-  return (
-    <section className="mt-6">
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (token.trim()) void submit(token.trim());
-        }}
-      >
-        <TokenInput
-          aria-label="Token"
-          placeholder="mx_..."
-          value={token}
-          onChange={(e) => setToken(e.target.value)}
-        />
-        <Button type="submit" aria-label="Load artifacts">
-          load
-        </Button>
-      </form>
-      {error && <p className="mt-3 text-xs text-danger">{error}</p>}
-      {artifacts && artifacts.length === 0 && <p className="mt-3 text-xs text-muted">No artifacts yet.</p>}
-      {artifacts && artifacts.length > 0 && (
-        <div className="mt-4">
-          <ArtifactTable artifacts={artifacts} />
-        </div>
-      )}
-    </section>
   );
 }
 

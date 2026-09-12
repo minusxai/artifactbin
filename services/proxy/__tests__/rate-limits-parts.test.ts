@@ -2,7 +2,7 @@
  * THE PROXY'S ONE ENFORCEMENT POINT, over a policy file. What used to be `doorFor` + `anonMintDoor` +
  * the `LOGIN_SEND` special case inside `loginRoutes` is ONE part reading ONE file:
  *
- *  - a 429's body and the `door.denied` event both carry the POLICY NAME (`anon_mint`, `login_send`), not a
+ *  - a 429's body and the `door.denied` event both carry the POLICY NAME (`start_doc`, `login_send`), not a
  *    DOOR constant — the field is still called `door`, and the events contract already types it `string`.
  *  - `browser_only` is refused BEFORE any counting, with today's exact 403 ladder body, so the advice the
  *    refusal gives never spends the budget it sends the human back to use.
@@ -14,7 +14,7 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assemble, fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { proxyParts } from '../src/parts';
-import { BROWSER_MINT_HEADERS, resetTestDb, testProxyOptions } from './helpers';
+import { PAGE_HEADERS, resetTestDb, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:6601';
 const FIXTURE = path.join(__dirname, 'fixtures/rate_limits.yml');
@@ -30,14 +30,14 @@ const proxy = async (extra: Record<string, string | undefined> = {}): Promise<Ap
 beforeEach(async () => { fake = fakeEvents(); await resetTestDb(); });
 
 describe('the 429 names the POLICY', () => {
-  it('a second anonymous mint is refused with door: "anon_mint", and the event says the same', async () => {
+  it('a second create from the same page is refused with door: "start_doc", and the event says the same', async () => {
     const app = await proxy();
-    const mint = () => app.request(`${BASE}/api/tokens/anonymous`, { method: 'POST', headers: { ...BROWSER_MINT_HEADERS, origin: BASE } });
+    const mint = () => app.request(`${BASE}/api/start`, { method: 'POST', headers: { ...PAGE_HEADERS, origin: BASE } });
     expect((await mint()).status).toBe(200);
     const denied = await mint();
     expect(denied.status).toBe(429);
-    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'anon_mint' });
-    expect(fake.events.at(-1)).toMatchObject({ verb: 'denied', object_kind: 'door', object_id: 'anon_mint', payload: { door: 'anon_mint' } });
+    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'start_doc' });
+    expect(fake.events.at(-1)).toMatchObject({ verb: 'denied', object_kind: 'door', object_id: 'start_doc', payload: { door: 'start_doc' } });
   });
 
   it('the login send is counted per ADDRESS and named login_send — the special case inside loginRoutes is gone', async () => {
@@ -73,7 +73,7 @@ describe('the 429 names the POLICY', () => {
 describe('browser_only is refused BEFORE anything is counted', () => {
   it('a non-browser mint gets today\'s exact 403 ladder, and the budget it was told to go and use is untouched', async () => {
     const app = await proxy();
-    const res = await app.request(`${BASE}/api/tokens/anonymous`, { method: 'POST', headers: { 'artifactbin-agent': 'claude-code' } });
+    const res = await app.request(`${BASE}/api/start`, { method: 'POST', headers: { 'artifactbin-agent': 'claude-code' } });
     expect(res.status).toBe(403);
     const body = await res.json() as { error: string; reason: string; ladder: string[]; help: string };
     expect(body.error).toBe('browser_only');
@@ -83,19 +83,18 @@ describe('browser_only is refused BEFORE anything is counted', () => {
     expect(body.help).toBe('afbin help publishing-auth');
     expect(fake.events.filter((e) => e.verb === 'denied'), 'a browser-only refusal is not a door denial').toEqual([]);
     // the mint budget is 1 and nothing above spent it
-    const ok = await app.request(`${BASE}/api/tokens/anonymous`, { method: 'POST', headers: { ...BROWSER_MINT_HEADERS, origin: BASE } });
+    const ok = await app.request(`${BASE}/api/start`, { method: 'POST', headers: { ...PAGE_HEADERS, origin: BASE } });
     expect(ok.status).toBe(200);
   });
 
-  it('/api/start shares the mint budget but is NOT browser-only — an agent posts it with no browser at all', async () => {
+  it('/api/start IS browser-only: a client that is not the page is taught the CLI, and spends nothing', async () => {
     const app = await proxy();
-    const start = () => app.request(`${BASE}/api/start`, { method: 'POST' });
-    const first = await start();
-    expect(first.status).not.toBe(403);
-    expect(first.status).toBe(200);
-    const second = await start();
-    expect(second.status, 'the same budget as the mint, spent by the first POST').toBe(429);
-    expect(await second.json()).toMatchObject({ error: 'rate_limited', door: 'anon_mint' });
+    const bare = await app.request(`${BASE}/api/start`, { method: 'POST' });
+    expect(bare.status).toBe(403);
+    expect(await bare.json()).toMatchObject({ error: 'browser_only' });
+    // The refusal spent nothing: the page still gets its one.
+    const page = await app.request(`${BASE}/api/start`, { method: 'POST', headers: { ...PAGE_HEADERS, origin: BASE } });
+    expect(page.status).toBe(200);
   });
 });
 

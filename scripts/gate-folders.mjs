@@ -38,7 +38,7 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const failures = [];
@@ -74,7 +74,7 @@ check(Boolean((await editorCtx.cookies(BASE)).find((c) => /better-auth/.test(c.n
 
 // The owner's token — minted anonymously, claimed by the session. This is what
 // stands in for the AGENT below: the same credential an agent would hold.
-const anon = await mintAnon(BASE);
+const anon = await connectAgent(BASE);
 const claimed = await owner.evaluate(
   async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
   anon.token,

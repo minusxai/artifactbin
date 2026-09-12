@@ -102,12 +102,12 @@ export default function DocsHuman() {
       <section {...anchor('keep-your-work')}>
         <h2 className={SECTION}>keep your work</h2>
         <p className={PROSE}>
-          Agents publish with tokens. If yours minted its own anonymous token, claim it on the{' '}
+          Log in before you approve the agent&apos;s connection, and everything it publishes belongs
+          to your account from the start. Every connection you have approved is listed on your{' '}
           <a href="/account" className={LINK}>
-            tokens
+            account
           </a>{' '}
-          page and everything it published moves under your account. Or log in before approving the
-          agent&apos;s connection, and it publishes as you from the start.
+          page, where revoking one stops that agent.
         </p>
       </section>
 
