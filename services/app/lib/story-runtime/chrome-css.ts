@@ -453,7 +453,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     background: #c2e7ff !important; color: #004a77 !important;
     font: 500 12px/1 var(--font-mono, ui-monospace, monospace) !important; letter-spacing: 0 !important;
   }
-  .mx-reader-action[data-mx-reader-action="share"] svg { width: 20px !important; height: 20px !important; }
+  .mx-reader-action[data-mx-reader-action="share"] svg { width: 14px !important; height: 14px !important; }
   .mx-reader-action[data-mx-reader-action="share"]:hover { background: #b3ddfa !important; }
   .mx-reader-action[data-mx-reader-action="share"]:focus-visible { outline: 2px solid #004a77 !important; outline-offset: 2px !important; }
   [data-mx-visibility] { display: inline-flex !important; align-items: center !important; }

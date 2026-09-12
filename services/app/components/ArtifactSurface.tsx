@@ -31,7 +31,6 @@ import { useLocation, useNavigate } from 'react-router';
 import { InlineReaderChrome } from '@/components/InlineReaderChrome';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
-import CopyAgentPrompt from '@/components/CopyAgentPrompt';
 import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
@@ -751,7 +750,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       {owner && (
         <section aria-label="Owner actions">
           <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
-          <CopyAgentPrompt id={id} variant="menu" />
           {/* Owner chrome: a refresh re-fetches
               bytes that every reader of every document naming those URLs is
               then served. Only for a markup document — it is the only format

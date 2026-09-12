@@ -177,7 +177,7 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Edit artifact').querySelector('.lucide-pencil')).toBeTruthy();
     expect(screen.getByLabelText('Toggle comments').querySelector('.lucide-message-square')).toBeTruthy();
     expect(within(screen.getByLabelText('Owner actions')).getByLabelText('Share')).toBeInTheDocument();
-    expect(screen.getByLabelText('Copy agent instructions')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Copy agent instructions')).not.toBeInTheDocument();
   });
 
   it('offers social-preview framing inside sharing to markup owners and editors, but not commenters or viewers', async () => {
