@@ -464,6 +464,7 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   }
   .mx-reader-rail { order: 2 !important; display: flex !important; align-items: center !important; gap: 2px !important; flex: 0 0 auto !important; }
   .mx-reader-action, .mx-reader-trigger { width: 34px !important; height: 34px !important; }
+  .mx-reader-action svg, .mx-reader-trigger svg { width: 16px !important; height: 16px !important; }
 
 }
 
