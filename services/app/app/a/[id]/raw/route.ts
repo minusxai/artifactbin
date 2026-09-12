@@ -236,13 +236,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
      */
     case 'markup': {
       /*
-       * A view is counted HERE, not on the page.
-       *
-       * A reader is served this route directly (proxy.ts rewrites their
-       * request to it), so the page's counter would miss every reader — which
-       * is nearly all of them. This is also the more honest place: /raw is
-       * fetched exactly once per view, whether the document arrives top-level
-       * or inside the owner's frame, so there is no double count either.
+       * Explicit raw document reads still count here. Ordinary app readers
+       * render inline and report through /api/page/artifact/:id/view instead;
+       * they do not fetch this route. Both use the same daily visitor hash.
        *
        * Never for a capture: that is our own headless browser re-reading the
        * document to photograph it, not a reader. `void`, because analytics may

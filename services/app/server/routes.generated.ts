@@ -59,32 +59,33 @@ import * as r55 from '@/app/api/my/tokens/[id]/route';
 import * as r56 from '@/app/api/my/tokens/route';
 import * as r57 from '@/app/api/page/account/route';
 import * as r58 from '@/app/api/page/artifact/[id]/route';
-import * as r59 from '@/app/api/page/assets/route';
-import * as r60 from '@/app/api/page/home/route';
-import * as r61 from '@/app/api/page/profile/[user]/[[...path]]/route';
-import * as r62 from '@/app/api/page/session/route';
-import * as r63 from '@/app/api/page/trash/route';
-import * as r64 from '@/app/api/preview/route';
-import * as r65 from '@/app/api/query/route';
-import * as r66 from '@/app/api/remote/sessions/[id]/exchange/route';
-import * as r67 from '@/app/api/remote/sessions/[id]/route';
-import * as r68 from '@/app/api/remote/sessions/route';
-import * as r69 from '@/app/api/secrets/route';
-import * as r70 from '@/app/api/session/token/route';
-import * as r71 from '@/app/api/sessions/[id]/route';
-import * as r72 from '@/app/api/sessions/route';
-import * as r73 from '@/app/api/start/route';
-import * as r74 from '@/app/api/tokens/[id]/route';
-import * as r75 from '@/app/api/tokens/claim/route';
-import * as r76 from '@/app/api/tokens/claimable/route';
-import * as r77 from '@/app/api/tokens/reject/route';
-import * as r78 from '@/app/api/tokens/route';
-import * as r79 from '@/app/api/users/[id]/follow/route';
-import * as r80 from '@/app/assets/[hash]/route';
-import * as r81 from '@/app/health/route';
-import * as r82 from '@/app/llms.txt/route';
-import * as r83 from '@/app/tiles/[...tile]/route';
-import * as r84 from '@/app/webfonts/[file]/route';
+import * as r59 from '@/app/api/page/artifact/[id]/view/route';
+import * as r60 from '@/app/api/page/assets/route';
+import * as r61 from '@/app/api/page/home/route';
+import * as r62 from '@/app/api/page/profile/[user]/[[...path]]/route';
+import * as r63 from '@/app/api/page/session/route';
+import * as r64 from '@/app/api/page/trash/route';
+import * as r65 from '@/app/api/preview/route';
+import * as r66 from '@/app/api/query/route';
+import * as r67 from '@/app/api/remote/sessions/[id]/exchange/route';
+import * as r68 from '@/app/api/remote/sessions/[id]/route';
+import * as r69 from '@/app/api/remote/sessions/route';
+import * as r70 from '@/app/api/secrets/route';
+import * as r71 from '@/app/api/session/token/route';
+import * as r72 from '@/app/api/sessions/[id]/route';
+import * as r73 from '@/app/api/sessions/route';
+import * as r74 from '@/app/api/start/route';
+import * as r75 from '@/app/api/tokens/[id]/route';
+import * as r76 from '@/app/api/tokens/claim/route';
+import * as r77 from '@/app/api/tokens/claimable/route';
+import * as r78 from '@/app/api/tokens/reject/route';
+import * as r79 from '@/app/api/tokens/route';
+import * as r80 from '@/app/api/users/[id]/follow/route';
+import * as r81 from '@/app/assets/[hash]/route';
+import * as r82 from '@/app/health/route';
+import * as r83 from '@/app/llms.txt/route';
+import * as r84 from '@/app/tiles/[...tile]/route';
+import * as r85 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -147,30 +148,31 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/my/tokens", dir: "/api/my/tokens", methods: ["GET"], module: r56 },
   { path: "/api/page/account", dir: "/api/page/account", methods: ["GET"], module: r57 },
   { path: "/api/page/artifact/:id", dir: "/api/page/artifact/[id]", methods: ["GET"], module: r58 },
-  { path: "/api/page/assets", dir: "/api/page/assets", methods: ["GET"], module: r59 },
-  { path: "/api/page/home", dir: "/api/page/home", methods: ["GET"], module: r60 },
-  { path: "/api/page/profile/:user/:path{.*}?", dir: "/api/page/profile/[user]/[[...path]]", methods: ["GET"], module: r61 },
-  { path: "/api/page/session", dir: "/api/page/session", methods: ["GET"], module: r62 },
-  { path: "/api/page/trash", dir: "/api/page/trash", methods: ["GET"], module: r63 },
-  { path: "/api/preview", dir: "/api/preview", methods: ["POST"], module: r64 },
-  { path: "/api/query", dir: "/api/query", methods: ["POST"], module: r65 },
-  { path: "/api/remote/sessions/:id/exchange", dir: "/api/remote/sessions/[id]/exchange", methods: ["POST"], module: r66 },
-  { path: "/api/remote/sessions/:id", dir: "/api/remote/sessions/[id]", methods: ["GET","POST","DELETE"], module: r67 },
-  { path: "/api/remote/sessions", dir: "/api/remote/sessions", methods: ["GET","POST"], module: r68 },
-  { path: "/api/secrets", dir: "/api/secrets", methods: ["POST"], module: r69 },
-  { path: "/api/session/token", dir: "/api/session/token", methods: ["POST","DELETE"], module: r70 },
-  { path: "/api/sessions/:id", dir: "/api/sessions/[id]", methods: ["GET","DELETE"], module: r71 },
-  { path: "/api/sessions", dir: "/api/sessions", methods: ["GET"], module: r72 },
-  { path: "/api/start", dir: "/api/start", methods: ["POST"], module: r73 },
-  { path: "/api/tokens/:id", dir: "/api/tokens/[id]", methods: ["DELETE"], module: r74 },
-  { path: "/api/tokens/claim", dir: "/api/tokens/claim", methods: ["POST"], module: r75 },
-  { path: "/api/tokens/claimable", dir: "/api/tokens/claimable", methods: ["POST"], module: r76 },
-  { path: "/api/tokens/reject", dir: "/api/tokens/reject", methods: ["POST"], module: r77 },
-  { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r78 },
-  { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r79 },
-  { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r80 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r81 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r82 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r83 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r84 },
+  { path: "/api/page/artifact/:id/view", dir: "/api/page/artifact/[id]/view", methods: ["POST"], module: r59 },
+  { path: "/api/page/assets", dir: "/api/page/assets", methods: ["GET"], module: r60 },
+  { path: "/api/page/home", dir: "/api/page/home", methods: ["GET"], module: r61 },
+  { path: "/api/page/profile/:user/:path{.*}?", dir: "/api/page/profile/[user]/[[...path]]", methods: ["GET"], module: r62 },
+  { path: "/api/page/session", dir: "/api/page/session", methods: ["GET"], module: r63 },
+  { path: "/api/page/trash", dir: "/api/page/trash", methods: ["GET"], module: r64 },
+  { path: "/api/preview", dir: "/api/preview", methods: ["POST"], module: r65 },
+  { path: "/api/query", dir: "/api/query", methods: ["POST"], module: r66 },
+  { path: "/api/remote/sessions/:id/exchange", dir: "/api/remote/sessions/[id]/exchange", methods: ["POST"], module: r67 },
+  { path: "/api/remote/sessions/:id", dir: "/api/remote/sessions/[id]", methods: ["GET","POST","DELETE"], module: r68 },
+  { path: "/api/remote/sessions", dir: "/api/remote/sessions", methods: ["GET","POST"], module: r69 },
+  { path: "/api/secrets", dir: "/api/secrets", methods: ["POST"], module: r70 },
+  { path: "/api/session/token", dir: "/api/session/token", methods: ["POST","DELETE"], module: r71 },
+  { path: "/api/sessions/:id", dir: "/api/sessions/[id]", methods: ["GET","DELETE"], module: r72 },
+  { path: "/api/sessions", dir: "/api/sessions", methods: ["GET"], module: r73 },
+  { path: "/api/start", dir: "/api/start", methods: ["POST"], module: r74 },
+  { path: "/api/tokens/:id", dir: "/api/tokens/[id]", methods: ["DELETE"], module: r75 },
+  { path: "/api/tokens/claim", dir: "/api/tokens/claim", methods: ["POST"], module: r76 },
+  { path: "/api/tokens/claimable", dir: "/api/tokens/claimable", methods: ["POST"], module: r77 },
+  { path: "/api/tokens/reject", dir: "/api/tokens/reject", methods: ["POST"], module: r78 },
+  { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r79 },
+  { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r80 },
+  { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r81 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r82 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r83 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r84 },
+  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r85 },
 ];

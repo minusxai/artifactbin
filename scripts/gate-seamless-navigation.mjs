@@ -17,13 +17,19 @@ assert(published.ok, `publish A: ${published.status}`);
 const browser = await chromium.launch();
 try {
   const page = await browser.newPage();
+  const viewReport = (id) => page.waitForResponse(response =>
+    new URL(response.url()).pathname === `/api/page/artifact/${id}/view` && response.request().method() === 'POST');
+  const initialView = viewReport(first.id);
   await page.goto(`${base}/a/${first.id}`);
   await page.locator('body > #root [data-mx-inline-story]').waitFor();
   await page.getByLabel('Artifact A', { exact: true }).waitFor();
+  assert.equal((await initialView).status(), 204, 'initial inline reader records a view');
   assert.equal(await page.evaluate(() => document.querySelector('[aria-label="Artifact A"]')?.getRootNode() === document), true, 'artifact is in top-level DOM');
   await page.evaluate(() => { window.__navigationProbe = 'same-document'; });
+  const nextView = viewReport(second.id);
   await page.getByLabel('Next artifact', { exact: true }).click();
   await page.getByLabel('Artifact B', { exact: true }).waitFor();
+  assert.equal((await nextView).status(), 204, 'client navigation records the next document view');
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'artifact to artifact is client navigation');
   assert.equal(await page.getByLabel('Artifact A', { exact: true }).count(), 0, 'old body removed');
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--mx-navigation-probe').trim()), '', 'old author stylesheet removed');
@@ -35,10 +41,12 @@ try {
   const holdArtifact = (route) => { heldArtifact.push(route); };
   await page.route(`**/api/page/artifact/${second.id}`, holdArtifact);
   const artifactRefresh = page.waitForRequest((request) => new URL(request.url()).pathname === `/api/page/artifact/${second.id}`);
+  const cachedView = viewReport(second.id);
   await page.goBack();
   await artifactRefresh;
   await page.getByLabel('Artifact B', { exact: true }).waitFor();
   assert(heldArtifact.length > 0, 'artifact Back actually starts a refresh');
+  assert.equal((await cachedView).status(), 204, 'cached Back records a view before page-data refresh completes');
   await Promise.all(heldArtifact.map((route) => route.continue()));
   await page.unroute(`**/api/page/artifact/${second.id}`, holdArtifact);
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'back app to artifact retains browser document');
