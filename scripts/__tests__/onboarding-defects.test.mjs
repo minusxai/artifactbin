@@ -32,9 +32,6 @@ describe('no stale text, no dead code', () => {
   it('config.ts no longer claims the runner refuses to start on retired names', () => {
     expect(read('services', 'app', 'lib', 'config.ts')).not.toMatch(/REFUSES TO START/);
   });
-  it('mint.mjs has no dead fallback', () => {
-    expect(read('scripts', 'mint.mjs')).not.toMatch(/ADMIN__SECRET \?\? process\.env\.ADMIN__SECRET/);
-  });
   it('.env.example gives a generator hint for ADMIN__SECRET too', () => {
     const lines = read('.env.example').split('\n');
     const i = lines.findIndex((l) => /^ADMIN__SECRET=/.test(l));

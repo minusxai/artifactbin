@@ -14,12 +14,10 @@
     "dev:otp": "node scripts/dev-otp.mjs",
     "dev:app": "node scripts/dev-app.mjs",
     "build": "npm run build -w services/app && node scripts/build-server.mjs dist/proxy-server.mjs",
-    "start": "NODE_ENV=production node dist/proxy-server.mjs",
     "validate": "node scripts/check-local.mjs validate",
     "test": "node scripts/check-local.mjs test",
     "test:all": "npm test -w services/app && npm test -w services/cli",
     "test:integration": "vitest run --project=integration",
-    "mint": "node scripts/mint.mjs",
     "build:runtime": "npm run build:runtime -w services/app",
     "test:api": "npm run test:api -w services/app",
     "test:node": "npm run test:node -w services/app",
@@ -31,7 +29,8 @@
     "eval": "tsx evals/run.ts",
     "eval:report": "tsx evals/report-cli.ts",
     "generate:routes": "npm run generate:routes -w services/app",
-    "render:schema": "node scripts/render-schema.mjs"
+    "render:schema": "node scripts/render-schema.mjs",
+    "generate:env-snapshot": "node scripts/generate-env-snapshot.mjs"
   },
   "dependencies": {
     "@artifactbin/browser": "0.1.0",

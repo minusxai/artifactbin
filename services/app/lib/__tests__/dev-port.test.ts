@@ -2,7 +2,7 @@
  * The dev server's port is derived so two checkouts can run at once:
  * PORT → the port inside PUBLIC_BASE_URL → 3030.
  */
-import { resolvePort, resolveBaseUrl, DEFAULT_DEV_PORT } from '../../../../scripts/lib/dev-env.mjs';
+import { resolvePort, DEFAULT_DEV_PORT } from '../../../../scripts/lib/dev-env.mjs';
 
 describe('resolvePort', () => {
   it('takes the port out of PUBLIC_BASE_URL', () => {
@@ -29,21 +29,5 @@ describe('resolvePort', () => {
     expect(resolvePort({ APP__PORT: 'abc', APP__PUBLIC_BASE_URL: 'http://localhost:3040' })).toBe(3040);
     expect(resolvePort({ APP__PORT: '0' })).toBe(3030);
     expect(resolvePort({ APP__PORT: '99999' })).toBe(3030);
-  });
-});
-
-describe('resolveBaseUrl', () => {
-  it('prefers an explicit BASE_URL', () => {
-    expect(resolveBaseUrl({ BASE_URL: 'https://staging.example.com', APP__PUBLIC_BASE_URL: 'http://localhost:3040' })).toBe(
-      'https://staging.example.com',
-    );
-  });
-
-  it('otherwise talks to PUBLIC_BASE_URL', () => {
-    expect(resolveBaseUrl({ APP__PUBLIC_BASE_URL: 'http://localhost:3040' })).toBe('http://localhost:3040');
-  });
-
-  it('falls back to localhost on the default dev port', () => {
-    expect(resolveBaseUrl({})).toBe('http://localhost:3030');
   });
 });

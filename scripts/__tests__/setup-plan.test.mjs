@@ -31,6 +31,19 @@ describe('full runtime image setup closure', () => {
       expect(dockerfile, `${source} is missing from the runtime image`).toMatch(new RegExp(`^COPY ${source.replaceAll('.', '\\.')} `, 'm'));
     }
   });
+
+  // The image ships the planner WITHOUT `.env.example`, so the planner carries
+  // the example as a base64 constant. A second copy of a tracked file drifts
+  // unless a machine writes it and a test refuses the drift.
+  it('carries a snapshot byte-identical to .env.example', () => {
+    const plan = fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'setup-plan.mjs'), 'utf8');
+    const encoded = /^const ENV_EXAMPLE_BASE64 = '([^']*)';$/m.exec(plan);
+    expect(encoded, 'setup-plan.mjs no longer declares ENV_EXAMPLE_BASE64 on one line').not.toBeNull();
+    expect(
+      Buffer.from(encoded[1], 'base64').toString('utf8'),
+      'the snapshot is stale — run `npm run generate:env-snapshot`',
+    ).toBe(EXAMPLE);
+  });
 });
 
 describe('questions()', () => {
