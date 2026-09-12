@@ -622,13 +622,6 @@ jobs:
           node-version: 22.22.3
           cache: npm
       - run: npm ci
-      # Pure auth/client cases run once; filesystem, executable discovery and PTY
-      # behavior still run on every OS/architecture, followed by the real binary smoke.
-      - if: matrix.os == 'ubuntu-24.04'
-        run: npm test -w services/cli
-      - if: matrix.os != 'ubuntu-24.04'
-        run: node --import tsx --test services/cli/test/config.test.ts services/cli/test/launcher.test.ts services/cli/test/runner.test.ts
-      - run: npm run build -w services/cli
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         id: cli-runtime-cache
         with:
@@ -647,6 +640,13 @@ jobs:
             node_modules/.cache/cli-node/node
             node_modules/.cache/cli-node/recipe.json
           key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
+      # Pure auth/client cases run once; filesystem, executable discovery and PTY
+      # behavior still run on every OS/architecture, followed by the real binary smoke.
+      - if: matrix.os == 'ubuntu-24.04'
+        run: npm test -w services/cli
+      - if: matrix.os != 'ubuntu-24.04'
+        run: node --import tsx --test services/cli/test/config.test.ts services/cli/test/launcher.test.ts services/cli/test/runner.test.ts
+      - run: npm run build -w services/cli
       - name: Build compact standalone CLI
         run: npm run build:binary -w services/cli
         env:
