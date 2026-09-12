@@ -230,6 +230,10 @@ try {
   await range('second', 4, 'lp', 5);
   await page.waitForFunction(() => getSelection().toString().includes('Left '));
   assert.equal(await page.locator('[data-mx-node-chrome]').isVisible(), false, 'text selection has no container resize controls');
+  await page.locator('#second').hover();
+  assert.equal(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(245, 158, 11, 0.08)', 'hover uses the shared subtle amber tint');
+  assert.equal(await page.locator('#second').evaluate(el => getComputedStyle(el).outlineWidth), '1px', 'hover uses the shared thin outline');
+  await page.mouse.move(0, 0);
   assert.equal(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'block selection does not flood the text background');
   await page.keyboard.press('Escape');
   await range('first', 2);
