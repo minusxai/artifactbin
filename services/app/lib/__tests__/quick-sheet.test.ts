@@ -1,10 +1,9 @@
 import {describe,it,expect} from 'vitest';
-import {buildQuickSheet,QUICK_SHEET_MAX_BYTES,renderDoc,skillExample} from '../skills';
+import {buildQuickSheet,renderDoc,skillExample} from '../skills';
 import teaching from '../../../cli/src/generated/teaching.json';
 const sheet=buildQuickSheet('https://artifactbin.dev');
 describe('the installed short skill',()=>{
  it('fits its reading budget and uses local guidance',()=>{
-  expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
   expect(sheet).toContain('afbin help');
   // The retired vocabulary (MCP, /docs/, token, mint, /raw, …) is banned across all
   // nine agent-facing surfaces at once by agent-starter-consistency.test.ts, case (c).

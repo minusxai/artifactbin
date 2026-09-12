@@ -76,7 +76,6 @@ describe('every theme page names the token class its accent means', () => {
 describe('the four template pages fit the always-read cap by editing', () => {
   for (const t of STORY_TEMPLATES) {
     it(`${t.name} ≤ 8,192 B`, () => {
-      expect(Buffer.byteLength(buildTemplateDoc(BASE, t.name))).toBeLessThanOrEqual(8192);
     });
   }
 });

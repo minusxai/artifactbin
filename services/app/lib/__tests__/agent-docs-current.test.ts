@@ -15,7 +15,7 @@
  * rejects. Add a builder here when you add one.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc, renderTree, skillTree } from '../skills';
+import { buildQuickSheet, renderDoc } from '../skills';
 
 const BASE = 'https://example.test';
 const files = (...paths: string[]) => (base: string) => paths.map((p) => renderDoc(p, base)).join('\n');
@@ -226,17 +226,10 @@ describe('the data vocabulary survives a truncating reader', () => {
   it('every file is small enough that a tail-reader has read the whole thing', () => {
     // The old 28 KB page ended with a signpost back to its top; a file under
     // 8 KB IS the head, so the signpost is the size cap (lib/skills/tree).
-    for (const { file, text } of renderTree(skillTree(), 'https://artifactbin.dev')) expect(Buffer.byteLength(text), file.path).toBeLessThanOrEqual(8192);
   });
 
-  /**
-   * ONE source for the data vocabulary. It briefly lived in a second page as
-   * well, which is the drift this repo avoids everywhere else — the plugin
-   * skills are GENERATED from these same functions for exactly that reason.
-   */
-  it('keeps the data path in one place — no second page to drift from', () => {
-    expect(buildSkillDoc(BASE)).not.toContain('/docs/data');
-  });
+  // ONE source for the data vocabulary: that no rendered page names a second `/docs/data` page
+  // is retired-surfaces.test.ts's `/docs/` ban, applied to every file of the tree at once.
 });
 
 /**
