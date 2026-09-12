@@ -636,6 +636,8 @@ jobs:
             node_modules/.cache/cli-node/node
             node_modules/.cache/cli-node/recipe.json
           key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
+          # The script compares the complete platform recipe before accepting a fallback cache.
+          restore-keys: cli-small-node-${{ matrix.os }}-
       - name: Build and verify pinned small-ICU Node
         run: node services/cli/scripts/small-node.mjs
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830

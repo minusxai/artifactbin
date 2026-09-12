@@ -32,6 +32,15 @@ try{
  await writeFile(join(home,'report.sql'),'select "Region" from public.rows where "Amount" > $minimum');
  const queried=await run(binary,['query','rows.csv','--input','report.sql','--param','minimum=15','--json'],{cwd:home,env:offlineEnv,timeout:30000});
  assert.deepEqual(JSON.parse(queried.stdout).results[0].rows,[{Region:'West'}]);
+ await writeFile(join(home,'rows.json'),JSON.stringify(Array.from({length:21},(_,n)=>({n}))));
+ const first=JSON.parse((await run(binary,['query','rows.json','--json'],{cwd:home,env:offlineEnv,timeout:30000})).stdout).results[0];
+ assert.equal(first.rows.length,20);assert.ok(first.next_cursor);
+ const second=JSON.parse((await run(binary,['query','rows.json','--cursor',first.next_cursor,'--json'],{cwd:home,env:offlineEnv,timeout:30000})).stdout).results[0];
+ assert.deepEqual(second.rows,[{n:20}]);assert.equal(second.next_cursor,null);
+ await writeFile(join(home,'query.jsx'),'<Helmet><Value name="minimum" type="number" value={10} /><Query name="answer">{`select $minimum as value`}</Query></Helmet><p>Local SQL</p>');
+ const declared=JSON.parse((await run(binary,['query','query.jsx','--name','answer','--param','minimum=42','--json'],{cwd:home,env:offlineEnv,timeout:30000})).stdout).results[0];
+ assert.deepEqual(declared.rows,[{value:42}]);
+
  assert.equal((await readdir(home)).filter(name=>name.startsWith('afbin-sql-')).length,0,'extracted native files cleaned up');
  assert.match(await readFile(join(home,'afbin.1'),'utf8'),/^\.TH AFBIN 1/);
  assert.equal(requests,downloaded,'cached SQL must work without the release server');

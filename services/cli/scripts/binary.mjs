@@ -104,11 +104,12 @@ await copyFile(runtime, binary);
 await chmod(binary, 0o755);
 if (process.platform === "darwin")
   execFileSync("codesign", ["--remove-signature", binary]);
+// Strip before injection: GNU strip rewrites ELF segments and can corrupt an injected SEA.
+execFileSync("strip", process.platform === "darwin" ? ["-x",binary] : ["--strip-all",binary]);
 await inject(binary, "NODE_SEA_BLOB", await readFile("dist/sea.blob"), {
   sentinelFuse: "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2",
   ...(process.platform === "darwin" ? { machoSegmentName: "NODE_SEA" } : {}),
 });
-execFileSync("strip", process.platform === "darwin" ? ["-x",binary] : ["--strip-all",binary]);
 if (process.platform === "darwin")
   execFileSync("codesign", ["--sign", "-", binary]);
 execFileSync(binary, ["--help"], { stdio: "inherit", cwd: tmpdir() });
