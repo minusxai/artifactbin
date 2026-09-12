@@ -9,7 +9,8 @@ import {CliError,type ParsedCommand} from './commands';
 import {parseLiteralYaml} from './document';
 import {digest,localBackup,readOptional} from './files';
 import {confinedPath,stageFiles,recoverFiles,type FileChange} from './journal';
-import {State,withLock} from './state';
+import {withLock,type State} from './state';
+import {readState,stateFor} from './state-access';
 import {recoverableOperation} from './recoverable-operation';
 import {readConflicts} from './conflict-state';
 import {deleteResources} from './delete';
@@ -48,8 +49,7 @@ function declaredAccountType(bytes:Buffer):'profile'|'session'|undefined{
  * create it. An absent database is simply a workspace nothing is tracked in.
  */
 async function withStore<T>(workspace:Workspace,run:(state:State|null)=>Promise<T>):Promise<T>{
- const state=await State.openIfPresent(workspace.home);
- try{return await run(state);}finally{state?.close();}
+ return run(await readState(workspace.home));
 }
 /**
  * `stageFiles` still journals through a directory inside the workspace. Once the
@@ -194,8 +194,8 @@ function reconcile(base:AccountResource,local:AccountResource,remote:AccountReso
 async function save(workspace:Workspace,path:string,resource:AccountResource,bytes:Buffer|null,working:Buffer|null,client:HttpClient){
  const account=client.account;
  if(!account)throw new CliError('unsupported_server','The server did not return an account identity.');
- const state=await State.open(workspace.home);
- try{
+ const state=await stateFor(workspace.home);
+ {
   const saved=await tracking(state,workspace);
   if(saved&&(saved.server!==client.connection.server||saved.account!==account))throw new CliError('account_mismatch','Account resource tracking belongs to another origin or account.');
   const duplicate=Object.entries(saved?.files??{}).find(([other,entry])=>other!==path&&entry.resource.id===resource.id)?.[0];
@@ -208,7 +208,7 @@ async function save(workspace:Workspace,path:string,resource:AccountResource,byt
    state.put(workspace.root,'account',path,{resource,sha256:digest(Buffer.from(yaml(resource)))});
   });
   if(changes.length){await recoverFiles(workspace.home,workspace.root);}
- }finally{state.close();}
+ }
 }
 /** Where a pulled session lands: its tracked path, an explicit --output, or a free name. */
 async function destination(workspace:Workspace,parsed:ParsedCommand,input:string|undefined,fallback:string,many:boolean):Promise<string>{

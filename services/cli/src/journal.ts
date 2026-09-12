@@ -1,7 +1,7 @@
 import { lstat, mkdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { atomicWrite, digest, isMissing, readOptional } from './files';
-import { stateFor } from './state-access';
+import { readState, stateFor } from './state-access';
 import type { State } from './state';
 
 export interface FileChange {path: string; before: string | null; data: Buffer; mode?: number}
@@ -61,7 +61,7 @@ export async function stageFiles(home: string, root: string, changes: FileChange
 
 /** Is a file commit still waiting to be applied to this workspace? */
 export async function stagedFiles(home: string, root: string): Promise<boolean> {
-  return (await stateFor(home)).list(root, 'staged-file').length > 0;
+  return ((await readState(home))?.list(root, 'staged-file').length ?? 0) > 0;
 }
 
 function decode(key: string, value: StagedFile, data: Buffer | null): {path: string; value: StagedFile; data: Buffer} {

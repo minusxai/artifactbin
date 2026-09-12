@@ -5,7 +5,8 @@ import {CliError} from './commands';
 import {parseDocument,writeDocument} from './document';
 import {digest,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles} from './journal';
-import {State,withLock} from './state';
+import {withLock,type State} from './state';
+import {readState,stateFor} from './state-access';
 import type {Workspace} from './workspace';
 const text=(source:string,literal=false)=>source.replace(literal?/&/g:/&(?!(?:#\d+|#x[\da-f]+|[a-z][a-z\d]+);)/gi,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\{/g,'&#123;').replace(/\}/g,'&#125;');
 const attribute=(value:string)=>text(value,true).replace(/"/g,'&quot;');
@@ -55,9 +56,8 @@ async function conversionRecord(state:State|null,root:string):Promise<Record<str
  */
 export async function prepareMarkdown(workspace:Workspace,paths:string[]):Promise<MarkdownPlan>{
  const conversions:Conversion[]=[],selected:string[]=[];const virtualFiles={...workspace.virtualFiles};
- const state=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await State.openIfPresent(workspace.home):null;
- let records:Record<string,ConversionEntry>={};
- try{records=await conversionRecord(state,workspace.root);}finally{state?.close();}
+ const state=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await readState(workspace.home):null;
+ const records=await conversionRecord(state,workspace.root);
  for(const path of paths){
   if(!['.md','.markdown'].includes(extname(path).toLowerCase())){selected.push(path);continue;}
   const absolute=await confinedPath(workspace.root,resolve(workspace.cwd,path)),source=relative(workspace.root,absolute);
@@ -75,8 +75,8 @@ export async function commitMarkdown(plan:MarkdownPlan):Promise<void>{
  if(!plan.conversions.length)return;
  const root=plan.workspace.root;
  await withLock(plan.workspace.home,root,async()=>{
-  const state=await State.open(plan.workspace.home);
-  try{
+  const state=await stateFor(plan.workspace.home);
+  {
    const records=await conversionRecord(state,root);
    for(const item of plan.conversions){
     const current=await readOptional(await confinedPath(root,item.source));
@@ -87,6 +87,6 @@ export async function commitMarkdown(plan:MarkdownPlan):Promise<void>{
    state.transaction(()=>{for(const item of plan.conversions)state.put(root,'conversion',item.source,{target:item.target,sha256:item.before});});
    await recoverFiles(plan.workspace.home,root);
    
-  }finally{state.close();}
+  }
  });
 }

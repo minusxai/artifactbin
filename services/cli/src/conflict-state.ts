@@ -1,12 +1,12 @@
 import {randomUUID} from 'node:crypto';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {CliError} from './errors';
-import {stateFor} from './state-access';
+import {readState,stateFor} from './state-access';
 interface SavedConflict {path:string;code:string;details:unknown}
 const CONFLICT_FIX='Run afbin status to see the conflicted file. Resolve the working file and use push --force to accept it, or pull --force to accept remote content.';
 export async function readConflicts(home:string,root:string):Promise<Record<string,SavedConflict>>{
  const conflicts:Record<string,SavedConflict>={};
- for(const record of (await stateFor(home)).list<SavedConflict>(root,'conflict')){
+ for(const record of (await readState(home))?.list<SavedConflict>(root,'conflict')??[]){
   if(!ARTIFACT_ID_PATTERN.test(record.key)||!record.value||typeof record.value.path!=='string')throw new CliError('invalid_journal','The saved conflict state is invalid.');
   conflicts[record.key]=record.value;
  }

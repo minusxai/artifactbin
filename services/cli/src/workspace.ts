@@ -16,7 +16,7 @@ import {CliError} from './commands';
 import {parseDocument,writeDocument,type LocalDocument,type DocumentMetadata} from './document';
 import {digest,readOptional} from './files';
 import {confinedPath} from './journal';
-import {stateFor} from './state-access';
+import {readState,stateFor} from './state-access';
 import type {State} from './state';
 import {snapshotDocument} from './local';
 import {restoreDependencyPaths} from './dependencies';
@@ -47,9 +47,9 @@ const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value
 /** Discovery is the nearest registered ancestor of the working directory, else the directory itself. */
 export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Workspace>{
  cwd=await realpath(cwd);
- const state=await stateFor(home);
- const found=state.nearestWorkspace<WorkspaceRecord>(cwd);
- if(!found)return{home,root:cwd,cwd,tracking:null};
+ const state=await readState(home);
+ const found=state?.nearestWorkspace<WorkspaceRecord>(cwd);
+ if(!state||!found)return{home,root:cwd,cwd,tracking:null};
  const {root,value}=found;
  if(typeof value?.server!=='string'||typeof value.account!=='string')throw new CliError('invalid_tracking','The stored workspace record is incomplete.','Run afbin pull to re-establish tracking for this directory.');
  normalizeServer(value.server);

@@ -1,7 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {digest,readOptional} from './files';
 import {confinedPath} from './journal';
-import {stateFor} from './state-access';
+import {readState,stateFor} from './state-access';
 import {normalizeServer} from './config';
 import {CliError} from './commands';
 import type {TrackedFile} from './workspace';
@@ -22,7 +22,7 @@ export async function stageRequest(home:string,root:string,intent:RequestIntent)
  return pending;
 }
 export async function readPendingRequest(home:string,root:string):Promise<PendingRequest|null>{
- const record=(await stateFor(home)).get<PendingRequest>(root,'pending-request',CURRENT);if(!record)return null;
+ const record=(await readState(home))?.get<PendingRequest>(root,'pending-request',CURRENT);if(!record)return null;
  const value=record.value;
  if(value?.version!==1||typeof value.key!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(value.key)||!value.file||typeof value.file.path!=='string'||typeof value.file.bytes!=='string'||!value.request||typeof value.request.path!=='string'||typeof value.request.method!=='string')throw new CliError('invalid_journal','The pending request record is invalid.');
  if(checksum(value)!==value.checksum||Buffer.from(value.file.bytes,'base64').toString('base64')!==value.file.bytes)throw new CliError('invalid_journal','Pending request checksum mismatch.');
@@ -58,7 +58,7 @@ export async function retireDeletedCreate(home:string,root:string,pending:Pendin
  state.transaction(()=>{state.put(root,'retired-create',pending.file.path,record);state.delete(root,'pending-request',CURRENT);});
 }
 export async function checkRetiredCreate(home:string,root:string,path:string,id?:string):Promise<void>{
- const record=(await stateFor(home)).get<RetiredCreate>(root,'retired-create',path);if(!record)return;
+ const record=(await readState(home))?.get<RetiredCreate>(root,'retired-create',path);if(!record)return;
  const value=record.value;
  if(value?.path!==path||!/^[A-Za-z0-9]{6,12}$/.test(value.id))throw new CliError('invalid_journal','Deleted creation recovery is invalid.');
  if(id)return; // An explicit fence or tracked identity makes this an update, never a create.

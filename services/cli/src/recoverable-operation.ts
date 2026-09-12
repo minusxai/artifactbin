@@ -3,7 +3,7 @@ import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
 import {CliError} from './errors';
 import {digest} from './files';
 import {withLock} from './state';
-import {stateFor} from './state-access';
+import {readState,stateFor} from './state-access';
 import {readPendingRequest} from './pending-request';
 import type {Workspace} from './workspace';
 import type {HttpClient} from './http';
@@ -51,5 +51,5 @@ export async function recoverableOperation(workspace:Workspace,client:HttpClient
  * exactly the state the pending operation has already changed.
  */
 export async function pendingOperation(workspace:Workspace):Promise<Operation|null>{
- return (await stateFor(workspace.home)).get<Operation>(workspace.root,'pending-operation',CURRENT)?.value??null;
+ return (await readState(workspace.home))?.get<Operation>(workspace.root,'pending-operation',CURRENT)?.value??null;
 }
