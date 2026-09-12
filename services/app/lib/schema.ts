@@ -157,6 +157,9 @@ const ARTIFACTS: Table = {
     { name: 'idx_artifacts_ancestors', columns: ['ancestor_ids'], using: 'gin' },
     { name: 'idx_artifacts_parent', columns: ['(ancestor_ids[cardinality(ancestor_ids)])'] },
     { name: 'idx_artifacts_user_level', columns: ['user_id', '(cardinality(ancestor_ids))'] },
+    // Asset dedupe (lib/artifacts findOwnedAssetsFor): "does this owner already have these bytes"
+    // is answered off the uploaded-bytes hash stamped on image/pdf/file meta, live rows only.
+    { name: 'idx_artifacts_asset_sha256', columns: ["(meta->>'sha256')"], where: "format IN ('image','pdf','file') AND deleted_at IS NULL" },
   ],
   // `folder` was a materialized PATH of names ('2026/08/reports'). Placement is
   // `ancestor_ids` now — ids, so two sibling folders may share a name and a
