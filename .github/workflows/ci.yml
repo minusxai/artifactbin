@@ -549,7 +549,7 @@ jobs:
           # ran 7.6m while nothing else passed 5m. `min` exports only what the
           # final stage needs, so a rebuild whose dependencies did not change
           # still restores; a dependency change pays for a colder builder.
-          cache-to: type=gha,mode=min,ignore-error=true
+          cache-to: type=gha,mode=max,ignore-error=true
           # No provenance attestation: it is generated and attached during the
           # export, and nothing here consumes it.
           provenance: false
