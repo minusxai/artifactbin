@@ -314,6 +314,13 @@ it('isolates Claude from unrelated server configurations',()=>{
  expect(JSON.parse(inv.argv[inv.argv.indexOf('--mcp-config')+1])).toEqual({mcpServers:{}});
 });
 
+it('ends the option list before the prompt — `--mcp-config <configs...>` is variadic and would swallow it (eval run 34694871143: every task died with "MCP config file not found: <cwd>/<prompt>")',()=>{
+ const c=ctx({harness:'claude-code',model:'claude-opus-5'});
+ const inv=claudeCode.invocation(c);
+ expect(inv.argv[inv.argv.length-1]).toBe(c.prompt);
+ expect(inv.argv[inv.argv.length-2]).toBe('--');
+});
+
 describe('working directory', () => {
   it('opencode is TOLD its directory — it otherwise walks up to the nearest project root and loses the staged files', () => {
     const inv = opencode.invocation(ctx({ harness: 'opencode', model: 'fireworks-ai/x' }));

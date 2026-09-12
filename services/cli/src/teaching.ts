@@ -24,6 +24,14 @@ export const helpTopics:Record<string,string>={
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
+/** Topics and commands that share a prefix or a substring with a mistyped topic — `publish` → the publishing-* set — so the agent's next call is the right one instead of a guess. */
+export function closestTopics(topic:string):string[]{
+ const wanted=topic.toLowerCase();
+ if(!wanted)return [];
+ const names=[...Object.keys(helpTopics),...commands.map(command=>command.name)];
+ const near=names.filter(name=>name.startsWith(wanted)||wanted.startsWith(name)||name.includes(wanted));
+ return [...new Set(near)].sort((a,b)=>a.startsWith(wanted)===b.startsWith(wanted)?a.localeCompare(b):a.startsWith(wanted)?-1:1).slice(0,6);
+}
 /** The top-level skill doc, without its YAML frontmatter: the brief printed by bare `afbin help`. */
 export function briefDocument():string{return localSkillFiles['SKILL.md'].replace(/^---\n[\s\S]*?\n---\n/,'');}
 const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Every command is offline unless it names a remote resource.\n\n`
@@ -47,7 +55,10 @@ export function helpDocument(topic?:string,format='text'):string{
  }
  if(!isCommand(topic)){
   const text=helpTopics[topic as string];
-  if(text===undefined)throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,'Run afbin help.');
+  if(text===undefined){
+   const near=closestTopics(topic as string);
+   throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,near.length?`Did you mean ${near.join(', ')}? Run afbin help for the full list.`:'Run afbin help.');
+  }
   return text;
  }
  // Bare `afbin help` reads the brief; a named command prints its own help. Markdown/man keep the registry.
