@@ -10,6 +10,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import VersionHistory from '../VersionHistory';
 import {
   STORY_DOCUMENT_MESSAGE,
+  STORY_SPOTLIGHT_MESSAGE,
 } from '@/lib/story-runtime/contract';
 import {
   type EditorArt,
@@ -123,5 +124,53 @@ describe('VersionHistory', () => {
     expect(screen.getByLabelText('Version 2 by bob')).toHaveTextContent('@bob');
     expect(screen.queryByLabelText(/Version 1 by/)).toBeNull();
     expect(screen.getByLabelText('Preview version 1')).not.toHaveTextContent('@');
+  });
+});
+
+/**
+ * The query notebook: every <Query> the document declares, in the right rail
+ * as cells. The bar offers it only when there is something to show, and a
+ * cell's edit is a structural edit like any other — it rewrites the
+ * declaration and goes out through the same queue.
+ */
+describe('the query notebook', () => {
+  const QUERY_SOURCE =
+    '<Helmet><Query name="sales" source="ref:ds1234">{`select 1 as x`}</Query></Helmet>'
+    + '<div data-design="tw" className="p-4"><Question data="$sales" /></div>';
+  const withQuery = () => mount({ art: { ...art, markup: QUERY_SOURCE } as EditorArt });
+
+  it('offers the notebook only when the document declares a query', () => {
+    mount();
+    expect(screen.queryByLabelText('Show queries')).toBeNull();
+    expect(screen.queryByLabelText('Queries')).toBeNull();
+  });
+
+  it('opens the rail with each query as a cell showing its SQL', () => {
+    withQuery();
+    fireEvent.click(screen.getByLabelText('Show queries'));
+    expect(screen.getByLabelText('Queries')).toBeTruthy();
+    expect((screen.getByLabelText('Query $sales SQL') as HTMLTextAreaElement).value).toBe('select 1 as x');
+    fireEvent.click(screen.getByLabelText('Close queries'));
+    expect(screen.queryByLabelText('Queries')).toBeNull();
+  });
+
+  it('an edited cell rewrites that declaration through the SAME queue', () => {
+    withQuery();
+    fireEvent.click(screen.getByLabelText('Show queries'));
+    const field = screen.getByLabelText('Query $sales SQL');
+    fireEvent.change(field, { target: { value: 'select 2 as x' } });
+    fireEvent.blur(field);
+    expect(lastQueued()?.source).toContain('<Query name="sales" source="ref:ds1234">{`select 2 as x`}</Query>');
+    expect(lastQueued()!.source).toContain('<Question data="$sales" />');
+  });
+
+  it('asks the document to spotlight what a query powers while its cell has focus', () => {
+    withQuery();
+    fireEvent.click(screen.getByLabelText('Show queries'));
+    const field = screen.getByLabelText('Query $sales SQL');
+    fireEvent.focus(field);
+    expect(sentToFrame(STORY_SPOTLIGHT_MESSAGE).at(-1)).toMatchObject({ paths: ['0.0'] });
+    fireEvent.blur(field);
+    expect(sentToFrame(STORY_SPOTLIGHT_MESSAGE).at(-1)).toMatchObject({ paths: [] });
   });
 });

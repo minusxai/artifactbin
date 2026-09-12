@@ -27,6 +27,7 @@ import {
   STORY_APPLY_LINK_MESSAGE,
   STORY_EDIT_MODE_MESSAGE,
   STORY_SELECT_MESSAGE,
+  STORY_SPOTLIGHT_MESSAGE,
   STORY_COMMIT_MESSAGE,
   STORY_DOCUMENT_MESSAGE,
   type StoryEditSelection,
@@ -86,6 +87,8 @@ export interface InPlaceEditController {
   restoreSelection: (bookmark: EditorBookmark) => void;
   /** Select a node by path (a breadcrumb click, a panel opening) or clear it. */
   select: (path: string | null) => void;
+  /** Outline nodes by path WITHOUT selecting them (the query notebook pointing at what a query powers); [] clears. */
+  spotlight: (paths: string[]) => void;
   /**
    * Collect anything typed but not yet blurred, and wait for it.
    *
@@ -356,6 +359,7 @@ export function useInPlaceEdit(options: InPlaceEditOptions): InPlaceEditControll
       [postToFrame],
     ),
     select,
+    spotlight: useCallback((paths: string[]) => postToFrame({ type: STORY_SPOTLIGHT_MESSAGE, paths }), [postToFrame]),
     commitPending,
     pushDocument,
     restoreSelection: useCallback(

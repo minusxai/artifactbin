@@ -9,9 +9,10 @@ import {
   STORY_EDIT_KEY_MESSAGE,
   STORY_SELECTION_MESSAGE,
   STORY_SELECT_MESSAGE,
+  STORY_SPOTLIGHT_MESSAGE,
   type StoryEditParentMessage,
 } from '@/lib/story-runtime/contract';
-import { EDIT_SELECTED_ATTR, EDIT_EMBED_SELECTED_ATTR, EDIT_HOVER_ATTR } from '@/lib/story-runtime/edit/session';
+import { EDIT_SELECTED_ATTR, EDIT_EMBED_SELECTED_ATTR, EDIT_HOVER_ATTR, EDIT_SPOTLIGHT_ATTR } from '@/lib/story-runtime/edit/session';
 import {
   disposeEditSessions,
   env,
@@ -174,5 +175,27 @@ describe('keys', () => {
     mount();
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(last(STORY_EDIT_KEY_MESSAGE)).toMatchObject({ key: 'Escape' });
+  });
+});
+
+/**
+ * A SPOTLIGHT is the parent pointing at nodes without selecting them (the
+ * query notebook naming what a query powers): an outline attribute, no
+ * selection report, the whole set each time, [] to clear.
+ */
+describe('spotlight', () => {
+  it('spotlights nodes by path when the parent asks — no selection — and clears on []', () => {
+    const { session, at } = mount();
+    const selections = sent(STORY_SELECTION_MESSAGE).length;
+    session.onParentMessage({ type: STORY_SPOTLIGHT_MESSAGE, paths: ['0.1', '0.2', '9.9'] } as StoryEditParentMessage);
+    expect(at('0.1').hasAttribute(EDIT_SPOTLIGHT_ATTR)).toBe(true);
+    expect(at('0.2').hasAttribute(EDIT_SPOTLIGHT_ATTR)).toBe(true);
+    expect(at('0.1').hasAttribute(EDIT_SELECTED_ATTR)).toBe(false);
+    expect(sent(STORY_SELECTION_MESSAGE)).toHaveLength(selections);
+    session.onParentMessage({ type: STORY_SPOTLIGHT_MESSAGE, paths: ['0.0'] } as StoryEditParentMessage);
+    expect(at('0.1').hasAttribute(EDIT_SPOTLIGHT_ATTR)).toBe(false);
+    expect(at('0.0').hasAttribute(EDIT_SPOTLIGHT_ATTR)).toBe(true);
+    session.onParentMessage({ type: STORY_SPOTLIGHT_MESSAGE, paths: [] } as StoryEditParentMessage);
+    expect(document.querySelector(`[${EDIT_SPOTLIGHT_ATTR}]`)).toBeNull();
   });
 });

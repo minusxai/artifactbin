@@ -21,6 +21,7 @@
  */
 import { useMemo, useState } from 'react';
 import { SelectMenu } from '@/components/SelectMenu';
+import BoundQuery from '@/components/views/story/BoundQuery';
 import type { TableChoice } from '@/lib/story/table-catalog';
 import {
   getChannelField, setChannelField, getVizType, setVizType, zonesForVizType, isBlankSpec,
@@ -55,6 +56,11 @@ interface VizEditorPanelProps {
    * panel may not even be able to read (a dynamic expression). `null` = remove.
    */
   onTitleChange: (title: string | null) => void;
+  /**
+   * Open the named query in the notebook rail (InPlaceEditor). Absent where
+   * there is no rail to open — the inspector then shows the SQL and no opener.
+   */
+  onOpenQuery?: (name: string) => void;
 }
 
 /**
@@ -145,7 +151,7 @@ function SpecEditor({ specJson, onApply }: { specJson: string; onApply: (parsed:
   );
 }
 
-export default function VizEditorPanel({ viz, title, table, tables, onChange, onTitleChange }: VizEditorPanelProps) {
+export default function VizEditorPanel({ viz, title, table, tables, onChange, onTitleChange, onOpenQuery }: VizEditorPanelProps) {
   const bound = tables.find((d) => d.name === table) ?? null;
   const columns = useMemo(() => bound?.columns ?? [], [bound]);
 
@@ -165,6 +171,16 @@ export default function VizEditorPanel({ viz, title, table, tables, onChange, on
     return (
       <div className="flex flex-col gap-3" aria-label="Chart editor">
         {titleField}
+        {/* The binding is a sibling prop the zones never touch, so a recipe (a
+            trend tile, a funnel) still says what it reads and shows the query
+            behind it — read-only here; the spec box below owns the rewrite. */}
+        {table && (
+          <div className="flex flex-col gap-1">
+            <span className="font-mono text-[11px] text-faint">data</span>
+            <span aria-label="Table" className="font-mono text-xs text-fg">${table}</span>
+          </div>
+        )}
+        <BoundQuery table={bound} onOpenQuery={onOpenQuery} />
         <p className="font-sans text-xs text-muted" aria-label="Chart not editable">
           {dynamic
             ? 'This chart is computed by an expression. Edit it in code mode.'
@@ -228,6 +244,7 @@ export default function VizEditorPanel({ viz, title, table, tables, onChange, on
           ]}
         />
       </div>
+      <BoundQuery table={bound} onOpenQuery={onOpenQuery} />
       {table && !bound && (
         <p className="font-sans text-[11px] text-amber-600" aria-label="Missing table notice">
           This chart points at a table the document does not declare — add a &lt;Query&gt; or &lt;Value&gt; in &lt;Helmet&gt;.

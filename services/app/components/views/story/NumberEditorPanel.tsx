@@ -13,6 +13,7 @@
  */
 import { useState } from 'react';
 import { SelectMenu } from '@/components/SelectMenu';
+import BoundQuery from '@/components/views/story/BoundQuery';
 import type { TableChoice } from '@/lib/story/table-catalog';
 import { NUMBER_AGGS, type NumberEmbedBinding, type NumberEmbedEdit } from '@/lib/data/story/story-number';
 
@@ -21,6 +22,8 @@ interface NumberEditorPanelProps {
   /** The tables the document declares (the chart picker's list). */
   tables: TableChoice[];
   onChange: (edit: NumberEmbedEdit) => void;
+  /** Open the named query in the notebook rail (InPlaceEditor); absent where there is no rail. */
+  onOpenQuery?: (name: string) => void;
 }
 
 /** A text field committed on blur or Enter, empty as null — the TitleField pattern. */
@@ -53,7 +56,7 @@ function TextField({ label, aria, value, placeholder, onCommit }: {
   );
 }
 
-export default function NumberEditorPanel({ binding, tables, onChange }: NumberEditorPanelProps) {
+export default function NumberEditorPanel({ binding, tables, onChange, onOpenQuery }: NumberEditorPanelProps) {
   const bound = binding.table ? tables.find((d) => d.name === binding.table) ?? null : null;
   /** Numeric first — a figure wants a measure, but everything stays selectable. */
   const columns = [...(bound?.columns ?? [])].sort((a, b) => (a.type === 'number' ? 0 : 1) - (b.type === 'number' ? 0 : 1));
@@ -78,6 +81,7 @@ export default function NumberEditorPanel({ binding, tables, onChange }: NumberE
           ]}
         />
       </div>
+      <BoundQuery table={bound} onOpenQuery={onOpenQuery} />
       {binding.table && !bound && (
         <p className="font-sans text-[11px] text-amber-600" aria-label="Missing table notice">
           This number points at a table the document does not declare.

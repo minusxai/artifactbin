@@ -15,6 +15,8 @@ export interface TableChoice {
   name: string;
   kind: 'query' | 'value';
   columns: DatasetColumn[];
+  /** The SQL behind a query table — what the inspector shows under the picker. Absent for a table Value. */
+  sql?: string;
 }
 
 export function tableChoices(source: string, state?: DataflowState | null): TableChoice[] {
@@ -26,7 +28,7 @@ export function tableChoices(source: string, state?: DataflowState | null): Tabl
     if (v.kind === 'table') out.push({ name: v.name, kind: 'value', columns: state?.tables[v.name]?.columns ?? v.columns });
   }
   for (const q of content.queries) {
-    out.push({ name: q.name, kind: 'query', columns: state?.tables[q.name]?.columns ?? [] });
+    out.push({ name: q.name, kind: 'query', columns: state?.tables[q.name]?.columns ?? [], sql: q.sql });
   }
   return out;
 }

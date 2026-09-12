@@ -23,3 +23,11 @@ export const APP_BAR_H = 44;
  * discovering each other at runtime.
  */
 export const RIGHT_RAIL_W = 320;
+
+/**
+ * The QUERY NOTEBOOK's width. Wider than the rail it borrows, because SQL and
+ * result tables are column-shaped where the inspectors are form-shaped. It
+ * OVERLAYS rather than reserves (the inspector rule: the page does not narrow
+ * the document for it), so it shares the rail's edge and layer, not its number.
+ */
+export const QUERY_RAIL_W = 480;
