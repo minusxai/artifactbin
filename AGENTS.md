@@ -1,8 +1,7 @@
 # Working on artifactbin
 
-These are the shared working rules for this repository. `CLAUDE.md` imports this file.
-Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and [docs/design-notes.md](docs/design-notes.md)
-when working on the relevant subsystem. Historical rollout narratives remain in Git history.
+`CLAUDE.md` imports this file. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and
+[docs/design-notes.md](docs/design-notes.md) for subsystem contracts.
 
 ## Working rules
 
@@ -12,42 +11,31 @@ when working on the relevant subsystem. Historical rollout narratives remain in 
   observe the failure, then implement. For refactors, establish the existing tests pass, prove the
   relevant assertion detects broken behavior, then restore it through the change (Blue → Red → Blue).
   Report what actually ran; never claim red/green or end-to-end evidence you did not observe.
-- Validate risky assumptions with executable probes; record open assumptions and evidence in the plan.
-  Rank implementation milestones by the risks that could change the plan. Finish with runnable checks.
-- **The routine local checks are `npm run validate` and `npm test`.** Use focused behavioral
-  tests during implementation: `npm test -- --files <test-path> [...]`. Run validation and the
-  affected tests once before handoff; repeat only after relevant edits, failures or integration changes.
-- **The local budget is 50 test files TOTAL across Vitest and CLI.** `npm test` discovers and
-  budgets both before executing either. Above 50, it runs neither and exits 2: **DEFERRED TO CI,
-  NOT PASSED**. No affected tests also exits 2 as unverified. Discovery errors fail visibly.
-  Do not preview/count tests yourself, increase the cap, pass `--all`, invoke a full suite,
-  or bypass the wrapper with raw Vitest/Node commands to get around deferral. A focused TDD
-  check may name the relevant behavioral tests; do not split a deferred suite into local batches.
-- **On deferral: commit, push, and open or update a PR; keep its body empty.** A feature-branch
-  push alone does not trigger CI. Report local testing as deferred, inspect all selected CI results,
-  and wait for required checks before merging. Fix observed failures; do not retry unchanged code
-  blindly. Full tests, integration, browser gates and production builds belong on CI.
-- **Reuse evidence at handoff instead of automatically repeating work.** Successful normal checks
-  save local receipts. In the SAME worktree, a reviewer can run `npm run validate -- --reuse` and
-  `npm test -- --reuse` (with the original test arguments). Reuse requires matching source contents,
-  commands, environment, runtime, installed lock state and generated inputs, within one hour.
-  Failed, deferred, empty and input-changing runs produce no reusable pass. Report reuse as prior
-  evidence, not a new run or branch-wide coverage. CI never reuses these receipts. After manual edits
-  to ignored dependencies or external state, omit `--reuse`. Never copy receipts between worktrees.
-- **Keep agent investigation bounded.** Start with `rg -l` for filenames or a narrowly scoped `rg -n`;
-  exclude fixtures, recorded transcripts, generated assets and dependency trees unless they are the
-  subject. Set an output/line limit, read the needed sections, and batch independent reads. Do not
-  dump entire files or repeat searches already answered. Separate command duration from agent
-  turnaround time when diagnosing slowness. Keep low-risk fixes small; avoid speculative abstractions.
-- Verify the affected user flow on the running app for user-facing changes. Reuse the task's own
-  server after confirming its checkout and current code. Keep PR bodies empty and add no descriptive
-  PR comments unless explicitly requested.
-- **Never run the full or heavy suites locally as a routine — they are slow and belong to CI:** the full
-  suite (`npm run test:all`), the `integration` project (Docker Postgres + real Chromium), the browser gates,
-  `npm run build` and the agent smoke. CI runs them sharded and only for affected modules; push, read CI, and
-  fix a failure in ONE pass, not a serial chain. Before editing text that tests pin (docs, skills, copy,
-  error bodies), grep for every test and gate that reads it (`buildQuickSheet`, `agentDiscovery`, `renderDoc`,
-  the exact phrase) and change them in the same edit, so `npm test` catches it before CI does.
+- Probe risky assumptions; record evidence and unknowns in the plan. Order milestones by
+  plan-changing risks and finish with runnable checks.
+- **Routine checks: `npm run validate` and `npm test`.** For TDD, use
+  `npm test -- --files <paths>`. Run affected checks before handoff; repeat after relevant changes
+  or failures, not after every edit. Verify user-facing changes on the task's running app.
+- **50 test files TOTAL across Vitest + CLI.** Above 50, `npm test` runs neither suite and exits 2:
+  **DEFERRED TO CI, NOT PASSED**. No affected tests also means unverified (exit 2); discovery errors
+  fail visibly. Do not count/preview tests, raise the cap, use `--all`, bypass the wrapper, or split
+  a deferred suite into local batches. Focused TDD tests are allowed, not broad local reruns.
+- **On deferral: commit, push, open/update a PR with an empty body, and inspect CI.** A branch push
+  alone does not start CI. Report deferral accurately; require selected checks before merging.
+  Full suites, Docker/Chromium integration, browser gates, production builds and agent smoke are
+  CI-only. Collect CI failures and fix them together; never blindly retry unchanged code.
+- **Reuse handoff evidence:** in the same worktree, use `npm run validate -- --reuse` and
+  `npm test -- --reuse` with the original test arguments. Successful receipts last one hour and
+  require matching sources, command, environment, runtime, installed lock and generated inputs.
+  Failed/deferred/empty runs are never reusable passes. Label reuse as prior evidence, not a fresh
+  run or branch-wide CI. Never copy receipts; omit `--reuse` after manual changes to ignored
+  dependencies or external state. See [docs/agent-workflows.md](docs/agent-workflows.md).
+- **Bound investigation:** use scoped `rg -l`/`rg -n`, output limits and targeted file sections.
+  Exclude fixtures/transcripts/generated assets/dependencies unless relevant; batch independent
+  reads and do not repeat answered searches. Separate command duration from agent turnaround time.
+- Before changing pinned docs/copy/errors, find their tests and gates (`buildQuickSheet`,
+  `agentDiscovery`, `renderDoc`, exact text) and update them together. Keep PR bodies empty and
+  add no descriptive PR comments unless requested. Reuse only the task's own current dev server.
 - After a merge, update the local main branch to the latest origin/main, then `git worktree prune` and
   remove the finished per-branch worktrees so stale copies do not pile up.
 - Use top-level imports. Preserve intentional lazy browser chunks and engine-selecting imports;
@@ -69,37 +57,30 @@ when working on the relevant subsystem. Historical rollout narratives remain in 
 
 ## Commands
 
-Run commands from this repository root (the submodule root in a downstream checkout).
+Run commands from this repository root.
 
 - `npm ci` — install the pinned workspace dependencies.
 - `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition; default http://localhost:3030.
 - `npm run dev:app` — app with local SQL/browser, without the proxy; same default port.
-- `npm run validate` — residual-name guard and TypeScript, including unused declarations/parameters, plus
-  `validate:shared`: `services/utils` and `services/contracts` under `noUncheckedIndexedAccess`, since
-  downstream consumers compile these packages with that flag.
-- `npm test` — affected api/node/ui tests plus CLI tests when that package changes; at most
-  50 files combined. Exit 2 means unverified/deferred: open/update a PR and use CI, never widen
-  the budget. `npm test -- <ref>` selects branch changes; `npm test -- --files <paths>` selects
-  focused behavioral tests. `--reuse` reuses matching successful local evidence during handoff.
-  Package/config changes may select everything and defer; that is expected, not a failure to fix.
-- CI/PR-time only, slow — do NOT run locally as a routine (CI shards them per affected module):
-  `npm run test:all` (whole API/Node/UI/CLI suite; `test:api`/`test:node`/`test:ui` select projects),
-  `npm run test:integration` (Docker Postgres + real Chromium), `npm run build` (bundles + prod server), and
-  `npm run test:gates` (browser flows; `-- --list`, `--only=<names>`, `--servers=1`).
+- `npm run validate` — name guard and incremental TypeScript, including unused declarations;
+  shared utils/contracts also use `noUncheckedIndexedAccess` for downstream compatibility.
+- `npm test` — affected api/node/ui + CLI tests, at most 50 files combined. Exit 2: use PR CI,
+  never widen. `-- <ref>` selects branch changes; `-- --files <paths>` selects TDD tests;
+  `-- --reuse` reuses matching evidence. Config/package edits may defer everything; that is expected.
+- CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:integration`, `build`,
+  `test:gates` and agent smoke. Do not invoke these locally to work around deferral.
 - `npm run generate:routes`, `npm run generate-story-ui-classes`, `npm run render:schema` — generated inputs.
 - `npm run eval -- --help` and `npm run eval:report -- --help` — agent eval CLI; see
   [docs/evals.md](docs/evals.md) before running paid legs.
 
 ## Change checks
 
-- Releasing the CLI: `services/app/public/chat/release.json` is the pointer `afbin update` reads, and
-  `curl … /chat/install.sh | sh` installs the version it names. `npm run release:cli` bumps
-  `services/cli/package.json`, `package-lock.json`, the installer and `release.json` together; then run
-  `npm run generate:teaching -w services/cli`. A merged CLI change WITHOUT a bump leaves the live
-  installer serving the old binary. `.github/workflows/release-cli.yml` publishes the GitHub release when
-  the CLI version changes on main and CI passes; the downstream image ships the new `release.json` when
-  its submodule pin advances.
+- CLI releases require `npm run release:cli`, then `npm run generate:teaching -w services/cli`.
+  The release command updates the CLI version, lockfile, installer and
+  `services/app/public/chat/release.json` together. Without the bump, the live installer serves
+  the old binary. CI publishes on a version change after main passes; downstream deployments
+  must advance their submodule pin to ship the release pointer.
 
 - Schema changes update `services/app/lib/schema.ts`, schema ownership tests, and generated SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
