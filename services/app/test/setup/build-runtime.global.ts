@@ -15,17 +15,21 @@
  * one way of starting it, so it lives here: `npx vitest`, a watch run, an IDE
  * runner and a CI shard all get the same guarantee.
  *
- * Cheap enough to do unconditionally (~150ms, esbuild): a staleness check
- * would be the same cost and could be wrong, and a stale bundle means testing
- * a runtime nobody is shipping.
+ * Runs on EVERY vitest invocation (a fresh `npx vitest`, a watch re-run, an IDE
+ * runner, a CI shard), so it is cached: `--cache` makes the script hash its
+ * inputs against a marker beside the output bundle and skip the ~0.8s esbuild
+ * pass when nothing that feeds the bundle has changed, rebuilding on any change
+ * (see scripts/build-story-runtime.mjs). stdio is inherited rather than
+ * discarded so the one-line skip/build verdict is visible — a silent build is
+ * how a stale or absent bundle went unnoticed before.
  */
 import { execFileSync } from 'child_process';
 import path from 'path';
 
 export default function buildStoryRuntime(): void {
   const appRoot = path.resolve(__dirname, '../..');
-  execFileSync(process.execPath, [path.resolve(__dirname, '../../scripts/build-story-runtime.mjs')], {
+  execFileSync(process.execPath, [path.resolve(__dirname, '../../scripts/build-story-runtime.mjs'), '--cache'], {
     cwd: appRoot,
-    stdio: 'ignore',
+    stdio: 'inherit',
   });
 }

@@ -17,6 +17,12 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
+    // Persist the incremental program graph OUT of the source tree, in the
+    // gitignored npm cache, so `npm run validate` reuses it across runs (a warm
+    // run is ~3x faster) without leaving a *.tsbuildinfo at the repo root. The
+    // strict config below points at its OWN file — one buildinfo per include
+    // set, or they clobber each other.
+    "tsBuildInfoFile": "node_modules/.cache/tsc/root.tsbuildinfo",
     "paths": {
       "@/*": [
         "./services/app/*"

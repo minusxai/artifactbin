@@ -141,6 +141,17 @@ jobs:
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}
         run: node scripts/ci.mjs node ${{ matrix.shard }}/3
+      # The heavy tests that `npm test` leaves out — a disposable Dockerised
+      # Postgres and real Chromium — live in the `integration` project and
+      # would otherwise run nowhere in CI. This job already provisions both
+      # (the Playwright install and `docker pull postgres:17-alpine` above), so
+      # coverage rides here rather than in a new top-level job: only jobs listed
+      # in scripts/lib/ci-plan.mjs's CI_JOBS are enforced by the `test` roll-up,
+      # and this one already is. Run once (shard 1, not per shard); no
+      # --passWithNoTests, so a rename that empties the include fails loudly
+      # instead of passing vacuously.
+      - if: matrix.shard == 1
+        run: npm run test:integration
 
   # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
   # the environment boots per test file), so it shards like api does.
