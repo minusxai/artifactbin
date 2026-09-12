@@ -57,12 +57,14 @@
 
 ## Commands
 
-Run commands from this repository root.
+Run commands from this repository root. This list is exhaustive: every script the root
+`package.json` defines appears below, so a script missing here is one that no longer exists.
 
 - `npm ci` — install the pinned workspace dependencies.
 - `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition; default http://localhost:3030.
 - `npm run dev:app` — app with local SQL/browser, without the proxy; same default port.
+- `npm run dev:otp -- <email>` — read a local login code from the protected outbox.
 - `npm run validate` — name guard and incremental TypeScript, including unused declarations;
   shared utils/contracts also use `noUncheckedIndexedAccess` for downstream compatibility.
 - `npm test` — affected api/node/ui + CLI tests, at most 50 files combined. Exit 2: use PR CI,
@@ -70,7 +72,11 @@ Run commands from this repository root.
   `-- --reuse` reuses matching evidence. Config/package edits may defer everything; that is expected.
 - CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:integration`, `build`,
   `test:gates` and agent smoke. Do not invoke these locally to work around deferral.
-- `npm run generate:routes`, `npm run generate-story-ui-classes`, `npm run render:schema` — generated inputs.
+- `npm run generate:routes`, `npm run generate-story-ui-classes`, `npm run render:schema`,
+  `npm run build:runtime` — generated inputs; run the generator and review its diff.
+- `npm run generate:theme-previews`, `npm run generate:og` — regenerate the theme preview and
+  unfurl images after changing a theme or the card design.
+- `npm run release:cli` — bump the CLI release (see Change checks below).
 - `npm run eval -- --help` and `npm run eval:report -- --help` — agent eval CLI; see
   [docs/evals.md](docs/evals.md) before running paid legs.
 

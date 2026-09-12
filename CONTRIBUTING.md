@@ -4,15 +4,8 @@ Read [AGENTS.md](AGENTS.md) first for working rules and links to subsystem desig
 
 - **Test-driven, in that order**: contracts and types first, a failing test second, the implementation third, then
   the affected tests. A test that was never red is decoration.
-- Run only fast checks locally: `npm run validate` type-checks (incremental), and `npm test` runs just the
-  tests your change affects, with a combined 50-file budget across Vitest and CLI. Above that,
-  exit 2 means DEFERRED TO CI, not passed: commit, push, and open/update a PR with an empty body.
-  A feature-branch push alone does not start CI. Never widen the cap or split the suite into batches.
-  Use `npm test -- --files <paths>` for focused TDD. Parent reviewers may use `--reuse` on the same
-  commands in the same worktree to reuse matching successful receipts; see [AGENTS.md](AGENTS.md).
-  The full suite (`npm run test:all`), `npm run test:integration`, `npm run build` and the browser gates
-  (`npm run test:gates`) are slow — leave them to CI, which runs them per affected module. See
-  [AGENTS.md](AGENTS.md).
+- Run only fast checks locally: `npm run validate` and `npm test`. The budget, what exit 2 means,
+  the reuse receipts and which suites are CI-only are stated once, in [AGENTS.md](AGENTS.md).
 - Keep modules deep: a feature's complexity lives in one `lib/` module with a narrow interface; route handlers
   only translate results into HTTP. Use the owning service’s config module; preserve documented lazy browser imports.
 - Open pull requests against `main`. Small, focused PRs land fastest.
