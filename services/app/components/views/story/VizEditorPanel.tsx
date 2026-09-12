@@ -171,6 +171,16 @@ export default function VizEditorPanel({ viz, title, table, tables, onChange, on
     return (
       <div className="flex flex-col gap-3" aria-label="Chart editor">
         {titleField}
+        {/* The binding is a sibling prop the zones never touch, so a recipe (a
+            trend tile, a funnel) still says what it reads and shows the query
+            behind it — read-only here; the spec box below owns the rewrite. */}
+        {table && (
+          <div className="flex flex-col gap-1">
+            <span className="font-mono text-[11px] text-faint">data</span>
+            <span aria-label="Table" className="font-mono text-xs text-fg">${table}</span>
+          </div>
+        )}
+        <BoundQuery table={bound} onOpenQuery={onOpenQuery} />
         <p className="font-sans text-xs text-muted" aria-label="Chart not editable">
           {dynamic
             ? 'This chart is computed by an expression. Edit it in code mode.'

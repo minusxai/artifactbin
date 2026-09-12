@@ -340,6 +340,16 @@ describe('the bound query', () => {
     expect(onOpenQuery).toHaveBeenCalledWith('sales');
   });
 
+  it('is there for a recipe chart too — a trend tile reads a query like any other', () => {
+    const onOpenQuery = vi.fn<(name: string) => void>();
+    panel({ viz: { kind: 'recipe', recipe: 'ref:rcp9zz' }, onOpenQuery });
+    expect(screen.getByLabelText('Chart not editable')).toBeTruthy();
+    expect(screen.getByLabelText('Table').textContent).toBe('$sales');
+    expect(screen.getByLabelText('Bound query SQL').textContent).toBe('select region, revenue, month from "public"."rows"');
+    fireEvent.click(screen.getByLabelText('Open $sales in queries'));
+    expect(onOpenQuery).toHaveBeenCalledWith('sales');
+  });
+
   it('shows nothing for a table Value, and no opener when there is nowhere to open', () => {
     panel({ tables: [{ name: 'sales', kind: 'value' as const, columns: COLUMNS }] });
     expect(screen.queryByLabelText('Bound query SQL')).toBeNull();
