@@ -19,7 +19,7 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
-import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import { becomeOwner } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 

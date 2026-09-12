@@ -91,8 +91,12 @@ describe('born visibility per format', () => {
     expect(body.visibility).toBe('private');
   });
 
-  it('anonymous creates stay born public, assets included', async () => {
+  it('anonymous creates stay born public, documents and assets alike', async () => {
     const t = await mintToken('anon');
+    // The document half came from visibility.test.ts, which asserted the pair
+    // (anonymous public / owned private) for markup only.
+    const doc = await create(t.token, { title: 'a', markup: '<h1>a</h1>' });
+    expect(doc.body.visibility).toBe('public');
     const ds = await create(t.token, { title: 'sales', dataset: ROWS });
     expect(ds.body.visibility).toBe('public');
     const img = await createImage(t.token);

@@ -143,10 +143,16 @@ describe('effectiveRole — the link grants a role to whoever holds the address'
     expect(await effectiveRole(await head(linkEdits.id) as ArtifactRow, asGuest), 'a viewer share cannot pull a link editor down').toBe('editor');
   });
 
+  // Every SETTING means both axes: the visibility tier and the role the link carries.
+  // The visibility half came from access-lattice.test.ts, which asserted it on its own.
   it('leaves the owner untouched at every setting', async () => {
     const owner = await account('mxmx_test_owner@example.com');
-    const row = await docOf(owner, 'public', 'viewer');
-    expect(await effectiveRole(row, { userId: owner.user.id, tokenId: null })).toBe('owner');
+    for (const visibility of ['private', 'unlisted', 'public'] as Visibility[]) {
+      for (const linkRole of [undefined, 'viewer', 'editor'] as (ShareRole | undefined)[]) {
+        const row = await docOf(owner, visibility, linkRole);
+        expect(await effectiveRole(row, { userId: owner.user.id, tokenId: null }), `${visibility}/${linkRole ?? 'default'}`).toBe('owner');
+      }
+    }
   });
 });
 

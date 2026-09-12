@@ -24,9 +24,9 @@ export default defineConfig({
     env: {
       APP_PACKAGE_ROOT: path.resolve(import.meta.dirname, 'services/app'),
       ADMIN__SECRET: 'test-secret',
-      // The OSS default closes anonymous minting (0/hour) and refuses `public`;
+      // The OSS default closes the start_doc door (0/hour) and refuses `public`;
       // the suite runs with the PUBLIC deployment's shape so every valve is
-      // exercised — the self-host policy file, whose mint is 10/hour/ip.
+      // exercised — the self-host policy file, whose start_doc door is 10/hour/ip.
       PROXY__RATE_LIMIT_CONFIG_FILE: path.resolve(import.meta.dirname, 'services/proxy/selfhost_rate_limits.yml'),
       ARTIFACTS__ALLOW_PUBLIC: '1',
       // lib/email refuses to send without a key (a login code in a log is an

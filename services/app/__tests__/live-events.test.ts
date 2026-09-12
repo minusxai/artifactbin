@@ -2,7 +2,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
 /**
  * Live down-sync: the SSE surface at /a/<id>/events and the LISTEN fan-out
  * behind it. Asserts the properties the design rests on — first frame is
- * always current state (self-syncing), every accepted write wakes watchers,
+ * always the head ping (live-frame owns the document frame), every accepted write wakes watchers,
  * anyone who may read the document may watch it, and subscriptions are
  * released. The id addressing the stream is the document's one identifier —
  * an address, not a credential.
@@ -70,18 +70,9 @@ afterAll(async () => {
 });
 
 describe('GET /a/<id>/events', () => {
-  it('is an event-stream whose FIRST frame is the current document (self-syncing)', async () => {
-    const { doc } = await setup();
-    const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toContain('text/event-stream');
-    expect(res.headers.get('Cache-Control')).toContain('no-store');
-
-    // A PING: the head's identity. The document itself comes from /events/frame
-    // (live-frame.test.ts) — the stream carries nothing a relay must understand.
-    const [first] = await readFrames(res.body!, 1);
-    expect(first).toEqual({ editId: doc.edit_id, version: doc.version, by: null });
-  });
+  // The FIRST frame is a ping — the head's identity, and nothing a relay must
+  // understand — asserted with the stream's own headers in live-frame.test.ts,
+  // which owns the other half of the pair: the document at /events/frame.
 
   // The start-flow path: a watcher opens a THEMELESS placeholder, then the agent
   // publishes a themed document. Source alone is not enough — a frame that omits

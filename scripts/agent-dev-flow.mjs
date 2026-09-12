@@ -11,7 +11,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const source = path.resolve(import.meta.dirname, '../..');
+const source = path.resolve(import.meta.dirname, '..');
 const folder = mkdtempSync(path.join(tmpdir(), 'agent-dev-flow-'));
 const root = path.join(folder, 'checkout');
 mkdirSync(root);

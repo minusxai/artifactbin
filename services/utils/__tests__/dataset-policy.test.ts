@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseDatasetPolicy, compilePolicyPredicate } from '../dataset-policy';
+import { parseDatasetPolicy, compilePolicyPredicate } from '@artifactbin/utils/dataset-policy';
 
 const policy = (permission: unknown, operation = 'insert') => ({
   version: 1,

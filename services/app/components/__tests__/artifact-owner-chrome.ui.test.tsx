@@ -555,28 +555,13 @@ describe('the fork row', () => {
     expect(screen.getByLabelText('Fork artifact').closest('[data-mx-reader-rail]')).not.toBeNull();
   });
 
-  it('POSTs the fork and goes to the copy', async () => {
-    const fetchMock = forkResponse(201, { id: 'copy01', url: 'http://localhost:3000/@me/copy01-doc' });
-    vi.stubGlobal('fetch', fetchMock);
-    await withLocation(async (assign) => {
-      render(
-        <ArtifactShell role="owner">
-          <ArtifactSurface {...surfaceProps({})} />
-        </ArtifactShell>,
-      );
-      openDocumentControls();
-      fireEvent.click(screen.getByLabelText('Fork artifact'));
-  fireEvent.click(screen.getByLabelText('Confirm fork'));
-      await waitFor(() => expect(router.pushed).toContain('http://localhost:3000/@me/copy01-doc'));
-      expect(assign).not.toHaveBeenCalled();
-      // The owner's sheet also loads its sharing state, so the fork call is
-      // found by its address rather than by being first.
-      const forkCall = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
-        .find((call) => String(call[0]).endsWith('/fork'));
-      expect(forkCall?.[0]).toBe('/api/my/artifacts/story1/fork');
-      expect(forkCall?.[1]).toMatchObject({ method: 'POST' });
-    });
-  });
+  /*
+   * Where a fork GOES — the copy through the router on 201, the login callback that
+   * keeps the reader's query and hash on 401/409 — is fork-navigation.ui.test.tsx's
+   * subject: it drives ForkArtifact against a real router, in StrictMode, and across
+   * an unmount. What stays here is what only the shell can answer: who sees the
+   * control, where it sits, and that a double click is not two copies.
+   */
 
   it('forks ONCE however fast it is pressed — a double click is not two copies', async () => {
     const fetchMock = forkResponse(201, { id: 'copy01', url: 'http://localhost:3000/@me/copy01-doc' });
@@ -622,25 +607,6 @@ describe('the fork row', () => {
     });
   });
 
-  it('sends a browser with no account to login, and back here still asking to fork', async () => {
-    vi.stubGlobal('fetch', forkResponse(409, { error: 'sign_in_required' }));
-    await withLocation(async (assign) => {
-      render(
-        <ArtifactShell role="owner">
-          <ArtifactSurface {...surfaceProps({})} />
-        </ArtifactShell>,
-      );
-      openDocumentControls();
-      fireEvent.click(screen.getByLabelText('Fork artifact'));
-  fireEvent.click(screen.getByLabelText('Confirm fork'));
-      await waitFor(() => expect(router.pushed.length).toBe(1));
-      expect(assign).not.toHaveBeenCalled();
-      // The reader's own selection travels with them — the callback is this
-      // address plus the intent, never a bare path.
-      expect(router.pushed[0])
-        .toBe(`/login?callbackUrl=${encodeURIComponent('/a/story1?$region=west&intent=fork')}`);
-    }, '?$region=west');
-  });
 });
 
 it('dataset editors can open sharing controls', async () => {

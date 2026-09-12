@@ -35,13 +35,9 @@ beforeEach(async () => {
 });
 
 describe('GET /webfonts/<file>', () => {
-  it('serves the bytes, immutable and CORS-open', async () => {
-    const res = await GET(request('/webfonts/x.woff2'), params(`${HASH}.woff2`));
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toBe('font/woff2');
-    expect(res.headers.get('Cache-Control')).toContain('immutable');
-    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
-  });
+  // The happy path — the bytes, `immutable`, CORS-open — is webfonts.test.ts's case,
+  // where the file served is one the publish really copied into the store. This file
+  // owns the other honest answer: 404, whatever the backend calls the miss.
 
   it('404s a filename that is not the content-addressed shape, without touching the store', async () => {
     h.get = async () => { throw new Error('the store must not be reached'); };

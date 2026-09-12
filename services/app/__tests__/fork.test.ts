@@ -51,10 +51,6 @@ const fork = (id: string, cookie?: string) => forkRoute(jreq(`/api/my/artifacts/
 const head = async (id: string) => (await getArtifactById(id))!;
 
 const PROSE = '<div><h1>Payroll</h1><p data-annotation-anchor="a1b2c3d4e">hello</p></div>';
-const MUTATING = (ds: string) =>
-  '<Helmet><Value name="choice" type="string" default="ramen" />'
-  + `<Mutation name="vote" source="ref:${ds}">{\`insert into public.rows (choice) values ($choice)\`}</Mutation></Helmet>`
-  + '<div><Button run="$vote">Vote</Button></div>';
 
 beforeEach(() => noSession());
 
@@ -173,15 +169,8 @@ describe('POST /api/my/artifacts/:id/fork', () => {
     expect((await fork(w.doc.id)).status).toBe(401);
   });
 
-  it('a document that writes another owner\'s dataset is refused by name, not copied broken', async () => {
-    const w = await world();
-    const ds = await create(w.ta.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite', visibility: 'public' });
-    const doc = await create(w.ta.token, { markup: MUTATING(ds.id), visibility: 'public' });
-    asSession({ id: w.bob.id, email: w.bob.email });
-    const res = await fork(doc.id);
-    expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/not yours to write/);
-  });
+  // A document that writes another owner's dataset is refused by name rather than
+  // copied broken: fork-operation.test.ts owns that case (it also pins invalid_refs).
 
   it('every format forks; a dataset fork shares the object key rather than re-uploading', async () => {
     const w = await world();

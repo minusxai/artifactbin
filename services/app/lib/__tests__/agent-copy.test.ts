@@ -16,8 +16,8 @@ describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {
     expect(existingPaste(B, ID)).toBe(STARTER);
     expect(existingPaste(B, ID)).not.toContain('mx_');
-    expect(existingPaste(B, ID)).not.toContain('/tokens/new');
-    expect(existingPaste(B, ID)).not.toMatch(/token/i);
+    // `/tokens/new` and any mention of a token at all are banned on this very surface
+    // by agent-starter-consistency.test.ts's case (c), over all nine of them.
   });
   it('carries the installer, so an agent that lacks afbin can get it', () => {
     expect(existingPaste(B, ID)).toContain('curl -fsSL https://x.test/chat/install.sh | sh');

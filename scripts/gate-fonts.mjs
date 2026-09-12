@@ -47,7 +47,7 @@ const p = await b.newPage({ viewport: { width: 1200, height: 900 } });
 // ── a themed document, published over the API ──────────────────────────────
 // The token comes from the start LINK (lib/agent-session): /api/start hands the
 // browser an httpOnly cookie, never a secret. startDocument throws rather than
-// walking on — anonymous minting is per-IP rate limited, and a gate that walked
+// walking on — the start_doc door is per-IP rate limited, and a gate that walked
 // on measured /a/undefined and reported font problems that did not exist.
 const st = await startDocument(B);
 await fetch(`${B}/api/artifacts/${st.id}`, {

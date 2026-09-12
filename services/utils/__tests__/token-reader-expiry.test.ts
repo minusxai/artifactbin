@@ -1,7 +1,7 @@
 /**
- * THE PROXY'S READER REFUSES EXPIRED TOKENS — AT EXPIRY, NOT AT CACHE EVICTION (tok-p1).
+ * THE PROXY'S READER REFUSES EXPIRED TOKENS — AT EXPIRY, NOT AT CACHE EVICTION.
  *
- * Measured before this change (briefs/tokderisk-evidence, item 1): a token dying INSIDE the reader's 5 s
+ * Before this guard a token dying INSIDE the reader's 5 s
  * TTL window kept answering from cache until eviction, and after eviction the SQL admitted the expired row
  * anyway. Two refusal points are therefore asserted here:
  *   (i)  the SELECT carries the expiry clause  — `expires_at IS NULL OR expires_at > now()`;
@@ -11,7 +11,7 @@
  * below applies the clause's SEMANTICS on the reader's clock, so a stale cache hit is the only way to be wrong.
  */
 import { describe, expect, it } from 'vitest';
-import { createTokenReader, hashToken } from '../tokens';
+import { createTokenReader, hashToken } from '@artifactbin/utils';
 
 type Row = { id: string; user_id: string | null; token_hash: string; deleted_at: number | null; expires_at: number | null };
 

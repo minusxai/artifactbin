@@ -43,7 +43,7 @@ PR bodies unless the user explicitly requests a description.
 
 ## Exercising the agent policy
 
-Run `node scripts/probes/agent-dev-flow.mjs` to create a disposable checkout with the current
+Run `node scripts/agent-dev-flow.mjs` to create a disposable checkout with the current
 instructions and real local-check wrappers. Give its printed `.agent/BRIEF.md` to a bounded agent
 (e.g. GPT Sol). It provides 51 affected test identities, simulated validation/discovery/GitHub tools,
 and a local bare Git remote; no real PR, install, browser, or paid model call is made by the fixture.
