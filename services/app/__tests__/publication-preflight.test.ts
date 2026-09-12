@@ -176,6 +176,30 @@ it('two dependency ids naming the same bytes both resolve to the one artifact th
  ]);
 });
 
+it('reports dependencies on a replace, an edit and a metadata preflight, not only on a create',async()=>{
+ // The republish path is the one the whole feature exists for: a document
+ // whose picture did not change must be told, on its SECOND push, that the
+ // server already has those bytes.
+ const token=await mintToken('preflight-modes');
+ const image=await (await create(request('/api/artifacts',{method:'POST',token:token.token,json:{image:`data:image/png;base64,${PNG.toString('base64')}`}}))).json();
+ const doc=await (await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<section><p>Alpha</p></section>'}}))).json();
+ const context={params:Promise.resolve({id:doc.id})};
+ const head=await (await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),context)).json();
+ const dependencies=[{id:'local000001',sha256:sha(PNG),size:PNG.length,filename:'photo.png'}];
+ const expected=[{id:'local000001',format:'image',existing:image.id}];
+ const send=(body:Record<string,unknown>):Promise<Response>=>
+  preflight(request('/api/artifacts/preflight',{method:'POST',token:token.token,json:{id:doc.id,...body,dependencies}}));
+ for(const [mode,body] of [
+  ['replace',{input:{markup:'<img src="ref:local000001" alt="one" />',expectedState:head.state,expectedVersion:head.version}}],
+  ['edit',{mode:'edit',input:{edit_id:head.edit_id,source:head.markup.replace('Alpha','Ours')}}],
+  ['metadata',{mode:'metadata',input:{title:'Renamed',expectedState:head.state,expectedVersion:head.version}}],
+ ] as const){
+  const response=await send(body);
+  expect(response.status,`${mode}: ${await response.clone().text()}`).toBe(200);
+  expect((await response.json()).dependencies,mode).toEqual(expected);
+ }
+});
+
 it('an avif is a file, because the image door will not take one',async()=>{
  const token=await mintToken('preflight-avif');
  // The CLI's create body already publishes an avif through the generic file
