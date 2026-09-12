@@ -134,7 +134,7 @@ it('reports each step, the downloaded size and the time it took', () => {
   const result = run();
   expect(result.status, result.stderr).toBe(0);
   expect(result.stdout).toContain(`afbin ${version}`);
-  expect(result.stdout).toContain('Publish and edit artifacts');
+  expect(result.stdout).toContain('Google Docs for agents.');
   expect(result.stdout).toMatch(/^ {2}-{20,}$/m);
   expect(result.stdout).toMatch(/Release afbin-v\S+ has a macOS arm64 build/);
   expect(result.stdout).toMatch(/Downloading afbin-darwin-arm64 \(\d+ B\)/);
@@ -144,9 +144,65 @@ it('reports each step, the downloaded size and the time it took', () => {
 });
 it('says when it replaced a previous installation', () => {
   expect(run().status).toBe(0);
+  fs.writeFileSync(path.join(target, 'afbin'), 'stale');
   const again = run();
   expect(again.status, again.stderr).toBe(0);
   expect(again.stdout).toMatch(/Installed afbin \S+ to .*replaced the previous version/);
+  expect(installed(target)).toBe('afbin-test\n');
+});
+it('skips the download when the installed afbin already is the requested release', () => {
+  expect(run().status).toBe(0);
+  fs.rmSync(path.join(tmp, 'curl.log'));
+  const again = run();
+  expect(again.status, again.stderr).toBe(0);
+  expect(again.stdout).toContain(`afbin ${version} is already installed at ${target}/afbin`);
+  expect(again.stdout).not.toMatch(/Downloading|Downloaded|Installed afbin/);
+  expect(again.stdout).toContain('afbin help');
+  expect(curlCalls().some((line) => line.includes('afbin-darwin-arm64'))).toBe(false);
+});
+it('keeps a verified copy in the cache and reinstalls from it without downloading', () => {
+  expect(run().status).toBe(0);
+  const cached = path.join(home, '.cache', 'afbin', `afbin-darwin-arm64-${version}`);
+  expect(fs.readFileSync(cached, 'utf8')).toBe('#!/bin/sh\necho afbin-test\n');
+  fs.rmSync(path.join(target, 'afbin')); fs.rmSync(path.join(tmp, 'curl.log'));
+  const again = run();
+  expect(again.status, again.stderr).toBe(0);
+  expect(installed(target)).toBe('afbin-test\n');
+  expect(again.stdout).toContain('Using the verified download in ~/.cache/afbin');
+  expect(curlCalls().some((line) => line.includes('afbin-darwin-arm64'))).toBe(false);
+  // A corrupted cache entry is ignored, re-downloaded and replaced.
+  fs.writeFileSync(cached, 'garbage'); fs.rmSync(path.join(target, 'afbin')); fs.rmSync(path.join(tmp, 'curl.log'));
+  const third = run();
+  expect(third.status, third.stderr).toBe(0);
+  expect(curlCalls().some((line) => line.includes('afbin-darwin-arm64'))).toBe(true);
+  expect(fs.readFileSync(cached, 'utf8')).toBe('#!/bin/sh\necho afbin-test\n');
+});
+it('runs the installed afbin once so it installs its agent skills, and reports them in its own style', () => {
+  publish(version, '#!/bin/sh\necho "Skill installed: $HOME/.claude/skills/artifactbin" >&2\necho "Restart Claude Code to load the installed skill at $HOME/.claude/skills/artifactbin." >&2\necho afbin-test\n');
+  const result = run();
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toContain('Skill installed at ~/.claude/skills/artifactbin');
+  expect(result.stdout).toContain('Restart Claude Code to load the installed skill at ~/.claude/skills/artifactbin.');
+  expect(result.stdout).not.toContain('afbin-test');
+  expect(result.stdout).not.toContain('Skill installed:');
+});
+it('says so when the first run finds no agent on PATH, and warns without failing when that run breaks', () => {
+  const quiet = run();
+  expect(quiet.status, quiet.stderr).toBe(0);
+  expect(quiet.stdout).toMatch(/afbin runs; skills install when an agent CLI is on PATH/);
+  publish(version, '#!/bin/sh\necho boom >&2\nexit 1\n');
+  fs.rmSync(path.join(target, 'afbin')); fs.rmSync(path.join(home, '.cache'), { recursive: true });
+  const broken = run();
+  expect(broken.status, broken.stderr).toBe(0);
+  expect(broken.stdout).toMatch(/first run failed/);
+  expect(broken.stdout).toContain('boom');
+  expect(fs.readFileSync(path.join(target, 'afbin'), 'utf8')).toContain('boom');
+});
+it('honours XDG_CACHE_HOME for the download cache', () => {
+  const result = run([], { env: { XDG_CACHE_HOME: path.join(tmp, 'xdg cache') } });
+  expect(result.status, result.stderr).toBe(0);
+  expect(fs.existsSync(path.join(tmp, 'xdg cache', 'afbin', `afbin-darwin-arm64-${version}`))).toBe(true);
+  expect(fs.existsSync(path.join(home, '.cache'))).toBe(false);
 });
 it('writes plain text without a terminal: no colour codes and no progress bar', () => {
   const result = run([], { env: { AFBIN_TEST_SLOW: '1' } });

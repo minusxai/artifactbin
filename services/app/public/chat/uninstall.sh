@@ -19,9 +19,9 @@ main() {
         cat <<'USAGE'
 Uninstall afbin: sh uninstall.sh [--dir PATH] [--keep-state] [--dry-run]
   --dir PATH    where install.sh put the executable (default ~/.local/bin)
-  --keep-state  keep ~/.artifactbin (sign-in and remembered choices)
+  --keep-state  keep ~/.artifactbin and ~/.cache/afbin (sign-in, choices, downloads)
   --dry-run     list what would be removed without removing anything
-Removes the executable, ~/.artifactbin and afbin-managed agent skills.
+Removes the executable, ~/.artifactbin, cached downloads and afbin-managed agent skills.
 Project files (afbin.lock, pulled artifacts) are never touched.
 USAGE
         return 0;;
@@ -57,6 +57,12 @@ USAGE
     else
       found=1; wipe "$state_dir"; echo "$verb $state_dir (sign-in and settings)"
     fi
+  fi
+
+  cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/afbin"
+  if [ -d "$cache_dir" ]; then
+    if [ "$keep_state" -eq 1 ]; then echo "Kept $cache_dir (downloads)."
+    else found=1; wipe "$cache_dir"; echo "$verb $cache_dir (downloads)"; fi
   fi
 
   # The same destinations afbin installs skills into; a directory without the manifest is not ours.

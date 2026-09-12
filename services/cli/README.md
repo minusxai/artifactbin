@@ -11,15 +11,18 @@ curl -fsSL https://artifactbin.dev/chat/install.sh | sh
 The installer needs only `curl` and a POSIX shell: it downloads the standalone executable for this
 platform, verifies its published SHA-256 and installs it in `~/.local/bin` (`--dir` and `--version`
 select another destination or release). A failed verification leaves an existing installation
-untouched. On a terminal the installer colours its output and shows a download progress bar;
+untouched; an installation that already is the requested release is left alone without a download,
+and verified downloads are kept in `~/.cache/afbin` so a reinstall never fetches twice. The installer
+then runs afbin once, so the skills for the agent CLIs on PATH are installed before the next agent
+starts. On a terminal the installer colours its output and shows a download progress bar;
 `NO_COLOR` turns colour off and `FORCE_COLOR` turns it on elsewhere. Self-hosted servers serve the
 same script, pinned to the release they were built with;
 `/install.sh` is the separate self-hosted **server** installer.
 
 Remove it again with `curl -fsSL https://artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
-executable, `~/.artifactbin` and the agent skills afbin manages, and never touches project files such as
-`afbin.lock`. `--keep-state` keeps your sign-in, `--dry-run` only lists, and `--dir` names a custom
-executable location.
+executable, `~/.artifactbin`, cached downloads and the agent skills afbin manages, and never touches
+project files such as `afbin.lock`. `--keep-state` keeps your sign-in and the download cache, `--dry-run`
+only lists, and `--dir` names a custom executable location.
 
 Setup opens browser authentication automatically and saves credentials privately in
 `~/.artifactbin/.env`. It offers a preselected checklist of detected Claude Code, Codex, pi and
@@ -37,7 +40,10 @@ afbin push report.jsx
 Push also creates a new artifact from a new JSX file. `status`, `diff`, validation, help and unchanged
 pushes make no HTTP request. Use `--remote` to refresh a comparison. `push --dry-run` preflights without
 saving files or publishing. `afbin -h`, command `-h`, `afbin help <topic>` and the installed man page
-teach the same flags and rules.
+teach the same flags and rules. At a terminal, `afbin help` and `afbin <command> -h` print colour
+screens sized to the window; automation, pipes, `--json` and `--output` get the agent brief and plain
+text, also available as `afbin help brief` and `afbin help commands`. `NO_COLOR` and `FORCE_COLOR`
+apply to every command.
 
 Nothing is written into your working directory. All local state — which files are tracked, the server
 state last accepted, account resources, Markdown conversions and interrupted operations — lives in one

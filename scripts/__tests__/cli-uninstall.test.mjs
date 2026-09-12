@@ -24,6 +24,8 @@ const seed = (root = home, env = {}) => {
   write(path.join(state, 'servers', 'abc.env'), 'ARTIFACTBIN_TOKEN=secret\n');
   write(path.join(state, 'settings.json'), '{"harnesses":["claude"]}\n');
   write(path.join(state, 'process-lock.sqlite'), '');
+  const cache = path.join(env.cache ?? path.join(root, '.cache'), 'afbin');
+  write(path.join(cache, 'afbin-darwin-arm64-0.1.9'), 'binary');
   const skills = {
     claude: path.join(env.claude ?? path.join(root, '.claude'), 'skills', 'artifactbin'),
     codex: path.join(env.codex ?? path.join(root, '.codex'), 'skills', 'artifactbin'),
@@ -31,7 +33,7 @@ const seed = (root = home, env = {}) => {
     opencode: path.join(env.opencode ?? path.join(root, '.config', 'opencode'), 'skills', 'artifactbin'),
   };
   for (const dir of Object.values(skills)) skill(dir);
-  return { exe, state, skills };
+  return { exe, state, cache, skills };
 };
 const snapshot = (dir) => fs.readdirSync(dir, { recursive: true }).sort();
 
@@ -54,10 +56,10 @@ it('is a POSIX shell script that every listed shell parses', () => {
 });
 
 it.each(shells)('removes the executable, sign-in state and managed skills, and nothing else (%s)', (shell) => {
-  const { exe, state, skills } = seed();
+  const { exe, state, cache, skills } = seed();
   const result = run([], {}, shell);
   expect(result.status, result.stderr).toBe(0);
-  for (const gone of [exe, state, ...Object.values(skills)]) {
+  for (const gone of [exe, state, cache, ...Object.values(skills)]) {
     expect(fs.existsSync(gone), gone).toBe(false);
     expect(result.stdout).toContain(`Removed ${gone}`);
   }
@@ -71,16 +73,16 @@ it.each(shells)('removes the executable, sign-in state and managed skills, and n
 it('honors --dir, ARTIFACTBIN_HOME and each harness directory override, leaving the defaults alone', () => {
   const defaults = seed();
   const custom = seed(tmp, {
-    dir: path.join(tmp, 'install with spaces'), state: path.join(tmp, 'state'),
+    dir: path.join(tmp, 'install with spaces'), state: path.join(tmp, 'state'), cache: path.join(tmp, 'xdg cache'),
     claude: path.join(tmp, 'claude cfg'), codex: path.join(tmp, 'codex'), pi: path.join(tmp, 'pi'), opencode: path.join(tmp, 'opencode'),
   });
   const result = run(['--dir', path.join(tmp, 'install with spaces')], {
-    ARTIFACTBIN_HOME: custom.state, CLAUDE_CONFIG_DIR: path.join(tmp, 'claude cfg'), CODEX_HOME: path.join(tmp, 'codex'),
+    ARTIFACTBIN_HOME: custom.state, XDG_CACHE_HOME: path.join(tmp, 'xdg cache'), CLAUDE_CONFIG_DIR: path.join(tmp, 'claude cfg'), CODEX_HOME: path.join(tmp, 'codex'),
     PI_CODING_AGENT_DIR: path.join(tmp, 'pi'), OPENCODE_CONFIG_DIR: path.join(tmp, 'opencode'),
   });
   expect(result.status, result.stderr).toBe(0);
-  for (const gone of [custom.exe, custom.state, ...Object.values(custom.skills)]) expect(fs.existsSync(gone), gone).toBe(false);
-  for (const kept of [defaults.exe, defaults.state, ...Object.values(defaults.skills)]) expect(fs.existsSync(kept), kept).toBe(true);
+  for (const gone of [custom.exe, custom.state, custom.cache, ...Object.values(custom.skills)]) expect(fs.existsSync(gone), gone).toBe(false);
+  for (const kept of [defaults.exe, defaults.state, defaults.cache, ...Object.values(defaults.skills)]) expect(fs.existsSync(kept), kept).toBe(true);
 });
 
 it('finds the OpenCode skill under XDG_CONFIG_HOME when no OpenCode directory is set', () => {
@@ -112,22 +114,24 @@ it('removes a managed skill reached through a symlinked directory, link included
 });
 
 it('--keep-state keeps sign-in and settings while removing the rest', () => {
-  const { exe, state, skills } = seed();
+  const { exe, state, cache, skills } = seed();
   const result = run(['--keep-state']);
   expect(result.status, result.stderr).toBe(0);
   expect(fs.readFileSync(path.join(state, '.env'), 'utf8')).toBe('ARTIFACTBIN_TOKEN=secret\n');
+  expect(fs.existsSync(path.join(cache, 'afbin-darwin-arm64-0.1.9'))).toBe(true);
+  expect(result.stdout).toContain(`Kept ${cache}`);
   expect(fs.existsSync(path.join(state, 'settings.json'))).toBe(true);
   for (const gone of [exe, ...Object.values(skills)]) expect(fs.existsSync(gone), gone).toBe(false);
   expect(result.stdout).toContain(`Kept ${state}`);
 });
 
 it('--dry-run changes nothing and lists what a real run would remove', () => {
-  const { exe, state, skills } = seed();
+  const { exe, state, cache, skills } = seed();
   const before = snapshot(home);
   const result = run(['--dry-run']);
   expect(result.status, result.stderr).toBe(0);
   expect(snapshot(home)).toEqual(before);
-  for (const target of [exe, state, ...Object.values(skills)]) expect(result.stdout).toContain(`Would remove ${target}`);
+  for (const target of [exe, state, cache, ...Object.values(skills)]) expect(result.stdout).toContain(`Would remove ${target}`);
   expect(result.stdout).not.toContain('Removed ');
   expect(result.stdout).toMatch(/Dry run/);
 });

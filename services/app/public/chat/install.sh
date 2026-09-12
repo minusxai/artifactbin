@@ -48,6 +48,18 @@ USAGE
   [ -n "$expected" ] || fail "Release afbin-v$version has no build for $os_label $arch."
   done_line "Release afbin-v$version has a $os_label $arch build"
 
+  # Nothing to do when the installed executable already is this release.
+  exe="$install_dir/afbin"
+  if [ -f "$exe" ] && [ ! -L "$exe" ] && [ "$(checksum "$exe")" = "$expected" ]; then
+    done_line "afbin $version is already installed at $(pretty "$exe")"
+    finish; return 0
+  fi
+  # Verified downloads are kept for reinstalls, so an uninstall-install loop never fetches twice.
+  cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/afbin"; cached="$cache_dir/$asset-$version"
+  if [ -f "$cached" ] && [ "$(checksum "$cached")" = "$expected" ]; then
+    cp "$cached" "$download_dir/$asset"
+    done_line "Using the verified download in $(pretty "$cache_dir")"
+  else
   total=$(content_length "$release/$asset")
   if [ -t 1 ] && [ -t 2 ]; then
     layout "$asset"
@@ -64,11 +76,10 @@ USAGE
     fetch "$asset" || fail "Download of $asset failed (network error, or the release is incomplete)." "$(curl_detail)"
   fi
 
-  if [ "$hash_tool" = sha256sum ]; then actual=$(sha256sum "$download_dir/$asset")
-  else actual=$(shasum -a 256 "$download_dir/$asset"); fi
-  actual=${actual%% *}
-  [ "$actual" = "$expected" ] || fail 'Checksum verification failed; existing installation was not changed.'
+  [ "$(checksum "$download_dir/$asset")" = "$expected" ] || fail 'Checksum verification failed; existing installation was not changed.'
   done_line 'Checksum verified (SHA-256)'
+  { mkdir -p "$cache_dir" && cp "$download_dir/$asset" "$cached"; } 2>/dev/null || true
+  fi
 
   replaced=0
   [ ! -e "$install_dir/afbin" ] || replaced=1
@@ -80,7 +91,30 @@ USAGE
   staged=''
   if [ "$replaced" -eq 1 ]; then done_line "Installed afbin $version to $(pretty "$install_dir/afbin") (replaced the previous version)"
   else done_line "Installed afbin $version to $(pretty "$install_dir/afbin")"; fi
+  first_run
+  finish
+}
 
+# afbin installs its skills for the agent CLIs on PATH the first time it runs; run it now so they are
+# ready before the next agent starts, and so a broken executable shows up here rather than later.
+first_run() {
+  if "$install_dir/afbin" help --json </dev/null >/dev/null 2>"$download_dir/first-run.err"; then
+    skills=0
+    while IFS= read -r line; do
+      case "$line" in
+        "Skill installed: "*|"Skill updated: "*) skills=1; done_line "${line%%:*} at $(pretty "${line#*: }")";;
+        "Restart "*) warn_line "$(tilde "$line")";;
+      esac
+    done < "$download_dir/first-run.err"
+    [ "$skills" -eq 1 ] || done_line 'afbin runs; skills install when an agent CLI is on PATH'
+  else
+    warn_line "afbin is installed, but its first run failed: $(tail -n 1 "$download_dir/first-run.err")"
+  fi
+}
+tilde() { case "$1" in *"$HOME"*) printf '%s~%s' "${1%%"$HOME"*}" "${1#*"$HOME"}";; *) printf '%s' "$1";; esac; }
+
+# PATH advice for this shell and the next, then the first command to run.
+finish() {
   case ":$PATH:" in
     *":$install_dir:"*) ;;
     *)
@@ -103,6 +137,10 @@ USAGE
   esac
   printf '\n  %sGet started:%s  afbin help\n' "$bold" "$reset"
   printf '  %safbin signs you in when needed.%s\n\n' "$dim" "$reset"
+}
+checksum() {
+  if [ "$hash_tool" = sha256sum ]; then sum=$(sha256sum "$1"); else sum=$(shasum -a 256 "$1"); fi
+  printf '%s' "${sum%% *}"
 }
 
 # Colour when writing to a terminal (NO_COLOR wins, FORCE_COLOR forces), at the depth the terminal

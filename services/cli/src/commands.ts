@@ -44,7 +44,7 @@ export const FORMATS:Record<string,readonly string[]>={
  pull:['jsx','yaml','csv','json','original'],export:['png','jpg','html','csv','json','yaml','original'],
  list:['table','csv','json','yaml'],query:['table','csv','json','yaml'],help:['text','markdown','man'],
 };
-const globalFlags=['help','version','json','server','yes','no-browser'];
+export const globalFlags=['help','version','json','server','yes','no-browser'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
  {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','dry-run','output','format'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
