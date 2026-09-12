@@ -18,10 +18,3 @@ export function stateFor(home: string, env: NodeJS.ProcessEnv = process.env): Pr
   if (!opened) { opened = State.open(home, env); stores.set(key, opened); }
   return opened;
 }
-
-/** Release the cached handles. Tests that assert on-disk state use this; commands exit instead. */
-export async function closeStores(): Promise<void> {
-  const opened = [...stores.values()];
-  stores.clear();
-  for (const store of opened) (await store).close();
-}
