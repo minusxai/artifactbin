@@ -681,6 +681,16 @@ interface StoryCommittedMessage { type: typeof STORY_COMMITTED_MESSAGE; nonce: s
 export const STORY_SELECT_MESSAGE = 'mx:select';
 interface StorySelectMessage { type: typeof STORY_SELECT_MESSAGE; path: string | null }
 
+/**
+ * Parent → frame: SPOTLIGHT nodes by BODY path without selecting them — the
+ * query notebook pointing at what a query powers. Selection would hand the
+ * rail to the embed inspector and hide the notebook that asked; a spotlight
+ * only outlines and scrolls the first one into view. Idempotent: the whole
+ * set every time, `[]` clears. Unknown paths are ignored.
+ */
+export const STORY_SPOTLIGHT_MESSAGE = 'mx:spotlight';
+export interface StorySpotlightMessage { type: typeof STORY_SPOTLIGHT_MESSAGE; paths: string[] }
+
 /* ────────────────────────────────────────────────────────────────────────────
  * ANNOTATIONS — comments the owner pins to nodes; the frame only ever sees
  * ids + BODY paths (content, threads and the session stay on the page).
@@ -784,7 +794,7 @@ type StoryEditFrameMessage =
   | StoryEditKeyMessage | StoryCommittedMessage | StoryLayoutEditMessage | StorySlideTitleMessage
   | StoryImageDropMessage | StoryAnnotationPinMessage | StoryAnnotationHoverMessage | StoryAnnotationLayoutMessage;
 export type StoryEditParentMessage =
-  | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StoryCommitMessage
+  | StoryInlineMessage | StoryPasteMessage | StoryEditModeMessage | StoryApplyFormatMessage | StoryApplyLinkMessage | StorySelectMessage | StorySpotlightMessage | StoryCommitMessage
   | StoryAnnotationsMessage | StorySelectionActionsMessage;
 
 const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
@@ -796,7 +806,7 @@ const EDIT_FRAME_TYPES: ReadonlySet<string> = new Set([
 ]);
 const EDIT_PARENT_TYPES: ReadonlySet<string> = new Set([
   STORY_INLINE_MESSAGE, STORY_PASTE_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_APPLY_FORMAT_MESSAGE, STORY_APPLY_LINK_MESSAGE, STORY_SELECT_MESSAGE,
-  STORY_COMMIT_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE,
+  STORY_SPOTLIGHT_MESSAGE, STORY_COMMIT_MESSAGE, STORY_ANNOTATIONS_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE,
 ]);
 
 /** A frame → parent edit message carrying THIS session's nonce. Anything else — including a forgery — is not one. */

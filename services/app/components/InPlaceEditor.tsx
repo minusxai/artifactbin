@@ -28,17 +28,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { Check, Code, History, Undo2, Redo2, Image as ImageIcon, Paintbrush } from 'lucide-react';
+import { Check, Code, Database, History, Undo2, Redo2, Image as ImageIcon, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
-import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { APP_BAR_H, EDIT_BAR_H, QUERY_RAIL_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 import VersionHistory from '@/components/VersionHistory';
 import { TrustedUi } from '@/components/TrustedUi';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import MermaidEditorPanel from '@/components/views/story/MermaidEditorPanel';
+import QueryNotebookPanel from '@/components/views/story/QueryNotebookPanel';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
 import MarkdownPasteDialog from '@/components/views/story/MarkdownPasteDialog';
 import { useLiveEdits, type EditorFlushRef } from '@/lib/story/use-live-edits';
@@ -61,6 +62,7 @@ import { readNumberEmbed, updateNumberEmbedInJsx, type NumberEmbedEdit } from '@
 import { readMermaidEmbed, updateMermaidEmbedInJsx, type MermaidEmbedEdit } from '@/lib/data/story/story-mermaid';
 import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
 import { tableChoices } from '@/lib/story/table-catalog';
+import { queryCells, updateQuerySqlInJsx } from '@/lib/story/query-notebook';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
 import type { DataflowState } from '@/lib/story/dataflow';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -180,6 +182,10 @@ export default function InPlaceEditor({
     return () => window.removeEventListener('keydown', onKey);
   }, [onComment]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  /** The right rail's query notebook (components/views/story/QueryNotebookPanel). */
+  const [queriesOpen, setQueriesOpen] = useState(false);
+  /** True from the moment a draft-data run is sent until its answer lands — the notebook's "running…". */
+  const [dataflowPending, setDataflowPending] = useState(false);
   /** An older version, shown in the document itself. Read-only while it is up. */
   const [preview, setPreview] = useState<ArtifactVersionSnapshot | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -498,6 +504,7 @@ export default function InPlaceEditor({
     let alive = true;
     const timer = window.setTimeout(() => {
       ranSignature.current = flowSignature;
+      setDataflowPending(true);
       void fetch('/api/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -505,13 +512,15 @@ export default function InPlaceEditor({
       })
         .then((r) => (r.ok ? r.json() : null))
         .then((body: { tables: DataflowState['tables']; errors: DataflowState['errors'] } | null) => {
-          if (!alive || !body) return;
+          if (!alive) return;
+          setDataflowPending(false);
+          if (!body) return;
           const next = { values: {}, tables: body.tables, errors: body.errors };
           setDataflowState(next);
           dataflowRef.current = next;
           showInDocument(sourceRef.current);
         })
-        .catch(() => {});
+        .catch(() => { if (alive) setDataflowPending(false); });
     }, 400);
     return () => {
       alive = false;
@@ -581,6 +590,7 @@ export default function InPlaceEditor({
   /** Which embed inspector the right rail shows, if any. */
   const inspector = chart ? 'chart' : numberEmbed ? 'number' : mermaidEmbed ? 'diagram' : null;
   const tables = useMemo(() => tableChoices(source, dataflowState), [source, dataflowState]);
+  const queryNotebook = useMemo(() => queryCells(source, dataflowState, dataflowPending), [source, dataflowState, dataflowPending]);
 
   const onChartChange = useCallback(
     (next: { viz: unknown; table: string | null }) => {
@@ -618,6 +628,21 @@ export default function InPlaceEditor({
     },
     [embedPath, commitStructural],
   );
+
+  const onQuerySqlChange = useCallback(
+    (name: string, sql: string) => commitStructural(updateQuerySqlInJsx(sourceRef.current, name, sql)),
+    [commitStructural],
+  );
+  const notebookVisible = queriesOpen && !inspector && mode === 'design' && !preview && queryNotebook.length > 0;
+  /*
+   * A spotlight is the notebook's, so it leaves with the notebook: a cell that
+   * was focused when the rail closed, or when a selection handed the rail to
+   * the inspector, gets no blur from React on unmount to clear it.
+   */
+  const { spotlight } = edit;
+  useEffect(() => {
+    if (!notebookVisible) spotlight([]);
+  }, [notebookVisible, spotlight]);
 
   const deleteSelected = useCallback(() => {
     if (!selection) return;
@@ -1031,6 +1056,28 @@ export default function InPlaceEditor({
               </button>
             ))}
           </div>
+          {queryNotebook.length > 0 && (
+            <Tooltip content="queries">
+              <button
+                type="button"
+                aria-label="Show queries"
+                aria-pressed={queriesOpen}
+                onClick={() => {
+                  setQueriesOpen((v) => !v);
+                  // The notebook wants the rail; a selected embed's inspector would keep it.
+                  if (!queriesOpen) edit.select(null);
+                }}
+                className={`inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
+                  queriesOpen
+                    ? 'border-accent/40 bg-accent-soft text-accent'
+                    : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
+                }`}
+              >
+                <Database size={12} className="shrink-0" />
+                <span className="hidden sm:inline">queries</span>
+              </button>
+            </Tooltip>
+          )}
           <Tooltip content="version history">
             <button
               type="button"
@@ -1146,6 +1193,31 @@ export default function InPlaceEditor({
           ) : (
             <MermaidEditorPanel embed={mermaidEmbed!} onChange={onMermaidChange} />
           )}
+        </aside>
+      )}
+
+      {/* The query notebook: the rail's other occupant. The inspector wins while an
+          embed is selected (same edge, same layer — one column); deselect and the
+          notebook is back. Wider than the inspectors (QUERY_RAIL_W): SQL and result
+          tables are column-shaped. Design mode only: in code mode the SQL is already on screen. */}
+      {notebookVisible && (
+        <aside
+          aria-label="Queries"
+          className="fixed right-0 bottom-0 z-30 overflow-y-auto border-l border-edge bg-surface p-3"
+          style={{ top: barTop + EDIT_BAR_H, width: QUERY_RAIL_W }}
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <span className="font-mono text-[11px] uppercase tracking-wide text-faint">queries</span>
+            <button
+              type="button"
+              aria-label="Close queries"
+              onClick={() => setQueriesOpen(false)}
+              className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
+            >
+              close
+            </button>
+          </div>
+          <QueryNotebookPanel cells={queryNotebook} onSqlChange={onQuerySqlChange} onSpotlight={edit.spotlight} />
         </aside>
       )}
 
