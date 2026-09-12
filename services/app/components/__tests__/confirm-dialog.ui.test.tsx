@@ -47,7 +47,8 @@ it('runs once on repeated confirmation and keeps a failed action available for r
   fireEvent.click(screen.getByRole('button', { name: 'Move to trash' }));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   expect(perform).toHaveBeenCalledTimes(2);
-  expect(trigger).toHaveFocus();
+  // Unmount removes the dialog before passive cleanup restores the trigger.
+  await waitFor(() => expect(trigger).toHaveFocus());
 });
 
 it('cancels a pending action when its owner unmounts', () => {
