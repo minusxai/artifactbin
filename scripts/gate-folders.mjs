@@ -297,9 +297,9 @@ check(cardBytes > 2000, `and it is a real picture, not a refusal (${cardBytes} b
 // ── 9. deleting a folder from the strip trashes it WITH its contents ─────
 await owner.goto(`${BASE}/`, { waitUntil: 'load' });
 await owner.waitForSelector('[aria-label="Folders"]', { timeout: 20000 });
+await owner.getByRole('button', { name: 'More actions for Field Notes 2026', exact: true }).first().click();
 await owner.locator('[aria-label="Delete Field Notes 2026"]').first().click();
 const confirmText = await owner.getByRole('dialog').innerText();
-await owner.locator('[aria-label="More actions for Field Notes 2026"]').first().click();
 await Promise.all([
   owner.waitForResponse((r) => r.request().method() === 'DELETE' && r.status() === 200, { timeout: 15000 }),
   owner.getByLabel('Confirm delete', { exact: true }).click(),

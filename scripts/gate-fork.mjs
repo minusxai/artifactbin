@@ -112,7 +112,7 @@ check(
 await loginOnThisPage(forker, sink, FORKER_EMAIL);
 
 // ── 5. returned to the document, with the confirm open ────────────────────
-const dialog = forker.locator('[role="dialog"][aria-label="Fork this artifact"]');
+const dialog = forker.getByRole('dialog', { name: 'Fork this artifact?', exact: true });
 await dialog.waitFor({ state: 'visible', timeout: 30000 });
 check(true, 'login returned them to the document with the fork confirm open');
 check(
