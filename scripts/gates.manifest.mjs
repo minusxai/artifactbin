@@ -34,7 +34,6 @@ export const GATE_SPECS = Object.freeze([
   { name: 'postgres-datasets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 180_000 },
   // measured: implementer 9s; orchestrator 7s
   { name: 'annotations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  { name: 'node-identity', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 66s; orchestrator 71s
   { name: 'app-flows', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 213_000 },
   // measured: implementer 5s; orchestrator 6s
@@ -124,16 +123,7 @@ export const GATE_SPECS = Object.freeze([
     why: 'The byline is the AUTHOR\'s handle, so the document has to be owned: it logs an owner in, claims a token to publish under it, and forks a copy for the provenance line — none of which the anonymous shared start helper produces.',
     needsMail: true, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000,
   },
-  // measured: implementer 11s; orchestrator 10s
-  {
-    name: 'real-paste', start: 'shared', needsMail: false, needsClipboard: true, serialGroup: 'clipboard',
-    timeoutMs: 60_000,
-  },
-  // measured: implementer 1s; orchestrator 2s
-  { name: 'ref-image', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 10s
-  { name: 'bound-assets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 60_000 },
-  { name: 'web-assets', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
+  { name: 'web-assets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   // measured: implementer 20s; orchestrator pending
   {
     name: 'pdf', start: 'shared',
