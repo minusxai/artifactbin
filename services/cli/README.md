@@ -11,8 +11,15 @@ curl -fsSL https://artifactbin.dev/chat/install.sh | sh
 The installer needs only `curl` and a POSIX shell: it downloads the standalone executable for this
 platform, verifies its published SHA-256 and installs it in `~/.local/bin` (`--dir` and `--version`
 select another destination or release). A failed verification leaves an existing installation
-untouched. Self-hosted servers serve the same script, pinned to the release they were built with;
+untouched. On a terminal the installer colours its output and shows a download progress bar;
+`NO_COLOR` turns colour off and `FORCE_COLOR` turns it on elsewhere. Self-hosted servers serve the
+same script, pinned to the release they were built with;
 `/install.sh` is the separate self-hosted **server** installer.
+
+Remove it again with `curl -fsSL https://artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
+executable, `~/.artifactbin` and the agent skills afbin manages, and never touches project files such as
+`afbin.lock`. `--keep-state` keeps your sign-in, `--dry-run` only lists, and `--dir` names a custom
+executable location.
 
 Setup opens browser authentication automatically and saves credentials privately in
 `~/.artifactbin/.env`. It offers a preselected checklist of detected Claude Code, Codex, pi and
