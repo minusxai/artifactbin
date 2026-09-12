@@ -176,6 +176,8 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
         // One CA per leg: `createCa` reuses an existing one, so every task's proxy is trusted by the
         // same bundle and the openssl work happens once.
         caDir: path.join(legDir, 'ca'),
+        // The checkout's CLI in the not-installed flow, as on the local path below.
+        localRelease: { version: CLI_VERSION, distDir: path.join(REPO_ROOT, 'services/cli/dist') },
       });
       log(`${leg.label}/${taskId}: proxying ${config.deployment} through :${mitm.port}`);
       // The agent is given the DEPLOYMENT's own address; its traffic is caught by where it SENDS.

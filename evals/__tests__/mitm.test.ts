@@ -118,6 +118,37 @@ describe('startMitmProxy', () => {
     expect(entries[0]).toMatchObject({ method: 'GET', path: '/docs/llm', status: 200 });
   });
 
+  it('serves the checkout\'s CLI to the installer — rewriting its GitHub download to the host under test and answering that path from dist (CI legs installed the published release instead: runs 34704052816, 34708820644)', async () => {
+    const dir = tmp(); dirs.push(dir);
+    const dist = path.join(dir, 'dist'); fs.mkdirSync(dist);
+    fs.writeFileSync(path.join(dist, 'afbin-linux-x64'), 'FAKE-BINARY-BYTES');
+    const ledger = path.join(dir, 'ledger.jsonl');
+    const installer = http.createServer((req, res) => {
+      if (req.url === '/chat/install.sh') { res.writeHead(200, { 'content-type': 'text/x-shellscript' }); res.end('release="https://github.com/minusxai/artifactbin/releases/download/afbin-v$version"\ncurl -fsSL --proto =https "$release/afbin-linux-x64"\n'); return; }
+      res.writeHead(404); res.end();
+    });
+    await new Promise<void>((r) => installer.listen(0, '127.0.0.1', r));
+    const installerPort = (installer.address() as { port: number }).port;
+    const mitm = await startMitmProxy({ port: 0, host: 'faux.test', ledgerPath: ledger, caDir: path.join(dir, 'ca'), upstream: `http://127.0.0.1:${installerPort}`, localRelease: { version: '0.0.0', distDir: dist } });
+    try {
+      const script = await throughProxy(mitm.url, 'faux.test', mitm.ca.caPath, '/chat/install.sh');
+      expect(script.status).toBe(200);
+      expect(script.body).toContain('https://faux.test/chat/releases/afbin-v');
+      expect(script.body).not.toContain('github.com');
+      const binary = await throughProxy(mitm.url, 'faux.test', mitm.ca.caPath, '/chat/releases/afbin-v0.0.0/afbin-linux-x64');
+      expect(binary.status).toBe(200);
+      expect(binary.body).toBe('FAKE-BINARY-BYTES');
+      const sums = await throughProxy(mitm.url, 'faux.test', mitm.ca.caPath, '/chat/releases/afbin-v0.0.0/SHA256SUMS');
+      expect(sums.body).toMatch(/^[a-f0-9]{64}  afbin-linux-x64\n$/);
+      // A release the checkout did not build is not ours to answer: it goes upstream like any other path.
+      const foreign = await throughProxy(mitm.url, 'faux.test', mitm.ca.caPath, '/chat/releases/afbin-v9.9.9/afbin-linux-x64');
+      expect(foreign.status).toBe(404);
+    } finally {
+      await mitm.stop();
+      await new Promise<void>((r) => installer.close(() => r()));
+    }
+  });
+
   it('records the error code of a JSON failure, as the reverse proxy does', async () => {
     const dir = tmp(); dirs.push(dir);
     const ledger = path.join(dir, 'ledger.jsonl');
