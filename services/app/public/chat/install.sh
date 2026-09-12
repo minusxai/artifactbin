@@ -2,7 +2,7 @@
 set -eu
 
 main() {
-  version=0.1.11
+  version=0.1.12
   install_dir="${HOME}/.local/bin"
   yes=0
   style
@@ -15,10 +15,10 @@ main() {
         shift 2;;
       --help|-h)
         cat <<'USAGE'
-Install afbin: sh install.sh [--version 0.1.11] [--dir PATH] [--yes]
+Install afbin: sh install.sh [--version 0.1.12] [--dir PATH] [--yes]
   --version X.Y.Z   install this release instead of the pinned one
   --dir PATH        install directory (default ~/.local/bin)
-  --yes, -y         accept saved or detected agent skills without a checklist
+  --yes, -y         accept default skills without a checklist or sign-in
 Colour follows NO_COLOR and FORCE_COLOR; the download progress bar needs a terminal.
 USAGE
         return 0;;
@@ -104,7 +104,10 @@ USAGE
 # `curl ... | sh` can still offer the checklist without consuming the script on stdin.
 first_run() {
   if [ "$yes" -eq 0 ] && [ -t 1 ] && [ -t 2 ] && ( : < /dev/tty ) 2>/dev/null; then
-    "$install_dir/afbin" setup < /dev/tty && return 0
+    if "$install_dir/afbin" setup < /dev/tty; then
+      "$install_dir/afbin" auth < /dev/tty || warn_line 'Run afbin auth when you’re ready to sign in.'
+      return 0
+    fi
   else
     "$install_dir/afbin" setup --yes < /dev/null && return 0
   fi
@@ -113,6 +116,8 @@ first_run() {
 
 # PATH advice for this shell and the next, then the first command to run.
 finish() {
+  shell_name=${SHELL:-}
+  shell_name=${shell_name##*/}
   case ":$PATH:" in
     *":$install_dir:"*) ;;
     *)
@@ -120,11 +125,11 @@ finish() {
       warn_line "$(pretty "$install_dir") is not on your PATH yet."
       if [ "$install_dir" != "$HOME/.local/bin" ]; then
         say "Add $install_dir to your PATH, or run the executable by its full path."
-      elif [ "${SHELL##*/}" = fish ]; then
+      elif [ "$shell_name" = fish ]; then
         say 'Add it once, for this and future shells:'
         say "  ${bold}fish_add_path ~/.local/bin${reset}"
       else
-        case "${SHELL##*/}" in zsh) rc='~/.zshrc';; bash) [ "$platform" = darwin ] && rc='~/.bash_profile' || rc='~/.bashrc';; *) rc='';; esac
+        case "$shell_name" in zsh) rc='~/.zshrc';; bash) [ "$platform" = darwin ] && rc='~/.bash_profile' || rc='~/.bashrc';; *) rc='';; esac
         say 'Add it for this shell:'
         say "  ${bold}export PATH=\"\$HOME/.local/bin:\$PATH\"${reset}"
         if [ -n "$rc" ]; then
@@ -163,7 +168,7 @@ style() {
     *) ok='ok'; arrow='->'; warn='!'; bad='x'; rule_char='-'; block='#'; empty='-';;
   esac
   # Ask the terminal itself: inside a command substitution, tput would answer for the capture pipe.
-  cols=$(stty size < /dev/tty 2>/dev/null | awk '{ print $2 }' || true)
+  cols=$({ stty size < /dev/tty; } 2>/dev/null | awk '{ print $2 }' || true)
   case "$cols" in ''|*[!0-9]*|0) cols=${COLUMNS:-80};; esac
 }
 headline() {

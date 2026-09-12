@@ -54,7 +54,7 @@ cp "$source" "$out"
 afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
 const baseEnv = () => ({ PATH: `${bin}:/usr/bin:/bin`, HOME: home, AFBIN_TEST_DIR: tmp });
 const run = (args = [], { dir = target, env = {} } = {}) => spawnSync('sh', [script, ...(dir ? ['--dir', dir] : []), ...args], {
-  encoding: 'utf8', cwd: home, env: { ...baseEnv(), ...env },
+  encoding: 'utf8', cwd: home, env: { ...baseEnv(), ...env }, timeout: 20000,
 });
 /** The same run inside a pseudo-terminal, where the installer may colour its output and show curl's progress bar. */
 const runInTerminal = (args = [], env = {}, onData, piped = false) => new Promise((resolve, reject) => {
@@ -81,6 +81,17 @@ it('installs into a clean home outside the checkout by default, and names the ve
   expect(installed(destination)).toBe('afbin-test\n');
   expect(result.stdout).toContain(`Installed afbin ${version}`);
   expect(result.stdout).toContain('afbin help');
+});
+it('installs noninteractively without SHELL or a controlling terminal', () => {
+  // macOS sh may populate SHELL itself; unset it inside the shell to reproduce Linux CI reliably.
+  const result = spawnSync('sh', ['-c', 'installer=$1; shift; unset SHELL; . "$installer"', 'installer-test', script], {
+    encoding: 'utf8', cwd: home, env: baseEnv(), timeout: 20000,
+  });
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stderr).toBe('');
+  expect(installed(path.join(home, '.local', 'bin'))).toBe('afbin-test\n');
+  expect(result.stdout).toContain('export PATH="$HOME/.local/bin:$PATH"');
+  expect(result.stdout).toContain('add the same line to your shell profile');
 });
 it('updates a working installation in place when a newer release is requested', () => {
   expect(run().status).toBe(0);
@@ -198,12 +209,25 @@ it('keeps the executable and explains how to retry when setup fails', () => {
   expect(broken.stderr).toContain('boom');
   expect(fs.readFileSync(path.join(target, 'afbin'), 'utf8')).toContain('boom');
 });
-it('gives setup a terminal and passes --yes only when explicitly requested', async () => {
+it('runs setup then auth with a terminal, but --yes and -y skip auth', async () => {
   publish(version, '#!/bin/sh\necho "$*" >> "$HOME/setup-args"\nif [ -t 0 ]; then echo terminal >> "$HOME/setup-args"; fi\n');
   expect((await runInTerminal()).status).toBe(0);
-  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup\nterminal\n');
+  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup\nterminal\nauth\nterminal\n');
   expect((await runInTerminal(['--yes'])).status).toBe(0);
-  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup\nterminal\nsetup --yes\n');
+  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup\nterminal\nauth\nterminal\nsetup --yes\n');
+  expect((await runInTerminal(['-y'])).status).toBe(0);
+  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup\nterminal\nauth\nterminal\nsetup --yes\nsetup --yes\n');
+});
+it('does not authenticate after cancelled setup, and lets failed authentication be retried later', async () => {
+  publish(version, '#!/bin/sh\necho "$1" >> "$HOME/calls"\nexit 2\n');
+  const cancelled = await runInTerminal();
+  expect(cancelled.status, cancelled.output).toBe(0);
+  expect(fs.readFileSync(path.join(home, 'calls'), 'utf8')).toBe('setup\n');
+  publish(version, '#!/bin/sh\necho "$1" >> "$HOME/calls"\ncase "$1" in auth) echo "sign-in cancelled" >&2; exit 2;; esac\n');
+  const authFailed = await runInTerminal();
+  expect(authFailed.status, authFailed.output).toBe(0);
+  expect(fs.readFileSync(path.join(home, 'calls'), 'utf8')).toBe('setup\nsetup\nauth\n');
+  expect(authFailed.output).toContain('Run afbin auth when you’re ready to sign in.');
 });
 it('honours XDG_CACHE_HOME for the download cache', () => {
   const result = run([], { env: { XDG_CACHE_HOME: path.join(tmp, 'xdg cache') } });
@@ -288,7 +312,8 @@ it('accepts a plain-http release base from a local server, and then stops demand
 it('a piped installer uses the real setup checklist and installs only the toggled selection', async () => {
   const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
   const main = path.join(checkout, 'services/cli/src/main.ts');
-  publish(version, `#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(require.resolve('tsx'))} ${quote(main)} "$@"\n`);
+  // Exercise the real offline picker, but keep auth deterministic: never open a browser or contact a provider.
+  publish(version, `#!/bin/sh\nif [ "$1" = auth ]; then echo auth >> "$HOME/auth-calls"; exit 0; fi\nexec ${quote(process.execPath)} --import ${quote(require.resolve('tsx'))} ${quote(main)} "$@"\n`);
   for (const name of ['claude', 'codex', 'pi', 'opencode']) fs.writeFileSync(path.join(bin, name), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
   let answered = false;
   const result = await runInTerminal([], { TSX_TSCONFIG_PATH: path.join(checkout, 'tsconfig.json') }, (text, child) => {
@@ -305,4 +330,5 @@ it('a piped installer uses the real setup checklist and installs only the toggle
   for (const dir of ['.claude/skills/artifactbin', '.codex/skills/artifactbin']) expect(fs.existsSync(path.join(home, dir))).toBe(false);
   expect(JSON.parse(fs.readFileSync(path.join(home, '.artifactbin/settings.json'), 'utf8')).harnesses).toEqual(['pi', 'opencode']);
   expect(result.output).not.toContain('Restart ');
+  expect(fs.readFileSync(path.join(home, 'auth-calls'), 'utf8')).toBe('auth\n');
 });

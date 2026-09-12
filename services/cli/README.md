@@ -18,10 +18,12 @@ Use ↑/↓ to move, Space to toggle and Enter to install. Skills appear togethe
 summary, followed by any restart instructions. Run `afbin setup` again to change your selection;
 unchecking a previously installed skill leaves its files in place and opts out of future updates.
 For an unattended install, use `sh install.sh --yes`; without a terminal the defaults are accepted
-automatically. Setup is local and never signs you in. A server with a CLI built beside it
+automatically, with no sign-in or waiting for browser approval. The interactive installer runs
+`afbin auth` after successful skill setup; if sign-in is cancelled, run `afbin auth` later.
+`afbin setup` itself stays local. A server with a CLI built beside it
 (`npm run build:binary -w services/cli`) serves that build
-itself and its installer installs it, so a local `curl http://localhost:3030/chat/install.sh | sh` never
-leaves the machine. On a terminal the installer colours its output and shows a download progress bar;
+itself, so `curl http://localhost:3030/chat/install.sh | sh` downloads the binary from that server.
+On a terminal the installer colours its output and shows a download progress bar;
 `NO_COLOR` turns colour off and `FORCE_COLOR` turns it on elsewhere. Self-hosted servers serve the
 same script, pinned to the release they were built with;
 `/install.sh` is the separate self-hosted **server** installer.
@@ -31,9 +33,8 @@ executable, `~/.artifactbin`, cached downloads and the agent skills afbin manage
 project files such as `afbin.lock`. `--keep-state` keeps your sign-in and the download cache, `--dry-run`
 only lists, and `--dir` names a custom executable location.
 
-Setup opens browser authentication automatically and saves credentials privately in
-`~/.artifactbin/.env`. It offers a preselected checklist of detected Claude Code, Codex, pi and
-OpenCode skills; uncheck integrations you do not want. Choices are remembered. Standalone executables
+Authentication opens browser approval and saves credentials privately in `~/.artifactbin/.env`.
+Skill setup supports Claude Code, Codex, pi and OpenCode and remembers your choices. Standalone executables
 for macOS/Linux arm64/x64 and versioned local skill bundles are published in GitHub releases.
 
 ```sh
