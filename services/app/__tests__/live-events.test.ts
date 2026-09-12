@@ -10,6 +10,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
 import { storedMarkup } from '@/test/helpers/echo';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { readFrames } from '@/__tests__/sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
@@ -39,27 +40,6 @@ async function setup(): Promise<{ token: string; doc: Wire }> {
 }
 
 /** Read SSE `data:` frames until `count` arrive (or the wait budget runs out). */
-async function readFrames(body: ReadableStream<Uint8Array>, count: number, budgetMs = 3000): Promise<Record<string, unknown>[]> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const frames: Record<string, unknown>[] = [];
-  let buffer = '';
-  const deadline = Date.now() + budgetMs;
-  while (frames.length < count && Date.now() < deadline) {
-    const chunk = await Promise.race([
-      reader.read(),
-      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now())),
-    ]);
-    if (chunk.done || !chunk.value) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-    for (const line of buffer.split('\n\n')) {
-      if (line.startsWith('data: ')) frames.push(JSON.parse(line.slice(6)));
-    }
-    buffer = '';
-  }
-  void reader.cancel().catch(() => {});
-  return frames;
-}
 
 beforeEach(async () => {
   await resetLiveSubscriptions();

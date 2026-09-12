@@ -6,7 +6,7 @@
  * that collide the moment two worktrees run at once (research risk row 6, MEASURED). This module owns all of it:
  * ephemeral ports only, IPv4 loopback, honest teardown.
  */
-import { createServer, type RequestListener } from 'node:http';
+import http, { createServer, type RequestListener } from 'node:http';
 
 export interface RunningServer {
   /** `http://127.0.0.1:<port>` — never `localhost` (IPv6 resolution surprises). */
@@ -53,4 +53,46 @@ export async function withHttpServer(handler: RequestListener): Promise<RunningS
       return closing;
     },
   };
+}
+
+/**
+ * What actually came down the socket — status, headers, raw bytes, and the length the server
+ * PROMISED in `content-length`.
+ *
+ * Two server tests hand-rolled this (`raw()` in content-length.test.ts, `fetchRaw()` in
+ * pdf-range.test.ts) and cross-referenced each other in their headers while drifting apart: one
+ * could not send a header or choose a method, the other did not surface the promised length. It is
+ * one reader now, because `fetch` is exactly the wrong tool here — it normalizes away the thing
+ * under test.
+ */
+export interface RawResponse {
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  /** The bytes as written, never decoded or re-encoded. */
+  body: Buffer;
+  /** `content-length` as a number, or null when the server sent none. */
+  promised: number | null;
+}
+
+export function readRawResponse(
+  port: number,
+  path: string,
+  options: { headers?: Record<string, string>; method?: string } = {},
+): Promise<RawResponse> {
+  return new Promise((resolve, reject) => {
+    http.request({ host: '127.0.0.1', port, path, headers: options.headers ?? {}, method: options.method ?? 'GET' }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => {
+        const length = response.headers['content-length'];
+        resolve({
+          status: response.statusCode ?? 0,
+          headers: response.headers,
+          body: Buffer.concat(chunks),
+          promised: length === undefined ? null : Number(length),
+        });
+      });
+      response.on('error', reject);
+    }).on('error', reject).end();
+  });
 }

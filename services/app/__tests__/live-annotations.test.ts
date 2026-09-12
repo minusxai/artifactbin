@@ -18,43 +18,13 @@ import { STORY_ANNOTATIONS_EVENT } from '@/lib/story-runtime/contract';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { sseStream } from '@/__tests__/sse';
 
 useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
-interface SseEvent { event: string; data: Record<string, unknown> }
 /** One persistent reader over the stream; `next(count)` may be called repeatedly. */
-function sseReader(body: ReadableStream<Uint8Array>) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const next = async (count: number, budgetMs = 3000): Promise<SseEvent[]> => {
-    const out: SseEvent[] = [];
-    const deadline = Date.now() + budgetMs;
-    while (out.length < count && Date.now() < deadline) {
-      const chunk = await Promise.race([
-        reader.read(),
-        new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now())),
-      ]);
-      if (chunk.done || !chunk.value) break;
-      buffer += decoder.decode(chunk.value, { stream: true });
-      const blocks = buffer.split('\n\n');
-      buffer = blocks.pop() ?? '';
-      for (const block of blocks) {
-        let event = 'message';
-        let data = '';
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event: ')) event = line.slice(7);
-          else if (line.startsWith('data: ')) data += line.slice(6);
-        }
-        if (data) out.push({ event, data: JSON.parse(data) });
-      }
-    }
-    return out;
-  };
-  return { next, close: () => void reader.cancel().catch(() => {}) };
-}
 
 async function setup() {
   const t = await mintToken('agent');
@@ -82,7 +52,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
 
     const res = await eventsRoute(request(`/a/${doc.id}/events`, { cookie: cookie }), params({ id: doc.id }));
     expect(res.status).toBe(200);
-    const reader = sseReader(res.body!);
+    const reader = sseStream(res.body!);
 
     // Frame 1 is the version ping (the stream is self-syncing); an annotations
     // PING follows. The list itself is fetched — the stream carries nothing a
@@ -108,7 +78,7 @@ describe('GET /a/<id>/events — the annotations frame', () => {
     const { doc, cookie } = await setup();
     const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
     expect(res.status).toBe(200);
-    const reader = sseReader(res.body!);
+    const reader = sseStream(res.body!);
 
     await annotate(doc.id, cookie, doc.edit_id);
     // Give any (wrong) frame a moment to arrive; only the document frame may exist.

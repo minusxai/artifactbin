@@ -13,7 +13,6 @@
  *    adapter, is likewise invisible to a test that calls GET() and reads the
  *    Response it was handed.
  */
-import http from 'node:http';
 import { getRequestListener } from '@hono/node-server';
 import { describe, expect, it } from 'vitest';
 import { samplePdf, samplePdfDataUrl } from '../../../../scripts/lib/sample-pdf.mjs';
@@ -21,21 +20,13 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/tokens';
 import { createAppServer } from '../app';
 import { request, useAppHarness } from '@/__tests__/harness';
-import { withHttpServer } from '@/__tests__/net';
+import { readRawResponse, withHttpServer } from '@/__tests__/net';
 
 useAppHarness();
 
-interface Wire { status: number; headers: http.IncomingHttpHeaders; body: Buffer }
-
-const fetchRaw = (port: number, path: string, headers: Record<string, string> = {}, method = 'GET'): Promise<Wire> =>
-  new Promise((resolve, reject) => {
-    http.request({ host: '127.0.0.1', port, path, headers, method }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body: Buffer.concat(chunks) }));
-      res.on('error', reject);
-    }).on('error', reject).end();
-  });
+/** The shared raw reader; `fetchRaw` is this file's name for it. */
+const fetchRaw = (port: number, path: string, headers: Record<string, string> = {}, method = 'GET') =>
+  readRawResponse(port, path, { headers, method });
 
 describe('a PDF as the socket actually writes it', () => {
   it('streams the whole file, and one range of it, with the lengths it promised', async () => {

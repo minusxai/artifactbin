@@ -27,6 +27,7 @@ import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { readFrames } from '@/__tests__/sse';
 
 useAppHarness();
 
@@ -64,25 +65,6 @@ const create = async (token: string, body: Record<string, unknown>) => {
   return res.json() as Promise<{ id: string; edit_id: string }>;
 };
 
-async function readFrames(body: ReadableStream<Uint8Array>, count: number, budgetMs = 2500) {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const frames: Record<string, unknown>[] = [];
-  let buffer = '';
-  const deadline = Date.now() + budgetMs;
-  while (frames.length < count && Date.now() < deadline) {
-    const chunk = await Promise.race([
-      reader.read(),
-      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), Math.max(1, deadline - Date.now()))),
-    ]);
-    if (chunk.done || !chunk.value) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-    for (const line of buffer.split('\n\n')) if (line.startsWith('data: ')) frames.push(JSON.parse(line.slice(6)));
-    buffer = '';
-  }
-  void reader.cancel().catch(() => {});
-  return frames;
-}
 
 beforeEach(async () => {
   await resetLiveSubscriptions();

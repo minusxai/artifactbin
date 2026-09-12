@@ -17,7 +17,6 @@
  * writer, not in the handler — a route tested by calling its exported function
  * cannot see it.
  */
-import http from 'node:http';
 import { getRequestListener } from '@hono/node-server';
 import { describe, expect, it } from 'vitest';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
@@ -26,27 +25,17 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { mintToken } from '@/lib/tokens';
 import { createAppServer } from '../app';
 import { useAppHarness } from '@/__tests__/harness';
-import { withHttpServer } from '@/__tests__/net';
+import { readRawResponse, withHttpServer } from '@/__tests__/net';
 
 useAppHarness();
 
 const BASE = 'http://localhost:3000';
 
-/** What actually came down the socket, with the length the server promised. */
-function raw(port: number, path: string): Promise<{ promised: number | null; bytes: number; body: string }> {
-  return new Promise((resolve, reject) => {
-    http.get({ host: '127.0.0.1', port, path }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (c: Buffer) => chunks.push(c));
-      res.on('end', () => {
-        const body = Buffer.concat(chunks);
-        const cl = res.headers['content-length'];
-        resolve({ promised: cl === undefined ? null : Number(cl), bytes: body.byteLength, body: body.toString('utf8') });
-      });
-      res.on('error', reject);
-    }).on('error', reject);
-  });
-}
+/** The shared raw reader, in the shape this file's assertions read. */
+const raw = async (port: number, path: string) => {
+  const { promised, body } = await readRawResponse(port, path);
+  return { promised, bytes: body.byteLength, body: body.toString('utf8') };
+};
 
 describe('what the server promises is what it sends', () => {
   it('answers two DIFFERENT documents with two different content-lengths', async () => {
