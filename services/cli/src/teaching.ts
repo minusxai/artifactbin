@@ -5,8 +5,18 @@ import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/a
 import {commands,commandHelp,CliError} from './commands';
 import {manPage} from './man';
 import {atomicWrite,isMissing} from './files';
+import {teachingFilesFor,withTeachingOrigin} from './teaching-origin';
+import {DEFAULT_SERVER} from './config';
 export {manPage} from './man';
+/**
+ * The bundle as COMPILED: every server address is still the placeholder
+ * (src/teaching-origin), because which server this copy of afbin talks to is
+ * not known until it is asked. Install and help go through `skillFilesFor` /
+ * `helpDocument`, which address it; read this one only to inspect the bundle.
+ */
 export const localSkillFiles:Readonly<Record<string,string>>=teaching.files;
+/** The bundle addressed to one server — what `afbin setup`/`update` write into a harness' skills folder. */
+export function skillFilesFor(origin:string=DEFAULT_SERVER):Record<string,string>{return teachingFilesFor(localSkillFiles,origin);}
 export const examples:Record<string,string>={
  editorial:'<article className="mx-auto max-w-3xl p-8"><h1>Report</h1><p>Explain the finding.</p></article>',
  dashboard:'<Helmet><Query name="sales" source="./sales.csv">{`select * from public.rows`}</Query></Helmet>\n<main className="p-8"><h1>Sales</h1><Table data="$sales" /></main>',
@@ -38,11 +48,14 @@ function closestTopics(topic:string):string[]{
  return [...new Set(near)].sort((a,b)=>a.startsWith(wanted)===b.startsWith(wanted)?a.localeCompare(b):a.startsWith(wanted)?-1:1).slice(0,6);
 }
 /** The top-level skill doc, without its YAML frontmatter: the brief printed by bare `afbin help`. */
-export function briefDocument():string{return localSkillFiles['SKILL.md'].replace(/^---\n[\s\S]*?\n---\n/,'');}
+export function briefDocument(origin:string=DEFAULT_SERVER):string{return withTeachingOrigin(localSkillFiles['SKILL.md'],origin).replace(/^---\n[\s\S]*?\n---\n/,'');}
 const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Every command is offline unless it names a remote resource.\n\n`
  +commands.map(command=>`## ${command.name}\n\n\`\`\`text\n${commandHelp(command.name)}\`\`\`\n`).join('\n');
 /** One bundled documentation set: help, the manual and the installed skills render the same registry. */
-export function helpDocument(topic?:string,format='text'):string{
+export function helpDocument(topic?:string,format='text',origin:string=DEFAULT_SERVER):string{
+ return withTeachingOrigin(helpBody(topic,format,origin),origin);
+}
+function helpBody(topic:string|undefined,format:string,origin:string):string{
  // The command list has its own topic name. It shadows the bundled references/commands.md doc,
  // so `afbin help commands` prints the live registry rather than the prose reference.
  if(topic==='commands'){
@@ -52,7 +65,7 @@ export function helpDocument(topic?:string,format='text'):string{
  // The agent brief by name, for a terminal whose bare `afbin help` shows the human overview instead.
  if(topic==='brief'){
   if(format==='man')throw new CliError('unsupported_format','The manual documents commands, not the brief.','Read it with --format text or markdown.');
-  return briefDocument();
+  return briefDocument(origin);
  }
  if(format==='man'){
   if(!isCommand(topic))throw new CliError('unsupported_format',`The manual documents commands, not the ${topic} topic.`,'Read topic guidance with --format text or markdown.');
@@ -67,7 +80,7 @@ export function helpDocument(topic?:string,format='text'):string{
   return text;
  }
  // Bare `afbin help` reads the brief; a named command prints its own help. Markdown/man keep the registry.
- if(!topic&&format!=='markdown')return briefDocument();
+ if(!topic&&format!=='markdown')return briefDocument(origin);
  if(format!=='markdown')return commandHelp(topic);
  const section=(name:string,heading:string)=>`${heading}\n\n\`\`\`text\n${commandHelp(name)}\`\`\`\n`;
  if(topic)return section(topic,`# afbin ${topic}`);

@@ -4,7 +4,10 @@ import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
-import {localSkillFiles,manPage} from '../src/teaching';
+import {localSkillFiles,manPage,skillFilesFor} from '../src/teaching';
+import {TEACHING_BASE,withTeachingOrigin} from '../src/teaching-origin';
+import {DEFAULT_SERVER} from '../src/config';
+import {installSkills,skillTargets} from '../src/skill-install';
 import {commandHelp} from '../src/commands';
 import {roffLiteral} from '../src/man';
 test('bundled skill links resolve locally and every template example, including the brief\'s, validates offline',async()=>{
@@ -54,8 +57,9 @@ test('help formats, destinations and the manual come from one command registry',
   assert.match(out.join(''),/"invalid_output"/);out.length=0;
   assert.equal(await runCli(['help','--format','man','--output','afbin.1','--json'],context),0);
   const written=JSON.parse(out.join(''));out.length=0;
-  assert.equal(written.format,'man');assert.equal(written.bytes,Buffer.byteLength(manPage()));
-  assert.equal(await readFile(join(root,'afbin.1'),'utf8'),manPage());
+  const manual=withTeachingOrigin(manPage(),DEFAULT_SERVER);
+  assert.equal(written.format,'man');assert.equal(written.bytes,Buffer.byteLength(manual));
+  assert.equal(await readFile(join(root,'afbin.1'),'utf8'),manual);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
@@ -79,4 +83,28 @@ test('bare help prints the brief; help commands prints the command registry; bot
 test('man literals preserve text without allowing roff requests or escapes',()=>{
  assert.equal(roffLiteral(".request\n'control\ntext \\escape - flag\nmid.line isn't a request"),
   "\\&.request\n\\&'control\ntext \\eescape \\- flag\nmid.line isn't a request");
+});
+
+test('the compiled bundle names no server, and every copy is addressed to the one afbin was pointed at',async()=>{
+ // A bundle that named one deployment would teach a self-hoster's agent to publish somewhere else.
+ const corpus=Object.values(localSkillFiles).join('\n');
+ for(const line of corpus.split('\n'))assert.doesNotMatch(line,/https?:\/\/[^\s`)'"]*artifactbin\.dev/,`the bundle addresses a deployment: ${line.trim().slice(0,120)}`);
+ assert.ok(corpus.includes(`${TEACHING_BASE}/chat/install.sh`),'the installer address must survive compilation as the placeholder');
+
+ const self='https://docs.self-hosted.example';
+ const addressed=skillFilesFor(self);
+ assert.ok(addressed['SKILL.md'].includes(`${self}/chat/install.sh`));
+ assert.ok(!Object.values(addressed).join('\n').includes(TEACHING_BASE),'no placeholder may survive into an installed skill');
+ assert.ok(addressed['references/errors.md'].includes(`${self}/chat/install.sh`),'the recovery catalogue is addressed too');
+
+ const home=await mkdtemp(join(tmpdir(),'afbin-skill-origin-'));
+ try{
+  await installSkills(['pi'],{home,env:{},origin:self});
+  const installed=await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8');
+  assert.ok(installed.includes(`${self}/chat/install.sh`));
+  assert.doesNotMatch(installed,/__AFBIN_SERVER__|artifactbin\.dev\/chat/);
+  // Re-pointing the CLI at another server rewrites the installed skill rather than calling it current.
+  await installSkills(['pi'],{home,env:{},origin:'https://other.example'});
+  assert.ok((await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8')).includes('https://other.example/chat/install.sh'));
+ }finally{await rm(home,{recursive:true,force:true});}
 });

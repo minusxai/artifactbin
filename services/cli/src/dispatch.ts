@@ -28,7 +28,7 @@ import {localStatus} from './local';
 import {helpDocument,writeHelp} from './teaching';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {loadConnection} from './config';
+import {DEFAULT_SERVER,loadConnection} from './config';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
@@ -51,21 +51,25 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':highlightJson(JSON.stringify(value,null,2),style)+'\n');};
   if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`${style.wordmark('afbin')} ${style.bold(CLI_VERSION)} ${style.dim(`(protocol ${CLI_PROTOCOL_VERSION})`)}`);return 0;}
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
+  // The skill and the help text must name the server THIS afbin talks to. Eager
+  // init and help both run before the workspace is read, so they use what is
+  // knowable that early: an explicit --server, else the exported origin.
+  const declaredServer=(typeof flags.server==='string'?flags.server:(context.env??process.env).ARTIFACTBIN_URL)??DEFAULT_SERVER;
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
-   const result=await setupSkills({home,env:context.env,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
+   const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    if(json)emit(result);else stdout(setupSummary(result.installations,await realpath(home),style));
    return 0;
   }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
   // harnesses. It never authenticates or touches the network, and is a no-op once the skill is current.
-  if(command!=='setup')await ensureInit({home,env:context.env,stderr,style});
+  if(command!=='setup')await ensureInit({home,env:context.env,origin:declaredServer,stderr,style});
   if(flags.help||command==='help'){
    const bundled=command==='help'?flags:{};
    const format=typeof bundled.format==='string'?bundled.format:'text';const topic=command==='help'?positionals[0]:command;
    // A person at a terminal gets the screens; automation, --json and --output keep the brief and plain text.
    const screen=!json&&format==='text'&&bundled.output===undefined&&interactive?helpScreen(topic,{...styleOptions,columns}):undefined;
-   const text=screen??helpDocument(topic,format);
+   const text=screen??helpDocument(topic,format,declaredServer);
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    emit(json?{help:text}:text);return 0;
   }
@@ -186,12 +190,12 @@ async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(co
  * never prompts (selection is non-interactive here) and never authenticates. Idempotent: it installs
  * only when the managed skill manifest is missing or stale, and stays silent otherwise.
  */
-async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;stderr:(value:string)=>void;style:Style}):Promise<void>{
+async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;origin?:string;stderr:(value:string)=>void;style:Style}):Promise<void>{
  const selected=await selectSkills({home:options.home,env:options.env,interactive:false});
  if(!selected.length)return;
- const plans=await planSkills(selected,{home:options.home,env:options.env});
+ const plans=await planSkills(selected,{home:options.home,env:options.env,origin:options.origin});
  if(plans.every(plan=>plan.status==='unchanged'))return;
- const installed=await installSkills(selected,{home:options.home,env:options.env});
+ const installed=await installSkills(selected,{home:options.home,env:options.env,origin:options.origin});
  for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${options.style.green(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
  for(const hint of restartHints(installed.installations))options.stderr(options.style.yellow(hint)+'\n');
 }

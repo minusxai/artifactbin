@@ -8,6 +8,8 @@ import {atomicWrite,digest,isMissing,privateDirectory,readOptional} from './file
 import {HOME_SCOPE,withLock} from './state';
 import {installedHarnesses} from './launcher';
 import {localSkillFiles} from './teaching';
+import {teachingFilesFor} from './teaching-origin';
+import {DEFAULT_SERVER} from './config';
 import {CLI_VERSION} from './version';
 import {CliError} from './commands';
 import {homedir} from 'node:os';
@@ -70,7 +72,7 @@ async function physicalPath(path:string):Promise<string>{
  try{return await realpath(path);}catch(error){if(!isMissing(error))throw error;const parent=dirname(path);if(parent===path)throw error;return join(await physicalPath(parent),relative(parent,path));}
 }
 export function safeSkillPath(path:string):boolean{return !!path&&!isAbsolute(path)&&!path.includes('\\')&&path.split('/').every(x=>!!x&&x!=='.'&&x!=='..')&&path!=='.afbin-skill.json';}
-interface Manifest {version:string;source?:string;files:Record<string,string>}
+interface Manifest {version:string;source?:string;server?:string;files:Record<string,string>}
 /** Managed copies record their provenance so status, update and the harness agree on who owns them. */
 const SKILL_SOURCE='afbin-cli';
 export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged';source:string;version:string;backup?:string;restart_required?:true}
@@ -100,20 +102,25 @@ export async function skillStatus(home:string,env?:NodeJS.ProcessEnv):Promise<Sk
  return result;
 }
 /** Read-only projection of installSkills: what each selected destination would become. */
-export async function planSkills(selected:readonly SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;version?:string}):Promise<SkillPlan[]>{
- const targets=skillTargets(options.home,options.env);const version=options.version??CLI_VERSION;const plans:SkillPlan[]=[];
+export async function planSkills(selected:readonly SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;version?:string;origin?:string}):Promise<SkillPlan[]>{
+ const targets=skillTargets(options.home,options.env);const version=options.version??CLI_VERSION;const origin=options.origin??DEFAULT_SERVER;const plans:SkillPlan[]=[];
  for(const harness of [...new Set(selected)]){
   const path=targets[harness];const manifest=await readManifest(path);
   const exists=manifest!==undefined||await readOptional(join(path,'SKILL.md'))!==null;
   plans.push({harness,path,version,
-   status:!exists?'install':manifest?.version===version?'unchanged':'update',
+   // A skill addressed to another server teaches the agent to publish there.
+   status:!exists?'install':manifest?.version===version&&manifest?.server===origin?'unchanged':'update',
    source:manifest?.source??(exists?'unmanaged':SKILL_SOURCE),
    ...(manifest?.version?{installed:manifest.version}:{})});
  }
  return plans;
 }
-export async function installSkills(selected:SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;files?:Readonly<Record<string,string>>;version?:string;alreadyLocked?:boolean}):Promise<{installations:SkillInstallation[];harnesses:SkillHarness[]}>{
- const files=options.files??localSkillFiles,version=options.version??CLI_VERSION;
+export async function installSkills(selected:SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;files?:Readonly<Record<string,string>>;origin?:string;version?:string;alreadyLocked?:boolean}):Promise<{installations:SkillInstallation[];harnesses:SkillHarness[]}>{
+ // Whichever bundle this is — the compiled one or a downloaded release — it
+ // ships addressed to nobody; the skill an agent reads must name the server
+ // THIS afbin uses, or the agent is taught to publish somewhere else.
+ const origin=options.origin??DEFAULT_SERVER;
+ const files=teachingFilesFor(options.files??localSkillFiles,origin),version=options.version??CLI_VERSION;
  if(!files['SKILL.md']||Object.keys(files).some(path=>!safeSkillPath(path)))throw new CliError('invalid_skill_bundle','Invalid skill bundle path or missing SKILL.md.');
  if(selected.some(x=>!skillHarnesses.includes(x)))throw new CliError('invalid_harness','Unknown harness selection.');
  const targets=skillTargets(options.home,options.env);const groups=new Map<string,SkillHarness[]>();
@@ -134,6 +141,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
     if(current&&digest(current)!==previous?.files[file])modified=true;
     if(file in files?current?.toString()!==files[file]:current!==null)changed=true;
    }
+   if(previous&&previous.server!==origin)changed=true;
    if(!changed){installations.push({path,harnesses,status:'unchanged',source:previous?.source??SKILL_SOURCE,version:previous?.version??version});continue;}
    let backup:string|undefined;
    if(existed&&(!previous||modified)){
@@ -143,7 +151,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
    await mkdir(path,{recursive:true});
    for(const [file,content] of Object.entries(files)){await mkdir(dirname(join(path,file)),{recursive:true});await atomicWrite(join(path,file),content);}
    for(const file of Object.keys(previous?.files??{}))if(!(file in files))await rm(join(path,file),{force:true});
-   await atomicWrite(join(path,'.afbin-skill.json'),JSON.stringify({version,source:SKILL_SOURCE,files:Object.fromEntries(Object.entries(files).map(([file,content])=>[file,digest(content)]))}));
+   await atomicWrite(join(path,'.afbin-skill.json'),JSON.stringify({version,source:SKILL_SOURCE,server:origin,files:Object.fromEntries(Object.entries(files).map(([file,content])=>[file,digest(content)]))}));
    installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{}),...(harnesses.some(name=>name in restartHarnesses)?{restart_required:true as const}:{})});
   }
   // Preserve other settings when adding the selected integrations.
