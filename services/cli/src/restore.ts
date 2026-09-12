@@ -1,10 +1,9 @@
-import {join} from 'node:path';
 import {CliError} from './errors';
-import {readOptional} from './files';
 import {artifactReference} from './read-commands';
-import {recoverableOperation} from './recoverable-operation';
+import {pendingOperation,recoverableOperation} from './recoverable-operation';
 import type {Workspace} from './workspace';
 import type {HttpClient} from './http';
+export {pendingOperation} from './recoverable-operation';
 
 /**
  * `push --restore` and `push --refresh`: the two remote-only pushes. Both
@@ -27,15 +26,6 @@ async function eachTarget(refs:string[],run:(ref:string)=>Promise<Record<string,
  return {operations};
 }
 
-/**
- * Is a durable operation already journalled here? Every pre-read in this
- * workstream is skipped while one is, because the state a pre-read inspects is
- * exactly the state the pending operation has already changed: after a delete
- * the row is invisible to the live read gate, and after a terminate the session
- * is a tombstone. Re-reading on the resume path would refuse the retry the
- * journal exists to complete, and strand it forever.
- */
-export const pendingOperation=(workspace:Workspace)=>readOptional(join(workspace.root,'.artifactbin','pending-operation.json'));
 const missing=(error:unknown)=>error instanceof CliError&&(error.details as {http_status?:number}|undefined)?.http_status===404;
 
 /**

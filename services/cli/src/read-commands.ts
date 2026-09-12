@@ -13,10 +13,10 @@ import type {HttpClient} from './http';
 export async function artifactReference(workspace:Workspace,input:string,server:string,writable=false){
  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server,writable});
  if(ref.kind==='id')return{id:ref.id,version:ref.version,notices:ref.notices};
- const tracked=workspace.lock?.files[ref.path];
+ const tracked=workspace.tracking?.files[ref.path];
  const id=ref.path.toLowerCase().endsWith('.jsx')?parseDocument(await readFile(join(workspace.root,ref.path),'utf8')).metadata.id:/\.ya?ml$/i.test(ref.path)?parseResourceFile(await readFile(join(workspace.root,ref.path),'utf8')).id:tracked?.id;
  if(!id)throw new CliError('unpublished_file',`${ref.path} has no published identity.`,'Publish it with afbin push first.');
- if(tracked&&tracked.id!==id)throw new CliError('identity_mismatch',`The fence identity for ${ref.path} differs from afbin.lock.`,'Resolve the identity before operating on the remote artifact.');
+ if(tracked&&tracked.id!==id)throw new CliError('identity_mismatch',`The fence identity for ${ref.path} differs from the tracked identity.`,'Resolve the identity before operating on the remote artifact.');
  return{id,version:ref.version,path:ref.path,notices:ref.notices};
 }
 export function pageQuery(flags:ParsedCommand['flags']):string{
@@ -46,7 +46,7 @@ export async function readCommand(workspace:Workspace,parsed:ParsedCommand,clien
 const RESOURCE_KINDS:Record<string,string>={markup:'artifact',folder:'folder',dataset:'dataset',image:'file',pdf:'file',file:'file'};
 /** A typed target is checked against what tracking already knows; nothing is fetched to decide it. */
 export function checkTrackedType(workspace:Workspace,path:string|undefined,requested:string):void{
- const tracked=path?workspace.lock?.files[path]:undefined;
+ const tracked=path?workspace.tracking?.files[path]:undefined;
  const kind=tracked?RESOURCE_KINDS[String(tracked.snapshot.format)]??'artifact':undefined;
  if(kind&&kind!==requested)throw new CliError('type_mismatch',`${path} tracks a ${kind}, not a ${requested}.`,'Omit --type, or select the kind this reference addresses.');
 }

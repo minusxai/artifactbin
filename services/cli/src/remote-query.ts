@@ -71,7 +71,7 @@ async function remoteQueryTarget(workspace:Workspace,parsed:ParsedCommand,sql:st
  }
 }
 async function draftFreshness(workspace:Workspace,path:string){
- const tracked=workspace.lock?.files[path];if(!tracked)return{path,draft:'untracked'};
+ const tracked=workspace.tracking?.files[path];if(!tracked)return{path,draft:'untracked'};
  const [file]=await inspectWorkspace(workspace,[resolve(workspace.root,path)]);
  return{path,draft:file?.status==='unchanged'?'published':file?.status??'missing',base_version:tracked.snapshot.version};
 }
