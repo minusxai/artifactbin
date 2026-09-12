@@ -1,5 +1,5 @@
 import {afterEach,expect,it} from 'vitest';
-import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {useAppHarness,request} from './harness';
@@ -9,7 +9,9 @@ import {remoteSessions} from '@/lib/remote/registry';
 import {GET as listRoute} from '@/app/api/sessions/route';
 import {GET as readRoute,DELETE as terminateRoute} from '@/app/api/sessions/[id]/route';
 import {runCli} from '../../cli/src/dispatch';
+import {readRecord} from '../../cli/test/tracking';
 import {saveConnection} from '../../cli/src/config';
+import {State} from '../../cli/src/state';
 
 useAppHarness();
 afterEach(()=>remoteSessions.clear());
@@ -50,8 +52,13 @@ it('the real CLI lists sessions, pulls one as read-only YAML, refuses to push it
   expect(pulled.result.operations).toEqual([{path:'session.yaml',id:session.id,type:'session',status:'pulled'}]);
   const yaml=await readFile(join(root,'session.yaml'),'utf8');
   expect(yaml).toMatch(/type: session/);expect(yaml).toContain(`id: ${session.id}`);
-  // Tracked like every other account resource, so status and diff can report it.
-  expect(Object.keys(JSON.parse(await readFile(join(root,'.artifactbin','accounts.json'),'utf8')).files)).toEqual(['session.yaml']);
+  // Tracked like every other account resource, so status and diff can report it: an `account`
+  // record in the state store under the `workspace` record that binds this root to one server.
+  const scope=await realpath(root);const state=await State.open(root);
+  try{
+   expect(state.list(scope,'account').map(record=>record.key)).toEqual(['session.yaml']);
+   expect((state.get(scope,'workspace',scope)?.value as {server:string}|undefined)?.server).toBe('http://localhost:3000');
+  }finally{state.close();}
 
   const status=await invoke(['status','--type','session']);
   expect(status.code,JSON.stringify(status.result)).toBe(0);
@@ -137,7 +144,7 @@ it('a terminate whose reply is lost completes on the repeated command instead of
   const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,fetch:lossy,stdout:s=>output.push(s),stderr:()=>{}});
   return {code,result:JSON.parse(output.join(''))};
  };
- const journal=join(root,'.artifactbin','pending-operation.json');
+ const journal=()=>readRecord<{path:string;body:unknown}>(root,root,'pending-operation','current');
  try{
   const user=await createUser({email:'mxmx_test_terminate_recovery@example.com'});
   const token=await mintToken('mxmx_test_terminate_recovery');await claimToken(user.id,token.token);
@@ -147,14 +154,14 @@ it('a terminate whose reply is lost completes on the repeated command instead of
   const interrupted=await invoke(['delete','--type','session',session.id]);
   expect(interrupted.code).not.toBe(0);
   expect(remoteSessions.list(user.id)).toEqual([]);
-  expect(await readFile(journal,'utf8')).toContain(session.id);
+  expect(JSON.stringify(await journal())).toContain(session.id);
 
   // The session is a tombstone now, so the terminate's own pre-read would answer
   // 410. Repeating the command has to finish the journalled operation instead.
   const recovered=await invoke(['delete','--type','session',session.id]);
   expect(recovered.code,JSON.stringify(recovered.result)).toBe(0);
   expect(recovered.result.operations).toEqual([{id:session.id,status:'terminated',operation:expect.any(String)}]);
-  await expect(readFile(journal,'utf8')).rejects.toThrow();
+  expect(await journal()).toBeNull();
   expect(calls.filter(call=>call.startsWith('DELETE'))).toHaveLength(2);
  }finally{await rm(root,{recursive:true,force:true});}
 });

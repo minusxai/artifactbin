@@ -1,21 +1,21 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 test('local commands and malformed invocations never load credentials, call the server or create state',async()=>{
- const root=await mkdtemp(join(tmpdir(),'afbin-dispatch-'));
+ const base=await mkdtemp(join(tmpdir(),'afbin-dispatch-'));const home=join(base,'home'),root=join(base,'work');await mkdir(home);await mkdir(root);
  try{
   await writeFile(join(root,'doc.jsx'),'<p>hello</p>');
   for(const args of [['-h'],['--version'],['push','-h'],['validate','doc.jsx'],['status'],['diff'],['status','--force']]){
    const output:string[]=[];const diagnostics:string[]=[];
-   const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:x=>output.push(x),stderr:x=>diagnostics.push(x),fetch:async()=>assert.fail('network during local dispatch')});
+   const code=await runCli([...args,'--json'],{cwd:root,home,env:{},interactive:false,stdout:x=>output.push(x),stderr:x=>diagnostics.push(x),fetch:async()=>assert.fail('network during local dispatch')});
    assert.equal(code,args.includes('--force')?2:0);
    assert.equal(output.length,1);assert.doesNotThrow(()=>JSON.parse(output[0]));
   }
-  await assert.rejects(stat(join(root,'.artifactbin')),{code:'ENOENT'});
- }finally{await rm(root,{recursive:true,force:true});}
+  assert.deepEqual(await readdir(root),['doc.jsx'],'local dispatch writes nothing into the workspace');
+ }finally{await rm(base,{recursive:true,force:true});}
 });
 test('malformed remote references fail before authentication',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-invalid-remote-'));
@@ -35,13 +35,13 @@ test('malformed remote references fail before authentication',async()=>{
 });
 
 test('an empty dry-run push needs no credentials, network or local state',async()=>{
- const root=await mkdtemp(join(tmpdir(),'afbin-empty-preflight-'));
+ const base=await mkdtemp(join(tmpdir(),'afbin-empty-preflight-'));const home=join(base,'home'),root=join(base,'work');await mkdir(home);await mkdir(root);
  try{
   const output:string[]=[];
-  const code=await runCli(['push','--dry-run','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('empty dry-run made HTTP')});
+  const code=await runCli(['push','--dry-run','--json'],{cwd:root,home,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('empty dry-run made HTTP')});
   assert.equal(code,0);assert.deepEqual(JSON.parse(output.join('')),{dry_run:true,operations:[]});
-  await assert.rejects(stat(join(root,'.artifactbin')),{code:'ENOENT'});
- }finally{await rm(root,{recursive:true,force:true});}
+  assert.deepEqual(await readdir(root),[],'an empty dry-run leaves the workspace untouched');
+ }finally{await rm(base,{recursive:true,force:true});}
 });
 test('recognized file extensions ignore case without renaming the user file',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-extension-'));

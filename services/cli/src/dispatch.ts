@@ -13,10 +13,10 @@ import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
 import {readFile} from 'node:fs/promises';
-import {resolve,join} from 'node:path';
-import {readOptional} from './files';
-import {recoverFiles} from './journal';
-import {withProcessLock} from './process-lock';
+import {resolve} from 'node:path';
+import {recoverFiles,stagedFiles} from './journal';
+import {withLock} from './state';
+import {pendingOperation} from './recoverable-operation';
 import {homedir} from 'node:os';
 import {parseCommand,CliError,type ParsedCommand} from './commands';
 import {loadWorkspace} from './workspace';
@@ -54,14 +54,14 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    emit(json?{help:text}:text);return 0;
   }
-  let workspace=await loadWorkspace(context.cwd);
+  let workspace=await loadWorkspace(context.cwd,home);
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
-  const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.lock?.server??account?.manifest?.server??(context.env??process.env).ARTIFACTBIN_URL;
-  if(['push','pull','delete'].includes(command)&&(!account||command==='pull')&&!flags['dry-run']&&await readOptional(join(workspace.root,'.artifactbin','pending-operation.json')))throw new CliError('pending_recovery','Recover the pending operation before changing this workspace.','Repeat the original command and inputs.');
-  const pendingFiles=await readOptional(join(workspace.root,'.artifactbin','pending-files.json'));
+  const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??(context.env??process.env).ARTIFACTBIN_URL;
+  if(['push','pull','delete'].includes(command)&&(!account||command==='pull')&&!flags['dry-run']&&await pendingOperation(workspace))throw new CliError('pending_recovery','Recover the pending operation before changing this workspace.','Repeat the original command and inputs.');
+  const pendingFiles=await stagedFiles(workspace.home,workspace.root);
   if(pendingFiles&&['push','pull','delete'].includes(command)&&!flags['dry-run']){
-   await withProcessLock(workspace.root,()=>recoverFiles(workspace.root));workspace=await loadWorkspace(context.cwd);
+   await withLock(workspace.home,workspace.root,()=>recoverFiles(workspace.home,workspace.root));workspace=await loadWorkspace(context.cwd,home);
   }
   if(pendingFiles&&command==='validate'&&flags.fix)throw new CliError('pending_recovery','Finish the interrupted file commit before applying fixes.','Run afbin push or afbin pull to recover it.');
   if(!account&&(command==='push'||command==='validate')){
@@ -92,8 +92,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
   if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
-  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd);}
-  if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.root)){
+  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
+  if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
    const result=await finishLocalPush(workspace,positionals,!!flags.force);if(result){emit(result);return 0;}
   }
   if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined);if(!targets.length){emit({operations:[]});return 0;}}
@@ -125,7 +125,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
    connection=await authenticate();
   }
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
   if(command==='export'){await exportResources(workspace,positionals,{...exportOptions(),client});return 0;}
@@ -145,7 +145,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='pull'&&flags.output==='-'){const result=await pullToStdout(workspace,positionals,client,parsed,stdout);if(result)emit(result);return 0;}
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run'],type:flags.type as string|undefined}));return 0;}
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
-  if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd);}
+  if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account){emit({...await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;}
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');

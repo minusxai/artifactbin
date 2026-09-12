@@ -20,6 +20,30 @@ export interface ImageLocation {
 }
 
 /**
+ * What a stored image row keeps in `meta` — the shape lib/story/data-tiers
+ * writes and every reader of one relies on.
+ *
+ * `sha256` is the hash of the bytes THE CLIENT SENT, taken before the door
+ * re-encoded them. Publication preflight matches a local file against it, and
+ * it is deliberately NOT `objectKey`'s digest: the stored object is webp and
+ * the upload usually is not, so those are hashes of two different byte strings
+ * and only one of them is a fact about the file on someone's disk. Optional on
+ * the type because rows written before the field existed do not carry it; every
+ * row written from here on does.
+ */
+export interface ImageMeta {
+  objectKey: string;
+  bytes: number;
+  contentType: string;
+  sha256?: string;
+  smallObjectKey?: string;
+  smallWidth?: number;
+  width?: number;
+  height?: number;
+  placeholder?: string;
+}
+
+/**
  * Persist image bytes. Content-addressed, so re-uploading the same screenshot
  * costs one object rather than one per artifact.
  */

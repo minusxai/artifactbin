@@ -11,10 +11,50 @@ export const FILE_TYPES = {
 
 export const FILE_EXTENSIONS = Object.keys(FILE_TYPES);
 
-export function fileContentType(filename: string): string | null {
+/** The lower-cased final extension, or null when the name has none. */
+function finalExtension(filename: string): string | null {
   const dot = filename.lastIndexOf('.');
-  if (dot <= 0) return null;
-  const extension = filename.slice(dot + 1).toLowerCase();
-  return Object.prototype.hasOwnProperty.call(FILE_TYPES, extension)
+  return dot <= 0 ? null : filename.slice(dot + 1).toLowerCase();
+}
+
+export function fileContentType(filename: string): string | null {
+  const extension = finalExtension(filename);
+  return extension !== null && Object.prototype.hasOwnProperty.call(FILE_TYPES, extension)
     ? FILE_TYPES[extension as keyof typeof FILE_TYPES] : null;
+}
+
+/**
+ * The extensions that go through the IMAGE door — sniffed, re-encoded to webp,
+ * measured, given a narrow variant.
+ *
+ * This is exactly what {@link IMAGE_CONTENT_TYPES} (lib/story/image-store)
+ * accepts, and it has to stay exactly that. `avif` is the interesting absence:
+ * it is a perfectly good {@link FILE_TYPES} upload and the browser renders it,
+ * but the image door refuses those bytes, so calling one an `image` here would
+ * have preflight validate a document against a tier the upload would then be
+ * rejected from — and, worse, would have the declared format disagree with the
+ * artifact the CLI actually creates, so its hash could never match on the next
+ * push. An avif is a `file`, the same thing the create body already makes it.
+ */
+const IMAGE_EXTENSIONS: readonly string[] = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'];
+
+/**
+ * WHICH ASSET TIER A LOCAL FILE BELONGS TO, decided from its name alone — the
+ * ONE rule the CLI and the server both speak.
+ *
+ * Preflight describes a local asset by HASH rather than by bytes, so the server
+ * never sees the file it is validating a document against: the extension is all
+ * there is to decide whether `ref:local000001` may sit in an `<img>`, a `<File>`
+ * or an `<a>`. The CLI imports this same function to choose the upload door for
+ * a miss, which is what stops the format preflight promised and the format the
+ * upload actually produces from drifting apart.
+ *
+ * Null for anything outside {@link FILE_TYPES}: an extension no door here
+ * accepts is not a dependency, it is a typo or an attempt.
+ */
+export function assetFormatOf(filename: string): 'image' | 'pdf' | 'file' | null {
+  const extension = finalExtension(filename);
+  if (extension === null || !Object.prototype.hasOwnProperty.call(FILE_TYPES, extension)) return null;
+  if (IMAGE_EXTENSIONS.includes(extension)) return 'image';
+  return extension === 'pdf' ? 'pdf' : 'file';
 }

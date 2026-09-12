@@ -1,16 +1,16 @@
-import {join,relative,resolve,dirname} from 'node:path';
+import {join,relative,resolve} from 'node:path';
 import {readdir,stat} from 'node:fs/promises';
 import {isDeepStrictEqual} from 'node:util';
-import {randomUUID} from 'node:crypto';
 import {stringify} from 'yaml';
 import {createTwoFilesPatch} from 'diff';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import {ACCOUNT_RESOURCE_TYPES,type AccountResource,type ProfileResource,type SessionResource} from '@artifactbin/contracts';
 import {CliError,type ParsedCommand} from './commands';
 import {parseLiteralYaml} from './document';
-import {atomicWrite,digest,privateDirectory,readOptional} from './files';
+import {digest,localBackup,readOptional} from './files';
 import {confinedPath,stageFiles,recoverFiles,type FileChange} from './journal';
-import {withProcessLock} from './process-lock';
+import {withLock,type State} from './state';
+import {readState,stateFor} from './state-access';
 import {recoverableOperation} from './recoverable-operation';
 import {readConflicts} from './conflict-state';
 import {deleteResources} from './delete';
@@ -22,16 +22,17 @@ import {finishLocalPush,push} from './sync';
 import {validateFiles} from './validation';
 import {inspectWorkspace,type LocalFile,type Workspace} from './workspace';
 import type {HttpClient} from './http';
-const manifestPath='.artifactbin/accounts.json';
-interface Entry {resource:AccountResource;baseline:string}
-interface Manifest {schema:1;server:string;account:string;files:Record<string,Entry>}
+/** What the store keeps for one tracked account resource: its accepted settings and the sha256 of the YAML those settings render to. */
+interface Entry {resource:AccountResource;sha256:string}
+/** The store's picture of this workspace: the `workspace` binding plus every `account` record under that root. */
+interface Tracking {server:string;account:string;files:Record<string,Entry>}
 /**
  * One plan says which invocations this module owns. `resource` covers the
- * account resources tracked in `.artifactbin/accounts.json` and, when a
+ * account resources tracked as `account` records in the state store and, when a
  * workspace holds both families, the artifact files that accompany them;
  * `restore`, `refresh` and `delete` are remote rows whose targets are ids.
  */
-export interface AccountPlan {kind:'resource'|'restore'|'refresh'|'delete';paths:string[];artifacts:string[];manifest:Manifest|null}
+export interface AccountPlan {kind:'resource'|'restore'|'refresh'|'delete';paths:string[];artifacts:string[];manifest:Tracking|null}
 const yaml=(value:unknown)=>stringify(value,{lineWidth:0});
 const accountResource=(value:unknown):AccountResource=>(value as {type?:unknown})?.type==='session'?parseSessionResource(value):parseAccountResource(value);
 const parse=(bytes:Buffer)=>{try{return accountResource(parseLiteralYaml(bytes.toString()));}catch(error){throw new CliError('invalid_resource',error instanceof Error?error.message:String(error));}};
@@ -43,16 +44,38 @@ function declaredAccountType(bytes:Buffer):'profile'|'session'|undefined{
  const normalized=type.replace(/[A-Z]/g,character=>character.toLowerCase());
  return (ACCOUNT_RESOURCE_TYPES as readonly string[]).includes(normalized)?normalized as 'profile'|'session':undefined;
 }
-async function manifest(workspace:Workspace):Promise<{value:Manifest|null;bytes:Buffer|null}>{
- const bytes=await readOptional(join(workspace.root,manifestPath));if(!bytes)return {value:null,bytes};
- let value:Manifest;try{value=JSON.parse(bytes.toString());}catch{throw new CliError('invalid_lock','Account tracking is not valid JSON.');}
- if(value.schema!==1||!value.server||!value.account||!value.files||typeof value.files!=='object')throw new CliError('invalid_lock','Account tracking has an invalid schema.');
- const ids=new Set<string>();
- // A session carries no compare-and-swap state: it is observed, never written.
- for(const [path,entry] of Object.entries(value.files)){await confinedPath(workspace.root,path);accountResource(entry.resource);if(!entry.resource.id||entry.resource.type==='profile'&&!entry.resource.state||typeof entry.baseline!=='string'||ids.has(entry.resource.id))throw new CliError('invalid_lock','Account tracking contains an invalid or duplicate identity.');ids.add(entry.resource.id);}
- return {value,bytes};
+/**
+ * The store is the CLI's own state, never the workspace's: a read must not
+ * create it. An absent database is simply a workspace nothing is tracked in.
+ */
+async function withStore<T>(workspace:Workspace,run:(state:State|null)=>Promise<T>):Promise<T>{
+ return run(await readState(workspace.home));
 }
-const trackedOfType=(saved:Manifest|null,type:'profile'|'session')=>Object.entries(saved?.files??{}).filter(([,entry])=>entry.resource.type===type).map(([path])=>path);
+/**
+ * `stageFiles` still journals through a directory inside the workspace. Once the
+ * journal has been applied nothing of ours belongs there, so the empty directory
+ * goes too and the workspace keeps only the user's files. This disappears with
+ * the file journal itself, when staged files become `staged-file` records.
+ */
+/** An interrupted write of this workspace, waiting for the command that started it to finish it. */
+const pendingOperation=(workspace:Workspace)=>withStore(workspace,async state=>!!state?.get(workspace.root,'pending-operation','current'));
+/** Everything an unchanged push must still finish: an interrupted operation, or staged files not yet applied. */
+const pendingRecovery=(workspace:Workspace)=>withStore(workspace,async state=>!!state?.get(workspace.root,'pending-operation','current')||!!state?.list(workspace.root,'staged-file').length);
+/** Every `account` record of this workspace, under the server and account the `workspace` record binds it to. */
+async function tracking(state:State|null,workspace:Workspace):Promise<Tracking|null>{
+ const binding=state?.get<{server:string;account:string}>(workspace.root,'workspace',workspace.root);
+ if(!state||!binding)return null;
+ if(typeof binding.value?.server!=='string'||typeof binding.value?.account!=='string')throw new CliError('invalid_lock','This workspace is bound to an invalid server or account.',`Remove the workspace record from ${state.path}.`);
+ const files:Record<string,Entry>={};const ids=new Set<string>();
+ // A session carries no compare-and-swap state: it is observed, never written.
+ for(const record of state.list<Entry>(workspace.root,'account')){
+  const entry=record.value;await confinedPath(workspace.root,record.key);accountResource(entry?.resource);
+  if(!entry.resource.id||entry.resource.type==='profile'&&!entry.resource.state||!/^[a-f0-9]{64}$/.test(entry.sha256)||ids.has(entry.resource.id))throw new CliError('invalid_lock','Account tracking contains an invalid or duplicate identity.',`Inspect the account records in ${state.path}.`);
+  ids.add(entry.resource.id);files[record.key]=entry;
+ }
+ return {server:binding.value.server,account:binding.value.account,files};
+}
+const trackedOfType=(saved:Tracking|null,type:'profile'|'session')=>Object.entries(saved?.files??{}).filter(([,entry])=>entry.resource.type===type).map(([path])=>path);
 
 /**
  * Local resource files that are not account resources, so a workspace holding
@@ -61,8 +84,8 @@ const trackedOfType=(saved:Manifest|null,type:'profile'|'session')=>Object.entri
  * hide. Discovery reads the workspace root only, and a file it cannot parse is
  * left to the command that names it explicitly.
  */
-async function discoverArtifactPaths(workspace:Workspace,saved:Manifest|null):Promise<string[]>{
- const found=new Set(Object.keys(workspace.lock?.files??{}));
+async function discoverArtifactPaths(workspace:Workspace,saved:Tracking|null):Promise<string[]>{
+ const found=new Set(Object.keys(workspace.tracking?.files??{}));
  let names:string[];
  try{names=(await readdir(workspace.root,{withFileTypes:true})).filter(entry=>entry.isFile()).map(entry=>entry.name);}catch{return [...found];}
  for(const name of names.sort()){
@@ -76,7 +99,7 @@ async function discoverArtifactPaths(workspace:Workspace,saved:Manifest|null):Pr
 async function inspectArtifacts(workspace:Workspace,paths:string[]):Promise<LocalFile[]>{
  if(!paths.length)return [];
  try{return await inspectWorkspace(workspace,paths);}
- catch{return inspectWorkspace(workspace,Object.keys(workspace.lock?.files??{}));}
+ catch{return inspectWorkspace(workspace,Object.keys(workspace.tracking?.files??{}));}
 }
 const artifactType=(file:LocalFile)=>file.document?'artifact':file.resource?file.resource.type:'file';
 
@@ -88,7 +111,7 @@ export async function accountPlan(workspace:Workspace,parsed:ParsedCommand):Prom
  if(!['pull','push','validate','status','diff'].includes(command))return null;
  const selected=typeof flags.type==='string'&&(ACCOUNT_RESOURCE_TYPES as readonly string[]).includes(flags.type)?flags.type as 'profile'|'session':undefined;
  const selectedArtifact=typeof flags.type==='string'&&!selected;
- const saved=(await manifest(workspace)).value;
+ const saved=await withStore(workspace,state=>tracking(state,workspace));
  const paths:string[]=[];const artifacts:string[]=[];
  for(const input of positionals){
   if(selected==='profile'&&command==='pull'&&(input==='me'||/^usr_[A-Za-z0-9_-]+$/.test(input))){paths.push(input);continue;}
@@ -109,15 +132,15 @@ export async function accountPlan(workspace:Workspace,parsed:ParsedCommand):Prom
  if(selected)return {kind:'resource',paths:paths.length?paths:trackedOfType(saved,selected),artifacts,manifest:saved};
  if(paths.length)return {kind:'resource',paths,artifacts,manifest:saved};
  if(!positionals.length&&saved&&Object.keys(saved.files).length)
-  return {kind:'resource',paths:Object.keys(saved.files),artifacts:summary?await discoverArtifactPaths(workspace,saved):Object.keys(workspace.lock?.files??{}),manifest:saved};
+  return {kind:'resource',paths:Object.keys(saved.files),artifacts:summary?await discoverArtifactPaths(workspace,saved):Object.keys(workspace.tracking?.files??{}),manifest:saved};
  return null;
 }
 async function entries(workspace:Workspace,plan:AccountPlan){
- const saved=(await manifest(workspace)).value;const results=[];
+ const saved=plan.manifest;const results=[];
  for(const path of plan.paths){
   const bytes=await readOptional(join(workspace.root,path));const entry=saved?.files[path];const resource=bytes?parse(bytes):undefined;
   if(resource?.id&&entry&&resource.id!==entry.resource.id)throw new CliError('identity_mismatch',`${path} differs from its tracked account identity.`);
-  results.push({path,bytes,entry,resource,status:!bytes?'missing':!entry?'new':bytes.toString('base64')===entry.baseline?'unchanged':'modified'});
+  results.push({path,bytes,entry,resource,status:!bytes?'missing':!entry?'new':digest(bytes)===entry.sha256?'unchanged':'modified'});
  }
  return results;
 }
@@ -138,18 +161,18 @@ export async function localAccountCommand(workspace:Workspace,parsed:ParsedComma
   return {valid:artifacts.valid&&accounts.every(file=>file.valid),files:[...artifacts.files,...accounts]};
  }
  if(parsed.command==='status'){
-  const conflicts=await readConflicts(workspace.root);
+  const conflicts=await readConflicts(workspace.home,workspace.root);
   const tracked=await inspectArtifacts(workspace,plan.artifacts);
-  return {remote:'last_observed',server:workspace.lock?.server??plan.manifest?.server??null,files:[
+  return {remote:'last_observed',server:workspace.tracking?.server??plan.manifest?.server??null,files:[
    ...tracked.map(file=>({path:file.path,type:artifactType(file),status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})})),
    ...files.map(file=>({path:file.path,id:file.resource?.id??file.entry?.resource.id,status:file.status,type:entryType(file)})),
   ]};
  }
  if(parsed.command==='diff'){
   const artifacts=plan.artifacts.length?(await localDiff(workspace,plan.artifacts)).diffs:[];
-  return {remote:'last_observed',diffs:[...artifacts,...files.filter(file=>file.status!=='unchanged').map(file=>({path:file.path,diff:createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,file.entry?Buffer.from(file.entry.baseline,'base64').toString():'',file.bytes?.toString()??'')}))]};
+  return {remote:'last_observed',diffs:[...artifacts,...files.filter(file=>file.status!=='unchanged').map(file=>({path:file.path,diff:createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,file.entry?yaml(file.entry.resource):'',file.bytes?.toString()??'')}))]};
  }
- if(parsed.command==='push'&&!await readOptional(join(workspace.root,'.artifactbin','pending-operation.json'))&&!await readOptional(join(workspace.root,'.artifactbin','pending-files.json'))&&files.every(file=>file.status==='unchanged')){
+ if(parsed.command==='push'&&!await pendingRecovery(workspace)&&files.every(file=>file.status==='unchanged')){
   const artifacts=await finishLocalPush(workspace,plan.artifacts,!!parsed.flags.force);
   if(artifacts)return {operations:[...artifacts.operations,...files.map(file=>({path:file.path,status:'unchanged'}))]};
  }
@@ -163,17 +186,29 @@ function reconcile(base:AccountResource,local:AccountResource,remote:AccountReso
  }
  return result;
 }
+/**
+ * Accept `resource` as the tracked state of `path`. The working file is staged
+ * before the records are committed, so an interrupted save replays the file the
+ * `account` record describes rather than claiming bytes that were never written.
+ */
 async function save(workspace:Workspace,path:string,resource:AccountResource,bytes:Buffer|null,working:Buffer|null,client:HttpClient){
- const saved=await manifest(workspace);
- if(saved.value&&(saved.value.server!==client.connection.server||saved.value.account!==client.account))throw new CliError('account_mismatch','Account resource tracking belongs to another origin or account.');
- if(!client.account)throw new CliError('unsupported_server','The server did not return an account identity.');
- const value=saved.value??{schema:1,server:client.connection.server,account:client.account,files:{}};
- const duplicate=Object.entries(value.files).find(([other,entry])=>other!==path&&entry.resource.id===resource.id);
- if(duplicate){if(await readOptional(join(workspace.root,duplicate[0])))throw new CliError('duplicate_identity',`${duplicate[0]} already tracks this ${resource.type}.`);delete value.files[duplicate[0]];}
- value.files[path]={resource,baseline:Buffer.from(yaml(resource)).toString('base64')};
- const changes:FileChange[]=[{path:manifestPath,before:saved.bytes?digest(saved.bytes):null,data:Buffer.from(JSON.stringify(value,null,2)+'\n')}];
- if(working)changes.unshift({path,before:bytes?digest(bytes):null,data:working});
- await stageFiles(workspace.root,changes);await recoverFiles(workspace.root);
+ const account=client.account;
+ if(!account)throw new CliError('unsupported_server','The server did not return an account identity.');
+ const state=await stateFor(workspace.home);
+ {
+  const saved=await tracking(state,workspace);
+  if(saved&&(saved.server!==client.connection.server||saved.account!==account))throw new CliError('account_mismatch','Account resource tracking belongs to another origin or account.');
+  const duplicate=Object.entries(saved?.files??{}).find(([other,entry])=>other!==path&&entry.resource.id===resource.id)?.[0];
+  if(duplicate&&await readOptional(join(workspace.root,duplicate)))throw new CliError('duplicate_identity',`${duplicate} already tracks this ${resource.type}.`);
+  const changes:FileChange[]=working?[{path,before:bytes?digest(bytes):null,data:working}]:[];
+  if(changes.length)await stageFiles(workspace.home,workspace.root,changes);
+  state.transaction(()=>{
+   state.put(workspace.root,'workspace',workspace.root,{server:client.connection.server,account},{exclusive:true});
+   if(duplicate)state.delete(workspace.root,'account',duplicate);
+   state.put(workspace.root,'account',path,{resource,sha256:digest(Buffer.from(yaml(resource)))});
+  });
+  if(changes.length){await recoverFiles(workspace.home,workspace.root);}
+ }
 }
 /** Where a pulled session lands: its tracked path, an explicit --output, or a free name. */
 async function destination(workspace:Workspace,parsed:ParsedCommand,input:string|undefined,fallback:string,many:boolean):Promise<string>{
@@ -188,21 +223,23 @@ async function destination(workspace:Workspace,parsed:ParsedCommand,input:string
  return input&&/\.ya?ml$/i.test(input)?input:fallback;
 }
 async function pullSessions(workspace:Workspace,parsed:ParsedCommand,plan:AccountPlan,client:HttpClient):Promise<{value?:unknown;content?:string}>{
- const saved=(await manifest(workspace)).value;
+ const saved=plan.manifest;
  const targets=plan.paths.map(input=>({input,id:saved?.files[input]?.resource.id??sessionIdentity(input)}));
  if(!targets.length)throw new CliError('invalid_arguments','Name the session to retrieve.','Run afbin list --type session for its id.');
+ // Each save adds a record, so a later target sees what an earlier one accepted.
+ const tracked=new Map(Object.entries(saved?.files??{}));
  const operations=[];
  for(const target of targets){
   const resource=await readSession(client,target.id);
   if(parsed.flags.output==='-'&&targets.length===1)return {content:parsed.flags.format==='json'?JSON.stringify(resource)+'\n':yaml(resource)};
-  const path=await destination(workspace,parsed,saved?.files[target.input]?target.input:undefined,sessionFileName(target.id),targets.length>1);
+  const path=await destination(workspace,parsed,tracked.has(target.input)?target.input:undefined,sessionFileName(target.id),targets.length>1);
   const before=await readOptional(join(workspace.root,path));
-  const entry=(await manifest(workspace)).value?.files[path];
-  if(before&&!entry&&!parsed.flags.force)throw new CliError('output_exists',`${path} already exists.`,'Choose another --output path.');
+  if(before&&!tracked.has(path)&&!parsed.flags.force)throw new CliError('output_exists',`${path} already exists.`,'Choose another --output path.');
   if(parsed.flags['dry-run']){operations.push({path,id:target.id,type:'session',status:'would_pull'});continue;}
   // Sessions are observed, never merged: the file is read-only, so replacing it
   // with what the relay reports cannot lose an edit anybody was allowed to make.
   await save(workspace,path,resource,before,Buffer.from(yaml(resource)),client);
+  tracked.set(path,{resource,sha256:digest(Buffer.from(yaml(resource)))});
   operations.push({path,id:target.id,type:'session',status:'pulled'});
  }
  return {value:{...(parsed.flags['dry-run']?{dry_run:true}:{}),operations}};
@@ -214,12 +251,13 @@ async function pullProfile(workspace:Workspace,parsed:ParsedCommand,plan:Account
  if(parsed.flags.output==='-')return {content:parsed.flags.format==='json'?JSON.stringify(current)+'\n':yaml(current)};
  let path=typeof parsed.flags.output==='string'?relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,parsed.flags.output))):input&&input!=='me'&&!input.startsWith('usr_')?input:'profile.yaml';
  if((await stat(join(workspace.root,path)).catch(()=>null))?.isDirectory())path=join(path,'profile.yaml');
- const before=await readOptional(join(workspace.root,path));const entry=(await manifest(workspace)).value?.files[path];
+ const before=await readOptional(join(workspace.root,path));const entry=(await withStore(workspace,state=>tracking(state,workspace)))?.files[path];
  if(before&&!entry&&!parsed.flags.force)throw new CliError('output_exists',`${path} already exists.`,'Choose another --output path.');
  const merged=before&&entry&&!parsed.flags.force?reconcile(entry.resource,parse(before),current):current;
  if(parsed.flags['dry-run'])return {value:{dry_run:true,operations:[{path,status:'would_pull',type:'profile',id:current.id}]}};
- if(parsed.flags.force&&before&&!before.equals(Buffer.from(yaml(merged)))){const backup=join(workspace.root,'.artifactbin','local-backups',randomUUID(),'profile.yaml');await privateDirectory(dirname(backup));await atomicWrite(backup,before,{exclusive:true});}
- await save(workspace,path,current,before,Buffer.from(yaml(merged)),client);return {value:{operations:[{path,id:current.id,type:'profile',status:'pulled'}]}};
+ // A forced pull replaces local edits, so the bytes it discards are kept outside the workspace and named absolutely.
+ const backup=parsed.flags.force&&before&&!before.equals(Buffer.from(yaml(merged)))?await localBackup(workspace.home,path,before):undefined;
+ await save(workspace,path,current,before,Buffer.from(yaml(merged)),client);return {value:{operations:[{path,id:current.id,type:'profile',status:'pulled',...(backup?{backup}:{})}]}};
 }
 export async function remoteAccountCommand(workspace:Workspace,parsed:ParsedCommand,plan:AccountPlan,client:HttpClient):Promise<{value?:unknown;content?:string;exitCode?:number}>{
  if(plan.kind==='restore')return {value:await pushRestore(workspace,plan.paths,client)};
@@ -229,7 +267,7 @@ export async function remoteAccountCommand(workspace:Workspace,parsed:ParsedComm
  if(plan.manifest)client.account=plan.manifest.account;
  const sessions=parsed.flags.type==='session'?plan.paths:parsed.flags.type==='profile'?[]:plan.paths.filter(path=>plan.manifest?.files[path]?.resource.type==='session');
  const profiles=plan.paths.filter(path=>!sessions.includes(path));
- if(parsed.command==='pull')return withProcessLock(workspace.root,async()=>{
+ if(parsed.command==='pull')return withLock(workspace.home,workspace.root,async()=>{
   const operations:unknown[]=[];
   if(sessions.length){
    const result=await pullSessions(workspace,parsed,{...plan,paths:sessions},client);
@@ -258,7 +296,7 @@ export async function remoteAccountCommand(workspace:Workspace,parsed:ParsedComm
  for(const file of files){
   if(!file.resource||!file.bytes)throw new CliError('missing_file',`Missing account resource: ${file.path}.`);
   if(file.resource.type!=='profile')throw new CliError('unsupported_type','This account command requires a profile.');
-  if(file.status==='unchanged'&&!await readOptional(join(workspace.root,'.artifactbin','pending-operation.json'))){operations.push({path:file.path,status:'unchanged'});continue;}
+  if(file.status==='unchanged'&&!await pendingOperation(workspace)){operations.push({path:file.path,status:'unchanged'});continue;}
   const proposal=file.resource;
   const prepare=async()=>{
    const current=parseAccountResource(await client.request('/account/profile'));if(current.type!=='profile')throw new CliError('invalid_response','Expected a profile response.');

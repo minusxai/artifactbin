@@ -27,7 +27,7 @@ export async function localDocumentQuery(workspace:Workspace,path:string,source:
  const queries=selectedQueries(flow,{only:selected});if(!queries)throw new CliError('invalid_query','The declared queries contain a dependency cycle.');
  const datasets:DatasetTables={};const fingerprints:string[]=[];
  for(const id of new Set(queries.flatMap(query=>query.source?[query.source]:query.refs))){
-  const entry=Object.entries(workspace.lock?.files??{}).find(([,tracked])=>tracked.id===id);
+  const entry=Object.entries(workspace.tracking?.files??{}).find(([,tracked])=>tracked.id===id);
   if(!entry)throw new CliError('missing_local_input',`Dataset ${id} has no local copy.` ,`Run afbin pull ${id} to make its data available locally.`);
   let [input]=entry;let bytes=await readOptional(join(workspace.root,input));
   if(!bytes)throw new CliError('missing_local_input',`Local dataset ${input} is missing.`);

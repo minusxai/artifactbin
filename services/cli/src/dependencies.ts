@@ -1,13 +1,15 @@
 import {readFile,realpath} from 'node:fs/promises';
 import {basename,dirname,extname,relative,resolve} from 'node:path';
 import {parseJsx,type JsxNode} from '../../app/lib/jsx';
-import {fileContentType} from '../../app/lib/story/file-types';
+import {assetFormatOf,fileContentType} from '../../app/lib/story/file-types';
 import {REFERENCE_POSITIONS} from '../../app/lib/story/reference-positions';
 import {urlListUrls} from '../../app/lib/jsx/url-attrs';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {CliError} from './commands';
+import {digest} from './files';
 import {confinedPath} from './journal';
-export interface Dependency {bytes:Buffer;path:string;authored:string;id:string;input:Record<string,unknown>;uses:Array<{start:number;end:number;attribute:string;authored?:string;list?:boolean;original?:string}>}
+export type DependencyFormat='image'|'pdf'|'file'|'dataset';
+export interface Dependency {bytes:Buffer;path:string;authored:string;id:string;sha256:string;size:number;filename:string;format:DependencyFormat;input:Record<string,unknown>;uses:Array<{start:number;end:number;attribute:string;authored?:string;list?:boolean;original?:string}>}
 const referenceAttributes=new Set([...REFERENCE_POSITIONS.map(position=>position.attribute),'source','data','recipe']);
 export async function planDependencies(source:string,path:string,root:string):Promise<Dependency[]>{
  root=await realpath(root);
@@ -35,7 +37,10 @@ export async function planDependencies(source:string,path:string,root:string):Pr
   let dependency=byPath.get(local);
   if(!dependency){
    let bytes:Buffer;try{bytes=await readFile(absolute);}catch{throw new CliError('missing_dependency',`Cannot read dependency ${candidate.value} in ${path}.`,'Keep dependencies inside the workspace and check their paths.');}
-   dependency={bytes,path:local,authored:candidate.value,id:`local${String(byPath.size+1).padStart(6,'0')}`,input:assetInput(local,bytes),uses:[]};byPath.set(local,dependency);
+   // assetInput refuses an unsupported type first, so the format here is never null.
+   const input=assetInput(local,bytes);const filename=basename(local);
+   const format:DependencyFormat=['.csv','.json'].includes(extname(local).toLowerCase())?'dataset':assetFormatOf(filename)!;
+   dependency={bytes,path:local,authored:candidate.value,id:`local${String(byPath.size+1).padStart(6,'0')}`,sha256:digest(bytes),size:bytes.length,filename,format,input,uses:[]};byPath.set(local,dependency);
   }
   dependency.uses.push({start:candidate.start,end:candidate.end,attribute:candidate.attribute,authored:candidate.value,...(candidate.list?{list:true,original:candidate.original}:{})});
  }
@@ -65,9 +70,10 @@ export function assetInput(path:string,bytes:Buffer):Record<string,unknown>{
   if(!Array.isArray(rows)||!rows.every(row=>row!==null&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_dataset',`${path} must contain an array of row objects.`,'Run afbin help data.');
   return{dataset:rows};
  }
- const contentType=fileContentType(basename(path));if(!contentType)throw new CliError('unsupported_file_type',`Unsupported file type: ${path}.`,'Use JSX documents, CSV/JSON rows or supported media files.');
- if(['.png','.jpg','.jpeg','.webp','.gif','.svg'].includes(extension))return{image:`data:${contentType};base64,${bytes.toString('base64')}`};
- if(extension==='.pdf')return{pdf:`data:application/pdf;base64,${bytes.toString('base64')}`};
+ const format=assetFormatOf(path),contentType=fileContentType(basename(path));
+ if(!format||!contentType)throw new CliError('unsupported_file_type',`Unsupported file type: ${path}.`,'Use JSX documents, CSV/JSON rows or supported media files.');
+ if(format==='image')return{image:`data:${contentType};base64,${bytes.toString('base64')}`};
+ if(format==='pdf')return{pdf:`data:application/pdf;base64,${bytes.toString('base64')}`};
  return{file:{filename:basename(path),contentType,base64:bytes.toString('base64')}};
 }
 

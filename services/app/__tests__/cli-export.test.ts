@@ -24,6 +24,7 @@ import {GET as content} from '@/app/api/artifacts/[id]/content/route';
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {runCli} from '../../cli/src/dispatch';
+import {tracking} from '../../cli/test/tracking';
 import {saveConnection} from '../../cli/src/config';
 import {parseDocument,writeDocument} from '../../cli/src/document';
 
@@ -117,7 +118,7 @@ it('exports data formats offline, honours --force backups and --dry-run, and nev
   expect(converted.code,JSON.stringify(converted.result)).toBe(0);
   expect(JSON.parse(await readFile(join(root,'rows.json'),'utf8'))).toEqual([{region:'East',total:12},{region:'West',total:7}]);
   // An export is not a working copy: nothing was tracked by it.
-  await expect(stat(join(root,'afbin.lock'))).rejects.toThrow();
+  expect((await tracking(root,root)).workspace).toBeNull();
 
   // A second export refuses rather than replacing the file.
   const clash=await run(['export','rows.csv','--format','json','--output','rows.json'],offline);
@@ -129,8 +130,10 @@ it('exports data formats offline, honours --force backups and --dry-run, and nev
   const forced=await run(['export','rows.csv','--format','json','--output','rows.json','--force'],offline);
   expect(forced.code,JSON.stringify(forced.result)).toBe(0);
   expect(JSON.parse(await readFile(join(root,'rows.json'),'utf8'))).toEqual([{region:'East',total:99}]);
+  // The replaced bytes are kept in the CLI's own state directory, named by an absolute path.
   const backup=forced.result.operations[0].backup as string;
-  expect(JSON.parse(await readFile(join(root,backup),'utf8'))).toHaveLength(2);
+  expect(backup.startsWith(join(root,'.artifactbin','backups','local'))).toBe(true);
+  expect(JSON.parse(await readFile(backup,'utf8'))).toHaveLength(2);
 
   // --dry-run reports the destination and the capability, renders nothing and writes nothing.
   const planned=await run(['export','rows.csv','--format','csv','--output','planned.csv','--dry-run'],offline);

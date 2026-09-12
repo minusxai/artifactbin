@@ -12,7 +12,8 @@ import type {Snapshot} from './workspace';
 import {snapshotDocument} from './local';
 import {isDeepStrictEqual} from 'node:util';
 
-export interface ResourceSource {path:string;bytes:string;version?:number}
+/** `path` is workspace-relative; `declared` is the spelling the YAML file uses for it. */
+export interface ResourceSource {path:string;declared?:string;bytes:string;version?:number}
 export type ResourceReconciliation={ok:true;resource:ArtifactResourceFile}|{ok:false;fields:string[]};
 export function reconcileResource(base:ArtifactResourceFile,local:ArtifactResourceFile,remote:ArtifactResourceFile):ResourceReconciliation{
  if(base.type!==local.type||base.type!==remote.type)return {ok:false,fields:['type']};
@@ -28,7 +29,7 @@ export async function readResourceSource(resource:ArtifactResourceFile,path:stri
  if(resource.type==='folder'||resource.source===undefined)return;
  const source=await confinedPath(root,resolve(root,dirname(path),resource.source));
  const bytes=await readOptional(source);if(!bytes)throw new CliError('missing_source',`Cannot read source ${resource.source}.`);
- return {path:relative(root,source),bytes:bytes.toString('base64')};
+ return {path:relative(root,source),declared:resource.source,bytes:bytes.toString('base64')};
 }
 export function writeResourceFile(resource:ArtifactResourceFile):string{return stringify(resource,{lineWidth:0});}
 export function snapshotResource(snapshot:Snapshot,previous:ArtifactResourceFile):ArtifactResourceFile{

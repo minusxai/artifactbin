@@ -48,8 +48,8 @@ async function publishedIdentity(workspace:Workspace,path:string):Promise<string
  const extension=extname(path).toLowerCase();
  const carried=extension==='.jsx'?parseDocument(bytes.toString()).metadata.id
   :['.yaml','.yml'].includes(extension)?parseResourceFile(bytes.toString()).id:undefined;
- const tracked=workspace.lock?.files[path];
- if(tracked&&digest(bytes)!==digest(Buffer.from(tracked.baseline,'base64')))throw new CliError('unpublished_draft',`${path} has local changes that are not published.`,DRAFT_FIX);
+ const tracked=workspace.tracking?.files[path];
+ if(tracked&&digest(bytes)!==tracked.file)throw new CliError('unpublished_draft',`${path} has local changes that are not published.`,DRAFT_FIX);
  const id=carried??tracked?.id;
  if(!id)throw new CliError('unpublished_draft',`${path} is not a published artifact.`,DRAFT_FIX);
  if(tracked&&carried&&tracked.id!==carried)throw new CliError('identity_mismatch',`${path} carries an id that disagrees with its tracking.`,'Restore the tracked identity, or pull the artifact into a fresh path.');

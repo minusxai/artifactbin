@@ -5,7 +5,7 @@ import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {emitKeypressEvents,type Key} from 'node:readline';
 import {atomicWrite,digest,isMissing,privateDirectory,readOptional} from './files';
-import {withProcessLock} from './process-lock';
+import {HOME_SCOPE,withLock} from './state';
 import {installedHarnesses} from './launcher';
 import {localSkillFiles} from './teaching';
 import {CLI_VERSION} from './version';
@@ -142,5 +142,5 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
   await atomicWrite(join(configDir(options.home,options.env),'settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');
   return {installations,harnesses:[...new Set(selected)]};
  };
- return options.alreadyLocked?install():withProcessLock(options.home,install);
+ return options.alreadyLocked?install():withLock(options.home,HOME_SCOPE,install);
 }

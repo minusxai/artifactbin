@@ -10,6 +10,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
+import {tracking} from './tracking';
 
 const head=(id:string,extra:Record<string,unknown>={})=>({id,version:2,edit_id:'e2',state:'b'.repeat(64),format:'markup',title:'Report',visibility:'unlisted',markup:'<p>Remote</p>',capabilities:{read:true,edit:true,mutation_receipts:true},...extra});
 async function harness(prefix:string){
@@ -22,7 +23,7 @@ async function harness(prefix:string){
   calls.push({method:request.method,path,body,key:request.headers.get('Idempotency-Key')??undefined});
   const response=await respond({method:request.method,path,body});response.headers.set('X-Artifactbin-Account','usr_seed');return response;
  }});
- return {root,out,calls,invoke,last:()=>JSON.parse(out[out.length-1]),cleanup:()=>rm(root,{recursive:true,force:true})};
+ return {root,home:root,out,calls,invoke,last:()=>JSON.parse(out[out.length-1]),cleanup:()=>rm(root,{recursive:true,force:true})};
 }
 
 test('pull --output - writes the editable representation to stdout without establishing tracking',async()=>{
@@ -31,7 +32,7 @@ test('pull --output - writes the editable representation to stdout without estab
   const code=await h.invoke(['pull','abc123','--output','-'],({path})=>path.startsWith('/api/artifacts/abc123')?Response.json(head('abc123')):Response.json({error:'not_found'},{status:404}));
   assert.equal(code,0,h.out.join(''));
   assert.match(h.out.join(''),/^---\nid: abc123\n/);assert.match(h.out.join(''),/<p>Remote<\/p>/);
-  await assert.rejects(readFile(join(h.root,'afbin.lock')),'stdout never tracks');
+  assert.equal((await tracking(h.home,h.root)).workspace,null,'stdout never tracks');
  }finally{await h.cleanup();}
 });
 

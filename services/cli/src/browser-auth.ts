@@ -10,7 +10,7 @@ import { unlink } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { atomicWrite, digest, privateDirectory, readOptional } from './files';
 import { loadConnection, normalizeServer, saveConnection, type Connection } from './config';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 
 interface Pending { server: string; deviceCode: string; userCode: string; verificationUrl: string; expiresAt: number; interval: number }
 /** An unattended agent gives up polling for approval after this bound, failing fast with an actionable error instead of holding the full device-code window. */
@@ -44,13 +44,13 @@ export async function openBrowser(url: string): Promise<void> {
 export async function browserAuthenticate(origin:string,options:AuthOptions):Promise<Connection>{
  const server=normalizeServer(origin);
  const home=options.home??homedir();
- return withProcessLock(home,async()=>{
+ return withLock(home,`auth:${server}`,async()=>{
   const saved=await loadConnection(server,home,{ARTIFACTBIN_HOME:options.env?.ARTIFACTBIN_HOME});
   if(saved&&saved.token!==options.rejectedToken&&(!saved.expiresAt||saved.expiresAt>(options.now??Date.now)()))return saved;
   const pending=await readOptional(join(configDir(home,options.env),`pairing-${digest(server).slice(0,16)}.json`));
   if(options.interactive&&!options.noBrowser&&!pending)return loopbackAuthenticate(server,{...options,open:options.open??openBrowser});
   return deviceAuthenticate(server,options);
- },{name:`auth-${digest(server).slice(0,16)}`,waitMs:300000});
+ },{waitMs:300000});
 }
 export async function deviceAuthenticate(origin: string, options: AuthOptions): Promise<Connection> {
   const server = normalizeServer(origin);

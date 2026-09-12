@@ -47,7 +47,7 @@ describe('the publishing skill', () => {
   });
   it('push handles the canonical response and sync identity', () => {
     expect(doc).toContain('canonical source and identity in the same response');
-    expect(doc).toContain('afbin.lock');
+    expect(doc).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
   });
   it('§2.1 one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
     expect(doc).not.toContain('for the full reference before authoring');

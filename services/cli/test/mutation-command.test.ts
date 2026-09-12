@@ -1,11 +1,12 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {digest} from '../src/files';
+import {readRecord} from './tracking';
 
 test('a lost mutation reply resumes the frozen operation with the same identity and rejects changed input',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-write-recovery-'));const keys:string[]=[];let lose=true;
@@ -16,7 +17,7 @@ test('a lost mutation reply resumes the frozen operation with the same identity 
  try{
   await saveConnection({server:'https://example.com',token:'test'},root);await writeFile(join(root,'change.sql'),'insert into public.rows (n) values (2)');
   const first=await invoke();assert.equal(first.result.error.code,'outcome_unknown');assert.ok(keys[0]);
-  const pending=await readFile(join(root,'.artifactbin','pending-operation.json'),'utf8');assert.ok(!pending.includes('"token":"test"'));
+  const pending=await readRecord(root,root,'pending-operation','current');assert.ok(pending);assert.ok(!JSON.stringify(pending).includes('"token":"test"'));
   await writeFile(join(root,'change.sql'),'delete from public.rows');const changed=await invoke();assert.equal(changed.result.error.code,'pending_recovery');assert.equal(keys.length,1);
   await writeFile(join(root,'change.sql'),'insert into public.rows (n) values (2)');const retry=await invoke();assert.equal(retry.code,0,JSON.stringify(retry));assert.deepEqual(keys,[keys[0],keys[0]]);assert.equal(retry.result.affected,1);
  }finally{await rm(root,{recursive:true,force:true});}

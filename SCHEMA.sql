@@ -250,6 +250,8 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_parent ON app.artifacts ((ancestor_ids[
 
 CREATE INDEX IF NOT EXISTS idx_artifacts_user_level ON app.artifacts (user_id, (cardinality(ancestor_ids)));
 
+CREATE INDEX IF NOT EXISTS idx_artifacts_asset_sha256 ON app.artifacts ((meta->>'sha256')) WHERE format IN ('image','pdf','file') AND deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS app.artifact_versions (
   artifact_id TEXT NOT NULL,
   version INTEGER NOT NULL,

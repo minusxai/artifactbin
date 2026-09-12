@@ -4,10 +4,9 @@ import {artifactReference} from './read-commands';
 import {readPendingRequest} from './pending-request';
 import {recoverableOperation} from './recoverable-operation';
 import {pendingOperation} from './restore';
-import {recoverFiles,stageFiles} from './journal';
+import {recoverFiles} from './journal';
 import {terminateSession} from './sessions';
-import {digest} from './files';
-import {loadWorkspace,type Workspace} from './workspace';
+import {loadWorkspace,saveTracking,type Workspace} from './workspace';
 import type {HttpClient} from './http';
 
 /** The server's stored format, named in the resource vocabulary the CLI uses. */
@@ -46,7 +45,7 @@ export async function deleteArtifact(workspace:Workspace,input:string,client:Htt
   if(declared&&declared!==kind)throw new CliError('type_conflict',`${input} is a ${kind}, not a ${declared}.`,`Run afbin delete --type ${kind} ${input}.`);
   if((head.capabilities as {delete?:boolean}|undefined)?.delete===false)throw new CliError('not_permitted',`Only the owner can delete ${ref.id}.`,'Ask the owner to delete it.');
  }
- if(await readPendingRequest(workspace.root))throw new CliError('pending_recovery','Recover the pending publication before deleting an artifact.','Run afbin push to recover its result.');
+ if(await readPendingRequest(workspace.home,workspace.root))throw new CliError('pending_recovery','Recover the pending publication before deleting an artifact.','Run afbin push to recover its result.');
  const result=await recoverableOperation(workspace,client,{
   path:`/artifacts/${ref.id}${options.force?'?force=true':''}`,method:'DELETE',body:undefined,identity:{type:'delete',id:ref.id},
   prepare:async()=>{},
@@ -54,14 +53,12 @@ export async function deleteArtifact(workspace:Workspace,input:string,client:Htt
   // folder's subtree, and the working files it named stay exactly where they
   // are. Runs inside the operation's own lock, after its reply is durable.
   finalize:async response=>{
-   await recoverFiles(workspace.root);
-   const current=await loadWorkspace(workspace.cwd);
-   if(!current.lock)return;
-   const lock=structuredClone(current.lock);
+   await recoverFiles(workspace.home,workspace.root);
+   const current=await loadWorkspace(workspace.cwd,workspace.home);
+   if(!current.tracking)return;
    const deleted=new Set([ref.id,...(Array.isArray(response.deleted_ids)?response.deleted_ids.filter((id):id is string=>typeof id==='string'):[])]);
-   for(const [path,file] of Object.entries(lock.files))if(deleted.has(file.id))delete lock.files[path];
-   await stageFiles(current.root,[{path:'afbin.lock',before:digest(current.raw!),data:Buffer.from(JSON.stringify(lock,null,2)+'\n')}]);
-   await recoverFiles(current.root);
+   const remove=Object.entries(current.tracking.files).filter(([,file])=>deleted.has(file.id)).map(([path])=>path);
+   if(remove.length)await saveTracking(current,{server:current.tracking.server,account:current.tracking.account,remove});
   },
  });
  return{...result,id:ref.id,...(kind?{type:kind}:{}),status:'deleted',local_file:'preserved'};

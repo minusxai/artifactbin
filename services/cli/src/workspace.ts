@@ -1,48 +1,98 @@
+/**
+ * A workspace is a directory the CLI has registered in its own store. No file is
+ * ever written into it to mark it: discovery walks up from the working directory
+ * and stops at the nearest ancestor that holds a `workspace` record.
+ *
+ * Tracking is hashes, not bytes. `TrackedFile.file` is the sha256 of the local
+ * bytes last accepted, and the base text a diff or a merge needs is derived from
+ * the server snapshot by `baselineOf`.
+ */
 import {realpath} from 'node:fs/promises';
-import {dirname,extname,join,relative,resolve} from 'node:path';
-import {parse as parseYaml} from 'yaml';
-import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
+import {dirname,extname,relative,resolve} from 'node:path';
+import {ARTIFACT_ID_PATTERN,type ArtifactResourceFile} from '@artifactbin/contracts';
+import {homedir} from 'node:os';
 import {normalizeServer} from './config';
 import {CliError} from './commands';
-import {parseDocument,type LocalDocument,type DocumentMetadata} from './document';
+import {parseDocument,writeDocument,type LocalDocument,type DocumentMetadata} from './document';
 import {digest,readOptional} from './files';
 import {confinedPath} from './journal';
-import {parseResourceFile,readResourceSource,type ResourceSource} from './resource-file';
-import type {ArtifactResourceFile} from '@artifactbin/contracts';
+import {readState,stateFor} from './state-access';
+import type {State} from './state';
+import {snapshotDocument} from './local';
+import {restoreDependencyPaths} from './dependencies';
+import {parseResourceFile,readResourceSource,snapshotResource,writeResourceFile,type ResourceSource} from './resource-file';
 export interface Snapshot {id:string;version:number;edit_id:string;state:string;markup?:string;format?:string;title?:string|null;theme?:string|null;template?:string|null;visibility?:DocumentMetadata['visibility'];link_role?:DocumentMetadata['link'];parent_id?:string|null;[key:string]:unknown}
-export interface TrackedFile {source?:ResourceSource;baseline:string;id:string;base:string;file:string;url:string;snapshot:Snapshot;observed?:Snapshot;selected?:Snapshot;versions?:Record<string,Snapshot>;paths?:Record<string,string>}
-export interface WorkspaceLock {schema:1;server:string;account:string;root:string;files:Record<string,TrackedFile>}
-export interface Workspace {virtualFiles?:Record<string,Buffer>;root:string;cwd:string;lock:WorkspaceLock|null;raw:Buffer|null}
+/** `file` is the sha256 of the accepted base representation: what the server holds, as it lands locally. */
+export interface TrackedFile {source?:ResourceSource;id:string;file:string;url:string;snapshot:Snapshot;observed?:Snapshot;selected?:Snapshot;versions?:Record<string,Snapshot>;paths?:Record<string,string>;dependencies?:Record<string,{id:string;sha256:string}>}
+export interface WorkspaceTracking {server:string;account:string;files:Record<string,TrackedFile>}
+export interface Workspace {virtualFiles?:Record<string,Buffer>;home:string;root:string;cwd:string;tracking:WorkspaceTracking|null}
 export interface LocalFile {path:string;bytes:Buffer|null;document?:LocalDocument;resource?:ArtifactResourceFile;tracked?:TrackedFile;renamedFrom?:string;status:'new'|'unchanged'|'modified'|'missing'|'renamed'}
-export async function loadWorkspace(cwd=process.cwd()):Promise<Workspace>{
- cwd=await realpath(cwd);let root=cwd;
- for(;;){
-  const raw=await readOptional(join(root,'afbin.lock'));
-  if(raw){
-   let lock:WorkspaceLock;
-   try{lock=parseYaml(raw.toString(),{maxAliasCount:0,uniqueKeys:true}) as WorkspaceLock;}catch{throw new CliError('invalid_lock','afbin.lock is invalid YAML.');}
-   if(lock?.schema!==1||typeof lock.server!=='string'||typeof lock.account!=='string'||typeof lock.root!=='string'||!lock.files||typeof lock.files!=='object'||Array.isArray(lock.files))throw new CliError('invalid_lock','afbin.lock does not match the current workspace schema.');
-   normalizeServer(lock.server);
-   const ids=new Set<string>();
-   for(const [path,entry] of Object.entries(lock.files)){
-    await confinedPath(root,path);
-    if(!entry||!ARTIFACT_ID_PATTERN.test(entry.id)||ids.has(entry.id)||!hash(entry.base)||!hash(entry.file)||typeof entry.baseline!=='string'||Buffer.from(entry.baseline,'base64').toString('base64')!==entry.baseline||entry.snapshot?.id!==entry.id||!Number.isSafeInteger(entry.snapshot.version)||entry.snapshot.version<1||!entry.snapshot.edit_id||!hash(entry.snapshot.state))throw new CliError('invalid_lock',`Invalid tracking entry for ${path}.`);
-    ids.add(entry.id);
-   }
-   return{root,cwd,lock,raw};
-  }
-  if(await readOptional(join(root,'.artifactbin','accounts.json'))||await readOptional(join(root,'.artifactbin','conflicts.json'))||await readOptional(join(root,'.artifactbin','pending-operation.json'))||await readOptional(join(root,'.artifactbin','pending-request.json'))||await readOptional(join(root,'.artifactbin','pending-files.json')))return{root,cwd,lock:null,raw:null};
-  const parent=dirname(root);if(parent===root)return{root:cwd,cwd,lock:null,raw:null};root=parent;
- }
+
+/** The workspace record every tracked scope carries: which server and account own it. */
+export interface WorkspaceRecord {server:string;account:string}
+export interface TrackingUpdate {server:string;account:string;set?:Record<string,TrackedFile>;remove?:string[]}
+/** Synchronous by design: the caller runs it inside one `state.transaction`. */
+export function writeTracking(state:State,root:string,update:TrackingUpdate):void{
+ state.put(root,'workspace',root,{server:normalizeServer(update.server),account:update.account} satisfies WorkspaceRecord);
+ for(const path of update.remove??[])state.delete(root,'tracked',path);
+ for(const [path,entry] of Object.entries(update.set??{}))state.put(root,'tracked',path,entry);
 }
+/** Write tracking on its own, when no file change accompanies it. */
+export async function saveTracking(workspace:Workspace,update:TrackingUpdate):Promise<void>{
+ const state=await stateFor(workspace.home);
+ state.transaction(()=>writeTracking(state,workspace.root,update));
+}
+
 const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+/** Discovery is the nearest registered ancestor of the working directory, else the directory itself. */
+export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Workspace>{
+ cwd=await realpath(cwd);
+ const state=await readState(home);
+ const found=state?.nearestWorkspace<WorkspaceRecord>(cwd);
+ if(!state||!found)return{home,root:cwd,cwd,tracking:null};
+ const {root,value}=found;
+ if(typeof value?.server!=='string'||typeof value.account!=='string')throw new CliError('invalid_tracking','The stored workspace record is incomplete.','Run afbin pull to re-establish tracking for this directory.');
+ normalizeServer(value.server);
+ const files:Record<string,TrackedFile>={};const ids=new Set<string>();
+ for(const record of state.list<TrackedFile>(root,'tracked')){
+  const entry=record.value;
+  await confinedPath(root,record.key);
+  if(!entry||!ARTIFACT_ID_PATTERN.test(entry.id)||ids.has(entry.id)||!hash(entry.file)||entry.snapshot?.id!==entry.id||!Number.isSafeInteger(entry.snapshot.version)||entry.snapshot.version<1||!entry.snapshot.edit_id||!hash(entry.snapshot.state))throw new CliError('invalid_tracking',`Invalid tracking entry for ${record.key}.`);
+  ids.add(entry.id);files[record.key]=entry;
+ }
+ return{home,root,cwd,tracking:{server:value.server,account:value.account,files}};
+}
+
+const RESOURCE_TYPES:Record<string,string>={markup:'artifact',folder:'folder',dataset:'dataset'};
+/**
+ * The accepted base text for a tracked file, derived from the snapshot rather
+ * than stored beside it. Binaries have none: they are compared by hash alone.
+ */
+export async function baselineOf(workspace:Workspace,path:string,tracked:TrackedFile):Promise<Buffer|null>{
+ const extension=extname(path).toLowerCase();
+ if(extension==='.jsx'){
+  const head=tracked.snapshot;const chosen=tracked.selected??head;
+  const document=snapshotDocument({...chosen,edit_id:head.edit_id,state:head.state});
+  document.metadata.head_version=head.version;
+  if(tracked.selected)document.metadata.version=tracked.selected.version;
+  document.body=await restoreDependencyPaths(document.body,tracked.paths??{},path,workspace.root);
+  return Buffer.from(writeDocument(document));
+ }
+ if(['.yaml','.yml'].includes(extension)){
+  const type=RESOURCE_TYPES[tracked.snapshot.format??'']??'file';
+  const prototype={type,...(tracked.source?{source:tracked.source.declared??relative(dirname(path),tracked.source.path)}:{})} as ArtifactResourceFile;
+  return Buffer.from(writeResourceFile(snapshotResource(tracked.snapshot,prototype)));
+ }
+ return null;
+}
+
 export async function inspectWorkspace(workspace:Workspace,paths?:string[]):Promise<LocalFile[]>{
- const selected=paths?.length?await Promise.all(paths.map(async path=>relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,path))))):Object.keys(workspace.lock?.files??{});
+ const selected=paths?.length?await Promise.all(paths.map(async path=>relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,path))))):Object.keys(workspace.tracking?.files??{});
  const seen=new Map<string,string>();
  const results:LocalFile[]=[];
  for(const path of [...new Set(selected)]){
   const bytes=workspace.virtualFiles?.[path]??await readOptional(await confinedPath(workspace.root,path));
-  let tracked=workspace.lock?.files[path];
+  let tracked=workspace.tracking?.files[path];
   let renamedFrom:string|undefined;
   const document=bytes&&extname(path).toLowerCase()==='.jsx'?parseDocument(bytes.toString()):undefined;
   const resource=bytes&&['.yaml','.yml'].includes(extname(path).toLowerCase())?parseResourceFile(bytes.toString()):undefined;
@@ -52,7 +102,7 @@ export async function inspectWorkspace(workspace:Workspace,paths?:string[]):Prom
   if(id){
    const previous=seen.get(id);if(previous&&previous!==path)throw duplicate(id,previous,path);
    seen.set(id,path);
-   const other=Object.entries(workspace.lock?.files??{}).find(([p,e])=>p!==path&&e.id===id);
+   const other=Object.entries(workspace.tracking?.files??{}).find(([p,e])=>p!==path&&e.id===id);
    if(other){
     if(await readOptional(await confinedPath(workspace.root,other[0])))throw duplicate(id,other[0],path);
     tracked=other[1];renamedFrom=other[0];
@@ -60,7 +110,7 @@ export async function inspectWorkspace(workspace:Workspace,paths?:string[]):Prom
   }
   const source=resource?await readResourceSource(resource,path,workspace.root):undefined;
   const sourceChanged=source?.bytes!==tracked?.source?.bytes;
-  results.push({path,bytes,...(document?{document}:{}),...(resource?{resource}:{}),...(tracked?{tracked}:{}),...(renamedFrom?{renamedFrom}:{}),status:!bytes?'missing':renamedFrom?'renamed':!tracked?'new':!sourceChanged&&digest(bytes)===digest(Buffer.from(tracked.baseline,'base64'))?'unchanged':'modified'});
+  results.push({path,bytes,...(document?{document}:{}),...(resource?{resource}:{}),...(tracked?{tracked}:{}),...(renamedFrom?{renamedFrom}:{}),status:!bytes?'missing':renamedFrom?'renamed':!tracked?'new':!sourceChanged&&digest(bytes)===tracked.file?'unchanged':'modified'});
  }
  return results;
 }
