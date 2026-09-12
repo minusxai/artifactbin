@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {gzipSync} from 'node:zlib';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -91,4 +92,15 @@ test('a download that stops delivering bytes is abandoned as stalled, not waited
  };
  await assert.rejects(updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],fetch:stalled as any,verifyExecutable:async()=>{},stallMs:100}),(error:any)=>error.code==='release_unavailable'&&/stalled/.test(error.message));
  assert.equal((await readFile(exe,'utf8')),'old binary');
+});
+
+test('gzip updates verify both transport and executable, and recover using decoded bytes',async()=>{
+ const compressed=gzipSync(binary);const packed={...manifest,binary:{...manifest.binary,gzip:{file:manifest.binary.file+'.gz',sha256:digest(compressed)}}};
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-gzip-')),exe=join(home,'afbin');
+ try{
+  await writeFile(exe,'old binary');let downloads=0;
+  const fetcher=async(input:unknown)=>{const path=String(input);if(path.endsWith('.manifest.json'))return Response.json(packed);if(path.endsWith('.gz')){downloads++;return new Response(compressed);}if(path.endsWith('/afbin-darwin-arm64'))assert.fail('must prefer gzip');return transport()(input);};
+  await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],verifyExecutable:async p=>{assert.deepEqual(await readFile(p),binary);},fetch:fetcher});
+  assert.equal(downloads,1);assert.deepEqual(await readFile(exe),binary);
+ }finally{await rm(home,{recursive:true,force:true});}
 });

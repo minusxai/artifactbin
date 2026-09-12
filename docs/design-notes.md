@@ -206,3 +206,28 @@ cold/warm browser samples for Home and prose. Preparing thumbnails equalizes
 server render work before the browser-cache comparison.
 Its PGLite/local-object-store measurements are controlled lab evidence, not
 production rollout results. Raw JSON includes resource timing and payload sizes.
+
+
+## Standalone CLI distribution
+
+The release matrix builds pinned Node source with `small-icu` (English/root locale data), then uses
+that same runtime for SEA generation. Linux uses a digest-pinned manylinux 2.28 toolchain with
+static C++ support and the official Node ET_EXEC layout (avoiding the injector’s PIE symbol-table bug);
+CI rejects other ELF layouts and runtime GLIBC requirements above 2.28. `services/cli/scripts/binary.mjs` strips the executable before
+final signing and emits raw and gzip assets, with separate transport/executable hashes. Raw assets
+remain for existing installers and self-updaters; new clients prefer gzip and verify decoded bytes
+before atomic replacement. Intel Mac injection uses hash-pinned LIEF 0.17.6 Python wheels; the old
+postject writer corrupts TLS in these binaries (Node issue #59553). The injector verifies the unique
+SEA fuse and exact embedded bytes before signing. CI emits per-platform `.sizes.json` measurements.
+
+SQL's contract and in-process execution stay unchanged. The standalone composition redirects only
+the engine's sanctioned lazy native import. Its executable embeds a package manifest, not DuckDB;
+first use downloads a platform-specific binary archive with architecture-thinned/stripped native
+files. `services/cli/src/native-package.ts` bounds decompression, checks every path/hash, publishes a
+private cache atomically and verifies cached files before native loading. Concurrent processes can
+stage independently but share the same immutable checksum directory. No user data enters download
+requests. `afbin setup --service sql` prepares offline use without selecting skills or authenticating.
+CLI upgrades pin their own package checksum; source/npm builds retain their installed dependencies.
+`CLI__SERVICE_BASE_URL` is owned by CLI config and changes only package transport, never trust. A base URL may include a path prefix;
+the local eval proxy serves the same compressed/core/native assets under `/chat/releases`.
+Browser rendering remains server-side and adds no mandatory browser bytes to this release.

@@ -7,6 +7,7 @@ import {
   loadConnection,
   saveConnection,
   normalizeServer,
+  servicePackageUrl,
 } from "../src/config";
 test("reads the single credential directory, scopes to host, saves privately without shell evaluation", async () => {
   const home = await mkdtemp(join(tmpdir(), "afbin-test-"));
@@ -103,4 +104,12 @@ test("ARTIFACTBIN_HOME selects a separate private state directory", async () => 
     assert.equal((await stat(join(home, ".artifactbin.local"))).mode & 0o777, 0o700);
     await assert.rejects(stat(join(home, ".artifactbin")), { code: "ENOENT" });
   } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test("service mirrors preserve release identity under a safe path prefix", () => {
+ const release='https://github.com/minusxai/artifactbin/releases/download/afbin-v0.1.13/afbin-sql-linux-x64.gz';
+ assert.equal(servicePackageUrl(release,{}),release);
+ assert.equal(servicePackageUrl(release,{CLI__SERVICE_BASE_URL:'http://127.0.0.1:6400/chat/releases/'}),'http://127.0.0.1:6400/chat/releases/afbin-v0.1.13/afbin-sql-linux-x64.gz');
+ assert.equal(servicePackageUrl(release,{CLI__SERVICE_BASE_URL:'https://mirror.example/packages'}),'https://mirror.example/packages/afbin-v0.1.13/afbin-sql-linux-x64.gz');
+ for(const base of ['http://mirror.example','https://user:secret@mirror.example','https://mirror.example/?token=secret','https://mirror.example/#secret'])assert.throws(()=>servicePackageUrl(release,{CLI__SERVICE_BASE_URL:base}));
 });

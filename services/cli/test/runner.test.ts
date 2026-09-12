@@ -51,7 +51,7 @@ test("real PTY delivers a remote line and relays output and exit, acknowledging 
       signal: AbortSignal.timeout(10000),
     });
     assert.equal(code, 7);
-    assert.match(output, /received:from-comment/);
+    assert.match(output, /received:from-comment/, JSON.stringify({local,ack,exit,exchanges}));
     assert.match(local, /received:from-comment/);
     assert.equal(ack, 1);
     assert.equal(exit, 7);
@@ -293,6 +293,7 @@ test("relay restart restores acknowledged history at the original link, includin
   let registered = 0;
   let restarted = false;
   let restored = false;
+  let recoveryOutputReceived = false;
   let originalId = "";
   t.mock.method(globalThis, "fetch", async (url: string, init: RequestInit) => {
     const payload = JSON.parse(String(init.body));
@@ -317,16 +318,23 @@ test("relay restart restores acknowledged history at the original link, includin
       restored = true;
       registry.input("owner", originalId, "done\r");
     }
+    // Keep the fixture alive until recovery output reaches the relay. Immediate-exit
+    // flushing is exercised separately; this test owns replay and re-registration.
+    if (!recoveryOutputReceived && view.snapshot?.includes("AFTER-RECOVERY")) {
+      recoveryOutputReceived = true;
+      registry.input("owner", originalId, "finish\r");
+    }
     return Response.json(await registry.exchange("owner", originalId, payload));
   });
   const code = await runRemote({
     client: new HttpClient({ connection: { server: "https://example.com", token: "test" } }),
-    command: "/bin/sh", args: ["-c", 'printf "BEFORE-RESTART\\n"; read line; echo AFTER-RECOVERY'],
+    command: "/bin/sh", args: ["-c", 'printf "BEFORE-RESTART\\n"; read line; echo AFTER-RECOVERY; read finish'],
     interactive: false, onOutput: () => {}, signal: AbortSignal.timeout(10000),
   });
   assert.equal(code, 0);
   assert.equal(registered, 3);
   assert.ok(restored);
+  assert.ok(recoveryOutputReceived, "the recovered relay acknowledges output before the fixture exits");
   const snapshot = (await registry.view("owner", originalId, -1)).snapshot!;
   assert.equal(snapshot.split("BEFORE-RESTART").length, 2, "history is not duplicated");
   assert.match(snapshot, /AFTER-RECOVERY/);

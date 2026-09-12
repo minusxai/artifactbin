@@ -45,3 +45,12 @@ test('setup cancellation writes nothing; selecting none persists even with detec
   assert.deepEqual(JSON.parse(await readFile(join(home,'.artifactbin','settings.json'),'utf8')).harnesses,[]);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('explicit SQL preparation checks the local engine and reports readiness without authentication',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-setup-sql-'));const out:string[]=[];
+ try{
+  assert.equal(await runCli(['setup','--service','sql','--json'],{home,cwd:home,env:{},stdout:s=>out.push(s),stderr:s=>out.push(s),fetch:async()=>{throw new Error('no server authentication');}}),0,out.join(''));
+  assert.deepEqual(JSON.parse(out.join('')),{services:[{name:'sql',status:'ready',execution:'local'}]});
+  await assert.rejects(stat(join(home,'.artifactbin','settings.json')),{code:'ENOENT'});
+ }finally{await rm(home,{recursive:true,force:true});}
+});

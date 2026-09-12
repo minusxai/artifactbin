@@ -1,3 +1,6 @@
+import {download} from './release-download';
+import {gunzipSync} from 'node:zlib';
+export {DOWNLOAD_STALL_MS} from './release-download';
 import {configDir} from './config';
 /** Explicit release update. Ordinary commands never import release metadata from the network. */
 import {execFile} from 'node:child_process';
@@ -18,7 +21,7 @@ const releasePointer='/chat/release.json';
 const downloads='https://github.com/minusxai/artifactbin/releases/download';
 export type Installation={kind:'standalone';path:string};
 interface ReleasePointer {version:string;protocol:number}
-interface ReleaseManifest {version:string;protocol:number;platform:string;arch:string;binary:{file:string;sha256:string};skills:{file:string;sha256:string}}
+interface ReleaseManifest {version:string;protocol:number;platform:string;arch:string;binary:{file:string;sha256:string;gzip?:{file:string;sha256:string}};skills:{file:string;sha256:string}}
 interface SkillBundle {version:string;protocol:number;files:Record<string,string>}
 interface PendingUpdate {schema:1;installation:Installation;manifest:ReleaseManifest;skills:string;selected:SkillHarness[];before?:string;mode?:number;backup?:string}
 interface UpdateOptions {home:string;server:string;stallMs?:number;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
@@ -32,34 +35,13 @@ function verifyPointer(value:any):asserts value is ReleasePointer{
 }
 function verifyManifest(value:any,platform:string,arch:string):asserts value is ReleaseManifest{
  if(!value||!semver(value.version)||!Number.isSafeInteger(value.protocol)||value.protocol<1||value.platform!==platform||value.arch!==arch||value.binary?.file!==`afbin-${platform}-${arch}`||value.skills?.file!=='afbin-skills.json'||![value.binary?.sha256,value.skills?.sha256].every(x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x)))throw new CliError('invalid_release','Release manifest is invalid.');
+ if(value.binary.gzip!==undefined&&(value.binary.gzip?.file!==`afbin-${platform}-${arch}.gz`||!/^([a-f0-9]{64})$/.test(value.binary.gzip?.sha256??'')))throw new CliError('invalid_release','Compressed release manifest is invalid.');
 }
 function verifySkills(bytes:Buffer,manifest:ReleaseManifest):SkillBundle{
  if(digest(bytes)!==manifest.skills.sha256)throw new CliError('checksum_mismatch','Skill bundle checksum mismatch; nothing was installed.');
  let bundle:SkillBundle;try{bundle=JSON.parse(bytes.toString());}catch{throw new CliError('invalid_release','The skill bundle is not valid JSON.');}
  if(bundle.version!==manifest.version||bundle.protocol!==manifest.protocol||!bundle.files||typeof bundle.files!=='object'||!bundle.files['SKILL.md']||Object.entries(bundle.files).some(([path,value])=>!safeSkillPath(path)||typeof value!=='string'))throw new CliError('invalid_release','Skill bundle does not match the release.');
  return bundle;
-}
-/** Downloads abort when no bytes arrive for `stallMs`, never on total duration: a slow link may take as long as it needs. */
-export const DOWNLOAD_STALL_MS=60_000;
-async function download(url:string,fetcher:typeof fetch,maxBytes:number,stallMs=DOWNLOAD_STALL_MS):Promise<Buffer>{
- const control=new AbortController();let watchdog=setTimeout(()=>control.abort(),stallMs);
- const progressed=()=>{clearTimeout(watchdog);watchdog=setTimeout(()=>control.abort(),stallMs);};
- try{return await downloadWith(url,fetcher,maxBytes,control.signal,progressed);}
- catch(error){
-  if(control.signal.aborted)throw new CliError('release_unavailable',`Release download stalled for ${Math.round(stallMs/1000)} seconds.`,'Retry afbin update after checking connectivity.');
-  throw error;
- }finally{clearTimeout(watchdog);}
-}
-async function downloadWith(url:string,fetcher:typeof fetch,maxBytes:number,signal:AbortSignal,progressed:()=>void):Promise<Buffer>{
- const response=await fetcher(url,{redirect:'follow',signal,headers:{Accept:'application/json','User-Agent':'afbin-update'}});
- if(!response.ok)throw new CliError('release_unavailable',`Release download returned HTTP ${response.status}.`,'Retry afbin update after checking connectivity.');
- if(url.startsWith('https:')&&response.url&&new URL(response.url).protocol!=='https:')throw new CliError('invalid_release','Release download redirected outside HTTPS.');
- if(Number(response.headers.get('content-length'))>maxBytes)throw new CliError('invalid_release','Release download exceeds its size limit.');
- if(!response.body)throw new CliError('invalid_release','Release download is empty.');
- const reader=response.body.getReader(),chunks:Buffer[]=[];let length=0;
- const aborted=new Promise<never>((_,reject)=>signal.addEventListener('abort',()=>{reject(new Error('aborted'));reader.cancel().catch(()=>{});},{once:true}));
- try{for(;;){const {done,value}=await Promise.race([reader.read(),aborted]);if(done)break;progressed();length+=value.byteLength;if(length>maxBytes){await reader.cancel();throw new CliError('invalid_release','Release download exceeds its size limit.');}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
- return Buffer.concat(chunks);
 }
 /** Only the verified standalone executable is self-updating; nothing else is replaced in place. */
 export async function detectInstallation(executable=process.execPath,standalone=isSea()):Promise<Installation>{
@@ -115,7 +97,10 @@ export async function updateCli(options:UpdateOptions){
   if(manifest.version!==release.version||manifest.protocol!==release.protocol)throw new CliError('compatible_release_unavailable','The published release does not match the protocol the selected server named.','Retry after a compatible CLI release is published.');
   const skillBytes=await download(`${base}/${manifest.skills.file}`,fetcher,4194304,options.stallMs);verifySkills(skillBytes,manifest);
   if(manifest.version!==(options.version??CLI_VERSION)){
-   bytes=await download(`${base}/${manifest.binary.file}`,fetcher,268435456,options.stallMs);
+   const asset=manifest.binary.gzip??manifest.binary;
+   bytes=await download(`${base}/${asset.file}`,fetcher,268435456,options.stallMs);
+   if(digest(bytes)!==asset.sha256)throw new CliError('checksum_mismatch','Download checksum mismatch; nothing was installed.');
+   if(manifest.binary.gzip){try{bytes=gunzipSync(bytes,{maxOutputLength:268435456});}catch{throw new CliError('invalid_release','Invalid compressed executable; nothing was installed.');}}
    if(digest(bytes)!==manifest.binary.sha256)throw new CliError('checksum_mismatch','Executable checksum mismatch; nothing was installed.');
   }
   pending={schema:1,installation,manifest,skills:skillBytes.toString(),selected:options.harnesses};

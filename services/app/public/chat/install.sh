@@ -2,7 +2,7 @@
 set -eu
 
 main() {
-  version=0.1.12
+  version=0.1.13
   install_dir="${HOME}/.local/bin"
   yes=0
   style
@@ -15,7 +15,7 @@ main() {
         shift 2;;
       --help|-h)
         cat <<'USAGE'
-Install afbin: sh install.sh [--version 0.1.12] [--dir PATH] [--yes]
+Install afbin: sh install.sh [--version 0.1.13] [--dir PATH] [--yes]
   --version X.Y.Z   install this release instead of the pinned one
   --dir PATH        install directory (default ~/.local/bin)
   --yes, -y         accept default skills without a checklist or sign-in
@@ -59,6 +59,13 @@ USAGE
     done_line "afbin $version is already installed at $(pretty "$exe")"
     first_run; finish; return 0
   fi
+  # Prefer compressed transport, while retaining raw identities for older releases/clients.
+  raw_asset=$asset; raw_expected=$expected
+  compressed_expected=$(awk -v asset="$asset.gz" '$2 == asset { print $1 }' "$download_dir/SHA256SUMS")
+  if [ -n "$compressed_expected" ]; then
+    command -v gzip >/dev/null 2>&1 || fail 'gzip is required.'
+    asset="$asset.gz"; expected=$compressed_expected
+  fi
   # Verified downloads are kept for reinstalls, so an uninstall-install loop never fetches twice.
   cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/afbin"; cached="$cache_dir/$asset-$version"
   if [ -f "$cached" ] && [ "$(checksum "$cached")" = "$expected" ]; then
@@ -85,6 +92,12 @@ USAGE
   done_line 'Checksum verified (SHA-256)'
   { mkdir -p "$cache_dir" && cp "$download_dir/$asset" "$cached"; } 2>/dev/null || true
   fi
+
+  if [ "$asset" != "$raw_asset" ]; then
+    gzip -dc "$download_dir/$asset" > "$download_dir/$raw_asset" || fail 'Invalid compressed executable; existing installation was not changed.'
+    [ "$(checksum "$download_dir/$raw_asset")" = "$raw_expected" ] || fail 'Executable checksum verification failed; existing installation was not changed.'
+  fi
+  asset=$raw_asset
 
   replaced=0
   [ ! -e "$install_dir/afbin" ] || replaced=1
