@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "noUncheckedIndexedAccess": true,
-    "noEmit": true
+    "noEmit": true,
+    // `incremental` is inherited from the base config; its default buildinfo
+    // path is not, so name a DISTINCT one — this config's include set differs
+    // from the base's, and a shared path would have each run invalidate the
+    // other. Lives in the gitignored npm cache like the base's.
+    "tsBuildInfoFile": "../../node_modules/.cache/tsc/utils-strict.tsbuildinfo"
   },
   "include": [
     "src/**/*.ts",

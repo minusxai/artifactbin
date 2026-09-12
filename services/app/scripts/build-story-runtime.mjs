@@ -8,7 +8,7 @@
  * matches the source.
  */
 import esbuild from 'esbuild';
-import './build-libraries.mjs';
+import crypto from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -18,6 +18,63 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // `--dev` builds unminified with React's development build, whose hydration
 // diagnostics name the offending element instead of a numbered error code.
 const dev = process.argv.includes('--dev');
+
+// `--cache` skips the whole build when nothing that feeds it has changed. The
+// test global-setup (test/setup/build-runtime.global.ts) runs this on EVERY
+// vitest invocation; a cold build is ~0.8s of esbuild the inner loop pays over
+// and over for a bundle that rarely moves. The production build path
+// (`npm run build` / `build:runtime`) does NOT pass the flag, so it is
+// byte-for-byte unchanged. Off in dev builds too: `--dev` swaps React builds,
+// so a cache keyed the same way would be wrong.
+const cache = process.argv.includes('--cache') && !dev;
+const distDir = path.join(root, 'lib/story-runtime/dist');
+// Marker lives NEXT TO the SSR bundle, inside the gitignored
+// lib/story-runtime/dist/ — never committed, and gone whenever the output is.
+const markerPath = path.join(distDir, '.build-cache.json');
+const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex');
+const fileSha = (file) => sha(fs.readFileSync(file));
+const listFiles = (dir) => fs.existsSync(dir)
+  ? fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? listFiles(path.join(dir, e.name)) : [path.join(dir, e.name)])
+  : [];
+
+// The build's FINGERPRINT: how the bundle is produced (both build scripts) and
+// every pinned dependency that lands in it (react, esbuild, three, vega — all
+// captured by the lockfile). A change here must invalidate regardless of the
+// source graph, so an esbuild bump or a dependency change rebuilds.
+const toolHash = sha(Buffer.concat([
+  fs.readFileSync(fileURLToPath(import.meta.url)),
+  fs.readFileSync(path.join(root, 'scripts/build-libraries.mjs')),
+  fs.readFileSync(path.join(root, '../../package-lock.json')),
+]));
+
+if (cache && fs.existsSync(markerPath)) {
+  try {
+    const marker = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    // Skip only when the tool fingerprint matches, every output the marker
+    // recorded is still on disk (a wiped dist/ must rebuild, not skip into a
+    // broken SSR), and every source input still hashes the same.
+    const outputsOk = marker.toolHash === toolHash
+      && Array.isArray(marker.outputs)
+      && marker.outputs.every((rel) => fs.existsSync(path.join(root, rel)));
+    const inputsOk = outputsOk && marker.inputs
+      && Object.entries(marker.inputs).every(([rel, hash]) => {
+        const file = path.join(root, rel);
+        return fs.existsSync(file) && fileSha(file) === hash;
+      });
+    if (inputsOk) {
+      console.log('build-story-runtime: inputs unchanged, skipping rebuild (cache hit)');
+      process.exit(0);
+    }
+  } catch {
+    // Any unreadable/older marker: fall through to a full rebuild.
+  }
+}
+
+// Registry-driven browser libraries (public/libraries/*). Imported here rather
+// than at module top so a cache hit above skips it too; on a rebuild it must
+// run, so it is awaited before the marker records its outputs below.
+await import('./build-libraries.mjs');
 
 const shared = {
   bundle: true,
@@ -178,11 +235,45 @@ fs.writeFileSync(path.join(outdir, 'manifest.json'), JSON.stringify(manifest, nu
 // Server renderer loaded by lib/story/ssr.server.ts through createRequire.
 // The CJS bundle carries React. Vega stays external because its Node ESM
 // build uses top-level await; SSR renders chart placeholders, not charts.
-await esbuild.build({
+const ssrBuild = await esbuild.build({
   ...shared,
   entryPoints: [path.join(root, 'lib/story-runtime/ssr-entry.tsx')],
   outfile: path.join(root, 'lib/story-runtime/dist/story-ssr.cjs'),
   format: 'cjs',
   platform: 'node',
   external: ['vega', 'vega-lite', 'vega-embed', 'vega-interpreter', 'canvas'],
+  metafile: true,
 });
+
+// Record what this build consumed and produced so a `--cache` run can decide
+// whether to skip. The INPUTS are the union of every esbuild metafile's own
+// module graph (exact — a new import lands because the file that added it
+// changed) minus node_modules (pinned by the lockfile, covered by toolHash),
+// plus lib/libraries/ whose graph has no metafile here (build-libraries.mjs is
+// out of scope to instrument; the registry pins each version, so a bump shows
+// up in registry.json). The OUTPUTS are every emitted file, checked for mere
+// existence — a wiped dist/ must not skip into a broken SSR.
+if (cache) {
+  const inputs = {};
+  const addGraph = (metafile) => {
+    for (const key of Object.keys(metafile.inputs)) {
+      const abs = path.resolve(process.cwd(), key);
+      if (abs.split(path.sep).includes('node_modules')) continue;
+      const rel = path.relative(root, abs);
+      if (rel.startsWith('..')) continue;
+      inputs[rel] ??= fileSha(abs);
+    }
+  };
+  for (const b of [browser, anchorBuild, commentBuild, ssrBuild]) addGraph(b.metafile);
+  for (const file of listFiles(path.join(root, 'lib/libraries'))) {
+    inputs[path.relative(root, file)] = fileSha(file);
+  }
+  const outputs = [
+    'lib/story-runtime/dist/story-ssr.cjs',
+    'public/story/manifest.json',
+    ...[manifest.entry, manifest.anchor, manifest.comment, ...manifest.lazy].map((url) => `public${url}`),
+    ...listFiles(path.join(root, 'public/libraries')).map((file) => path.relative(root, file)),
+  ];
+  fs.mkdirSync(distDir, { recursive: true });
+  fs.writeFileSync(markerPath, JSON.stringify({ toolHash, inputs, outputs }, null, 2) + '\n');
+}

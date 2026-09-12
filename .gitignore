@@ -6,6 +6,10 @@ node_modules/
 !.env.example
 *.tsbuildinfo
 next-env.d.ts
+# incremental tsc program graph (npm run validate / validate:shared). Under
+# node_modules, so already ignored — named explicitly because it is a build
+# input the tsconfigs point at, not a stray artifact.
+node_modules/.cache/tsc/
 # vendored runtime assets — copied from node_modules on postinstall
 **/public/monaco/
 .artifact-objects/

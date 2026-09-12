@@ -17,6 +17,7 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "incremental": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsc/root.tsbuildinfo",
     "paths": {
       "@/*": [
         "./services/app/*"
