@@ -587,7 +587,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
      * ORDER with every module script before it, so on a chart document this
      * one waited for the whole runtime entry to download AND evaluate before
      * the reader's bar would answer a single scroll — measured at ~9.3 s
-     * against ~2.0 s for the chrome appearing (scripts/measure-bar.mjs).
+     * against ~2.0 s for the chrome appearing.
      * Nothing here depends on the runtime or on anything the runtime does, so
      * there is no order to keep; it needs only its own document, and it is
      * emitted after the island for that.
