@@ -26,8 +26,6 @@ export interface AuthOptions {
   /** Only `ARTIFACTBIN_HOME` is read here: an explicit `ARTIFACTBIN_TOKEN` never short-circuits browser approval. */
   env?: NodeJS.ProcessEnv;
   interactive: boolean;
-  /** Browser launch is independent of terminal prompts. Approval waiting is bounded. */
-  noBrowser?: boolean;
   /** A rejected token must not be reused; another process may already have replaced it. */
   rejectedToken?: string;
   fetch?: typeof fetch;
@@ -48,7 +46,7 @@ export async function browserAuthenticate(origin:string,options:AuthOptions):Pro
   const saved=await loadConnection(server,home,{ARTIFACTBIN_HOME:options.env?.ARTIFACTBIN_HOME});
   if(saved&&saved.token!==options.rejectedToken&&(!saved.expiresAt||saved.expiresAt>(options.now??Date.now)()))return saved;
   const pending=await readOptional(join(configDir(home,options.env),`pairing-${digest(server).slice(0,16)}.json`));
-  if(options.interactive&&!options.noBrowser&&!pending)return loopbackAuthenticate(server,{...options,open:options.open??openBrowser});
+  if(options.interactive&&!pending)return loopbackAuthenticate(server,{...options,open:options.open??openBrowser});
   return deviceAuthenticate(server,options);
  },{waitMs:300000});
 }
@@ -87,7 +85,7 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   const approval = new ApprovalRequired(pending.verificationUrl,pending.userCode,pending.expiresAt);
   {
     (options.notify ?? (message=>process.stderr.write(`${message}\n`)))(approval.message);
-    try { if (!options.noBrowser) await (options.open ?? openBrowser)(pending.verificationUrl); }
+    try { await (options.open ?? openBrowser)(pending.verificationUrl); }
     catch (error) { options.notify?.(error instanceof Error ? error.message : 'Open the approval URL in your browser.'); }
   }
   const deadline = options.interactive ? pending.expiresAt : Math.min(pending.expiresAt, clock() + AGENT_APPROVAL_WAIT_MS);

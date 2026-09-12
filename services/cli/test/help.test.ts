@@ -49,7 +49,8 @@ test('the overview groups every command once, with the first clause of its descr
   assert.ok(!summary(command).includes(';'));
  }
  assert.match(text,/^Global options:$/m);
- for(const flag of ['--help','--version','--json','--server <URL>','--yes','--no-browser'])assert.ok(text.includes(flag),flag);
+ assert.doesNotMatch(text,/--no-browser/);
+ for(const flag of ['--help','--version','--json','--server <URL>','--yes'])assert.ok(text.includes(flag),flag);
  assert.match(text,/<ref> = <url\|id\|path>\[@version\]/);
  assert.match(text,/afbin help brief/);
  assert.match(text,/afbin help <command>/);
@@ -77,11 +78,12 @@ test('a command screen carries usage, every flag the parser accepts, and the exa
  for(const command of commands){
   const text=commandScreen(command.name,plain);
   assert.doesNotMatch(text,ANSI);
+  assert.doesNotMatch(text,/--no-browser/);
   assert.ok(text.startsWith(`afbin ${command.name}\n`),command.name);
   assert.ok(text.replace(/\n/g,' ').includes(command.description),command.name);
   assert.ok(text.includes(`Usage: afbin ${command.name} ${command.usage}`.trimEnd()),command.name);
   for(const flag of command.flags)assert.match(text,new RegExp(`^ {2,6}(-[a-z], )?--${flag}( <[A-Z=]+>)?( |$)`,'m'),`${command.name} --${flag}`);
-  for(const flag of ['--help','--version','--server <URL>','--yes','--no-browser'])assert.ok(text.includes(flag),`${command.name} ${flag}`);
+  for(const flag of ['--help','--version','--server <URL>','--yes'])assert.ok(text.includes(flag),`${command.name} ${flag}`);
   assert.equal(text.includes('--json'),command.name!=='remote',command.name);
   for(const example of command.examples)assert.ok(text.includes(`  ${example}`),example);
   assert.ok(text.includes('Examples:'));
@@ -376,4 +378,13 @@ describe('the bundled teaching and the manual', () => {
    assert.match(templates,/Run afbin help <template> to print a local starter/);
   });
 
+});
+
+test('removed browser flag is rejected before authentication or network access',async()=>{
+ const output:string[]=[];let calls=0;
+ const code=await runCli(['auth','--no-browser','--json'],{cwd:tmpdir(),home:tmpdir(),env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},auth:{open:async()=>{calls++;}},fetch:async()=>{calls++;return Response.json({});}});
+ assert.equal(code,2);
+ assert.equal(JSON.parse(output.join('')).error.code,'unknown_flag');
+ assert.equal(calls,0);
+ for(const topic of ['commands','publishing-auth','brief'])assert.doesNotMatch(helpDocument(topic),/--no-browser/);
 });

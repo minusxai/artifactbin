@@ -33,7 +33,7 @@ import path from 'node:path';
 import tls from 'node:tls';
 import { execFileSync } from 'node:child_process';
 import type { LedgerEntry } from './contracts';
-import { createRecorder, forwardExchange, transportFor } from './proxy';
+import { createRecorder, forwardExchange, installerRewrite, isLocalReleasePath, serveLocalRelease, transportFor, type LocalRelease } from './proxy';
 import { settleWithin, TEARDOWN_MS } from './shutdown';
 
 /** Where the OS keeps its root bundle. First hit wins; both are plain concatenated PEM. */
@@ -121,6 +121,15 @@ export async function startMitmProxy(opts: {
   caDir: string;
   /** Where a decrypted request is re-originated. Defaults to the host itself over https. */
   upstream?: string;
+  /**
+   * THIS CHECKOUT'S CLI, for the not-installed flow against a deployment. The shipped installer
+   * downloads `afbin-v<version>` from GitHub; with this set the installer text is rewritten so the
+   * download lands on the host under test — which this proxy answers itself from `dist/` — exactly as
+   * the local-server proxy does. Without it every CI not-installed and hardcore leg installed the
+   * published release (runs 34704052816, 34708820644: afbin-v0.1.12, built before that day's CLI
+   * fixes) while the workflow believed it was measuring the checkout.
+   */
+  localRelease?: LocalRelease;
 }): Promise<RunningMitm> {
   const ca = createCa(opts.caDir);
   const record = createRecorder(opts.ledgerPath);
@@ -128,9 +137,14 @@ export async function startMitmProxy(opts: {
   const target = new URL(opts.upstream ?? `https://${opts.host}`);
   const upstreamTransport = transportFor(target.href);
 
+  const releaseSelf = `https://${opts.host}`;
   const decrypted = https.createServer(
     { SNICallback: (name, cb) => cb(null, certFor(ca, name, certs)) },
-    (req, res) => forwardExchange(req, res, { target, transport: upstreamTransport, rewriteHost: true, record }),
+    (req, res) => {
+      const pathname = (req.url ?? '/').split('?')[0];
+      if (isLocalReleasePath(pathname, opts.localRelease)) return serveLocalRelease(pathname, opts.localRelease, res);
+      forwardExchange(req, res, { target, transport: upstreamTransport, rewriteHost: true, record, rewriteBody: opts.localRelease ? [installerRewrite(opts.localRelease, releaseSelf)] : [] });
+    },
   );
   decrypted.on('tlsClientError', () => { /* a probe or an aborted handshake; not a request */ });
 

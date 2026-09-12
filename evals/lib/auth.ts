@@ -29,7 +29,7 @@ export async function runCliAuth(opts: AuthOptions): Promise<AuthResult> {
   const approver = startApprover({ homeDir: opts.homeDir, agentBase: opts.server, publicOrigin: opts.publicOrigin, cookie: opts.cookie, log: opts.log, intervalMs: 500 });
   try {
     const output = await new Promise<string>((resolve, reject) => {
-      const child = spawn(path.join(opts.cliBin, 'afbin'), ['auth', '--server', opts.server, '--no-browser', '--json'], {
+      const child = spawn(path.join(opts.cliBin, 'afbin'), ['auth', '--server', opts.server, '--json'], {
         cwd: opts.homeDir,
         env: { ...process.env, ...harnessEnv(opts.harness, opts.homeDir), HOME: opts.homeDir, PATH: [opts.cliBin, process.env.PATH ?? ''].join(path.delimiter) },
         stdio: ['ignore', 'pipe', 'pipe'],

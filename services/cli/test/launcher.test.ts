@@ -90,7 +90,7 @@ describe('attaching to a remote session', () => {
    const h=await harness('afbin-seed-remote-attach-');
    try{
     let created=0;
-    const code=await runCli(['remote','--session','rs_1','--no-browser','--server','https://example.com'],{cwd:h.root,home:h.root,env:{},interactive:false,stdout:s=>h.out.push(s),stderr:()=>{},fetch:async(input,init)=>{const request=new Request(input,init);const path=new URL(request.url).pathname;if(request.method==='POST'&&path==='/api/remote/sessions')created++;if(path==='/api/remote/sessions/rs_1')return Response.json({session:{id:'rs_1',name:'pi',harness:'pi',cwd:'/w',machine:'m',cols:80,rows:24,online:false,exitCode:0,controller:'local',createdAt:'2026-09-11T00:00:00Z'},generation:'g1',seq:0,frames:[],snapshot:''});return Response.json({error:'not_found'},{status:404});}});
+    const code=await runCli(['remote','--session','rs_1','--server','https://example.com'],{cwd:h.root,home:h.root,env:{},interactive:false,stdout:s=>h.out.push(s),stderr:()=>{},fetch:async(input,init)=>{const request=new Request(input,init);const path=new URL(request.url).pathname;if(request.method==='POST'&&path==='/api/remote/sessions')created++;if(path==='/api/remote/sessions/rs_1')return Response.json({session:{id:'rs_1',name:'pi',harness:'pi',cwd:'/w',machine:'m',cols:80,rows:24,online:false,exitCode:0,controller:'local',createdAt:'2026-09-11T00:00:00Z'},generation:'g1',seq:0,frames:[],snapshot:''});return Response.json({error:'not_found'},{status:404});}});
     assert.equal(code,0,h.out.join(''));assert.equal(created,0);
    }finally{await h.cleanup();}
   });

@@ -49,10 +49,10 @@ test('an agent operation resumes after rejected refresh and browser approval',as
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
-test('no-browser still waits without a TTY; approval is never implied by defaults',async()=>{
- const home=await mkdtemp(join(tmpdir(),'afbin-no-browser-'));let now=0;
+test('unavailable browser still waits without a TTY; approval is never implied by defaults',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-unavailable-browser-'));let now=0;
  try{
-  await assert.rejects(deviceAuthenticate(origin,{home,interactive:false,noBrowser:true,now:()=>now,sleep:async ms=>{now+=ms;},notify:()=>{},open:async()=>assert.fail('browser suppressed'),fetch:async input=>String(input).endsWith('/oauth/device')?pairing():Response.json({error:'authorization_pending'},{status:400})}),error=>(error as {code:string}).code==='approval_expired');
+  await assert.rejects(deviceAuthenticate(origin,{home,interactive:false,now:()=>now,sleep:async ms=>{now+=ms;},notify:()=>{},open:async()=>{throw new Error('browser unavailable');},fetch:async input=>String(input).endsWith('/oauth/device')?pairing():Response.json({error:'authorization_pending'},{status:400})}),error=>(error as {code:string}).code==='approval_expired');
   assert.equal(now,10000);assert.equal(await loadConnection(origin,home,{}),null);
  }finally{await rm(home,{recursive:true,force:true});}
 });
@@ -60,7 +60,7 @@ test('no-browser still waits without a TTY; approval is never implied by default
 test('an unattended agent fails fast with approval_required and keeps the pairing for a retry',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-fastfail-'));let now=0;let approved=false;
  const bigPairing=()=>Response.json({device_code:'d'.repeat(43),user_code:'ABCD',verification_uri_complete:origin+'/oauth/device?user_code=ABCD',expires_in:300,interval:5});
- const opts=()=>({home,interactive:false,noBrowser:true,now:()=>now,sleep:async(ms:number)=>{now+=ms;},notify:()=>{},open:async()=>assert.fail('browser suppressed'),
+ const opts=()=>({home,interactive:false,now:()=>now,sleep:async(ms:number)=>{now+=ms;},notify:()=>{},open:async()=>{throw new Error('browser unavailable');},
   fetch:(async(input:unknown)=>{const u=String(input);
    if(u.endsWith('/oauth/device'))return bigPairing();
    if(u.endsWith('/oauth/device/token'))return approved?credentials():Response.json({error:'authorization_pending'},{status:400});
