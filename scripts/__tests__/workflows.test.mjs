@@ -25,28 +25,17 @@ import path from 'node:path';
 import yaml from 'yaml';
 import { describe, expect, it } from 'vitest';
 
-const root = path.join(__dirname, '../../../..');
+const root = path.resolve(import.meta.dirname, '../..');
 const publishPath = path.join(root, '.github', 'workflows', 'publish.yml');
 const ciPath = path.join(root, '.github', 'workflows', 'ci.yml');
-const wf = yaml.parse(readFileSync(publishPath, 'utf8')) as {
-  jobs: Record<string, {
-    steps: Array<{ uses?: string; with?: Record<string, unknown> }>;
-  }>;
-};
-const ci = yaml.parse(readFileSync(ciPath, 'utf8')) as {
-  jobs: Record<string, {
-    'timeout-minutes'?: number;
-    needs?: string[];
-    env?: Record<string, string>;
-    steps: Array<{ uses?: string; with?: Record<string, unknown>; run?: string; name?: string; env?: Record<string, string> }>;
-  }>;
-};
+const wf = yaml.parse(readFileSync(publishPath, 'utf8'));
+const ci = yaml.parse(readFileSync(ciPath, 'utf8'));
 
-const buildPush = (job: string) => wf.jobs[job]?.steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
-const metadata = (job: string) => wf.jobs[job]?.steps.find((s) => s.uses?.startsWith('docker/metadata-action'));
+const buildPush = (job) => wf.jobs[job]?.steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
+const metadata = (job) => wf.jobs[job]?.steps.find((s) => s.uses?.startsWith('docker/metadata-action'));
 
 /** The four images a deployment pulls, and the Dockerfile each is built from. */
-const PUBLISHED_IMAGES: Array<{ suffix: string; file: string }> = [
+const PUBLISHED_IMAGES = [
   { suffix: '', file: 'Dockerfile' },
   { suffix: '-app', file: 'services/app/Dockerfile' },
   { suffix: '-sql', file: 'services/sql/Dockerfile' },
@@ -138,9 +127,7 @@ describe('dependency security', () => {
   // browser loads those local assets; the Node image needs no second copy.
   it('pins Monaco — the copy that SHIPS — outside the vulnerable DOMPurify advisory range', () => {
     for (const file of ['package.json', 'services/app/package.json']) {
-      const pkg = JSON.parse(readFileSync(path.join(root, file), 'utf8')) as {
-        dependencies?: Record<string, string>; devDependencies?: Record<string, string>;
-      };
+      const pkg = JSON.parse(readFileSync(path.join(root, file), 'utf8'));
       expect(pkg.devDependencies?.['monaco-editor'], file).toBe('0.53.0');
       expect(pkg.dependencies?.['monaco-editor'], file).toBeUndefined();
     }
