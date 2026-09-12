@@ -14,12 +14,34 @@ when working on the relevant subsystem. Historical rollout narratives remain in 
   Report what actually ran; never claim red/green or end-to-end evidence you did not observe.
 - Validate risky assumptions with executable probes; record open assumptions and evidence in the plan.
   Rank implementation milestones by the risks that could change the plan. Finish with runnable checks.
-- **Run only fast checks locally; everything heavy runs on CI.** While working, run two commands:
-  `npm run validate` (name guards + incremental TypeScript) and `npm test` — it runs only the tests your
-  uncommitted change affects (`vitest --changed`), and above 100 test files stops with instructions rather
-  than running a slow set. Just run `npm test`; never preview or count yourself. Then commit, push, and let
-  CI run the rest. Verify the affected user flow on the running app when it is user-facing. Keep PR bodies
-  empty unless explicitly requested; add no descriptive PR comments.
+- **The routine local checks are `npm run validate` and `npm test`.** Use focused behavioral
+  tests during implementation: `npm test -- --files <test-path> [...]`. Run validation and the
+  affected tests once before handoff; repeat only after relevant edits, failures or integration changes.
+- **The local budget is 50 test files TOTAL across Vitest and CLI.** `npm test` discovers and
+  budgets both before executing either. Above 50, it runs neither and exits 2: **DEFERRED TO CI,
+  NOT PASSED**. No affected tests also exits 2 as unverified. Discovery errors fail visibly.
+  Do not preview/count tests yourself, increase the cap, pass `--all`, invoke a full suite,
+  or bypass the wrapper with raw Vitest/Node commands to get around deferral. A focused TDD
+  check may name the relevant behavioral tests; do not split a deferred suite into local batches.
+- **On deferral: commit, push, and open or update a PR; keep its body empty.** A feature-branch
+  push alone does not trigger CI. Report local testing as deferred, inspect all selected CI results,
+  and wait for required checks before merging. Fix observed failures; do not retry unchanged code
+  blindly. Full tests, integration, browser gates and production builds belong on CI.
+- **Reuse evidence at handoff instead of automatically repeating work.** Successful normal checks
+  save local receipts. In the SAME worktree, a reviewer can run `npm run validate -- --reuse` and
+  `npm test -- --reuse` (with the original test arguments). Reuse requires matching source contents,
+  commands, environment, runtime, installed lock state and generated inputs, within one hour.
+  Failed, deferred, empty and input-changing runs produce no reusable pass. Report reuse as prior
+  evidence, not a new run or branch-wide coverage. CI never reuses these receipts. After manual edits
+  to ignored dependencies or external state, omit `--reuse`. Never copy receipts between worktrees.
+- **Keep agent investigation bounded.** Start with `rg -l` for filenames or a narrowly scoped `rg -n`;
+  exclude fixtures, recorded transcripts, generated assets and dependency trees unless they are the
+  subject. Set an output/line limit, read the needed sections, and batch independent reads. Do not
+  dump entire files or repeat searches already answered. Separate command duration from agent
+  turnaround time when diagnosing slowness. Keep low-risk fixes small; avoid speculative abstractions.
+- Verify the affected user flow on the running app for user-facing changes. Reuse the task's own
+  server after confirming its checkout and current code. Keep PR bodies empty and add no descriptive
+  PR comments unless explicitly requested.
 - **Never run the full or heavy suites locally as a routine — they are slow and belong to CI:** the full
   suite (`npm run test:all`), the `integration` project (Docker Postgres + real Chromium), the browser gates,
   `npm run build` and the agent smoke. CI runs them sharded and only for affected modules; push, read CI, and
@@ -56,12 +78,11 @@ Run commands from this repository root (the submodule root in a downstream check
 - `npm run validate` — residual-name guard and TypeScript, including unused declarations/parameters, plus
   `validate:shared`: `services/utils` and `services/contracts` under `noUncheckedIndexedAccess`, since
   downstream consumers compile these packages with that flag.
-- `npm test` — FAST, run locally: only the tests your uncommitted change affects (`vitest --changed` over
-  api/node/ui, never the heavy `integration` project; the CLI suite only when `services/cli` changed). Above
-  100 test files it runs nothing and prints how to proceed — `npm test -- --all`, `npm test -- -n <N>`, or
-  `npm run test:all`. `npm test -- <ref>` diffs against a git ref; `npm run test:dry` lists affected files.
-  A `package.json`/vitest-config edit forces a full rerun, so `npm test` hits the cap and points at
-  `npm run test:all` — intended.
+- `npm test` — affected api/node/ui tests plus CLI tests when that package changes; at most
+  50 files combined. Exit 2 means unverified/deferred: open/update a PR and use CI, never widen
+  the budget. `npm test -- <ref>` selects branch changes; `npm test -- --files <paths>` selects
+  focused behavioral tests. `--reuse` reuses matching successful local evidence during handoff.
+  Package/config changes may select everything and defer; that is expected, not a failure to fix.
 - CI/PR-time only, slow — do NOT run locally as a routine (CI shards them per affected module):
   `npm run test:all` (whole API/Node/UI/CLI suite; `test:api`/`test:node`/`test:ui` select projects),
   `npm run test:integration` (Docker Postgres + real Chromium), `npm run build` (bundles + prod server), and
@@ -95,7 +116,7 @@ Run commands from this repository root (the submodule root in a downstream check
 ## Delegated work
 
 The orchestrator defines and seeds contracts, core tests and a bounded brief; the implementer completes
-that brief without further delegation. Review by reproducing the reported checks, not just reading a report.
+that brief without further delegation. Review the diff and matching verification evidence; reproduce risky behavior or invalidated checks.
 Use isolated worktrees, data directories and port blocks; never two implementers in one checkout.
 Only one agent runs browser gates at a time. Keep PRs scoped per repository and check their CI before merge.
 See [docs/agent-workflows.md](docs/agent-workflows.md) for the handoff and review procedure.

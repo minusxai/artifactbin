@@ -58,8 +58,12 @@ export async function runDev({ appOnly, args = [] }) {
     }
   }
 
-  const runtime = spawn('node', ['scripts/build-story-runtime.mjs'], { cwd: APP_ROOT, stdio: 'inherit' });
-  await new Promise((resolve) => runtime.on('exit', resolve));
+  const runtime = spawn('node', ['scripts/build-story-runtime.mjs', '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
+  const runtimeStatus = await new Promise((resolve, reject) => {
+    runtime.once('error', reject);
+    runtime.once('exit', (code) => resolve(code ?? 1));
+  });
+  if (runtimeStatus !== 0) { process.exitCode = 1; return; }
   watchRuntimeSources();
 
   const nodeEnv = appOnly && process.env.NODE_ENV === 'test'
@@ -104,7 +108,7 @@ function watchRuntimeSources() {
     if (building) { again = true; return; }
     building = true;
     console.log('[dev] reader runtime source changed — rebuilding public/story');
-    const run = spawn('node', ['scripts/build-story-runtime.mjs'], { cwd: APP_ROOT, stdio: 'inherit' });
+    const run = spawn('node', ['scripts/build-story-runtime.mjs', '--cache'], { cwd: APP_ROOT, stdio: 'inherit' });
     run.on('exit', () => {
       building = false;
       if (again) { again = false; rebuild(); }

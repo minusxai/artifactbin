@@ -115,7 +115,7 @@ when adding cross-module consumers; the planner tests also check workspace edges
 The required `test` job accepts a skipped job only when the plan did not select it,
 and includes CLI results. The live-provider agent smoke remains optional/advisory.
 
-Run `npx vitest run --project=node scripts/__tests__/ci-plan.test.mjs` for path,
+Run `npm test -- --files scripts/__tests__/ci-plan.test.mjs` for path,
 rename, dependency, workflow wiring and required-result checks. The CI plan is
 printed in the Actions summary so each skipped job is reviewable.
 
@@ -146,3 +146,20 @@ content clicks remain native, including the first click of a word selection. Chi
 highlights do not intercept input or add separate dot buttons. The annotations and
 comment-targets browser gates cover these interactions, repeated text/node/area
 comments, keyed lifecycles, and mobile tap/long-press selection.
+
+### Local verification evidence
+
+`scripts/test-changed.mjs` owns discovery, the combined 50-file Vitest/CLI budget, execution and
+unverified/deferred status. It reads structured Vitest output and fails closed on discovery errors.
+`scripts/check-local.mjs` owns the command/environment boundary for `validate` and `test`;
+`scripts/lib/check-evidence.mjs` records only successful checks with stable inputs. Normal commands
+always execute. Explicit `--reuse` allows a parent in the same checkout to reuse evidence for one hour.
+Fingerprints include tracked/untracked sources, selected generated inputs, environment digests,
+runtime, command/ref selection and installed lock state. They contain no raw environment values.
+Dependencies must remain lockfile-managed; manual changes to ignored dependencies or external state
+require a fresh check. These receipts attest to the recorded command's scope, never branch-wide
+coverage. CI always executes and remains the merge authority.
+
+PR concurrency cancels superseded runs on the same PR; main runs remain independent. Node shards
+retain existing coverage, but only the integration shard provisions Chromium and Postgres. CLI
+builds remain available on every Node shard because `evals/__tests__/cli-kit.test.ts` executes the actual CLI and can land on any shard.

@@ -96,6 +96,18 @@ describe('agent-worktree --harness', () => {
     expect(fs.existsSync(path.join(DIR, '.agent', 'BRIEF.md'))).toBe(false);
   });
 
+  it('resumes its existing worktree without replacing its environment or brief', () => {
+    withTree('codex', (res) => {
+      expect(res.status).toBe(0);
+      fs.appendFileSync(path.join(DIR, '.env'), '\nFIXTURE__PRESERVE=yes\n');
+      const brief = fs.readFileSync(path.join(DIR, '.agent/BRIEF.md'), 'utf8');
+      const resumed = run(['--phase', PHASE, '--dir', DIR, '--reuse']);
+      expect(resumed.status, resumed.stderr).toBe(0);
+      expect(fs.readFileSync(path.join(DIR, '.env'), 'utf8')).toContain('FIXTURE__PRESERVE=yes');
+      expect(fs.readFileSync(path.join(DIR, '.agent/BRIEF.md'), 'utf8')).toBe(brief);
+    });
+  });
+
   it('the generated BRIEF ends with the REPORT reminder', () => {
     withTree('codex', (res) => {
       expect(res.status).toBe(0);
