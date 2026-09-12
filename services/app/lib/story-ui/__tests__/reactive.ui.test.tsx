@@ -1,11 +1,10 @@
 import {expect, it} from 'vitest';
 import {render, screen} from '@testing-library/react';
-import {parseJsx} from '@/lib/jsx';
 import {renderStoryNodes} from '../interpreter';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 function tree(source: string, values: Record<string, unknown>) {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   return <>{renderStoryNodes(parsed.nodes, {components: {}, values})}</>;
 }
 

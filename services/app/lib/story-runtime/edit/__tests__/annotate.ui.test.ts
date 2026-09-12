@@ -8,10 +8,11 @@ import type { StoryEditSelection } from '../../contract';
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFrameAnnotateSession } from '../annotate';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { STORY_ANNOTATION_PIN_MESSAGE as _PIN } from '../../contract';
 import type { PristineChannel } from '../../pristine';
 import { STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE, STORY_SELECTION_MESSAGE, type StoryAnnotationsMessage } from '../../contract';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const NONCE = 'l'.repeat(32);
 const PIN = { id: 'ann_1', path: '0', key: 'anchor_1' };
@@ -470,7 +471,7 @@ describe('picking a block to comment on', () => {
  * highlight, and its layout report is the box, not the node.
  */
 const AREA_SRC = '<section className="max-w-2xl"><p id="pa">Alpha</p><p id="pb">Beta</p></section>';
-const areaNodes = (() => { const p = parseJsx(AREA_SRC); if (!p.ok) throw new Error('fixture does not parse'); return p.nodes; })();
+const areaNodes = (() => { const p = parseJsxOrThrow(AREA_SRC); return p.nodes; })();
 const rectOf = (el: Element, r: { x: number; y: number; width: number; height: number }) =>
   vi.spyOn(el, 'getBoundingClientRect').mockImplementation(() => ({
     x: r.x, y: r.y, top: r.y, left: r.x, width: r.width, height: r.height, right: r.x + r.width, bottom: r.y + r.height, toJSON: () => ({}),
@@ -581,7 +582,7 @@ describe('drawing an area to comment on', () => {
     document.body.innerHTML = '<main><section data-mx-ast="0" id="sec"><p data-mx-ast="0.0" id="pa">Alpha</p>'
       + '<svg data-mx-ast="0.1" id="pic" class="w-6" viewBox="0 0 10 10"><circle data-mx-ast="0.1.0" id="dot" cx="5" cy="5" r="4"></circle></svg></section></main>';
     const src = '<section className="max-w-2xl"><p id="pa">Alpha</p><svg id="pic" className="w-6" viewBox="0 0 10 10"><circle id="dot" cx="5" cy="5" r="4" /></svg></section>';
-    const parsed = parseJsx(src); if (!parsed.ok) throw new Error('fixture does not parse');
+    const parsed = parseJsxOrThrow(src);
     session.setNodes(parsed.nodes);
     rectOf(document.getElementById('sec')!, { x: 20, y: 100, width: 400, height: 200 });
     rectOf(document.getElementById('pa')!, { x: 20, y: 100, width: 400, height: 40 });
@@ -611,7 +612,7 @@ describe('runtime instance targeting', () => {
     const cell=document.getElementById('cell')!;cell.setAttribute('data-mx-comment-owner','table');cell.setAttribute('data-mx-comment-target',JSON.stringify(target));
     const other=document.getElementById('other')!;other.setAttribute('data-mx-comment-owner','table');other.setAttribute('data-mx-comment-target',JSON.stringify({...target,rowKey:'1'}));
     vi.spyOn(cell,'getBoundingClientRect').mockReturnValue({x:10,y:20,width:30,height:40} as DOMRect);
-    const parsed=parseJsx('<DataTable id="table" rows={[]} />');if(!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+    const parsed=parseJsxOrThrow('<DataTable id="table" rows={[]} />');session.setNodes(parsed.nodes);
     const message:StoryAnnotationsMessage={...state('on'),pins:[{id:'cell-comment',path:'0',key:'table',nodeId:'table',range:{v:1,kind:'target',target}}]};
     session.update(message);
     expect(layouts().at(-1)).toMatchObject({positions:[{id:'cell-comment',status:'exact',rect:{x:10,y:20}}]});
@@ -626,7 +627,7 @@ it('replays iframe selection and preserves inner geometry when composer state re
   document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""><div id="inner"></div></div>';
   const owner=document.getElementById('frame')!;
   vi.spyOn(owner,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);
-  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if (!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const parsed=parseJsxOrThrow('<Iframe id="frame"><p id="static">Static</p></Iframe>');session.setNodes(parsed.nodes);
   session.update({...state('on'),pins:[],pick:'select'});
   const states:ManagedCommentState[]=[];
   const host=connectManagedComments(document.getElementById('inner')!, (state)=>states.push(state));
@@ -646,7 +647,7 @@ it('opens a composer for an iframe text Comment action outside Select mode witho
   document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
   const owner=document.getElementById('frame')!;
   vi.spyOn(owner,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);
-  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if (!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const parsed=parseJsxOrThrow('<Iframe id="frame"><p id="static">Static</p></Iframe>');session.setNodes(parsed.nodes);
   session.update({...state('on'),pins:[],pick:null,canComment:true});
   const states:ManagedCommentState[]=[];const host=connectManagedComments(owner,(state)=>states.push(state));
   const generation=states.at(-1)!.generation;
@@ -668,7 +669,7 @@ it('delegates exact iframe pin paint to the child and restores owner paint when 
   document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
   const owner=document.getElementById('frame')!;
   vi.spyOn(owner,'getBoundingClientRect').mockReturnValue({x:100,y:200,width:400,height:300} as DOMRect);
-  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if (!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const parsed=parseJsxOrThrow('<Iframe id="frame"><p id="static">Static</p></Iframe>');session.setNodes(parsed.nodes);
   const message:StoryAnnotationsMessage={...state('on'),pins:[{id:'inside',path:'0',key:'frame',nodeId:'frame',range:{v:1,kind:'target',target:{kind:'iframe',node:{kind:'source',id:'static'}}}}],openId:'inside',hoverId:'inside'};
   session.update(message);
   let generation='';const host=connectManagedComments(owner,(state)=>{generation=state.generation;});
@@ -689,7 +690,7 @@ it('retains ordinary area refinement in geometry reports for the same owner', ()
   document.body.innerHTML='<section id="section" data-mx-ast="0"></section>';
   const owner=document.getElementById('section')!;
   rectOf(owner,{x:20,y:40,width:200,height:100});
-  const parsed=parseJsx('<section id="section" />');if(!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const parsed=parseJsxOrThrow('<section id="section" />');session.setNodes(parsed.nodes);
   const range={v:1 as const,kind:'area' as const,box:{x:0.1,y:0.2,w:0.5,h:0.4}};
   session.update({...state('on'),pins:[],selectedPath:'0',selected:{kind:'element',path:'0',nodeId:'section',tag:'section',rect:{x:0,y:0,width:200,height:100},className:'',style:'',ancestors:[],range}});
   expect(posted.filter((message)=>message.type===STORY_SELECTION_MESSAGE).at(-1)).toMatchObject({selection:{nodeId:'section',range,rect:{x:20,y:40}}});
@@ -697,8 +698,7 @@ it('retains ordinary area refinement in geometry reports for the same owner', ()
 
 it('keeps sidebar block picking distinct from explicit iframe Select mode', () => {
   document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
-  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');
-  if(!parsed.ok) throw Error('parse'); session.setNodes(parsed.nodes);
+  const parsed=parseJsxOrThrow('<Iframe id="frame"><p id="static">Static</p></Iframe>'); session.setNodes(parsed.nodes);
   const states:ManagedCommentState[]=[];
   const host=connectManagedComments(document.getElementById('frame')!,next=>states.push(next));
   session.update({...state('on'),pins:[],pick:'block'});
@@ -713,7 +713,7 @@ it('keeps sidebar block picking distinct from explicit iframe Select mode', () =
 it('does not let a previous iframe draft geometry finish a fresh Select or replace a second comment', () => {
   document.body.innerHTML='<div id="frame" data-mx-ast="0" data-mx-managed-frame=""></div>';
   const owner=document.getElementById('frame')!;rectOf(owner,{x:100,y:200,width:400,height:300});
-  const parsed=parseJsx('<Iframe id="frame"><p id="static">Static</p></Iframe>');if(!parsed.ok) throw Error('parse');session.setNodes(parsed.nodes);
+  const parsed=parseJsxOrThrow('<Iframe id="frame"><p id="static">Static</p></Iframe>');session.setNodes(parsed.nodes);
   const selected:StoryEditSelection={kind:'embed',path:'0',nodeId:'frame',tag:'Iframe',rect:{x:110,y:220,width:50,height:30},className:'',style:'',ancestors:[],range:{v:1,kind:'target',target:{kind:'iframe',node:{kind:'key',path:['first']}}}};
   session.update({...state('on'),pins:[],selectedPath:'0',selected,pick:null});
   const states:ManagedCommentState[]=[];const host=connectManagedComments(owner,next=>states.push(next));const generation=states.at(-1)!.generation;

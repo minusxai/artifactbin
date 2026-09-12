@@ -9,8 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { parseJsx } from '@/lib/jsx';
 import { renderStoryNodes } from '../interpreter';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const propsProbe: Record<string, unknown>[] = [];
 const StubCard = ({ children, ...props }: { children?: React.ReactNode } & Record<string, unknown>) => {
@@ -22,8 +22,7 @@ const REGISTRY: Record<string, React.ComponentType<Record<string, unknown>>> = {
 };
 
 const mount = (src: string) => {
-  const parsed = parseJsx(src);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(src);
   return render(<>{renderStoryNodes(parsed.nodes, { components: REGISTRY })}</>);
 };
 

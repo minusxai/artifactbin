@@ -12,6 +12,7 @@ import { applyDomEditsToJsx, applyFormatEditsToJsx, insertImageInJsx, isEditable
 import { parseJsx, validateJsxSource, type JsxElement } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 /** Every write-back result must be valid, renderable story JSX. */
 function expectValidStoryJsx(source: string) {
@@ -205,8 +206,7 @@ describe('applyDomEditsToJsx — batches and failure modes', () => {
 
 describe('isEditableTextHost', () => {
   const el = (src: string): JsxElement => {
-    const parsed = parseJsx(src);
-    if (!parsed.ok) throw new Error(parsed.error);
+    const parsed = parseJsxOrThrow(src);
     return parsed.nodes[0] as JsxElement;
   };
 

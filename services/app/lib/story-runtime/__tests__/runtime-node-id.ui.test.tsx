@@ -1,11 +1,12 @@
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import type { StoryIslandDataflow } from '../contract';
 import { createDataflowStore } from '../store';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const LOADED: StoryIslandDataflow = {
   flow: { values: [], queries: [] },
@@ -24,8 +25,7 @@ const LOADED: StoryIslandDataflow = {
 describe('persisted source ids reach runtime embed targets', () => {
   for (const tag of ['Question', 'Number', 'DataTable']) {
     it(`${tag} preserves its authored id on exactly one DOM target even without loaded data`, () => {
-      const parsed = parseJsx(`<${tag} id="node-a" data="$missing" />`);
-      if (!parsed.ok) throw new Error(parsed.error);
+      const parsed = parseJsxOrThrow(`<${tag} id="node-a" data="$missing" />`);
       const app = <StoryRuntimeApp nodes={parsed.nodes} refData={{}} colorMode="light" chrome={false} />;
       const { container, rerender } = render(app);
       const targets = container.querySelectorAll('[id="node-a"]');
@@ -38,8 +38,7 @@ describe('persisted source ids reach runtime embed targets', () => {
 
   for (const tag of ['Question', 'Number', 'DataTable']) {
     it(`${tag} keeps id and AST identity on its outer target after data loads`, () => {
-      const parsed = parseJsx(`<${tag} id="loaded-${tag}" data="$loaded" />`);
-      if (!parsed.ok) throw new Error(parsed.error);
+      const parsed = parseJsxOrThrow(`<${tag} id="loaded-${tag}" data="$loaded" />`);
       const { container } = render(
         <StoryRuntimeApp nodes={parsed.nodes} refData={{}} dataflow={LOADED} colorMode="light" chrome={false} />,
       );
@@ -50,8 +49,7 @@ describe('persisted source ids reach runtime embed targets', () => {
   }
 
   it('keeps identity on a DataTable error target', () => {
-    const parsed = parseJsx('<DataTable id="failed-table" data="$failed" />');
-    if (!parsed.ok) throw new Error(parsed.error);
+    const parsed = parseJsxOrThrow('<DataTable id="failed-table" data="$failed" />');
     const dataflow: StoryIslandDataflow = {
       flow: { values: [], queries: [] },
       state: { values: {}, tables: {}, errors: { failed: 'query failed' } },
@@ -65,11 +63,10 @@ describe('persisted source ids reach runtime embed targets', () => {
   });
 
   it('keeps exactly one identity target while all three embeds are pending', async () => {
-    const parsed = parseJsx(
+    const parsed = parseJsxOrThrow(
       '<Helmet><Value name="pick" default="a" /><Query name="rows">{`select $pick label, 12 amount`}</Query></Helmet>'
       + '<div><Question id="pending-question" data="$rows" /><Number id="pending-number" data="$rows" col="amount" /><DataTable id="pending-table" data="$rows" /></div>',
     );
-    if (!parsed.ok) throw new Error(parsed.error);
     const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
     const dataflow: StoryIslandDataflow = {
       flow: { values: content.values, queries: content.queries },
@@ -97,7 +94,7 @@ describe('persisted source ids reach runtime embed targets', () => {
   });
 
   it('keeps authored identity on native and kit bound-control outer targets', () => {
-    const parsed = parseJsx(
+    const parsed = parseJsxOrThrow(
       '<div>'
       + '<input id="native-input" value="$pick" />'
       + '<select id="native-select" value="$pick"><option value="a">A</option></select>'
@@ -110,7 +107,6 @@ describe('persisted source ids reach runtime embed targets', () => {
       + '<Button id="kit-button" run="$save">Save</Button>'
       + '</div>',
     );
-    if (!parsed.ok) throw new Error(parsed.error);
     const { container } = render(
       <StoryRuntimeApp nodes={parsed.nodes} refData={{}} colorMode="light" chrome={false} />,
     );

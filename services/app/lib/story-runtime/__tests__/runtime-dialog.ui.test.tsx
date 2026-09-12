@@ -1,10 +1,10 @@
 import {expect, it, vi, beforeEach} from 'vitest';
 import {render, fireEvent, waitFor} from '@testing-library/react';
-import {parseJsx} from '@/lib/jsx';
 import {splitHelmet} from '@/lib/story/helmet';
 import {initialValues, initialTables} from '@/lib/story/dataflow';
 import {StoryRuntimeApp} from '../StoryRuntimeApp';
 import {createDataflowStore} from '../store';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () {this.open = true;};
@@ -12,8 +12,7 @@ beforeEach(() => {
 });
 
 it('binds dialog state two ways and submits with current signals through the existing mutation transport', async () => {
-  const parsed = parseJsx('<Helmet><Value name="editing" type="boolean" default={false} /><Value name="title" type="string" default="First" /><Mutation name="save" source="ref:abc123">{`insert into public.rows (title) values ($title)`}</Mutation></Helmet><Dialog open="$editing"><DialogTrigger>Open</DialogTrigger><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" value="$title" required /><button type="submit">Save</button><DialogClose>Cancel</DialogClose></DialogContent></Dialog>{$editing && <p>Editing</p>}');
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow('<Helmet><Value name="editing" type="boolean" default={false} /><Value name="title" type="string" default="First" /><Mutation name="save" source="ref:abc123">{`insert into public.rows (title) values ($title)`}</Mutation></Helmet><Dialog open="$editing"><DialogTrigger>Open</DialogTrigger><DialogContent run="$save" aria-label="Editor"><input aria-label="Title" value="$title" required /><button type="submit">Save</button><DialogClose>Cancel</DialogClose></DialogContent></Dialog>{$editing && <p>Editing</p>}');
   const {content, body: nodes} = splitHelmet(parsed.nodes);
   const flow = {values: content.values, queries: content.queries, mutations: content.mutations};
   const state = {values: initialValues(flow), tables: initialTables(flow), errors: {}, mutationAccess: {save: null}};

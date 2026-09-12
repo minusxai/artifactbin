@@ -4,16 +4,16 @@
  * rule over the graph. Pure — no engine, no DB.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
+import { type JsxElement, type JsxNode } from '@/lib/jsx';
 import {
   coerceScalarInput, collectRefNameUses, datasetRefsInDataflow, initialValues, parseQueryDecl, parseValueDecl,
   queriesDependingOn, queryDeps, queryOrder, refName, sqlParams, validateDataflow,
   type Dataflow, type QueryDecl, type ValueDecl,
 } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(`test source failed to parse: ${parsed.error}`);
+  const parsed = parseJsxOrThrow(source);
   return parsed.nodes;
 };
 const el = (source: string): JsxElement => nodes(source)[0] as JsxElement;

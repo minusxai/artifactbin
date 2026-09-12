@@ -15,8 +15,8 @@ import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
-import { parseJsx } from '@/lib/jsx';
 import { glyphsForNodes } from '@/lib/story/icon-glyphs';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const DECK = `<SlideDeck>
   <Slide title="Cover"><h1>The Cover Slide</h1><Icon name="chart-column" /></Slide>
@@ -24,8 +24,7 @@ const DECK = `<SlideDeck>
 </SlideDeck>`;
 
 function renderDeck(source: string) {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   // Exactly what the served document does: resolve the glyphs the nodes name,
   // then hand them to the one composition both ends render.
   return renderWithProviders(

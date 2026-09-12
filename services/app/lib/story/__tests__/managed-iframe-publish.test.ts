@@ -1,7 +1,8 @@
-import {parseJsx,serializeJsx,validateJsx} from '@/lib/jsx';
-import {publishJsx} from '../jsx-tier';
+import { serializeJsx, validateJsx } from '@/lib/jsx';
+import { publishJsx } from '../jsx-tier';
 import {splitHelmet} from '../helmet';
 import type {StoredContent} from '../input';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 const inner='<Iframe id="10" title="Canvas" height={320}><style id="11">{`canvas {position:fixed;height:100vh}`}</style><canvas id="12"/><script id="13" src="https://cdn.example/bundle.js"/><script id="14">{`document.querySelector("canvas")`}</script></Iframe>';
 describe('managed Iframe publish boundary',()=>{
   it('rejects malformed inline JavaScript at the actual publish door',async()=>{
@@ -27,8 +28,7 @@ describe('managed Iframe publish boundary',()=>{
     expect((await publishJsx({},stored.source! ) as StoredContent).source).toBe(stored.source);
   });
   it('does not hoist nested Helmet from isolated contents even on invalid stored markup',()=>{
-    const parsed=parseJsx('<Iframe><Helmet><title>Not parent</title></Helmet></Iframe>');
-    if(!parsed.ok)throw Error(parsed.error);
+    const parsed=parseJsxOrThrow('<Iframe><Helmet><title>Not parent</title></Helmet></Iframe>');
     const split=splitHelmet(parsed.nodes);
     expect(split.content.title).toBeNull();
     expect(serializeJsx(split.body)).toContain('<Helmet>');

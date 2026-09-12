@@ -9,16 +9,16 @@
  * and its own server render, so it has to be a function, not a behaviour.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import {
   carriesRef, collectRefNameUses, isTemplateRefPosition, REF_ATTRS, resolveRefTemplate, templateRefNames,
   validateDataflow, type Dataflow, type Scalar,
 } from '@/lib/story/dataflow';
 import { assetUrlFor, runtimeAssetUrl } from '@/lib/story/asset-url';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(`test source failed to parse: ${parsed.error}`);
+  const parsed = parseJsxOrThrow(source);
   return parsed.nodes;
 };
 

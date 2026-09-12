@@ -22,9 +22,9 @@ import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
-import { parseJsx } from '@/lib/jsx';
 import { glyphsForNodes } from '@/lib/story/icon-glyphs';
 import type { Dataflow } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const DOC = '<Helmet><Query name="children">{`select * from ref_abc123`}</Query></Helmet>\n<h1>Field Notes</h1>\n<Files data="$children" variant="icons" />';
 
@@ -36,8 +36,7 @@ const ROWS = [
 const FLOW: Dataflow = { values: [], queries: [{ name: 'children', sql: 'select * from ref_abc123', params: [], refs: ['abc123'], start: 0, end: 0 }] };
 
 function renderFolder(chrome: boolean, over: Partial<React.ComponentProps<typeof StoryRuntimeApp>> = {}) {
-  const parsed = parseJsx(DOC);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(DOC);
   // The declaration by hand: what this exercises is the adapter between the
   // store and the component, not the parser above it.
   return renderWithProviders(

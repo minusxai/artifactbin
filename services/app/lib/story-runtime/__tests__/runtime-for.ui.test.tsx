@@ -1,11 +1,11 @@
 import {expect,it} from 'vitest';
 import {act,screen,waitFor} from '@testing-library/react';
 import {renderWithProviders} from '@/test/helpers/render-with-providers';
-import {parseJsx} from '@/lib/jsx';
 import {StoryRuntimeApp} from '../StoryRuntimeApp';
 import {createDataflowStore} from '../store';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 it('subscribes For to actual query table results and preserves DOM identity after refresh',async()=>{
- const parsed=parseJsx('<For id="orders" each={$orders} keyBy="id"><p id="name">{$_row.name}</p></For>');if(!parsed.ok)throw new Error(parsed.error);
+ const parsed=parseJsxOrThrow('<For id="orders" each={$orders} keyBy="id"><p id="name">{$_row.name}</p></For>');
  let rows=[{id:'a',name:'Alice'}];
  const store=createDataflowStore({flow:{values:[],queries:[{name:'orders',sql:'select * from ref_abc123',params:[],refs:['abc123'],start:0,end:0}]}},{transport:{page:async()=>{throw new Error('not used')},run:async()=>({tables:{orders:{rows,columns:[{name:'id',type:'string'},{name:'name',type:'string'}]}},errors:{}})}});
  const view=renderWithProviders(<StoryRuntimeApp nodes={parsed.nodes} refData={{}} store={store} colorMode="light" chrome={false}/>);

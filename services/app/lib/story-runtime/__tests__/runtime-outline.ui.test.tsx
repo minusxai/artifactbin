@@ -11,12 +11,12 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   return parsed.nodes;
 };
 const DOC = '<article>' + ['Why', 'How', 'What next', 'Limits'].map((t, i) => `<section><h2>${i + 1}. ${t}</h2><p>text ${i}</p></section>`).join('') + '</article>';
