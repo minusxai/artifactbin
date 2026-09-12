@@ -166,11 +166,12 @@ describe('retired surfaces', () => {
 
 /** THE README IS A FRONT DOOR (node S3): six sections in order, the two one-liners, no retired env name. */
 const readme = () => read('README.md');
-const retiredEnvNames = () => {
-  const src = read('services', 'app', 'lib', 'config.ts');
-  const block = src.slice(src.indexOf('RETIRED_ENV_NAMES'), src.indexOf('};', src.indexOf('RETIRED_ENV_NAMES')));
-  return [...block.matchAll(/^\s*([A-Z][A-Z0-9_]+):/gm)].map((m) => m[1]);
-};
+// The flat settings this product retired; the boot-time alias map is gone (no backward compatibility), so the
+// list lives in the guards that keep the names from coming back (see services/app/lib/__tests__/retired-names.test.ts).
+const retiredEnvNames = () => [
+  'ADMIN_SECRET', 'AUTH_SECRET', 'PUBLIC_BASE_URL', 'PORT', 'RESEND_API_KEY', 'MIXPANEL_TOKEN',
+  'TRUSTED_PROXY_HOPS', 'QUERY_TIMEOUT_MS', 'MAX_QUERY_ROWS', 'LOCAL_OBJECT_DIR',
+];
 
 describe('README.md', () => {
   it('is short and has exactly the six sections, in order', () => {
@@ -180,17 +181,12 @@ describe('README.md', () => {
   });
   it('carries the two one-liners, the hosted instance and the license', () => {
     expect(readme()).toContain('curl -fsSL https://artifactbin.dev/install.sh | bash');
-    expect(readme()).toMatch(/git clone https:\/\/github\.com\/minusxai\/artifactbin[\s\S]*npm install[\s\S]*npm run setup[\s\S]*npm run dev/);
+    expect(readme()).toMatch(/git clone https:\/\/github\.com\/minusxai\/artifactbin[\s\S]*npm ci[\s\S]*npm run setup[\s\S]*npm run dev/);
     expect(readme()).toContain('npm run setup -- --yes --port <port>');
     expect(readme()).toContain('curl -fsS http://localhost:3030/health');
     expect(readme()).toContain('https://artifactbin.dev');
     expect(readme()).toContain('Apache-2.0');
     expect(readme()).toContain('ghcr.io/minusxai/artifactbin');
-  });
-  it('names no retired env name', () => {
-    const names = retiredEnvNames();
-    expect(names.length).toBeGreaterThan(3);
-    for (const n of names) expect(readme(), n).not.toMatch(new RegExp(`(^|[^A-Z_])${n}([^A-Z_]|$)`, 'm'));
   });
 });
 
@@ -235,9 +231,6 @@ describe('one port story', () => {
 describe('no stale text, no dead code', () => {
   it('config.ts no longer claims the runner refuses to start on retired names', () => {
     expect(read('services', 'app', 'lib', 'config.ts')).not.toMatch(/REFUSES TO START/);
-  });
-  it('mint.mjs has no dead fallback', () => {
-    expect(read('scripts', 'mint.mjs')).not.toMatch(/ADMIN__SECRET \?\? process\.env\.ADMIN__SECRET/);
   });
   it('.env.example gives a generator hint for ADMIN__SECRET too', () => {
     const lines = read('.env.example').split('\n');

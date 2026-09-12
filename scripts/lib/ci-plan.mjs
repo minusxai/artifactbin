@@ -12,11 +12,11 @@ export const CI_MODULES = {
   utils: ['contracts'],
   'test-support': [],
   sql: ['contracts', 'utils'],
-  browser: ['contracts', 'utils'],
+  browser: ['contracts', 'utils', 'test-support'],
   events: ['contracts', 'utils'],
-  proxy: ['contracts', 'utils'],
-  app: ['contracts', 'utils', 'sql', 'browser', 'events', 'proxy'],
-  cli: ['contracts', 'app', 'sql'],
+  proxy: ['contracts', 'utils', 'test-support'],
+  app: ['contracts', 'utils', 'sql', 'browser', 'events', 'proxy', 'test-support'],
+  cli: ['contracts', 'app', 'sql', 'test-support'],
   evals: ['app', 'cli'],
 };
 
