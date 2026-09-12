@@ -121,7 +121,7 @@ ok((await fetch(startUrl)).status === 410, 'and the brief for a spent link answe
 // ── 5. copy again: the owner re-arms the link with their own token ──────────
 const reissue = await fetch(`${B}/a/${created.id}/start`, {
   method: 'POST',
-  headers: { Authorization: `Bearer ${token}` },
+  headers: { Authorization: `Bearer ${pasteToken}` },
 });
 const re = await reissue.json();
 const m2 = /\/start\?k=([A-Za-z0-9_-]+)/.exec(re.prompt ?? '');
