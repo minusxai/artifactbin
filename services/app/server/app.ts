@@ -46,6 +46,7 @@ import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
+import { mountBuildAssets } from './build-assets';
 
 /** The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's base. */
 export function withAgentDiscovery(html: string, origin: string): string {
@@ -216,6 +217,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     });
   }
   const webDir = opts.webDir ?? path.resolve('dist/web');
+  if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');

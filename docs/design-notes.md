@@ -7,9 +7,16 @@ Paths below are relative to `services/app` unless they start with `services/` or
 ## Services and request ownership
 
 The OSS-root `server.ts` composes the proxy, Hono app, SQL, browser and events implementations for the full image.
-Split images use the same contracts over HTTP. `services/proxy/src/parts.ts` orders session resolution,
+Split images use the same contracts over HTTP. `services/proxy/src/parts.ts` admits public build files before session resolution, then orders
 rate limits, login/OAuth, forwarded headers and the final upstream forwarder. Deployment policy belongs
 in configuration or a downstream composition, never an app special case.
+
+Public build admission belongs to `server/build-assets.ts`: only flat JS/CSS/woff2 paths listed in the
+production Vite manifest can return marked bytes from `/api/internal/build-assets/*`. The proxy probes
+that handler anonymously, with only byte-request headers, and accepts only marked static responses.
+Unknown files, missing manifests, queries, writes and unverified responses retain normal identity/access
+checks. No document, dataset or whole `/assets/*` namespace is declared public. The existing asset-host
+boundary runs first; development continues through Vite. Old builds without this handler fall back safely.
 
 Proxy rate limits come from policy files. Signing belongs to HTTP actor transport; in-process callers
 carry the resolved actor on the request. The app owns live document streams, so a proxy does not need
