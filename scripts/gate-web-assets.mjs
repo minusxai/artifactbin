@@ -1,3 +1,4 @@
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkWebImport } from './lib/web-import-cases.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
@@ -47,8 +48,7 @@ import { becomeOwner, publishAs, startDocument } from './lib/start-doc.mjs';
 import { loginViaEmail, startMailSink } from './lib/mail-login.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
+const check = createChecker('web-assets');
 
 /* ── the "public web" this gate imports from ─────────────────────────────────
  * Its own port so the count of requests to it is unambiguous: anything it is
@@ -118,15 +118,15 @@ if (put.status !== 200) {
   console.error(`could not publish (${put.status} ${JSON.stringify(wrote)})`);
   process.exit(2);
 }
-ok(Array.isArray(wrote.warnings) === false || wrote.warnings.length === 0, `publish imported everything (${JSON.stringify(wrote.warnings ?? [])})`);
+check(Array.isArray(wrote.warnings) === false || wrote.warnings.length === 0, `publish imported everything (${JSON.stringify(wrote.warnings ?? [])})`);
 
 // The STORED markup keeps the author's URLs — the half of the design an agent sees.
 const stored = await (await fetch(`${B}/api/artifacts/${owner.id}`, { headers: auth })).json();
-ok(stored.markup.includes(`${WEB}/photo.png${RUN}`), 'the stored markup still carries the source URL');
-ok(stored.markup.includes(`${WEB}/face.woff2${RUN}`), 'the stored markup still carries the @font-face url');
+check(stored.markup.includes(`${WEB}/photo.png${RUN}`), 'the stored markup still carries the source URL');
+check(stored.markup.includes(`${WEB}/face.woff2${RUN}`), 'the stored markup still carries the @font-face url');
 
 const importHits = [...hits];
-ok(importHits.filter((h) => h === '/photo.png').length === 1, `the source host was asked once for the image (${importHits.length} requests at publish)`);
+check(importHits.filter((h) => h === '/photo.png').length === 1, `the source host was asked once for the image (${importHits.length} requests at publish)`);
 hits = [];
 
 const browser = await chromium.launch();
@@ -176,18 +176,18 @@ const probe = await frame.evaluate(async () => {
 });
 
 const ASSET_URL = /^\/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8}$/;
-ok(ASSET_URL.test(probe.src ?? ''), `the raster <img> is served from our origin, versioned (${probe.src})`);
-ok(probe.natural[0] > 0 && probe.natural[1] > 0, `it paints (${probe.natural.join('×')})`);
-ok(probe.width === '48' && probe.height === '32', `it carries the box the row recorded (width=${probe.width} height=${probe.height})`);
-ok(probe.blur.startsWith('url(') && probe.blur.includes('data:image/'), 'the blur placeholder rides as an inline background');
-ok(ASSET_URL.test(probe.svgSrc ?? ''), `the SVG <img> is served from our origin, versioned (${probe.svgSrc})`);
-ok(probe.svgNatural[0] > 0, `the SVG paints as an image despite the attachment header (${probe.svgNatural.join('×')})`);
-ok(probe.sheet.includes('/assets/') && !probe.sheet.includes(WEB), 'the @font-face src was rewritten to our origin');
+check(ASSET_URL.test(probe.src ?? ''), `the raster <img> is served from our origin, versioned (${probe.src})`);
+check(probe.natural[0] > 0 && probe.natural[1] > 0, `it paints (${probe.natural.join('×')})`);
+check(probe.width === '48' && probe.height === '32', `it carries the box the row recorded (width=${probe.width} height=${probe.height})`);
+check(probe.blur.startsWith('url(') && probe.blur.includes('data:image/'), 'the blur placeholder rides as an inline background');
+check(ASSET_URL.test(probe.svgSrc ?? ''), `the SVG <img> is served from our origin, versioned (${probe.svgSrc})`);
+check(probe.svgNatural[0] > 0, `the SVG paints as an image despite the attachment header (${probe.svgNatural.join('×')})`);
+check(probe.sheet.includes('/assets/') && !probe.sheet.includes(WEB), 'the @font-face src was rewritten to our origin');
 // …and VERSIONED: a face is served from the same immutable address a picture
 // is, so a refreshed font needs the same cache key (R19).
-ok(/url\(\/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8}\)/.test(probe.sheet), 'the @font-face src carries the content version');
-ok(probe.fontFamily.includes('Probe'), `the paragraph asks for the imported face (${probe.fontFamily})`);
-ok(
+check(/url\(\/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8}\)/.test(probe.sheet), 'the @font-face src carries the content version');
+check(probe.fontFamily.includes('Probe'), `the paragraph asks for the imported face (${probe.fontFamily})`);
+check(
   fontResponses.some((f) => /^200 \/assets\/[0-9a-f]{64}$/.test(f)),
   `the browser LOADED a font from /assets (${fontResponses.join(', ') || 'no font request at all'})`,
 );
@@ -195,12 +195,12 @@ ok(
 /* ── two widths, and the browser picking ────────────────────────────────────
  * `sizes` is authoritative for the choice, so this is a real browser decision
  * and not a guess about layout. */
-ok(/w=1280 1280w, \/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8} 1600w$/.test(probe.wideSrcset ?? ''),
+check(/w=1280 1280w, \/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8} 1600w$/.test(probe.wideSrcset ?? ''),
   `the wide image offers both widths (${probe.wideSrcset})`);
-ok(probe.wideSizes === '(max-width: 640px) 100vw, 768px', `…and the column they are read in (${probe.wideSizes})`);
+check(probe.wideSizes === '(max-width: 640px) 100vw, 768px', `…and the column they are read in (${probe.wideSizes})`);
 
 // THE HEADLINE: nothing on the page reached the source host.
-ok(outbound.length === 0 && hits.length === 0, `zero requests to the source host while reading (${outbound.length} browser, ${hits.length} server-side)`);
+check(outbound.length === 0 && hits.length === 0, `zero requests to the source host while reading (${outbound.length} browser, ${hits.length} server-side)`);
 
 /* ── which copy each screen actually asks for ───────────────────────────────
  * THE DPR IS THE POINT. A browser picks by slot x DPR: a 390px phone at DPR 3
@@ -231,11 +231,11 @@ const whichCopy = async (label, viewport, deviceScaleFactor) => {
 
 for (const dpr of [2, 3]) {
   const shot = await whichCopy('phone', { width: 390, height: 844 }, dpr);
-  ok((shot.current ?? '').includes('w=1280'), `${shot.label} loads the narrow copy (${shot.current})`);
-  ok(shot.asked.some((s) => s.includes('w=1280')), `…and asked our origin for it (${shot.asked.join(' ') || 'no image request'})`);
+  check((shot.current ?? '').includes('w=1280'), `${shot.label} loads the narrow copy (${shot.current})`);
+  check(shot.asked.some((s) => s.includes('w=1280')), `…and asked our origin for it (${shot.asked.join(' ') || 'no image request'})`);
 }
 const desk = await whichCopy('desktop', { width: 1200, height: 900 }, 2);
-ok(!(desk.current ?? '').includes('w='), `${desk.label} loads the full copy — 768 x 2 needs more than 1280 (${desk.current})`);
+check(!(desk.current ?? '').includes('w='), `${desk.label} loads the full copy — 768 x 2 needs more than 1280 (${desk.current})`);
 
 /* ── a refresh reaches a reader who already has the old bytes (R19) ──────────
  * /assets/<hash> is immutable for a year and its address is derived from the
@@ -248,7 +248,7 @@ const refreshed = await fetch(`${B}/api/artifacts/assets/refresh`, {
   method: 'POST', headers: auth, body: JSON.stringify({ id: owner.id }),
 });
 const refreshBody = await refreshed.json();
-ok(refreshed.status === 200 && (refreshBody.refreshed ?? []).length > 0,
+check(refreshed.status === 200 && (refreshBody.refreshed ?? []).length > 0,
   `refresh_asset re-fetched the changed sources (${refreshed.status} ${JSON.stringify(refreshBody).slice(0, 160)})`);
 
 const reader = await browser.newPage({ viewport: { width: 1200, height: 900 } });
@@ -266,12 +266,12 @@ const after = await readerFrame.evaluate(async () => {
   }
   return document.querySelector('img[alt="wide"]')?.getAttribute('src') ?? null;
 });
-ok(after !== before && ASSET_URL.test(after ?? ''), `the refreshed asset is served at a new ?v= (${before} → ${after})`);
+check(after !== before && ASSET_URL.test(after ?? ''), `the refreshed asset is served at a new ?v= (${before} → ${after})`);
 /* The VERSION is what must have moved; WHICH width this reader picks is the
  * browser's business (a 1200px DPR-1 page needs 768 device pixels, so it takes
  * the 1280 copy — the srcset working). */
 const newVersion = new URL(after ?? '', B).searchParams.get('v');
-ok(
+check(
   fetchedAfter.some((u) => u.startsWith(new URL(after ?? '', B).pathname) && u.includes(`v=${newVersion}`)),
   `…and the reader's browser fetched the new version (${fetchedAfter.filter((u) => u.includes('/assets/')).join(' ') || 'nothing'})`,
 );
@@ -288,7 +288,7 @@ const shifted = await frame.evaluate(async () => {
   await new Promise((r) => setTimeout(r, 600));
   return total;
 });
-ok(shifted < 0.02, `no layout shift as the images land (CLS ${shifted.toFixed(4)})`);
+check(shifted < 0.02, `no layout shift as the images land (CLS ${shifted.toFixed(4)})`);
 
 /* ── R15: the SVG as a TOP-LEVEL navigation ─────────────────────────────────
  * A pass is anything but "a document running in this app's origin": the
@@ -310,15 +310,15 @@ try {
   // A download aborts the navigation — the strongest form of the pass.
   verdict = verdict === 'download' ? 'download' : `aborted (${String(error).split('\n')[0]})`;
 }
-ok(!verdict.startsWith('OUR ORIGIN'), `a top-level navigation to the stored SVG does not run in this origin: ${verdict}`);
+check(!verdict.startsWith('OUR ORIGIN'), `a top-level navigation to the stored SVG does not run in this origin: ${verdict}`);
 
 const headers = (await fetch(svgUrl)).headers;
-ok(headers.get('content-security-policy') === 'sandbox', 'the asset carries CSP: sandbox');
-ok(headers.get('content-disposition') === 'attachment', 'the asset carries Content-Disposition: attachment');
-ok(headers.get('x-content-type-options') === 'nosniff', 'the asset carries nosniff');
-ok((headers.get('cache-control') ?? '').includes('immutable'), 'the asset is immutable');
+check(headers.get('content-security-policy') === 'sandbox', 'the asset carries CSP: sandbox');
+check(headers.get('content-disposition') === 'attachment', 'the asset carries Content-Disposition: attachment');
+check(headers.get('x-content-type-options') === 'nosniff', 'the asset carries nosniff');
+check((headers.get('cache-control') ?? '').includes('immutable'), 'the asset is immutable');
 
-await checkWebImport(B, browser, WEB, ok);
+await checkWebImport(B, browser, WEB, check);
 
 /* ── 6. THE OTHER BINDING TIME: a URL that only exists in the READER'S browser ─
  *
@@ -370,12 +370,12 @@ await checkWebImport(B, browser, WEB, ok);
     console.error(`could not publish the bound document (${boundPut.status} ${JSON.stringify(boundWrote)})`);
     process.exit(2);
   }
-  ok((boundWrote.warnings ?? []).length === 0,
+  check((boundWrote.warnings ?? []).length === 0,
     `bound: publish fetched nothing and warned about nothing (${JSON.stringify(boundWrote.warnings ?? [])})`);
-  ok(hits.length === boundHitsBefore,
+  check(hits.length === boundHitsBefore,
     `bound: the source host was not asked at publish — publish cannot see a bound URL (${hits.length - boundHitsBefore} requests)`);
   const boundStored = await (await fetch(`${B}/api/artifacts/${bound.id}`, { headers: boundAuth })).json();
-  ok(boundStored.markup.includes('src="$pick"'), 'bound: the stored markup keeps the binding the author wrote');
+  check(boundStored.markup.includes('src="$pick"'), 'bound: the stored markup keeps the binding the author wrote');
 
   // A STRANGER: no session, no adopted token. A public document is served
   // top-level, so this is the reading path a shared link gives someone.
@@ -420,28 +420,28 @@ await checkWebImport(B, browser, WEB, ok);
 
   const firstAnswer = await firstImport;
   const firstShot = await shotOf(firstAnswer.url);
-  ok(/^\/assets\/[0-9a-f]{64}$/.test(firstShot.src ?? '') && firstShot.src === firstAnswer.url,
+  check(/^\/assets\/[0-9a-f]{64}$/.test(firstShot.src ?? '') && firstShot.src === firstAnswer.url,
     `bound: the first import renders the scoped endpoint's cached content address (${firstShot.src})`);
-  ok(firstShot.natural[0] === 48 && firstShot.natural[1] === 32,
+  check(firstShot.natural[0] === 48 && firstShot.natural[1] === 32,
     `bound: it paints at the source's size (${firstShot.natural.join('×')})`);
-  ok(hits.filter((h) => h === '/pic1.png').length === 1,
+  check(hits.filter((h) => h === '/pic1.png').length === 1,
     `bound: the source host was asked ONCE for the first picture (${hits.filter((h) => h === '/pic1.png').length})`);
 
   const secondImport = waitForImport(TWO);
   await reading.selectOption('select[aria-label="pick"]', TWO);
   const secondAnswer = await secondImport;
   const secondShot = await shotOf(secondAnswer.url);
-  ok(/^\/assets\/[0-9a-f]{64}$/.test(secondShot.src ?? '') && secondShot.src === secondAnswer.url
+  check(/^\/assets\/[0-9a-f]{64}$/.test(secondShot.src ?? '') && secondShot.src === secondAnswer.url
     && secondShot.src !== firstShot.src,
   `bound: picking another URL renders that import's distinct cached address (${secondShot.src})`);
-  ok(hits.filter((h) => h === '/pic2.png').length === 1, 'bound: the source host was asked once for the second');
+  check(hits.filter((h) => h === '/pic2.png').length === 1, 'bound: the source host was asked once for the second');
 
   const beforeReturn = { web: hits.length, endpoint: endpointCalls.length };
   await reading.selectOption('select[aria-label="pick"]', ONE);
   const back = await shotOf('/assets/');
-  ok(/^\/assets\/[0-9a-f]{64}$/.test(back.src ?? '') && back.natural[0] === 48,
+  check(/^\/assets\/[0-9a-f]{64}$/.test(back.src ?? '') && back.natural[0] === 48,
     `bound: coming back renders our copy directly, and it still paints (${back.src})`);
-  ok(hits.length === beforeReturn.web && endpointCalls.length === beforeReturn.endpoint,
+  check(hits.length === beforeReturn.web && endpointCalls.length === beforeReturn.endpoint,
     `bound: neither the source host nor the endpoint was asked again (${hits.length - beforeReturn.web} / ${endpointCalls.length - beforeReturn.endpoint})`);
 
   const untilRefused = () => reading.evaluate(async () => {
@@ -464,15 +464,15 @@ await checkWebImport(B, browser, WEB, ok);
   });
   await reading.selectOption('select[aria-label="pick"]', BAD);
   const refused = await untilRefused();
-  ok(refused.mark === 'refused' && refused.src === null,
+  check(refused.mark === 'refused' && refused.src === null,
     `bound: a refused URL is marked and carries no src (data-mx-asset=${refused.mark})`);
-  ok(refused.alt === 'the pick', "bound: the alt text is still the author's, so the browser draws it");
+  check(refused.alt === 'the pick', "bound: the alt text is still the author's, so the browser draws it");
   await reading.selectOption('select[aria-label="pick"]', DATA_URL);
   const dataShot = await untilRefused();
-  ok(dataShot.mark === 'refused' && dataShot.src === null && dataShot.natural !== 40,
+  check(dataShot.mark === 'refused' && dataShot.src === null && dataShot.natural !== 40,
     `bound: a data: value is refused by the MAPPING, not left to the policy (${JSON.stringify(dataShot)})`);
 
-  ok(boundOutbound.length === 0, `bound: zero requests from the page to the source host (${boundOutbound.length})`);
+  check(boundOutbound.length === 0, `bound: zero requests from the page to the source host (${boundOutbound.length})`);
 
   /*
    * THE CASE THE WHOLE RELAY EXISTS FOR, and it is the DEFAULT one: a signed-in
@@ -491,7 +491,7 @@ await checkWebImport(B, browser, WEB, ok);
     markup: `<Helmet><Value name="pick" type="string" default="${PRIV}" /></Helmet><div><img src="$pick" alt="a" /></div>`,
   });
   const readBack = await holder.evaluate(async (id) => (await fetch(`/api/my/artifacts/${id}`)).json(), mine.id);
-  ok(readBack.visibility === 'private', `bound: a signed-in user's document is born private (${readBack.visibility})`);
+  check(readBack.visibility === 'private', `bound: a signed-in user's document is born private (${readBack.visibility})`);
 
   const paints = (frameOrPage) => frameOrPage.evaluate(async () => {
     const deadline = Date.now() + 15_000;
@@ -514,19 +514,19 @@ await checkWebImport(B, browser, WEB, ok);
   const beforePriv = hits.filter((h) => h === '/pic3.png').length;
   await holder.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
   const owned = await paints(await artifactDocument(holder, { timeout: 30_000 }));
-  ok(owned.natural[0] === 48 && owned.natural[1] === 32,
+  check(owned.natural[0] === 48 && owned.natural[1] === 32,
     `bound: a private document's OWNER sees the picture, imported through the page (${JSON.stringify(owned)})`);
-  ok(/^\/assets\/[0-9a-f]{64}$/.test(owned.src ?? ''),
+  check(/^\/assets\/[0-9a-f]{64}$/.test(owned.src ?? ''),
     `bound: and its src is the public content address the relay handed back (${owned.src})`);
-  ok(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1,
+  check(hits.filter((h) => h === '/pic3.png').length === beforePriv + 1,
     'bound: the source host was asked exactly once for it');
   const listed = await holder.evaluate(async () => (await fetch('/api/my/artifacts')).json());
-  ok(Array.isArray(listed.artifacts) && listed.artifacts.some((a) => a.id === mine.id),
+  check(Array.isArray(listed.artifacts) && listed.artifacts.some((a) => a.id === mine.id),
     'bound: the import created no artifact of its own — the document is still the only one');
 
   const asStranger = await fetch(`${B}/a/${mine.id}/assets?u=${encodeURIComponent(ONE)}`, { redirect: 'manual' });
   const asStrangerJson = await fetch(`${B}/a/${mine.id}/assets?u=${encodeURIComponent(ONE)}`, { headers: { Accept: 'application/json' } });
-  ok(asStranger.status === 404 && asStrangerJson.status === 404,
+  check(asStranger.status === 404 && asStrangerJson.status === 404,
     `bound: a stranger's call to a private document's asset endpoint is the uniform 404, page and JSON alike (${asStranger.status}/${asStrangerJson.status})`);
 
   const guestEmail = `mxmx_test_boundguest_${RUN_ID}@example.com`;
@@ -535,15 +535,15 @@ await checkWebImport(B, browser, WEB, ok);
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }),
   })).status, [mine.id, guestEmail]);
-  ok(shared === 200, `bound: the owner invited a viewer (${shared})`);
+  check(shared === 200, `bound: the owner invited a viewer (${shared})`);
   const guest = await browser.newPage();
   await loginViaEmail(guest, B, sink, guestEmail);
   const beforeGuest = hits.filter((h) => h === '/pic3.png').length;
   await guest.goto(`${B}/a/${mine.id}`, { waitUntil: 'networkidle' });
   const seenByGuest = await paints(await artifactDocument(guest, { timeout: 30_000 }));
-  ok(seenByGuest.natural[0] === 48,
+  check(seenByGuest.natural[0] === 48,
     `bound: an INVITED VIEWER of the private document sees the picture too, through the shell (${JSON.stringify(seenByGuest)})`);
-  ok(hits.filter((h) => h === '/pic3.png').length === beforeGuest,
+  check(hits.filter((h) => h === '/pic3.png').length === beforeGuest,
     'bound: and cost the source host nothing — it was already ours');
   sink.close();
 }
@@ -551,6 +551,4 @@ await checkWebImport(B, browser, WEB, ok);
 await browser.close();
 web.close();
 
-const failed = out.filter((l) => l.startsWith('FAIL'));
-console.log(failed.length ? `\n${failed.length} failed` : '\nall ok');
-process.exit(failed.length ? 1 : 0);
+check.done();

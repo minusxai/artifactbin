@@ -13,7 +13,6 @@
  * `becomeOwner` does.
  */
 import { connectAgent } from './cli-connection.mjs';
-import { fixtureFetch } from './fixture-http.mjs';
 import { loginViaEmail } from './mail-login.mjs';
 
 /**
@@ -122,29 +121,4 @@ export async function publishAs(page, body) {
     throw new Error(`could not publish as this browser (${created.status} ${JSON.stringify(created.body)})`);
   }
   return created.body;
-}
-
-/**
- * The bearer-carrying API caller thirteen gates each wrote inline. Returns the
- * raw `Response`; `.json(path, init)` throws on a non-2xx and parses, which is
- * what seeding code wants.
- *
- * @param {string} base
- * @param {string} [token]  omit for an unauthenticated call
- */
-export function apiAs(base, token) {
-  const call = (path, init = {}) => fixtureFetch(`${base}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
-  call.json = async (path, init) => {
-    const res = await call(path, init);
-    if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${path} → ${res.status} ${(await res.text()).slice(0, 300)}`);
-    return res.json();
-  };
-  return call;
 }

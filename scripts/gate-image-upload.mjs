@@ -20,14 +20,14 @@
  *
  *   usage: node scripts/gate-image-upload.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { artifactDocument } from './lib/artifact-document.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
+const check = createChecker('image-upload');
 
 // A 2×2 red PNG (non-zero dimensions so a real paint is measurable).
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mP8z8Dwn4EIwDiqkL4KAcT9GO0U4BxjAAAAAElFTkSuQmCC';
@@ -38,11 +38,10 @@ const MARKUP = '<div data-design="tw" className="p-10">'
   + '<p className="mt-4 text-lg">Body copy.</p></div>';
 
 async function mint() {
-  const res = { json: async () => startDocument(B), ok: true, status: 201 }; // start link → token
-  const st = await res.json();
+  const st = await startDocument(B);
   if (!st.id || !st.token) {
-    console.error(`cannot mint (${res.status} ${JSON.stringify(st)}).`
-      + '\nThe anonymous-mint limit is per-IP and in-memory: restart the dev server to clear it.');
+    console.error(`cannot start a document (${JSON.stringify(st)}).`
+      + '\nThe start_doc door is rate limited per IP, in memory: restart the server to clear it.');
     process.exit(2);
   }
   await fetch(`${B}/api/artifacts/${st.id}`, {
@@ -134,7 +133,7 @@ const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openEditor(page, st);
   await page.setInputFiles('[aria-label="Upload image file"]', { name: 'shot.png', mimeType: 'image/png', buffer: PNG_BUF });
-  ok((await paintedImages(page)) >= 1, 'file picker: the uploaded image paints in the canvas');
+  check((await paintedImages(page)) >= 1, 'file picker: the uploaded image paints in the canvas');
 
   // ── 2. it persists across `done` + reload — the whole point ──────────────
   await page.click('[aria-label="Exit edit mode"]');
@@ -150,20 +149,20 @@ const browser = await chromium.launch();
     if (i) await page.waitForTimeout(500);
     got = await read();
   }
-  ok(/<img[^>]*src="ref:/.test(got), 'the image ref is in the persisted source');
+  check(/<img[^>]*src="ref:/.test(got), 'the image ref is in the persisted source');
   const view = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await view.goto(`${B}/a/${st.id}`, { waitUntil: 'networkidle' });
   // A fresh page with NO token is exactly the sessionless reader the exporter
   // is — so a paint here proves an unlisted image is reachable without auth,
   // which is why born-unlisted is load-bearing (a private image would 404 here
   // and bake a hole into the export).
-  ok((await paintedImages(view)) >= 1, 'and it still paints on a fresh, tokenless read (the exporter is one too)');
+  check((await paintedImages(view)) >= 1, 'and it still paints on a fresh, tokenless read (the exporter is one too)');
   await view.close();
 
   // ── the export pipeline itself renders with the embedded image ───────────
   const exp = await fetch(`${B}/a/${st.id}/export`);
   const buf = Buffer.from(await exp.arrayBuffer());
-  ok(exp.status === 200 && (exp.headers.get('content-type') ?? '').startsWith('image/') && buf.length > 1000,
+  check(exp.status === 200 && (exp.headers.get('content-type') ?? '').startsWith('image/') && buf.length > 1000,
     `export renders a real image with the embed (${exp.status}, ${buf.length} bytes)`);
   await page.close();
 }
@@ -174,8 +173,8 @@ const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openEditor(page, st);
   const sent = await dispatchFileEvent(page, 'drop', PNG_B64);
-  ok(sent === 'dispatched', 'drag-drop: the event reached the document realm');
-  ok(await paintedImages(page) > 0, 'drag-drop inserts an image that actually PAINTS');
+  check(sent === 'dispatched', 'drag-drop: the event reached the document realm');
+  check(await paintedImages(page) > 0, 'drag-drop inserts an image that actually PAINTS');
   await page.close();
 }
 
@@ -185,8 +184,8 @@ const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await openEditor(page, st);
   const sent = await dispatchFileEvent(page, 'paste', PNG_B64);
-  ok(sent === 'dispatched', 'paste: the event reached the document realm');
-  ok(await paintedImages(page) > 0, 'paste inserts an image that actually PAINTS');
+  check(sent === 'dispatched', 'paste: the event reached the document realm');
+  check(await paintedImages(page) > 0, 'paste inserts an image that actually PAINTS');
   await page.close();
 }
 
@@ -246,8 +245,8 @@ const browser = await chromium.launch();
   await page.keyboard.press(PASTE);
   await page.waitForTimeout(1200);
   const text = await frame.evaluate(() => document.querySelector('p')?.textContent ?? '');
-  ok(text.includes('PASTED_TEXT_OK'), `a real text paste lands in the paragraph (got ${JSON.stringify(text)})`);
-  ok(text.includes('START'), 'and it did not replace what was already there');
+  check(text.includes('PASTED_TEXT_OK'), `a real text paste lands in the paragraph (got ${JSON.stringify(text)})`);
+  check(text.includes('START'), 'and it did not replace what was already there');
 
   await page.evaluate(async () => {
     // Encoded by Chrome itself, so the clipboard will certainly accept it.
@@ -262,13 +261,13 @@ const browser = await chromium.launch();
   await page.waitForTimeout(400);
   await page.keyboard.press(PASTE);
   await page.waitForTimeout(4000);
-  ok(await paintedImages(page) > 0, 'a real image paste inserts an image that PAINTS');
+  check(await paintedImages(page) > 0, 'a real image paste inserts an image that PAINTS');
 
   const stored = await (await fetch(`${B}/api/artifacts/${st.id}`, {
     headers: { Authorization: `Bearer ${st.token}` },
   })).json();
-  ok(/src="ref:[A-Za-z0-9]{6,12}"/.test(stored.markup ?? ''), 'the image ref reached the stored source');
-  ok((stored.markup ?? '').includes('PASTED_TEXT_OK'), 'and so did the text pasted a moment before it');
+  check(/src="ref:[A-Za-z0-9]{6,12}"/.test(stored.markup ?? ''), 'the image ref reached the stored source');
+  check((stored.markup ?? '').includes('PASTED_TEXT_OK'), 'and so did the text pasted a moment before it');
   await chrome.close();
 }
 
@@ -323,12 +322,12 @@ const browser = await chromium.launch();
       arrived: el.naturalWidth,
     };
   });
-  ok(/\/raw(\?|$)/.test(during.src ?? ''), `a ref: image renders the bytes URL, not the artifact page (${during.src})`);
-  ok(during.arrived === 0, `the bytes really are still in flight (naturalWidth ${during.arrived})`);
-  ok(during.background.startsWith('url("data:image/webp'), `the blur is what the reader sees meanwhile (${during.background}…)`);
+  check(/\/raw(\?|$)/.test(during.src ?? ''), `a ref: image renders the bytes URL, not the artifact page (${during.src})`);
+  check(during.arrived === 0, `the bytes really are still in flight (naturalWidth ${during.arrived})`);
+  check(during.background.startsWith('url("data:image/webp'), `the blur is what the reader sees meanwhile (${during.background}…)`);
   // A background paints nothing without a box. The recorded dimensions are
   // what give it one before the image has any of its own.
-  ok(during.width > 0 && during.height > 0, `and it has an area to paint in (${during.width}×${during.height})`);
+  check(during.width > 0 && during.height > 0, `and it has an area to paint in (${during.width}×${during.height})`);
 
   release();
   const after = await frame.evaluate(async () => {
@@ -337,12 +336,10 @@ const browser = await chromium.launch();
     while (Date.now() < deadline && !(el()?.naturalWidth > 0)) await new Promise((r) => setTimeout(r, 100));
     return el()?.naturalWidth ?? 0;
   });
-  ok(after > 0, `and the real image covers it once it lands (naturalWidth ${after})`);
+  check(after > 0, `and the real image covers it once it lands (naturalWidth ${after})`);
   await page.close();
 }
 
 await browser.close();
 
-const failed = out.filter((l) => l.startsWith('FAIL')).length;
-console.log(failed ? `\n${failed} FAILED` : `\nall ${out.length} checks passed`);
-process.exit(failed ? 1 : 0);
+check.done();

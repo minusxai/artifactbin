@@ -27,6 +27,7 @@
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
 
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { createServer } from 'http';
 import { createHash, randomBytes } from 'crypto';
@@ -34,8 +35,7 @@ import { chromium } from 'playwright';
 import { startMailSink } from './lib/mail-login.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('oauth-browser');
 
 const PORT = 9987;
 const REDIRECT = `http://127.0.0.1:${PORT}/cb`;
@@ -167,5 +167,4 @@ check(cspViolations.length === 0, `no CSP violation blocks the submission${cspVi
 await browser.close();
 sink.close();
 server.close();
-if (failures.length) { console.error(`\n${failures.length} check(s) failed:\n - ${failures.join('\n - ')}`); process.exit(1); }
-console.log('\nall oauth-browser gates passed');
+check.done();

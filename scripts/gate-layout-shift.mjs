@@ -1,3 +1,4 @@
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { checkViewportGeometry } from './lib/viewport-geometry.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
@@ -33,8 +34,7 @@ import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
+const check = createChecker('layout-shift');
 
 const slide = (n) => `<Slide title="Slide ${n}"><h1 className="text-5xl font-bold">Heading ${n}</h1>`
   + `<p className="mt-4 text-lg">Body copy for slide ${n}.</p></Slide>`;
@@ -201,28 +201,28 @@ const [d, e, p, m] = await Promise.all([
   watchCanvas(deck.id, { token: deck.token, width: 390 }),
 ]);
 
-ok(d.railEntries >= 2, `deck: the rail did arrive (${d.railEntries} entries) — otherwise this proves nothing`);
-ok(d.seen.length === 1, `deck: the document's left edge never moves (positions seen: ${d.seen.join(' -> ')})`);
-ok(d.railShift === 0, `deck: nothing shifts the canvas or the rail (attributed CLS ${d.railShift.toFixed(4)})`);
+check(d.railEntries >= 2, `deck: the rail did arrive (${d.railEntries} entries) — otherwise this proves nothing`);
+check(d.seen.length === 1, `deck: the document's left edge never moves (positions seen: ${d.seen.join(' -> ')})`);
+check(d.railShift === 0, `deck: nothing shifts the canvas or the rail (attributed CLS ${d.railShift.toFixed(4)})`);
 console.log(`       (page CLS ${d.shifts.toFixed(4)} — the remainder is the footer settling as the canvas gets its height, which predates this gate)`);
 
 // Without proving the rail actually turned up, "it never moved" is what a page
 // with no rail at all also reports.
-ok(e.railEntries >= 2, `edit mode: the rail is there too (${e.railEntries} entries)`);
-ok(e.seen.length === 1, `edit mode: the document's left edge never moves (positions seen: ${e.seen.join(' -> ')})`);
+check(e.railEntries >= 2, `edit mode: the rail is there too (${e.railEntries} entries)`);
+check(e.seen.length === 1, `edit mode: the document's left edge never moves (positions seen: ${e.seen.join(' -> ')})`);
 
-ok(p.railEntries === 0, 'plain: no rail, as before');
-ok(p.seen.length === 1, `plain: and it still does not move (positions seen: ${p.seen.join(' -> ')})`);
+check(p.railEntries === 0, 'plain: no rail, as before');
+check(p.seen.length === 1, `plain: and it still does not move (positions seen: ${p.seen.join(' -> ')})`);
 // The reserved column is for DECKS only: an ordinary document that indents
 // itself by 190px for a rail it will never show is a different bug with the
 // same shape.
-ok(p.seen[0] < d.seen[0], `plain: and sits further left than a deck (${p.seen[0]}px vs ${d.seen[0]}px)`);
+check(p.seen[0] < d.seen[0], `plain: and sits further left than a deck (${p.seen[0]}px vs ${d.seen[0]}px)`);
 
 // A reserved column that leaked below the breakpoint would indent every phone
 // reader by 190px for a rail their screen never shows.
-ok(m.railEntries === 0 || m.railHidden, 'mobile: no rail column on a phone-width viewport');
-ok(m.seen.length === 1, `mobile: and the document never moves (positions seen: ${m.seen.join(' -> ')})`);
-ok(m.seen[0] < 40, `mobile: the document uses the full width (left edge ${m.seen[0]}px)`);
+check(m.railEntries === 0 || m.railHidden, 'mobile: no rail column on a phone-width viewport');
+check(m.seen.length === 1, `mobile: and the document never moves (positions seen: ${m.seen.join(' -> ')})`);
+check(m.seen[0] < 40, `mobile: the document uses the full width (left edge ${m.seen[0]}px)`);
 
 // ── 5. a deck built from our own guidance must not scroll sideways ────────
 /*
@@ -280,15 +280,15 @@ const [b, mm] = await Promise.all([
   measureBleed(bleedDeck.id, bleedDeck.token),
   measureBleed(mismatch.id, mismatch.token),
 ]);
-ok(b.railWidth > 0 && b.bleedLeft !== null,
+check(b.railWidth > 0 && b.bleedLeft !== null,
   `bleed: the rail and the full-bleed slide are both there (rail ${b.railWidth}px) — otherwise this proves nothing`);
-ok(b.overflow === 0, `bleed: the deck does not scroll sideways (${b.overflow}px of horizontal overflow)`);
+check(b.overflow === 0, `bleed: the deck does not scroll sideways (${b.overflow}px of horizontal overflow)`);
 // The point of the idiom is edge-to-edge WITHIN the column. Landing left of it
 // is the same 24px seen from the other end: blue paint on top of the rail.
-ok(b.bleedLeft >= b.columnLeft, `bleed: the slide stays out of the rail (slide left ${b.bleedLeft}px vs column ${b.columnLeft}px)`);
-ok(b.bleedRight <= b.columnRight, `bleed: and inside the column's right edge (slide right ${b.bleedRight}px vs column ${b.columnRight}px)`);
-ok(mm.bleedLeft !== null, 'mismatch: the overshooting element is there — otherwise this proves nothing');
-ok(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${mm.overflow}px of horizontal overflow)`);
+check(b.bleedLeft >= b.columnLeft, `bleed: the slide stays out of the rail (slide left ${b.bleedLeft}px vs column ${b.columnLeft}px)`);
+check(b.bleedRight <= b.columnRight, `bleed: and inside the column's right edge (slide right ${b.bleedRight}px vs column ${b.columnRight}px)`);
+check(mm.bleedLeft !== null, 'mismatch: the overshooting element is there — otherwise this proves nothing');
+check(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${mm.overflow}px of horizontal overflow)`);
 
 // ── 7. the deck's navigation chrome, which lives INSIDE the document ───────
 /*
@@ -326,12 +326,12 @@ ok(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${
     [SLIDES, index],
   );
 
-  ok(await frame.evaluate(() => !!document.querySelector('.mx-rail')), 'the rail is in the served document');
-  ok(await frame.evaluate(() => document.querySelector('.mx-rail-thumb')?.innerText.includes('The Cover Slide')),
+  check(await frame.evaluate(() => !!document.querySelector('.mx-rail')), 'the rail is in the served document');
+  check(await frame.evaluate(() => document.querySelector('.mx-rail-thumb')?.innerText.includes('The Cover Slide')),
     'rail previews render the slide content');
-  ok(await frame.evaluate(() => !!document.querySelector('.mx-rail-thumb svg')),
+  check(await frame.evaluate(() => !!document.querySelector('.mx-rail-thumb svg')),
     "rail previews draw the slide's icons too (server-resolved glyphs reach the rail)");
-  ok(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row').length === 3), 'one rail row per slide');
+  check(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row').length === 3), 'one rail row per slide');
 
   // The rail is SERVER-RENDERED, so every check above holds before hydration —
   // and clicking a row is the first thing here that needs the handler to exist.
@@ -339,9 +339,9 @@ ok(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${
   await page.waitForTimeout(2500);
   await frame.click('[aria-label="Go to slide 3: Close"]');
   await page.waitForTimeout(1500);
-  ok(await slideTop(2) < 60, 'clicking a rail row scrolls to that slide');
+  check(await slideTop(2) < 60, 'clicking a rail row scrolls to that slide');
   await page.waitForTimeout(500);
-  ok(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row')[2].getAttribute('aria-current') === 'true'),
+  check(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row')[2].getAttribute('aria-current') === 'true'),
     'the active row follows the reader');
 
   await frame.click('[aria-label="Go to slide 1: Cover"]');
@@ -349,20 +349,18 @@ ok(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${
   await frame.evaluate(() => document.querySelector('.mx-present').scrollIntoView());
   await page.keyboard.press('ArrowRight');
   await page.waitForTimeout(1500);
-  ok(await slideTop(1) < 60, 'ArrowRight pages to the next slide');
-  ok(await frame.evaluate(() => document.querySelector('[aria-label="Slide position"]').innerText.trim()) === '2 / 3',
+  check(await slideTop(1) < 60, 'ArrowRight pages to the next slide');
+  check(await frame.evaluate(() => document.querySelector('[aria-label="Slide position"]').innerText.trim()) === '2 / 3',
     'the counter tracks position');
 
   // The CAPTURE render — what /export screenshots — carries no chrome at all.
   const bare = await (await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`)).text();
-  ok(!bare.includes('Slide controls') && !bare.includes('mx-rail'), 'the capture render (?chrome=0) has no chrome');
-  ok(bare.includes('The Cover Slide'), 'and still carries the document');
+  check(!bare.includes('Slide controls') && !bare.includes('mx-rail'), 'the capture render (?chrome=0) has no chrome');
+  check(bare.includes('The Cover Slide'), 'and still carries the document');
   await page.close();
 }
 
-await checkViewportGeometry(B, browser, ok);
+await checkViewportGeometry(B, browser, check);
 await browser.close();
 
-const failed = out.filter((l) => l.startsWith('FAIL')).length;
-console.log(failed ? `\n${failed} FAILED` : `\nall ${out.length} checks passed`);
-process.exit(failed ? 1 : 0);
+check.done();

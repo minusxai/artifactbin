@@ -1,157 +1,76 @@
 /**
  * THE GATE MANIFEST — what each browser gate needs, beside the one runner (scripts/gates.mjs).
  *
- * Disk discovery stays (a `gate-*.mjs` cannot go missing); this file adds what discovery cannot see: how a gate
- * starts, whether it reads the mail sink, whether it drives the clipboard (one browser at a time), which gates must
- * never overlap, and how long each may run. The runner asserts a BIJECTION between the files on disk and the rows
- * here at startup and refuses to run otherwise — a new gate without a row, or a row without a file, is a failure,
- * not a silent skip.
+ * Disk discovery stays (a `gate-*.mjs` cannot go missing); this file adds what discovery cannot see:
+ * whether a gate reads the mail sink, whether it needs the generation fixture server, which gates must
+ * never overlap, and how long each may run. The runner asserts a BIJECTION between the files on disk and
+ * the rows here at startup and refuses to run otherwise — a new gate without a row, or a row without a
+ * file, is a failure, not a silent skip.
  *
- * Timeouts keep a cold-start floor and use the slower outside-sandbox observation from implementation and review:
- * `timeoutMs = max(60_000, 3 * 1000 * max(implementer seconds, orchestrator max seconds))`. Both measurements stay
- * beside every row so the budget remains auditable rather than becoming an unexplained constant.
+ * EVERY FIELD IS READ BY THE RUNNER. The shape used to carry `start`, `why` and `needsClipboard` as well,
+ * and nothing ever read any of them: `start` drifted until nine `shared` rows never called the shared
+ * helper at all, and `needsClipboard` was one-to-one with `serialGroup: 'clipboard'` on all 55 rows. A
+ * field no code consults is a second source of truth that cannot be wrong loudly.
+ *
+ * TIMEOUTS ARE A MEASUREMENT, not a guess: `timeoutMs = max(60_000, 3 × measured seconds)`, rounded up to
+ * the next ten seconds. Three times, because a gate sharing a machine with five others is slower than one
+ * run alone; the floor, because a cold start is most of a short gate's time. The numbers below were taken
+ * one gate at a time on one server (`node scripts/gates.mjs --servers=1 --only=<name>`) — and they are the
+ * weight `gates.shard.mjs` balances CI's shards on, so re-measuring a gate re-balances them.
  *
  * @typedef {object} GateSpec
  * @property {string} name            `gate-<name>.mjs`
- * @property {'shared'|'custom'|'none'} start  `shared` = boots its document through lib/start-doc.mjs; `custom` = its own
- *                                    identity/setup path (say why); `none` = needs no document
- * @property {string} [why]           REQUIRED when start !== 'shared': the one sentence that justifies the exception
  * @property {boolean} needsMail      reads a login code from the mail sink
- * @property {boolean} needsClipboard drives the real clipboard — such gates share one serial group
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
+ * @property {boolean} [needsGenerationFixture]  needs the deterministic model server (lib/generation-fixture)
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
-  { name: 'comment-targets', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
-  { name: 'dataset-policies', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
-  { name: 'generation-mutations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
-  { name: 'public-home-stars', start: 'shared', needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 90_000 },
-  { name: 'seamless-navigation', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
-  { name: 'managed-iframe', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
-  { name: 'libraries', start: 'custom', why: 'Uploads a textured GLB and publishes scripts that load it through the optional library registry.', needsMail: false, needsClipboard: false, timeoutMs: 90_000 },
-  { name: 'postgres-datasets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 180_000 },
-  // measured: implementer 9s; orchestrator 7s
-  { name: 'annotations', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 66s; orchestrator 71s
-  { name: 'app-flows', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 213_000 },
-  // measured: implementer 5s; orchestrator 6s
-  { name: 'claim-flow', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 25s; orchestrator 25s
-  {
-    name: 'collab-edit', start: 'custom',
-    why: 'Uses two logged-in browser contexts and one mail sink to prove editor collaboration and immediate demotion.',
-    needsMail: true, needsClipboard: false, timeoutMs: 75_000,
-  },
-  // measured: implementer 6s; orchestrator 7s
-  { name: 'data-ux', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 4s; orchestrator 83s
-  {
-    name: 'dataflow', start: 'custom',
-    why: 'Publishes its own dataset and dataflow documents, then logs in a private reader to exercise direct and relayed queries.',
-    needsMail: true, needsClipboard: false, timeoutMs: 249_000,
-  },
-  // measured: implementer 35s; orchestrator 36s
-  { name: 'editor-v2', start: 'shared', needsMail: true, needsClipboard: true, serialGroup:'clipboard', timeoutMs:180_000 },
-  // measured: orchestrator 30s, including two readers, owner relay and PNG export
-  { name: 'editable-table', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
-  // Table/DAG/Sprint navigation and sprint creation through the shared dialog.
-  { name: 'roadmap-views', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 120_000 },
-  // measured: implementer 2s; orchestrator 2s
-  // measured: implementer 8s; orchestrator 13s
-  { name: 'export-slice', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 5s; orchestrator 5s
-  { name: 'fonts', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 40s; orchestrator pending
-  {
-    name: 'folders', start: 'custom',
-    why: 'Needs two logged-in contexts and a stranger over ONE public folder: the owner\u2019s shell, an invited editor, and the document served top-level.',
-    needsMail: true, needsClipboard: false, timeoutMs: 120_000,
-  },
-  // measured: implementer 5s; orchestrator 5s
-  {
-    name: 'fork', start: 'custom',
-    why: 'Drives two browser contexts and logs the second in ON the /login page the fork anchor produced — the callbackUrl round trip is the thing under test, so the shared start helper (which navigates to /login itself) would throw it away.',
-    needsMail: true, needsClipboard: false, timeoutMs: 60_000,
-  },
-  // measured: implementer 17s; orchestrator 23s
-  { name: 'full-kit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 69_000 },
-  // measured: implementer 7s; orchestrator 7s
-  { name: 'hydration', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 11s; orchestrator 14s
-  {
-    name: 'image-upload', start: 'shared', needsMail: false, needsClipboard: true, serialGroup: 'clipboard',
-    timeoutMs: 60_000,
-  },
-  // measured: implementer 36s; orchestrator 36s
-  { name: 'inplace-edit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 108_000 },
-  // measured: implementer 39s; orchestrator 39s
-  { name: 'layout-shift', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 180_000 },
-  // measured: implementer 2s; orchestrator 2s
-  {
-    name: 'link-access', start: 'custom',
-    why: 'Exercises the share menu general-access seam with its own owner, stranger, and logged-out identity setup.',
-    needsMail: true, needsClipboard: false, timeoutMs: 60_000,
-  },
-  // measured: implementer pending; orchestrator pending
-  {
-    name: 'local-sql-state', start: 'custom',
-    why: 'Publishes local-state and stored-dataset fixtures, then exercises anonymous top-level and logged-in framed transports.',
-    needsMail: true, needsClipboard: false, timeoutMs: 180_000,
-  },
-  // measured: implementer 3s; orchestrator 7s
-  { name: 'live-data', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 20s; orchestrator 20s
-  { name: 'live-reader', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 27s (F4 adds a fourth, touch-enabled context); orchestrator 9s (pre-F4)
-  { name: 'mobile', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 81_000 },
-  // measured: implementer 1s; orchestrator 1s
-  {
-    name: 'oauth-browser', start: 'custom',
-    why: 'Clicks the OAuth consent form in a real browser and receives the authorization code at a real callback listener.',
-    needsMail: true, needsClipboard: false, timeoutMs: 60_000,
-  },
-  // measured: implementer 15s; orchestrator 17s
-  { name: 'reading-chrome', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 16s; orchestrator pending
-  {
-    name: 'reader-chrome', start: 'custom',
-    why: 'The byline is the AUTHOR\'s handle, so the document has to be owned: it logs an owner in, claims a token to publish under it, and forks a copy for the provenance line — none of which the anonymous shared start helper produces.',
-    needsMail: true, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000,
-  },
-  { name: 'web-assets', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
-  // measured: implementer 20s; orchestrator pending
-  {
-    name: 'pdf', start: 'shared',
-    needsMail: false, needsClipboard: false, timeoutMs: 60_000,
-  },
-  // measured: implementer 16s; orchestrator 17s
-  { name: 'script-slice', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 25s; orchestrator 26s
-  {
-    name: 'secure-arch', start: 'custom',
-    why: 'Creates logged-in owner and stranger sessions plus a session-less reader to exercise the browser security seams.',
-    needsMail: true, needsClipboard: false, timeoutMs: 78_000,
-  },
-  // measured: implementer 4s; orchestrator 4s
-  { name: 'shell-seo', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 14s
-  { name: 'social-preview', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
-  // measured: implementer 3s; orchestrator 3s
-  {
-    name: 'simpler-start', start: 'custom',
-    why: 'Drives the one-line handoff from the home page in a real browser and proves no credential rides in the paste, the response, or any second door.',
-    needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000,
-  },
-  // measured: implementer 4s; orchestrator 4s
-  {
-    name: 'visibility', start: 'custom',
-    why: 'Logs in an owner through the mail sink to prove private iframe delivery, canonical URL healing, and sharing UI changes.',
-    needsMail: true, needsClipboard: false, timeoutMs: 60_000,
-  },
-  // measured: implementer 41s; orchestrator 43s
-  { name: 'viz-editor', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 129_000 },
+  { name: 'comment-targets', needsMail: false, timeoutMs: 60_000 },
+  { name: 'dataset-policies', needsMail: true, timeoutMs: 60_000 },
+  { name: 'generation-mutations', needsMail: false, needsGenerationFixture: true, timeoutMs: 70_000 },
+  { name: 'public-home-stars', needsMail: false, serialGroup: 'clipboard', timeoutMs: 60_000 },
+  { name: 'seamless-navigation', needsMail: true, timeoutMs: 60_000 },
+  { name: 'managed-iframe', needsMail: false, timeoutMs: 60_000 },
+  { name: 'libraries', needsMail: false, timeoutMs: 60_000 },
+  { name: 'postgres-datasets', needsMail: true, timeoutMs: 60_000 },
+  { name: 'annotations', needsMail: false, timeoutMs: 60_000 },
+  { name: 'app-flows', needsMail: true, timeoutMs: 210_000 },
+  { name: 'claim-flow', needsMail: true, timeoutMs: 60_000 },
+  { name: 'collab-edit', needsMail: true, timeoutMs: 100_000 },
+  { name: 'data-ux', needsMail: false, timeoutMs: 60_000 },
+  { name: 'dataflow', needsMail: true, timeoutMs: 60_000 },
+  { name: 'editor-v2', needsMail: true, serialGroup: 'clipboard', timeoutMs: 310_000 },
+  { name: 'editable-table', needsMail: true, timeoutMs: 60_000 },
+  { name: 'roadmap-views', needsMail: false, timeoutMs: 60_000 },
+  { name: 'export-slice', needsMail: false, timeoutMs: 60_000 },
+  { name: 'fonts', needsMail: false, timeoutMs: 60_000 },
+  { name: 'folders', needsMail: true, timeoutMs: 60_000 },
+  { name: 'fork', needsMail: true, timeoutMs: 60_000 },
+  { name: 'full-kit', needsMail: false, timeoutMs: 60_000 },
+  { name: 'hydration', needsMail: false, timeoutMs: 60_000 },
+  { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', timeoutMs: 110_000 },
+  { name: 'inplace-edit', needsMail: false, timeoutMs: 180_000 },
+  { name: 'layout-shift', needsMail: false, timeoutMs: 80_000 },
+  { name: 'link-access', needsMail: true, timeoutMs: 60_000 },
+  { name: 'local-sql-state', needsMail: true, timeoutMs: 60_000 },
+  { name: 'live-data', needsMail: false, timeoutMs: 60_000 },
+  { name: 'live-reader', needsMail: false, timeoutMs: 70_000 },
+  { name: 'mobile', needsMail: false, timeoutMs: 100_000 },
+  { name: 'oauth-browser', needsMail: true, timeoutMs: 60_000 },
+  { name: 'reading-chrome', needsMail: false, timeoutMs: 90_000 },
+  { name: 'reader-chrome', needsMail: true, serialGroup: 'clipboard', timeoutMs: 110_000 },
+  { name: 'web-assets', needsMail: true, timeoutMs: 60_000 },
+  { name: 'pdf', needsMail: false, timeoutMs: 60_000 },
+  { name: 'script-slice', needsMail: false, timeoutMs: 70_000 },
+  { name: 'secure-arch', needsMail: true, timeoutMs: 60_000 },
+  { name: 'shell-seo', needsMail: false, timeoutMs: 60_000 },
+  { name: 'social-preview', needsMail: false, timeoutMs: 80_000 },
+  { name: 'simpler-start', needsMail: false, serialGroup: 'clipboard', timeoutMs: 60_000 },
+  { name: 'visibility', needsMail: true, timeoutMs: 60_000 },
+  { name: 'viz-editor', needsMail: true, timeoutMs: 130_000 },
 ]);
 
 /**

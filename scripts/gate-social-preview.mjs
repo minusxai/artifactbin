@@ -3,6 +3,7 @@
  * owner chrome → sharing → focused cropper → keyboard position/resize → source edit →
  * exact 1600×840 card → reset back to the top-left default.
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -10,8 +11,7 @@ import sharp from 'sharp';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('social-preview');
 
 const start = await startDocument(BASE);
 const auth = { 'Content-Type': 'application/json', Authorization: `Bearer ${start.token}` };
@@ -105,8 +105,4 @@ try {
   await browser.close();
 }
 
-if (failures.length) {
-  console.error(`\n${failures.length} failure(s):\n- ${failures.join('\n- ')}`);
-  process.exit(1);
-}
-console.log('\nsocial preview gate passed');
+check.done();

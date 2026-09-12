@@ -17,14 +17,14 @@
  *
  *   usage: node scripts/gate-annotations.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const ok = (pass, label) => { console.log(`${pass ? '  ok ' : 'FAIL '} ${label}`); if (!pass) failures.push(label); };
+const check = createChecker('annotations');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function until(read, want, budgetMs = 8000) {
@@ -77,8 +77,8 @@ const run = async () => {
       await frame.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
       return bubble.isVisible().catch(() => false);
     }, (v) => v === true, 15000);
-    ok(await bubble.isVisible(), 'selecting text in view mode raises the action bubble inside the document');
-    ok(await page.locator('[aria-label="Edit selected text"]').count() === 1
+    check(await bubble.isVisible(), 'selecting text in view mode raises the action bubble inside the document');
+    check(await page.locator('[aria-label="Edit selected text"]').count() === 1
       && await page.locator('[aria-label="Comment on selected text"]').count() === 1,
       'the owner is offered both edit and annotate');
 
@@ -86,11 +86,11 @@ const run = async () => {
     // NOTHING. Commenting is a layer, so no hash moves and no mode opens.
     await page.locator('[aria-label="Comment on selected text"]').click();
     const seeded = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
-    ok(seeded === 1, 'the composer opens on the selected words — no second click on the same text');
-    ok(await page.evaluate(() => location.hash) === '', 'commenting enters no mode: the hash is untouched');
-    ok(await frame.locator('#figure[data-mx-annotate-selected]').count() === 1,
+    check(seeded === 1, 'the composer opens on the selected words — no second click on the same text');
+    check(await page.evaluate(() => location.hash) === '', 'commenting enters no mode: the hash is untouched');
+    check(await frame.locator('#figure[data-mx-annotate-selected]').count() === 1,
       'the frame marks the node the composer is composing on');
-    ok(await page.locator('[aria-label="Select section"]').count() >= 1, 'the composer carries the selection breadcrumb');
+    check(await page.locator('[aria-label="Select section"]').count() >= 1, 'the composer carries the selection breadcrumb');
 
     // Write it from the composer the bubble opened.
     await page.locator('[aria-label="Annotation comment"]').fill('this number looks wrong — check the Q3 sheet');
@@ -99,61 +99,61 @@ const run = async () => {
     // Saving tints the commented node (the Docs highlight).
     const highlighted = frame.locator('#figure[data-mx-annotated]');
     await highlighted.waitFor({ timeout: 8000 });
-    ok(true, 'saving tints the commented node');
+    check(true, 'saving tints the commented node');
 
     // ── the rail is a PANEL, not a mode ───────────────────────────────────
     await openArtifactControls(page);
     await page.locator('[aria-label="Toggle comments"]').click();
     await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
-    ok(await page.evaluate(() => location.hash) === '', 'opening the rail moves no hash');
+    check(await page.evaluate(() => location.hash) === '', 'opening the rail moves no hash');
     await openArtifactControls(page);
-    ok(await page.locator('[aria-label="Edit artifact"]').count() === 1, 'edit stays offered while the rail is open');
+    check(await page.locator('[aria-label="Edit artifact"]').count() === 1, 'edit stays offered while the rail is open');
     await page.keyboard.press('Escape');
     const thread = page.locator('[aria-label="Annotation thread"]');
-    ok((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
+    check((await thread.textContent())?.includes('Q3 sheet'), 'the saved comment appears as a rail thread');
     // The frame stays FULL-WIDTH — the bar drawn inside it must not narrow —
     // and the document leaves the rail its width instead.
-    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right === '0px'),
+    check(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => el.style.right === '0px'),
       'the open rail leaves the frame full-width, so the bar inside it does not move');
     const railInset = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '320px', 5000);
-    ok(railInset === '320px', `the document leaves the rail its width (got ${railInset})`);
-    ok(await page.locator('[aria-label="Annotation sidebar"]').evaluate((el) => el.style.top === '44px'),
+    check(railInset === '320px', `the document leaves the rail its width (got ${railInset})`);
+    check(await page.locator('[aria-label="Annotation sidebar"]').evaluate((el) => el.style.top === '44px'),
       'the rail sits under the document\'s bar');
 
     await page.locator('[aria-label="Close comments"]').click();
     const railGone = await until(() => page.locator('[aria-label="Annotation sidebar"]').count(), (n) => n === 0, 5000);
-    ok(railGone === 0, 'closing the rail puts the panel away');
+    check(railGone === 0, 'closing the rail puts the panel away');
 
     // THE INVERSION: the tint used to leave with the mode. It is ambient now,
     // so it stays — and a compact identity marker floats beside it.
     const stillTinted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 5000);
-    ok(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
+    check(stillTinted === 1, 'the tint is ambient: a commented node stays marked with no rail and no mode');
     // The count rides the framed document's comment glyph now, kept live by the page.
-    ok((await page.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
+    check((await page.locator('[data-mx-reader-count="comment"]').textContent())?.trim() === '1', 'the comment glyph carries the unresolved count');
     const viewComments = page.locator('[aria-label="Open annotation comments"]');
     await viewComments.waitFor({ timeout: 8000 });
     const viewComment = page.locator('[aria-label^="Open annotation conversation by"]');
     await viewComment.waitFor({ timeout: 8000 });
     const compactBox = await viewComment.boundingBox();
-    ok(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
+    check(!!compactBox && compactBox.width <= 40 && compactBox.height <= 40,
       'the ambient annotation is a compact identity marker');
     const railGone2 = await until(() => page.getByLabel('Artifact viewport').evaluate((el) => getComputedStyle(el).paddingRight), (v) => v === '0px', 5000);
-    ok(railGone2 === '0px', 'closing the rail gives the document its width back');
-    ok(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
+    check(railGone2 === '0px', 'closing the rail gives the document its width back');
+    check(await page.locator('[aria-label="Artifact viewport"]').evaluate((el) => (el).style.right === '0px'),
       'the floating marker leaves the document full-width');
     await viewComment.hover();
     const expandedBox = await until(() => viewComment.boundingBox(), (box) => !!box && box.width > 250, 5000);
-    ok((await viewComments.textContent())?.includes('Q3 sheet'), 'hover reveals the conversation preview');
+    check((await viewComments.textContent())?.includes('Q3 sheet'), 'hover reveals the conversation preview');
     const anchorBox = await frame.locator('#figure').boundingBox();
     const commentBox = expandedBox;
     // The marker follows the WORDS now (F3: a comment keeps its selection, and
     // its rect is the union of the highlighted ranges), so it sits on the text
     // LINE rather than on the paragraph box — half-leading apart, a handful of
     // pixels. It is still the annotated content it follows.
-    ok(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 12,
+    check(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 12,
       `the annotation marker follows its annotated content vertically (${Math.round(Math.abs((anchorBox?.y ?? 0) - (commentBox?.y ?? 0)))}px apart)`);
     const viewportWidth = await page.evaluate(() => innerWidth);
-    ok(!!commentBox
+    check(!!commentBox
       && commentBox.x >= 0
       && commentBox.x + commentBox.width <= viewportWidth
       && Math.abs(viewportWidth - (commentBox.x + commentBox.width) - 12) <= 2,
@@ -163,7 +163,7 @@ const run = async () => {
     // artifact controls only open the full rail.
     await page.mouse.move(400, 20);
     await openArtifactControls(page);
-    ok(await page.locator('[aria-label="Hide comments"], [aria-label="Show comments"]').count() === 0,
+    check(await page.locator('[aria-label="Hide comments"], [aria-label="Show comments"]').count() === 0,
       'artifact controls carry no annotation visibility toggle');
     await page.keyboard.press('Escape');
 
@@ -172,16 +172,16 @@ const run = async () => {
     await viewComment.click();
     await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
     await frame.locator('#figure[data-mx-annotation-open]').waitFor({ timeout: 8000 });
-    ok(await page.evaluate(() => location.hash) === '', 'opening a thread never touches the URL');
-    ok((await thread.first().textContent())?.includes('Q3 sheet') && await page.locator('[aria-label="Reply to annotation"]').first().isVisible(),
+    check(await page.evaluate(() => location.hash) === '', 'opening a thread never touches the URL');
+    check((await thread.first().textContent())?.includes('Q3 sheet') && await page.locator('[aria-label="Reply to annotation"]').first().isVisible(),
       'clicking the floating marker opens the rail focused and ready to reply');
 
     // ── the agent's side, over plain HTTP ─────────────────────────────────
     const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
     const ann = wire.annotations?.[0];
-    ok(!!ann && ann.snippet.includes('Revenue grew 40%'), 'GET /api/artifacts/<id> inlines the annotation with its snippet');
-    ok(wire.open_annotations === 1, 'the wire carries the open count');
-    ok(typeof ann?.anchor?.nodeId === 'string' && wire.markup.includes(`id="${ann.anchor.nodeId}"`), 'the comment addresses a persisted source id');
+    check(!!ann && ann.snippet.includes('Revenue grew 40%'), 'GET /api/artifacts/<id> inlines the annotation with its snippet');
+    check(wire.open_annotations === 1, 'the wire carries the open count');
+    check(typeof ann?.anchor?.nodeId === 'string' && wire.markup.includes(`id="${ann.anchor.nodeId}"`), 'the comment addresses a persisted source id');
 
     // The case the ids exist for: a full-replace PUT that keeps the attribute keeps the annotation.
     const rewritten = wire.markup.replace('grew 40%', 'grew 34%');
@@ -190,30 +190,30 @@ const run = async () => {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ markup: rewritten }),
     });
-    ok(putRes.ok, 'the agent full-replaces the document, preserving the annotation anchor');
+    check(putRes.ok, 'the agent full-replaces the document, preserving the annotation anchor');
     const afterPut = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json();
-    ok(afterPut.annotations?.[0]?.orphaned === false && afterPut.annotations?.[0]?.snippet.includes('34%'),
+    check(afterPut.annotations?.[0]?.orphaned === false && afterPut.annotations?.[0]?.snippet.includes('34%'),
       'the annotation survives the PUT and its snippet follows the new text');
     const stillHighlighted = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 10000);
-    ok(stillHighlighted === 1, 'the open tab re-highlights the node after the live adopt');
+    check(stillHighlighted === 1, 'the open tab re-highlights the node after the live adopt');
 
     const resolved = await (await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ reply: 'Recomputed — it was 34%. Fixed.', resolve: true }),
     })).json();
-    ok(resolved.status === 'resolved' && resolved.thread?.length === 2, 'the agent replies and resolves in one POST');
+    check(resolved.status === 'resolved' && resolved.thread?.length === 2, 'the agent replies and resolves in one POST');
 
     // The still-open owner tab loses the highlight AND the sidebar thread
     // WITHOUT a reload (the live stream); resolved history is listed below it.
     const gone = await until(() => frame.locator('[data-mx-annotated]').count(), (n) => n === 0, 10000);
-    ok(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
+    check(gone === 0, 'the resolve reaches the open tab live: the highlight lifts with no reload');
     const threadGone = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 0, 8000);
-    ok(threadGone === 0, 'the open-thread list empties live too');
+    check(threadGone === 0, 'the open-thread list empties live too');
     const badgeGone = await until(() => page.locator('[data-mx-reader-count="comment"]').textContent().then((t) => (t ?? '').trim()), (t) => t === '', 5000);
-    ok(badgeGone === '', 'the count badge drops with the resolve');
+    check(badgeGone === '', 'the count badge drops with the resolve');
     const resolvedCard = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 1, 8000);
-    ok(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
+    check(resolvedCard === 1, 'resolved history lists the closed thread below the open list');
 
     // The owner's delete erases the thread outright once its collapsed
     // conversation is opened.
@@ -222,9 +222,9 @@ const run = async () => {
     await page.locator('[aria-label="Delete annotation"]').click();
     await page.getByLabel('Confirm delete comment', { exact: true }).click();
     const allGone = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 0, 8000);
-    ok(allGone === 0, 'delete erases the thread from the history');
+    check(allGone === 0, 'delete erases the thread from the history');
     const wireAfter = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: { Authorization: `Bearer ${token}` } })).json();
-    ok(wireAfter.annotations?.length === 0, 'the delete reached storage — nothing left on the wire');
+    check(wireAfter.annotations?.length === 0, 'the delete reached storage — nothing left on the wire');
 
     // ── THE POINT OF ALL OF THIS: comment WHILE editing ───────────────────
     // Type into a paragraph, then comment on that same paragraph without
@@ -238,7 +238,7 @@ const run = async () => {
     // through the document's own (pinned) chrome — no button in the editor bar.
     await openArtifactControls(page);
     const editComments = await until(() => page.locator('[aria-label="Toggle comments"]').count(), (n) => n === 1, 5000);
-    ok(editComments === 1, 'the comments control survives entering edit mode');
+    check(editComments === 1, 'the comments control survives entering edit mode');
     // Put the panel away: its click-away scrim covers the frame, and the
     // paragraph click below must reach the document.
     await page.keyboard.press('Escape');
@@ -253,7 +253,7 @@ const run = async () => {
       await para.click({ timeout: 2000 }).catch(() => {});
       return toolbar.isVisible().catch(() => false);
     }, (v) => v === true, 20000);
-    ok(await toolbar.isVisible(), 'the editor selects the annotated paragraph');
+    check(await toolbar.isVisible(), 'the editor selects the annotated paragraph');
     await page.keyboard.press('End');
     await page.keyboard.type(' MIDSENTENCE');
 
@@ -261,8 +261,8 @@ const run = async () => {
     // the typing above is still UNCOMMITTED when the composer opens.
     await page.locator('[aria-label="Comment on selection"]').click();
     const editComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
-    ok(editComposer === 1, 'the editor toolbar opens the composer without leaving edit mode');
-    ok(await page.evaluate(() => location.hash) === '#edit', 'commenting mid-edit stays in edit mode');
+    check(editComposer === 1, 'the editor toolbar opens the composer without leaving edit mode');
+    check(await page.evaluate(() => location.hash) === '#edit', 'commenting mid-edit stays in edit mode');
     await page.locator('[aria-label="Annotation comment"]').fill('written without leaving the editor');
     await page.locator('[aria-label="Save annotation"]').click();
     await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 0, 10000);
@@ -274,14 +274,14 @@ const run = async () => {
       (w) => (w?.annotations?.length ?? 0) === 1,
       15000,
     );
-    ok((afterMid?.annotations?.length ?? 0) === 1, 'the mid-edit comment reached storage');
-    ok((await frame.locator('#figure').innerText()).includes('MIDSENTENCE'),
+    check((afterMid?.annotations?.length ?? 0) === 1, 'the mid-edit comment reached storage');
+    check((await frame.locator('#figure').innerText()).includes('MIDSENTENCE'),
       'uncommitted typing survives a relation-only comment');
 
     // …and the layer is ambient INSIDE the editor: the node just commented on
     // is tinted while the document is still editable.
     const tintWhileEditing = await until(() => frame.locator('#figure[data-mx-annotated]').count(), (n) => n === 1, 10000);
-    ok(tintWhileEditing === 1, 'commented nodes are tinted inside the editor');
+    check(tintWhileEditing === 1, 'commented nodes are tinted inside the editor');
 
     await page.locator('[aria-label="Exit edit mode"]').click();
     await until(() => page.evaluate(() => location.hash), (h) => h === '');
@@ -290,7 +290,7 @@ const run = async () => {
       (w) => typeof w?.markup === 'string' && w.markup.includes('MIDSENTENCE'),
       15000,
     );
-    ok(persistedTyping?.markup?.includes('MIDSENTENCE'), 'ordinary editor exit persists the typing without comment-triggered writes');
+    check(persistedTyping?.markup?.includes('MIDSENTENCE'), 'ordinary editor exit persists the typing without comment-triggered writes');
 
     // ── a logged-out reader sees nothing ──────────────────────────────────
     const strangerCtx = await browser.newContext();
@@ -299,12 +299,12 @@ const run = async () => {
     await sleep(1500);
     const strangerPins = await stranger.locator('[data-mx-annotated], [data-mx-annotation-open]').count();
     const strangerButtons = await stranger.locator('[aria-label="Toggle comments"]').count();
-    ok(strangerPins === 0 && strangerButtons === 0, 'a logged-out reader sees no pins and no annotate chrome');
+    check(strangerPins === 0 && strangerButtons === 0, 'a logged-out reader sees no pins and no annotate chrome');
     // A reader is served the document top-level, so their selection happens in
     // the page itself — and nothing grants them an action, so no chunk loads.
     await stranger.locator('#figure').click({ clickCount: 3, timeout: 2000 }).catch(() => {});
     await sleep(500);
-    ok(await stranger.locator('[data-mx-selection-actions]').count() === 0,
+    check(await stranger.locator('[data-mx-selection-actions]').count() === 0,
       'a reader selecting text is offered nothing at all');
     await strangerCtx.close();
     await owner.close();
@@ -389,7 +389,7 @@ async function quoteLeg(browser) {
     await dragAcross().catch(() => {});
     return bubble.isVisible().catch(() => false);
   }, (v) => v === true, 20000);
-  ok(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
+  check(await bubble.isVisible(), 'a drag across two paragraphs raises the bubble');
 
   await page.locator('[aria-label="Comment on selected text"]').click();
   await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
@@ -402,13 +402,13 @@ async function quoteLeg(browser) {
   const wire = await until(read, (w) => (w?.annotations?.length ?? 0) === 1, 15000);
   const ann = wire.annotations?.[0];
   const parts = ann?.range?.parts ?? [];
-  ok(parts.length === 2 && parts[0].rel === '' && parts[1].rel === '+1',
+  check(parts.length === 2 && parts[0].rel === '' && parts[1].rel === '+1',
     `the range is two parts, "" then "+1" (got ${JSON.stringify(parts.map((p) => p.rel))})`);
-  ok(FIRST_TEXT.endsWith(parts[0]?.text ?? 'x') && SECOND_TEXT.startsWith(parts[1]?.text ?? 'x'),
+  check(FIRST_TEXT.endsWith(parts[0]?.text ?? 'x') && SECOND_TEXT.startsWith(parts[1]?.text ?? 'x'),
     'each part is exactly the run it covers in its own node');
-  ok(ann?.quote === `${parts[0]?.text} ${parts[1]?.text}`, 'the quote is the parts, one space between blocks');
-  ok(ann?.quote_found === true, 'the quoted words are still in the document');
-  ok(ann?.snippet === FIRST_TEXT, 'the snippet is still the whole anchored node — a different thing, kept');
+  check(ann?.quote === `${parts[0]?.text} ${parts[1]?.text}`, 'the quote is the parts, one space between blocks');
+  check(ann?.quote_found === true, 'the quoted words are still in the document');
+  check(ann?.snippet === FIRST_TEXT, 'the snippet is still the whole anchored node — a different thing, kept');
 
   // (b) THE PAINT, AFTER A RELOAD: nothing about it is stored in the DOM, so a
   // reload is the honest test that the range alone can re-find the words.
@@ -432,20 +432,20 @@ async function quoteLeg(browser) {
     (p) => p?.has === true,
     15000,
   );
-  ok(paint.has, 'the frame registers a CSS highlight for the thread after a reload');
-  ok(paint.first && paint.second, 'the highlight covers words in BOTH paragraphs');
-  ok(paint.ranged, 'the anchored node gives up its own tint while its words are painted');
+  check(paint.has, 'the frame registers a CSS highlight for the thread after a reload');
+  check(paint.first && paint.second, 'the highlight covers words in BOTH paragraphs');
+  check(paint.ranged, 'the anchored node gives up its own tint while its words are painted');
 
   // (c) AN AGENT REWORDS THE FIRST PARAGRAPH: the thread stays anchored, the
   // quote no longer reads as it did, and the paint falls back to the tint.
   const current = await read();
   const rewritten = current.markup.replace(FIRST_TEXT, 'Revenue was flat in Q3, behind plan.');
   const put = await fetch(`${BASE}/api/artifacts/${id}`, { method: 'PUT', headers: auth, body: JSON.stringify({ markup: rewritten }) });
-  ok(put.ok, 'the agent rewords the annotated paragraph, keeping the anchor');
+  check(put.ok, 'the agent rewords the annotated paragraph, keeping the anchor');
   const after = await until(read, (w) => w?.annotations?.[0]?.quote_found === false, 15000);
-  ok(after?.annotations?.[0]?.quote_found === false, 'quote_found turns false when the words are written away');
-  ok(after?.annotations?.[0]?.orphaned === false, 'the thread is still anchored — the node is still there');
-  ok(after?.annotations?.[0]?.quote === ann.quote, 'the quote itself is never recomputed');
+  check(after?.annotations?.[0]?.quote_found === false, 'quote_found turns false when the words are written away');
+  check(after?.annotations?.[0]?.orphaned === false, 'the thread is still anchored — the node is still there');
+  check(after?.annotations?.[0]?.quote === ann.quote, 'the quote itself is never recomputed');
   const fallback = await until(
     () => reloaded.evaluate((name) => ({
       highlighted: !!window.CSS?.highlights?.get(name),
@@ -455,7 +455,7 @@ async function quoteLeg(browser) {
     (state) => state?.highlighted === false,
     15000,
   );
-  ok(fallback?.highlighted === false && fallback?.tinted === true && fallback?.ranged === false,
+  check(fallback?.highlighted === false && fallback?.tinted === true && fallback?.ranged === false,
     `the live frame falls back to the whole-node tint (got ${JSON.stringify(fallback)})`);
   await ctx.close();
 }
@@ -513,7 +513,7 @@ async function markdownLeg(browser) {
     });
     return { status: res.status, body: await res.text() };
   }, [id, head.edit_id]);
-  ok(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
+  check(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
 
   // Open the rail, and open the thread inside it: the compact surfaces show
   // the plain text on purpose, so only the opened thread renders the tree.
@@ -524,17 +524,17 @@ async function markdownLeg(browser) {
   const thread = page.locator('[aria-label="Annotation thread"]').first();
   await thread.waitFor({ timeout: 8000 });
   await page.locator('[aria-label="Open annotation thread"]').first().click();
-  ok(await page.locator('[aria-label="Reply to annotation"]').first().isVisible(), 'the thread opens ready to reply');
-  ok(await page.locator('[aria-label="Bold"]').first().isVisible(), 'the reply box carries the markdown toolbar');
+  check(await page.locator('[aria-label="Reply to annotation"]').first().isVisible(), 'the thread opens ready to reply');
+  check(await page.locator('[aria-label="Bold"]').first().isVisible(), 'the reply box carries the markdown toolbar');
 
   // THE AGENT ANSWERS over plain HTTP, with a fenced block in the reply.
   const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
   const ann = wire.annotations?.[0];
-  ok(!!ann, 'the comment is on the wire for the agent to answer');
+  check(!!ann, 'the comment is on the wire for the agent to answer');
   const replied = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
     method: 'POST', headers: auth, body: JSON.stringify({ reply: AGENT_REPLY }),
   });
-  ok(replied.ok, 'the agent replies with a fenced block over plain HTTP');
+  check(replied.ok, 'the agent replies with a fenced block over plain HTTP');
 
   // …and it is READ, in the still-open tab, with no reload.
   const rendered = await until(
@@ -552,16 +552,16 @@ async function markdownLeg(browser) {
     (state) => typeof state?.pre === 'string',
     15000,
   );
-  ok(rendered?.pre === 'const MAX = 10;', `the fenced block arrives live as a <pre> (got ${JSON.stringify(rendered?.pre)})`);
-  ok(rendered?.items?.join('|') === 'bumped the cap|added a test', `the list arrives as <li>s (got ${JSON.stringify(rendered?.items)})`);
-  ok(rendered?.code?.includes('lib/config.ts'), 'a backticked identifier is a <code>, not a backtick');
-  ok(rendered?.strong?.includes('10'), 'the emphasis is a <strong>');
-  ok(rendered?.fence === false, 'the fence markers themselves are gone');
-  ok(rendered?.wider === false, 'the code block scrolls inside the rail rather than widening it');
+  check(rendered?.pre === 'const MAX = 10;', `the fenced block arrives live as a <pre> (got ${JSON.stringify(rendered?.pre)})`);
+  check(rendered?.items?.join('|') === 'bumped the cap|added a test', `the list arrives as <li>s (got ${JSON.stringify(rendered?.items)})`);
+  check(rendered?.code?.includes('lib/config.ts'), 'a backticked identifier is a <code>, not a backtick');
+  check(rendered?.strong?.includes('10'), 'the emphasis is a <strong>');
+  check(rendered?.fence === false, 'the fence markers themselves are gone');
+  check(rendered?.wider === false, 'the code block scrolls inside the rail rather than widening it');
 
   // The wire NEVER carries the rendering — the body is the text as written.
   const after = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: auth })).json();
-  ok(after.annotations?.[0]?.thread?.[1]?.body === AGENT_REPLY, 'the stored body is still the exact markdown text the agent sent');
+  check(after.annotations?.[0]?.thread?.[1]?.body === AGENT_REPLY, 'the stored body is still the exact markdown text the agent sent');
   await ctx.close();
 }
 
@@ -611,7 +611,7 @@ async function foldLeg(browser) {
     });
     return { status: res.status, body: await res.text() };
   }, [id, head.edit_id]);
-  ok(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
+  check(created.status === 201, `the owner leaves a comment (${created.status} ${created.body.slice(0, 120)})`);
 
   const wire = await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: auth })).json();
   const ann = wire.annotations?.[0];
@@ -619,14 +619,14 @@ async function foldLeg(browser) {
   const replied = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
     method: 'POST', headers: auth, body: JSON.stringify({ reply: LONG_AGENT_REPLY }),
   });
-  ok(replied.ok, 'the agent answers with sixty lines over plain HTTP');
+  check(replied.ok, 'the agent answers with sixty lines over plain HTTP');
   const lastWord = await page.evaluate(async ([docId, annId, body]) => {
     const res = await fetch(`/api/my/artifacts/${docId}/annotations/${annId}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reply: body }),
     });
     return res.status;
   }, [id, ann.id, HUMAN_LAST_WORD]);
-  ok(lastWord === 200, `the human answers shortly underneath (${lastWord})`);
+  check(lastWord === 200, `the human answers shortly underneath (${lastWord})`);
 
   await openArtifactControls(page);
   await page.locator('[aria-label="Toggle comments"]').click();
@@ -695,36 +695,36 @@ async function foldLeg(browser) {
     return read();
   };
   const folded = await readSettled();
-  ok(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
+  check(folded?.clamped === true, 'the sixty-line agent answer arrives folded');
   // The page's floating action bar is gone (the chrome lives in the document
   // now), so the sheet's own rect IS the visible area: nothing covers it.
-  ok(/^show more \(\d+ lines\)$/.test(folded?.control ?? ''), `the fold offers to open itself (${JSON.stringify(folded?.control)})`);
-  ok(folded?.hasLastLine === true, 'clamped, not truncated: the whole answer is still in the document');
-  ok(!!folded?.reply
+  check(/^show more \(\d+ lines\)$/.test(folded?.control ?? ''), `the fold offers to open itself (${JSON.stringify(folded?.control)})`);
+  check(folded?.hasLastLine === true, 'clamped, not truncated: the whole answer is still in the document');
+  check(!!folded?.reply
     && folded.reply.top >= folded.sheet.top - 1
     && folded.reply.bottom <= folded.sheet.bottom + 1,
   `the human's own reply is visible without scrolling the sheet (reply ${JSON.stringify(folded?.reply)} in sheet ${JSON.stringify(folded?.sheet)})`);
-  ok(typeof folded?.answerTop === 'number' && folded.answerTop >= folded.sheet.top - 1,
+  check(typeof folded?.answerTop === 'number' && folded.answerTop >= folded.sheet.top - 1,
     `the agent's answer BEGINS on screen too — the fold is what fits both (answer top ${folded?.answerTop}, sheet top ${folded?.sheet.top})`);
 
   await page.locator('[aria-label="Show whole comment"]').first().click();
   const opened = await until(read, (s) => s?.clamped === false, 5000);
-  ok(opened?.clamped === false, 'tapping "show whole comment" expands it');
-  ok(await page.locator('[aria-label="Show less of comment"]').first().isVisible(), 'and offers to fold it back');
+  check(opened?.clamped === false, 'tapping "show whole comment" expands it');
+  check(await page.locator('[aria-label="Show less of comment"]').first().isVisible(), 'and offers to fold it back');
   // THE A/B, so nothing above can pass vacuously: opened, the same sixty lines
   // push the human's reply straight off the sheet. That is what the fold buys,
   // measured on the same thread a moment apart.
-  ok(!!opened?.reply && opened.reply.top > opened.sheet.bottom,
+  check(!!opened?.reply && opened.reply.top > opened.sheet.bottom,
     `unfolded, the sixty lines push the human's reply off the sheet (reply ${JSON.stringify(opened?.reply)} vs sheet ${JSON.stringify(opened?.sheet)})`);
   await page.locator('[aria-label="Show less of comment"]').first().click();
   const refolded = await until(read, (s) => s?.clamped === true, 5000);
-  ok(!!refolded?.reply && refolded.reply.bottom <= refolded.sheet.bottom + 1, 'folding it back brings the reply home');
+  check(!!refolded?.reply && refolded.reply.bottom <= refolded.sheet.bottom + 1, 'folding it back brings the reply home');
 
   // ── F7: a resolved card reads as resolved ─────────────────────────────
   const resolvedRes = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
     method: 'POST', headers: auth, body: JSON.stringify({ resolve: true }),
   });
-  ok(resolvedRes.ok, 'the agent resolves the thread over plain HTTP');
+  check(resolvedRes.ok, 'the agent resolves the thread over plain HTTP');
   const muted = await until(
     () => page.locator('[aria-label="Resolved annotation thread"]').first().evaluate(card => {
       const open = card.getRootNode().querySelector('[aria-label="Annotation thread"]');
@@ -735,10 +735,10 @@ async function foldLeg(browser) {
     (state) => typeof state?.opacity === 'number',
     12000,
   );
-  ok(!!muted && muted.opacity > 0.4 && muted.opacity < 0.8,
+  check(!!muted && muted.opacity > 0.4 && muted.opacity < 0.8,
     `the resolved card is muted rather than identical to an open one (opacity ${muted?.opacity})`);
-  ok(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
-  ok(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
+  check(muted?.open === null || muted.open === 1, `an open card beside it stays at full opacity (${muted?.open})`);
+  check(await page.locator('[aria-label="Show resolved conversation"]').first().isVisible(),
     'muted is not disabled: the resolved card still offers its conversation');
   await ctx.close();
 }
@@ -772,87 +772,84 @@ async function pickLeg(browser) {
 
   // Opening the rail opened the pick: nothing to press before the first click.
   const tool = page.locator('[aria-label="Select"]');
-  ok(await tool.count() === 1, 'the rail header offers the pick tool');
-  ok(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail put the pick on: the tool reads as pressed');
-  ok(await page.locator('[aria-label="Select tool active"]').isVisible(), 'a pill over the document says what to do next');
+  check(await tool.count() === 1, 'the rail header offers the pick tool');
+  check(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail put the pick on: the tool reads as pressed');
+  check(await page.locator('[aria-label="Select tool active"]').isVisible(), 'a pill over the document says what to do next');
   const promptBox = await page.locator('[aria-label="Select tool active"]').boundingBox();
-  ok(promptBox.y >= 44, 'the Select prompt sits below the app topbar');
+  check(promptBox.y >= 44, 'the Select prompt sits below the app topbar');
 
   const intro = frame.locator('#intro');
   await intro.hover();
   const stamped = await until(() => intro.getAttribute('data-mx-annotate-pick-hover'), (v) => typeof v === 'string', 5000);
-  ok(typeof stamped === 'string', 'hovering a block while picking stamps it');
+  check(typeof stamped === 'string', 'hovering a block while picking stamps it');
   const painted = await intro.evaluate((el) => getComputedStyle(el).outlineStyle);
-  ok(painted !== 'none', `…and the outline is PAINTED, not only stamped (outline-style ${painted})`);
+  check(painted !== 'none', `…and the outline is PAINTED, not only stamped (outline-style ${painted})`);
   const cursor = await intro.evaluate((el) => getComputedStyle(el).cursor);
-  ok(cursor === 'crosshair', `the document cursor says pick (${cursor})`);
+  check(cursor === 'crosshair', `the document cursor says pick (${cursor})`);
 
   await intro.click();
   const composer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
-  ok(composer === 1, 'clicking the block opens the composer on it');
-  ok(await page.locator('[aria-label="Select tool active"]').count() === 0, 'the pick is one-shot: the pill is gone');
-  ok(await tool.getAttribute('aria-pressed') === 'false', '…and the tool is released');
-  ok(await frame.locator('#intro[data-mx-annotate-selected]').count() === 1, 'the picked block is marked as the subject');
-  ok(await frame.locator('[data-mx-annotate-pick-hover]').count() === 0, 'and the hover outline went with the pick');
+  check(composer === 1, 'clicking the block opens the composer on it');
+  check(await page.locator('[aria-label="Select tool active"]').count() === 0, 'the pick is one-shot: the pill is gone');
+  check(await tool.getAttribute('aria-pressed') === 'false', '…and the tool is released');
+  check(await frame.locator('#intro[data-mx-annotate-selected]').count() === 1, 'the picked block is marked as the subject');
+  check(await frame.locator('[data-mx-annotate-pick-hover]').count() === 0, 'and the hover outline went with the pick');
 
   await page.locator('[aria-label="Annotation comment"]').fill('picked, not selected');
   await page.locator('[aria-label="Save annotation"]').click();
   const thread = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 1, 10000);
-  ok(thread === 1, 'the comment lands as a rail thread');
+  check(thread === 1, 'the comment lands as a rail thread');
   const tinted = await until(() => frame.locator('#intro[data-mx-annotated]').count(), (n) => n === 1, 8000);
-  ok(tinted === 1, 'the picked block is tinted like any commented node');
+  check(tinted === 1, 'the picked block is tinted like any commented node');
   const read = async () => (await (await fetch(`${BASE}/api/artifacts/${id}`, { headers: { Authorization: `Bearer ${token}` } })).json());
   const wire = await until(read, (w) => (w?.annotations?.length ?? 0) === 1, 15000);
-  ok(wire?.annotations?.[0]?.snippet === 'An intro paragraph of ordinary prose.' && !wire?.annotations?.[0]?.quote,
+  check(wire?.annotations?.[0]?.snippet === 'An intro paragraph of ordinary prose.' && !wire?.annotations?.[0]?.quote,
     'the wire carries the whole block and no quote — a pick has no words');
 
   // A second pick — explicit this time, the tool is still the way in — stood
   // down by escape: the outline goes with it.
   await tool.click();
-  ok(await tool.getAttribute('aria-pressed') === 'true', 'the tool starts a pick again after the first ended');
+  check(await tool.getAttribute('aria-pressed') === 'true', 'the tool starts a pick again after the first ended');
   await frame.locator('#figure').hover();
   await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
   await page.keyboard.press('Escape');
   const stoodDown = await until(() => page.locator('[aria-label="Select tool active"]').count(), (n) => n === 0, 5000);
-  ok(stoodDown === 0, 'escape cancels a pick');
+  check(stoodDown === 0, 'escape cancels a pick');
   const cleared = await until(() => frame.locator('[data-mx-annotate-pick-hover]').count(), (n) => n === 0, 5000);
-  ok(cleared === 0, '…and clears the outline');
+  check(cleared === 0, '…and clears the outline');
 
   // ── a DRAWN AREA ──────────────────────────────────────────────────────
   // The same Select tool: a real drag from inside the figure paragraph into the
   // list below it. Neither is what was drawn — their SECTION is — and the
   // rectangle rides the comment as its range, painted back as an overlay.
   await page.locator('[aria-label="Select"]').click();
-  ok(await page.locator('[aria-label="Select tool active"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
+  check(await page.locator('[aria-label="Select tool active"]').textContent().then((t) => /drag/i.test(t ?? '')), 'the pill says to drag');
   const from = await frame.locator('#figure').boundingBox();
   const to = await frame.locator('#list li').last().boundingBox();
   await page.mouse.move(from.x + 8, from.y + 4);
   await page.mouse.down();
   await page.mouse.move(from.x + 20, from.y + 10, { steps: 3 });
   await page.mouse.move(to.x + to.width / 2, to.y + to.height - 2, { steps: 15 });
-  ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the band is drawn while dragging');
+  check(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the band is drawn while dragging');
   await page.mouse.up();
   const areaComposer = await until(() => page.locator('[aria-label="Annotation comment"]').count(), (n) => n === 1, 10000);
-  ok(areaComposer === 1, 'releasing the drag opens the composer');
+  check(areaComposer === 1, 'releasing the drag opens the composer');
   // The breadcrumb's TARGET crumb (the composer's icon badge carries the accent colour too).
   const crumb = await page.locator('[role="dialog"][aria-label="Annotation composer"] span.truncate.text-accent').first().textContent();
-  ok(crumb === 'section', `the anchor is the lowest common ancestor of what was drawn over (got ${crumb})`);
-  ok(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the drawn area stays visible while composing');
+  check(crumb === 'section', `the anchor is the lowest common ancestor of what was drawn over (got ${crumb})`);
+  check(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the drawn area stays visible while composing');
   await page.locator('[aria-label="Annotation comment"]').fill('this whole region');
   await page.locator('[aria-label="Save annotation"]').click();
   const areaWire = await until(read, (w) => (w?.annotations?.length ?? 0) === 2, 15000);
   const areaAnn = areaWire?.annotations?.find((a) => a.range?.kind === 'area');
   const box = areaAnn?.range?.box;
-  ok(!!box && box.x >= 0 && box.y >= 0 && box.x + box.w <= 1 && box.y + box.h <= 1 && box.w > 0 && box.h > 0,
+  check(!!box && box.x >= 0 && box.y >= 0 && box.x + box.w <= 1 && box.y + box.h <= 1 && box.w > 0 && box.h > 0,
     `the wire carries the area as fractions of the section (got ${JSON.stringify(box)})`);
-  ok(areaAnn?.quote === null && areaAnn?.quote_found === null, 'an area has no words: no quote, quote_found null');
+  check(areaAnn?.quote === null && areaAnn?.quote_found === null, 'an area has no words: no quote, quote_found null');
   const overlay = await until(() => frame.locator(`[data-mx-annotation-area="${areaAnn?.id}"]`).count(), (n) => n === 1, 8000);
-  ok(overlay === 1, 'the saved area is painted back as an overlay box');
-  ok(await frame.locator('[data-mx-annotate-band]').count() === 0, 'and the composing band is gone');
+  check(overlay === 1, 'the saved area is painted back as an overlay box');
+  check(await frame.locator('[data-mx-annotate-band]').count() === 0, 'and the composing band is gone');
   await ctx.close();
 }
 
-run().then(() => {
-  if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }
-  console.log('\nall good');
-}).catch((err) => { console.error(err); process.exit(1); });
+run().then(() => check.done()).catch((err) => { console.error(err); process.exit(1); });

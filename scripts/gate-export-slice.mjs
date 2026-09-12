@@ -20,12 +20,12 @@
  *
  *   usage: node scripts/gate-export-slice.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const ok = (pass, label) => { console.log(`${pass ? '  ok ' : 'FAIL '} ${label}`); if (!pass) failures.push(label); };
+const check = createChecker('export-slice');
 
 const slide = (n, body) => `<Slide title="Slide ${n}" className="justify-center p-16">${body}</Slide>`;
 const DECK =
@@ -55,20 +55,20 @@ const put = await fetch(`${BASE}/api/artifacts/${start.id}`, {
   headers: { Authorization: `Bearer ${start.token}`, 'Content-Type': 'application/json' },
   body: JSON.stringify({ title: 'Slice gate', markup: DECK, template: 'deck', theme: 'industry' }),
 });
-ok(put.status === 200, `published the deck (${put.status})`);
+check(put.status === 200, `published the deck (${put.status})`);
 
 const whole = await shot(start.id);
 const one = await shot(start.id, '?slide=1');
 const two = await shot(start.id, '?slide=2');
 
 if (whole.status !== 200 || one.status !== 200) {
-  ok(false, `renders available (whole ${whole.status}, slide ${one.status}) — is a headless browser installed?`);
+  check(false, `renders available (whole ${whole.status}, slide ${one.status}) — is a headless browser installed?`);
 } else {
   const w = pngSize(whole.body);
   const s1 = pngSize(one.body);
-  ok(s1.height < w.height, `a slide is ONE SCREEN, not the document (slide ${s1.height}px < deck ${w.height}px)`);
-  ok(s1.height > 200, `a slide is a real screen, not a sliver (${s1.height}px)`);
-  ok(two.status === 200 && !one.body.equals(two.body), 'slide 2 is a different picture from slide 1');
+  check(s1.height < w.height, `a slide is ONE SCREEN, not the document (slide ${s1.height}px < deck ${w.height}px)`);
+  check(s1.height > 200, `a slide is a real screen, not a sliver (${s1.height}px)`);
+  check(two.status === 200 && !one.body.equals(two.body), 'slide 2 is a different picture from slide 1');
 }
 
 // The full shot must run PAST THE FOLD. `/docs/artifactbin/references/publishing-versions.md` promises "the fully
@@ -84,7 +84,7 @@ await fetch(`${BASE}/api/artifacts/${tallStart.id}`, {
   body: JSON.stringify({ title: 'Tall', markup: TALL }),
 });
 const tall = await shot(tallStart.id);
-ok(tall.status === 200 && pngSize(tall.body).height > 1000,
+check(tall.status === 200 && pngSize(tall.body).height > 1000,
   `a full export photographs past the fold (${tall.status === 200 ? pngSize(tall.body).height + 'px' : tall.status})`);
 
 /*
@@ -95,5 +95,4 @@ ok(tall.status === 200 && pngSize(tall.body).height > 1000,
  * pixels, which no faked BrowserService can produce.
  */
 
-console.log(failures.length ? `\nFAILED: ${failures.length}` : '\nAll checks passed');
-process.exit(failures.length ? 1 : 0);
+check.done();

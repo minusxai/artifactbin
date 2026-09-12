@@ -26,6 +26,8 @@
  *
  *   node scripts/gate-fork.mjs [base]
  */
+import { servedTopLevel } from './lib/page-facts.mjs';
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -33,8 +35,7 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('fork');
 const stamp = Date.now().toString(36);
 const OWNER_EMAIL = `mxmx_test_fork_owner_${stamp}@example.com`;
 const FORKER_EMAIL = `mxmx_test_fork_${stamp}@example.com`;
@@ -96,7 +97,7 @@ check(strangerHtml.includes('id="root"'), 'the shared SPA supplies the authentic
 // ── 3. the logged-out reader taps Fork in the document's own controls ─────
 await forker.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
 await forker.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 20000 });
-check((await forker.locator('iframe[title="artifact"]').count()) === 0, 'a logged-out reader is served the document TOP-LEVEL, not the shell');
+check(await servedTopLevel(forker), 'a logged-out reader is served the document TOP-LEVEL, not the shell');
 const forkAnchor = forker.locator('[aria-label="Fork artifact"]');
 await forkAnchor.waitFor({ state: 'visible', timeout: 10000 });
 check(true, 'the reader action bar offers Fork directly');
@@ -181,5 +182,4 @@ check(!new URL(forker.url()).search.includes('intent='), '…and that instructio
 
 await browser.close();
 await sink.close();
-if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }
-console.log('\nall good');
+check.done();

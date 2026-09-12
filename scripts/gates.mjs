@@ -3,59 +3,24 @@
  * Run the browser gates as a SET.
  *
  *   node scripts/gates.mjs [base-url ...] [--only=a,b] [--list] [--servers=N] [--shard=i/n]
-
- * With no base URL it BUILDS NOTHING but boots `min(6, cores)` servers from
- * dist/ — run `npm run build` first, exactly as CI does.
  *
- * Every gate is a standalone script that drives a running server and exits
- * non-zero when a contract breaks. Individually they were runnable and
- * individually they were run — but nothing ever ran them all, nothing listed
- * them, and nine of the twenty-seven were referenced by no script, no CI job
- * and no doc. A gate nobody can enumerate is a gate nobody runs, and several
- * guard the behavioral contracts exercised by their user flows.
+ * The set is DISCOVERED from disk — a new `scripts/gate-*.mjs` joins by
+ * existing — and every gate must have a row in gates.manifest.mjs, which says
+ * what it needs and how long it may take.
  *
- * So the list is DISCOVERED from disk rather than written down: a new
- * `scripts/gate-*.mjs` joins the set by existing, and cannot go missing from a
- * hand-maintained list it was never added to.
+ * PARALLEL BY SERVER, SEQUENTIAL BY WORKER. Gates seed real documents and mint
+ * from one IP, so two sharing a server share a ceiling, a login door and a
+ * listing; each worker gets its OWN server (in-memory PGLite, its own object
+ * dir, its own port) and those collisions go away. `--servers=1` is a serial
+ * run, for debugging one gate's interference.
  *
- * PARALLEL BY SERVER, SEQUENTIAL BY WORKER. The set took ~25 minutes in one
- * file because it ran one gate at a time, and the reason it had to was never
- * the browser: it was the SERVER. Gates seed real documents, several are named
- * in one process's in-memory caches, and every one of them mints from the same
- * IP — so two gates sharing a server share a mint ceiling, a login door and a
- * listing. Give each worker its OWN server and all three go away: no shared
- * counter, no shared row, nothing to race. Within a worker the gates still run
- * one at a time, because a gate's own seeding is sequential and its mail sink
- * is a port it binds alone.
- *
- * So the fan-out is over SERVERS, not over gates: pass several base URLs and
- * the set is dealt across them, or let this runner boot them itself (in-memory
- * PGLite, its own object dir, its own port) from the build in dist/.
- *
- * BOOTING THEM IS NOW THE DEFAULT, and that is the second half of the same
- * lesson. With no arguments the runner used to drive whatever was listening on
- * :3040 — a DEV server — and a local run therefore did not mean what CI's run
- * means. CI builds and boots the bundle (`.github/workflows/ci.yml`:
- * `npm run build`, then `gates.mjs --servers=4`); a dev server serves the SPA
- * through Vite, whose HMR websocket is on a second port that the app's fixed
- * `connect-src 'self'` CSP refuses, so the SPA never mounts and every gate
- * waiting on the artifact iframe or a chart's marks times out. MEASURED: 26 of
- * 42 gates failed that way on a clean checkout, and the SAME 26 failed on a
- * commit that had changed nothing. So with no base URL the default is
- * `min(6, availableParallelism())` servers of the CI shape
- * (scripts/gates.servers.mjs). `--servers=N` still wins — `--servers=1` is a
- * SERIAL run, for debugging one gate's interference, and `--servers=0` asks for
- * the old "drive :3040" behaviour — and a base URL still means DRIVE THAT
- * SERVER. The run prints how many servers and how many gates before it starts
- * and the wall-clock when it ends, so a serial run is visible in any log.
- *
- * A BOOTED SERVER IS PRODUCTION-MODE, SO IT NEEDS THE DEV POLICY FILE. The
- * shipped default closes the start_doc door outright, and a full pass starts far
- * more than a handful of documents from one IP — so every gate after the
- * ceiling would die on a 429 the START helper reports as `401 unauthorized` at
- * publish time, which reads like a broken build and is not one. `bootServer`
- * points each one at `services/proxy/dev_rate_limits.yml` (2000/hour). Driving
- * a server of your own, set `PROXY__RATE_LIMIT_CONFIG_FILE` to the same file.
+ * With no base URL it boots `min(6, cores)` servers from dist/ in production
+ * mode — run `npm run build` first, exactly as CI does. A dev server is not a
+ * substitute: its HMR websocket trips the app's fixed `connect-src 'self'`, so
+ * the SPA never mounts and every gate times out. A base URL means DRIVE THAT
+ * SERVER, and a booted one is pointed at `services/proxy/dev_rate_limits.yml`
+ * (2000/hour) because the shipped default closes the start_doc door outright
+ * and a full pass starts far more documents than that from one address.
  */
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -216,12 +181,34 @@ async function bootServer(index, mailOutbox, authSecret) {
   return base;
 }
 
-const stopAll = () => { for (const child of started) { try { child.kill('SIGTERM'); } catch { /* gone */ } } };
-process.on('exit', () => { stopAll(); try { rmSync(scratch, { recursive: true, force: true }); } catch { /* best effort */ } });
-for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { stopAll(); process.exit(130); });
+const alive = (child) => child.exitCode === null && child.signalCode === null;
+/** Every server this run booted is gone before it is — SIGKILL is the guarantee. */
+const kill = (signal) => { for (const child of started) { if (alive(child)) { try { child.kill(signal); } catch { /* gone */ } } } };
+/**
+ * A production-mode app takes its time over a graceful close, and a finished
+ * gate run has nothing left to be graceful about. SIGTERM alone left one
+ * server per run behind — MEASURED: nine of them, oldest forty minutes, each
+ * holding a port and a Chromium-shaped amount of memory. So: ask, wait, insist.
+ */
+const stopAll = async () => {
+  kill('SIGTERM');
+  const deadline = Date.now() + 2000;
+  while (started.some(alive) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+  kill('SIGKILL');
+};
+// The last word, for the paths that cannot await: an uncaught throw, a signal,
+// `process.exit` from anywhere. A SIGKILLed RUNNER can still leak — nothing in
+// it can run then — which is why the escalation above exists at all.
+process.on('exit', () => { kill('SIGKILL'); try { rmSync(scratch, { recursive: true, force: true }); } catch { /* best effort */ } });
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => { kill('SIGKILL'); process.exit(130); });
+}
 
 let targets = bases;
-const generationFixture=servers>0&&selected.some(gate=>gate.name==='generation-mutations')?await startGenerationFixture():null;
+// The fixture model server is a ROW's requirement, not a name the runner knows.
+const generationFixture = servers > 0 && selected.some((gate) => specFor(gate.name).needsGenerationFixture)
+  ? await startGenerationFixture()
+  : null;
 const needsMail = selected.some((gate) => specFor(gate.name).needsMail);
 const mailOutbox = needsMail && servers > 0 ? path.join(scratch, 'dev-mail.jsonl') : null;
 if (servers > 0) {
@@ -234,7 +221,10 @@ if (servers > 0) {
   targets = await Promise.all(Array.from({ length: servers }, (_, i) => bootServer(i, mailOutbox, authSecret)));
   console.log(` — ${targets.join(' ')}\n`);
 }
-if (targets.length === 0) targets = ['http://localhost:3040'];
+if (targets.length === 0) {
+  console.error('Nothing to drive: pass base URLs, or --servers=N with N > 0.');
+  process.exit(2);
+}
 
 /*
  * SAY HOW WIDE THE RUN IS, BEFORE IT RUNS. A serial pass and a parallel one differ by an order of magnitude
@@ -340,7 +330,7 @@ if (failed.length > 0 && targets.length > 1) {
 
 // The servers are OURS and they outlive the last gate: node keeps running
 // while a spawned child is attached, so the set would finish and then hang.
-stopAll();
+await stopAll();
 await generationFixture?.close();
 
 console.log('════════ gates ════════');

@@ -1,3 +1,4 @@
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
@@ -29,8 +30,7 @@ import { chromium } from 'playwright';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { out.push(`${c ? '  ok ' : 'FAIL'} ${l}`); return c; };
+const check = createChecker('fonts');
 
 // A serif theme on purpose: Noto Serif was both the biggest asset (1.8 MB) and
 // the most jarring swap, since the fallback is Georgia — a different face
@@ -65,10 +65,10 @@ await becomeOwner(p, B, st.token);
 const html = await (await fetch(`${B}/a/${st.id}/raw`)).text();
 const preloadTags = [...html.matchAll(/<link[^>]+rel="preload"[^>]*>/g)].map((m) => m[0])
   .filter((t) => t.includes('as="font"'));
-ok(preloadTags.length > 0, `the served document preloads the font (${preloadTags.length} link)`);
-ok(preloadTags.length <= 2, 'and preloads only the display/body faces, not the whole registry');
-ok(preloadTags.every((t) => t.includes('crossorigin')), 'each preload is crossorigin (or the font downloads twice)');
-ok(preloadTags.every((t) => /href="\/fonts\/[^"]+\.woff2"/.test(t)), 'each preload points at a woff2');
+check(preloadTags.length > 0, `the served document preloads the font (${preloadTags.length} link)`);
+check(preloadTags.length <= 2, 'and preloads only the display/body faces, not the whole registry');
+check(preloadTags.every((t) => t.includes('crossorigin')), 'each preload is crossorigin (or the font downloads twice)');
+check(preloadTags.every((t) => /href="\/fonts\/[^"]+\.woff2"/.test(t)), 'each preload points at a woff2');
 
 // Fall back to the surface's own @font-face when there is no preload at all,
 // so a missing preload reports as the one failure it is rather than taking
@@ -76,20 +76,20 @@ ok(preloadTags.every((t) => /href="\/fonts\/[^"]+\.woff2"/.test(t)), 'each prelo
 const fontUrl = /href="(\/fonts\/[^"]+)"/.exec(preloadTags[0] ?? '')?.[1]
   ?? /url\(\\?"(\/fonts\/[^"\\]+)/.exec(html)?.[1];
 if (!fontUrl) {
-  ok(false, 'no /fonts/ URL anywhere in the document — cannot check delivery');
+  check(false, 'no /fonts/ URL anywhere in the document — cannot check delivery');
 } else {
   const asset = await fetch(`${B}${fontUrl}`);
   const bytes = (await asset.arrayBuffer()).byteLength;
   const cc = asset.headers.get('cache-control') ?? '';
-  ok(asset.status === 200, `the font serves (${fontUrl})`);
-  ok(bytes < 300 * 1024, `and is small — ${Math.round(bytes / 1024)} KB (a full TTF was 1842 KB)`);
-  ok(cc.includes('immutable'), `and is immutable, so a warm view revalidates nothing (${cc})`);
-  ok(/max-age=\d{7,}/.test(cc), 'with a long max-age');
+  check(asset.status === 200, `the font serves (${fontUrl})`);
+  check(bytes < 300 * 1024, `and is small — ${Math.round(bytes / 1024)} KB (a full TTF was 1842 KB)`);
+  check(cc.includes('immutable'), `and is immutable, so a warm view revalidates nothing (${cc})`);
+  check(/max-age=\d{7,}/.test(cc), 'with a long max-age');
 }
 
 // ── 2. no TTF is reachable any more ────────────────────────────────────────
 const ttf = await fetch(`${B}/fonts/NotoSerif-Regular.ttf`);
-ok(ttf.status === 404, `the unhashed TTF is gone (${ttf.status})`);
+check(ttf.status === 404, `the unhashed TTF is gone (${ttf.status})`);
 
 /**
  * ── 3. the DOCUMENT preloads its own faces ────────────────────────────────
@@ -101,8 +101,8 @@ ok(ttf.status === 404, `the unhashed TTF is gone (${ttf.status})`);
  * the document's own head — which is also where the @font-face is.
  */
 const docHead = html.slice(0, html.indexOf('</head>'));
-ok(docHead.includes('rel="preload"'), "the preload is in the DOCUMENT's own head, not the app page's");
-ok(docHead.indexOf('rel="preload"') < docHead.indexOf('@font-face'), 'and it comes before the @font-face that uses it');
+check(docHead.includes('rel="preload"'), "the preload is in the DOCUMENT's own head, not the app page's");
+check(docHead.indexOf('rel="preload"') < docHead.indexOf('@font-face'), 'and it comes before the @font-face that uses it');
 
 // ── 4. the font actually resolves INSIDE the document frame ────────────────
 const reqs = [];
@@ -113,9 +113,9 @@ const docFrame = p.mainFrame();
 await docFrame.waitForSelector('h1', { timeout: 20_000 });
 await p.waitForTimeout(2500);
 
-ok(reqs.length > 0, `the font is actually fetched (${reqs.length} request)`);
-ok(reqs.every((u) => u.endsWith('.woff2')), 'and nothing requests a .ttf');
-ok(new Set(reqs).size === 2, `and exactly the display and body files are needed (${new Set(reqs).size})`);
+check(reqs.length > 0, `the font is actually fetched (${reqs.length} request)`);
+check(reqs.every((u) => u.endsWith('.woff2')), 'and nothing requests a .ttf');
+check(new Set(reqs).size === 2, `and exactly the display and body files are needed (${new Set(reqs).size})`);
 
 const inside = await docFrame.evaluate(async () => {
   await document.fonts.ready;
@@ -133,12 +133,12 @@ const inside = await docFrame.evaluate(async () => {
     domInteractive: Math.round(nav?.domInteractive ?? 0),
   };
 });
-ok(inside.loaded > 0, `the face LOADS inside the sandboxed document (${inside.loaded}/${inside.declared} — a font-src regression fails here)`);
-ok(inside.check === true, 'and the document reports it usable');
-ok(/Cormorant Garamond/.test(inside.rendered), `and the heading asks for the display face (${String(inside.rendered).slice(0, 40)})`);
+check(inside.loaded > 0, `the face LOADS inside the sandboxed document (${inside.loaded}/${inside.declared} — a font-src regression fails here)`);
+check(inside.check === true, 'and the document reports it usable');
+check(/Cormorant Garamond/.test(inside.rendered), `and the heading asks for the display face (${String(inside.rendered).slice(0, 40)})`);
 // The whole point of a preload: discovery at PARSE time, not after hydration.
-ok(inside.initiator.includes('link'), `the fetch is initiated by a <link>, not by hydration (${inside.initiator.join(',')})`);
-ok(inside.start !== null && inside.start <= inside.domInteractive,
+check(inside.initiator.includes('link'), `the fetch is initiated by a <link>, not by hydration (${inside.initiator.join(',')})`);
+check(inside.start !== null && inside.start <= inside.domInteractive,
   `and starts before the document is even interactive (${inside.start}ms vs ${inside.domInteractive}ms)`);
 
 // ── 5. a WARM load spends no round trip (the immutable win) ────────────────
@@ -149,10 +149,10 @@ await p.waitForTimeout(2000);
 const warm = await warmFrame.evaluate(() => performance.getEntriesByType('resource')
   .filter((x) => x.name.includes('/fonts/'))
   .map((x) => ({ transfer: x.transferSize, ms: Math.round(x.duration) })));
-ok(warm.length > 0, 'the warm view still resolves the font');
-ok(warm.every((r) => r.transfer === 0), `served from cache with no bytes on the wire (${warm.map((r) => r.transfer).join(',')})`);
+check(warm.length > 0, 'the warm view still resolves the font');
+check(warm.every((r) => r.transfer === 0), `served from cache with no bytes on the wire (${warm.map((r) => r.transfer).join(',')})`);
 // This is the header fix, measured: it was 466ms of Georgia on production.
-ok(warm.every((r) => r.ms < 50), `and with no revalidation round trip (${warm.map((r) => r.ms + 'ms').join(',')})`);
+check(warm.every((r) => r.ms < 50), `and with no revalidation round trip (${warm.map((r) => r.ms + 'ms').join(',')})`);
 
 /**
  * ── 6. the reader never sees two typefaces ────────────────────────────────
@@ -208,14 +208,11 @@ for (let attempt = 0; attempt < 3 && order === null; attempt++) {
   }
 }
 
-ok(order.textAt !== null, 'the document paints the heading');
-ok(order.fontEnd !== null && order.fontEnd < order.textAt,
+check(order.textAt !== null, 'the document paints the heading');
+check(order.fontEnd !== null && order.fontEnd < order.textAt,
   `and the font was ready BEFORE it did — font ${order.fontEnd}ms vs text ${order.textAt}ms`);
 
 await p.screenshot({ path: '/tmp/gate-fonts.png' });
 await b.close();
 
-console.log(out.join('\n'));
-const failed = out.filter((l) => l.startsWith('FAIL')).length;
-console.log(failed ? `\n${failed} FAILED` : `\nall ${out.length} checks passed`);
-process.exit(failed ? 1 : 0);
+check.done();

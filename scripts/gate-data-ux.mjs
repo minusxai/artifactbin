@@ -15,14 +15,14 @@
  *
  *   usage: node scripts/gate-data-ux.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { out.push(`${c ? '  ok ' : 'FAIL'} ${l}`); return c; };
+const check = createChecker('data-ux');
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
 await p.goto(B, { waitUntil: 'load' });
@@ -37,50 +37,50 @@ const csv = 'month,revenue,zip,note\n2026-01,120,01234,ok\n2026-02,,09876,\n2026
 const made = await (await fetch(`${B}/api/artifacts`, { method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
   body: JSON.stringify({ title: 'Q3 Revenue', dataset: csv }) })).json();
-ok(!!made.id, `the dataset lands with a usable reference (${made.ref})`);
+check(!!made.id, `the dataset lands with a usable reference (${made.ref})`);
 /*
  * The create response must TELL the agent how to consume the dataset. A bare
  * id is not usable, and omitting the `ref:` prefix is exactly the mistake that
  * shipped a blank chart. (Type inference and leading-zero STORAGE cases are
  * data-ingest-routes.test.ts's; what is checked here is the handshake.)
  */
-ok(made.ref === `ref:${made.id}`, `the create response carries the ref form (${made.ref})`);
-ok((made.usage ?? '').includes(`<Query name="rows" source="ref:${made.id}">`)
+check(made.ref === `ref:${made.id}`, `the create response carries the ref form (${made.ref})`);
+check((made.usage ?? '').includes(`<Query name="rows" source="ref:${made.id}">`)
   && /from\s+"public"\."rows"/i.test(made.usage ?? '')
   && /data="\$rows"/.test(made.usage ?? ''),
 'and a canonical source query over public.rows + embed bound as data="$rows"');
-ok(/vega-lite/.test(made.usage ?? ''), 'with a viz spec bound to the real columns');
+check(/vega-lite/.test(made.usage ?? ''), 'with a viz spec bound to the real columns');
 
 // ── the dataset PAGE: the bug from the screenshot ───────────────────────────
 await p.goto(`${B}/a/${made.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(2500);
 const rows = await p.locator('table tbody tr').count();
-ok(rows === 3, `the dataset page renders ROWS, not just headers (${rows})`);
-ok((await p.locator('[aria-label="Dataset summary"]').textContent()).includes('3 rows'), 'and says how many rows and columns');
+check(rows === 3, `the dataset page renders ROWS, not just headers (${rows})`);
+check((await p.locator('[aria-label="Dataset summary"]').textContent()).includes('3 rows'), 'and says how many rows and columns');
 const tableText = await p.locator('table').innerText();
-ok(tableText.includes('—'), 'a blank cell reads as missing, not as empty text');
-ok(tableText.includes('01234'), 'leading zero preserved through ingest');
-ok((await p.locator('[aria-label="Edit artifact"]').count()) === 0, 'no edit button on a dataset');
+check(tableText.includes('—'), 'a blank cell reads as missing, not as empty text');
+check(tableText.includes('01234'), 'leading zero preserved through ingest');
+check((await p.locator('[aria-label="Edit artifact"]').count()) === 0, 'no edit button on a dataset');
 await openMenu(p);
-ok((await p.locator('[aria-label="Page bar"] [aria-label="Current page"]').first().textContent()).includes('Q3 Revenue'), 'the page bar carries the typed title as page context');
+check((await p.locator('[aria-label="Page bar"] [aria-label="Current page"]').first().textContent()).includes('Q3 Revenue'), 'the page bar carries the typed title as page context');
 await p.keyboard.press('Escape');
 const w = await p.evaluate(() => ({ d: document.documentElement.scrollWidth, w: window.innerWidth }));
-ok(w.d <= w.w, 'no horizontal page scroll');
+check(w.d <= w.w, 'no horizontal page scroll');
 await p.screenshot({ path: '/tmp/ux-dataset.png' });
 
 // The catalog page follows stored row changes through its existing live stream.
 const writable = await fetch(`${B}/api/artifacts/${made.id}`, { method: 'PUT',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
   body: JSON.stringify({ dataset: csv, access: 'readwrite' }) });
-ok(writable.status === 200, 'the owner can enable stored row edits');
+check(writable.status === 200, 'the owner can enable stored row edits');
 if (!writable.ok) throw new Error(`Enable writes: ${writable.status} ${await writable.text()}`);
 const changed = await fetch(`${B}/api/artifacts/${made.id}/mutate`, { method: 'POST',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tok}` },
   body: JSON.stringify({ sql: `update public.rows set revenue=125 where month='2026-01'` }) });
-ok(changed.status === 200, 'a stored row mutation succeeds');
+check(changed.status === 200, 'a stored row mutation succeeds');
 if (!changed.ok) throw new Error(`Mutate rows: ${changed.status} ${await changed.text()}`);
 await p.getByLabel('Table preview', { exact: true }).getByText('125', { exact: true }).waitFor();
-ok((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'rows', 'live rows refresh without navigating or losing table selection');
+check((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'rows', 'live rows refresh without navigating or losing table selection');
 
 // ── the whole seam: uploaded values reach a real Vega scale ────────────────
 /*
@@ -104,16 +104,16 @@ ok((await p.getByLabel('Dataset table', { exact: true }).inputValue()) === 'rows
   const put = await fetch(`${B}/api/artifacts/${st.id}`, { method: 'PUT',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
     body: JSON.stringify({ title: 'Sales', markup, theme: 'modernist' }) });
-  ok(put.status === 200, `the story accepts a Query over the uploaded dataset (${put.status})`);
+  check(put.status === 200, `the story accepts a Query over the uploaded dataset (${put.status})`);
 
   await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
   await p.waitForTimeout(6000);
   const surface = p.mainFrame();
-  ok((await surface.locator('svg.marks, canvas').count()) > 0, 'a real Vega chart rendered (not a fallback table)');
+  check((await surface.locator('svg.marks, canvas').count()) > 0, 'a real Vega chart rendered (not a fallback table)');
   const text = await surface.locator('body').innerText();
-  ok(/2026-01/.test(text), 'the x axis carries values from the uploaded CSV');
-  ok(/revenue/i.test(text), 'the y axis is labelled from the CSV header');
-  ok(/\b(150|190|200)\b/.test(text), 'the y scale is numeric — coercion survived into Vega');
+  check(/2026-01/.test(text), 'the x axis carries values from the uploaded CSV');
+  check(/revenue/i.test(text), 'the y axis is labelled from the CSV header');
+  check(/\b(150|190|200)\b/.test(text), 'the y scale is numeric — coercion survived into Vega');
 }
 
 // ── a chart must render in EDIT mode too ───────────────────────────────────
@@ -146,11 +146,11 @@ await becomeOwner(p, B, st.token);
   const ef = p.mainFrame();
   const marks = ef ? await ef.locator('svg.marks, canvas').count().catch(() => 0) : 0;
   const text = ef ? await ef.locator('body').innerText().catch(() => '') : '';
-  ok(marks > 0, `a chart renders in EDIT mode (${marks} marks)`);
-  ok(!/data unavailable/.test(text), 'and does not say "data unavailable"');
+  check(marks > 0, `a chart renders in EDIT mode (${marks} marks)`);
+  check(!/data unavailable/.test(text), 'and does not say "data unavailable"');
   // The failure message must never appear even for a frame while refs load —
   // "did not resolve" is a verdict, and it is wrong while a fetch is in flight.
-  ok(!sawUnavailable, 'and never flashed the failure message while loading');
+  check(!sawUnavailable, 'and never flashed the failure message while loading');
 }
 
 // ── a markup artifact still HAS an edit button — for its OWNER ──────────────
@@ -162,7 +162,7 @@ const st = await startDocument(B);
 const readerCtx = await p.context().browser().newContext();
 const readerPage = await readerCtx.newPage();
 await readerPage.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
-ok((await readerPage.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) === 0, 'a reader sees no edit chrome');
+check((await readerPage.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) === 0, 'a reader sees no edit chrome');
 await readerCtx.close();
 // A browser's credential is the httpOnly session cookie now, not a
 // localStorage token — and the shell it unlocks belongs to the owner.
@@ -170,12 +170,11 @@ await becomeOwner(p, B, st.token);
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(2500);
 await openArtifactControls(p);
-ok((await p.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) >= 1, 'a document still offers edit to its owner');
+check((await p.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) >= 1, 'a document still offers edit to its owner');
 
 // (The upload form's error paths — bad URL, private sheet — are exercised at
 // the API level in gate-data-ingest and at the component level in
 // dataset-upload.ui.test.tsx; the form no longer exists signed-out.)
 
-console.log(out.join('\n'));
 await b.close();
-process.exit(out.some(l => l.startsWith('FAIL')) ? 1 : 0);
+check.done();

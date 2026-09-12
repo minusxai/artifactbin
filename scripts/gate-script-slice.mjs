@@ -1,3 +1,5 @@
+import { inlineStory } from './lib/page-facts.mjs';
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
@@ -25,8 +27,7 @@ import { becomeOwner } from './lib/start-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('script-slice');
 
 const mint = await connectAgent(BASE);
 const api = async (path, body, method = 'POST') => {
@@ -72,7 +73,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
 
-const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 15000 });
+const frameEl = await inlineStory(page, { timeout: 15000 });
 const frame = page.mainFrame();
 await frame.waitForSelector('h1', { timeout: 15000 });
 const managedRealm = async (host, title) => {
@@ -228,7 +229,7 @@ const broken = await api('/api/artifacts', {
  */
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
+await inlineStory(page);
 await page.waitForTimeout(4000);
 const documentFrame = () => page.mainFrame();
 await page.evaluate(() => { document.querySelector('[data-mx-inline-story]').__probe = 'same-document'; });
@@ -315,5 +316,4 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
 }
 
 await browser.close();
-if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }
-console.log('\nall checks passed');
+check.done();

@@ -1,11 +1,24 @@
-/** Real sandbox: optional library loading, GLB assets, WebGL paint, isolation, export. */
+/**
+ * Gate: a real sandbox with a real library in it — optional library loading,
+ * GLB assets, WebGL pixels, isolation and a COLD export.
+ *
+ * Every verdict below is a browser fact: that the managed realm resolved the
+ * library from our own asset cache rather than the source URL, that the same
+ * module identity is handed back on a second import, that the textured model
+ * actually painted red pixels a GPU produced, and that the exporter waited for
+ * all of it on a document nobody had visited yet.
+ *
+ *   usage: node scripts/gate-libraries.mjs [base]
+ */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import sharp from 'sharp';
+import { createChecker } from './lib/assert.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3040';
+const check = createChecker('libraries');
 const { token } = await connectAgent(base);
 const authorization = `Bearer ${token}`;
 const create = async body => {
@@ -67,12 +80,12 @@ const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader'] })
 try {
   // Export before an interactive visit can warm the managed asset/module path.
   const exported = await fetch(`${base}/a/${doc.id}/export?format=png`);
-  assert.equal(exported.status, 200, await exported.clone().text().then(t => t.slice(0, 100)));
-  assert.ok(exported.headers.get('content-type')?.startsWith('image/png'));
+  check(exported.status === 200 && exported.headers.get('content-type')?.startsWith('image/png'),
+    `a cold export of an unvisited WebGL document is a PNG (${exported.status})`);
   const { data, info } = await sharp(Buffer.from(await exported.arrayBuffer())).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   let red = 0;
   for (let i = 0; i < data.length; i += info.channels) if (data[i] > 100 && data[i] > data[i + 1] * 2 && data[i] > data[i + 2] * 2) red++;
-  assert.ok(red > 100, 'cold export waits for the rendered red model');
+  check(red > 100, `the cold export waited for the rendered red model (${red} red pixels)`);
 
   const page = await browser.newPage();
   page.on('pageerror', error => console.error('PAGE',error.message));
@@ -80,7 +93,7 @@ try {
   const libraries = [];
   page.on('request', req => { if (req.url().includes('/libraries/')) libraries.push(req.url()); });
   await page.goto(`${base}/a/${prose.id}/raw`);
-  assert.equal(libraries.length, 0, 'prose loads no optional library');
+  check(libraries.length === 0, 'an ordinary prose document loads no optional library at all');
   await page.goto(`${base}/a/${doc.id}/raw`);
   const realm = async () => {
     const outer = page.locator('iframe[title="Three.js scene"]'); await outer.waitFor({timeout:10_000}).catch(async error=>{throw new Error(`${error.message}; body=${(await page.locator('body').innerText()).slice(0,1000)}`);});
@@ -90,23 +103,25 @@ try {
   let managed = await realm();
   await managed.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
   const state = await managed.evaluate(() => ({ error: window.__sceneError, pixel: window.__pixel, same: window.__sameLibrary, source: window.__librarySource }));
-  assert.equal(state.error, undefined, state.error);
-  assert.equal(state.same, true);
-  assert.ok(state.pixel[0] > state.pixel[1] * 2, `red model painted: ${state.pixel}`);
-  assert.match(state.source,/\/assets\//,'library source was rewritten to the managed asset cache');
-  assert.equal(libraries.length, 0, 'browser never reaches the original library URL directly');
+  check(state.error === undefined, `the scene ran without error (${state.error ?? 'none'})`);
+  check(state.same === true, 'a second import of the library is the same module, not a second copy');
+  check(state.pixel[0] > state.pixel[1] * 2, `the textured model painted real WebGL pixels (${state.pixel})`);
+  check(/\/assets\//.test(state.source), `the library source was rewritten to the managed asset cache (${state.source})`);
+  check(libraries.length === 0, 'and the browser never reached the original library URL directly');
   const blocked = await managed.evaluate(async () => {
     const missing = await fetch('ref:Miss12').then(response => response.status === 404, () => true);
     const network = await fetch('http://169.254.169.254/latest/meta-data').then(() => false, () => true);
     let storage = false; try { localStorage.getItem('x'); } catch { storage = true; }
     return { missing, network, storage };
   });
-  assert.deepEqual(blocked, { missing: true, network: true, storage: true });
+  check(blocked.missing && blocked.network && blocked.storage,
+    `inside the realm a missing ref 404s and network and storage stay blocked (${JSON.stringify(blocked)})`);
   const hydrated = await create({ markup: `<Card><CardContent>${scene}</CardContent></Card>` });
   await page.goto(`${base}/a/${hydrated.id}/raw`);
   managed = await realm();
   await managed.waitForFunction(() => window.__painted || window.__sceneError, { timeout: 15000 });
-  assert.equal(await managed.evaluate(() => window.__sceneError), undefined, 'generic bundle and ref fetch also work after hydration');
-  assert.equal(await managed.evaluate(() => window.__painted), true);
-  console.log('ok: cold export readiness, optional library, cached imports, textured GLB, WebGL pixels, CSP, and missing refs');
+  check(await managed.evaluate(() => window.__sceneError) === undefined,
+    'the generic bundle and the ref fetch work after hydration too');
+  check(await managed.evaluate(() => window.__painted) === true, 'and the hydrated copy painted as well');
 } finally { await browser.close(); }
+check.done();

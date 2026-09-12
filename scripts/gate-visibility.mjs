@@ -23,6 +23,7 @@
 
  *     node scripts/gate-visibility.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -30,8 +31,7 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('visibility');
 
 const EMAIL = `mxmx_test_vis_${Date.now().toString(36)}@example.com`;
 
@@ -170,8 +170,4 @@ check(await stranger.locator('[aria-label="Open folder Shelf"]').isVisible()
 await browser.close();
 sink.close();
 
-if (failures.length) {
-  console.error(`\n${failures.length} failure(s):\n- ${failures.join('\n- ')}`);
-  process.exit(1);
-}
-console.log('\nvisibility + pretty-url gate: all green');
+check.done();

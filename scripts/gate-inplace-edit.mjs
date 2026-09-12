@@ -22,14 +22,15 @@
  *
  *   usage: node scripts/gate-inplace-edit.mjs [base]
  */
+import { inlineStory } from './lib/page-facts.mjs';
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const ok = (pass, label) => { console.log(`${pass ? '  ok ' : 'FAIL '} ${label}`); if (!pass) failures.push(label); };
+const check = createChecker('inplace-edit');
 const note = (label) => console.log(`  ·   ${label}`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -65,7 +66,7 @@ const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
   await becomeOwner(page, BASE, start.token);
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
+  await inlineStory(page);
   await sleep(7000);
 
   const frame = () => page.mainFrame();
@@ -88,7 +89,7 @@ const browser = await chromium.launch();
   });
   await sleep(700);
   const initialReadingAt = await frame().evaluate(() => window.scrollY);
-  ok(initialReadingAt > 500, `the reader is somewhere specific before editing (scrollY ${initialReadingAt})`);
+  check(initialReadingAt > 500, `the reader is somewhere specific before editing (scrollY ${initialReadingAt})`);
 
   // ENTER
   await openArtifactControls(page);
@@ -98,13 +99,13 @@ const browser = await chromium.launch();
   await page.click('[aria-label="Edit artifact"]');
   await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
   await sleep(3000);
-  ok(await page.evaluate(() => window.__swaps) === 0
+  check(await page.evaluate(() => window.__swaps) === 0
     && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
     'entering edit did not replace the document');
   const afterEntering = await frame().evaluate(() => window.scrollY);
-  ok(Math.abs(afterEntering - readingAt) < 5,
+  check(Math.abs(afterEntering - readingAt) < 5,
     `and did not move the reader (${readingAt} → ${afterEntering})`);
-  ok(await frame().evaluate(() => !!document.querySelector('#lede')?.isContentEditable),
+  check(await frame().evaluate(() => !!document.querySelector('#lede')?.isContentEditable),
     'the document itself became editable');
 
   /*
@@ -134,10 +135,10 @@ const browser = await chromium.launch();
   await focusHost(hosts[1]);
   await sleep(3500);
   const after = await (await api(start.id, start.token, '', {})).json();
-  ok(after.version > before.version, `typing persists with no save (v${before.version} → v${after.version})`);
-  ok(after.markup.includes('EDITED IN PLACE'), 'the typed text reached the stored source');
+  check(after.version > before.version, `typing persists with no save (v${before.version} → v${after.version})`);
+  check(after.markup.includes('EDITED IN PLACE'), 'the typed text reached the stored source');
   const afterTyping = await frame().evaluate(() => window.scrollY);
-  ok(Math.abs(afterTyping - readingAt) < 5, `and typing did not move the reader (${readingAt} → ${afterTyping})`);
+  check(Math.abs(afterTyping - readingAt) < 5, `and typing did not move the reader (${readingAt} → ${afterTyping})`);
 
   // AN AGENT WRITES, into the paragraph the cursor is parked in
   const head = await (await api(start.id, start.token, '', {})).json();
@@ -147,21 +148,21 @@ const browser = await chromium.launch();
   });
   await sleep(5000);
   const shown = await frame().evaluate(() => document.body.innerText);
-  ok(/Agent total:/.test(shown), "the agent's write reached the open document");
-  ok(/EDITED IN PLACE/.test(shown), "and the human's own text survived it");
-  ok(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe) === 'same-chart',
+  check(/Agent total:/.test(shown), "the agent's write reached the open document");
+  check(/EDITED IN PLACE/.test(shown), "and the human's own text survived it");
+  check(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe) === 'same-chart',
     'the chart kept the svg it had drawn');
-  ok(await page.evaluate(() => window.__swaps) === 0, 'and the document was still never replaced');
+  check(await page.evaluate(() => window.__swaps) === 0, 'and the document was still never replaced');
 
   // LEAVE
   const leavingAt = await frame().evaluate(() => window.scrollY);
   await page.click('[aria-label="Exit edit mode"]');
   await sleep(3000);
-  ok(await page.evaluate(() => window.__swaps) === 0
+  check(await page.evaluate(() => window.__swaps) === 0
     && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
     'leaving edit did not replace it either');
-  ok(Math.abs(await frame().evaluate(() => window.scrollY) - leavingAt) < 5, 'nor moved the reader on the way out');
-  ok(await frame().evaluate(() => !document.querySelector('#lede')?.isContentEditable), 'and the document is no longer editable');
+  check(Math.abs(await frame().evaluate(() => window.scrollY) - leavingAt) < 5, 'nor moved the reader on the way out');
+  check(await frame().evaluate(() => !document.querySelector('#lede')?.isContentEditable), 'and the document is no longer editable');
   /*
    * The EMBED is the no-remount promise. Its <svg> is Vega's own: leaving gives
    * the viewport back the editing bar's height, and a responsive view redraws
@@ -169,7 +170,7 @@ const browser = await chromium.launch();
    * window. The svg identity is asserted across the agent's write above, where
    * nothing resizes.
    */
-  ok(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"]')?.__probe) === 'same-embed',
+  check(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"]')?.__probe) === 'same-embed',
     'the chart embed was never remounted across the whole journey');
   await page.close();
 }
@@ -192,7 +193,7 @@ const browser = await chromium.launch();
   await becomeOwner(page, BASE, start.token);
   await page.evaluate(() => { window.__swaps = 0; });
   await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
-  await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
+  await inlineStory(page);
   await sleep(6000);
   await page.evaluate(() => {
     document.querySelector('[data-mx-inline-story]').__probe = 'same-document';
@@ -211,10 +212,10 @@ const browser = await chromium.launch();
   await sleep(5000);
 
   const frame = () => page.mainFrame();
-  ok(await page.evaluate(() => window.__swaps) === 0
+  check(await page.evaluate(() => window.__swaps) === 0
     && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
     'a SCRIPTED document is edited in place too — no swap');
-  ok(await frame().evaluate(() => !!document.getElementById('lede')?.isContentEditable),
+  check(await frame().evaluate(() => !!document.getElementById('lede')?.isContentEditable),
     'and it is editable');
 
   const now = await (await api(start.id, start.token, '', {})).json();
@@ -224,8 +225,8 @@ const browser = await chromium.launch();
    * finds the attempt rather than its result.
    */
   const lede = /<p id="lede">([^<]*)<\/p>/.exec(now.markup)?.[1] ?? '(gone)';
-  ok(lede === 'the author wrote this', `nothing the author script forged reached the document ("${lede}")`);
-  ok(now.version === at.version, `and it spent no versions trying (v${at.version} → v${now.version})`);
+  check(lede === 'the author wrote this', `nothing the author script forged reached the document ("${lede}")`);
+  check(now.version === at.version, `and it spent no versions trying (v${at.version} → v${now.version})`);
   await page.close();
 }
 
@@ -261,7 +262,7 @@ const browser = await chromium.launch();
 
   await surface().locator('p').nth(1).click();
   await page.keyboard.type(' Typed by the human.');
-  ok(/Typed by the human\./.test(await surface().locator('body').innerText()), 'the typing is in the editor DOM');
+  check(/Typed by the human\./.test(await surface().locator('body').innerText()), 'the typing is in the editor DOM');
 
   // The agent edits a DIFFERENT node while that text is still uncommitted.
   const head = await read();
@@ -273,18 +274,18 @@ const browser = await chromium.launch();
       new_string: 'First paragraph, revised by the agent.',
     }),
   })).json();
-  ok(agentResult.markup.includes('revised by the agent'), 'the agent edit applied server-side');
+  check(agentResult.markup.includes('revised by the agent'), 'the agent edit applied server-side');
   await sleep(2500);
-  ok(/Typed by the human\./.test(await surface().locator('body').innerText()),
+  check(/Typed by the human\./.test(await surface().locator('body').innerText()),
     'uncommitted typing SURVIVES a remote edit arriving');
 
   // Now commit (blur) and let the buffer drain.
   await surface().locator('h1').first().click();
   await sleep(3000);
   const persisted = await read();
-  ok(persisted.markup.includes('Typed by the human.'), "the human's text reached the server");
-  ok(persisted.markup.includes('revised by the agent'), "the agent's text is still there");
-  ok(/Typed by the human\./.test(await surface().locator('body').innerText()),
+  check(persisted.markup.includes('Typed by the human.'), "the human's text reached the server");
+  check(persisted.markup.includes('revised by the agent'), "the agent's text is still there");
+  check(/Typed by the human\./.test(await surface().locator('body').innerText()),
     'the editor still shows the human text');
 
   const viewer = await browser.newPage();
@@ -302,20 +303,19 @@ const browser = await chromium.launch();
     }),
   });
   await sleep(3000);
-  ok(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+  check(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
     'the viewer saw the live edit');
   // Reading is chromeless until the artifact controls are opened.
   await openArtifactControls(viewer);
   await viewer.click('[aria-label="Edit artifact"]');
   await sleep(4000);
-  ok(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+  check(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
     'the editor opens on the LIVE document, not the page it was rendered with');
   const headNow = await read();
-  ok(headNow.version >= 2, `the document is on a real, advanced version (v${headNow.version})`);
+  check(headNow.version >= 2, `the document is on a real, advanced version (v${headNow.version})`);
   await viewer.close();
   await page.close();
 }
 
 await browser.close();
-console.log(failures.length ? `\n${failures.length} FAILED` : '\nall in-place edit checks passed');
-process.exit(failures.length ? 1 : 0);
+check.done();
