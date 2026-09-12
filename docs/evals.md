@@ -18,7 +18,7 @@ CI retries failed smoke tasks once when enabled; creative comparisons do not inh
 
 ## How a task gets its credential
 
-artifactbin is CLI-only: the only credential path is afbin's OAuth device approval in a browser. The
+artifactbin is CLI-only: the only credential path an agent has is afbin's OAuth device approval in a browser. The
 driver stands in for the person at that browser, so every leg logs in as a real account — reading its
 login code from a booted server's dev outbox, or from the eval's Resend inbox against a deployment
 (`evals/lib/credential.ts`). There is no other source: a leg with no session could not approve the

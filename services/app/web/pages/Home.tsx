@@ -94,7 +94,7 @@ export function HomePage() {
     // and hands over the instruction; the page menu keeps the login door.
     return <Landing />;
   }
-  const empty = home.artifacts.length === 0 && home.shared.length === 0;
+  const empty = home.artifacts.length === 0 && home.shared.length === 0 && !state.insights?.stats?.assets;
   return (
     <main className={`${empty ? PAGE_COLUMN : HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
       {empty ? (

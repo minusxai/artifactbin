@@ -92,7 +92,7 @@ describe('ShareLink — writes', () => {
     // Closing writes asks first — the rows stay, but those buttons stop working.
     fireEvent.click(screen.getByLabelText('Make read-only'));
     expect(lastPut).toBeNull();
-    expect(screen.getByRole('alert').textContent).toMatch(/1 document/);
+    expect(screen.getAllByRole('dialog').at(-1)?.textContent).toMatch(/1 document/);
     fireEvent.click(screen.getByLabelText('Confirm read-only'));
     await waitFor(() => expect(lastPut).toEqual({ access: 'read' }));
   });

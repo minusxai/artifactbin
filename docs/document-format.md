@@ -16,8 +16,8 @@ respond, but it cannot reach the app's session, its storage, or the network.
 
 Documents get: six dual-palette **themes** (`modernist · organic · industry ·
 terminal · manuscript · pop`, each with a light and a dark mode), a stable public link that survives edits, and full
-version history, and four **templates** (`editorial`, `deck` with a birds-eye
-rail and keyboard paging, `scrolly`, `dashboard`), plus **interactive Vega
+version history, and five **templates** (`editorial`, `deck` with a birds-eye
+rail and keyboard paging, `scrolly`, `dashboard`, `plan`), plus **interactive Vega
 charts** — real tooltips and hover, themed to the story, rendered by a
 runtime served from this origin (the CSP still blocks all external hosts,
 and expression evaluation uses the AST interpreter, never `eval`). The full

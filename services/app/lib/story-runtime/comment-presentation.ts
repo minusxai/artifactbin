@@ -1,3 +1,5 @@
+import { SELECTION_PRESENTATION } from './selection-presentation';
+
 /** Shared inert comment chrome for markup and opaque managed frames.
  * The bootstrap serializes this data; no parent DOM or executable author capability crosses realms. */
 export const COMMENT_PRESENTATION = {
@@ -36,15 +38,15 @@ export const COMMENT_PRESENTATION = {
   `[data-mx-annotated] { background: rgba(245, 158, 11, 0.10); border-radius: 3px; transition: background 120ms; }`,
   `[data-mx-annotated]:hover { background: rgba(245, 158, 11, 0.20); }`,
   `[data-mx-annotation-open] { background: rgba(245, 158, 11, 0.26); border-radius: 3px; }`,
-  `[data-mx-annotation-hover] { background: rgba(245, 158, 11, 0.18); outline: 2px solid rgba(245, 158, 11, 0.82); outline-offset: 3px; border-radius: 3px; }`,
-  `[data-mx-annotate-selected] { outline: 2px solid rgba(245, 158, 11, 0.85); outline-offset: 3px; border-radius: 3px; }`,
+  `[data-mx-annotation-hover] { background: rgba(245, 158, 11, 0.18); ${SELECTION_PRESENTATION.selectedCss} }`,
+  `[data-mx-annotate-selected] { ${SELECTION_PRESENTATION.selectedCss} }`,
   // The pick: a crosshair everywhere, and an outline on the block under it. The
   // doubled attribute is deliberate — it out-specifies the edit session's own
   // `[data-mx-edit-hover]` when both stamp the same node while editing.
   `[data-mx-annotate-picking], [data-mx-annotate-picking] * { cursor: crosshair !important; }`,
   // A finger drawing an area must draw, not scroll; and nothing under a band selects.
   `[data-mx-annotate-picking="area"], [data-mx-annotate-picking="area"] *, [data-mx-annotate-picking="select"], [data-mx-annotate-picking="select"] * { touch-action: none !important; user-select: none !important; }`,
-  `[data-mx-annotate-pick-hover][data-mx-annotate-pick-hover] { outline: 2px solid rgba(245, 158, 11, 0.9); outline-offset: 3px; border-radius: 3px; background: rgba(245, 158, 11, 0.08); }`,
+  `[data-mx-annotate-pick-hover][data-mx-annotate-pick-hover] { ${SELECTION_PRESENTATION.hoverCss} }`,
   // A node whose words are painted gives up its own background — the tint is
   // what a comment looks like when we cannot find the words, not as well as.
   `[data-mx-annotated][data-mx-annotation-ranged],`

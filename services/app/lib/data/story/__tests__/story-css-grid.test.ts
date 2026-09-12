@@ -6,7 +6,7 @@
  * stops emitting one of these calc()/container-query utilities, grids silently collapse to
  * a stack of unpositioned divs. This pins actual CSS emission, not candidate extraction.
  */
-import { compileStoryCss } from '../story-css.server';
+import { compileStoryCss, STORY_RECIPE_UNION } from '../story-css.server';
 import { STORY_UI_RECIPE_CLASSES } from '@/lib/story-ui/recipe-classes';
 
 const GRID_STORY =
@@ -55,5 +55,26 @@ describe('story grid CSS compilation', () => {
     expect(Math.abs(query - utility)).toBeLessThan(200);
     // The gutter padding.
     expect(css).toContain('padding: 3px');
+  });
+});
+
+/*
+ * Moved here from story-css-question-title.test.ts: the same union-membership →
+ * emission pair for the other set of classes that reaches the sheet only through
+ * a recipe union. The `<Question>` title strip is chart chrome in the mono face,
+ * and its classes never appear in story markup, so a candidate the compiler drops
+ * fails silently as "the title just looks sans".
+ */
+describe('the Question title chrome CSS', () => {
+  const TITLE_STORY = '<div className="p-4"><Question title="t" data="ref:dsOne01" /></div>';
+
+  it('font-mono is in the recipe union (extractor coverage)', () => {
+    expect(STORY_RECIPE_UNION).toContain('font-mono');
+  });
+
+  it('the story compile EMITS the font-mono rule', async () => {
+    const css = await compileStoryCss(TITLE_STORY, { force: true });
+    expect(css).toBeTruthy();
+    expect(css).toMatch(/\.font-mono\s*\{/);
   });
 });

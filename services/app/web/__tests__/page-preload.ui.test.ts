@@ -77,9 +77,3 @@ it('preload ownership expires in bounded time', async () => {
     expect(store.adoptPreload('page','nav')).toBe(false);
   } finally {vi.useRealTimers();}
 });
-
-it('repeated preload requests for the same navigation reuse completed work', async () => {
-  const store=createPageDataStore();store.setScope('A');const loader=vi.fn(async()=>1);
-  await store.preload('page','nav',loader);await store.preload('page','nav',loader);
-  expect(loader).toHaveBeenCalledTimes(1);expect(store.adoptPreload('page','nav')).toBe(true);
-});

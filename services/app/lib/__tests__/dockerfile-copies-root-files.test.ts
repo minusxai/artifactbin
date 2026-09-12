@@ -49,3 +49,31 @@ describe('Dockerfile', () => {
     }
   });
 });
+
+/**
+ * Runtime shape of the images themselves. Moved here from the retired app-layout
+ * placement seed, whose layout archaeology is gone but whose image pins are not.
+ */
+describe('every runtime image', () => {
+  const read = (p: string) => readFileSync(path.join(ROOT, p), 'utf8');
+
+  it('probes DuckDB without assuming the host architecture', () => {
+    const df = read('Dockerfile');
+    expect(df).not.toContain('@duckdb/node-bindings-linux-x64/libduckdb.so');
+    expect(df).toContain("require('@duckdb/node-api')");
+  });
+
+  it('drops root before starting the service', () => {
+    for (const file of ['Dockerfile', 'services/app/Dockerfile', 'services/proxy/Dockerfile', 'services/sql/Dockerfile', 'services/browser/Dockerfile']) {
+      expect(read(file), file).toMatch(/^USER node$/m);
+    }
+  });
+
+  it('provisions the default local object store for the unprivileged user in the app images', () => {
+    for (const file of ['Dockerfile', 'services/app/Dockerfile']) {
+      const dockerfile = read(file);
+      expect(dockerfile, file).toContain('/app/.artifact-objects');
+      expect(dockerfile, file).toMatch(/chown[^\n]*node:node[^\n]*\/app\/\.artifact-objects/);
+    }
+  });
+});

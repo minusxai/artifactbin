@@ -19,11 +19,24 @@ export const helpTopics:Record<string,string>={
  /** The brief's complete commented document, as a file to copy and adapt. */
  example:teaching.example,
  data:referenceTopics['markup-data'],
- themes:`Available themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice. Use help themes-<name> for a detailed guide.`,
- templates:`Available templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> to print a local example.`,
+ // The OVERVIEWS, not a bare name list. `afbin help themes` used to print only the six names and "use
+ // help themes-<name>", so an agent choosing a mood opened three theme guides in a row (eval run
+ // 34696655937: opencode deck and scrolly, pi scrolly — three reads and three turns each) while one
+ // that read references/themes.md, which carries a one-line description per theme and says to pick
+ // ONE, opened one. The reference is the better answer to the same question; same for templates.
+ themes:`${referenceTopics['themes']}\n\nAvailable themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice.`,
+ templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> to print a local starter.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
+/** Topics and commands that share a prefix or a substring with a mistyped topic — `publish` → the publishing-* set — so the agent's next call is the right one instead of a guess. */
+export function closestTopics(topic:string):string[]{
+ const wanted=topic.toLowerCase();
+ if(!wanted)return [];
+ const names=[...Object.keys(helpTopics),...commands.map(command=>command.name)];
+ const near=names.filter(name=>name.startsWith(wanted)||wanted.startsWith(name)||name.includes(wanted));
+ return [...new Set(near)].sort((a,b)=>a.startsWith(wanted)===b.startsWith(wanted)?a.localeCompare(b):a.startsWith(wanted)?-1:1).slice(0,6);
+}
 /** The top-level skill doc, without its YAML frontmatter: the brief printed by bare `afbin help`. */
 export function briefDocument():string{return localSkillFiles['SKILL.md'].replace(/^---\n[\s\S]*?\n---\n/,'');}
 const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help and validation stay offline. Local SQL may download its engine once; prepare it with afbin setup --service sql before disconnecting.\n\n`
@@ -47,7 +60,10 @@ export function helpDocument(topic?:string,format='text'):string{
  }
  if(!isCommand(topic)){
   const text=helpTopics[topic as string];
-  if(text===undefined)throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,'Run afbin help.');
+  if(text===undefined){
+   const near=closestTopics(topic as string);
+   throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,near.length?`Did you mean ${near.join(', ')}? Run afbin help for the full list.`:'Run afbin help.');
+  }
   return text;
  }
  // Bare `afbin help` reads the brief; a named command prints its own help. Markdown/man keep the registry.

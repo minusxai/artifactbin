@@ -1,40 +1,29 @@
 import { Database } from 'lucide-react';
-import { usePageData, fetchPageData } from '../use-page-data';
+import { usePageData } from '../use-page-data';
 import { Navigate } from 'react-router';
 import type { PickerFolder } from '@/components/FolderPicker';
-import type { ShelfRow } from '@/components/Shelf';
-import { SHELF_LIST_PER_PAGE } from '@/components/Shelf';
+import { useRef, useState } from 'react';
+import type { AssetSelection, WorkspaceAssets } from '@/lib/workspace-inventory';
 import { ArtifactTable } from '@/components/ArtifactTable';
 import { MicroLabel, PANEL } from '@/components/ui';
 import { useSession } from '@/web/session';
 
-interface AssetsData {
-  assets: ShelfRow[];
-  folders: ShelfRow[];
-}
-
 /** The data/image files that support documents, on their own management page. */
 export function AssetsPage() {
   const { session } = useSession();
-  const { data, error: failed, refresh } = usePageData<AssetsData>('/api/page/assets', { loader: async (signal) => {
-      const response = await fetch('/api/page/assets', { credentials: 'same-origin', signal });
-      if (response.ok) return response.json() as Promise<AssetsData>;
-      // During Vite development the SPA hot-reloads, while Hono's generated
-      // route table is mounted only at process boot. Let a newly-added page
-      // work before that one required restart by reading the already-mounted
-      // Home payload; production and every subsequent boot use the focused API.
-      if (response.status === 404) {
-          const home = await fetchPageData<{ signedIn: boolean; artifacts?: ShelfRow[] }>('/api/page/home', signal);
-        if (home.signedIn) {
-          const rows = home.artifacts ?? [];
-          return {
-            assets: rows.filter((row) => row.format !== 'markup' && row.format !== 'folder'),
-            folders: rows.filter((row) => row.format === 'folder'),
-          };
-        }
-      }
-      throw Object.assign(new Error('assets unavailable'), { status: response.status });
-  } });
+  const [selection, setSelection] = useState<AssetSelection>({ page: 0, query: '', formats: [], visibilities: [] });
+  const params = new URLSearchParams();
+  if (selection.page) params.set('page', String(selection.page));
+  if (selection.query) params.set('q', selection.query);
+  selection.formats.forEach(format => params.append('formats', format));
+  selection.visibilities.forEach(visibility => params.append('visibilities', visibility));
+  const key = `/api/page/assets${params.size ? `?${params}` : ''}`;
+  const { data: response, error: failed, pending, refresh } = usePageData<WorkspaceAssets>(key, { enabled: Boolean(session?.user) });
+  // Keep the search control mounted while its next server result loads. Never retain another account's rows.
+  const previous = useRef<{ owner: string; data: WorkspaceAssets } | null>(null);
+  const owner = session?.user?.id;
+  if (response && owner) previous.current = { owner, data: response };
+  const data = response ?? (previous.current?.owner === owner ? previous.current?.data : null);
   const load = () => { void refresh(true); };
 
   if (session && !session.user) return <Navigate to="/login?callbackUrl=/assets" replace />;
@@ -62,12 +51,12 @@ export function AssetsPage() {
         <section aria-label="Loading assets" aria-busy="true" className={`${PANEL} flex h-24 items-center justify-center font-mono text-xs text-faint`}>
           loading assets…
         </section>
-      ) : data.assets.length === 0 ? (
+      ) : data.assets.length === 0 && !selection.query && !selection.formats.length && !selection.visibilities.length ? (
         <section aria-label="Assets" className={`${PANEL} px-4 py-8 text-center font-mono text-xs text-faint`}>
           no assets yet
         </section>
       ) : (
-        <section aria-label="Assets">
+        <section aria-label="Assets" aria-busy={pending}>
           {failed && <button aria-label="Retry assets" onClick={load}>Could not refresh assets. Retry</button>}
           <ArtifactTable
             artifacts={data.assets}
@@ -76,7 +65,12 @@ export function AssetsPage() {
             canEdit={false}
             showViews={false}
             filtersInline
-            perPage={SHELF_LIST_PER_PAGE}
+            perPage={data.perPage}
+            remote={{
+              selection: { ...selection, page: response?.page ?? selection.page },
+              total: data.total, formats: data.formats, visibilities: data.visibilities, pending,
+              onChange: setSelection,
+            }}
             searchLabel="Search assets"
             searchPlaceholder="search assets"
           />

@@ -60,8 +60,8 @@ describe('GET /a/:id (the document itself)', () => {
   it('follows x-forwarded-proto/host like every other absolute URL the app emits', async () => {
     const t = await mintToken('t');
     const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
-    const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artefactbin.dev' } }), params(row.id));
-    expect(res.headers.get('link')).toBe('<https://artefactbin.dev/llms.txt>; rel="help"');
+    const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'docs.example' } }), params(row.id));
+    expect(res.headers.get('link')).toBe('<https://docs.example/llms.txt>; rel="help"');
   });
   it('carries the same header and head pointer at an owned artifact pretty URL', async () => {
     const owner = await ensureUsername(await createUser({ email: 'pretty-help@example.com' }));

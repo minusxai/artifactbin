@@ -96,37 +96,10 @@ describe('templates are genre references, not contracts', () => {
   });
 });
 
-/**
- * The reference must teach the ONE capability unification added, or agents
- * conclude the opposite — and they did. An agent reading this doc reasoned:
- * "This platform can't take the original's hand-rolled JS — static JSX, no
- * event handlers", and rewrote a working interactive page as <Param>/<Question>
- * embeds. It was reading these very lines: "No … event handlers … no
- * `<script>`", written before a document could carry one, with no mention of
- * `<Helmet>` anywhere in the file.
- *
- * Both halves of the truth have to sit together: inline `onclick=` really is
- * rejected AND the document runs its own script, so handlers are ATTACHED from
- * it. Naming only the first reads as "no JavaScript here".
+/*
+ * That the markup reference teaches <Helmet> as the home of title, CSS and script,
+ * never claims a document cannot carry a script, connects the inline-handler ban to
+ * addEventListener, and never points at a body <style> block, is
+ * agent-docs-current.test.ts's subject — it runs each of those over every
+ * agent-facing surface at once (it.each(SURFACES)), not the markup doc alone.
  */
-describe('markup doc teaches that a document runs its own JavaScript', () => {
-  const doc = buildMarkupDoc(BASE);
-
-  it('names <Helmet> as the home for the document title, CSS and script', () => {
-    expect(doc).toContain('<Helmet>');
-    expect(doc).toContain('<script>');
-  });
-
-  it('never claims a document cannot carry a script', () => {
-    expect(doc).not.toMatch(/no\s+`?<script>`?/i);
-  });
-
-  it('connects the ban on inline handlers to the way that DOES work', () => {
-    expect(doc).toMatch(/addEventListener/);
-  });
-
-  it('sends custom CSS to the Helmet, not a body <style> block', () => {
-    expect(doc).not.toMatch(/ONE top-level style block/i);
-    expect(doc).toMatch(/<Helmet>[\s\S]{0,400}<style>/);
-  });
-});

@@ -357,6 +357,7 @@ describe('picking a block to comment on', () => {
     expect(document.head.querySelector('style[data-mx-annotate-css]')!.textContent).toContain('data-mx-annotate-pick-hover');
     anchor().dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
     expect(anchor()).toHaveAttribute('data-mx-annotate-pick-hover');
+    expect(window.getComputedStyle(anchor()).outline).toBe('1px solid rgba(245, 158, 11, 0.9)');
     anchor().dispatchEvent(new MouseEvent('pointerout', { bubbles: true }));
     expect(anchor()).not.toHaveAttribute('data-mx-annotate-pick-hover');
 

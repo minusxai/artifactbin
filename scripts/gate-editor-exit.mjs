@@ -35,7 +35,7 @@ const MARKUP_DOC = '<div data-design="tw" className="p-10">'
 /** A fresh document, plus the token that owns it. */
 async function mint(fields) {
   // The token rides the start LINK now (lib/agent-session). startDocument
-  // throws rather than walking on: anonymous minting is per-IP rate limited,
+  // throws rather than walking on: the start_doc door is per-IP rate limited,
   // and a gate that walked on edited /a/undefined and reported a loss that was
   // not real.
   const st = await startDocument(B);

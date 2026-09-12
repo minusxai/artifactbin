@@ -260,7 +260,7 @@ describe('buildStoryDocument', () => {
     expect(html).toContain('aria-label="Home"');
     expect(html).toContain('data-mx-reader-action="like"');
     expect(html).toContain('data-mx-reader-action="comment"');
-    expect(html).toContain('data-mx-reader-action="share"');
+    expect(html).not.toContain('data-mx-reader-action="share" aria-label="Share"');
     expect(html).toContain('data-mx-reader-trigger="controls"');
     expect(html).toContain('aria-label="Open artifact controls"');
     expect(html).toContain('data-mx-reader-trigger="menu"');

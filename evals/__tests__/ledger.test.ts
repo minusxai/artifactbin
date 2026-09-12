@@ -234,6 +234,18 @@ describe('targetArtifactId', () => {
     expect(targetArtifactId([e('PUT', '/api/artifacts/aaaaaa', 400, 'aaaaaa')])).toBeNull();
   });
 
+  it('follows the agent to an artifact it created itself, and takes the LAST successful write across several', () => {
+    expect(targetArtifactId([e('GET', '/a/start1', 200), e('POST', '/api/artifacts', 201, 'newOne'), e('POST', '/api/artifacts/newOne/edits', 200, 'newOne')])).toBe('newOne');
+    expect(targetArtifactId([e('POST', '/api/artifacts', 201, 'first'), e('POST', '/api/artifacts', 201, 'second'), e('POST', '/api/artifacts/first/edits', 200, 'first')])).toBe('first');
+    // A create whose id is only in the response body still counts, even at 200 rather than 201.
+    expect(targetArtifactId([e('POST', '/api/artifacts', 200, 'viaCli')])).toBe('viaCli');
+  });
+
+  it('ignores failed writes and reads, and is null when nothing was ever written', () => {
+    expect(targetArtifactId([e('PUT', '/api/artifacts/good', 200, 'good'), e('PUT', '/api/artifacts/bad', 400, 'bad'), e('GET', '/api/artifacts/other', 200, 'other')])).toBe('good');
+    expect(targetArtifactId([e('GET', '/docs/llm', 200)])).toBeNull();
+  });
+
   it('skips an artifact the agent later DELETEd — Claude Opus 5 makes a scratch document, exports it to look, and deletes it', () => {
     const entries = [
       e('PUT', '/api/artifacts/cvPGM1', 200, 'cvPGM1'),

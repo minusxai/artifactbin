@@ -17,6 +17,8 @@
  *    account; go to /login and come back to THIS address still asking to fork
  *    (lib/intent), so the person does the work once.
  */
+import ConfirmDialog from './ConfirmDialog';
+import { Tooltip } from './Tooltip';
 import { GitFork } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { withIntent } from '@/lib/intent';
@@ -130,27 +132,23 @@ export function ForkRefusal({ lines, onDismiss }: { lines: string[]; onDismiss: 
 
 /** Fork is offered to every reader; the server decides the read ACL.
  * The bar variant keeps refusals visible beside the initiating control. */
-export default function ForkArtifact({ id, variant = 'menu' }: {
+export default function ForkArtifact({ id, title = null, variant = 'menu' }: {
   id: string;
+  title?: string | null;
   /** Settings row or compact app-bar button. */
   variant?: 'menu' | 'bar';
 }) {
-  const { busy, refusal, fork, dismiss } = useForkArtifact(id);
+  const [asked, setAsked] = useState(false);
   return (
     <div className="relative">
-      <button
-        type="button"
-        aria-label="Fork artifact"
-        aria-live="polite"
-        disabled={busy}
-        onClick={fork}
-        title="Fork artifact"
-        className={variant === 'bar' ? 'flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-muted hover:bg-raised hover:text-fg disabled:opacity-60' : CONTROL_ROW}
+      <Tooltip content="Fork artifact"><button
+        type="button" aria-label="Fork artifact" onClick={() => setAsked(true)}
+        className={variant === 'bar' ? 'flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-muted hover:bg-raised hover:text-fg' : CONTROL_ROW}
       >
         <GitFork size={14} strokeWidth={1.75} />
-        <span className={variant === 'bar' ? 'sr-only' : 'flex-1'}>{busy ? 'forking…' : 'fork'}</span>
-      </button>
-      {refusal && <div className={variant === 'bar' ? 'absolute right-0 top-full z-50 w-72' : ''}><ForkRefusal lines={refusal} onDismiss={dismiss} /></div>}
+        <span className={variant === 'bar' ? 'sr-only' : 'flex-1'}>fork</span>
+      </button></Tooltip>
+      {asked && <ForkConfirm id={id} title={title} onClose={() => setAsked(false)} />}
     </div>
   );
 }
@@ -160,75 +158,15 @@ export default function ForkArtifact({ id, variant = 'menu' }: {
  *
  * It asks because the instruction arrived in a URL: a fork writes a copy into
  * somebody's account, and an address anyone may hand over must not be able to
- * do that silently. Focus goes to the confirm and stays inside the dialog,
+ * do that silently. Focus goes to Cancel and stays inside the dialog,
  * Escape is cancel — the house dialog contract (components/ShareLink).
  */
 export function ForkConfirm({ id, title, onClose }: { id: string; title: string | null; onClose: () => void }) {
   const { busy, refusal, fork, dismiss } = useForkArtifact(id);
-  const panel = useRef<HTMLDivElement | null>(null);
-  const confirm = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => { confirm.current?.focus(); }, []);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { onClose(); return; }
-      if (event.key !== 'Tab' || !panel.current) return;
-      // The trap: a dialog asking to write into your account should not be
-      // possible to tab behind and forget about.
-      const stops = [...panel.current.querySelectorAll<HTMLElement>('button:not([disabled])')];
-      if (stops.length === 0) return;
-      const edge = event.shiftKey ? stops[0] : stops[stops.length - 1];
-      if (document.activeElement === edge) {
-        event.preventDefault();
-        (event.shiftKey ? stops[stops.length - 1] : stops[0]).focus();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
-      <button
-        type="button"
-        aria-label="Cancel fork by clicking outside"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default border-0 bg-black/45 p-0 backdrop-blur-[2px]"
-      />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Fork this artifact"
-        className="relative z-10 w-full max-w-md rounded-[9px] border border-edge-bright bg-surface p-5 font-mono text-xs shadow-2xl"
-      >
-        <h2 className="text-sm font-semibold text-fg">Fork this artifact?</h2>
-        <p className="mt-2 text-[11px] text-muted">
-          {`A copy of “${title ?? 'this artifact'}” is added to your artifacts. Comments, history and sharing stay with the original.`}
-        </p>
-        {refusal && <ForkRefusal lines={refusal} onDismiss={dismiss} />}
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            aria-label="Cancel fork"
-            onClick={onClose}
-            className="cursor-pointer rounded-[5px] border border-edge bg-transparent px-3 py-1.5 text-muted hover:border-edge-bright hover:text-fg"
-          >
-            cancel
-          </button>
-          <button
-            ref={confirm}
-            type="button"
-            aria-label="Confirm fork"
-            disabled={busy}
-            onClick={fork}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-[5px] border border-edge-bright bg-raised px-3 py-1.5 text-accent hover:border-accent disabled:cursor-default disabled:opacity-60"
-          >
-            <GitFork size={13} strokeWidth={1.75} />
-            {busy ? 'forking…' : 'fork'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return <ConfirmDialog title="Fork this artifact?"
+    description={`A copy of “${title ?? 'this artifact'}” will be added to your artifacts. You’ll open the new copy after forking. Comments, history and sharing stay with the original.`}
+    action="Fork and open copy" confirmLabel="Confirm fork" cancelLabel="Cancel fork"
+    busy={busy} onConfirm={fork} onCancel={onClose}>
+    {refusal && <ForkRefusal lines={refusal} onDismiss={dismiss} />}
+  </ConfirmDialog>;
 }

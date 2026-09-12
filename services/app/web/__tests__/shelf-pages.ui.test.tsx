@@ -94,6 +94,13 @@ describe('what the dashboard leads with', () => {
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
 
+  it('keeps the asset library reachable for an account with no documents', async () => {
+    home = { signedIn: true, artifacts: [], shared: [], stats: { artifacts: 0, assets: 204, views: 0 } };
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    expect(await screen.findByLabelText('Assets')).toHaveAttribute('href', '/assets');
+    expect(screen.getByLabelText('Dashboard metrics')).toHaveTextContent('204');
+  });
+
   it('WITH artifacts: leads with the Drive-like shelf and keeps analytics in the right rail', async () => {
     home = {
       signedIn: true,
@@ -101,6 +108,7 @@ describe('what the dashboard leads with', () => {
         { ...doc('a'), views: 7 },
         { ...doc('data'), title: 'Dataset', format: 'dataset', views: 99 },
       ],
+      stats: { artifacts: 1004, assets: 204, views: 1234 },
       viewsOverTime: [0, 2, 5],
       likes: 3,
       likesOverTime: [0, 1, 2],
@@ -118,9 +126,9 @@ describe('what the dashboard leads with', () => {
     const shelf = screen.getByLabelText('Shelf');
     const metrics = within(screen.getByLabelText('Dashboard metrics'));
     const valueFor = (label: string) => metrics.getByText(label).closest('dt')?.nextElementSibling;
-    expect(valueFor('artifacts')).toHaveTextContent('1');
-    expect(valueFor('assets')).toHaveTextContent('1');
-    expect(valueFor('views')).toHaveTextContent('7');
+    expect(valueFor('artifacts')).toHaveTextContent('1k');
+    expect(valueFor('assets')).toHaveTextContent('204');
+    expect(valueFor('views')).toHaveTextContent('1.2k');
     expect(valueFor('likes')).toHaveTextContent('3');
     expect(valueFor('followers')).toHaveTextContent('4');
     expect(valueFor('forks')).toHaveTextContent('2');

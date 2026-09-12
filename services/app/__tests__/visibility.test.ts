@@ -60,13 +60,8 @@ afterAll(async () => {
 });
 
 describe('defaults and validation', () => {
-  it('anonymous docs are born public; user-owned docs are born private', async () => {
-    const { anonToken, ownedToken } = await fixtures();
-    const anonDoc = await create(anonToken, { title: 'a', markup: '<h1>a</h1>' });
-    expect(anonDoc.visibility).toBe('public');
-    const ownedDoc = await create(ownedToken, { title: 'o', markup: '<h1>o</h1>' });
-    expect(ownedDoc.visibility).toBe('private');
-  });
+  // What a document is BORN as — anonymous public, owned private, and the same
+  // question per format — is default-visibility.test.ts's subject.
 
   it('an explicit visibility on create wins; private without an account is a 400', async () => {
     const { anonToken, ownedToken } = await fixtures();

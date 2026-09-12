@@ -1,5 +1,7 @@
 'use client';
 
+import type { WorkspaceStats } from '@/lib/workspace-inventory';
+
 import { useDialogKeyboard } from './use-dialog-keyboard';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -162,6 +164,7 @@ function useAppMode(): 'light' | 'dark' {
 
 export interface DashboardProps {
   rows: ShelfRow[];
+  stats?: WorkspaceStats;
   viewsOverTime?: number[];
   likes?: number;
   likesOverTime?: number[];
@@ -176,6 +179,7 @@ export interface DashboardProps {
  */
 export function DashboardContent({
   rows,
+  stats,
   viewsOverTime = EMPTY_SERIES,
   likes = 0,
   likesOverTime = EMPTY_SERIES,
@@ -195,9 +199,9 @@ export function DashboardContent({
   const EngagementChart = expanded ? ExpandedInteractiveVegaChart : InteractiveVegaChart;
 
   const metrics: ReadonlyArray<{ label: string; value: number; Icon: LucideIcon }> = [
-    { label: 'artifacts', value: documents.length, Icon: FileText },
-    { label: 'assets', value: dataFiles, Icon: Database },
-    { label: 'views', value: totalViews, Icon: Eye },
+    { label: 'artifacts', value: stats?.artifacts ?? documents.length, Icon: FileText },
+    { label: 'assets', value: stats?.assets ?? dataFiles, Icon: Database },
+    { label: 'views', value: stats?.views ?? totalViews, Icon: Eye },
     { label: 'likes', value: likes, Icon: Heart },
     { label: 'followers', value: followers, Icon: Users },
     { label: 'forks', value: forks, Icon: GitFork },

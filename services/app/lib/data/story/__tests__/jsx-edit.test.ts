@@ -235,6 +235,27 @@ describe('isEditableTextHost', () => {
     expect(isEditableTextHost(el('<CardTitle>Title</CardTitle>'))).toBe(false);
     expect(isEditableTextHost(el('<style>p &#123; color: red &#125;</style>'))).toBe(false);
   });
+
+  /*
+   * Moved here from svg-edit.test.ts, which tested this same predicate on its own.
+   * SVG internals are drawing, not prose: contenteditable inside an <svg> subtree is
+   * undefined browser behaviour and the write-back would splice drawing coordinates
+   * as text, so the subset stays atomic however much text it carries.
+   */
+  const inside = (src: string): JsxElement => el(src).children[0] as JsxElement;
+
+  it('rejects svg <text> with direct text — the subset is atomic', () => {
+    expect(isEditableTextHost(inside('<svg><text x="0" y="10">label</text></svg>'))).toBe(false);
+  });
+
+  it('rejects svg <title>/<desc>', () => {
+    expect(isEditableTextHost(inside('<svg><title>a11y name</title></svg>'))).toBe(false);
+    expect(isEditableTextHost(inside('<svg><desc>a long description</desc></svg>'))).toBe(false);
+  });
+
+  it('an ordinary <p> beside the svg still is a text host', () => {
+    expect(isEditableTextHost(inside('<div><p>prose</p></div>'))).toBe(true);
+  });
 });
 
 describe('applyFormatEditsToJsx — className/style attr write-back (typography toolbar)', () => {

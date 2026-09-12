@@ -25,7 +25,7 @@ function updateChrome(current: Element, next: Element) {
 }
 
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
-export function InlineReaderChrome({ input, onAction,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;pinned?:boolean }): ReactNode {
+export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;pinned?:boolean }): ReactNode {
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
   const artifact=useRef(input.artifactId);
@@ -72,7 +72,7 @@ export function InlineReaderChrome({ input, onAction,pinned=false }: { input: Re
       const target = (event.target as Element).closest<HTMLElement>('[data-mx-reader-action],[data-mx-reader-trigger]');
       if (!target) return;
       event.preventDefault();
-      if(target.getAttribute('data-mx-reader-action')==='share'){sharing.current?.share();return;}
+      if(target.getAttribute('data-mx-reader-action')==='share'){if(onShare)onShare();else sharing.current?.share();return;}
       onAction(target.getAttribute('data-mx-reader-action') ?? target.getAttribute('data-mx-reader-trigger') ?? '');
     }} />
   </>;

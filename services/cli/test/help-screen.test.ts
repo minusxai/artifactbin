@@ -70,6 +70,31 @@ test('a command screen carries usage, every flag the parser accepts, and the exa
  }
  assert.throws(()=>commandScreen('nope',plain),/unknown_help_topic|Unknown command/);
 });
+
+test('help themes and help templates print the overview that describes each choice, so the agent picks one instead of opening several guides (eval run 34696655937)',()=>{
+ const themes=helpDocument('themes');
+ assert.match(themes,/Pick ONE by the subject's mood/);
+ for(const name of ['modernist','organic','industry','terminal','manuscript','pop'])assert.match(themes,new RegExp('`'+name+'` — .+ → '),name);
+ assert.match(themes,/Available themes: .*modernist/);
+ const templates=helpDocument('templates');
+ assert.match(templates,/Pick ONE by the content's shape/);
+ assert.match(templates,/Run afbin help <template> to print a local starter/);
+});
+
+test('an unknown help topic names its nearest topics — `publish` (asked seven times in eval run 34694871143) points at the publishing set',()=>{
+ assert.throws(()=>helpDocument('publish'),(error:unknown)=>{
+  const e=error as {code:string;fix?:string};
+  assert.equal(e.code,'unknown_help_topic');
+  assert.match(e.fix??'',/Did you mean publishing, publishing-annotations, publishing-auth/);
+  return true;
+ });
+ assert.throws(()=>helpDocument('zzqx'),(error:unknown)=>{
+  const e=error as {code:string;fix?:string};
+  assert.equal(e.code,'unknown_help_topic');
+  assert.equal(e.fix,'Run afbin help.');
+  return true;
+ });
+});
 test('screens wrap to the terminal width with a hanging indent, and widen when there is room',()=>{
  for(const columns of [60,80]){
   // Examples are commands to copy, so they alone may run past the width.

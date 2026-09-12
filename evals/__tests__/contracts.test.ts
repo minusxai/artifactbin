@@ -70,16 +70,18 @@ describe('config.json', () => {
   });
 
   /**
-   * BOTH BOUNDS ARE REAL BOUNDS. The measured tasks finish in 31–45 s; the timeout is the ceiling for a
-   * process that has HUNG, and the turn cap (`lib/spawn TurnCap`) is the one for a process that is
-   * looping. Fifteen minutes was neither: it let a runaway spend a quarter of an hour of paid tokens
-   * under the three harnesses with no `--max-turns` of their own, and it is the number to keep down.
+   * BOTH BOUNDS ARE REAL BOUNDS. The timeout is the ceiling for a process that has HUNG, and the turn
+   * cap (`lib/spawn TurnCap`) is the one for a process that is looping. Fifteen minutes was neither: it
+   * let a runaway spend a quarter of an hour of paid tokens under the three harnesses with no
+   * `--max-turns` of their own, and it is the number to keep down. Five minutes was too tight the
+   * other way: in run 34694871143 the slower harnesses (Pi, OpenCode) took 200–300 s on a document
+   * task and were cut off one step from publishing, so the cap was scoring speed, not output.
    */
   it('bounds a run in minutes, not quarter-hours, and caps its turns', () => {
     const config = EvalConfigSchema.parse(read('config.json'));
-    expect(config.run.timeoutMs).toBeLessThanOrEqual(300_000);
-    // …and still far above the slowest measured task, so a slow model is not scored as a hang.
-    expect(config.run.timeoutMs).toBeGreaterThanOrEqual(120_000);
+    expect(config.run.timeoutMs).toBeLessThanOrEqual(600_000);
+    // …and still above the slowest measured task (~300 s), so a slow model is not scored as a hang.
+    expect(config.run.timeoutMs).toBeGreaterThanOrEqual(450_000);
     expect(config.run.maxTurns).toBeGreaterThan(0);
   });
 });

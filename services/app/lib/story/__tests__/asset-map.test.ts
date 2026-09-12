@@ -28,18 +28,8 @@ const rows = new Map([[URL_A, ROW]]);
 const held = assetLookupFrom(rows);
 const known = (u: string) => u === URL_A;
 
-describe('assetUrlFor', () => {
-  it('is deterministic and canonicalizing', () => {
-    // The seeded assertion was `^/assets/<64 hex>$`. It now ends in a
-    // content-derived `?v=` whenever the caller holds the row (R19): the
-    // address is `immutable` and cannot move, so the CACHE KEY moves instead
-    // and a refreshed asset reaches readers who already fetched the old bytes.
-    expect(assetUrlFor(URL_A, ROW)).toMatch(/^\/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8}$/);
-    expect(assetUrlFor(URL_A)).toMatch(/^\/assets\/[0-9a-f]{64}$/);
-    expect(assetUrlFor(URL_A, ROW)).toBe(assetUrlFor(URL_A, ROW));
-    expect(assetUrlFor('HTTPS://Picsum.Photos/id/237/300/200'.toLowerCase())).toBe(assetUrlFor(URL_A));
-  });
-});
+// `assetUrlFor` itself — the bare address, the `?v=` (R19) and the canonical URL —
+// is asset-url.test.ts's subject. This file is about the three renderings agreeing.
 
 describe('mapExternalImageSources', () => {
   it('rewrites a known url and leaves an unknown one', () => {

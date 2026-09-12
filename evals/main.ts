@@ -196,7 +196,14 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     // The baseline pays the same fixed context as a task: in the installed flow the skills are on disk.
     let baseSkills = undefined as ReturnType<typeof skillKit> | undefined;
     if (cliPreinstalled(leg.mode.run)) {
-      await runCliAuth({ cliBin: materializeCli(path.join(baseWorkspace.homeDir, 'bin')), homeDir: baseWorkspace.homeDir, harness: leg.harness, server: productUrl, publicOrigin, cookie: credential.cookie, log: (m) => log(`${leg.label}: baseline ${m}`) });
+      // Through a proxy like every task, not at the server directly: a locally booted server mints its
+      // approval link from PUBLIC_BASE_URL (the leg's proxy origin), and the CLI refuses an approval
+      // origin that differs from the server it was told — `approval_origin_mismatch` on every local
+      // installed leg, before any task ran. Against a deployment the two are the same address.
+      const baseRoute = await startTaskProxy('baseline');
+      try {
+        await runCliAuth({ cliBin: materializeCli(path.join(baseWorkspace.homeDir, 'bin')), homeDir: baseWorkspace.homeDir, harness: leg.harness, server: baseRoute.agentBase, publicOrigin, cookie: credential.cookie, log: (m) => log(`${leg.label}: baseline ${m}`) });
+      } finally { await baseRoute.stop(); }
       baseSkills = skillKit(baseWorkspace.homeDir, leg.harness);
     }
     const baseline = await measureBaseline({
@@ -361,7 +368,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     stderrPath: path.join(runDir, 'stderr.log'),
     // EVERY harness is bounded by the driver, not by whichever CLI happens to have a flag for it
     // (`lib/spawn TurnCap`). A run that goes past the cap is killed where it stands.
-    turnCap: { maxTurns: config.run.maxTurns, countsAsTurn: (line) => adapter.countsAsTurn(line) },
+    turnCap: { maxTurns: config.run.maxTurns, countsAsTurn: (line) => adapter.countsAsTurn(line), turnKey: adapter.turnKey ? (line) => adapter.turnKey!(line) : undefined },
     // The harness's HOME is this run's home in every case — `~/.artifactbin.env` resolves there, and
     // nothing the CLI writes under $HOME lands in the runner's own. Under `--run-as` the workspace ROOT
     // goes with it: it is a 0700 mkdtemp directory the other user could not otherwise traverse.

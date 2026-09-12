@@ -1,3 +1,4 @@
+import { useConfirmation } from './ConfirmDialog';
 'use client';
 
 /**
@@ -20,7 +21,8 @@ import { artifactEditPath } from '@/lib/urls';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';
-import { Crop, Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
+import { Crop, Check, createLucideIcon, Link as LinkIcon, PenLine, X } from 'lucide-react';
+import { VISIBILITY_ICON_NODES, sharingIconFor, type SharingVerdict } from '@/lib/visibility-icons';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
 import type { DatasetCatalog } from '@/lib/datasets/types';
@@ -40,7 +42,12 @@ interface SharingState {
   canPrivate?: boolean;
 }
 
-const VISIBILITY_ICONS = { public: Globe, unlisted: EyeOff, private: Lock } as const;
+const VISIBILITY_ICONS = {
+  shared: createLucideIcon('users', VISIBILITY_ICON_NODES.shared),
+  public: createLucideIcon('globe', VISIBILITY_ICON_NODES.public),
+  unlisted: createLucideIcon('eye-off', VISIBILITY_ICON_NODES.unlisted),
+  private: createLucideIcon('lock', VISIBILITY_ICON_NODES.private),
+} as const;
 
 /**
  * The role list, as the house dropdown wants it. A native <select> draws its
@@ -63,6 +70,7 @@ export default function ShareLink({
   url,
   onClose,
   onSocialPreview,
+  onSharingChange,
 }: {
   className: string;
   /** Enables the ACL dialog; without it this is just the copy button. */
@@ -85,6 +93,8 @@ export default function ShareLink({
   onClose?: () => void;
   /** Editors may configure the card without managing access. */
   onSocialPreview?: () => void;
+  /** Keep a separately rendered toolbar verdict in sync with this dialog. */
+  onSharingChange?: (verdict: SharingVerdict) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(variant === 'dialog');
@@ -92,7 +102,7 @@ export default function ShareLink({
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   /** Closing writes with documents that write here asks once — see below. */
-  const [confirmReadOnly, setConfirmReadOnly] = useState(false);
+  const { confirmAction, confirmation } = useConfirmation();
 
   // Revert through an effect so unmounting mid-flash cancels the timer.
   useEffect(() => {
@@ -100,6 +110,10 @@ export default function ShareLink({
     const t = setTimeout(() => setCopied(false), 1500);
     return () => clearTimeout(t);
   }, [copied]);
+
+  useEffect(() => {
+    if (state) onSharingChange?.({ visibility: state.visibility, hasInvitedUsers: state.shares.length > 0 });
+  }, [state, onSharingChange]);
 
   const canManage = (owner || editable) && !!artifactId;
 
@@ -123,6 +137,7 @@ export default function ShareLink({
     }).catch(() => null);
     if (res?.ok) setState((await res.json()) as SharingState);
     else setError('could not update sharing');
+    return !!res?.ok;
   };
 
   const copyLink = () => {
@@ -153,7 +168,7 @@ export default function ShareLink({
     );
   }
 
-  const VerdictIcon = VISIBILITY_ICONS[state?.visibility ?? 'private'];
+  const VerdictIcon = VISIBILITY_ICONS[sharingIconFor({ visibility: state?.visibility ?? 'private', hasInvitedUsers: (state?.shares.length ?? 0) > 0 })];
   /*
    * The WRITES row (datasets only).
    *
@@ -170,8 +185,10 @@ export default function ShareLink({
     // Closing writes never touches the ROWS — every mutate call re-checks — but
     // it does stop the documents that write, so it says which ones first. With
     // nothing writing here there is nothing to warn about, and it just flips.
-    if (next === 'read' && writers.length > 0 && !confirmReadOnly) { setConfirmReadOnly(true); return; }
-    setConfirmReadOnly(false);
+    if (next === 'read' && writers.length > 0) { void confirmAction({ title: 'Make this dataset read-only?', action: 'Make read-only', confirmLabel: 'Confirm read-only', cancelLabel: 'Keep writable', danger: true,
+        description: `${writers.length} document${writers.length === 1 ? '' : 's'} write${writers.length === 1 ? 's' : ''} here. Their buttons will stop working until you turn writes back on. The rows stay.` }, async () => {
+        if (!await put({ access: 'read' })) throw new Error('Could not update sharing. Try again.');
+      }); return; }
     void put({ access: next });
   };
   const toggle = () => setOpen((o) => !o);
@@ -184,7 +201,7 @@ export default function ShareLink({
           onClick={toggle}
           className={`flex w-full cursor-pointer items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs transition-colors hover:bg-raised hover:text-fg ${open ? 'text-accent' : 'text-muted'}`}
         >
-          <VerdictIcon size={14} />
+          <VerdictIcon strokeWidth={1.5} size={14} />
           <span>{state ? `sharing · ${state.visibility}` : 'sharing'}</span>
         </button>
       ) : (
@@ -195,7 +212,7 @@ export default function ShareLink({
           onClick={toggle}
           className={className}
         >
-          <VerdictIcon size={12} />{' '}
+          <VerdictIcon strokeWidth={1.5} size={12} />{' '}
           {/* The compact chip keeps its text from crowding a narrow toolbar. */}
           <span className="hidden whitespace-nowrap sm:inline">
             {state ? <>share: {state.visibility}</> : 'share'}
@@ -243,7 +260,7 @@ export default function ShareLink({
                         onClick={() => void put({ visibility: v })}
                       className={`flex-1 cursor-pointer rounded-[4px] border px-2 py-2.5 whitespace-nowrap ${state.visibility === v ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'}`}
                       >
-                        <Icon size={11} className="mr-1 inline" /> {v}
+                        <Icon strokeWidth={1.5} size={11} className="mr-1 inline" /> {v}
                       </button>
                     </Tooltip>
                   );
@@ -315,30 +332,7 @@ export default function ShareLink({
                       ))}
                     </div>
                   )}
-                  {confirmReadOnly && (
-                    <div role="alert" className="mt-2 rounded-[4px] border border-danger/40 bg-danger-soft p-2 leading-relaxed">
-                      <span className="text-danger">{writers.length} document{writers.length === 1 ? '' : 's'} write{writers.length === 1 ? 's' : ''} here.</span>{' '}
-                      Their buttons will stop working until you turn writes back on. The rows stay.
-                      <div className="mt-1.5 flex gap-1">
-                        <button
-                          type="button"
-                          aria-label="Confirm read-only"
-                          onClick={() => { setConfirmReadOnly(false); void put({ access: 'read' }); }}
-                          className="cursor-pointer rounded-[4px] border border-danger/40 px-2 py-1 text-danger hover:bg-danger/10"
-                        >
-                          make read-only
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Keep writable"
-                          onClick={() => setConfirmReadOnly(false)}
-                          className="cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-muted hover:text-fg"
-                        >
-                          keep writable
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {confirmation}
                 </div>
               )}
               {/* PEOPLE — under every visibility. `can view` on a public

@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 
 import { createUser } from '@/lib/users';
+import { mintToken } from '@/lib/tokens';
 import { POST as mintAdmin } from '@/app/api/tokens/route';
 import { DELETE as revokeAdmin } from '@/app/api/tokens/[id]/route';
 import { POST as mintInternal } from '@/app/api/internal/tokens/route';
@@ -27,6 +28,7 @@ const ADMIN = 'admin-secret-for-tests';
 process.env.ADMIN__SECRET = ADMIN;
 const params = (p: Record<string, string>) => ({ params: Promise.resolve(p) });
 const json = (r: Response) => r.json() as Promise<Record<string, unknown>>;
+type TokenRow = { id: string; status: string; expires_at: string | null; last_used_at: string | null };
 
 describe('token routes served by the app', () => {
   it('POST /api/tokens mints with the admin secret and 404s without it', async () => {
@@ -84,6 +86,37 @@ describe('token routes served by the app', () => {
     await mintInternal(request('/api/internal/tokens', { method: 'POST' }));
     const list = await json(await listMine(request('/api/my/tokens', { actor })));
     expect((list.tokens as unknown[]).length).toBe(1);
+  });
+  /*
+   * What the Account page's tokens panel is fed, from my-tokens-shape.test.ts:
+   * `status` is computed server-side (web code may not import lib/tokens), and the
+   * order is most-recently-used first, then newest minted.
+   */
+  it('GET /api/my/tokens rows carry status, expires_at and last_used_at, last-used first', async () => {
+    const user = await createUser({ email: 'mxmx_test_tokens@example.com' });
+    const actor = { credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true };
+    const used = await mintToken('used', user.id);
+    const expired = await mintToken('expired', user.id);
+    const fresh = await mintToken('fresh', user.id);
+    const db = await harness.db();
+    await db.query('UPDATE tokens SET last_used_at = now() WHERE id = $1', [used.id]);
+    await db.query("UPDATE tokens SET expires_at = now() - interval '1 minute' WHERE id = $1", [expired.id]);
+
+    const res = await listMine(request('/api/my/tokens', { actor }));
+    expect(res.status).toBe(200);
+    const rows = ((await res.json()) as { tokens: TokenRow[] }).tokens;
+    expect(rows.map((r) => r.id)).toEqual([used.id, fresh.id, expired.id]);
+    for (const r of rows) expect(Object.keys(r)).toEqual(expect.arrayContaining(['status', 'expires_at', 'last_used_at']));
+    expect(rows.find((r) => r.id === used.id)?.status).toBe('active');
+    expect(rows.find((r) => r.id === expired.id)?.status).toBe('expired');
+    expect(rows.find((r) => r.id === fresh.id)).toMatchObject({ status: 'active', last_used_at: null, expires_at: expect.any(String) });
+  });
+  it('GET /api/my/tokens shows the account\'s non-expiring web token as a null expiry, still active', async () => {
+    const user = await createUser({ email: 'mxmx_test_web@example.com' });
+    const actor = { credential: 'session' as const, userId: user.id, email: user.email ?? '', emailVerified: true };
+    await mintToken('web', user.id, undefined, { expiresInMs: null });
+    const rows = ((await (await listMine(request('/api/my/tokens', { actor }))).json()) as { tokens: TokenRow[] }).tokens;
+    expect(rows[0]).toMatchObject({ status: 'active', expires_at: null });
   });
   it('DELETE /api/my/tokens/:id refuses another account\'s token with 404 and a cross-site request with 403', async () => {
     const a = await createUser({ email: 'c@example.com' }); const b = await createUser({ email: 'd@example.com' });

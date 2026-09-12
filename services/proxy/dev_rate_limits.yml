@@ -1,4 +1,4 @@
-# THE DEVELOPMENT RATE LIMITS — `default_rate_limits.yml` with the anonymous mint wide open, so a
+# THE DEVELOPMENT RATE LIMITS — `default_rate_limits.yml` with the start_doc door wide open, so a
 # gate run, an eval leg or a `npm run dev` session cannot exhaust it. Never point a public deployment here.
 # else: there is no `RATE_LIMITER__<POLICY>_MAX` any more. A deployment points
 # `PROXY__RATE_LIMIT_CONFIG_FILE` at its own copy of this shape; unset, this file is the default.

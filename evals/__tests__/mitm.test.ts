@@ -47,6 +47,10 @@ describe('agentProxyEnv', () => {
     }
   });
 
+  it('silences Node\'s experimental-proxy warning, which NODE_USE_ENV_PROXY otherwise prints on every afbin command the agent runs', () => {
+    expect(env.NODE_OPTIONS).toBe('--disable-warning=UNDICI-EHPA');
+  });
+
   it('gives the COMBINED bundle to the variables that replace the trust store, and the bare CA to the additive one', () => {
     expect(env.SSL_CERT_FILE).toBe(ca.bundlePath);
     expect(env.CURL_CA_BUNDLE).toBe(ca.bundlePath);

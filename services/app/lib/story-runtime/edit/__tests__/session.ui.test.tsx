@@ -277,6 +277,16 @@ describe('selection', () => {
 });
 
 describe('hover boundaries', () => {
+  it('keeps amber feedback visible on a focused editable heading', () => {
+    const { at } = mount();
+    const heading = at('0.0');
+    heading.focus();
+    fireEvent.pointerOver(heading);
+    expect(window.getComputedStyle(heading).outline).toBe('1px solid rgba(245, 158, 11, 0.9)');
+    fireEvent.pointerOut(heading, { relatedTarget: document.body });
+    expect(window.getComputedStyle(heading).outline).toBe('1px solid rgba(245, 158, 11, 0.85)');
+  });
+
   it('marks the selectable node under the pointer and transfers the boundary as it moves', () => {
     const { at } = mount();
 

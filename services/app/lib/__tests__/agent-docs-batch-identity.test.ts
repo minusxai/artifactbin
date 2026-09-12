@@ -14,7 +14,7 @@ describe('local editing guidance',()=>{
   const text=doc('references/publishing.md');
   expect(text).toContain('YAML fence');
   // Local state is the CLI's own, never a file in the user's working directory.
-  expect(text).toContain('~/.artifactbin/state.sqlite');
+  expect(text).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
   expect(text).toContain('writes nothing into your working directory');
   expect(text).toContain('Push preserves edits made while the request was in flight');
   expect(text).toContain('frozen journal recovers the original result');

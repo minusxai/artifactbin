@@ -43,7 +43,7 @@ The browser service is not shipped in the CLI; image exports continue to use the
 
 Remove it again with `curl -fsSL https://artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
 executable, `~/.artifactbin`, cached downloads and the agent skills afbin manages, and never touches
-project files such as `afbin.lock`. `--keep-state` keeps your sign-in and the download cache, `--dry-run`
+your project files. `--keep-state` keeps your sign-in and the download cache, `--dry-run`
 only lists, and `--dir` names a custom executable location.
 
 Authentication opens browser approval and saves credentials privately in `~/.artifactbin/.env`.
@@ -177,7 +177,7 @@ those exact binaries with `SHA256SUMS`. It does not execute downloaded artifacts
 versions are skipped; partial drafts can be recovered by rerunning the workflow.
 
 1. Run `npm run release:cli` from the repository root. This defaults to a patch bump
-   (for example, 0.1.1 → 0.1.2) and updates the package, lockfile, and installer together.
+   and updates the package, lockfile, and installer together.
 2. Commit and merge the release PR. Once main CI passes, the tag and release are created automatically.
 3. Verify the release workflow succeeds before deploying the app serving the corresponding installer.
    For a rollback, deploy an installer pinned to a previous release; users can also pass `--version` explicitly.

@@ -57,6 +57,7 @@ import { captureSelection } from './selection-range';
 import { EditableHost } from './editable-host';
 import { GridEdit } from './grid-edit';
 import { imageFileFromTransfer } from './image-drop';
+import { SELECTION_PRESENTATION } from '../selection-presentation';
 
 /** Marks the selected node so the reader can see what the toolbar is pointed at. */
 export const EDIT_SELECTED_ATTR = 'data-mx-selected';
@@ -71,11 +72,11 @@ export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
  * or apply editor chrome.
  */
 export const EDIT_MODE_CSS = [
-  `[${EDIT_HOVER_ATTR}] { outline: 1px solid rgba(100, 116, 139, 0.16); outline-offset: 2px; }`,
-  `[${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}] { outline: 1px solid rgba(100, 116, 139, 0.3); outline-offset: 2px; }`,
   '[data-mx-block-selected] { outline: 1px solid rgba(100,116,139,.18); outline-offset: 2px; }',
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
   '[contenteditable="true"]:focus { outline: none; }',
+  `[${EDIT_SELECTED_ATTR}][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.selectedCss} }`,
+  `[${EDIT_HOVER_ATTR}][${EDIT_HOVER_ATTR}] { ${SELECTION_PRESENTATION.hoverCss} }`,
 ].join('\n');
 
 const EDIT_CSS_ATTR = 'data-mx-edit-css';

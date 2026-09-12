@@ -297,12 +297,12 @@ check(cardBytes > 2000, `and it is a real picture, not a refusal (${cardBytes} b
 // ── 9. deleting a folder from the strip trashes it WITH its contents ─────
 await owner.goto(`${BASE}/`, { waitUntil: 'load' });
 await owner.waitForSelector('[aria-label="Folders"]', { timeout: 20000 });
-let confirmText = '';
-owner.once('dialog', (d) => { confirmText = d.message(); void d.accept(); });
-await owner.locator('[aria-label="More actions for Field Notes 2026"]').first().click();
+await owner.getByRole('button', { name: 'More actions for Field Notes 2026', exact: true }).first().click();
+await owner.locator('[aria-label="Delete Field Notes 2026"]').first().click();
+const confirmText = await owner.getByRole('dialog').innerText();
 await Promise.all([
   owner.waitForResponse((r) => r.request().method() === 'DELETE' && r.status() === 200, { timeout: 15000 }),
-  owner.locator('[aria-label="Delete Field Notes 2026"]').first().click(),
+  owner.getByLabel('Confirm delete', { exact: true }).click(),
 ]);
 check(/inside it\? They go to the trash, and you can restore them any time\./.test(confirmText), `the confirm names what goes with it (${confirmText})`);
 await owner.locator('[aria-label="Open folder Field Notes 2026"]').waitFor({ state: 'detached', timeout: 15000 });

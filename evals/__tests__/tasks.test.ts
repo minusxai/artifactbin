@@ -29,6 +29,12 @@ it('starter is the default level, so an unstaged call and a {promptLevel:starter
  expect(buildPrompt(task,ACCESS,{vision:false})).toBe(buildPrompt(task,ACCESS,{promptLevel:'starter',vision:false}));
 });
 
+it('a cold-install publish task explicitly selects its task proxy before authentication',()=>{
+ const prompt=buildPrompt(task,{id:'abc123',base:'http://127.0.0.1:45407'});
+ expect(prompt).toContain('Pass --server http://127.0.0.1:45407 to every afbin server command');
+ expect(prompt).not.toContain('https://artifactbin.dev');
+});
+
 it('hardcore gives only the brief and the bare base — no starter, no afbin, no artifact id, and it never throws',()=>{
  const prompt=buildPrompt(task,ACCESS,{promptLevel:'hardcore'});
  expect(prompt).toContain(task.brief);
