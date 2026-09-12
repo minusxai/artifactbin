@@ -109,3 +109,29 @@ it('keeps an in-progress resize anchored when the viewport scrolls', () => {
   expect(overlay.style.width).toBe('290px');
   expect(commit).not.toHaveBeenCalled();
 });
+
+
+it.each([false, true])('centers controls on the selection outline (touch: %s)', (touch) => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: touch })));
+  try {
+    chrome = createNodeChrome(document, vi.fn());
+    const p = document.createElement('p');
+    document.body.append(p);
+    chrome.select(p, '0');
+    for (const [name, left, top] of [
+      ['Move selected block', '-4px', '-4px'],
+      ['Delete selected block', 'calc(100% + 4px)', '-4px'],
+      ['Resize selected block', 'calc(100% + 4px)', 'calc(100% + 4px)'],
+      ['Resize block width', 'calc(100% + 4px)', '50%'],
+      ['Resize block height', '50%', 'calc(100% + 4px)'],
+    ]) {
+      const button = screen.getByRole('button', { name });
+      expect(button).toHaveStyle({ left, top, transform: 'translate(-50%, -50%)', width: touch ? '44px' : '28px' });
+    }
+    const remove = screen.getByRole('button', { name: 'Delete selected block' });
+    expect(remove.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(remove).not.toHaveTextContent('×');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});

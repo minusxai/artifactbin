@@ -109,10 +109,8 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
               : kind === 'resize'
                 ? 'nwse-resize'
                 : 'pointer',
+      transform: 'translate(-50%, -50%)',
       ...position,
-      ...(touch && position.top === '-28px' ? { top: '-44px' } : {}),
-      ...(touch && position.right === '-28px' ? { right: '-44px' } : {}),
-      ...(touch && position.bottom === '-28px' ? { bottom: '-44px' } : {}),
     });
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
@@ -122,20 +120,28 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     root.append(b);
     return b;
   };
-  button('Move selected block', '⠿', { left: '-12px', top: '-28px' }, 'move');
-  const remove = button('Delete selected block', '×', {
-    right: '-12px',
-    top: '-28px',
-  });
-  button('Resize selected block', '', { right: '-28px', bottom: '-28px' }, 'resize');
-  button('Resize block width', '', { right: '-28px', top: 'calc(50% - 14px)' }, 'width');
-  button('Resize block height', '', { left: 'calc(50% - 14px)', bottom: '-28px' }, 'height');
-  const divider = button(
-    'Resize adjacent columns',
-    '',
-    { right: '-28px', top: 'calc(50% - 14px)' },
-    'divider',
-  );
+  // The amber outline is 2px wide with a 3px offset: its center is
+  // 4px outside the block. Anchor button centers there at every hit-target size.
+  const near = '-4px';
+  const far = 'calc(100% + 4px)';
+  button('Move selected block', '⠿', { left: near, top: near }, 'move');
+  const remove = button('Delete selected block', '', { left: far, top: near });
+  const trash = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  for (const [name, value] of Object.entries({
+    viewBox: '0 0 24 24', width: '12', height: '12', fill: 'none',
+    stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round',
+    'stroke-linejoin': 'round', 'aria-hidden': 'true', focusable: 'false',
+  })) trash.setAttribute(name, value);
+  for (const d of ['M3 6h18', 'M19 6v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6', 'M9 6V3h6v3', 'M10 10v7', 'M14 10v7']) {
+    const line = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line.setAttribute('d', d);
+    trash.append(line);
+  }
+  remove.firstElementChild!.append(trash);
+  button('Resize selected block', '', { left: far, top: far }, 'resize');
+  button('Resize block width', '', { left: far, top: '50%' }, 'width');
+  button('Resize block height', '', { left: '50%', top: far }, 'height');
+  const divider = button('Resize adjacent columns', '', { left: far, top: '50%' }, 'divider');
   remove.addEventListener('click', () => {
     if (path) {
       const p = path;
