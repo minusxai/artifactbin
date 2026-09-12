@@ -9,7 +9,7 @@
  * It lived in `services/app/__tests__/net` until `services/browser` had to reach across a package boundary to
  * import it. Nothing here imports a test runner, so the CLI's `node:test` suite can use it too.
  */
-import { createServer, type RequestListener } from 'node:http';
+import http, { createServer, type RequestListener } from 'node:http';
 
 export interface RunningServer {
   /** `http://127.0.0.1:<port>` — never `localhost` (IPv6 resolution surprises). */
@@ -56,4 +56,37 @@ export async function withHttpServer(handler: RequestListener): Promise<RunningS
       return closing;
     },
   };
+}
+
+/** One request on a raw socket, the body kept as the bytes written — for content-length and range assertions. */
+export interface RawResponse {
+  status: number;
+  headers: http.IncomingHttpHeaders;
+  /** The bytes as written, never decoded or re-encoded. */
+  body: Buffer;
+  /** `content-length` as a number, or null when the server sent none. */
+  promised: number | null;
+}
+
+export function readRawResponse(
+  port: number,
+  path: string,
+  options: { headers?: Record<string, string>; method?: string } = {},
+): Promise<RawResponse> {
+  return new Promise((resolve, reject) => {
+    http.request({ host: '127.0.0.1', port, path, headers: options.headers ?? {}, method: options.method ?? 'GET' }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on('data', (chunk: Buffer) => chunks.push(chunk));
+      response.on('end', () => {
+        const length = response.headers['content-length'];
+        resolve({
+          status: response.statusCode ?? 0,
+          headers: response.headers,
+          body: Buffer.concat(chunks),
+          promised: length === undefined ? null : Number(length),
+        });
+      });
+      response.on('error', reject);
+    }).on('error', reject).end();
+  });
 }
