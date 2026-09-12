@@ -68,15 +68,10 @@ describe('every theme page names the token class its accent means', () => {
   }
 });
 
-describe('the brief teaches automatic sign-in, not a setup step', () => {
-  it('in one line, tokenless', () => {
-    const sheet = buildQuickSheet(BASE);
-    expect(sheet).not.toContain('afbin setup');
-    expect(sheet).toMatch(/automatic|authenticates itself|signs you in/i);
-    expect(sheet).toContain('browser approval');
-    expect(sheet).toContain('~/.artifactbin/.env');
-  });
-});
+// That the brief teaches automatic sign-in — no `afbin setup`, browser approval,
+// the private configuration location — is brief-auth-rule.test.ts's case, on the
+// same text (buildQuickSheet is renderDoc of artifactbin/SKILL.md) with three
+// further assertions this copy lacked.
 
 describe('the four template pages fit the always-read cap by editing', () => {
   for (const t of STORY_TEMPLATES) {

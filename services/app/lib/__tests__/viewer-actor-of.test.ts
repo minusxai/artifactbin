@@ -2,7 +2,7 @@
  * THE HANDOFF, wave 1: the app reads the actor the proxy ATTACHED to the Request (utils actorOf) first;
  * the signed header stays as a fallback until wave 3 deletes it. A forged header cannot outrank an attached actor.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
 import { ACTOR_HEADER } from '@artifactbin/contracts';
 import { sessionActor } from '@/lib/viewer';
@@ -20,4 +20,22 @@ describe('sessionActor', () => {
     expect(actor.credential).toBe('none');
     expect(actor.viewer).toBeNull();
   });
+
+  /*
+   * From viewer-no-fallback.test.ts: wave 3 deleted the header fallback, so a
+   * header signed with the REAL secret — not merely a forged one — is nobody too.
+   */
+  it('a correctly signed header alone is nobody: the fallback is gone', async () => {
+    const secret = 's'.repeat(32);
+    vi.stubEnv('CONTRACT__ACTOR_SECRET', secret); vi.resetModules();
+    const { sessionActor: fresh } = await import('@/lib/viewer');
+    const req = new Request('http://x/api/page/session', {
+      headers: { [ACTOR_HEADER]: signActor({ credential: 'session', userId: 'usr_header', email: 'h@example.com', emailVerified: true }, secret) },
+    });
+    const actor = await fresh(req);
+    expect(actor.credential).toBe('none');
+    expect(actor.viewer).toBeNull();
+  });
 });
+
+afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });

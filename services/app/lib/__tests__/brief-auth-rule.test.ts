@@ -10,7 +10,8 @@ describe('the installed brief when authentication is missing', () => {
     expect(brief).toContain('browser approval');
     expect(brief).toContain('--yes');
     expect(brief).toMatch(/never.*mint/i);
-    expect(brief).not.toMatch(/MCP|\/docs\//);
+    // MCP and /docs/ are banned here by agent-starter-consistency.test.ts's case (c),
+    // which runs the whole retired vocabulary over every agent-facing surface.
   });
   it('fits the local skill budget', () => {
     expect(Buffer.byteLength(brief)).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);

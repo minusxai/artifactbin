@@ -38,6 +38,33 @@ for (const [name, withToken, withoutToken] of [
     });
   });
 
+  /*
+   * The ordering contract, from agent-session-shape.test.ts, which pinned it for the
+   * app module alone: the list is not a set. The LAST entry is the primary — the one a
+   * write acts as — so re-presenting a held token PROMOTES it rather than being ignored.
+   * A set-like implementation passes a happy-path route test while silently changing
+   * which token writes.
+   */
+  describe(`withToken order (${name})`, () => {
+    it('adds to an empty browser', () => {
+      expect(withToken(null, 'tok_1')).toEqual({ tokenIds: ['tok_1'] });
+      expect(withToken({ tokenIds: [] }, 'tok_1')).toEqual({ tokenIds: ['tok_1'] });
+    });
+    it('appends newest LAST — the newest is the one that writes', () => {
+      expect(withToken({ tokenIds: ['tok_1'] }, 'tok_2')).toEqual({ tokenIds: ['tok_1', 'tok_2'] });
+    });
+    it('PROMOTES a token it already holds instead of duplicating it', () => {
+      expect(withToken({ tokenIds: ['tok_1', 'tok_2'] }, 'tok_1')).toEqual({ tokenIds: ['tok_2', 'tok_1'] });
+      // Re-presenting the primary is a no-op in effect, never a duplicate.
+      expect(withToken({ tokenIds: ['tok_1', 'tok_2'] }, 'tok_2')).toEqual({ tokenIds: ['tok_1', 'tok_2'] });
+    });
+    it('never mutates the session it was given', () => {
+      const held = { tokenIds: ['tok_1', 'tok_2'] };
+      withToken(held, 'tok_1');
+      expect(held.tokenIds).toEqual(['tok_1', 'tok_2']);
+    });
+  });
+
   describe(`withToken cap (${name})`, () => {
     it('holds at most 8 ids, the newest last', () => {
       let held: { tokenIds: string[] } | null = null;

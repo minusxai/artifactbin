@@ -28,12 +28,16 @@ it.each([401, 409])('keeps query and hash in the login callback for %s', async s
 });
 
 it('commits a successful copy through the router', async () => {
-  vi.stubGlobal('fetch', vi.fn(async () => Response.json({url:`${window.location.origin}/@owner/copy01-document`}, {status:201})));
+  const fetchMock = vi.fn(async () => Response.json({url:`${window.location.origin}/@owner/copy01-document`}, {status:201}));
+  vi.stubGlobal('fetch', fetchMock);
   const router=createMemoryRouter([{path:'*',element:<ForkArtifact id="abcdef"/>}]);
   render(<RouterProvider router={router}/>);
   fireEvent.click(screen.getByLabelText('Fork artifact'));
   fireEvent.click(screen.getByLabelText('Confirm fork'));
   await waitFor(() => expect(router.state.location.pathname).toBe('/@owner/copy01-document'));
+  // The door it POSTs to, from artifact-owner-chrome.ui.test.tsx, which drove the
+  // same two navigations a second time through the whole shell.
+  expect(fetchMock.mock.calls[0][0]).toBe('/api/my/artifacts/abcdef/fork');
 });
 
 it('keeps a forbidden response visible rather than sending the user to login', async () => {

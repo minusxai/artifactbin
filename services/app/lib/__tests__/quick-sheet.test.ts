@@ -6,11 +6,13 @@ describe('the installed short skill',()=>{
  it('fits its reading budget and uses local guidance',()=>{
   expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
   expect(sheet).toContain('afbin help');
-  expect(sheet).not.toMatch(/MCP|\/docs\//);
+  // The retired vocabulary (MCP, /docs/, token, mint, /raw, …) is banned across all
+  // nine agent-facing surfaces at once by agent-starter-consistency.test.ts, case (c).
  });
  it('uses the same push for create and update with local validation',()=>{
   for(const text of ['afbin pull','afbin push report.jsx','new artifact','afbin validate'])expect(sheet).toContain(text);
-  expect(renderDoc('artifactbin/references/publishing.md','https://example.test')).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
+  // The publishing guide naming ~/.artifactbin/state.sqlite is
+  // agent-docs-batch-identity.test.ts's assertion, in the whole sentence.
   expect(sheet).toContain('YAML fence');
   expect(sheet).toContain('edit_id');
  });
@@ -23,7 +25,8 @@ describe('the installed short skill',()=>{
  });
  it('teaches responsive containers, static JSX and appropriate chart primitives through the example',()=>{
   for(const term of ['@2xl:','phone width','static JSX','className','<Helmet>','CDN','never inline','never hand-rolled <svg>'])expect(sheet).toContain(term);
-  expect(sheet).toContain(skillExample().trimEnd());
+  // The example being inlined verbatim is skill-brief.test.ts's assertion — it pins
+  // the surrounding ```jsx fence too.
  });
  it('points to data, comments, history and recovery without another network reference',()=>{
   for(const topic of ['markup-data','publishing-annotations','publishing-auth','publishing','errors','commands'])expect(sheet).toContain(`references/${topic}.md`);
