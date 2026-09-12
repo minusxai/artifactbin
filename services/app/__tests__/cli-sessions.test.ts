@@ -1,5 +1,5 @@
 import {afterEach,expect,it} from 'vitest';
-import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {useAppHarness,request} from './harness';
@@ -10,6 +10,7 @@ import {GET as listRoute} from '@/app/api/sessions/route';
 import {GET as readRoute,DELETE as terminateRoute} from '@/app/api/sessions/[id]/route';
 import {runCli} from '../../cli/src/dispatch';
 import {saveConnection} from '../../cli/src/config';
+import {State} from '../../cli/src/state';
 
 useAppHarness();
 afterEach(()=>remoteSessions.clear());
@@ -50,8 +51,13 @@ it('the real CLI lists sessions, pulls one as read-only YAML, refuses to push it
   expect(pulled.result.operations).toEqual([{path:'session.yaml',id:session.id,type:'session',status:'pulled'}]);
   const yaml=await readFile(join(root,'session.yaml'),'utf8');
   expect(yaml).toMatch(/type: session/);expect(yaml).toContain(`id: ${session.id}`);
-  // Tracked like every other account resource, so status and diff can report it.
-  expect(Object.keys(JSON.parse(await readFile(join(root,'.artifactbin','accounts.json'),'utf8')).files)).toEqual(['session.yaml']);
+  // Tracked like every other account resource, so status and diff can report it: an `account`
+  // record in the state store under the `workspace` record that binds this root to one server.
+  const scope=await realpath(root);const state=await State.open(root);
+  try{
+   expect(state.list(scope,'account').map(record=>record.key)).toEqual(['session.yaml']);
+   expect((state.get(scope,'workspace',scope)?.value as {server:string}|undefined)?.server).toBe('http://localhost:3000');
+  }finally{state.close();}
 
   const status=await invoke(['status','--type','session']);
   expect(status.code,JSON.stringify(status.result)).toBe(0);
