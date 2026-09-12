@@ -3,7 +3,10 @@ import {mkdtemp,readFile,writeFile,rm,readdir,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import {parse} from 'yaml';
 import {gzipSync} from 'node:zlib';
+import {runtimePin} from '../../services/cli/scripts/runtime.mjs';
 import {downloadRuntime,packageRuntime} from '../../services/cli/scripts/runtime-package.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const node=Buffer.from('prepared runtime fixture'),gzip=gzipSync(node,{level:9});
@@ -37,4 +40,38 @@ it('repairs an untrusted local cache from verified release bytes',()=>withRoot(a
 it('a missing release fails promptly and never falls back to source compilation',()=>withRoot(async root=>{
  await expect(downloadRuntime(pin,{root,fetch:async()=>new Response('',{status:404})})).rejects.toThrow(/prebuilt runtime.*404.*runtime workflow/i);
  expect(await readdir(root)).toEqual([]);
+}));
+
+it('runtime selection binds the release to its exact platform and recipe',()=>{
+ const entry={...pin,recipe:{platform:'darwin',arch:'arm64',version:'22.22.3',intl:'small-icu'}};
+ const lock={schema:1,release:'cli-node-v22.22.3-r1',version:'22.22.3',platforms:{'darwin-arm64':entry}};
+ expect(runtimePin(lock,'darwin','arm64').url).toBe('https://github.com/minusxai/artifactbin/releases/download/cli-node-v22.22.3-r1/afbin-node-darwin-arm64.gz');
+ expect(()=>runtimePin(lock,'linux','x64')).toThrow(/No pinned prebuilt runtime/);
+ expect(()=>runtimePin({...lock,version:'24.0.0'},'darwin','arm64')).toThrow(/recipe/);
+});
+
+for(const scenario of ['new','corrupt','existing'])it(`runtime producer handles ${scenario} assets without executing downloaded code`,()=>withRoot(async root=>{
+ const workflow=parse(await readFile(new URL('../../.github/workflows/cli-runtime.yml',import.meta.url),'utf8'));
+ const fakeGh=`#!${process.execPath}
+const fs=require('node:fs'),zlib=require('node:zlib'),crypto=require('node:crypto');
+const args=process.argv.slice(2),all=args.join(' '),digest=b=>crypto.createHash('sha256').update(b).digest('hex');
+fs.appendFileSync('calls',all+'\\n');
+if(all.startsWith('release view')){if(process.env.SCENARIO==='existing')process.exit(0);console.error('HTTP 404');process.exit(1);}
+if(all.startsWith('run download')){
+ const dir=args[args.indexOf('--dir')+1],runner=args[args.indexOf('--name')+1].replace('cli-node-','');
+ const target={'macos-14':'darwin-arm64','macos-15-intel':'darwin-x64','ubuntu-24.04':'linux-x64','ubuntu-24.04-arm':'linux-arm64'}[runner];
+ const bytes=Buffer.from('runtime fixture'),gzip=zlib.gzipSync(bytes),name='afbin-node-'+target;
+ fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(dir+'/'+name+'.gz',gzip);
+ fs.writeFileSync(dir+'/'+name+'.pin.json',JSON.stringify({size:bytes.length,sha256:digest(bytes),gzipSha256:process.env.SCENARIO==='corrupt'?'0'.repeat(64):digest(gzip)}));
+}else if(!all.startsWith('release create'))process.exit(2);
+`;
+ await writeFile(join(root,'gh'),fakeGh,{mode:0o755});
+ const env={...process.env,PATH:`${root}:${process.env.PATH}`,SCENARIO:scenario,RUNTIME_TAG:'cli-node-v22.22.3-r1',GITHUB_SHA:'a'.repeat(40),GITHUB_RUN_ID:'123',GITHUB_REPOSITORY:'minusxai/artifactbin'};
+ const run=script=>spawnSync('bash',['-c',script],{cwd:root,env,encoding:'utf8'});
+ const planned=run(workflow.jobs.plan.steps[0].run);
+ if(scenario==='existing'){expect(planned.status).not.toBe(0);expect(await readFile(join(root,'calls'),'utf8')).not.toContain('run download');return;}
+ expect(planned.status,planned.stderr).toBe(0);
+ const published=run(workflow.jobs.publish.steps[0].run);
+ if(scenario==='corrupt'){expect(published.status).not.toBe(0);expect(await readFile(join(root,'calls'),'utf8')).not.toContain('release create');}
+ else{expect(published.status,published.stderr).toBe(0);expect(await readdir(join(root,'bundle'))).toHaveLength(8);expect(await readFile(join(root,'calls'),'utf8')).toContain('release create cli-node-v22.22.3-r1');}
 }));

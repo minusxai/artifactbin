@@ -18,7 +18,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUNTIME_TAG: ${{ inputs.release }}
+    steps:
+      - name: Validate the new runtime revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUNTIME_TAG" =~ ^cli-node-v[0-9]+\.[0-9]+\.[0-9]+-r[0-9]+$ ]]
+          if gh release view "$RUNTIME_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2> release-error.txt; then
+            echo 'This runtime revision already exists; choose a new revision.' >&2
+            exit 1
+          fi
+          if ! grep -qi 'not found\|HTTP 404' release-error.txt; then
+            cat release-error.txt >&2
+            exit 1
+          fi
   build:
+    needs: plan
     runs-on: ${{ matrix.os }}
     timeout-minutes: 180
     strategy:
@@ -73,9 +94,9 @@ jobs:
             compressed=$(jq -r .gzipSha256 "$pin")
             decoded=$(jq -r .sha256 "$pin")
             [[ "$compressed" =~ ^[a-f0-9]{64}$ && "$decoded" =~ ^[a-f0-9]{64}$ ]]
-            echo "$compressed  bundle/$asset.gz" | sha256sum --check --status
+            test "$(sha256sum "bundle/$asset.gz" | cut -d ' ' -f1)" = "$compressed"
             gzip -dc "bundle/$asset.gz" > "bundle/$asset"
-            echo "$decoded  bundle/$asset" | sha256sum --check --status
+            test "$(sha256sum "bundle/$asset" | cut -d ' ' -f1)" = "$decoded"
             test "$(wc -c < "bundle/$asset" | tr -d ' ')" = "$(jq -r .size "$pin")"
             rm "bundle/$asset"
           done
