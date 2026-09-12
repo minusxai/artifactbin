@@ -200,15 +200,17 @@ describe('CI job shape', () => {
   it('runs one paid smoke leg on a pull request and the cold-start leg on a schedule', () => {
     const { jobs } = ci();
     expect(jobs['agent-smoke'].strategy.matrix.include.map((row) => row.mode)).toEqual(['installed']);
-    // The platform binary is only served to the leg that installs afbin itself.
-    for (const step of jobs['agent-smoke'].steps) expect(step.run ?? '').not.toContain('build:binary');
+    // The platform binary is only served to the leg that installs afbin itself. Named as the exact
+    // command, not as a substring anywhere in the job, so a comment cannot satisfy or break it.
+    const binary = 'npm run build:binary -w services/cli';
+    expect(jobs['agent-smoke'].steps.some((step) => step.run?.trim() === binary)).toBe(false);
 
     const night = nightly();
     expect(night.on.schedule?.[0]?.cron).toMatch(/^\S+( \S+){4}$/);
     expect(Object.keys(night.on)).toContain('schedule');
     const smoke = night.jobs['agent-smoke'];
     expect(smoke.steps.some((step) => (step.run ?? '').includes('--mode=not-installed'))).toBe(true);
-    expect(smoke.steps.some((step) => (step.run ?? '').includes('build:binary'))).toBe(true);
+    expect(smoke.steps.some((step) => step.run?.trim() === binary)).toBe(true);
     // It reports; it never gates. Nothing in ci.yml waits on it and it is not a planned job.
     expect(jobs.test.needs).not.toContain('agent-smoke-nightly');
     expect(CI_JOBS).not.toContain('agent-smoke-nightly');
