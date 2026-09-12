@@ -169,7 +169,8 @@ builds remain available on every Node shard because `evals/__tests__/cli-kit.tes
 
 The release matrix builds pinned Node source with `small-icu` (English/root locale data), then uses
 that same runtime for SEA generation. Linux uses a digest-pinned manylinux 2.28 toolchain with
-static C++ support; CI rejects runtime GLIBC requirements above 2.28. `services/cli/scripts/binary.mjs` strips the executable before
+static C++ support and the official Node ET_EXEC layout (avoiding the injector’s PIE symbol-table bug);
+CI rejects other ELF layouts and runtime GLIBC requirements above 2.28. `services/cli/scripts/binary.mjs` strips the executable before
 final signing and emits raw and gzip assets, with separate transport/executable hashes. Raw assets
 remain for existing installers and self-updaters; new clients prefer gzip and verify decoded bytes
 before atomic replacement. CI emits per-platform `.sizes.json` measurements.

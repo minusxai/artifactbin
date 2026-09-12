@@ -100,6 +100,8 @@ execFileSync(
 const binary = resolve(
   `dist/afbin-${process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`,
 );
+if (process.platform === 'linux' && !/Type:\s+EXEC\b/.test(execFileSync('readelf',['-h',runtime],{encoding:'utf8'})))
+  throw new Error('Linux SEA packaging requires an ET_EXEC Node runtime; use the pinned CI runtime.');
 await copyFile(runtime, binary);
 await chmod(binary, 0o755);
 if (process.platform === "darwin")

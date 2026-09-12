@@ -13,7 +13,7 @@ const images={
  x64:'quay.io/pypa/manylinux_2_28_x86_64@sha256:53390351aeb4688114b02c36a23b3e6ce1166ee9b7afc5df1a4f776354fc764c',
  arm64:'quay.io/pypa/manylinux_2_28_aarch64@sha256:ad74e53b713f3b07d8c889c526dc0c6500da9827b45e38739570875fef52e28f',
 };
-const recipe={version,checksum,intl:'small-icu',platform:process.platform,arch:process.arch,...(process.platform==='linux'?{image:images[process.arch],partlyStatic:true}:{})};
+const recipe={version,checksum,intl:'small-icu',platform:process.platform,arch:process.arch,...(process.platform==='linux'?{image:images[process.arch],partlyStatic:true,elfType:'EXEC'}:{})};
 const root=resolve('node_modules/.cache/cli-node'),binary=join(root,'node');
 await mkdir(root,{recursive:true});
 let exists=false;try{await access(binary);exists=JSON.stringify(JSON.parse(await readFile(join(root,'recipe.json'),'utf8')))===JSON.stringify(recipe);}catch{}
@@ -27,7 +27,7 @@ if(!exists){
  if(process.platform==='linux'){
   // Preserve Node 22's glibc 2.28 baseline; do not link against the newer runner's libc/libstdc++.
   if(!images[process.arch])throw new Error('Unsupported Linux runtime architecture.');
-  execFileSync('docker',['run','--rm','--network','none','-v',`${root}:/runtime`,'-w',`/runtime/node-v${version}`,images[process.arch],'bash','-c',`export PATH=/opt/python/cp311-cp311/bin:$PATH; ./configure --with-intl=small-icu --partly-static && make -j${availableParallelism()}`],{stdio:'inherit'});
+  execFileSync('docker',['run','--rm','--network','none','-v',`${root}:/runtime`,'-w',`/runtime/node-v${version}`,images[process.arch],'bash','-c',`export PATH=/opt/python/cp311-cp311/bin:$PATH; export LDFLAGS=-no-pie; ./configure --with-intl=small-icu --partly-static && make -j${availableParallelism()}`],{stdio:'inherit'});
  }else{
   execFileSync('./configure',['--with-intl=small-icu'],{cwd:source,stdio:'inherit'});
   execFileSync('make',[`-j${availableParallelism()}`],{cwd:source,stdio:'inherit'});
@@ -36,6 +36,9 @@ if(!exists){
 }
 execFileSync(binary,['-e',`const a=require('node:assert/strict');a.equal(process.version,'v${version}');a.equal(process.config.variables.icu_small,true);a.deepEqual(Intl.DateTimeFormat.supportedLocalesOf(['en','fr','ja']),['en']);a.equal('e\\u0301'.normalize(),'é');a.equal(new URL('https://bücher.example').hostname,'xn--bcher-kva.example');require('node:sqlite');require('node:sea');require('node:crypto').randomBytes(32);`],{stdio:'inherit'});
 if(process.platform==='linux'){
+ // Match official Node's ET_EXEC layout; postject's old LIEF corrupts large GNU hashes in PIE.
+ // https://github.com/nodejs/postject/pull/108
+ assert.match(execFileSync('readelf',['-h',binary],{encoding:'utf8'}),/Type:\s+EXEC\b/,'SEA runtime must use ET_EXEC');
  const symbols=execFileSync('readelf',['--version-info',binary],{encoding:'utf8'});
  for(const match of symbols.matchAll(/Name: GLIBC_(\d+)\.(\d+)/g))assert.ok(Number(match[1])<2||Number(match[1])===2&&Number(match[2])<=28,`Runtime requires ${match[0]}`);
  assert.ok(!/Name: GLIBCXX_/.test(symbols),'C++ runtime must be statically linked');
