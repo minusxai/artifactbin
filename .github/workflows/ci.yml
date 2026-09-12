@@ -425,13 +425,13 @@ jobs:
   gates:
     needs: [plan]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/3)
+    name: browser gates (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -489,7 +489,7 @@ jobs:
       - name: pull the Postgres image the datasets gate needs
         run: docker pull postgres:17-alpine
       - name: every gate, four servers
-        run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/3
+        run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/4
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'

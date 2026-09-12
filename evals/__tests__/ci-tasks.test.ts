@@ -11,7 +11,15 @@ const ROOT = path.resolve(__dirname, '../..');
 const ci = yaml.parse(fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8')) as {
   jobs: Record<string, { steps?: Array<{ name?: string; run?: string; with?: Record<string, unknown> }>; strategy?: { matrix?: { include?: Array<{ mode: string; tasks: string }> } } }>;
 };
-const ROWS = ci.jobs['agent-smoke'].strategy?.matrix?.include ?? [];
+// The installed leg runs on every pull request; the not-installed leg (the agent installing and
+// authenticating itself, which no fix can hold under three minutes) runs nightly in its own workflow.
+const nightly = yaml.parse(fs.readFileSync(path.join(ROOT, '.github/workflows/agent-smoke-nightly.yml'), 'utf8')) as {
+  jobs: Record<string, { steps?: Array<{ name?: string; run?: string }> }>;
+};
+const nightlyRows = Object.values(nightly.jobs).flatMap((job) => (job.steps ?? [])
+  .map((step) => step.run ?? '').filter((run) => run.includes('npm run eval'))
+  .map((run) => ({ mode: /--mode=([\w-]+)/.exec(run)?.[1] ?? '', tasks: /--tasks=([\w,]+)/.exec(run)?.[1] ?? '' })));
+const ROWS = [...(ci.jobs['agent-smoke'].strategy?.matrix?.include ?? []), ...nightlyRows];
 const tasksOf = (row: { tasks: string }) => row.tasks.split(',').map((s) => s.trim());
 
 const CI_SET = selectTasks(discoverTasks(path.join(ROOT, 'evals/tasks')), { set: 'ci' });
@@ -20,7 +28,8 @@ const byId = new Map(CI_SET.map((t) => [t.id, t.task]));
 describe('the agent-smoke matrix', () => {
   it('runs Linux agents under a separate account with evidence outside the denied checkout', () => {
     const steps = ci.jobs['agent-smoke'].steps ?? [];
-    const prepare = steps.find((step) => step.name === 'Prepare isolated eval account')?.run ?? '';
+    const prepare = ['create the eval account', 'close the checkout to it', 'prove the eval account cannot read the checkout']
+      .map((name) => steps.find((step) => step.name === name)?.run ?? '').join('\n');
     expect(prepare).toContain('useradd --create-home --shell /bin/bash eval-agent');
     expect(prepare).toContain('chmod 700 "$GITHUB_WORKSPACE"');
     expect(prepare).toContain('sudo -n -u eval-agent test -r "$GITHUB_WORKSPACE/package.json"');
@@ -37,9 +46,10 @@ describe('the agent-smoke matrix', () => {
    * approving the pairing as the person would. Only the second exercises that half, and it was not
    * being run at all — so a break in the agent's own auto-auth would have reached production green.
    */
-  it('runs both CLI flows: staged-and-authenticated, and the agent doing it for itself', () => {
+  it('runs both CLI flows: staged-and-authenticated on every PR, and the agent doing it for itself nightly', () => {
     const byMode = new Map(ROWS.map((r) => [r.mode, r]));
     expect([...byMode.keys()].sort()).toEqual(['installed', 'not-installed']);
+    expect((ci.jobs['agent-smoke'].strategy?.matrix?.include ?? []).map((r) => r.mode)).toEqual(['installed']);
     expect(tasksOf(byMode.get('installed')!)).toEqual(expect.arrayContaining(['cli', 'data', 'edit', 'comment']));
     // Two tasks are enough for the flow that is being exercised; each one is a paid agent run.
     expect(tasksOf(byMode.get('not-installed')!)).toEqual(expect.arrayContaining(['cli', 'comment']));

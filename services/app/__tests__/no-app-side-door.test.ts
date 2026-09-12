@@ -40,7 +40,7 @@ const PAST_EVERY_CAP = policy.max * policy.burst + 2;
 /** The limiter reads the address the outermost trusted proxy saw — the LAST hop. */
 const REAL = '203.0.113.7';
 
-const call = (path: string, forwardedFor: string, token?: string) =>
+const viaDoor = (path: string, forwardedFor: string, token?: string) =>
   new Request(`http://localhost:3000${path}`, {
     method: 'POST',
     headers: { 'x-forwarded-for': forwardedFor, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -66,13 +66,13 @@ describe("the app counts no valve of its own — the proxy's start_doc policy is
   it.each(DOORS)('%s is served past every cap', async (label, handler, path, head, bearer) => {
     const token = bearer ? (await mintToken('no-app-side-door')).token : undefined;
     for (let i = 0; i < PAST_EVERY_CAP; i++) {
-      const response = await handler(call(path, head(i), token));
+      const response = await handler(viaDoor(path, head(i), token));
       expect(response.status, `${label}: call ${i + 1} of ${PAST_EVERY_CAP}`).toBe(201);
     }
   });
 
   it('mints are genuinely served, not merely un-refused', async () => {
-    const response = await internalMint(call('/api/internal/tokens', `spoof, ${REAL}`));
+    const response = await internalMint(viaDoor('/api/internal/tokens', `spoof, ${REAL}`));
     expect(response.status).toBe(201);
     expect((await response.json()).token).toMatch(/^mx_/);
   });

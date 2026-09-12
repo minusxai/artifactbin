@@ -189,10 +189,10 @@ describe('CI job shape', () => {
 
   it('fans the gate set over three runners and pulls the Postgres image the datasets gate drives', () => {
     const { jobs } = ci();
-    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3]);
+    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
     const run = jobs.gates.steps.find((step) => /scripts\/gates\.mjs/.test(step.run ?? ''));
     expect(run.run).toContain('--servers=4');
-    expect(run.run).toContain('--shard=${{ matrix.shard }}/3');
+    expect(run.run).toContain('--shard=${{ matrix.shard }}/4');
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
