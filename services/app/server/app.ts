@@ -13,7 +13,7 @@
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
-import {agentDiscovery,agentDiscoveryHead} from '@/lib/agent-discovery';
+import {agentDiscovery,agentDiscoveryHead,agentDiscoveryRedirect,withAgentDiscoveryTail} from '@/lib/agent-discovery';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
@@ -259,7 +259,8 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
       : publicHome ? withInitialHome(discovered) : discovered;
-    return new Response(data ? withBootstrap(shell, data) : shell, { status: code, headers: {
+    // Last, so the pointer is the page's final line whatever else was inlined.
+    return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
       ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
     } });
@@ -382,7 +383,16 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // without changing security policy. Only /raw and exports retain the
     // standalone top-level sandbox; authored scripts still run in Iframes.
     const { status, redirect } = await runWithRequest(c.req.raw, () => documentPreparation(c.req.raw));
-    if (redirect) return new Response(null, { status: 302, headers: { location: redirect, 'cache-control': 'no-store' } });
+    // A browser follows Location and never shows this body; a fetch that stops
+    // here (curl without -L, a HEAD) still reads the canonical address and the
+    // agent pointer — in the header and in the body.
+    if (redirect) {
+      const base = baseUrl(c.req.raw);
+      const help = agentDiscovery(base);
+      return new Response(agentDiscoveryRedirect(help, `${base.replace(/\/$/, '')}${redirect}`), { status: 302, headers: {
+        location: redirect, 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8', Link: `<${help.url}>; rel="help"`,
+      } });
+    }
     // Admission's 404 is final; its 200 can mean "not a document
     // address" — a pretty path under an unknown handle still misses, and
     // page() derives that from the profile resolution it already ran.

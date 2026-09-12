@@ -63,6 +63,37 @@ describe('GET /a/:id (the document itself)', () => {
     const res = await rawRoute(new Request(`${BASE}/a/${row.id}`, { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'docs.example' } }), params(row.id));
     expect(res.headers.get('link')).toBe('<https://docs.example/llms.txt>; rel="help"');
   });
+  it('a healing 302 carries the pointer in its header and body, so an unfollowed redirect still names the way on', async () => {
+    const owner = await ensureUsername(await createUser({ email: 'redirect-help@example.com' }));
+    const t = await mintToken('t', owner.id);
+    const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>hop</div>', meta: {}, title: 'Hop', description: null, visibility: 'public' });
+    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
+    const res = await app.request(`${BASE}/a/${row.id}`);
+    expect(res.status).toBe(302);
+    const canonical = `/@${owner.username}/${row.id}-hop`;
+    expect(res.headers.get('location')).toBe(canonical);
+    expect(res.headers.get('link')).toBe(`<${BASE}/llms.txt>; rel="help"`);
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    const html = await res.text();
+    expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
+    expect(html).toContain(`<meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh">`);
+    expect(html).toContain(`The document is at ${BASE}${canonical}`);
+    expect(html).toContain(`<a href="${BASE}${canonical}">`);
+  });
+  it('repeats the pointer as the LAST thing before </body>, where a tail-keeping reader still sees it', async () => {
+    const owner = await ensureUsername(await createUser({ email: 'tail-help@example.com' }));
+    const t = await mintToken('t', owner.id);
+    const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>tail</div>', meta: {}, title: 'Tail', description: null, visibility: 'public' });
+    const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
+    const tail = `<!-- Agents: read this to create, edit, or operate artifacts on the CLI using afbin: ${BASE}/llms.txt. afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh --></body>`;
+    for (const path of [`/@${owner.username}/${row.id}-tail`, '/', `/a/${row.id}/raw`]) {
+      const res = await app.request(`${BASE}${path}`, { headers: { accept: 'text/html' } });
+      expect(res.status, path).toBe(200);
+      const html = await res.text();
+      expect(html.slice(html.lastIndexOf('<!--')), path).toMatch(new RegExp(`^${tail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*</html>\\s*$`));
+      expect(html.match(/name="afbin"/g), path).toHaveLength(1);
+    }
+  });
   it('carries the same header and head pointer at an owned artifact pretty URL', async () => {
     const owner = await ensureUsername(await createUser({ email: 'pretty-help@example.com' }));
     const t = await mintToken('t', owner.id);
