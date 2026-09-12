@@ -17,7 +17,6 @@
  * read through one and written through the other and they must not drift.
  */
 import { describe, it, expect } from 'vitest';
-import React from 'react';
 import { render } from '@testing-library/react';
 import { STORY_UI_COMPONENTS } from '../registry';
 import { STORY_UI_COMPONENT_NAME_LIST } from '../component-names';
@@ -42,9 +41,6 @@ function served(props: { name: string } & Record<string, unknown>) {
  * resolves its icons exactly the way every other version does, and the second
  * renderer (with its map) is gone.
  */
-const RENDERERS: [string, (props: { name: string } & Record<string, unknown>) => React.ReactElement][] = [
-  ['served document', served],
-];
 
 describe('<Icon>', () => {
   it('is registered under both the registry and the names-only module', () => {
@@ -52,7 +48,10 @@ describe('<Icon>', () => {
     expect(STORY_UI_COMPONENT_NAME_LIST).toContain('Icon');
   });
 
-  describe.each(RENDERERS)('%s', (_label, renderIcon) => {
+  // A `describe.each` over an array of ONE entry: the second renderer (the draft canvas with its
+  // own ~1600-glyph map) is gone, so the parameterisation was a loop with one iteration.
+  describe('served document', () => {
+    const renderIcon = served;
     it('renders the named lucide icon as inline svg (kebab-case name)', () => {
       const { container } = render(renderIcon({ name: 'calendar', 'aria-label': 'cal' }));
       expect(container.querySelector('svg[aria-label="cal"]')).toBeTruthy();

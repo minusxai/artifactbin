@@ -1,14 +1,20 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { act, cleanup, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { AppBar } from '../PageChrome';
 import { InlineReaderChrome } from '../InlineReaderChrome';
 
+/**
+ * The widget caches its star count in MODULE state, keyed on a clock, so a case must run past the
+ * previous case's cache window to see a fresh request. Each case used to do that for itself
+ * (`now += 120_000; vi.spyOn(Date, 'now')…`) over a shared mutable `now` — order-dependent shared
+ * state, and silently wrong for any case that forgot the two lines. The hook owns it now: every
+ * case gets a clock strictly past every case before it, whichever ones run.
+ */
 let now = Date.now();
+beforeEach(() => { now += 120_000; vi.spyOn(Date, 'now').mockReturnValue(now); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 it('always shows theme-inheriting icons, shares the count request, and preserves reader counts across updates', async () => {
-  now += 120_000;
-  vi.spyOn(Date, 'now').mockReturnValue(now);
   const fetch = vi.fn().mockResolvedValue(Response.json({ stars: 1234 }));
   vi.stubGlobal('fetch', fetch);
   const input = { artifactId: 'abcdef', title: 'Before', author: null };
@@ -35,8 +41,6 @@ it('always shows theme-inheriting icons, shares the count request, and preserves
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 it('keeps the repository icon and link usable when the count request fails', async () => {
-  now += 120_000;
-  vi.spyOn(Date, 'now').mockReturnValue(now);
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
   const view = render(<InlineReaderChrome input={{ artifactId: null, title: null, author: null }} onAction={() => {}} />);
   await act(async () => {});

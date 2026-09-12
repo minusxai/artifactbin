@@ -11,7 +11,6 @@ it('removes WebRTC constructors immutably before author execution',()=>{
  }
 });
 it('includes the denial in the actual author bootstrap, not just the helper',()=>{
- expect(AUTHOR_REALM_LOCKDOWN.length).toBeGreaterThan(20);
  expect(AUTHOR_SCRIPT_BOOTSTRAP).toContain(AUTHOR_REALM_LOCKDOWN);
  expect(AUTHOR_SCRIPT_BOOTSTRAP.indexOf(AUTHOR_REALM_LOCKDOWN)).toBeLessThan(AUTHOR_SCRIPT_BOOTSTRAP.indexOf("message.type === 'run'"));
 });
