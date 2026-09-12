@@ -24,7 +24,11 @@ when working on the relevant subsystem. Historical rollout narratives remain in 
   wall-clock is lost only by running them one after another, by fixing one pinned assertion per pass, or by
   waiting on a subagent instead of doing independent work meanwhile. Fix-cycles after the first pass are a
   planning failure to report, not a routine.
-- After a merge, update the local main branch to the latest origin/main.
+- After a merge, update the local main branch to the latest origin/main, then `git worktree prune` and
+  remove the finished per-branch worktrees so stale copies do not pile up.
+- Iterate with `vitest` in watch mode on only the affected files (`npx vitest <path-or-pattern>`); do NOT
+  run the `integration` project or the browser gates in the inner loop — both are heavy (real Docker/DB,
+  real Chromium) and are CI/PR-time checks, not per-edit ones.
 - Use top-level imports. Preserve intentional lazy browser chunks and engine-selecting imports;
   document new exceptions at the boundary and verify the resulting bundle.
 - Read environment variables through the owning service's audited config/env module. CLI scripts and
