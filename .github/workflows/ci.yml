@@ -380,7 +380,8 @@ jobs:
       # for a `useradd`, a `chmod` and a `test -r`. Nothing here is slow by nature, so the next run's
       # step timings name the offender instead of leaving the number to guesswork.
       - name: create the eval account
-        run: sudo useradd --create-home --shell /bin/bash eval-agent
+        # --no-log-init: on the hosted runner useradd otherwise spends ~40 s extending the sparse lastlog/faillog files (measured 34–41 s).
+        run: sudo useradd --no-log-init --create-home --shell /bin/bash eval-agent
       - name: close the checkout to it
         run: chmod 700 "$GITHUB_WORKSPACE"
       - name: prove the eval account cannot read the checkout

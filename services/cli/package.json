@@ -41,8 +41,7 @@
     "@artifactbin/sql": "*"
   },
   "devDependencies": {
-    "postject": "1.0.0-alpha.6",
-    "@artifactbin/test-support": "*"
+    "postject": "1.0.0-alpha.6"
   },
   "types": "./dist/types/cli/src/index.d.ts",
   "optionalDependencies": {

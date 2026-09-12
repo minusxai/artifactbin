@@ -18,7 +18,7 @@
   "files": [
     "src"
   ],
-  "dependencies": {
+  "devDependencies": {
     "@electric-sql/pglite": "0.4.6"
   }
 }

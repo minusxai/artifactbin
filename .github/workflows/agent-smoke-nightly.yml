@@ -71,7 +71,8 @@ jobs:
       # The agent runs as a non-sudo account; evidence stays outside the checkout
       # so granting access to the dev-mail outbox cannot reopen source access.
       - name: create the eval account
-        run: sudo useradd --create-home --shell /bin/bash eval-agent
+        # --no-log-init: on the hosted runner useradd otherwise spends ~40 s extending the sparse lastlog/faillog files (measured 34–41 s).
+        run: sudo useradd --no-log-init --create-home --shell /bin/bash eval-agent
       - name: close the checkout to it
         run: chmod 700 "$GITHUB_WORKSPACE"
       - name: prove the eval account cannot read the checkout

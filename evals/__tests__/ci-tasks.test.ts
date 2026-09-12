@@ -30,7 +30,7 @@ describe('the agent-smoke matrix', () => {
     const steps = ci.jobs['agent-smoke'].steps ?? [];
     const prepare = ['create the eval account', 'close the checkout to it', 'prove the eval account cannot read the checkout']
       .map((name) => steps.find((step) => step.name === name)?.run ?? '').join('\n');
-    expect(prepare).toContain('useradd --create-home --shell /bin/bash eval-agent');
+    expect(prepare).toContain('useradd --no-log-init --create-home --shell /bin/bash eval-agent');
     expect(prepare).toContain('chmod 700 "$GITHUB_WORKSPACE"');
     expect(prepare).toContain('sudo -n -u eval-agent test -r "$GITHUB_WORKSPACE/package.json"');
     const launch = steps.find((step) => step.run?.includes('npm run eval'))?.run ?? '';

@@ -117,7 +117,6 @@
     "typescript": "5.9.3",
     "vite": "8.2.2",
     "vitest": "4.1.11",
-    "yaml": "2.9.0",
-    "@artifactbin/test-support": "*"
+    "yaml": "2.9.0"
   }
 }

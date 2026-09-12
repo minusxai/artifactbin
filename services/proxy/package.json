@@ -20,7 +20,6 @@
     "yaml": "2.9.0"
   },
   "devDependencies": {
-    "vitest": "4.1.11",
-    "@artifactbin/test-support": "*"
+    "vitest": "4.1.11"
   }
 }

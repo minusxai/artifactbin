@@ -21,7 +21,6 @@
     "sharp": "0.35.4"
   },
   "devDependencies": {
-    "vitest": "4.1.11",
-    "@artifactbin/test-support": "*"
+    "vitest": "4.1.11"
   }
 }
