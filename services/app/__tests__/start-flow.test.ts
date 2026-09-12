@@ -14,7 +14,7 @@ import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as artifactPage } from '@/app/api/artifacts/[id]/route';
 
 
-import { anonymousPaste } from '@/lib/agent-copy';
+import { existingPaste } from '@/lib/agent-copy';
 import { issueStartHandle } from '@/lib/start-links';
 import { DEFAULT_TOKEN_TTL_MS } from '@/lib/tokens';
 import { registerAgentCookie, useAppHarness, request } from '@/__tests__/harness';
@@ -59,8 +59,10 @@ describe('POST /api/start', () => {
     expect(Math.abs(Date.parse(body.expiresAt) - (Date.now() + DEFAULT_TOKEN_TTL_MS))).toBeLessThan(5_000);
     expect(body.token).toMatch(/^mx_/);
     expect(res.headers.get('set-cookie') ?? '').toContain('HttpOnly');
-    expect(body.prompt).toBe(anonymousPaste(BASE, body.id, body.token));
-    expect(body.prompt).toContain(body.token);
+    // The paste is tokenless: the agent copies this, and afbin signs itself in.
+    expect(body.prompt).toBe(existingPaste(BASE, body.id));
+    expect(body.prompt).not.toContain('mx_');
+    expect(body.prompt).not.toContain(body.token);
     expect(body.prompt).toContain('afbin help');
     expect(body.prompt.split('\n')).toHaveLength(1);
     expect(body.prompt.length).toBeLessThan(600);

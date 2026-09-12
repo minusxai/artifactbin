@@ -207,7 +207,8 @@ describe('the data vocabulary survives a truncating reader', () => {
   it('teaches the publish call and the document rules in the same budget', () => {
     const head = buildQuickSheet(BASE).slice(0, HEAD);
     expect(head).toContain('afbin push');
-    expect(head).toContain('afbin setup');
+    expect(head).not.toContain('afbin setup');
+    expect(head).toMatch(/automatic|authenticates itself|signs you in/i);
     expect(head).toMatch(/self-contained/i);
     expect(head).toMatch(/No CDN/i);
     expect(head).toContain('<Helmet>');

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import AgentLink from '@/components/AgentLink';
 import TokensPanel from '@/components/TokensPanel';
-import { anonymousPaste } from '@/lib/agent-copy';
+import { existingPaste } from '@/lib/agent-copy';
 
 const push = vi.fn();
 vi.mock('@/lib/navigation', async (original) => ({ ...(await original<typeof import('@/lib/navigation')>()), useRouter: () => ({ push }) }));
@@ -98,7 +98,7 @@ describe('<AgentLink>', () => {
       id: 'Ab3xK9',
       url: 'http://localhost:3000/a/Ab3xK9',
       token: 'mx_secret',
-      prompt: anonymousPaste(window.location.origin, 'Ab3xK9', 'mx_secret'),
+      prompt: existingPaste(window.location.origin, 'Ab3xK9'),
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(response) }));
     vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });

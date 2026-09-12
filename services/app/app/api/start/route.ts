@@ -9,13 +9,14 @@
  * It composes two things that already exist (anonymous mint, create) rather
  * than adding a third way to do either — same IP rate limit, same artifact
  * shape. Signed-in callers get the artifact stamped with their account so it
- * appears in their dashboard immediately. Anonymous callers receive the new
- * token once, inline in the decided paste; signed-in callers receive the owned
- * paste and use an account token they already gave their agent.
+ * appears in their dashboard immediately. No token is exposed to the agent:
+ * every caller receives the same tokenless paste, and afbin authenticates
+ * itself on demand. The anonymous mint and browser session still happen so the
+ * document is watchable and later claimable.
  */
 import { auth } from '@/auth';
 import { createArtifact } from '@/lib/artifacts';
-import { anonymousPaste, ownedPaste } from '@/lib/agent-copy';
+import { existingPaste } from '@/lib/agent-copy';
 import { baseUrl, json } from '@/lib/http';
 import { START_PLACEHOLDER_MARKUP } from '@/lib/start-links';
 import { mintToken, resolveToken } from '@/lib/tokens';
@@ -72,9 +73,11 @@ export async function POST(request: Request) {
   const base = baseUrl(request);
   const url = `${base}/a/${row.id}`;
   const signedIn = userId !== null;
-  const prompt = signedIn
-    ? ownedPaste(base, row.id)
-    : anonymousPaste(base, row.id, minted.token!);
+  // The PASTE is tokenless for every caller — afbin signs itself in when it
+  // first needs the server, so the agent is never handed a token. The anonymous
+  // `token` field still rides the JSON response (for the browser session and the
+  // start-link/claim plumbing); it is simply not in the paste the agent copies.
+  const prompt = existingPaste(base, row.id);
   const res = json(
     {
       id: row.id,

@@ -36,6 +36,6 @@ describe('the human docs address', () => {
   it('the static shell carries no agent pointer of its own: the server injects the one source on every page', () => {
     const html = read('web/index.html');
     expect(html).not.toContain('rel="help"');
-    expect(html).not.toContain('artifactbin:agent');
+    expect(html).not.toContain('name="afbin"');
   });
 });
