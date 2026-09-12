@@ -467,23 +467,23 @@ export function AppBar({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo-128.png" alt="" style={{ width: CHROME_IDENTITY.logoSize, height: CHROME_IDENTITY.logoSize }} />
       </a>
-      <a href="/" className="min-w-0 truncate font-mono text-sm font-medium text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
+      <a href="/" className="min-w-0 truncate font-mono text-[13px] font-medium text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
       {/* Desktop breadcrumbs; phones keep the brand beside the logo. */}
       <nav aria-label="Current page" className="hidden min-w-0 items-center gap-2 font-mono text-fg sm:flex" style={{ fontSize: CHROME_IDENTITY.fontSize, fontWeight: CHROME_IDENTITY.fontWeight }}>
-        <a href="/" className="shrink-0 no-underline hover:text-accent">artifactbin</a>
+        <a href="/" className={`shrink-0 no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
         {trail.length === 0 && (
           <>
             <span aria-hidden="true" className="text-faint">·</span>
-            <span className="truncate">Google Docs for agents</span>
+            <span className="truncate font-normal text-muted">Google Docs for agents</span>
           </>
         )}
         {trail.map((crumb) => (
           <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-2">
             <ChevronRight size={14} className="shrink-0 text-faint" aria-hidden="true" />
             {crumb.href ? (
-              <a href={crumb.href} className="shrink-0 no-underline hover:text-accent">{crumb.label}</a>
+              <a href={crumb.href} className="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a>
             ) : (
-              <span className="min-w-0 truncate">{crumb.label}</span>
+              <span className="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>
             )}
           </span>
         ))}
@@ -493,8 +493,8 @@ export function AppBar({
         <GitHubStar placement="mobile-bar" />
         {actions}
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
-        {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.3} />)}
-        {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.3} />)}
+        {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.5} />)}
+        {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.5} />)}
       </div>
     </header>
     </>

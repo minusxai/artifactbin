@@ -147,6 +147,25 @@ describe('the surface header buttons are owner chrome', () => {
     expect(rail.querySelector('[data-mx-github-star]')).not.toBeNull();
   });
 
+  it('shows the current visibility icon on Share and updates it after sharing changes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => new Response(JSON.stringify({ visibility: init?.method === 'PUT' ? 'public' : 'private', linkRole: 'viewer', shares: [] }))));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({})} /></ArtifactShell>);
+    const share = document.querySelector<HTMLElement>('[data-mx-reader-action="share"]')!;
+    expect(share.querySelector('[data-mx-visibility="private"]')).not.toBeNull();
+    fireEvent.click(share);
+    fireEvent.click(await screen.findByLabelText('Make public'));
+    await waitFor(() => expect(share.querySelector('[data-mx-visibility="public"]')).not.toBeNull());
+  });
+
+  it('uses identical visibility geometry in the toolbar and sharing dialog', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'unlisted', linkRole: 'viewer', shares: [] }))));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({ visibility: 'unlisted' })} /></ArtifactShell>);
+    const share = document.querySelector<HTMLElement>('[data-mx-reader-action="share"]')!;
+    fireEvent.click(share);
+    const option = await screen.findByLabelText('Make unlisted');
+    expect(share.querySelector('svg')?.innerHTML).toBe(option.querySelector('svg')?.innerHTML);
+  });
+
   it('the owner keeps edit and share (via the shell signal)', () => {
     render(
       <ArtifactShell role="owner">

@@ -1,5 +1,6 @@
 'use client';
 
+import type { Visibility } from '@/lib/artifacts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
 import { DatasetCatalogView } from '@/components/DatasetCatalogView';
@@ -76,6 +77,7 @@ export interface ArtifactSurfaceProps {
   /** Head pointer at render time — the baseline the live stream is compared against. */
   editId: string;
   format: ArtifactFormat;
+  visibility?: Visibility;
   title: string | null;
   /** pdf: how big the file is and how long, as the file view says it. */
   bytes?: number;
@@ -228,6 +230,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   /** Naming a new folder under THIS one — the shell's only folder-specific act. */
   const [namingFolder, setNamingFolder] = useState(false);
   const [sharingOpen, setSharingOpen] = useState(false);
+  const [sharingVerdict, setSharingVerdict] = useState<{ id: string; visibility: Visibility } | null>(null);
+  const onVisibilityChange = useCallback((visibility: Visibility) => setSharingVerdict({ id: props.id, visibility }), [props.id]);
   const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
@@ -723,7 +727,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           </>
         )}
         {canEdit && !owner && (
-          <ShareLink artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink onVisibilityChange={onVisibilityChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
         {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the
             document because the document is sandboxed at an opaque origin and
@@ -763,7 +767,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink onVisibilityChange={onVisibilityChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         </section>
       )}
     </div>
@@ -780,7 +784,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing} input={{artifactId:id, share:owner, title:shownTitle, forkBusy:false, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing} input={{artifactId:id, share:owner, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, title:shownTitle, forkBusy:false, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
           else if (action === 'fork') setForkAsked(true);
@@ -788,7 +792,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
         }} />
-        {sharingOpen && <ShareLink artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
+        {sharingOpen && <ShareLink onVisibilityChange={onVisibilityChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */

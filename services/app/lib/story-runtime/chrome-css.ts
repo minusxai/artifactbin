@@ -266,13 +266,13 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
    one must carry no author mark anywhere in it, stylesheet included. The byline
    holds exactly two anchors, and the other one is create. */
 .mx-reader-byline > a {
-  color: var(--mx-reader-fg) !important; font-weight: ${CHROME_IDENTITY.fontWeight} !important;
+  color: var(--mx-reader-muted) !important; font-weight: ${CHROME_IDENTITY.fontWeight} !important;
   text-decoration: none !important; white-space: nowrap !important;
 }
 .mx-reader-byline > a:hover { color: var(--mx-reader-accent) !important; }
 .mx-reader-chevron { display: inline-flex !important; flex-shrink: 0 !important; color: var(--mx-reader-muted) !important; }
 .mx-reader-title {
-  color: var(--mx-reader-fg) !important; min-width: 0 !important;
+  font-weight: 600 !important; color: var(--mx-reader-fg) !important; min-width: 0 !important;
   overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
 }
 /* The toast says what just happened and then gets out of the way. */
@@ -451,11 +451,12 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     width: auto !important; height: 28px !important; padding: 0 10px !important; margin: 0 6px !important;
     gap: 6px !important; border-radius: 7px !important;
     background: #c2e7ff !important; color: #004a77 !important;
-    font: 500 12px/1 system-ui, sans-serif !important; letter-spacing: 0 !important;
+    font: 500 12px/1 var(--font-mono, ui-monospace, monospace) !important; letter-spacing: 0 !important;
   }
-  .mx-reader-action[data-mx-reader-action="share"] > svg { width: 16px !important; height: 16px !important; }
+  .mx-reader-action[data-mx-reader-action="share"] svg { width: 20px !important; height: 20px !important; }
   .mx-reader-action[data-mx-reader-action="share"]:hover { background: #b3ddfa !important; }
   .mx-reader-action[data-mx-reader-action="share"]:focus-visible { outline: 2px solid #004a77 !important; outline-offset: 2px !important; }
+  [data-mx-visibility] { display: inline-flex !important; align-items: center !important; }
   .mx-reader-share-text { display: inline !important; }
   /* Tips hang under the bar. */
   .mx-reader-chrome [data-mx-tip]:hover::after, .mx-reader-chrome [data-mx-tip]:focus-visible::after {

@@ -134,13 +134,13 @@ describe('GET /api/page/artifact/:id', () => {
     expect((await artifactPage(request('/api/page/artifact/nope00'), params({ id: 'nope00' }))).status).toBe(404);
     const anon = await (await artifactPage(request(`/api/page/artifact/${w.pub.id}`), params({ id: w.pub.id }))).json();
     expect(anon).toMatchObject({ role: 'viewer', kind: 'none', canonical: `/@${w.owner.username}/${w.pub.id}-public-one` });
-    expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'markup', title: 'Public one', version: 1 });
+    expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'markup', title: 'Public one', version: 1, visibility: 'public' });
     expect(anon.surface).not.toHaveProperty('compiledCss');
     expect(anon.surface.runtime).toHaveProperty('compiledCss');
     asSession(w.owner);
     const own = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
     expect(own).toMatchObject({ role: 'owner', kind: 'account' });
-    expect(own.surface).toMatchObject({ openAnnotations: 0, accountSession: true });
+    expect(own.surface).toMatchObject({ openAnnotations: 0, accountSession: true, visibility: 'private' });
   });
   it('lets the exporter\'s signed key read a private document without a session', async () => {
     const w = await world();

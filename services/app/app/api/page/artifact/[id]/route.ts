@@ -136,6 +136,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       id: artifact.id,
       editId: artifact.edit_id,
       format: artifact.format,
+      visibility: artifact.visibility,
       title: artifact.title,
       author: { username: authorUsername, forkedFrom },
       ...(runtime ? { runtime } : {}),
