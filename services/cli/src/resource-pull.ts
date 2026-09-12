@@ -30,8 +30,9 @@ export async function prepareResourcePull(workspace:Workspace,path:string,snapsh
   const local=await readOptional(absolute);
   let bytes=same?Buffer.from(previous!.source!.bytes,'base64'):type==='artifact'?Buffer.from(snapshot.markup??''):fetched!.bytes;
   if(type==='dataset'&&!same)bytes=definition?Buffer.from(endLine(bytes.toString())):Buffer.from(extname(sourcePath).toLowerCase()==='.csv'?rowsCsv(datasetRows(bytes)):JSON.stringify(datasetRows(bytes),null,2)+'\n');
-  source={path:sourcePath,bytes:bytes.toString('base64'),version:snapshot.version};
-  prototype={type,source:relative(dirname(path),sourcePath)} as ArtifactResourceFile;
+  const declared=relative(dirname(path),sourcePath);
+  source={path:sourcePath,declared,bytes:bytes.toString('base64'),version:snapshot.version};
+  prototype={type,source:declared} as ArtifactResourceFile;
   const changed=local&&(!previous?.source||!local.equals(Buffer.from(previous.source.bytes,'base64')));
   if(changed&&!same&&!force){
    throw new CliError('merge_conflict',`${sourcePath} has overlapping local and remote content.`,undefined,{fields:['source'],path,local:local.toString('base64'),remote:bytes.toString('base64'),encoding:'base64',head:snapshot},3);
@@ -40,12 +41,12 @@ export async function prepareResourcePull(workspace:Workspace,path:string,snapsh
   if(!local||(!changed||force)&&!local.equals(bytes))changes.push({path:sourcePath,before:local?digest(local):null,data:bytes});
  }
  const canonical=snapshotResource(snapshot,prototype);
- const baseline=Buffer.from(writeResourceFile(canonical));let bytes=baseline;
+ const canonicalBytes=Buffer.from(writeResourceFile(canonical));let bytes=canonicalBytes;
  const accepted=previous?await baselineOf(workspace,path,previous):null;
  if(before&&previous&&accepted&&!force&&digest(before)!==previous.file){
   const merged=reconcileResource(parseResourceFile(accepted.toString()),parseResourceFile(before.toString()),canonical);
-  if(!merged.ok)throw new CliError('merge_conflict',`${path} has overlapping resource settings.`,undefined,{fields:merged.fields,path,base:accepted.toString(),local:before.toString(),remote:baseline.toString(),head:snapshot},3);
+  if(!merged.ok)throw new CliError('merge_conflict',`${path} has overlapping resource settings.`,undefined,{fields:merged.fields,path,base:accepted.toString(),local:before.toString(),remote:canonicalBytes.toString(),head:snapshot},3);
   bytes=Buffer.from(writeResourceFile(merged.resource));
  }
- return {bytes,source,changes,backups};
+ return {bytes,accepted:canonicalBytes,source,changes,backups};
 }

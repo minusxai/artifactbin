@@ -53,7 +53,7 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
   if(path&&workspace.tracking?.files[path]&&workspace.tracking.files[path].id!==id)throw new CliError('identity_mismatch',`${path} tracks a different artifact.`);
   const before=path?await readOptional(await confinedPath(workspace.root,path)):null;
   const tracked=path?workspace.tracking?.files[path]:undefined;
-  if(before&&!force&&(!tracked||digest(before)!==tracked.file)&&(!tracked||ref.version||!path||!(/\.(jsx|ya?ml)$/i.test(path))))throw new CliError('local_changed',`${path} has local changes.`,'Save a backup and inspect afbin diff. Use pull --force only to overwrite this file.');
+  if(before&&!force&&(!tracked||ref.version||!path||!(/\.(jsx|ya?ml)$/i.test(path)))&&(!tracked||digest(before)!==tracked.file))throw new CliError('local_changed',`${path} has local changes.`,'Save a backup and inspect afbin diff. Use pull --force only to overwrite this file.');
   if(targets.some(target=>target.id===id))throw new CliError('duplicate_identity',`The selected references address ${id} more than once.`);
   targets.push({id,...(ref.version?{version:ref.version}:{}),path,directory,before,...(prior&&prior[0]!==path?{previousPath:prior[0]}:{})});
  }
@@ -122,16 +122,16 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    const path=target.path??join(target.directory??'',`${target.id}${options.format&&options.format!=='original'?'.'+options.format:defaultExtension(snapshot)}`);
    const before=target.path?target.before:await readOptional(await confinedPath(workspace.root,path));
    if(before&&!target.path&&!options.force)throw new CliError('local_changed',`${path} already exists. Choose a destination or use --force.`);
-   let bytes:Buffer;let source:ResourceSource|undefined;const sourceBackups:string[]=[];
+   let bytes:Buffer;let acceptedBytes:Buffer|undefined;let source:ResourceSource|undefined;const sourceBackups:string[]=[];
    if(options.format==='yaml'||/\.ya?ml$/i.test(path)){
     try{
-     const prepared=await prepareResourcePull(workspace,path,snapshot,previous,before,client,!!options.force);bytes=prepared.bytes;source=prepared.source;
+     const prepared=await prepareResourcePull(workspace,path,snapshot,previous,before,client,!!options.force);bytes=prepared.bytes;acceptedBytes=prepared.accepted;source=prepared.source;
      if(!options.dryRun){for(const backup of prepared.backups)sourceBackups.push(await localBackup(workspace.home,backup.path,backup.bytes));files.push(...prepared.changes);}
     }catch(error){if(error instanceof CliError&&error.code==='merge_conflict'&&!options.dryRun)throw await persistConflict(workspace.home,workspace.root,target.id,path,error);throw error;}
    }else if(snapshot.format==='markup'||snapshot.format==='folder'){
     const document=snapshotDocument({...snapshot,edit_id:head.edit_id,state:head.state});document.metadata.head_version=head.version;if(target.version)document.metadata.version=target.version;
     document.body=await restoreDependencyPaths(document.body,previous?.paths??{},path,workspace.root);
-    const remote=Buffer.from(writeDocument(document));bytes=remote;
+    const remote=Buffer.from(writeDocument(document));bytes=remote;acceptedBytes=remote;
     const accepted=previous?await baselineOf(workspace,path,previous):null;
     if(before&&previous&&accepted&&!options.force&&!target.version&&digest(before)!==previous.file){
      const merged=reconcileDocument(parseDocument(accepted.toString()),parseDocument(before.toString()),document);
@@ -155,7 +155,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    const backup=wantsBackup?await localBackup(workspace.home,path,before!):undefined;
    operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:'pulled'});
    if(target.previousPath)untracked.push(target.previousPath);
-   tracked[path]={source,id:head.id,url:typeof head.url==='string'?head.url:`${client.connection.server}/a/${head.id}`,file:digest(bytes),snapshot:head,...(previous?.paths?{paths:previous.paths}:{}),...(selected?{selected,versions:{...previous?.versions,[String(selected.version)]:selected}}:previous?.versions?{versions:previous.versions}:{})};
+   tracked[path]={source,id:head.id,url:typeof head.url==='string'?head.url:`${client.connection.server}/a/${head.id}`,file:digest(acceptedBytes??bytes),snapshot:head,...(previous?.paths?{paths:previous.paths}:{}),...(selected?{selected,versions:{...previous?.versions,[String(selected.version)]:selected}}:previous?.versions?{versions:previous.versions}:{})};
    files.push({path,before:before?digest(before):null,data:bytes});
   }
   const recovery=pending?await archivePendingRequest(workspace.home,workspace.root,pending,await readOptional(await confinedPath(workspace.root,pending.file.path))):undefined;

@@ -225,14 +225,14 @@ async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingReque
  const snapshot=readSnapshot(pending.response!,pending);
  const current=await readOptional(await confinedPath(workspace.root,pending.file.path));
  if(!current)throw new CliError('local_changed',`Remote publication succeeded, but ${pending.file.path} was removed. Recovery was retained.`,'Restore the local file and rerun afbin push.');
- let baseline=Buffer.from(pending.file.bytes,'base64');let written=current;
+ let accepted=Buffer.from(pending.file.bytes,'base64');let written=current;
  if(extname(pending.file.path).toLowerCase()==='.jsx'){
-  const frozen=parseDocument(baseline.toString());const latest=parseDocument(current.toString());
+  const frozen=parseDocument(accepted.toString());const latest=parseDocument(current.toString());
   if(latest.metadata.id&&latest.metadata.id!==snapshot.id||frozen.metadata.id&&!latest.metadata.id)throw new CliError('identity_mismatch','Local identity changed while the request was in flight. The server response is retained for recovery.');
   const restored=await restoreDependencyPaths(snapshot.markup??'',pending.file.paths??{},pending.file.path,workspace.root);
   const canonical=snapshotDocument(snapshot);canonical.body=restored;
-  baseline=Buffer.from(writeDocument(canonical));
-  if(digest(current)===digest(Buffer.from(pending.file.bytes,'base64')))written=baseline;
+  accepted=Buffer.from(writeDocument(canonical));
+  if(digest(current)===digest(Buffer.from(pending.file.bytes,'base64')))written=accepted;
   else{
    // A create can add persistent IDs while the author keeps typing. Only
    // discount that normalization when the shared stamper reproduces the
@@ -246,19 +246,19 @@ async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingReque
  if(['.yaml','.yml'].includes(extname(pending.file.path).toLowerCase())){
   const frozen=parseResourceFile(Buffer.from(pending.file.bytes,'base64').toString());
   const canonical=snapshotResource(snapshot,frozen);
-  baseline=Buffer.from(writeResourceFile(canonical));
-  if(current.equals(Buffer.from(pending.file.bytes,'base64')))written=baseline;
+  accepted=Buffer.from(writeResourceFile(canonical));
+  if(current.equals(Buffer.from(pending.file.bytes,'base64')))written=accepted;
   else{
    const latest=parseResourceFile(current.toString());
    if(latest.id&&latest.id!==snapshot.id||frozen.id&&!latest.id)throw new CliError('identity_mismatch','Local resource identity changed while publication completed.');
    const merged=reconcileResource(frozen,latest,canonical);
-   if(!merged.ok)throw await persistConflict(workspace.home,workspace.root,snapshot.id,pending.file.path,new CliError('merge_conflict','The resource changed in overlapping fields during publication.',undefined,{fields:merged.fields,base:writeResourceFile(frozen),local:current.toString(),remote:baseline.toString(),head:snapshot},3));
+   if(!merged.ok)throw await persistConflict(workspace.home,workspace.root,snapshot.id,pending.file.path,new CliError('merge_conflict','The resource changed in overlapping fields during publication.',undefined,{fields:merged.fields,base:writeResourceFile(frozen),local:current.toString(),remote:accepted.toString(),head:snapshot},3));
    written=Buffer.from(writeResourceFile(merged.resource));
   }
  }
  if(!account)throw new CliError('unsupported_server','The server did not return the current account identity.','Update the server before using workspace sync.');
  const source=pending.file.source?{...pending.file.source,version:pending.request.method==='PATCH'?(pending.file.tracked?.source?.version??pending.file.tracked?.snapshot.version):snapshot.version}:undefined;
- const entry:TrackedFile={source,id:snapshot.id,url:typeof snapshot.url==='string'?snapshot.url:`${pending.server}/a/${snapshot.id}`,file:digest(written),snapshot,paths:pending.file.paths};
+ const entry:TrackedFile={source,id:snapshot.id,url:typeof snapshot.url==='string'?snapshot.url:`${pending.server}/a/${snapshot.id}`,file:digest(accepted),snapshot,paths:pending.file.paths};
  await stageFiles(workspace.home,workspace.root,[{path:pending.file.path,before:digest(current),data:written}],state=>writeTracking(state,workspace.root,{server:pending.server,account,set:{[pending.file.path]:entry},...(pending.file.renamedFrom?{remove:[pending.file.renamedFrom]}:{})}));
  await recoverFiles(workspace.home,workspace.root);await clearConflict(workspace.home,workspace.root,snapshot.id);await clearPendingRequest(workspace.home,workspace.root);return snapshot;
 }
