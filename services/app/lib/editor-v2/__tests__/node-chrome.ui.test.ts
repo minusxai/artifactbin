@@ -117,6 +117,7 @@ it.each([false, true])('centers controls on the selection outline (touch: %s)', 
     chrome = createNodeChrome(document, vi.fn());
     const p = document.createElement('p');
     document.body.append(p);
+    p.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
     chrome.select(p, '0');
     for (const [name, left, top] of [
       ['Move selected block', '-3.5px', '-3.5px'],
@@ -131,6 +132,38 @@ it.each([false, true])('centers controls on the selection outline (touch: %s)', 
     const remove = screen.getByRole('button', { name: 'Delete selected block' });
     expect(remove.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
     expect(remove).not.toHaveTextContent('×');
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+
+it.each([false, true])('keeps all control hit areas disjoint on small blocks (touch: %s)', (touch) => {
+  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: touch })));
+  try {
+    chrome = createNodeChrome(document, vi.fn());
+    const p = document.createElement('p');
+    document.body.append(p);
+    for (const [width, height] of [[300, 20], [20, 100], [20, 20], [300, 100]]) {
+      p.getBoundingClientRect = () => new DOMRect(0, 0, width, height);
+      chrome.select(p, '0');
+      const buttons = screen.getAllByRole('button');
+      const point = (value: string, size: number) => value === '50%' ? size / 2
+        : value.startsWith('calc') ? size + 3.5 : Number.parseFloat(value);
+      const boxes = buttons.map((button) => {
+        const style = button.style;
+        const w = Number.parseFloat(style.width), h = Number.parseFloat(style.height);
+        return { name: button.getAttribute('aria-label'), w, h,
+          x: point(style.left, width), y: point(style.top, height) };
+      });
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        expect(Math.abs(a.x - b.x) >= (a.w + b.w) / 2 || Math.abs(a.y - b.y) >= (a.h + b.h) / 2,
+          `${width}x${height}: ${a.name} overlaps ${b.name}`).toBe(true);
+      }
+      if (width === 300 && height === 100)
+        for (const button of buttons) expect(button).toHaveStyle({ width: touch ? '44px' : '28px', height: touch ? '44px' : '28px' });
+    }
   } finally {
     vi.unstubAllGlobals();
   }

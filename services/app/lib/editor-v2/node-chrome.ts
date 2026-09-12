@@ -162,6 +162,15 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
       width: `${grid ? r.width : size.width}px`,
       height: `${Math.max(size.height, r.height)}px`,
     });
+    // Corners and edge midpoints share each axis. Fit hit areas within
+    // their center spacing so short prose cannot put resize over delete.
+    const targetSize = touch ? 44 : 28;
+    const width = grid ? r.width : size.width;
+    const height = Math.max(size.height, r.height);
+    for (const button of [...controls.keys(), remove]) {
+      button.style.width = `${Math.min(targetSize, width / 2 + SELECTION_PRESENTATION.handleOutset)}px`;
+      button.style.height = `${Math.min(targetSize, height / 2 + SELECTION_PRESENTATION.handleOutset)}px`;
+    }
     if (gesture?.kind === 'move') moveDestination();
   };
   function start(kind: GestureKind, pointer: number | null, x = 0, y = 0) {
