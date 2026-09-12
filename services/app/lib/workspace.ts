@@ -7,14 +7,15 @@
  */
 import { decorateFeed, followFeed, forkCountByUser, likeSummaryByUser, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
 import { count } from '@/lib/relations';
-import { listArtifactsByUser, listSharedWithEmail } from '@/lib/users';
+import { listSharedWithEmail } from '@/lib/users';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
+import { workspaceDocumentsFor, workspaceStatsFor } from '@/lib/workspace-inventory';
 
 const ACTIVITY_LIMIT = 20;
 
 export async function accountWorkspaceCoreFor(userId: string, email?: string | null) {
   const [artifacts, sharedRows] = await Promise.all([
-    listArtifactsByUser(userId), email ? listSharedWithEmail(email, userId) : Promise.resolve([]),
+    workspaceDocumentsFor(userId), email ? listSharedWithEmail(email, userId) : Promise.resolve([]),
   ]);
   const shared = sharedRows
     .map(({ ancestor_ids: _placement, ...row }) => row);
@@ -29,11 +30,11 @@ export async function accountWorkspaceCoreFor(userId: string, email?: string | n
 
 /** No shelf query here: account-wide series already identify their documents. */
 export async function accountWorkspaceInsightsFor(userId: string) {
-  const [series, likes, mine, following, followers, forks] = await Promise.all([
+  const [series, likes, mine, following, followers, forks, stats] = await Promise.all([
     viewSeriesByUser(userId, VIEW_SERIES_DAYS, 'markup'), likeSummaryByUser(userId),
     ownerFeed(userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
     followFeed(userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
-    count('follow', userId), forkCountByUser(userId),
+    count('follow', userId), forkCountByUser(userId), workspaceStatsFor(userId),
   ]);
 
   const sparklines: Record<string, string | undefined> = {};
@@ -47,6 +48,7 @@ export async function accountWorkspaceInsightsFor(userId: string) {
   }
 
   return {
+    stats,
     feed: { mine, following },
     sparklines,
     viewsOverTime,
