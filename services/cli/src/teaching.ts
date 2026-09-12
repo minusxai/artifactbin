@@ -36,6 +36,11 @@ export function helpDocument(topic?:string,format='text'):string{
   if(format==='man')return manPage();
   return format==='markdown'?commandsMarkdown():commandHelp();
  }
+ // The agent brief by name, for a terminal whose bare `afbin help` shows the human overview instead.
+ if(topic==='brief'){
+  if(format==='man')throw new CliError('unsupported_format','The manual documents commands, not the brief.','Read it with --format text or markdown.');
+  return briefDocument();
+ }
  if(format==='man'){
   if(!isCommand(topic))throw new CliError('unsupported_format',`The manual documents commands, not the ${topic} topic.`,'Read topic guidance with --format text or markdown.');
   return manPage(topic);

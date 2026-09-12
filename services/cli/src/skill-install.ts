@@ -10,8 +10,11 @@ import {installedHarnesses} from './launcher';
 import {localSkillFiles} from './teaching';
 import {CLI_VERSION} from './version';
 import {CliError} from './commands';
+import {homedir} from 'node:os';
+import {colorSupport,createStyle} from './style';
 export const skillHarnesses=['claude','codex','pi','opencode'] as const;
 export type SkillHarness=typeof skillHarnesses[number];
+export const harnessLabels:Record<SkillHarness,string>={claude:'Claude Code',codex:'Codex',pi:'pi',opencode:'OpenCode'};
 export interface SkillChoice {name:SkillHarness;path:string;selected:boolean}
 interface Settings {harnesses:SkillHarness[]}
 export function skillTargets(home:string,env:NodeJS.ProcessEnv=process.env):Record<SkillHarness,string>{
@@ -41,20 +44,25 @@ export async function chooseSkills(choices:SkillChoice[]):Promise<SkillHarness[]
  const input=process.stdin,output=process.stderr;
  if(!input.isTTY)throw new CliError('interactive_required','A terminal is required for the checklist.','Use --harness <name> or --yes.');
  let cursor=0;const checked=choices.map(x=>x.selected);const wasRaw=input.isRaw;
- const draw=()=>output.write(choices.map((x,i)=>`${cursor===i?'>':' '} [${checked[i]?'x':' '}] ${x.name}: ${x.path}`).join('\n')+'\n');
+ const s=createStyle(colorSupport(process.env,!!output.isTTY));const home=homedir();
+ const pretty=(path:string)=>path.startsWith(home+'/')?'~'+path.slice(home.length):path;
+ // Two fixed lines per choice keep redraws stable even with long custom paths.
+ const pathWidth=Math.max(10,(output.columns??80)-8);
+ const shortPath=(path:string)=>{const p=pretty(path);return p.length>pathWidth?'…'+p.slice(-(pathWidth-1)):p;};
+ const draw=()=>output.write(choices.map((x,i)=>`    ${cursor===i?s.accent('›'):' '} ${checked[i]?s.green('[✓]'):s.dim('[ ]')} ${cursor===i?s.bold(harnessLabels[x.name]):harnessLabels[x.name]}\n        ${s.dim(shortPath(x.path))}`).join('\n')+'\n');
  emitKeypressEvents(input);input.setRawMode(true);input.resume();
  try{return await new Promise((resolveSelection,reject)=>{
   const cleanup=()=>{input.off('keypress',key);input.off('end',cancel);};
   const cancel=()=>{cleanup();reject(new CliError('cancelled','Skill installation cancelled.'));};
   const key=(_text:string,event:Key)=>{
    if(event.name==='escape'||event.ctrl&&['c','d'].includes(event.name??''))return cancel();
-   if(['return','enter'].includes(event.name??'')){cleanup();resolveSelection(choices.filter((_,i)=>checked[i]).map(x=>x.name));return;}
+   if(['return','enter'].includes(event.name??'')){cleanup();output.write(`\x1b[${choices.length*2+3}A\r\x1b[J`);resolveSelection(choices.filter((_,i)=>checked[i]).map(x=>x.name));return;}
    if(event.name==='up')cursor=(cursor+choices.length-1)%choices.length;
    else if(event.name==='down')cursor=(cursor+1)%choices.length;
    else if(event.name==='space')checked[cursor]=!checked[cursor];else return;
-   output.write(`\x1b[${choices.length}A\r\x1b[J`);draw();
+   output.write(`\x1b[${choices.length*2}A\r\x1b[J`);draw();
   };
-  output.write('Install/update local artifactbin skills (↑/↓ move, Space toggle, Enter confirm, Esc cancel).\nSelection controls writes; harnesses may also discover shared skill folders.\n');
+  output.write(`\n  ${s.bold('Choose your agent skills')}\n  ${s.dim('↑/↓ move · Space toggle · Enter install · Esc cancel')}\n`);
   draw();input.on('keypress',key);input.once('end',cancel);
  });}finally{input.setRawMode(wasRaw??false);input.pause();}
 }

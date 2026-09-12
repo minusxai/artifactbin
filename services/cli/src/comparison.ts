@@ -1,4 +1,5 @@
 import {createTwoFilesPatch} from 'diff';
+import {highlightDiff,type Style} from './style';
 import {CliError,type ParsedCommand} from './commands';
 import {resolve} from 'node:path';
 import {resolveReference} from './reference';
@@ -84,13 +85,13 @@ export async function compare(workspace:Workspace,input:string|string[]|undefine
 }
 
 /** One diff, however many targets: the text is written once, to a file or to stdout. */
-export async function diffCommand(workspace:Workspace,parsed:ParsedCommand,server:string,remote:boolean,stdout:(value:string)=>void,client?:HttpClient):Promise<Record<string,unknown>|undefined>{
+export async function diffCommand(workspace:Workspace,parsed:ParsedCommand,server:string,remote:boolean,stdout:(value:string)=>void,client?:HttpClient,style?:Style):Promise<Record<string,unknown>|undefined>{
  const {flags,positionals}=parsed;const output=flags.output as string|undefined;
  if(output==='-'&&flags.json)throw new CliError('conflicting_output','--json cannot share stdout with the diff text.','Choose a file with --output, or omit --json.');
  const result=positionals.length||remote?await compare(workspace,positionals,server,remote,client):await localDiff(workspace);
  if(output===undefined)return result;
  const text=result.diffs.map(entry=>entry.diff).filter(Boolean).map(entry=>entry.endsWith('\n')?entry:entry+'\n').join('');
- if(output==='-'){stdout(text);return undefined;}
+ if(output==='-'){stdout(style?highlightDiff(text,style):text);return undefined;}
  const path=resolve(workspace.cwd,output);
  try{await atomicWrite(path,text,{exclusive:true});}
  catch(error){if((error as NodeJS.ErrnoException).code==='EEXIST')throw new CliError('output_exists',`Output already exists: ${path}.`,'Choose a new --output path; diff never replaces an existing file.');throw error;}

@@ -18,6 +18,7 @@ import {chmod, lstat, mkdir, stat} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import type {DatabaseSync} from 'node:sqlite';
+import type * as SQLite from 'node:sqlite';
 import {configDir} from './config';
 import {isMissing} from './files';
 
@@ -36,15 +37,19 @@ export type StateKind =
 
 export interface StateRecord<T = unknown> {key: string; value: T; data: Buffer | null}
 
-/** Keep the experimental-feature banner off every command's stderr. Node 22 prints it on first load of node:sqlite. */
-async function loadSqlite(): Promise<typeof import('node:sqlite')> {
-  const emit = process.emitWarning;
-  process.emitWarning = ((warning: unknown, ...rest: unknown[]) => {
-    if (String(warning).includes('SQLite')) return;
-    return (emit as (...args: unknown[]) => void).call(process, warning, ...rest);
-  }) as typeof process.emitWarning;
-  // The runtime subsystem is loaded lazily on purpose: the warning filter above must be in place first.
-  try { return await import('node:sqlite'); } finally { process.emitWarning = emit; }
+let sqlite:typeof SQLite|undefined;
+/** Lazy builtin loading keeps read-only startup small. Node 22 emits this informational notice
+ * synchronously on first load; silence only that notice and restore the handler before any async work.
+ * Actual SQLite errors and every other warning retain their normal behavior. */
+function loadSqlite():typeof SQLite {
+  if(sqlite)return sqlite;
+  const emitWarning=process.emitWarning;
+  process.emitWarning=(warning:string|Error,...args:unknown[])=>{
+    if(warning==='SQLite is an experimental feature and might change at any time'&&args[0]==='ExperimentalWarning')return;
+    Reflect.apply(emitWarning,process,[warning,...args]);
+  };
+  try{return sqlite=process.getBuiltinModule('node:sqlite') as typeof SQLite;}
+  finally{process.emitWarning=emitWarning;}
 }
 
 async function privateFile(path: string): Promise<void> {
@@ -59,7 +64,7 @@ export class State {
   static async open(home: string, env: NodeJS.ProcessEnv = process.env): Promise<State> {
     const path = join(configDir(home, env), 'state.sqlite');
     await privateFile(path);
-    const {DatabaseSync} = await loadSqlite();
+    const {DatabaseSync} = loadSqlite();
     const db = new DatabaseSync(path);
     await chmod(path, 0o600);
     db.exec(`
@@ -146,7 +151,7 @@ export async function withLock<T>(home: string, scope: string, run: () => Promis
   const file = join(configDir(home, env), 'locks', `${name}.sqlite`);
   if (locks.has(file)) return run();
   await privateFile(file);
-  const {DatabaseSync} = await loadSqlite();
+  const {DatabaseSync} = loadSqlite();
   const db = new DatabaseSync(file);
   const held = (async () => {
     await chmod(file, 0o600);

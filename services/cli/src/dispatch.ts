@@ -8,11 +8,12 @@ import {resultOutput} from './result-output';
 import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
+import {setupSkills,setupSummary} from './setup';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
 import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
-import {readFile} from 'node:fs/promises';
+import {readFile,realpath} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {recoverFiles,stagedFiles} from './journal';
 import {withLock} from './state';
@@ -25,6 +26,8 @@ import {deleteComments} from './delete';
 import {diffCommand,remoteStatus} from './comparison';
 import {localStatus} from './local';
 import {helpDocument,writeHelp} from './teaching';
+import {helpScreen} from './help-screen';
+import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
 import {loadConnection} from './config';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
@@ -34,23 +37,35 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;cwd?:string;home?:string;interactive?:boolean;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const stdout=context.stdout??(value=>process.stdout.write(value));const stderr=context.stderr??(value=>process.stderr.write(value));
+ // Colour only reaches a real terminal: a supplied writer stays plain unless the caller asks for colour.
+ const styleOptions:StyleOptions=context.color!==undefined?{color:context.color}:context.stdout||context.stderr?{color:false}:colorSupport(context.env??process.env,!!process.stdout.isTTY);
+ const columns=context.columns??process.stdout.columns;const style=createStyle(styleOptions);
  let parsed:ParsedCommand|undefined;let json=argv.includes('--json');
  try{
   parsed=parseCommand(argv);json=!!parsed.flags.json;
   const {command,positionals,flags}=parsed;
   let recoveredRequest:string|undefined;let markdownPlan:MarkdownPlan|undefined;let querySql:string|undefined;let secretBinding:Record<string,unknown>|undefined;
-  const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':JSON.stringify(value,null,2)+'\n');};
-  if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`afbin ${CLI_VERSION} (protocol ${CLI_PROTOCOL_VERSION})`);return 0;}
+  const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':highlightJson(JSON.stringify(value,null,2),style)+'\n');};
+  if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`${style.wordmark('afbin')} ${style.bold(CLI_VERSION)} ${style.dim(`(protocol ${CLI_PROTOCOL_VERSION})`)}`);return 0;}
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
+  // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
+  if(command==='setup'&&!flags.help){
+   const result=await setupSkills({home,env:context.env,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
+   if(json)emit(result);else stdout(setupSummary(result.installations,await realpath(home),style));
+   return 0;
+  }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
   // harnesses. It never authenticates or touches the network, and is a no-op once the skill is current.
-  await ensureInit({home,env:context.env,stderr});
+  if(command!=='setup')await ensureInit({home,env:context.env,stderr,style});
   if(flags.help||command==='help'){
    const bundled=command==='help'?flags:{};
-   const text=helpDocument(command==='help'?positionals[0]:command,typeof bundled.format==='string'?bundled.format:'text');
+   const format=typeof bundled.format==='string'?bundled.format:'text';const topic=command==='help'?positionals[0]:command;
+   // A person at a terminal gets the screens; automation, --json and --output keep the brief and plain text.
+   const screen=!json&&format==='text'&&bundled.output===undefined&&interactive?helpScreen(topic,{...styleOptions,columns}):undefined;
+   const text=screen??helpDocument(topic,format);
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    emit(json?{help:text}:text);return 0;
   }
@@ -75,7 +90,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='validate'&&!account){localValidation=await validateFiles(workspace,positionals,!!flags.fix);if(!flags.remote||!localValidation.valid){emit(localValidation);return localValidation.valid?0:2;}}
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
-   try{const result=await diffCommand(workspace,parsed,serverOrigin()??'https://artifactbin.dev',false,stdout);if(result)emit(result);return 0;}
+   try{const result=await diffCommand(workspace,parsed,serverOrigin()??'https://artifactbin.dev',false,stdout,undefined,style);if(result)emit(result);return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
   const selectedServer=serverOrigin()??'https://artifactbin.dev';
@@ -87,7 +102,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='query'){
    queryParameters(flags.param as string[]|undefined);
    querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
-   const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout);return 0;}
+   const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout,style);return 0;}
   }
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
@@ -109,7 +124,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    return 0;
   }
   let connection=await loadConnection(server,home,context.env);
-  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,noBrowser:!!flags['no-browser'],rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(message+'\n')});
+  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,noBrowser:!!flags['no-browser'],rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
   if(command==='auth'){
    // AUTH is lazy and idempotent. A saved token is verified with one read and its account reported;
    // no token or a rejected one runs the same browser approval the rest of the CLI uses on 401.
@@ -130,17 +145,17 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
   if(command==='export'){await exportResources(workspace,positionals,{...exportOptions(),client});return 0;}
   if(command==='query'&&flags.write){emit(await queryMutation(workspace,parsed,querySql,client));return 0;}
-  if(command==='query'){const result=await mixedQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
+  if(command==='query'){const result=await mixedQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout,style);return result.exitCode;}
   if(command==='validate'){const remote=await push(workspace,positionals,client,{dryRun:true});const valid=!!localValidation?.valid&&remote.operations.every(op=>!('error' in op));emit({...localValidation,valid,remote:remote.operations});return valid?0:2;}
   if(command==='delete'&&flags.type==='comment'){const result=await deleteComments(workspace,String(flags.in),positionals,client,{dryRun:!!flags['dry-run']});emit(result.value);return result.exitCode;}
   if(command==='status'){emit(await remoteStatus(workspace,client,home,context.env));return 0;}
-  if(command==='diff'){const result=await diffCommand(workspace,parsed,client.connection.server,!!flags.remote,stdout,client);if(result)emit(result);return 0;}
+  if(command==='diff'){const result=await diffCommand(workspace,parsed,client.connection.server,!!flags.remote,stdout,client,style);if(result)emit(result);return 0;}
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
-  if(command==='list'&&flags.type==='profile'){await resultOutput(await client.request('/account/profile'),parsed,workspace.cwd,emit,stdout);return 0;}
-  if(command==='list'&&flags.type==='session'){await resultOutput(await listAccountCollection(parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
-  if(command==='list'&&flags.type==='table'){await resultOutput(await discoverTables(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
-  if(command==='list'&&positionals.length){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
-  if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout);return 0;}
+  if(command==='list'&&flags.type==='profile'){await resultOutput(await client.request('/account/profile'),parsed,workspace.cwd,emit,stdout,style);return 0;}
+  if(command==='list'&&flags.type==='session'){await resultOutput(await listAccountCollection(parsed,client),parsed,workspace.cwd,emit,stdout,style);return 0;}
+  if(command==='list'&&flags.type==='table'){await resultOutput(await discoverTables(workspace,parsed,client),parsed,workspace.cwd,emit,stdout,style);return 0;}
+  if(command==='list'&&positionals.length){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));await resultOutput(result.value,parsed,workspace.cwd,emit,stdout,style);return result.exitCode;}
+  if(command==='list'){await resultOutput(await readCommand(workspace,parsed,client),parsed,workspace.cwd,emit,stdout,style);return 0;}
   if(command==='log'){const result=await batchCommand(positionals,ref=>readCommand(workspace,{command,flags,positionals:[ref]},client));emit(result.value);return result.exitCode;}
   if(command==='pull'&&flags.output==='-'){const result=await pullToStdout(workspace,positionals,client,parsed,stdout);if(result)emit(result);return 0;}
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run'],type:flags.type as string|undefined}));return 0;}
@@ -149,19 +164,19 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='push'&&!account){emit({...await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;}
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');
-   return attachRemote({client,id:flags.session,interactive,stdout,onSession:url=>stderr(`Remote session: ${url}\n`)});
+   return attachRemote({client,id:flags.session,interactive,stdout,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
   }
   if(command==='remote'){
    // The PTY graph is loaded only after the user selects remote execution.
    const {chooseLaunch}=await import('./launcher');const {runRemote}=await import('./runner');
    const launch=positionals.length?{command:positionals[0],args:positionals.slice(1)}:await chooseLaunch();
-   return runRemote({client,...launch,name:typeof flags.name==='string'?flags.name:undefined,onSession:url=>stderr(`Remote session: ${url}\n`)});
+   return runRemote({client,...launch,name:typeof flags.name==='string'?flags.name:undefined,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
   }
   throw new CliError('command_integration_pending',`The ${command} command is still being integrated.`);
  }catch(error){
   const failure=error instanceof ApprovalRequired?{code:error.code,message:error.message,verification_url:error.verificationUrl,user_code:error.userCode,expires_at:new Date(error.expiresAt).toISOString()}:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{}),...(error.details?{details:error.details}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)};
   if(json)stdout(JSON.stringify({error:failure})+'\n');
-  stderr(`${failure.code}: ${failure.message}${'fix'in failure?`\n${failure.fix}`:''}\n`);
+  stderr(`${style.red(style.bold(failure.code))}: ${failure.message}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
  }
 }
@@ -171,12 +186,16 @@ async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(co
  * never prompts (selection is non-interactive here) and never authenticates. Idempotent: it installs
  * only when the managed skill manifest is missing or stale, and stays silent otherwise.
  */
-async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;stderr:(value:string)=>void}):Promise<void>{
+async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;stderr:(value:string)=>void;style:Style}):Promise<void>{
  const selected=await selectSkills({home:options.home,env:options.env,interactive:false});
  if(!selected.length)return;
  const plans=await planSkills(selected,{home:options.home,env:options.env});
  if(plans.every(plan=>plan.status==='unchanged'))return;
  const installed=await installSkills(selected,{home:options.home,env:options.env});
- for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
- for(const hint of restartHints(installed.installations))options.stderr(hint+'\n');
+ for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${options.style.green(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
+ for(const hint of restartHints(installed.installations))options.stderr(options.style.yellow(hint)+'\n');
+}
+/** The approval sentence keeps its words; the code and the URL stand out on a terminal. */
+function approvalMessage(message:string,style:Style):string{
+ return message.replace(/https?:\/\/[^\s,]+/g,url=>style.cyan(url)).replace(/\bcode (\S+)/,(_,code)=>`code ${style.bold(code)}`);
 }
