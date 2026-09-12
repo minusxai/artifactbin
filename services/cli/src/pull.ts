@@ -49,7 +49,7 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
   const prior=Object.entries(workspace.tracking?.files??{}).find(([,file])=>file.id===id);
   if(directory&&prior)path=join(directory,basename(prior[0]));
   path??=prior?.[0];
-  if(path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity.');
+  if(path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity. To inspect the published head instead, run afbin diff --remote <path> or afbin export <id> --format html.');
   if(path&&workspace.tracking?.files[path]&&workspace.tracking.files[path].id!==id)throw new CliError('identity_mismatch',`${path} tracks a different artifact.`);
   const before=path?await readOptional(await confinedPath(workspace.root,path)):null;
   const tracked=path?workspace.tracking?.files[path]:undefined;
