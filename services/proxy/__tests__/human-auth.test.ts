@@ -10,7 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eventName } from '@artifactbin/contracts';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { createHumanAuth, type HumanAuth } from '../src/auth/human';
-import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 let pg: PGlite;
 let auth: HumanAuth;

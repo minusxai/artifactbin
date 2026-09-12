@@ -73,6 +73,7 @@
     "services/browser",
     "services/events",
     "services/proxy",
-    "services/cli"
+    "services/cli",
+    "services/test-support"
   ]
 }

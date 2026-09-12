@@ -1,68 +1,31 @@
-/** Shared by the proxy's tests: options over one in-memory PGLite, no secrets, no network. */
+/** Shared by the proxy's tests: options over one in-memory PGLite, no secrets, no network.
+ *
+ * The generic half — the PGLite instance, the app-owned tokens table, the wipe, the minted token row,
+ * the recorded page headers — now lives in `@artifactbin/test-support`. What stays here is the part
+ * that is the proxy's own: its schema, its policy files, and the options object its parts take.
+ */
 import path from 'node:path';
-import { PGlite } from '@electric-sql/pglite';
+import { ensureTokensTable, resetTables, testDb } from '@artifactbin/test-support/db';
 import { createTokenReader } from '@artifactbin/utils';
 import { ensureProxySchema } from '../src/schema';
 import type { ProxyOptions } from '../src/parts';
 
-/** One PGLite per process: every test's tables live in it, wiped per use. */
-let shared: PGlite | null = null;
-export const testDb = () => {
-  if (!shared) shared = new PGlite();
-  const query = async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) =>
-    (await shared!.query<T>(sql, params)) as { rows: T[] };
-  return { pg: () => shared!, query };
-};
-
-/** The app-owned tokens table, as the reader SELECTs it (the app declares it; the proxy only reads). */
-const TOKENS_DDL = [
-  `CREATE TABLE IF NOT EXISTS tokens (
-     id TEXT PRIMARY KEY,
-     name TEXT,
-     token_hash TEXT NOT NULL,
-     user_id TEXT,
-     client_harness TEXT,
-     audience TEXT,
-     scope TEXT,
-     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-     deleted_at TIMESTAMPTZ,
-     expires_at TIMESTAMPTZ,
-     last_used_at TIMESTAMPTZ
-   )`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS idx_tokens_hash ON tokens (token_hash)`,
-];
+export { mintTestToken, testDb } from '@artifactbin/test-support/db';
+export { PAGE_HEADERS } from '@artifactbin/test-support/browser';
 
 /** Both sides' tables, idempotent — safe to call before anything exists. */
 export async function ensureTestSchema(): Promise<void> {
   const { pg, query } = testDb();
   await pg().exec('CREATE SCHEMA IF NOT EXISTS auth');
-  for (const stmt of TOKENS_DDL) await pg().exec(stmt);
+  await ensureTokensTable();
   await ensureProxySchema({ query }, 'auth');
 }
 
 /** Wipe both sides' tables so each test starts empty. */
 export async function resetTestDb(): Promise<void> {
   await ensureTestSchema();
-  const { pg } = testDb();
-  await pg().exec('DELETE FROM tokens; DELETE FROM auth.credentials; DELETE FROM auth.clients');
+  await resetTables(['tokens', 'auth.credentials', 'auth.clients']);
 }
-
-/** A ready token row, answered the way the app would mint it (hash only, never the secret). */
-export async function mintTestToken(o: { id: string; userId: string | null; pg: PGlite }): Promise<string> {
-  const token = `mx_${o.id.padEnd(40, 'x')}`;
-  const { createHash } = await import('node:crypto');
-  const hash = createHash('sha256').update(token).digest('hex');
-  await o.pg.query('INSERT INTO tokens (id, name, token_hash, user_id) VALUES ($1, $2, $3, $4)', [o.id, 'test', hash, o.userId]);
-  return token;
-}
-
-/**
- * What Chromium actually sends on the home page's create fetch (MEASURED on production). Any test that
- * posts `/api/start` through the composed proxy needs these: that route is `browser_only` in every policy
- * file, and the proxy refuses it to anything that is not the page. Kept here rather than typed into each
- * file, so the measured shape has a single home.
- */
-export const PAGE_HEADERS: Readonly<Record<string, string>> = { origin: 'http://localhost', 'sec-fetch-site': 'same-origin' };
 
 /**
  * THE SUITE'S DEFAULT POLICY FILE — the shipped DEV one, whose anonymous mint is wide open, so a test that

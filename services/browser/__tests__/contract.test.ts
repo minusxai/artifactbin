@@ -8,7 +8,7 @@ import type { BrowserService, RenderRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, browserClient, serveBrowser } from '@artifactbin/browser';
 import { createBrowser,requestOriginAllowed } from '@artifactbin/browser/local';
 import sharp from 'sharp';
-import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 const PAGE = `<html><head><style>
 .density{position:absolute;left:10px;top:10px;width:20px;height:20px;background:#c33}

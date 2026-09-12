@@ -34,7 +34,7 @@ describe('the session part', () => {
   });
   it('resolves a bearer to credential bearer with its ids, and a bad bearer to none', async () => {
     const app = await proxy();
-    const token = await mintTestToken({ id: 'tok_9', userId: 'usr_1', pg: testDb().pg() });
+    const token = await mintTestToken({ id: 'tok_9', userId: 'usr_1', query: testDb().query });
     await app.request('/api/artifacts', { headers: { authorization: `Bearer ${token}` } });
     expect(seenActor).toEqual({ credential: 'bearer', tokenId: 'tok_9', userId: 'usr_1' });
     await app.request('/api/artifacts', { headers: { authorization: 'Bearer mx_badbadbadbadbadbadbadbadbadbadbadbadbad01' } });
@@ -51,7 +51,7 @@ describe('the session part', () => {
   });
   it('authenticates the agent cookie as agent-cookie by its primary (last) id', async () => {
     const app = await proxy();
-    await mintTestToken({ id: 'tok_c', userId: null, pg: testDb().pg() });
+    await mintTestToken({ id: 'tok_c', userId: null, query: testDb().query });
     const sessionId='c'.repeat(43);
     await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,'tok_c',now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex')]);
     await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_x', 'tok_c'],sessionId }, 'test-cookie-secret-00000000000000000000')}` } });
@@ -81,7 +81,7 @@ describe('the start_doc policy (the rate limit; the browser check is the same pa
     const denied = await post();
     expect(denied.status).toBe(429);
     expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'start_doc' });
-    const token = await mintTestToken({ id: 'tok_h', userId: null, pg: testDb().pg() });
+    const token = await mintTestToken({ id: 'tok_h', userId: null, query: testDb().query });
     const holder = { authorization: `Bearer ${token}` };
     expect((await post(holder)).status).toBe(200);
     expect((await post(holder)).status).toBe(200);
