@@ -22,7 +22,8 @@ its static `code` string stays editable through ordinary document edits.
 Use `stateDiagram-v2` or `sequenceDiagram` for those diagram types. Code is
 limited to 20,000 characters; diagram configuration/frontmatter is refused.
 The app owns strict rendering, theme and resource limits; click callbacks
-are disabled. Syntax errors show a readable error and preserve the source.
+are disabled. Syntax errors show a readable error and keep the source; in edit
+mode, select a diagram to change its source and title in the inspector.
 Do not draw UI wireframes in Mermaid: use spatial HTML/CSS screen panels.
 
 ## Inline SVG
