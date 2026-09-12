@@ -51,7 +51,7 @@ vi.mock('@/lib/dynamic', () => ({
 // Monaco itself is a browser concern — it bundles workers and paints on a
 // canvas, neither of which jsdom has. Stubbing the SOURCE EDITOR rather than
 // `@monaco-editor/react` keeps this test about what InPlaceEditor does with the
-// text; that the real editor mounts at all is scripts/gate-editor-flow.mjs's
+// text; that the real editor mounts at all is scripts/gate-editor-v2.mjs's
 // question, and mocking the library instead is exactly why the CDN loader
 // nobody could reach went unnoticed for so long.
 vi.mock('@/components/SourceEditor', async () => {
