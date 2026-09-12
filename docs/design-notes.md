@@ -235,8 +235,12 @@ production rollout results. Raw JSON includes resource timing and payload sizes.
 
 ## Standalone CLI distribution
 
-The release matrix builds pinned Node source with `small-icu` (English/root locale data), then uses
-that same runtime for SEA generation. Linux uses a digest-pinned manylinux 2.28 toolchain with
+The dedicated `cli-runtime.yml` workflow builds pinned Node source with `small-icu` (English/root
+locale data) only when a maintainer requests a new runtime revision. Prepared executables and
+upstream notices are versioned release assets; `runtime-lock.json` pins compressed and decoded
+hashes. Ordinary CLI builds verify/download that dependency through `scripts/runtime.mjs`, then
+use the same runtime for SEA generation. Missing or corrupt release bytes fail promptly, never
+trigger source compilation. The Actions cache is an optional accelerator and may be evicted. Linux uses a digest-pinned manylinux 2.28 toolchain with
 static C++ support and the official Node ET_EXEC layout (avoiding the injector’s PIE symbol-table bug);
 CI rejects other ELF layouts and runtime GLIBC requirements above 2.28. `services/cli/scripts/binary.mjs` strips the executable before
 final signing and emits raw and gzip assets, with separate transport/executable hashes. Raw assets

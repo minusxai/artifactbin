@@ -161,6 +161,25 @@ npm run build:binary -w services/cli
 
 Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Terminal native files extract into a private temporary directory for the process lifetime; SQL uses the verified persistent cache described above. Each of the four release targets has its own build and smoke gate. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
 
+The build downloads the small-ICU Node executable pinned in `runtime-lock.json`, verifies both
+compressed and executable SHA-256, and reuses a verified local copy. A cache miss downloads the
+same versioned release asset; ordinary builds never compile Node. `CLI__NODE` is an explicit
+build/test override. GitHub's dependency cache is only an acceleration layer, not the runtime's
+source of availability.
+
+To update Node or its build recipe, change `scripts/small-node.mjs` and run the dedicated
+**Build CLI Node runtimes** workflow with a new `cli-node-v<version>-r<revision>` tag. This is the
+infrequent source compilation step. It publishes prepared runtimes and upstream notices in a
+separate prerelease; it does not advance the user-facing CLI release pointer. Download those
+assets into one directory, then run from the repository root:
+
+```sh
+node services/cli/scripts/pin-runtime.mjs cli-node-v22.22.3-r2 /path/to/runtime-assets
+```
+
+Review and commit the resulting `services/cli/runtime-lock.json`, then require the four-platform
+CLI CI to pass using those downloaded bytes. Existing runtime revisions are never overwritten.
+
 Intel Mac packaging also needs Python 3.8–3.14. The build creates a private virtual environment
 and installs hash-pinned LIEF 0.17.6 to avoid the old injector’s Mach-O TLS corruption. Python and
 LIEF are build tools.
