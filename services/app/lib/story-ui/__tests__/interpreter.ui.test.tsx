@@ -146,3 +146,46 @@ describe('unknown tags', () => {
     expect(container.textContent).toBe('');
   });
 });
+
+describe('managed Iframe interpreter boundary',()=>{
+  it('passes only compiled inert payload to the adapter; no author DOM enters parent',()=>{
+    const calls:Record<string,unknown>[]=[];
+    const Iframe=(props:Record<string,unknown>)=>{calls.push(props);return <div aria-label="managed-frame"/>;};
+    const parsed=parseJsxOrThrow('<Iframe id="1"><style>{`body{color:red}`}</style><canvas id="2"/><script>{`window.untrusted=true`}</script></Iframe>');
+    const result=render(<>{renderStoryNodes(parsed.nodes,{components:{Iframe}})}</>);
+    expect(calls[0].compiled).toEqual({html:'<style>body{color:red}</style><canvas id="2"></canvas>',scripts:[{type:'classic',source:'window.untrusted=true'}]});
+    expect(calls[0].children).toBeUndefined();
+    expect(result.container.querySelector('canvas,style,script')).toBeNull();
+    expect(calls[0].id).toBe('1');
+  });
+  it('fails closed for unvalidated forged platform props or unsafe child markup',()=>{
+    for(const source of ['<Iframe compiled={{html:"evil"}}/>','<Iframe><iframe/></Iframe>']){
+      const parsed=parseJsxOrThrow(source);
+      const Iframe=()=>{throw Error('must not render');};
+      expect(renderStoryNodes(parsed.nodes,{components:{Iframe}})).toEqual([null]);
+    }
+  });
+});
+
+/**
+ * Authored `<style>` blocks — interpreter render. The CSS travels as a
+ * template-literal child (the JSX idiom that keeps `{`/`}` as data); the
+ * interpreter must render it as a real <style> node inside the surface so the
+ * capture path (which serializes in-root styles) carries it for free.
+ */
+const mountBare = (src: string) => {
+  const parsed = parseJsxOrThrow(src);
+  return render(<>{renderStoryNodes(parsed.nodes, { components: {} })}</>);
+};
+
+describe('authored <style> rendering', () => {
+  it('renders a style element whose text is the authored CSS', () => {
+    const { container } = mountBare(
+      '<style>{`@keyframes rise { from { opacity: 0 } } .rise { animation: rise 1s both }`}</style><p className="rise">x</p>',
+    );
+    const style = container.querySelector('style');
+    expect(style).not.toBeNull();
+    expect(style!.textContent).toContain('@keyframes rise');
+    expect(style!.textContent).toContain('.rise');
+  });
+});
