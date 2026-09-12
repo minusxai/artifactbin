@@ -13,7 +13,7 @@
  */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
-import { startDocument } from './lib/start-doc.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
@@ -72,14 +72,20 @@ ok((await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })).status === 404
 // one way it gets a credential at all.
 ok((await fetch(`${B}/api/start`, { method: 'POST' })).status === 403,
   'a client that is not the page is refused the create button');
-const agentDoc = await startDocument(B);
-ok(/^mx_/.test(agentDoc.token ?? ''), 'the CLI device approval is the only way a credential exists');
+// This gate runs its OWN server (start: custom), so it does not share the
+// helper the shared-server gates use — it walks the same two steps by hand.
+const agent = await connectAgent(B);
+ok(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
+const agentDoc = await (await fetch(`${B}/api/start`, {
+  method: 'POST',
+  headers: { origin: new URL(B).origin, 'sec-fetch-site': 'same-origin', authorization: `Bearer ${agent.token}` },
+})).json();
 ok(!!agentDoc.id, 'and the connected agent has a document it can write');
 
 await page.goto(`${B}/a/${agentDoc.id}`, { waitUntil: 'load' });
 const put = await fetch(`${B}/api/artifacts/${agentDoc.id}`, {
   method: 'PUT',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agentDoc.token}` },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agent.token}` },
   body: JSON.stringify({
     title: 'gate doc',
     markup: '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Landed by the agent</h1></div>',
