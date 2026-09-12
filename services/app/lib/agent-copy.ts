@@ -9,7 +9,7 @@
  */
 export function existingPaste(base: string, artifactId: string): string {
   const origin = base.replace(/\/$/, '');
-  return `Help me edit my artifact at ${artifactUrl(base, artifactId)}. Use the afbin CLI to operate artifactbin, or (curl -fsSL ${origin}/chat/install.sh | sh) if not installed. Run afbin help first.`;
+  return `Help me edit my artifact at ${artifactUrl(base, artifactId)}. Use the afbin CLI to operate artifactbin, or (curl -fsSL ${origin}/chat/install.sh | sh) if not installed. Run afbin help first. Pass --server ${origin} to every afbin server command so authentication and publishing use this server.`;
 }
 
 const artifactUrl = (base: string, artifactId: string): string =>
