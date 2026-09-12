@@ -3,10 +3,10 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import sharp from 'sharp';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3040';
-const { token } = await mintAnon(base);
+const { token } = await connectAgent(base);
 const authorization = `Bearer ${token}`;
 const create = async body => {
   const res = await fetch(`${base}/api/artifacts`, { method: 'POST', headers: { Authorization: authorization, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

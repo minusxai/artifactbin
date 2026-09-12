@@ -31,7 +31,6 @@ import { MAX_CONTENT_BYTES } from '@/lib/story/input';
 import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
 import { COMPUTED_FIGURE_RULE } from '@/lib/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
-import { anonymousClaimRelay } from '@/lib/agent-copy';
 import type { SkillFile } from './tree';
 
 export interface RenderOptions { base: string }
@@ -74,9 +73,6 @@ const REGISTRY_GLOBALS = {
 };
 
 export function renderSkill(file: SkillFile, opts: RenderOptions): string {
-  // ONE source for this advice: agent-copy's fifth string, the line an agent relays about an orphaned
-  // document. The docs render it for a stand-in id, so the words a reader sees are the words we hand over.
-  const claim = anonymousClaimRelay(opts.base, '<id>');
   const own: Record<string, unknown> = {};
   const entry = file.file.replace(/\.md$/, '');
   if (file.ref && entry.startsWith('themes-')) own.theme = REGISTRY_GLOBALS.themes.find((t) => t.name === entry.slice('themes-'.length));
@@ -87,7 +83,6 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       base: opts.base,
       // Only the brief inlines the example; a reference that names it is a build failure, by design.
       ...(file.file === 'SKILL.md' && !file.ref ? { example: skillExample().trimEnd() } : {}),
-      claim,
       publishExample: '```sh\nafbin push report.jsx\n```',
       editExample: 'Edit the local JSX file, then run `afbin push report.jsx`.',
       readBackCall: '`afbin pull`',

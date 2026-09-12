@@ -280,10 +280,16 @@ try {
   const page = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   const email = `mxmx_test_viz_${Date.now().toString(36)}@example.com`;
   await loginViaEmail(page, B, sink, email);
-  await page.goto(`${B}/account`, { waitUntil: 'load' });
-  await page.fill('[aria-label="Token to claim"]', token);
-  await page.click('[aria-label="Claim token"]');
-  await page.waitForTimeout(3000);
+  // The account takes ownership of what this connection published. There is
+  // no paste anywhere in the product, so the gate calls the claim API with the
+  // browser's own session, which is what any account surface would do.
+  const cookieHeader = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
+  await fetch(`${B}/api/tokens/claim`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', cookie: cookieHeader, origin: new URL(B).origin },
+    body: JSON.stringify({ token }),
+  });
+  await page.waitForTimeout(1000);
 
   // No stored bearer: the editor must authenticate by session alone.
   await page.goto(`${B}/a/${start.id}`, { waitUntil: 'load' });

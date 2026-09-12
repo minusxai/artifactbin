@@ -1,43 +1,37 @@
 /**
  * Starting a document, and becoming its owner in a browser — for gates.
  *
- * Two things changed under every gate that used to do this by hand:
+ * `POST /api/start` hands out NOTHING but the document and the one-line
+ * tokenless paste: the product's only door to a credential is the afbin CLI's
+ * device approval. So a gate that needs to WRITE the document it started gets
+ * a connection first (lib/cli-connection) and starts the document AS that
+ * connection — which is exactly what an agent does.
  *
- *  1. `POST /api/start` returns the anonymous agent token once, both as a
- *     `token` field and inline in the one-line paste. Gates take the field and
- *     assert the paste carries the same credential; no start link is spent.
- *  2. `/a/<id>` serves the app document with its story runtime inline to every
- *     viewer. Owner authority still controls the surrounding editing chrome,
- *     so the owner-focused gates make their browser the owner, which is what
- *     `becomeOwner` does.
- *
- * Both are the product working as designed, so they belong in one helper
- * rather than in thirteen copies of the old assumptions.
+ * `/a/<id>` serves the app document with its story runtime inline to every
+ * viewer. Owner authority still controls the surrounding editing chrome, so
+ * the owner-focused gates make their browser the owner, which is what
+ * `becomeOwner` does.
  */
+import { connectAgent } from './cli-connection.mjs';
 
 /**
- * Create an artifact and take the agent's token from the start response.
+ * Create an artifact AS a fresh CLI connection, so the caller can write it.
  * Returns `{ id, token, editId, prompt }`.
  */
 export async function startDocument(base) {
-  const res = await fetch(`${base}/api/start`, { method: 'POST' });
+  const { token } = await connectAgent(base);
+  const res = await fetch(`${base}/api/start`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.id) {
-    throw new Error(
-      `cannot start a document (${res.status} ${JSON.stringify(body)}).\n`
-      + 'The anonymous-mint limit is per-IP and in-memory: restart the dev server to clear it.',
-    );
+    throw new Error(`cannot start a document (${res.status} ${JSON.stringify(body)}).`);
   }
-  const token = typeof body.token === 'string' && /^mx_[A-Za-z0-9_-]+$/.test(body.token)
-    ? body.token
-    : null;
-  if (!token) throw new Error('the start response handed out no token');
   if (typeof body.prompt !== 'string'
     || body.prompt.includes('\n')
     || body.prompt.includes('\r')
     || body.prompt.includes('mx_')) {
     throw new Error('the start paste is not one tokenless line');
   }
+  if ('token' in body) throw new Error('the start response handed out a credential');
   return { id: body.id, token, editId: body.edit_id, prompt: body.prompt };
 }
 

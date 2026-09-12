@@ -21,7 +21,7 @@ import { chromium } from 'playwright';
 import { openArtifactControls, openMenu } from './lib/reveal-chrome.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
-import { mintAnonResponse } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3000';
 const fails = [];
@@ -31,22 +31,22 @@ const J = async (path, init = {}, token) => {
   let body = null; try { body = await res.json(); } catch { /* non-JSON */ }
   return { status: res.status, body };
 };
-// Anonymous minting is IP-rate-limited (10/hour). Say so plainly rather than
-// failing every later check with an opaque 401.
-const mint = async () => {
-  const res = await mintAnonResponse(B);
-  const r = { status: res.status, body: await res.json().catch(() => null) };
-  if (r.status === 429) {
-    console.error('\nAnonymous mint is rate-limited (10/hour per IP). Wait for the window, restart the server (the limiter is in-memory), or export GATE_TOKEN=<mx_...> and re-run.');
+// The CLI's device approval is the only door to a credential, and its
+// exchange is IP-rate-limited. Say so plainly rather than failing every later
+// check with an opaque 401.
+const connect = async () => {
+  try {
+    return (await connectAgent(B)).token;
+  } catch (error) {
+    console.error(`\nCould not connect an agent: ${error instanceof Error ? error.message : error}`);
+    console.error('If this is the rate limit, wait for the window, restart the server (the limiter is in-memory), or export GATE_TOKEN=<mx_...> and re-run.');
     process.exit(2);
   }
-  if (!r.body?.token) { console.error(`\nCould not mint a token: ${r.status} ${JSON.stringify(r.body)}`); process.exit(2); }
-  return r.body.token;
 };
 
 // ───────────────────────────── API ─────────────────────────────
 console.log('█ API');
-const T = process.env.GATE_TOKEN || (await mint());
+const T = process.env.GATE_TOKEN || (await connect());
 const made = {};
 const tiers = {
   markup: { markup: '<Helmet><script>{`void 0`}</script></Helmet><div data-design="tw" className="p-8"><h1 className="text-3xl font-bold">Tier markup</h1></div>' },
@@ -134,18 +134,28 @@ await loginViaEmail(p, B, sink, EMAIL);
 const signedIn = () => isSignedInAs(p, EMAIL);
 ok(await signedIn(), 'a first login with a code creates the account and signs you in');
 ok((await p.locator('[aria-label="Password"]').count()) === 0, 'no password is asked for anywhere');
-const claimToken = await mint();
-await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Claimed artifact', markup: '<h1>claimed</h1>' }) }, claimToken);
-await p.goto(`${B}/account`, { waitUntil: 'load' });
-await p.fill('[aria-label="Token to claim"]', claimToken); await p.click('[aria-label="Claim token"]'); await p.waitForTimeout(3000);
+// CONNECTING THE CLI is the only way a credential exists, so this is how an
+// agent's work lands in an account: the signed-in browser approves the device
+// pairing, and everything that connection publishes belongs to the account
+// from the start — there is nothing to paste and nothing to claim.
+const pairing = await (await fetch(`${B}/oauth/device`, { method: 'POST' })).json();
+await p.goto(`${B}/oauth/device?user_code=${encodeURIComponent(pairing.user_code)}`, { waitUntil: 'load' });
+ok((await p.locator('body').innerText()).includes(pairing.user_code), 'the approval page shows the code the terminal displayed');
+await p.click('button[type=submit]');
+await p.waitForTimeout(1500);
+ok((await p.locator('body').innerText()).includes('Connection approved'), 'a signed-in browser approves the connection');
+const granted = await (await fetch(`${B}/oauth/device/token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_code: pairing.device_code }) })).json();
+const accountToken = granted.access_token;
+ok(typeof accountToken === 'string' && accountToken.length > 0, 'the terminal receives its credential');
+await J('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Connected artifact', markup: '<h1>connected</h1>' }) }, accountToken);
 await p.goto(`${B}/`, { waitUntil: 'load' }); await p.waitForTimeout(1000);
-ok((await p.getByText('Claimed artifact').count()) > 0, 'claimed artifacts appear on the dashboard');
+ok((await p.getByText('Connected artifact').count()) > 0, 'what the connection publishes appears on the dashboard');
 await p.goto(`${B}/account`, { waitUntil: 'load' }); await p.waitForTimeout(800);
 const revoke = p.locator('[aria-label^="Revoke token"]').first();
 if (await revoke.count()) {
   await revoke.click(); await p.waitForTimeout(2500);
-  ok((await fetch(`${B}/api/artifacts`, { headers: { Authorization: `Bearer ${claimToken}` } })).status === 401, 'revoked token stops working');
-} else ok(false, 'tokens page offers revoke');
+  ok((await fetch(`${B}/api/artifacts`, { headers: { Authorization: `Bearer ${accountToken}` } })).status === 401, 'a revoked connection stops working');
+} else ok(false, 'the connections panel offers revoke');
 await openMenu(p);
 await p.click('[aria-label="Sign out"]'); await p.waitForTimeout(3000);
 await openMenu(p);

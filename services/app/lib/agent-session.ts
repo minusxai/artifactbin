@@ -136,23 +136,10 @@ export function withToken(session: AgentSession | null, tokenId: string): AgentS
 }
 
 /**
- * Hand the browser a token: append its id to what the request's cookie already
- * holds and answer with the Set-Cookie that stores the result. The app sets
- * this cookie itself — there is no proxy instruction any more, one path for
- * every shape (the proxy in front READS the cookie to build the agent-cookie
- * actor and never writes it).
- */
-/**
  * The inverse of withToken (tok-p1, reject): drop ONE held id, preserving the order of the rest — the last
  * entry stays the primary. Returns null when nothing remains, which the caller turns into a cleared cookie.
  */
 export function withoutToken(session: AgentSession | null, tokenId: string): AgentSession | null {
   const tokenIds = (session?.tokenIds ?? []).filter((id) => id !== tokenId);
   return tokenIds.length ? { tokenIds } : null;
-}
-
-export async function withAgentSession(request: Request, res: Response, tokenId: string): Promise<Response> {
-  const carried = await liveAgentSession(request);
-  res.headers.append('Set-Cookie', agentSessionSetCookie(await encodeAgentSession(withToken(carried, tokenId))));
-  return res;
 }

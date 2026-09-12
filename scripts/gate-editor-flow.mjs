@@ -22,7 +22,7 @@ import { chromium } from 'playwright';
 import { expect } from 'playwright/test';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3000';
 const failures = [];
@@ -38,7 +38,7 @@ const api = async (path, init = {}, token) => {
 };
 
 // ── 1. seed: a document with a bound select, a Number and a chart over a query ──
-const { token } = await mintAnon(BASE);
+const { token } = await connectAgent(BASE);
 const dataset = await api('/api/artifacts', {
   method: 'POST',
   body: JSON.stringify({ title: 'Editor gate dataset', dataset: [
@@ -280,7 +280,7 @@ check(afterPreview.markup === beforePreview.markup && afterPreview.edit_id === b
   // A fresh CONTEXT, so it carries none of this one's cookies.
   const strangerCtx = await browser.newContext({ viewport: { width: 1400, height: 950 } });
   const stranger = await strangerCtx.newPage();
-  const other = await mintAnon(BASE);
+  const other = await connectAgent(BASE);
   // Holding SOMEONE ELSE's token: a credential, but not for this document.
   await becomeOwner(stranger, BASE, other.token);
   await stranger.goto(`${BASE}/a/${doc.id}#edit`, { waitUntil: 'load' });
@@ -302,10 +302,16 @@ await loginViaEmail(page, BASE, sink, email);
 // Signed in is the masthead's identity line — the handle, linking to the
 // profile — since the header stopped printing the address (components/HeaderBar).
 check(await isSignedInAs(page, email), 'logging in with a code signs you in');
-await page.goto(`${BASE}/account`, { waitUntil: 'load' });
-await page.fill('[aria-label="Token to claim"]', token);
-await page.click('[aria-label="Claim token"]');
-await page.waitForTimeout(3000);
+// The account takes ownership of what this connection published. There is no
+// paste anywhere in the product, so the gate calls the claim API with the
+// browser's own session, which is what any account surface would do.
+const cookieHeader = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
+await fetch(`${BASE}/api/tokens/claim`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', cookie: cookieHeader, origin: new URL(BASE).origin },
+  body: JSON.stringify({ token }),
+});
+await page.waitForTimeout(1000);
 await page.goto(`${BASE}/`, { waitUntil: 'load' });
 await page.waitForTimeout(1200);
 // The dashboard lists by artifact TITLE (unchanged by a body edit), not by heading text.

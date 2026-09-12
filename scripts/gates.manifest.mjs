@@ -167,7 +167,7 @@ export const GATE_SPECS = Object.freeze([
   // measured: implementer 3s; orchestrator 3s
   {
     name: 'simpler-start', start: 'custom',
-    why: 'Creates the one-line human-to-agent handoff from the home page and validates the independent start-link protocol.',
+    why: 'Creates the one-line human-to-agent handoff from the home page and proves the retired token doors are gone.',
     needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000,
   },
   // measured: implementer 4s; orchestrator 4s

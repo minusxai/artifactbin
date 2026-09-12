@@ -2,14 +2,14 @@
 
 /**
  * The top-level document action that puts the "hand this document to an agent"
- * instruction on the clipboard — one paste line carrying a one-time START LINK
- * (never a token), for a document that already exists.
- *  - session owners: POST /api/my/artifacts/<id>/agent-prompt parks a fresh
- *    user-owned token (account-wide scope reaches a doc ANY of their tokens
- *    made) in a start handle and returns the finished prompt;
- *  - anonymous (token) owners: the server answers 409 — an anonymous token
- *    reaches only what it created and the original plaintext exists nowhere —
- *    so the button says "sign in" instead.
+ * instruction on the clipboard — the ONE starter line (lib/agent-copy), which
+ * names the document and the afbin CLI and carries no credential at all.
+ *  - session owners: POST /api/my/artifacts/<id>/agent-prompt answers the
+ *    finished paste, because the agent connected to that account already
+ *    reaches the document;
+ *  - anonymous owners: the server answers 409 — the document belongs to no
+ *    account for a connection to reach it through — so the button says
+ *    "sign in" instead.
  */
 import { Bot, Check } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -26,12 +26,11 @@ export default function CopyAgentPrompt({ id, variant = 'chip' }: {
   const copy = async () => {
     let prompt: string | null = null;
     try {
-      // Always issued server-side: the browser holds no plaintext token, and
-      // the paste itself carries only a one-time start link the agent claims.
+      // Always decided server-side: one wording for every surface, and the
+      // browser keeps no wording rule of its own.
       const res = await fetch(`/api/my/artifacts/${id}/agent-prompt`, { method: 'POST' });
-      // An anonymous owner has no account for a new token to belong to, and an
-      // anonymous token reaches only what it created — so the server says so
-      // instead of minting one that cannot edit this document.
+      // An anonymous owner has no account an agent could connect to, so the
+      // server says so instead of handing over a link nothing can edit.
       if (res.status === 409) {
         setState('signin');
         if (resetTimer.current) clearTimeout(resetTimer.current);

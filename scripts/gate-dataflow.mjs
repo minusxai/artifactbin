@@ -10,12 +10,12 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  */
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { mintAnon } from './lib/mint-anon.mjs';
+import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
 const ok = (c, l) => { out.push(`${c ? '  ok ' : 'FAIL'} ${l}`); return c; };
 const j = async (r) => { const t = await r.text(); try { return JSON.parse(t); } catch { return { raw: t, status: r.status }; } };
-const tok = (await mintAnon(B)).token;
+const tok = (await connectAgent(B)).token;
 const H = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
 const api = (path, body) => fetch(`${B}${path}`, { method: 'POST', headers: H, body: JSON.stringify(body) });
 
@@ -167,7 +167,7 @@ const stamp = Date.now().toString(36);
 const ownerCtx = await b.newContext();
 const owner = await ownerCtx.newPage();
 await loginViaEmail(owner, B, sink, `mxmx_test_dataflow_owner_${stamp}@example.com`);
-const ownerTok = (await mintAnon(B)).token;
+const ownerTok = (await connectAgent(B)).token;
 const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status, ownerTok);
 ok(claimed === 200, 'the owner claimed a token');
 const OH = { Authorization: `Bearer ${ownerTok}`, 'Content-Type': 'application/json' };

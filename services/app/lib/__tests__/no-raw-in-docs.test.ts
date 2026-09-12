@@ -15,15 +15,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
-import { startBrief } from '@/lib/start-links';
 
 const BASE = 'https://example.test';
 
 describe.each([
   ...renderTree(skillTree(), BASE).map(({ file, text }) => [`skills/${file.path}`, text] as [string, string]),
   ['the brief', buildQuickSheet(BASE)],
-  ['the start brief (fill)', startBrief(BASE, 'Ab3xK9', 'secret', 'fill')],
-  ['the start brief (edit)', startBrief(BASE, 'Ab3xK9', 'secret', 'edit')],
 ])('%s', (_name, doc) => {
   it('never names /raw', () => {
     expect(doc).not.toContain('/raw');

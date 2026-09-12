@@ -1,18 +1,19 @@
 /**
  * Gate: the one-line handoff, end to end, the way it is actually used.
  *
- * A human clicks "create" and pastes ONE LINE containing the token — no
- * start link. An owner can re-arm the separate start-link flow with that token;
- * an agent GETs the resulting link (instructions), POSTs it (a token, once),
- * and edits; the human's page updates live. This gate drives every leg in a
- * real browser + real HTTP, and the negative space too: the paste carries no
- * start link, an unfurler's GET spends nothing, a replayed claim gets 410,
- * and "copy again" revives a dead link.
+ * A human clicks "create" and copies ONE LINE that names the document and the
+ * afbin CLI — and nothing else. There is no credential in the paste, none in
+ * the response, and no second door that hands one out: the CLI's browser
+ * approval is the only way a client is connected. This gate drives that in a
+ * real browser + real HTTP, and the negative space too: the start-link
+ * protocol and the public mint are GONE, and the page a human is staring at
+ * still fills in live when the connected agent writes.
  *
  *   usage: node scripts/gate-simpler-start.mjs [base]
  */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
+import { connectAgent } from './lib/cli-connection.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
@@ -23,7 +24,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 await page.goto(`${B}/`, { waitUntil: 'load' });
-// The home page has two shapes and the mint button sits at a different depth
+// The home page has two shapes and the create button sits at a different depth
 // in each: a stranger gets the LANDING page, which offers it outright, while a
 // browser already holding drafts gets the shelf, where it is folded behind the
 // "connect an agent" card. Wait for either, and open the card only when that
@@ -35,68 +36,57 @@ await page.waitForSelector(
 if (!(await page.locator('[aria-label="Create a live document for my agent"]').count())) {
   await page.click('[aria-label="Connect an agent"]', { timeout: 30_000 });
 }
-// The paste is tokenless now, so the doc id + bearer come from the START API response the
-// button itself makes (same browser session owns the doc — exactly the original flow).
 const startRespP = page.waitForResponse(
   (r) => r.url().includes('/api/start') && r.request().method() === 'POST',
   { timeout: 30_000 },
 );
 await page.click('[aria-label="Create a live document for my agent"]', { timeout: 30_000 });
-const started = await (await startRespP).json();
+const startRes = await startRespP;
+const started = await startRes.json();
 await page.waitForTimeout(1500);
 const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
 const id = started.id;
-const pasteToken = typeof started.token === 'string' && /^mx_[A-Za-z0-9_-]+$/.test(started.token) ? started.token : null;
-ok(!!id && !!pasteToken, 'the create button mints a doc and returns a bearer in the API body');
+ok(!!id, 'the create button makes a real document');
+ok(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
+ok(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
+ok(!(await startRes.allHeaders())['set-cookie'], 'and no agent cookie is set');
 // The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
 ok(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
 ok(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
 ok(!/\/start\?k=/.test(prompt), 'and carries no start link');
 ok(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
 ok(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
-if (!id || !pasteToken) { console.log('cannot continue without the doc id and token'); process.exit(1); }
+ok(prompt.includes('/chat/install.sh'), 'and says how to get it when it is not installed');
+if (!id) { console.log('cannot continue without the doc id'); process.exit(1); }
 
-// The start-link protocol remains independently live: the owner re-arms it.
-const armed = await fetch(`${B}/a/${id}/start`, {
+// ── 2. the retired doors are GONE, not merely unadvertised ──────────────────
+ok((await fetch(`${B}/a/${id}/start?k=anything`)).status === 404, 'the start-link brief is gone (404)');
+ok((await fetch(`${B}/a/${id}/start`, { method: 'POST' })).status === 404, 'and so is its claim door');
+ok((await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })).status === 404,
+  'and the public anonymous mint is not a route any more');
+
+// ── 3. the agent's leg: connect the way afbin does, then write ──────────────
+const agent = await connectAgent(B);
+ok(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
+const agentDoc = await (await fetch(`${B}/api/start`, {
   method: 'POST',
-  headers: { Authorization: `Bearer ${pasteToken}` },
-});
-const armedBody = await armed.json();
-const m = /\/a\/([A-Za-z0-9]+)\/start\?k=([A-Za-z0-9_-]+)/.exec(armedBody.prompt ?? '');
-ok(armed.status === 200 && m?.[1] === id, 'the bearer re-arm door mints a start link');
-if (!m) { console.log('cannot continue without the re-armed link'); process.exit(1); }
-const [, , k] = m;
-const startUrl = `${B}/a/${id}/start?k=${k}`;
+  headers: { Authorization: `Bearer ${agent.token}` },
+})).json();
+ok(!!agentDoc.id, 'the connected agent starts its own document');
 
-// ── 2. the unfurler: GET spends nothing and reveals nothing ─────────────────
-const unfurl1 = await fetch(startUrl);
-const unfurl2 = await fetch(startUrl);
-const briefText = await unfurl1.text();
-ok(unfurl1.status === 200 && unfurl2.status === 200, 'GET is non-consuming (two reads, both 200)');
-ok(!/mx_[A-Za-z0-9_-]{20,}/.test(briefText), 'the brief contains no real token');
-ok(briefText.includes('afbin') && /POST/.test(briefText), 'the brief teaches the claim and local CLI guidance');
-
-// ── 3. the agent's leg: claim, then edit; the human's page updates live ────
-await page.goto(`${B}/a/${id}`, { waitUntil: 'load' });
-const claim = await fetch(startUrl, { method: 'POST' });
-const { token } = await claim.json();
-ok(claim.status === 200 && /^mx_/.test(token ?? ''), 'POST claims a working-shaped token');
-
-const put = await fetch(`${B}/api/artifacts/${id}`, {
+await page.goto(`${B}/a/${agentDoc.id}`, { waitUntil: 'load' });
+const put = await fetch(`${B}/api/artifacts/${agentDoc.id}`, {
   method: 'PUT',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agent.token}` },
   body: JSON.stringify({
     title: 'gate doc',
     markup: '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Landed by the agent</h1></div>',
     theme: 'modernist',
   }),
 });
-ok(put.status === 200, `the claimed token edits (PUT ${put.status})`);
+ok(put.status === 200, `the connection edits what it created (PUT ${put.status})`);
 
-// The page the human is staring at picks the edit up over the live stream.
-// The document is an opaque-origin frame, so it is READ through the frame API
-// (contentDocument is null across origins by design — that is the sandbox).
 /**
  * Is this text on screen, wherever the document happens to be?
  *
@@ -116,74 +106,6 @@ const seenInFrame = async (p, text) => {
   return false;
 };
 ok(await seenInFrame(page, 'Landed by the agent'), "the watching human's page updated live");
-
-// ── 4. the link is spent: claim replay and brief both answer 410 ────────────
-ok((await fetch(startUrl, { method: 'POST' })).status === 410, 'a replayed claim answers 410');
-ok((await fetch(startUrl)).status === 410, 'and the brief for a spent link answers 410');
-
-// ── 5. copy again: the owner re-arms the link with their own token ──────────
-const reissue = await fetch(`${B}/a/${id}/start`, {
-  method: 'POST',
-  headers: { Authorization: `Bearer ${token}` },
-});
-const re = await reissue.json();
-const m2 = /\/start\?k=([A-Za-z0-9_-]+)/.exec(re.prompt ?? '');
-ok(reissue.status === 200 && !!m2, 'an owner re-issue mints a fresh link');
-ok((await fetch(`${B}/a/${id}/start?k=${m2?.[1]}`)).status === 200, 'and the fresh link is live');
-
-// ── 6. the GET-only client (ChatGPT's envelope): chunk, finish, published ───
-// Simulated the way ChatGPT actually fetches: bare GETs, no headers, no
-// method choice, every URL under the ~1.4KB reliable bound.
-{
-  const { gzipSync } = await import('zlib');
-  const startRes = await fetch(`${B}/api/start`, { method: 'POST' });
-  const st = await startRes.json();
-  const secondToken = typeof st.token === 'string' && /^mx_[A-Za-z0-9_-]+$/.test(st.token) ? st.token : null;
-  const secondArm = secondToken ? await fetch(`${B}/a/${st.id}/start`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${secondToken}` },
-  }) : null;
-  const secondArmBody = secondArm ? await secondArm.json() : {};
-  const gm = /\/a\/([A-Za-z0-9]+)\/start\?k=([A-Za-z0-9_-]+)/.exec(secondArmBody.prompt ?? '');
-  ok(startRes.ok && secondArm?.status === 200 && !!gm, 'a second start re-arms a link for the GET-only leg');
-  const [, gid, gk] = gm ?? [, '', ''];
-  const gUrl = `${B}/a/${gid}/start?k=${gk}`;
-
-  // Big enough that gzip+base64url spans SEVERAL chunks — a one-chunk pass
-  // would leave the assembly path untested. Varied text so gzip can't crush it.
-  const paras = Array.from({ length: 40 }, (_, i) =>
-    `<p className="mt-3">Section ${i}: ${Math.sin(i).toString(36).slice(2, 14)} measured against quarter ${i % 4 + 1} with drift ${((i * 37) % 100)}%.</p>`).join('');
-  const SOURCE = '<div data-design="tw" className="p-10">'
-    + '<h1 className="text-4xl font-bold">Written by GET alone</h1>'
-    + '<p className="mt-4 text-lg">No POST, no headers, chunked URL fetches.</p>' + paras + '</div>';
-  const b64 = gzipSync(Buffer.from(SOURCE, 'utf8')).toString('base64url');
-  const pieces = [];
-  for (let i = 0; i < b64.length; i += 900) pieces.push(b64.slice(i, i + 900));
-
-  let allStored = true;
-  let maxLen = 0;
-  for (const [i, d] of pieces.entries()) {
-    const u = `${gUrl}&i=${i}&d=${encodeURIComponent(d)}`;
-    maxLen = Math.max(maxLen, u.length);
-    const r = await fetch(u);
-    allStored = allStored && r.status === 200;
-  }
-  ok(allStored, `all ${pieces.length} chunk GETs stored (200)`);
-  ok(maxLen <= 1400, `every chunk URL fits ChatGPT's reliable bound (longest ${maxLen} ≤ 1400)`);
-
-  const done = await fetch(`${gUrl}&done=1&n=${pieces.length}`);
-  const doneText = await done.text();
-  ok(done.status === 200 && doneText.includes(`/a/${gid}`), `done publishes and returns the link (${done.status})`);
-
-  const page2 = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-  await page2.goto(`${B}/a/${gid}`, { waitUntil: 'networkidle' });
-  ok(await seenInFrame(page2, 'Written by GET alone'), 'the GET-only document renders for a reader');
-  await page2.close();
-
-  const replay = await fetch(`${gUrl}&done=1&n=${pieces.length}`);
-  ok(replay.status === 410 && (await replay.text()).includes(`/a/${gid}`),
-    'a replayed done answers 410 and still names the document URL');
-}
 
 await browser.close();
 

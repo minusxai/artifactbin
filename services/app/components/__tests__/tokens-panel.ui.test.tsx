@@ -11,7 +11,6 @@ vi.mock('@/components/GetStarted', () => ({
   default: () => <div>anonymous start</div>,
   AGENT_MARKS: [],
 }));
-vi.mock('@/components/ClaimForm', () => ({ default: () => null }));
 vi.mock('@/components/DatasetUpload', () => ({ default: () => null }));
 vi.mock('@/components/LoginForm', () => ({ default: () => null }));
 
