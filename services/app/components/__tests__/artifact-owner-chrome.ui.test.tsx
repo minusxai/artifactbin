@@ -114,13 +114,73 @@ const openDocumentControls = () => {
 };
 
 describe('the surface header buttons are owner chrome', () => {
-  it('a reader can share the public link but has no owner controls', () => {
+  it('a reader has no Share button or owner controls', () => {
     render(<ArtifactSurface {...surfaceProps({})} />);
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Share')).toHaveAttribute('data-mx-reader-action', 'share');
+    expect(screen.queryByLabelText('Share')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Copy agent instructions')).not.toBeInTheDocument();
     // Standalone raw rendering is not a reader navigation affordance.
     expect(screen.queryByLabelText('Open the raw artifact')).not.toBeInTheDocument();
+  });
+
+  it('opens sharing directly from the reader bar for the owner', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares: [] }))));
+    for (const role of ['owner'] as const) {
+      render(<ArtifactShell role={role}><ArtifactSurface {...surfaceProps({})} /></ArtifactShell>);
+      const share = document.querySelector<HTMLElement>('[data-mx-reader-rail] [data-mx-reader-action="share"]')!;
+      fireEvent.click(share);
+      expect(await screen.findByRole('dialog', { name: 'Sharing' })).toBeInTheDocument();
+      expect(await screen.findByLabelText('Make public')).toBeInTheDocument();
+      fireEvent.click(screen.getByLabelText('Close sharing'));
+      expect(screen.queryByRole('dialog', { name: 'Sharing' })).not.toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it('keeps all actions directly in the bar and hides top-bar sharing from editors', () => {
+    render(<ArtifactShell role="editor"><ArtifactSurface {...surfaceProps({})} /></ArtifactShell>);
+    const rail = document.querySelector('[data-mx-reader-rail]')!;
+    expect(rail.querySelector('[data-mx-reader-action="share"]')).toBeNull();
+    expect(rail.querySelector('details')).toBeNull();
+    expect(rail.querySelector('[data-mx-reader-action="like"]')).not.toBeNull();
+    expect(rail.querySelector('[data-mx-reader-action="fork"]')).not.toBeNull();
+    expect(rail.querySelector('[data-mx-github-star]')).not.toBeNull();
+  });
+
+  it('shows the current visibility icon on Share and updates it after sharing changes', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => new Response(JSON.stringify({ visibility: init?.method === 'PUT' ? 'public' : 'private', linkRole: 'viewer', shares: [] }))));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({})} /></ArtifactShell>);
+    const share = document.querySelector<HTMLElement>('[data-mx-reader-action="share"]')!;
+    expect(share.querySelector('[data-mx-visibility="private"]')).not.toBeNull();
+    fireEvent.click(share);
+    fireEvent.click(await screen.findByLabelText('Make public'));
+    await waitFor(() => expect(share.querySelector('[data-mx-visibility="public"]')).not.toBeNull());
+  });
+
+  it('uses identical visibility geometry in the toolbar and sharing dialog', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'unlisted', linkRole: 'viewer', shares: [] }))));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({ visibility: 'unlisted' })} /></ArtifactShell>);
+    const share = document.querySelector<HTMLElement>('[data-mx-reader-action="share"]')!;
+    fireEvent.click(share);
+    const option = await screen.findByLabelText('Make unlisted');
+    expect(share.querySelector('svg')?.innerHTML).toBe(option.querySelector('svg')?.innerHTML);
+  });
+
+  it('uses the users icon for private invitations and restores the lock when the last person is removed', async () => {
+    let shares = [{ email: 'mxmx_test_guest@example.com', role: 'viewer' }];
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      if (init?.method === 'PUT') shares = JSON.parse(String(init.body)).shares;
+      return new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares }));
+    }));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({ hasInvitedUsers: true })} /></ArtifactShell>);
+    const share = document.querySelector<HTMLElement>('[data-mx-reader-action="share"]')!;
+    expect(share.querySelector('[data-mx-sharing-icon="shared"]')).not.toBeNull();
+    fireEvent.click(share);
+    fireEvent.click(await screen.findByLabelText('Remove mxmx_test_guest@example.com'));
+    await waitFor(() => expect(share.querySelector('[data-mx-sharing-icon="private"]')).not.toBeNull());
+    fireEvent.change(screen.getByLabelText('Invite email'), { target: { value: 'mxmx_test_guest@example.com' } });
+    fireEvent.click(screen.getByLabelText('Add email'));
+    await waitFor(() => expect(share.querySelector('[data-mx-sharing-icon="shared"]')).not.toBeNull());
   });
 
   it('the owner keeps edit and share (via the shell signal)', () => {
@@ -134,7 +194,7 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.getByLabelText('Edit artifact').querySelector('.lucide-pencil')).toBeTruthy();
     expect(screen.getByLabelText('Toggle comments').querySelector('.lucide-message-square')).toBeTruthy();
     expect(within(screen.getByLabelText('Owner actions')).getByLabelText('Share')).toBeInTheDocument();
-    expect(screen.getByLabelText('Copy agent instructions')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Copy agent instructions')).not.toBeInTheDocument();
   });
 
   it('offers social-preview framing inside sharing to markup owners and editors, but not commenters or viewers', async () => {
@@ -499,9 +559,9 @@ describe('the refresh row', () => {
 });
 
 describe('the fork row', () => {
-  const forkResponse = (status: number, body: unknown) => vi.fn(async () => ({
-    ok: status === 201, status, json: async () => body,
-  })) as unknown as typeof fetch;
+  const forkResponse = (status: number, body: unknown) => vi.fn(async (url: string) => url.endsWith('/sharing')
+    ? new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares: [] }))
+    : { ok: status === 201, status, json: async () => body }) as unknown as typeof fetch;
 
   /** Assign is observed the way login-form does it: a location whose href setter is a spy. */
   const withLocation = async (run: (assign: ReturnType<typeof vi.fn>) => Promise<void> | void, search = '') => {

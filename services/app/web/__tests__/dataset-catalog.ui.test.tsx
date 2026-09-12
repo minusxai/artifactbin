@@ -29,6 +29,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     const method = init?.method ?? 'GET'; calls.push({ url, body, method });
+    if (url.endsWith('/sharing')) return reply({ visibility: 'private', linkRole: 'viewer', shares: [], datasetKind: loadedCatalog.kind, access: 'read' });
     if (url.endsWith('/policy')) return reply({canManage:true,policy:null,revision:0,tables:loadedCatalog.tables,writtenBy:[]});
     if (url === '/api/my/secrets') return secretReply ? secretReply() : reply({ secret: { id: 'secret-new' } }, 201);
     if (url === '/api/my/datasets/discover') return discoveryReply ? discoveryReply() : reply({ tables: discoveryTables });
@@ -441,7 +442,10 @@ it('uses artifact controls with sharing when editing a dataset', async () => {
   editor(true);
   await screen.findByDisplayValue('Orders');
   expect(screen.getByLabelText('Open artifact controls')).toBeInTheDocument();
-  expect(screen.getByRole('button', {name:'Share'})).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', {name:'Share'}));
+  expect(await screen.findByRole('dialog', { name: 'Sharing' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Make private')).toBeInTheDocument();
+  expect(screen.getByLabelText('Invite email')).toBeInTheDocument();
 });
 
 it('renames a dataset without attempting to replace its protected rows', async () => {

@@ -21,7 +21,8 @@ import { artifactEditPath } from '@/lib/urls';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';
-import { Crop, Check, EyeOff, Globe, Link as LinkIcon, Lock, PenLine, X } from 'lucide-react';
+import { Crop, Check, createLucideIcon, Link as LinkIcon, PenLine, X } from 'lucide-react';
+import { VISIBILITY_ICON_NODES, sharingIconFor, type SharingVerdict } from '@/lib/visibility-icons';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
 import type { DatasetCatalog } from '@/lib/datasets/types';
@@ -41,7 +42,12 @@ interface SharingState {
   canPrivate?: boolean;
 }
 
-const VISIBILITY_ICONS = { public: Globe, unlisted: EyeOff, private: Lock } as const;
+const VISIBILITY_ICONS = {
+  shared: createLucideIcon('users', VISIBILITY_ICON_NODES.shared),
+  public: createLucideIcon('globe', VISIBILITY_ICON_NODES.public),
+  unlisted: createLucideIcon('eye-off', VISIBILITY_ICON_NODES.unlisted),
+  private: createLucideIcon('lock', VISIBILITY_ICON_NODES.private),
+} as const;
 
 /**
  * The role list, as the house dropdown wants it. A native <select> draws its
@@ -64,6 +70,7 @@ export default function ShareLink({
   url,
   onClose,
   onSocialPreview,
+  onSharingChange,
 }: {
   className: string;
   /** Enables the ACL dialog; without it this is just the copy button. */
@@ -86,6 +93,8 @@ export default function ShareLink({
   onClose?: () => void;
   /** Editors may configure the card without managing access. */
   onSocialPreview?: () => void;
+  /** Keep a separately rendered toolbar verdict in sync with this dialog. */
+  onSharingChange?: (verdict: SharingVerdict) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(variant === 'dialog');
@@ -101,6 +110,10 @@ export default function ShareLink({
     const t = setTimeout(() => setCopied(false), 1500);
     return () => clearTimeout(t);
   }, [copied]);
+
+  useEffect(() => {
+    if (state) onSharingChange?.({ visibility: state.visibility, hasInvitedUsers: state.shares.length > 0 });
+  }, [state, onSharingChange]);
 
   const canManage = (owner || editable) && !!artifactId;
 
@@ -155,7 +168,7 @@ export default function ShareLink({
     );
   }
 
-  const VerdictIcon = VISIBILITY_ICONS[state?.visibility ?? 'private'];
+  const VerdictIcon = VISIBILITY_ICONS[sharingIconFor({ visibility: state?.visibility ?? 'private', hasInvitedUsers: (state?.shares.length ?? 0) > 0 })];
   /*
    * The WRITES row (datasets only).
    *
@@ -188,7 +201,7 @@ export default function ShareLink({
           onClick={toggle}
           className={`flex w-full cursor-pointer items-center gap-2 rounded-[5px] border-0 bg-transparent px-2 py-2 text-left font-mono text-xs transition-colors hover:bg-raised hover:text-fg ${open ? 'text-accent' : 'text-muted'}`}
         >
-          <VerdictIcon size={14} />
+          <VerdictIcon strokeWidth={1.5} size={14} />
           <span>{state ? `sharing · ${state.visibility}` : 'sharing'}</span>
         </button>
       ) : (
@@ -199,7 +212,7 @@ export default function ShareLink({
           onClick={toggle}
           className={className}
         >
-          <VerdictIcon size={12} />{' '}
+          <VerdictIcon strokeWidth={1.5} size={12} />{' '}
           {/* The compact chip keeps its text from crowding a narrow toolbar. */}
           <span className="hidden whitespace-nowrap sm:inline">
             {state ? <>share: {state.visibility}</> : 'share'}
@@ -247,7 +260,7 @@ export default function ShareLink({
                         onClick={() => void put({ visibility: v })}
                       className={`flex-1 cursor-pointer rounded-[4px] border px-2 py-2.5 whitespace-nowrap ${state.visibility === v ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'}`}
                       >
-                        <Icon size={11} className="mr-1 inline" /> {v}
+                        <Icon strokeWidth={1.5} size={11} className="mr-1 inline" /> {v}
                       </button>
                     </Tooltip>
                   );

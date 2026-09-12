@@ -134,13 +134,19 @@ describe('GET /api/page/artifact/:id', () => {
     expect((await artifactPage(request('/api/page/artifact/nope00'), params({ id: 'nope00' }))).status).toBe(404);
     const anon = await (await artifactPage(request(`/api/page/artifact/${w.pub.id}`), params({ id: w.pub.id }))).json();
     expect(anon).toMatchObject({ role: 'viewer', kind: 'none', canonical: `/@${w.owner.username}/${w.pub.id}-public-one` });
-    expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'markup', title: 'Public one', version: 1 });
+    expect(anon.surface).toMatchObject({ id: w.pub.id, editId: w.pub.edit_id, format: 'markup', title: 'Public one', version: 1, visibility: 'public' });
+    expect(anon.surface).not.toHaveProperty('hasInvitedUsers');
     expect(anon.surface).not.toHaveProperty('compiledCss');
     expect(anon.surface.runtime).toHaveProperty('compiledCss');
     asSession(w.owner);
     const own = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
     expect(own).toMatchObject({ role: 'owner', kind: 'account' });
-    expect(own.surface).toMatchObject({ openAnnotations: 0, accountSession: true });
+    expect(own.surface).toMatchObject({ openAnnotations: 0, accountSession: true, visibility: 'private', hasInvitedUsers: false });
+    await updateSharingFor({ userId: w.owner.id, tokenId: '' }, w.priv.id, { shares: [{ email: 'mxmx_test_invitee@example.com', role: 'viewer' }] });
+    const shared = await (await artifactPage(request(`/api/page/artifact/${w.priv.id}`), params({ id: w.priv.id }))).json();
+    expect(shared.surface.hasInvitedUsers).toBe(true);
+    expect(shared.surface).not.toHaveProperty('shares');
+
   });
   it('lets the exporter\'s signed key read a private document without a session', async () => {
     const w = await world();
