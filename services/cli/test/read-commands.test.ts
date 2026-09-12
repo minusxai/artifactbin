@@ -71,14 +71,14 @@ describe('exporting and opening a published artifact', () => {
    }finally{await h.cleanup();}
   });
 
-  test('open prints the published URL with --no-browser and refuses untracked drafts',async()=>{
+  test('open prints the published URL with --json and refuses untracked drafts',async()=>{
    const h=await harness('afbin-seed-open-');
    try{
     await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Hello</p>'));
-    assert.equal(await h.invoke(['open','report.jsx','--no-browser','--json']),0,h.out.join(''));
+    assert.equal(await h.invoke(['open','report.jsx','--json']),0,h.out.join(''));
     assert.equal(h.network(),0);assert.equal(h.last().operations[0].url,'https://example.com/a/abc123');
     await writeFile(join(h.root,'draft.jsx'),'<p>Unpublished</p>\n');
-    assert.notEqual(await h.invoke(['open','draft.jsx','--no-browser','--json']),0);assert.equal(h.last().error.code,'unpublished_draft');
+    assert.notEqual(await h.invoke(['open','draft.jsx','--json']),0);assert.equal(h.last().error.code,'unpublished_draft');
    }finally{await h.cleanup();}
   });
 });

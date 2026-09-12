@@ -105,7 +105,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer});
   const exportOptions=()=>({type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
-  if(command==='open'){emit(await openResources(workspace,positionals,{server:selectedServer,noBrowser:!!flags['no-browser'],json,launch:context.auth?.open??openBrowser}));return 0;}
+  if(command==='open'){emit(await openResources(workspace,positionals,{server:selectedServer,json,launch:context.auth?.open??openBrowser}));return 0;}
   if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
   if(command==='query'){
    queryParameters(flags.param as string[]|undefined);
@@ -132,7 +132,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    return 0;
   }
   let connection=await loadConnection(server,home,context.env);
-  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,noBrowser:!!flags['no-browser'],rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
+  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
   if(command==='auth'){
    // AUTH is lazy and idempotent. A saved token is verified with one read and its account reported;
    // no token or a rejected one runs the same browser approval the rest of the CLI uses on 401.

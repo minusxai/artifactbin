@@ -45,8 +45,9 @@ test('afbin auth reports anonymous when the server names no account',async()=>{
 test('afbin auth with no saved token runs the browser approval flow and saves the credential',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-auth-none-'));const output:string[]=[];const calls:string[]=[];
  try{
-  const code=await runCli(['auth','--server',origin,'--no-browser','--json'],{
+  const code=await runCli(['auth','--server',origin,'--json'],{
    home,cwd:home,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},
+   auth:{open:async()=>{}},
    fetch:async input=>{const path=new URL(String(input)).pathname;calls.push(path);return path==='/oauth/device'?pairing():credentials();},
   });
   assert.equal(code,0,output.join(''));
@@ -59,8 +60,9 @@ test('afbin auth with no saved token runs the browser approval flow and saves th
 test('afbin auth surfaces the structured denial error and relays the verification URL on stderr',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-auth-denied-'));const output:string[]=[];const diagnostics:string[]=[];
  try{
-  const code=await runCli(['auth','--server',origin,'--no-browser','--json'],{
+  const code=await runCli(['auth','--server',origin,'--json'],{
    home,cwd:home,env:{},interactive:false,stdout:s=>output.push(s),stderr:s=>diagnostics.push(s),
+   auth:{open:async()=>{}},
    fetch:async input=>new URL(String(input)).pathname==='/oauth/device'?pairing():Response.json({error:'access_denied'},{status:400}),
   });
   assert.equal(code,2);
@@ -74,9 +76,9 @@ test('afbin auth surfaces the structured denial error and relays the verificatio
 test('afbin auth unattended surfaces approval_expired when the window closes',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-auth-expired-'));const output:string[]=[];let now=0;
  try{
-  const code=await runCli(['auth','--server',origin,'--no-browser','--json'],{
+  const code=await runCli(['auth','--server',origin,'--json'],{
    home,cwd:home,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},
-   auth:{now:()=>now,sleep:async ms=>{now+=ms;}},
+   auth:{open:async()=>{},now:()=>now,sleep:async ms=>{now+=ms;}},
    fetch:async input=>new URL(String(input)).pathname==='/oauth/device'?pairing():Response.json({error:'authorization_pending'},{status:400}),
   });
   assert.equal(code,2);
@@ -124,10 +126,10 @@ describe('browser device approval', () => {
       throw new Error(`Unexpected request ${path}`);
     };
     try {
-      await assert.rejects(browserAuthenticate('https://example.com', {home, fetch:request, interactive:false,noBrowser:true,notify:()=>{},sleep:async()=>{throw new Error('interrupted');}}), /interrupted/);
+      await assert.rejects(browserAuthenticate('https://example.com', {home, fetch:request, interactive:false,open:async()=>{},notify:()=>{},sleep:async()=>{throw new Error('interrupted');}}), /interrupted/);
       assert.equal((await stat(join(home,'.artifactbin'))).mode & 0o777, 0o700);
       approved = true;
-      const connection = await browserAuthenticate('https://example.com', {home, fetch:request, interactive:false,noBrowser:true,notify:()=>{}});
+      const connection = await browserAuthenticate('https://example.com', {home, fetch:request, interactive:false,open:async()=>{},notify:()=>{}});
       assert.equal(connection.token,'mx_access');
       assert.deepEqual(await loadConnection(undefined,home,{}),connection);
       assert.equal(calls.filter(x=>x==='/oauth/device').length,1);
@@ -153,7 +155,7 @@ describe('browser device approval', () => {
   test('device denial has a stable error code and leaves no credentials',async()=>{
    const home=await mkdtemp(join(tmpdir(),'afbin-denied-'));
    try{
-    await assert.rejects(deviceAuthenticate('https://example.com',{home,interactive:false,noBrowser:true,notify:()=>{},fetch:async input=>String(input).endsWith('/oauth/device')
+    await assert.rejects(deviceAuthenticate('https://example.com',{home,interactive:false,open:async()=>{},notify:()=>{},fetch:async input=>String(input).endsWith('/oauth/device')
      ?Response.json({device_code:'d'.repeat(43),user_code:'code',verification_uri_complete:'https://example.com/oauth/device?user_code=code',expires_in:300,interval:5})
      :Response.json({error:'access_denied'},{status:400})}),error=>error instanceof CliError&&error.code==='access_denied');
     assert.equal(await loadConnection(undefined,home,{}),null);
@@ -189,8 +191,8 @@ describe('which origin the approval uses', () => {
     const calls:string[]=[];const output:string[]=[];
     try{
      if(saved)await saveConnection({server:'https://artifactbin.dev',token:'mx_saved'},home);
-     const code=await runCli(['auth','--no-browser','--json',...(explicit?['--server',selected]:[])],{
-      home,cwd:home,env:{ARTIFACTBIN_URL:'http://localhost:7242'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},
+     const code=await runCli(['auth','--json',...(explicit?['--server',selected]:[])],{
+      home,cwd:home,env:{ARTIFACTBIN_URL:'http://localhost:7242'},interactive:false,auth:{open:async()=>{}},stdout:s=>output.push(s),stderr:()=>{},
       fetch:async input=>{
        const url=new URL(String(input));calls.push(url.origin);
        return url.pathname==='/oauth/device'
@@ -214,7 +216,7 @@ describe('a rejected token mid-command', () => {
     await saveConnection({server:'https://example.com',token:'stale'},root);
     const calls:string[]=[];const out:string[]=[];const err:string[]=[];
     const view={session:{id:'rs_1',name:'pi',harness:'pi',cwd:'/w',machine:'m',cols:80,rows:24,online:false,exitCode:0,controller:'local',createdAt:'2026-09-11T00:00:00Z'},generation:'g1',seq:0,frames:[],snapshot:''};
-    const code=await runCli(['remote','--session','rs_1','--no-browser','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:s=>err.push(s),fetch:async(input,init)=>{
+    const code=await runCli(['remote','--session','rs_1','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,auth:{open:async()=>{}},stdout:s=>out.push(s),stderr:s=>err.push(s),fetch:async(input,init)=>{
      const request=new Request(input,init);const path=new URL(request.url).pathname;const token=request.headers.get('Authorization');
      calls.push(`${request.method} ${path} ${token??''}`.trim());
      if(path==='/oauth/device')return Response.json({device_code:'d'.repeat(43),user_code:'ABCD',verification_uri_complete:'https://example.com/oauth/device?code=ABCD',expires_in:300,interval:5});
