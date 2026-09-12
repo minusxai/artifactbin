@@ -8,12 +8,13 @@
  * Seeded by the orchestrator. Blue → red → blue: break the forwarding of `capture`/`format` in lib/export and this
  * file must go red; restore and it is blue again.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { createArtifact } from '@/lib/artifacts';
-import { resetExportRenderer } from '@/lib/export';
+import { objectStore } from '@/lib/object-store';
+import { resetExportRenderer, renderArtifactImage, exportStoreKey } from '@/lib/export';
 import { setServices } from '@/lib/services';
 import { mintToken } from '@/lib/tokens';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
@@ -157,5 +158,50 @@ describe('the export route through the browser seam', () => {
     const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
     expect(res.status).toBeGreaterThanOrEqual(500);
     expect(fake.calls).toHaveLength(1);
+  });
+});
+
+
+describe('stored export admission before screenshot work', () => {
+  it('returns a stored image while an unrelated cold render is still blocked', async () => {
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    setServices({ browser: { render: async () => { entered(); await gate; return { ok: true, mime: 'image/png', bytes: PNG }; } } });
+    const stored = { id: 'stored-hit', version: 1 };
+    await objectStore().put(exportStoreKey(stored, 'png', 'full'), Buffer.from(PNG), 'image/png');
+    const options = { pageUrl: () => BASE, target: 'body' };
+    const cold = renderArtifactImage({ id: 'cold-miss', version: 1 }, 'png', options);
+    await started;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const hit = renderArtifactImage(stored, 'png', options);
+      const result = await Promise.race([hit, new Promise<'blocked'>(resolve => { timer = setTimeout(() => resolve('blocked'), 500); })]);
+      expect(result).not.toBe('blocked');
+      expect(result).toMatchObject({ ok: true, mime: 'image/png' });
+    } finally { clearTimeout(timer); release(); await cold; }
+  });
+
+  it('shares one storage lookup and render among concurrent identical requests', async () => {
+    const get = vi.spyOn(objectStore(), 'get');
+    const render = vi.fn(async (): Promise<RenderResult> => ({ ok: true, mime: 'image/png', bytes: PNG }));
+    setServices({ browser: { render } });
+    const artifact = { id: 'concurrent-twins', version: 1 }, options = { pageUrl: () => BASE, target: 'body' };
+    try {
+      const results = await Promise.all(Array.from({ length: 5 }, () => renderArtifactImage(artifact, 'png', options)));
+      expect(results.every(result => result.ok)).toBe(true);
+      expect(get).toHaveBeenCalledOnce(); expect(render).toHaveBeenCalledOnce();
+    } finally { get.mockRestore(); }
+  });
+
+  it('releases failed in-flight keys so a later request can succeed', async () => {
+    const render = vi.fn<() => Promise<RenderResult>>()
+      .mockResolvedValueOnce({ ok: false, reason: 'unavailable' })
+      .mockResolvedValue({ ok: true, mime: 'image/png', bytes: PNG });
+    setServices({ browser: { render } });
+    const artifact = { id: 'retry-after-unavailable', version: 1 }, options = { pageUrl: () => BASE, target: 'body' };
+    expect(await renderArtifactImage(artifact, 'png', options)).toMatchObject({ ok: false });
+    expect(await renderArtifactImage(artifact, 'png', options)).toMatchObject({ ok: true });
+    expect(render).toHaveBeenCalledTimes(2);
   });
 });

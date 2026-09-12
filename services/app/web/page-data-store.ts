@@ -61,7 +61,17 @@ export function createPageDataStore(options?: { maxEntries?: number; maxBytes?: 
     },
     clear,
     expire() { for (const [key, entry] of entries) { forgetPreload(entry); if (entry.listeners.size) entry.expired = true; else { entries.delete(key); entry.revoke(); } } changed(); },
-    setScope(next) { if (scope !== next) { scope = next; if (firstScope && next !== null) firstScope = false; else clear(); waiting.forEach((done) => done()); waiting.clear(); } },
+    setScope(next) {
+      if (scope === next) return;
+      scope = next;
+      if (firstScope && next !== null) {
+        firstScope = false;
+        // Startup requests already wait for this first identity before
+        // publishing. Let the lazy page adopt that same request once.
+        for (const entry of entries.values()) if (entry.preload?.scope === null) entry.preload.scope = next;
+      } else clear();
+      waiting.forEach((done) => done()); waiting.clear();
+    },
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     revision: () => revision,
     resource<T>(key: string): PageDataResource<T> {

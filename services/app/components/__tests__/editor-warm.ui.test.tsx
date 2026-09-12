@@ -31,6 +31,7 @@ vi.mock('@/components/ArtifactEditor', () => {
   return { default: () => null };
 });
 
+import ArtifactShell from '../ArtifactShell';
 import ArtifactSurface, { type ArtifactSurfaceProps } from '../ArtifactSurface';
 
 const PROPS: ArtifactSurfaceProps = {
@@ -75,8 +76,8 @@ describe('warming the editor bundle', () => {
    * second read a cached editor as "never imported" and pass for the wrong reason.
    * One lifecycle, asserted before and after, cannot lie that way.
    */
-  it('is cancelled with the surface, and still runs while the reader is reading', async () => {
-    const { unmount } = render(<ArtifactSurface {...PROPS} />);
+  it('is cancelled with the surface, and still runs while a permitted editor is reading', async () => {
+    const { unmount } = render(<ArtifactShell role="owner"><ArtifactSurface {...PROPS} /></ArtifactShell>);
     unmount();
     // Well past the 1.5s the warm is scheduled for: a timer that outlived the
     // component would fetch the editor into a page that no longer exists.
@@ -84,7 +85,7 @@ describe('warming the editor bundle', () => {
     expect(editorImported).toBe(false);
 
     // …and the guard must not have turned the prefetch off altogether.
-    render(<ArtifactSurface {...PROPS} />);
+    render(<ArtifactShell role="owner"><ArtifactSurface {...PROPS} /></ArtifactShell>);
     await act(async () => { await vi.advanceTimersByTimeAsync(5000); });
     expect(editorImported).toBe(true);
   });

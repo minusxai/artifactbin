@@ -4,7 +4,6 @@ import type { SharingVerdict } from '@/lib/visibility-icons';
 import type { Visibility } from '@/lib/artifacts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
-import { DatasetCatalogView } from '@/components/DatasetCatalogView';
 
 /**
  * The client half of /a/<id>: what the artifact LOOKS like, and whether we
@@ -53,6 +52,13 @@ import { formatFileSize } from '@/lib/file-display';
 import { resolveStoryMode } from '@/lib/data/story/story-themes';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryIslandDataflow } from '@/lib/story-runtime/contract';
+
+// Dataset controls are a format-specific boundary. Text readers must not
+// preload their query/editor dependencies through the common artifact shell.
+const DatasetCatalogView = dynamic(() => import('@/components/DatasetCatalogView').then(module => ({ default: module.DatasetCatalogView })), {
+  ssr: false,
+  loading: () => <p role="status" className="mt-4 text-sm text-muted">Loading dataset…</p>,
+});
 
 const InlineStoryRuntime = dynamic(() => import('@/lib/story-runtime/InlineStoryRuntime').then(module => ({default:module.InlineStoryRuntime})), { ssr: false });
 const ArtifactEditor = dynamic(() => import('@/components/ArtifactEditor'), {
@@ -496,7 +502,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, [route.hash, route.pathname]);
 
   /*
-   * Fetch the editor bundle while the reader is still reading, so pressing edit
+   * Fetch the editor bundle for permitted document editors while they read, so pressing edit
    * swaps in rather than downloading Monaco first.
    *
    * A prefetch owes the page two things. It must be CANCELLED with the component:
@@ -509,6 +515,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * real import, when the reader presses edit, is what gets to report.
    */
   useEffect(() => {
+    if (!canEdit || format !== 'markup') return;
     const warm = () => void import('@/components/ArtifactEditor').catch(() => {});
     const w = window as unknown as {
       requestIdleCallback?: (c: () => void) => number;
@@ -520,7 +527,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     }
     const timer = setTimeout(warm, 1500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [canEdit, format]);
 
   // Whether THIS page load is what pushed `#edit`, so `done` can undo its own
   // history entry instead of stacking another one.
@@ -728,7 +735,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           </>
         )}
         {canEdit && !owner && (
-          <ShareLink onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
         {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the
             document because the document is sandboxed at an opaque origin and
@@ -767,7 +774,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         </section>
       )}
     </div>
@@ -792,7 +799,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
         }} />
-        {sharingOpen && <ShareLink onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
+        {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */

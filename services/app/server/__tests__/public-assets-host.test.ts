@@ -1,3 +1,7 @@
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { inProcess, overHttp } from '@artifactbin/utils';
 import {it,expect,vi} from 'vitest';
 vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),get PUBLIC_BASE_URL(){return 'https://example.test';},ASSETS_ORIGIN:'https://assets.example.test'}));
 import {useAppHarness} from '@/__tests__/harness';
@@ -66,4 +70,27 @@ it('internal export transport reaches the real public-byte middleware, not the a
   expect((await read('/assets/ref/'+publicRow.id)).status).toBe(404);
  }finally{await server.close();}
  }
+});
+
+it('production composition bypasses identity only for manifest-listed files and still denies private documents', async () => {
+ const dir = mkdtempSync(path.join(os.tmpdir(), 'app-build-admission-'));
+ mkdirSync(path.join(dir, '.vite')); mkdirSync(path.join(dir, 'assets'));
+ writeFileSync(path.join(dir, '.vite/manifest.json'), JSON.stringify({ main: { file: 'assets/app-test.js' } }));
+ writeFileSync(path.join(dir, 'assets/app-test.js'), 'public build');
+ writeFileSync(path.join(dir, 'index.html'), '<html><head></head><body><div id="root"></div></body></html>');
+ const token = await mintToken('build-admission-private');
+ const row = await createArtifact(token.id, null, { title: 'private', description: null, visibility: 'private', format: 'markup', source: '<p>private content</p>', meta: {}, content: '<p>private content</p>' });
+ const secret = 'build-admission-transport-secret', app = createAppServer({ webDir: dir, actorSecret: secret });
+ const server = await withHttpServer(getRequestListener(app.fetch));
+ try {
+  for (const upstream of [inProcess(app), overHttp(server.base, secret)]) {
+   const session = vi.fn(async () => null);
+   const proxy = createProxy(await testProxyOptions({ upstream, sessions: { resolve: session } }));
+   const res = await proxy.request('https://example.test/assets/app-test.js', { headers: { cookie: 'secret', 'x-forwarded-host': 'assets.example.test', 'x-mx-actor': 'forged' } });
+   expect(res.status).toBe(200); expect(await res.text()).toBe('public build'); expect(session).not.toHaveBeenCalled();
+   const denied = await proxy.request('https://example.test/a/' + row.id);
+   expect(denied.status).toBe(404); expect(await denied.text()).not.toContain('private content');
+   expect(session).toHaveBeenCalledOnce();
+  }
+ } finally { await server.close(); rmSync(dir, { recursive: true, force: true }); }
 });

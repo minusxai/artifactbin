@@ -54,6 +54,7 @@ const accountWorkspace = (): AccountWorkspace => ({
     accountRow('ccc333', 'folder', 'Q3'),
     accountRow('root01', 'markup', 'At account root', []),
   ],
+  views: {},
   viewsOverTime: [0, 2, 4],
   likes: 1,
   likesOverTime: [0, 0, 1],

@@ -7,7 +7,7 @@ import { NavigationPreloadContext } from './navigation-preload-context';
 
 /** Optional context keeps isolated page-data consumers independent of the router. */
 export { NavigationPreloadContext } from './navigation-preload-context';
-/** Coordinates only admitted route transitions; initial bootstrap remains its current owner. */
+/** Overlap initial home data with code; seeded reader/profile bootstrap stays with its owner. */
 export function NavigationPreloads({ children }: { children: ReactNode }): ReactNode {
   const location = useLocation();
   const { pages, sessionError } = useSession();
@@ -18,7 +18,8 @@ export function NavigationPreloads({ children }: { children: ReactNode }): React
   const navigation = useMemo(() => ({ id: location.key, route, editing: location.pathname.endsWith('/edit') || location.hash === '#edit' }), [identity]);
   const initial = useRef(navigation);
   useLayoutEffect(() => {
-    if (!pages || sessionError || navigation === initial.current) return;
+    if (!pages || sessionError) return;
+    if (navigation === initial.current && navigation.route?.identity !== '/') return;
     // A warm child chunk must see this marker before its passive mount load.
     const { route: target, id } = navigation;
     for (const code of target?.code ?? []) void code.preload().catch(() => {});

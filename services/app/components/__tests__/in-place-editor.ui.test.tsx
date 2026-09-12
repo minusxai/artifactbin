@@ -72,7 +72,8 @@ const SOURCE =
   + '<div data-design="tw" className="p-4"><h1 id="h">Title</h1>'
   + '<p id="lede" className="lede">hello</p>'
   + '<Question data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar"}}} />'
-  + '<Number data="$rows" col="x" /></div>';
+  + '<Number data="$rows" col="x" />'
+  + '<Mermaid title="Flow" code="flowchart TD; A--&gt;B" /></div>';
 
 let frameEl: HTMLIFrameElement;
 let frameWin: Window;
@@ -254,6 +255,13 @@ describe('the chrome the selection drives', () => {
     mount();
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Number', path: '0.3' }) });
     expect(screen.getByLabelText('Number inspector')).toBeTruthy();
+  });
+
+  it('opens the diagram inspector for a selected Mermaid, with its source ready to edit', async () => {
+    mount();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Mermaid', path: '0.4' }) });
+    expect(screen.getByLabelText('Diagram inspector')).toBeTruthy();
+    expect((screen.getByLabelText('Diagram source') as HTMLTextAreaElement).value).toBe('flowchart TD; A-->B');
   });
 
   it('shows the full format toolbar for a selected element', async () => {

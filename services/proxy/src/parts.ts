@@ -1,6 +1,7 @@
 /**
  * THE PROXY AS PARTS. One ordered literal — `proxyParts(o)` — is the whole
- * proxy: `session` resolves who is asking (bearer → the token reader; Better
+ * proxy: `publicBuildAssets` first asks the app to confirm credential-free build bytes;
+ * all other requests continue to `session`, which resolves who is asking (bearer → the token reader; Better
  * Auth session; the agent cookie by id) and is the ONLY part that may touch
  * the actor; `rateLimit` is the WHOLE of the rate limiting — the policy file's
  * verdict on every request, the browser-only refusal included (it is asked
@@ -26,7 +27,7 @@ import {
 } from '@artifactbin/contracts';
 import type { RateLimiter } from '@artifactbin/contracts/rate-limits';
 import { Hono, type Context } from 'hono';
-import { assemble, cookieName, decodeAgentSession, readCookie, parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse } from '@artifactbin/utils';
+import { assemble, cookieName, decodeAgentSession, readCookie, parseAssetsOrigin, isPublicAssetRequest, publicAssetResponse, buildAssetRequest, buildAssetResponse } from '@artifactbin/utils';
 import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits';
 import { loadPolicyFile, resolvePolicyFilePath } from './rate-limits';
 import { baseUrlOf, mountOAuthRoutes } from './routes/oauth';
@@ -204,7 +205,7 @@ const limiterFor = (o: ProxyOptions): RateLimiter => {
   return l;
 };
 
-/** THE SESSION PART — resolve who is asking, ONCE, before anything else runs; the ONLY part that touches the actor. */
+/** THE SESSION PART — resolve identity once for requests not answered by public file handlers. */
 export function session(o: ProxyOptions): Part<ProxyEnv> {
   return {
     name: 'session',
@@ -405,7 +406,31 @@ export function proxyParts(o: ProxyOptions): Part<ProxyEnv>[] {
     try { return publicAssetResponse(await o.upstream(request, ANONYMOUS)); }
     catch { return new Response('asset upstream unavailable', { status: 502 }); }
   }) }] : [];
-  return [...assetBoundary, session(o), internalBoundary(), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+  return [...assetBoundary, publicBuildAssets(o), session(o), internalBoundary(), rateLimit(o), loginRoutes(o), oauthRoutes(o), forwardedHeaders({ trustedHops: trustedHopsOf(o.env), ...(o.secure ? { secure: true } : {}) }), forward(o.upstream, o)];
+}
+
+/** The app confirms public build bytes before identity is needed. Failed probes use normal access checks. */
+export function publicBuildAssets(o: ProxyOptions): Part<ProxyEnv> {
+  return {
+    name: 'publicBuildAssets',
+    mount: app => app.use('*', async (c, next) => {
+      const request = buildAssetRequest(c.req.raw);
+      if (!request) return next();
+      const deadline = o.upstreamDeadlineMs;
+      const controller = deadline !== undefined && Number.isFinite(deadline) && deadline > 0 ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(new Error('build asset handshake deadline exceeded')), deadline) : null;
+      try {
+        const response = await o.upstream(controller ? new Request(request, { signal: AbortSignal.any([request.signal, controller.signal]) }) : request, ANONYMOUS);
+        const safe = buildAssetResponse(response);
+        if (safe) return safe;
+        await response.body?.cancel();
+      } catch {
+        // Never turn an unverified response into public bytes; the normal
+        // forwarding path retains its own availability and access behavior.
+      } finally { if (timer) clearTimeout(timer); }
+      return next();
+    }),
+  };
 }
 
 /** The proxy, assembled from its parts. */

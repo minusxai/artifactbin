@@ -38,6 +38,7 @@ import VersionHistory from '@/components/VersionHistory';
 import { TrustedUi } from '@/components/TrustedUi';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
+import MermaidEditorPanel from '@/components/views/story/MermaidEditorPanel';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
 import MarkdownPasteDialog from '@/components/views/story/MarkdownPasteDialog';
 import { useLiveEdits, type EditorFlushRef } from '@/lib/story/use-live-edits';
@@ -57,12 +58,16 @@ import {
   type VizEnvelopeValue,
 } from '@/lib/data/story/story-viz';
 import { readNumberEmbed, updateNumberEmbedInJsx, type NumberEmbedEdit } from '@/lib/data/story/story-number';
+import { readMermaidEmbed, updateMermaidEmbedInJsx, type MermaidEmbedEdit } from '@/lib/data/story/story-mermaid';
 import { updateSlideTitleInJsx } from '@/lib/data/story/story-slides';
 import { tableChoices } from '@/lib/story/table-catalog';
 import { storyThemeDefaultMode } from '@/lib/data/story/story-themes';
 import type { DataflowState } from '@/lib/story/dataflow';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
 import type { StoryEditSelection, StoryIslandDataflow } from '@/lib/story-runtime/contract';
+
+/** The embed inspectors the right rail can show, by the selected embed's kind. */
+const INSPECTOR_LABEL = { chart: 'Chart inspector', number: 'Number inspector', diagram: 'Diagram inspector' } as const;
 
 /**
  * WHICH EXTERNAL URLs THE SERVER HOLDS, from the editor's side: all of them.
@@ -572,6 +577,9 @@ export default function InPlaceEditor({
   const embedPath = selection?.kind === 'embed' ? bodyPathToSourcePath(source, selection.path) : null;
   const chart = embedPath && selection?.tag === 'Question' ? readQuestionChart(source, embedPath) : null;
   const numberEmbed = embedPath && selection?.tag === 'Number' ? readNumberEmbed(source, embedPath) : null;
+  const mermaidEmbed = embedPath && selection?.tag === 'Mermaid' ? readMermaidEmbed(source, embedPath) : null;
+  /** Which embed inspector the right rail shows, if any. */
+  const inspector = chart ? 'chart' : numberEmbed ? 'number' : mermaidEmbed ? 'diagram' : null;
   const tables = useMemo(() => tableChoices(source, dataflowState), [source, dataflowState]);
 
   const onChartChange = useCallback(
@@ -599,6 +607,14 @@ export default function InPlaceEditor({
     (next: NumberEmbedEdit) => {
       if (!embedPath) return;
       commitStructural(updateNumberEmbedInJsx(sourceRef.current, embedPath, next));
+    },
+    [embedPath, commitStructural],
+  );
+
+  const onMermaidChange = useCallback(
+    (next: MermaidEmbedEdit) => {
+      if (!embedPath) return;
+      commitStructural(updateMermaidEmbedInJsx(sourceRef.current, embedPath, next));
     },
     [embedPath, commitStructural],
   );
@@ -1093,9 +1109,9 @@ export default function InPlaceEditor({
           mode). It takes the rail while a chart is selected: same width, higher
           layer, so the two read as one column rather than two panels fighting
           for an edge. */}
-      {(chart || numberEmbed) && mode === 'design' && (
+      {inspector && mode === 'design' && (
         <aside
-          aria-label={chart ? 'Chart inspector' : 'Number inspector'}
+          aria-label={INSPECTOR_LABEL[inspector]}
           className="fixed right-0 bottom-0 z-30 overflow-y-auto border-l border-edge bg-surface p-3"
           style={{ top: barTop + EDIT_BAR_H, width: RIGHT_RAIL_W }}
         >
@@ -1105,11 +1121,11 @@ export default function InPlaceEditor({
               mistake. The inspector inspects; the toolbar acts on the node. */}
           <div className="mb-3 flex items-center justify-between">
             <span className="font-mono text-[11px] uppercase tracking-wide text-faint">
-              {chart ? 'chart' : 'number'}
+              {inspector}
             </span>
             <button
               type="button"
-              aria-label={chart ? 'Close chart inspector' : 'Close number inspector'}
+              aria-label={`Close ${INSPECTOR_LABEL[inspector].toLowerCase()}`}
               onClick={() => edit.select(null)}
               className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
             >
@@ -1125,8 +1141,10 @@ export default function InPlaceEditor({
               onChange={onChartChange}
               onTitleChange={onChartTitleChange}
             />
+          ) : numberEmbed ? (
+            <NumberEditorPanel binding={numberEmbed} tables={tables} onChange={onNumberChange} />
           ) : (
-            <NumberEditorPanel binding={numberEmbed!} tables={tables} onChange={onNumberChange} />
+            <MermaidEditorPanel embed={mermaidEmbed!} onChange={onMermaidChange} />
           )}
         </aside>
       )}

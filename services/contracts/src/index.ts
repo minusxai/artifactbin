@@ -21,3 +21,5 @@ export * from './resource-file';
 
 export * from './account-resource';
 export * from './preflight';
+
+export { BUILD_ASSET_PATH, BUILD_ASSET_HEADER } from './build-assets';

@@ -77,3 +77,17 @@ it('preload ownership expires in bounded time', async () => {
     expect(store.adoptPreload('page','nav')).toBe(false);
   } finally {vi.useRealTimers();}
 });
+
+
+it('adopts startup work after the first identity resolves, but never after an account switch', async () => {
+  const store = createPageDataStore(), loader = vi.fn(async () => 'home');
+  const work = store.preload('home', 'initial', loader);
+  expect(store.resource('home').snapshot().data).toBeNull();
+  expect(store.adoptPreload('home', 'initial')).toBe(false);
+  store.setScope('A'); await work;
+  expect(store.adoptPreload('home', 'initial')).toBe(true);
+  expect(store.resource('home').snapshot().data).toBe('home');
+  expect(loader).toHaveBeenCalledOnce();
+  store.setScope('B');
+  expect(store.resource('home').snapshot().data).toBeNull();
+});

@@ -7,9 +7,16 @@ Paths below are relative to `services/app` unless they start with `services/` or
 ## Services and request ownership
 
 The OSS-root `server.ts` composes the proxy, Hono app, SQL, browser and events implementations for the full image.
-Split images use the same contracts over HTTP. `services/proxy/src/parts.ts` orders session resolution,
+Split images use the same contracts over HTTP. `services/proxy/src/parts.ts` admits public build files before session resolution, then orders
 rate limits, login/OAuth, forwarded headers and the final upstream forwarder. Deployment policy belongs
 in configuration or a downstream composition, never an app special case.
+
+Public build admission belongs to `server/build-assets.ts`: only flat JS/CSS/woff2 paths listed in the
+production Vite manifest can return marked bytes from `/api/internal/build-assets/*`. The proxy probes
+that handler anonymously, with only byte-request headers, and accepts only marked static responses.
+Unknown files, missing manifests, queries, writes and unverified responses retain normal identity/access
+checks. No document, dataset or whole `/assets/*` namespace is declared public. The existing asset-host
+boundary runs first; development continues through Vite. Old builds without this handler fall back safely.
 
 Proxy rate limits come from policy files. Signing belongs to HTTP actor transport; in-process callers
 carry the resolved actor on the request. The app owns live document streams, so a proxy does not need
@@ -163,6 +170,42 @@ coverage. CI always executes and remains the merge authority.
 PR concurrency cancels superseded runs on the same PR; main runs remain independent. Node shards
 retain existing coverage, but only the integration shard provisions Chromium and Postgres. CLI
 builds remain available on every Node shard because `evals/__tests__/cli-kit.test.ts` executes the actual CLI and can land on any shard.
+
+### First useful content and workspace performance
+
+Initial Home navigation overlaps its core JSON request with its lazy route code.
+The session-owned page store holds startup results until identity resolves; the
+first scope adopts the startup marker and subsequent account changes revoke it.
+Reader/profile SSR bootstrap remains owned by those routes.
+
+Workspace core owns narrow SQL projections: no document metadata or engagement
+queries. Shared rows retain description and role for search/access display.
+Lifetime visitor counts move to insights as one grouped query with the existing
+visitor semantics; Home and folder dashboards join the resulting ID map. The
+current 1000-document shelf, 50-row asset pages and folder placement semantics
+remain owned by workspace-inventory; aggregate totals cover the entire account.
+
+ArtifactSurface admits DatasetCatalogView through a format-specific dynamic
+import. Editor warming is limited to markup viewers with edit permission and is
+cancelled on unmount or permission loss. These are intentional lazy browser
+boundaries; the reader import-graph test guards the dataset split.
+
+Useful-content readiness is a one-shot browser lifecycle signal, separate from
+identity: data pages signal a loaded/error commit, static routes signal route
+commit. Mixpanel waits for that signal and two animation frames before importing
+and initializing; coverage settings and identity ordering remain unchanged.
+
+Export cache lookup precedes screenshot queue admission. Per-key in-flight work
+coalesces storage lookup and rendering; only misses serialize, and failed keys
+are released. Access checks still precede this module, keys remain versioned,
+and volatile previews never enter durable storage.
+
+The paired-performance workflow builds the production reference and candidate
+on one runner, prepares the visible-library thumbnail cache, then records seven
+cold/warm browser samples for Home and prose. Preparing thumbnails equalizes
+server render work before the browser-cache comparison.
+Its PGLite/local-object-store measurements are controlled lab evidence, not
+production rollout results. Raw JSON includes resource timing and payload sizes.
 
 
 ## Standalone CLI distribution
