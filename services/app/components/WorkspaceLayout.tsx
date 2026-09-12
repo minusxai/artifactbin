@@ -38,7 +38,7 @@ export default function WorkspaceLayout({
       <aside aria-label="Dashboard rail" className="min-w-0 border-t border-edge pt-6 lg:col-start-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-24 lg:pl-6">
         <div className="lg:sticky lg:top-6">
           {loaded ? <><Dashboard
-            rows={workspace.artifacts as never}
+            rows={workspace.artifacts.map(row => ({ ...row, views: loaded.views?.[row.id] ?? ('views' in row ? row.views : 0) })) as never}
             viewsOverTime={loaded.viewsOverTime}
             likes={loaded.likes}
             likesOverTime={loaded.likesOverTime}

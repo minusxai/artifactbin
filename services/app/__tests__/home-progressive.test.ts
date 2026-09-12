@@ -37,3 +37,22 @@ it('anonymous insights requests do not expose account activity and are never cac
   expect(result.headers.get('cache-control')).toBe('no-store');
   expect(await result.json()).toEqual({ signedIn: false });
 });
+
+it('keeps source metadata and analytics queries out of core while retaining shared search fields', async () => {
+  const db = await harness.db(), user = await createUser({ email: 'mxmx_test_slim@example.com' }), other = await createUser({ email: 'mxmx_test_other@example.com' });
+  const token = await mintToken('slim');
+  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,description,content,meta,version) VALUES ('own123',$1,$3,'markup','Owned','owned description','', $4,1),('shr123',$2,$3,'markup','Shared','searchable description','',$4,1)", [user.id, other.id, token.id, JSON.stringify({ unnecessary: 'large source metadata'.repeat(1000) })]);
+  await db.query("INSERT INTO artifact_shares (artifact_id,email,role) VALUES ('shr123',$1,'viewer')", [user.email]);
+  const query = vi.spyOn(db, 'query');
+  try {
+    const response = await GET(request('/api/page/home?part=core', { actor: { credential: 'session', userId: user.id, email: user.email!, emailVerified: true } }));
+    const core = await response.json();
+    expect(core.artifacts[0]).toMatchObject({ id: 'own123', title: 'Owned' });
+    expect(core.artifacts[0]).not.toHaveProperty('views');
+    expect(core.shared[0]).toMatchObject({ id: 'shr123', description: 'searchable description', role: 'viewer' });
+    expect(JSON.stringify(core)).not.toContain('unnecessary');
+    const statements = query.mock.calls.map(([sql]) => String(sql));
+    expect(statements.some(sql => sql.includes('analytics_events'))).toBe(false);
+    expect(statements.filter(sql => sql.includes('FROM artifacts')).some(sql => /\bmeta\b/.test(sql))).toBe(false);
+  } finally { query.mockRestore(); }
+});

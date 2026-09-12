@@ -7,33 +7,51 @@
  */
 import { decorateFeed, followFeed, forkCountByUser, likeSummaryByUser, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
 import { count } from '@/lib/relations';
-import { listArtifactsByUser, listSharedWithEmail } from '@/lib/users';
+import { LIVE_ARTIFACT_SQL, type ArtifactSummary } from '@/lib/artifacts';
+import { getDb } from '@/lib/db';
+import type { SharedArtifactSummary } from '@/lib/users';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
 
 const ACTIVITY_LIMIT = 20;
 
+// Workspace projections deliberately exclude source metadata and engagement.
+// Discovery keeps the same ownership/share/trash gates as the general listings.
+type WorkspaceOwnedItem = Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'version' | 'ancestor_ids' | 'visibility' | 'updated_at'>;
+export type WorkspaceSharedItem = Pick<SharedArtifactSummary, 'id' | 'title' | 'description' | 'format' | 'version' | 'visibility' | 'updated_at' | 'owner_username' | 'role'>;
+
 export async function accountWorkspaceCoreFor(userId: string, email?: string | null) {
-  const [artifacts, sharedRows] = await Promise.all([
-    listArtifactsByUser(userId), email ? listSharedWithEmail(email, userId) : Promise.resolve([]),
+  const db = await getDb();
+  const [owned, shared] = await Promise.all([
+    db.query<WorkspaceOwnedItem>(`SELECT id, title, format, version, ancestor_ids, visibility, updated_at
+      FROM artifacts WHERE user_id = $1 AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC LIMIT 200`, [userId]),
+    email ? db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, s.role
+      FROM artifacts a JOIN artifact_shares s ON s.artifact_id = a.id LEFT JOIN users u ON u.id = a.user_id
+      WHERE s.email = $1 AND a.user_id IS DISTINCT FROM $2::text AND a.${LIVE_ARTIFACT_SQL}
+      ORDER BY a.updated_at DESC LIMIT 200`, [email.toLowerCase().trim(), userId]) : { rows: [] },
   ]);
-  const shared = sharedRows
-    .map(({ ancestor_ids: _placement, ...row }) => row);
   return {
-    artifacts: artifacts.map((artifact) => ({
-      id: artifact.id, url: `/a/${artifact.id}`, title: artifact.title, format: artifact.format,
-      version: artifact.version, ancestor_ids: artifact.ancestor_ids, visibility: artifact.visibility,
-      updated_at: artifact.updated_at, views: artifact.views, sparkline: null as string | null,
-    })), shared,
+    artifacts: owned.rows.map((artifact) => ({
+      ...artifact, url: `/a/${artifact.id}`, sparkline: null as string | null,
+    })), shared: shared.rows,
   };
+}
+
+/** Lifetime visitor semantics stay identical to the old per-row subquery. */
+async function workspaceViewCounts(userId: string): Promise<Record<string, number>> {
+  const db = await getDb();
+  const result = await db.query<{ id: string; views: number }>(`SELECT a.id, COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS views
+    FROM artifacts a LEFT JOIN analytics_events e ON e.artifact_id = a.id AND e.event = 'view'
+    WHERE a.user_id = $1 AND a.${LIVE_ARTIFACT_SQL} GROUP BY a.id`, [userId]);
+  return Object.fromEntries(result.rows.map(row => [row.id, row.views]));
 }
 
 /** No shelf query here: account-wide series already identify their documents. */
 export async function accountWorkspaceInsightsFor(userId: string) {
-  const [series, likes, mine, following, followers, forks] = await Promise.all([
+  const [series, likes, mine, following, followers, forks, views] = await Promise.all([
     viewSeriesByUser(userId, VIEW_SERIES_DAYS, 'markup'), likeSummaryByUser(userId),
     ownerFeed(userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
     followFeed(userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
-    count('follow', userId), forkCountByUser(userId),
+    count('follow', userId), forkCountByUser(userId), workspaceViewCounts(userId),
   ]);
 
   const sparklines: Record<string, string | undefined> = {};
@@ -49,6 +67,7 @@ export async function accountWorkspaceInsightsFor(userId: string) {
   return {
     feed: { mine, following },
     sparklines,
+    views,
     viewsOverTime,
     likes: likes.total,
     likesOverTime: likes.series,
@@ -61,7 +80,7 @@ export async function accountWorkspaceFor(userId: string, email?: string | null)
   const [core, { sparklines, ...insights }] = await Promise.all([
     accountWorkspaceCoreFor(userId, email), accountWorkspaceInsightsFor(userId),
   ]);
-  return { ...core, ...insights, artifacts: core.artifacts.map((row) => ({ ...row, sparkline: sparklines[row.id] ?? null })) };
+  return { ...core, ...insights, artifacts: core.artifacts.map((row) => ({ ...row, views: insights.views[row.id] ?? 0, sparkline: sparklines[row.id] ?? null })) };
 }
 
 export type AccountWorkspaceCore = Awaited<ReturnType<typeof accountWorkspaceCoreFor>>;

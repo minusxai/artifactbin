@@ -1,0 +1,48 @@
+name: paired performance
+on:
+  pull_request:
+    paths:
+      - 'scripts/performance-*.mjs'
+      - '.github/workflows/performance.yml'
+  workflow_dispatch:
+    inputs:
+      baseline:
+        description: Baseline commit (defaults to the production pin used in the performance review)
+        default: '3709d83f699ceb723d559526af5ade1db72bb640'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: performance-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Measure candidate
+        run: node scripts/performance-loads.mjs . performance-results/candidate.json
+      - name: Build baseline on the same runner
+        env:
+          PERF__BASE_REF: ${{ inputs.baseline || '3709d83f699ceb723d559526af5ade1db72bb640' }}
+        run: |
+          git worktree add --detach /tmp/artifactbin-performance-base "$PERF__BASE_REF"
+          npm ci --prefix /tmp/artifactbin-performance-base
+          npm run build --prefix /tmp/artifactbin-performance-base
+      - name: Measure baseline with the identical harness
+        run: node scripts/performance-loads.mjs /tmp/artifactbin-performance-base performance-results/baseline.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: performance-results
+          path: performance-results/

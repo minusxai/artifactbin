@@ -6,7 +6,7 @@
  * so the ordering gate is itself the behavior under test. The gate lives in
  * module state, so every test re-imports a fresh copy of the module.
  */
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mixpanel = vi.hoisted(() => ({
@@ -25,9 +25,11 @@ const setHostname = (hostname: string) =>
   });
 
 /** The init→identify gate is module state — each test gets a fresh module. */
-const importFresh = async () => {
+const importFresh = async (contentReady = true) => {
   vi.resetModules();
-  return import('@/components/MixpanelClient');
+  const module = await import('@/components/MixpanelClient');
+  if (contentReady) (await import('@/web/initial-content')).markInitialContentReady();
+  return module;
 };
 
 beforeEach(() => {
@@ -91,4 +93,30 @@ describe('MixpanelClient', () => {
     expect(mixpanel.identify).not.toHaveBeenCalled();
     expect(mixpanel.people.set).not.toHaveBeenCalled();
   });
+});
+
+it('waits for useful content and a paint opportunity before initializing analytics', async () => {
+  const { default: MixpanelClient } = await importFresh(false);
+  render(<MixpanelClient token="mp_test" host="https://api-js.mixpanel.com" />);
+  await act(async () => {});
+  expect(mixpanel.init).not.toHaveBeenCalled();
+  const frames: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+  try {
+    (await import('@/web/initial-content')).markInitialContentReady();
+    await act(async () => { frames.shift()?.(1); });
+    expect(mixpanel.init).not.toHaveBeenCalled();
+    await act(async () => { frames.shift()?.(2); });
+    expect(mixpanel.init).toHaveBeenCalledOnce();
+  } finally { vi.unstubAllGlobals(); }
+});
+
+it('cancels deferred analytics when unmounted before content is ready', async () => {
+  const { default: MixpanelClient } = await importFresh(false);
+  const view = render(<MixpanelClient token="mp_test" host="https://api-js.mixpanel.com" />);
+  view.unmount();
+  (await import('@/web/initial-content')).markInitialContentReady();
+  await act(async () => {});
+  expect(mixpanel.init).not.toHaveBeenCalled();
 });

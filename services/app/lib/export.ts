@@ -133,13 +133,9 @@ export type RenderResult =
   | { ok: false; reason: 'no_slide'; slides: number };
 
 interface ExportState {
-  /**
-   * Serialises RENDERS AT THIS DOOR — not for the browser's sake (the package
-   * has its own chain and shoots one page at a time), but so two requests for
-   * the same shot do not both take a picture: the second finds what the first
-   * cached ("a queued twin may have filled it" below).
-   */
+  /** Only cache misses serialize, including retry/persistence. */
   chain: Promise<unknown>;
+  inFlight: Map<string, Promise<RenderResult>>;
   cache: Map<string, { mime: string; bytes: Buffer }>;
 }
 
@@ -150,8 +146,9 @@ declare global {
 
 function state(): ExportState {
   if (!global.__artifact_bin_export__) {
-    global.__artifact_bin_export__ = { chain: Promise.resolve(), cache: new Map() };
+    global.__artifact_bin_export__ = { chain: Promise.resolve(), cache: new Map(), inFlight: new Map() };
   }
+  global.__artifact_bin_export__.inFlight ??= new Map();
   return global.__artifact_bin_export__;
 }
 
@@ -292,6 +289,8 @@ export function renderArtifactImage(
   const key = `${artifact.id}:${artifact.version}:${captureKey}:${format}`;
   const hit = s.cache.get(key);
   if (hit) return Promise.resolve({ ok: true, ...hit });
+  const pending = s.inFlight.get(key);
+  if (pending) return pending;
 
   // The durable layer: version-keyed, so an edit misses naturally and the
   // stale entry just goes cold — no invalidation to run, ever. One render
@@ -299,56 +298,61 @@ export function renderArtifactImage(
   // across restarts.
   const storeKey = opts.volatile ? null : exportStoreKey(artifact, format, capture, slide, selection);
   const input: RenderInput = { urlFor: opts.pageUrl, target: opts.target };
-  const run = s.chain.then(async (): Promise<RenderResult> => {
-    const cached = s.cache.get(key); // a queued twin may have filled it
-    const stored = cached ?? (storeKey ? await objectStore().get(storeKey).then(
-      (bytes) => ({ mime: EXPORT_MIME[format], bytes }),
-      () => null,
-    ) : null);
-    if (stored) {
-      if (!cached) remember(s, key, stored);
-      return { ok: true, ...stored };
-    }
-    /*
-     * ONE retry on a failed render: a shot taken immediately after a write can
-     * race the fresh version — the page loads, but what the exporter is waiting
-     * for is not there yet — and answers render_failed, which an agent then
-     * spends turns diagnosing (measured: two turns on a real run). Only that
-     * race is retried: a missing browser ('unavailable'), a missing slide
-     * ('no_slide') and an unreachable page ('navigation') are ANSWERS — a
-     * server that is not answering answers no faster the second time, and
-     * re-asking only doubles the wait before the caller learns.
-     *
-     * A failure that took the FULL wait already polled for what it wanted and
-     * never saw it — that is an answer too, and re-running it only doubles the
-     * time before the caller hears it. Only a FAST 'failed' looks like a race.
-     */
-    const startedAt = Date.now();
-    let rendered = await renderOnce(input, format, capture, slide, opts.crop);
-    if (!rendered.ok && rendered.reason === 'failed' && Date.now() - startedAt <= RENDER_TIMEOUT_MS / 2) {
-      await new Promise((r) => setTimeout(r, RENDER_RETRY_MS));
-      rendered = await renderOnce(input, format, capture, slide, opts.crop);
-    }
-    // Only now do the service's four verdicts become the app's three: the
-    // page could not be reached is a FAILURE, never "there is no browser here".
-    if (!rendered.ok) return rendered.reason === 'navigation' ? { ok: false, reason: 'failed' } : rendered;
-    const shot = { mime: rendered.mime, bytes: rendered.bytes };
-    // Best-effort persist: a failed put costs a re-render later, never the shot.
-    if (storeKey) await objectStore().put(storeKey, shot.bytes, shot.mime).catch(() => {});
-    remember(s, key, shot);
-    return { ok: true, ...shot };
-  });
-  s.chain = run.catch(() => {});
+  const work = (async (): Promise<RenderResult> => {
+    // Stored hits never join the screenshot queue. Same-key callers share
+    // both this lookup and any ensuing render through inFlight.
+    const stored = storeKey ? await objectStore().get(storeKey).then(
+      bytes => ({ mime: EXPORT_MIME[format], bytes }), () => null,
+    ) : null;
+    if (stored) { remember(s, key, stored); return { ok: true, ...stored }; }
+    const run = s.chain.then(async (): Promise<RenderResult> => {
+      const cached = s.cache.get(key);
+      if (cached) return { ok: true, ...cached };
+      /*
+       * ONE retry on a failed render: a shot taken immediately after a write can
+       * race the fresh version — the page loads, but what the exporter is waiting
+       * for is not there yet — and answers render_failed, which an agent then
+       * spends turns diagnosing (measured: two turns on a real run). Only that
+       * race is retried: a missing browser ('unavailable'), a missing slide
+       * ('no_slide') and an unreachable page ('navigation') are ANSWERS — a
+       * server that is not answering answers no faster the second time, and
+       * re-asking only doubles the wait before the caller learns.
+       *
+       * A failure that took the FULL wait already polled for what it wanted and
+       * never saw it — that is an answer too, and re-running it only doubles the
+       * time before the caller hears it. Only a FAST 'failed' looks like a race.
+       */
+      const startedAt = Date.now();
+      let rendered = await renderOnce(input, format, capture, slide, opts.crop);
+      if (!rendered.ok && rendered.reason === 'failed' && Date.now() - startedAt <= RENDER_TIMEOUT_MS / 2) {
+        await new Promise((r) => setTimeout(r, RENDER_RETRY_MS));
+        rendered = await renderOnce(input, format, capture, slide, opts.crop);
+      }
+      // Only now do the service's four verdicts become the app's three: the
+      // page could not be reached is a FAILURE, never "there is no browser here".
+      if (!rendered.ok) return rendered.reason === 'navigation' ? { ok: false, reason: 'failed' } : rendered;
+      const shot = { mime: rendered.mime, bytes: rendered.bytes };
+      // Best-effort persist: a failed put costs a re-render later, never the shot.
+      if (storeKey) await objectStore().put(storeKey, shot.bytes, shot.mime).catch(() => {});
+      remember(s, key, shot);
+      return { ok: true, ...shot };
+    });
+    s.chain = run.catch(() => {});
+    return run;
+  })();
   /*
    * The service answers a VERDICT rather than throwing, so this catch is the
    * backstop for THIS module's own failures (the object store, a bad URL from
    * the thunk) — not for a render that went wrong. The caller still gets a
    * name; the operator gets the reason.
    */
-  return run.catch((error): RenderResult => {
+  const result = work.catch((error): RenderResult => {
     console.error('[export] render failed:', error);
     return { ok: false, reason: 'failed' };
   });
+  s.inFlight.set(key, result);
+  void result.then(() => { if (s.inFlight.get(key) === result) s.inFlight.delete(key); });
+  return result;
 }
 
 /** Keep the newest shots, drop the oldest — a small LRU in front of the store. */

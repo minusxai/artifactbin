@@ -83,3 +83,16 @@ it('repeated preload requests for the same navigation reuse completed work', asy
   await store.preload('page','nav',loader);await store.preload('page','nav',loader);
   expect(loader).toHaveBeenCalledTimes(1);expect(store.adoptPreload('page','nav')).toBe(true);
 });
+
+it('adopts startup work after the first identity resolves, but never after an account switch', async () => {
+  const store = createPageDataStore(), loader = vi.fn(async () => 'home');
+  const work = store.preload('home', 'initial', loader);
+  expect(store.resource('home').snapshot().data).toBeNull();
+  expect(store.adoptPreload('home', 'initial')).toBe(false);
+  store.setScope('A'); await work;
+  expect(store.adoptPreload('home', 'initial')).toBe(true);
+  expect(store.resource('home').snapshot().data).toBe('home');
+  expect(loader).toHaveBeenCalledOnce();
+  store.setScope('B');
+  expect(store.resource('home').snapshot().data).toBeNull();
+});
