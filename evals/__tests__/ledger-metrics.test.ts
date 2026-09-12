@@ -1,22 +1,23 @@
 /**
- * M1 — what the eval must be able to WATCH.
+ * WHAT THE LEDGER MEASURES — the metrics read off the recorded HTTP of one run, and the artifact id
+ * a run is finally scored against.
  *
- * What the driver did not observe while it measured from the first HTTP call: how long its human
- * waited before a URL existed. This pins that, plus the guardrail that stops a fast empty stub from
- * beating a real skeleton.
+ * The first of these is the thing the driver could not see while it measured from the first HTTP
+ * call: how long its human waited before a URL existed. The second is the guardrail that stops a
+ * fast empty stub from beating a real skeleton.
+ *
+ * Filed as `m1-instrumentation` — a milestone, not a seam — it also carried a credential-source
+ * block (now beside the rest of the credential seam) and a prompt-text block that restated
+ * `tasks.test.ts`. `ledger.test.ts` holds the ledger's own reading; this holds what is derived
+ * from it.
  */
 import { describe, it, expect } from 'vitest';
 import { ledgerMetrics, scoredArtifactId } from '../lib/ledger';
 import type { LedgerEntry } from '../lib/contracts';
-import { credentialSourceFor, parseCredentialSource } from '../lib/credential';
-import { buildPrompt } from '../lib/tasks';
-import type { Task } from '../lib/contracts';
 
 const entry = (over: Partial<LedgerEntry>): LedgerEntry => ({
   t: 1_000, ms: 5, method: 'GET', path: '/docs', status: 200, ua: null, auth: null, error: null, ...over,
 });
-
-const TASK = { id: 'demo', brief: 'Publish something.' } as unknown as Task;
 
 describe('msToFirstPublish — how long the human waited for a link', () => {
   const ledger = [
@@ -59,19 +60,6 @@ describe('skeletonSections — was the early publish a document or a placeholder
  * token to an agent — the paste, a pre-provisioned secret, withholding one on purpose — is gone, and
  * the two that remain are the same account login read from two different mailboxes.
  */
-describe('the credential sources', () => {
-  it('refuses a retired source by name, listing the two there are', () => {
-    for (const retired of ['none', 'paste', 'secret']) {
-      expect(() => parseCredentialSource(retired)).toThrow(new RegExp(`unknown --credential "${retired}"`));
-      expect(() => parseCredentialSource(retired)).toThrow(/inbox-oauth, outbox-oauth/);
-    }
-  });
-
-  it('the two that remain parse, and a run with neither configured fails loudly', () => {
-    for (const s of ['inbox-oauth', 'outbox-oauth'] as const) expect(parseCredentialSource(s)).toBe(s);
-    expect(() => credentialSourceFor('installed', {}, {})).toThrow(/RESEND_EVAL_API_KEY/);
-  });
-});
 
 describe('the edges the seed did not pin', () => {
   it('msToFirstPublish counts a conditional body write', () => {
@@ -138,15 +126,6 @@ describe('the edges the seed did not pin', () => {
   });
 });
 
-describe('the line the agent is given', () => {
-  it('teaches the afbin CLI and names the document, inventing no saved connection and no token', () => {
-    const line = buildPrompt(TASK, { base: 'https://x.test', id: 'abc123' });
-    expect(line).toContain('https://x.test/a/abc123');
-    expect(line).toContain('afbin');
-    expect(line).toContain('Run afbin help first');
-    expect(line).not.toMatch(/saved|mx_[A-Za-z0-9_-]+|\/docs\//);
-  });
-});
 
 describe('scoring a run whose agent named nothing', () => {
   it('falls through to null when there is no answer, no ledger write and no document to fall back on', () => {

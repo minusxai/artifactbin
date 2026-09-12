@@ -1,15 +1,19 @@
-/** Skills reach each harness only through the CLI's eager init; the eval knows where that lands and nothing more. */
-import {expect,it} from 'vitest';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
+import {expect,it,describe} from 'vitest';
+import fs, {mkdtempSync,rmSync,statSync,existsSync} from 'node:fs';
+import os, {tmpdir} from 'node:os';
+import path, {join} from 'node:path';
 import {skillKit,harnessEnv,copySkillsInto} from '../lib/skill-kit';
 import {rewriteInstallerForLocal} from '../lib/proxy';
 import {adapterFor} from '../lib/harness';
-import {planMode} from '../lib/mode';
+import {planMode,DEFAULT_MODE,cliPreinstalled,parseMode} from '../lib/mode';
 import {buildPrompt} from '../lib/tasks';
 import type {Harness,HarnessRunContext,Task} from '../lib/contracts';
 import {skillTargets} from '../../services/cli/src/skill-install';
+import {execFileSync} from 'node:child_process';
+import {materializeCli} from '../lib/cli-kit';
+import {countDocsReads} from '../lib/docs-reads';
+
+/** Skills reach each harness only through the CLI's eager init; the eval knows where that lands and nothing more. */
 const ctx=(harness:Harness,home:string,installed:boolean):HarnessRunContext=>({leg:{harness,model:'m',envVar:'TEST_KEY',apiKey:'k',label:harness,price:null,vision:true,promptLevel:'starter',mode:planMode(harness,installed?'installed':'not-installed')},prompt:'p',cwd:home,homeDir:home,apiKey:'k',maxTurns:1,maxBudgetUsd:1,...(installed?{skills:skillKit(home,harness)}:{})});
 it('names the directory eager init installs to for each harness, under the environment the adapter passes',()=>{
  const home='/tmp/afbin-home';const map={'claude-code':'claude',codex:'codex',pi:'pi',opencode:'opencode'} as const;
@@ -47,4 +51,30 @@ it('gives both CLI-staging flows the same prompt: mode is not an input to buildP
  expect(p).toContain('Run afbin help first');
  expect(p).toContain('http://127.0.0.1:1/a/abc123');
  expect(p).not.toMatch(/\.env|afbin setup/);
+});
+
+describe('the run mode', () => {
+  it('runs two CLI flows, installed and not-installed, without silent substitutions',()=>{
+   expect(DEFAULT_MODE).toBe('installed');
+   for(const harness of ['claude-code','codex','pi','opencode'] as const)for(const mode of ['installed','not-installed'] as const)expect(planMode(harness,parseMode(mode))).toEqual({asked:mode,run:mode,substitutedWhy:null});
+   expect(cliPreinstalled('installed')).toBe(true);expect(cliPreinstalled('not-installed')).toBe(false);
+   for(const mode of ['cli','cold','fetched_skill+api_action','installed_skill+mcp_action'])expect(()=>parseMode(mode)).toThrow('unknown --mode');
+  });
+});
+
+describe('the CLI kit', () => {
+  it('stages the actual CLI outside the checkout and runs offline without creating credentials',()=>{
+   const root=mkdtempSync(join(tmpdir(),'afbin-eval-cli-'));
+   try{
+    const bin=materializeCli(join(root,'bin'));
+    const output=execFileSync(join(bin,'afbin'),['--version','--json'],{cwd:root,env:{PATH:process.env.PATH,HOME:root},encoding:'utf8'});
+    expect(JSON.parse(output)).toMatchObject({protocol:1});
+    expect(statSync(join(bin,'afbin')).mode&0o777).toBe(0o755);
+    expect(existsSync(join(root,'.artifactbin'))).toBe(false);
+    expect(()=>materializeCli(join(root,'missing'),join(root,'absent'))).toThrow('Build the CLI');
+   }finally{rmSync(root,{recursive:true,force:true});}
+  });
+  it('counts local CLI help as reading guidance without counting writes',()=>{
+   expect(countDocsReads([{name:'bash',input:{command:'afbin help markup'}},{name:'bash',input:{command:'afbin push -h'}},{name:'bash',input:{command:'afbin push report.jsx'}}])).toBe(2);
+  });
 });

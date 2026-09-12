@@ -1,8 +1,10 @@
-/** Schema as data → additive, idempotent DDL; applied twice it changes nothing; a new column appears on the next boot. */
-import { PGlite } from '@electric-sql/pglite';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {PGlite} from '@electric-sql/pglite';
+import {afterAll,beforeAll,describe,expect,it} from 'vitest';
 import type { Queryable, Table } from '@artifactbin/contracts';
-import { ensureTable, renderSchema } from '@artifactbin/utils';
+import {ensureTable,renderSchema} from '@artifactbin/utils';
+import {serviceSecretForServer} from '../src/service-auth';
+
+/** Schema as data → additive, idempotent DDL; applied twice it changes nothing; a new column appears on the next boot. */
 
 const T: Table = { name: 'widgets', columns: [{ name: 'id', type: 'TEXT' }, { name: 'n', type: 'INTEGER', notNull: true, default: '0' }, { name: 'old', type: 'TEXT', retired: true }], primaryKey: ['id'], indexes: [{ name: 'idx_widgets_n', columns: ['n'], where: 'n > 0' }] };
 let pg: PGlite; let db: Queryable;
@@ -68,5 +70,49 @@ describe('ensureTable', () => {
     await ensureTable(db, [grown], { schema: 'app' });
     const { rows } = await db.query<{ column_name: string }>("SELECT column_name FROM information_schema.columns WHERE table_schema = 'app' AND table_name = 'widgets' ORDER BY ordinal_position");
     expect(rows.map((r) => r.column_name)).toEqual(['id', 'n', 'old', 'extra']);
+  });
+});
+
+describe('service auth', () => {
+  describe('serviceSecretForServer', () => {
+    it('requires authentication when a service boots in production', () => {
+      expect(() => serviceSecretForServer({ NODE_ENV: 'production' })).toThrow(/INTERNAL__SERVICE_SECRET/);
+      expect(serviceSecretForServer({ NODE_ENV: 'production', INTERNAL__SERVICE_SECRET: 'shared' })).toBe('shared');
+    });
+
+    it('retains an explicit unauthenticated development and test API', () => {
+      expect(serviceSecretForServer({ NODE_ENV: 'development' })).toBeUndefined();
+      expect(serviceSecretForServer({ NODE_ENV: 'test' })).toBeUndefined();
+    });
+  });
+});
+
+describe('renaming a schema', () => {
+  /** P3 (seeded RED) — a column rename is DECLARED: add, guarded copy, drop; idempotent across boots. */
+
+  const OLD: Table = { name: 'tokens', columns: [{ name: 'id', type: 'TEXT', notNull: true }, { name: 'revoked_at', type: 'TIMESTAMPTZ' }], primaryKey: ['id'] };
+  const NEW: Table = { name: 'tokens', columns: [{ name: 'id', type: 'TEXT', notNull: true }, { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' } as never], primaryKey: ['id'] };
+
+  describe('renamedFrom', () => {
+    it('renders add, a guarded copy, and the drop of the old column', () => {
+      const s = renderSchema([NEW]).join('\n');
+      expect(s).toContain('ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
+      expect(s).toMatch(/information_schema\.columns/);
+      expect(s).toMatch(/SET deleted_at = revoked_at/);
+      expect(s).toMatch(/DROP COLUMN (IF EXISTS )?revoked_at/);
+    });
+
+    it('a revoked token stays revoked through the rename, and a second boot changes nothing', async () => {
+      const db = new PGlite();
+      for (const st of renderSchema([OLD])) await db.exec(st);
+      await db.exec(`INSERT INTO tokens VALUES ('live', NULL), ('dead', now())`);
+      for (let boot = 1; boot <= 2; boot++) {
+        for (const st of renderSchema([NEW])) await db.exec(st);
+        const rows = (await db.query<{ id: string; gone: boolean }>(`SELECT id, deleted_at IS NOT NULL AS gone FROM tokens ORDER BY id`)).rows;
+        expect(rows, `boot ${boot}`).toEqual([{ id: 'dead', gone: true }, { id: 'live', gone: false }]);
+        const cols = (await db.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns WHERE table_name = 'tokens' ORDER BY 1`)).rows.map((r) => r.column_name);
+        expect(cols, `boot ${boot}`).toEqual(['deleted_at', 'id']);
+      }
+    });
   });
 });

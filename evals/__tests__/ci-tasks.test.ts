@@ -60,13 +60,15 @@ describe('the agent-smoke matrix', () => {
   it('and every row can actually PLAN every task it names — the general form of the rule above', () => {
     for (const r of ROWS) {
       // The row's mode is one the driver knows; which one is the matrix's business, not this test's.
-      expect(() => parseMode(r.mode), r.mode).not.toThrow();
+      expect(parseMode(r.mode), r.mode).toBe(r.mode);
       for (const id of tasksOf(r)) {
         const task = byId.get(id)!;
-        expect(
-          () => planAccess({ task, base: 'http://x.test', start: { id: 'abc123' }, credential: { token: 'mx_account' } }),
-          `${r.mode} × ${id}`,
-        ).not.toThrow();
+        // Planning has to produce the two things a leg is launched with: the document the agent is
+        // pointed at, and the seed write — present exactly when the task declares one.
+        const plan = planAccess({ task, base: 'http://x.test', start: { id: 'abc123' }, credential: { token: 'mx_account' } });
+        expect(plan.access, `${r.mode} × ${id}`).toEqual({ base: 'http://x.test', id: 'abc123' });
+        if (task.seed === undefined) expect(plan.seed, `${r.mode} × ${id}`).toBeNull();
+        else expect(plan.seed, `${r.mode} × ${id}`).toMatchObject({ id: 'abc123', markup: task.seed });
       }
     }
   });
