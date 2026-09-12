@@ -362,7 +362,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
   const baseline = prepared.baseline;
 
-  const prompt = buildPrompt(task, access, { vision: leg.vision });
+  const prompt = buildPrompt(task, access, { vision: leg.vision, promptLevel: leg.promptLevel });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
   const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, skills };
