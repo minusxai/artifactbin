@@ -1,6 +1,7 @@
 /** Selected-block controls own their preview; only a completed gesture changes source. */
 import type { BlockEdit } from './block-edit';
 import { createDragPreview } from './drag-preview';
+import { SELECTION_PRESENTATION } from '../story-runtime/selection-presentation';
 interface GridGeometry {
   cols: number;
   rowHeight: number;
@@ -120,10 +121,9 @@ export function createNodeChrome(doc: Document, commit: (command: BlockEdit) => 
     root.append(b);
     return b;
   };
-  // The amber outline is 2px wide with a 3px offset: its center is
-  // 4px outside the block. Anchor button centers there at every hit-target size.
-  const near = '-4px';
-  const far = 'calc(100% + 4px)';
+  // Center every hit-target size on the shared selection outline.
+  const near = `${-SELECTION_PRESENTATION.handleOutset}px`;
+  const far = `calc(100% + ${SELECTION_PRESENTATION.handleOutset}px)`;
   button('Move selected block', '⠿', { left: near, top: near }, 'move');
   const remove = button('Delete selected block', '', { left: far, top: near });
   const trash = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');

@@ -119,11 +119,11 @@ it.each([false, true])('centers controls on the selection outline (touch: %s)', 
     document.body.append(p);
     chrome.select(p, '0');
     for (const [name, left, top] of [
-      ['Move selected block', '-4px', '-4px'],
-      ['Delete selected block', 'calc(100% + 4px)', '-4px'],
-      ['Resize selected block', 'calc(100% + 4px)', 'calc(100% + 4px)'],
-      ['Resize block width', 'calc(100% + 4px)', '50%'],
-      ['Resize block height', '50%', 'calc(100% + 4px)'],
+      ['Move selected block', '-3.5px', '-3.5px'],
+      ['Delete selected block', 'calc(100% + 3.5px)', '-3.5px'],
+      ['Resize selected block', 'calc(100% + 3.5px)', 'calc(100% + 3.5px)'],
+      ['Resize block width', 'calc(100% + 3.5px)', '50%'],
+      ['Resize block height', '50%', 'calc(100% + 3.5px)'],
     ]) {
       const button = screen.getByRole('button', { name });
       expect(button).toHaveStyle({ left, top, transform: 'translate(-50%, -50%)', width: touch ? '44px' : '28px' });
