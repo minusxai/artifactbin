@@ -4,15 +4,16 @@ import {createTwoFilesPatch} from 'diff';
 import {type LocalDocument} from './document';
 import {inspectWorkspace,type LocalFile,type Snapshot,type Workspace} from './workspace';
 import {readResourceSource} from './resource-file';
+import {skillStatus} from './skill-install';
 import {extname} from 'node:path';
 export function snapshotDocument(snapshot:Snapshot):LocalDocument{
  return{metadata:{...(snapshot.shares!==undefined?{shares:snapshot.shares as ShareEntry[]}:{}),...(snapshot.description!==undefined?{description:snapshot.description as string|null}:{}),...(snapshot.colorMode!==undefined?{colorMode:snapshot.colorMode as 'light'|'dark'|null}:{}),id:snapshot.id,title:snapshot.title??null,theme:snapshot.theme??null,template:snapshot.template??null,
   ...(snapshot.visibility?{visibility:snapshot.visibility}:{}),link:snapshot.link_role??'viewer',folder:snapshot.parent_id??null,
   edit_id:snapshot.edit_id,head_version:snapshot.version,state:snapshot.state},body:snapshot.markup??''};
 }
-export async function localStatus(workspace:Workspace,paths?:string[]){
+export async function localStatus(workspace:Workspace,paths?:string[],home?:string,env?:NodeJS.ProcessEnv){
  const conflicts=await readConflicts(workspace.root);
- return{remote:'last_observed',server:workspace.lock?.server??null,files:(await inspectWorkspace(workspace,paths)).map(file=>({path:file.path,status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id??file.document?.metadata.id??file.resource?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})}))};
+ return{remote:'last_observed',server:workspace.lock?.server??null,files:(await inspectWorkspace(workspace,paths)).map(file=>({path:file.path,status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id??file.document?.metadata.id??file.resource?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})})),...(home!==undefined?{skills:await skillStatus(home,env)}:{})};
 }
 export async function localDiff(workspace:Workspace,paths?:string[]){
  const files=await inspectWorkspace(workspace,paths);

@@ -61,7 +61,7 @@ export const commands: Command[] = [
  {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
  {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --no-browser.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --no-browser --json']},
  {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help.',min:0,max:1,flags:['format','output'],examples:['afbin help example','afbin help markup','afbin help dashboard']},
- {name:'setup',usage:'',description:'Authenticate in your browser and install selected local skills.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin setup','afbin setup --harness pi --harness opencode --yes --json']},
+ {name:'auth',usage:'',description:'Authenticate this machine in the browser; report the signed-in account, or anonymous.',min:0,max:0,flags:[],examples:['afbin auth','afbin auth --no-browser --json']},
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session'],examples:['afbin remote pi','afbin remote --name Backend codex','afbin remote --session rs_123']},
 ];
@@ -98,7 +98,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
    result.command=command.name;
   }else result.positionals.push(token);
  }
- if(!result.command)result.command=result.flags.help?'help':'setup';
+ if(!result.command)result.command='help';
  const command=commands.find(c=>c.name===result.command)!;
  for(const name of Object.keys(result.flags))if(!globalFlags.includes(name)&&!command.flags.includes(name))throw new CliError('unsupported_flag',`afbin ${command.name} does not accept --${name}.`,`Run afbin ${command.name} -h.`);
  if(result.flags.help||result.flags.version)return result;
@@ -146,6 +146,6 @@ export function parseCommand(argv:string[]):ParsedCommand {
 export function commandHelp(name?:string):string {
  const command=name?commands.find(c=>c.name===name||c.aliases?.includes(name)):undefined;
  if(name&&!command)throw new CliError('unknown_help_topic',`Unknown command ${name}.`);
- if(!command)return `afbin — local files, published artifacts\n\n${commands.map(c=>`  afbin ${c.name} ${c.usage}\n    ${c.description}`).join('\n')}\n\n<ref> = <url|id|path>[@version]. Published references use ref:<id>.\nRun afbin <command> -h for flags and examples.\nLocal topics: example, markup, data, themes, templates, errors.\n`;
+ if(!command)return `afbin — local files, published artifacts\n\n${commands.map(c=>`  afbin ${c.name} ${c.usage}\n    ${c.description}`).join('\n')}\n\n<ref> = <url|id|path>[@version]. Published references use ref:<id>.\nRun afbin <command> -h for flags and examples.\nLocal topics: commands, example, markup, data, themes, templates, errors.\n`;
  return `afbin ${command.name} ${command.usage}\n\n${command.description}\n\n${[...globalFlags.filter(name=>command.name!=='remote'||name!=='json'),...command.flags].map(name=>{const f=flags[name];return `  ${f.short?`-${f.short}, `:''}--${name}${f.value?` <${f.value}>`:''}\n    ${f.description}`;}).join('\n')}\n\nExamples:\n${command.examples.map(x=>`  ${x}`).join('\n')}\n`;
 }
