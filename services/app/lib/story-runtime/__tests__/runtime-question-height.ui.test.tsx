@@ -51,13 +51,6 @@ describe('StoryRuntimeApp — question embed heights', () => {
     expect(embed.style.height).toBe('100%');
   });
 
-  it('…and so does a DataTable in a cell', () => {
-    const parsed = parseJsx('<Grid><GridItem x={0} y={0} w={12} h={4}><DataTable data="ref:abc123" /></GridItem></Grid>');
-    if (!parsed.ok) throw new Error(parsed.error);
-    const { container } = renderWithProviders(
-      <StoryRuntimeApp nodes={parsed.nodes} refData={{}} colorMode="light" chrome={false} />,
-    );
-    const embed = container.querySelector('[aria-label="DataTable embed"]') as HTMLElement;
-    expect(embed.style.height).toBe('100%');
-  });
+  // …and so does a DataTable in a cell: runtime-data-table-height.ui.test.tsx owns that case,
+  // next to the rest of the table's own sizing contract.
 });

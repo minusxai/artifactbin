@@ -21,6 +21,15 @@ it('an expired owner cannot publish after eviction and recreation (ABA)',async()
   const fresh=await cache.run('key',async()=>result(2),cacheRequest);old.resolve(result(1));
   expect(await pending).toEqual(fresh);
 });
+// The other way an entry goes stale under an owner: the ROW is gone, not merely its
+// lease. Moved here from result-cache.test.ts, which tested this module twice over.
+it('a lease token cannot be revived once its row is evicted and recreated',async()=>{
+  const db=await getDb(),cache=createDatasetResultCache(db),old=deferred<CatalogResult>(),started=deferred<void>();
+  const pending=cache.run('key',()=>{started.resolve();return old.promise;},cacheRequest);await started.promise;
+  await db.query('DELETE FROM dataset_result_cache WHERE cache_key=$1',['key']);
+  await cache.run('key',async()=>result(2),cacheRequest);old.resolve(result(1));await pending;
+  expect((await cache.run('key',async()=>result(3),cacheRequest)).rows).toEqual([{n:2}]);
+});
 it('bounds aggregate concurrent fills and outstanding leases',async()=>{
   const db=await getDb(),cache=createDatasetResultCache(db,{maxEntries:2,maxBytes:300}),release=deferred<void>(),started=deferred<void>();let starts=0;
   const work=Array.from({length:5},(_,i)=>cache.run(String(i),async()=>{if(++starts===5)started.resolve();await release.promise;return result(i);},cacheRequest));

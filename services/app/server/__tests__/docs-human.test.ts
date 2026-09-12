@@ -17,10 +17,13 @@ describe('docs addresses', () => {
   useAppHarness();
 
   it('retired remote skill paths return 404 to machines and browsers', async () => {
-    for(const path of ['/docs','/docs/artifactbin','/docs/artifactbin/SKILL.md']) {
+    for(const path of ['/docs','/docs/artifactbin','/docs/artifactbin/SKILL.md','/docs/artifactbin/references/publishing.md']) {
       expect((await app.request(path)).status).toBe(404);
       expect((await app.request(path,{headers:BROWSER})).status).toBe(404);
     }
+    // The remote MCP transport retired with them — moved here from the Hono route
+    // smoke test, which keeps to the artifact routes it exists to prove.
+    expect((await app.request('/mcp',{method:'POST'})).status).toBe(404);
   });
 
   it('/docs-human is the page for people, and /docs/human sends them there', async () => {

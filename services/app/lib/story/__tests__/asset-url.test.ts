@@ -79,6 +79,13 @@ describe('assetUrlFor', () => {
     expect(after.split('?')[0]).toBe(before.split('?')[0]); // the ADDRESS never moves
     expect(assetUrlFor(URL_A, box())).toBe(before);         // same bytes, same key, same url
   });
+
+  it('is canonicalizing: scheme and host case reach one address', () => {
+    // Moved here from asset-map.test.ts's duplicate `assetUrlFor` block. That copy
+    // lower-cased the url before handing it over, so it proved nothing; the folding
+    // is `canonicalAssetUrl`'s (`new URL(...).href`) and belongs on the real input.
+    expect(assetUrlFor('HTTPS://CDN.Example/photo.png')).toBe(assetUrlFor(URL_A));
+  });
 });
 
 describe('lazy loading', () => {

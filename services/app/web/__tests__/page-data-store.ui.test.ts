@@ -19,9 +19,22 @@ it('evicts unused entries but keeps an active resource consistent', async () => 
 
 it('purges permission failures but retains transient failures and can retry', async () => {
   const store = createPageDataStore(); store.setScope('A'); const r = store.resource<string>('a'); r.seed('old');
-  await r.load(async () => { throw new Error('offline'); }); expect(r.snapshot().data).toBe('old');
+  await r.load(async () => { throw new Error('offline'); });
+  // The failure is reported and settled, and the retained data stays visible behind it.
+  expect(r.snapshot()).toMatchObject({ data: 'old', pending: false }); expect(r.snapshot().error).toBeInstanceOf(Error);
   await r.load(async () => { throw Object.assign(new Error('forbidden'), { status: 403 }); }); expect(r.snapshot().data).toBeNull();
-  await r.load(async () => 'new'); expect(r.snapshot().data).toBe('new');
+  await r.load(async () => 'new'); expect(r.snapshot()).toMatchObject({ data: 'new', pending: false, error: null });
+});
+
+it('clearing retained data also prevents pending work from restoring it', async () => {
+  const store = createPageDataStore(); store.setScope('account:A');
+  const resource = store.resource<string>('/account'); resource.seed('private');
+  let resolve!: (value: string) => void;
+  const pending = resource.load(() => new Promise<string>(done => { resolve = done; }));
+  store.clear(); expect(resource.snapshot().data).toBeNull();
+  resolve('late private'); await pending;
+  expect(resource.snapshot().data).toBeNull();
+  expect(store.resource<string>('/account').snapshot().data).toBeNull();
 });
 
 it('a forced refresh supersedes an older completion and clear revokes held references', async () => {

@@ -126,8 +126,6 @@ describe('mx.mutate — the author script\'s handle on a write', () => {
     expect(mx.params.get('choice')).toBe('salad');
   });
 
-  it('rejects with the server\'s message so a script can report it', async () => {
-    const store = storeWith(async () => { throw new Error('dataset is full'); });
-    await expect(createMx(store).mutate('vote')).rejects.toThrow(/full/);
-  });
+  // A rejection carrying the server's message is store-mutate.test.ts's case: mx.mutate
+  // is a pass-through, and that test also pins the busy flag and the capability refresh.
 });
