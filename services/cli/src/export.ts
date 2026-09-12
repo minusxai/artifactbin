@@ -1,9 +1,8 @@
-import {basename,dirname,extname,join,relative,resolve} from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {basename,extname,join,relative,resolve} from 'node:path';
 import {stat} from 'node:fs/promises';
 import {stringify} from 'yaml';
 import {CliError} from './errors';
-import {atomicWrite,digest,privateDirectory,readOptional} from './files';
+import {atomicWrite,digest,localBackup,readOptional} from './files';
 import {confinedPath} from './journal';
 import {resolveReference} from './reference';
 import {parseResourceFile,readResourceSource} from './resource-file';
@@ -109,9 +108,10 @@ function publishedHead(workspace:Workspace,path:string):string{
  return tracked.id;
 }
 async function unchangedHead(workspace:Workspace,path:string):Promise<void>{
+ // `file` is the sha256 of the local bytes last accepted, so the comparison needs no stored copy of them.
  const tracked=workspace.lock!.files[path];
  const bytes=await readOptional(await confinedPath(workspace.root,path));
- if(!bytes||digest(bytes)!==digest(Buffer.from(tracked.baseline,'base64')))throw new CliError('renderer_unavailable',`${path} differs from its observed head; drafts are never uploaded for rendering.`,RENDERER_FIX);
+ if(!bytes||digest(bytes)!==tracked.file)throw new CliError('renderer_unavailable',`${path} differs from its observed head; drafts are never uploaded for rendering.`,RENDERER_FIX);
 }
 
 async function renderTarget(target:ExportTarget,options:ExportOptions):Promise<Buffer>{
@@ -197,19 +197,15 @@ function originalExtension(target:ExportTarget):string|undefined{
  return target.path!==undefined?extname(target.path)||undefined:undefined;
 }
 
-/** Exports never establish tracking, and never replace a tracked source file. */
+/** Exports never establish tracking, never replace a tracked source file, and never write state into the workspace. */
 async function write(workspace:Workspace,path:string,bytes:Buffer,force:boolean):Promise<Record<string,unknown>>{
  if(workspace.lock?.files[path])throw new CliError('output_exists',`${path} is a tracked source file.`,'Choose a destination outside the workspace tracking.');
  const destination=await confinedPath(workspace.root,path);
  const before=await readOptional(destination);
  if(before&&!force)throw new CliError('output_exists',`${path} already exists.`,'Choose a free --output path, or use --force to replace it after a recoverable backup.');
  if(!before){await atomicWrite(destination,bytes,{exclusive:true});return {};}
- const backup=`.artifactbin/local-backups/${randomUUID()}/${basename(path)}`;
- const backupPath=await confinedPath(workspace.root,backup);
- await privateDirectory(join(workspace.root,'.artifactbin'));
- await privateDirectory(join(workspace.root,'.artifactbin','local-backups'));
- await privateDirectory(dirname(backupPath));
- await atomicWrite(backupPath,before,{exclusive:true});
+ // The replaced bytes are kept under the CLI's own state directory and reported absolutely.
+ const backup=await localBackup(workspace.home,path,before);
  await atomicWrite(destination,bytes);
  return {backup};
 }
