@@ -24,8 +24,8 @@
   failed — `[health] upstream unhealthy: sql, events`, logged only when one
   does.
 - `npm run validate` type-checks (never `npm run build` to verify); `npm test` runs only the tests your
-  change affects (`vitest --changed`) against in-memory PGLite — `npm run test:all` runs the whole Vitest
-  suite. Leave the full and heavy suites to CI (see [AGENTS.md](../AGENTS.md)).
+  change affects, capped at 50 files, and exits 2 (deferred to CI, not passed) above the cap. The full
+  and heavy suites are CI-only; the rules live in [AGENTS.md](../AGENTS.md).
 - **Live editing needs LISTEN/NOTIFY**, which both storage modes provide
   (PGLite in-process, Postgres via one dedicated client). A missed
   notification is harmless: every wakeup triggers a fresh read, so the
@@ -41,7 +41,7 @@
   (`--servers=4`), and it is the
   default on purpose: driving a DEV server instead means the SPA is served
   through Vite, whose HMR websocket a fixed `connect-src 'self'` CSP refuses, so
-  the page never mounts and ~26 gates time out on a checkout where nothing is
+  the page never mounts and the gates time out on a checkout where nothing is
   wrong. `--servers=N` chooses the count (`--servers=0` falls back to
   `http://localhost:3040`), and `npm run test:gates -- <base>` drives a server
   you already have — point that one at

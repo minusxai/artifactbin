@@ -72,8 +72,8 @@ ok((await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })).status === 404
 // one way it gets a credential at all.
 ok((await fetch(`${B}/api/start`, { method: 'POST' })).status === 403,
   'a client that is not the page is refused the create button');
-// This gate runs its OWN server (start: custom), so it does not share the
-// helper the shared-server gates use — it walks the same two steps by hand.
+// The start door is the thing under test, so this gate cannot use the shared
+// start helper — it walks the same two steps by hand.
 const agent = await connectAgent(B);
 ok(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
 const agentDoc = await (await fetch(`${B}/api/start`, {

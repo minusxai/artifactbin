@@ -1,5 +1,5 @@
-# THE SELF-HOST RATE LIMITS — `default_rate_limits.yml` with the anonymous mint OPEN at 10/hour/ip.
-# A self-hoster must be able to mint a token from their own page; production ships `default_rate_limits.yml`,
+# THE SELF-HOST RATE LIMITS — `default_rate_limits.yml` with the start_doc door OPEN at 10/hour/ip.
+# A self-hoster must be able to start a document from their own page; production ships `default_rate_limits.yml`,
 # which closes it. Pointed at by docker-compose.yml and by the vitest suite.
 # else: there is no `RATE_LIMITER__<POLICY>_MAX` any more. A deployment points
 # `PROXY__RATE_LIMIT_CONFIG_FILE` at its own copy of this shape; unset, this file is the default.

@@ -30,14 +30,14 @@ describe('forward', () => {
   });
   it('drops a forged inbound x-mx-actor and sets x-forwarded-{for,host,proto} itself when it is the outermost hop', async () => {
     const proxy = assemble([forwardedHeaders({ trustedHops: 0 }), forward(inProcess(echo), await testProxyOptions())]);
-    const r = await (await proxy.request('http://artifactbin.dev/echo', { headers: { [ACTOR_HEADER]: signActor({ credential: 'bearer', tokenId: 'x' }, 'z'.repeat(32)), 'x-forwarded-host': 'evil.example', 'x-forwarded-for': '9.9.9.9' } })).json();
-    expect(r).toMatchObject({ host: 'artifactbin.dev', proto: 'http', actor: null });
+    const r = await (await proxy.request('http://public.example/echo', { headers: { [ACTOR_HEADER]: signActor({ credential: 'bearer', tokenId: 'x' }, 'z'.repeat(32)), 'x-forwarded-host': 'evil.example', 'x-forwarded-for': '9.9.9.9' } })).json();
+    expect(r).toMatchObject({ host: 'public.example', proto: 'http', actor: null });
     expect(r.xff).not.toContain('9.9.9.9');
   });
   it('preserves x-forwarded-{host,proto} and appends to x-forwarded-for behind a trusted hop', async () => {
     const proxy = assemble([forwardedHeaders({ trustedHops: 1 }), forward(inProcess(echo), await testProxyOptions())]);
-    const r = await (await proxy.request('http://inner:3000/echo', { headers: { 'x-forwarded-host': 'artifactbin.dev', 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.7' } })).json();
-    expect(r).toMatchObject({ host: 'artifactbin.dev', proto: 'https' });
+    const r = await (await proxy.request('http://inner:3000/echo', { headers: { 'x-forwarded-host': 'public.example', 'x-forwarded-proto': 'https', 'x-forwarded-for': '203.0.113.7' } })).json();
+    expect(r).toMatchObject({ host: 'public.example', proto: 'https' });
     expect(r.xff).toMatch(/^203\.0\.113\.7/);
   });
   it('streams SSE unbuffered through both adapters and the client\'s abort cancels the upstream stream', async () => {

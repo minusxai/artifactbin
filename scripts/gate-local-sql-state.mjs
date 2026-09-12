@@ -11,7 +11,6 @@ import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
-export const timeoutMs = 90_000;
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
 const ok = (condition, label) => { out.push(`${condition ? '  ok ' : 'FAIL'} ${label}`); return condition; };
