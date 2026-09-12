@@ -35,36 +35,39 @@ await page.waitForSelector(
 if (!(await page.locator('[aria-label="Create a live document for my agent"]').count())) {
   await page.click('[aria-label="Connect an agent"]', { timeout: 30_000 });
 }
+// The paste is tokenless now, so the doc id + bearer come from the START API response the
+// button itself makes (same browser session owns the doc — exactly the original flow).
+const startRespP = page.waitForResponse(
+  (r) => r.url().includes('/api/start') && r.request().method() === 'POST',
+  { timeout: 30_000 },
+);
 await page.click('[aria-label="Create a live document for my agent"]', { timeout: 30_000 });
+const started = await (await startRespP).json();
 await page.waitForTimeout(1500);
 const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
-const paste = /\/a\/([A-Za-z0-9]+)/.exec(prompt);
-ok(!!paste, 'the copied paste names the artifact URL');
+const id = started.id;
+const pasteToken = typeof started.token === 'string' && /^mx_[A-Za-z0-9_-]+$/.test(started.token) ? started.token : null;
+ok(!!id && !!pasteToken, 'the create button mints a doc and returns a bearer in the API body');
+// The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
+ok(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
 ok(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
 ok(!/\/start\?k=/.test(prompt), 'and carries no start link');
 ok(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
 ok(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
-if (!paste) { console.log('cannot continue without the artifact id'); process.exit(1); }
-const [, id] = paste;
+if (!id || !pasteToken) { console.log('cannot continue without the doc id and token'); process.exit(1); }
 
-// The paste is tokenless; the re-arm/claim protocol takes a bearer from the start API body.
-const created = await (await fetch(`${B}/api/start`, { method: 'POST' })).json();
-const pasteToken = typeof created.token === 'string' && /^mx_[A-Za-z0-9_-]+$/.test(created.token) ? created.token : null;
-ok(!!pasteToken, 'the start API returns a bearer token in its body');
-if (!pasteToken) { console.log('cannot continue without a token'); process.exit(1); }
-
-// The start-link protocol remains independently live: a bearer re-arms the doc it belongs to.
-const armed = await fetch(`${B}/a/${created.id}/start`, {
+// The start-link protocol remains independently live: the owner re-arms it.
+const armed = await fetch(`${B}/a/${id}/start`, {
   method: 'POST',
   headers: { Authorization: `Bearer ${pasteToken}` },
 });
 const armedBody = await armed.json();
 const m = /\/a\/([A-Za-z0-9]+)\/start\?k=([A-Za-z0-9_-]+)/.exec(armedBody.prompt ?? '');
-ok(armed.status === 200 && m?.[1] === created.id, 'the bearer re-arm door mints a start link');
+ok(armed.status === 200 && m?.[1] === id, 'the bearer re-arm door mints a start link');
 if (!m) { console.log('cannot continue without the re-armed link'); process.exit(1); }
 const [, , k] = m;
-const startUrl = `${B}/a/${created.id}/start?k=${k}`;
+const startUrl = `${B}/a/${id}/start?k=${k}`;
 
 // ── 2. the unfurler: GET spends nothing and reveals nothing ─────────────────
 const unfurl1 = await fetch(startUrl);
@@ -75,12 +78,12 @@ ok(!/mx_[A-Za-z0-9_-]{20,}/.test(briefText), 'the brief contains no real token')
 ok(briefText.includes('afbin') && /POST/.test(briefText), 'the brief teaches the claim and local CLI guidance');
 
 // ── 3. the agent's leg: claim, then edit; the human's page updates live ────
-await page.goto(`${B}/a/${created.id}`, { waitUntil: 'load' });
+await page.goto(`${B}/a/${id}`, { waitUntil: 'load' });
 const claim = await fetch(startUrl, { method: 'POST' });
 const { token } = await claim.json();
 ok(claim.status === 200 && /^mx_/.test(token ?? ''), 'POST claims a working-shaped token');
 
-const put = await fetch(`${B}/api/artifacts/${created.id}`, {
+const put = await fetch(`${B}/api/artifacts/${id}`, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
   body: JSON.stringify({
@@ -119,9 +122,9 @@ ok((await fetch(startUrl, { method: 'POST' })).status === 410, 'a replayed claim
 ok((await fetch(startUrl)).status === 410, 'and the brief for a spent link answers 410');
 
 // ── 5. copy again: the owner re-arms the link with their own token ──────────
-const reissue = await fetch(`${B}/a/${created.id}/start`, {
+const reissue = await fetch(`${B}/a/${id}/start`, {
   method: 'POST',
-  headers: { Authorization: `Bearer ${pasteToken}` },
+  headers: { Authorization: `Bearer ${token}` },
 });
 const re = await reissue.json();
 const m2 = /\/start\?k=([A-Za-z0-9_-]+)/.exec(re.prompt ?? '');
