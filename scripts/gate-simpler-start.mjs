@@ -35,19 +35,29 @@ await page.waitForSelector(
 if (!(await page.locator('[aria-label="Create a live document for my agent"]').count())) {
   await page.click('[aria-label="Connect an agent"]', { timeout: 30_000 });
 }
+// The paste is tokenless now, so the doc id + bearer come from the START API response the
+// button itself makes (same browser session owns the doc — exactly the original flow).
+const startRespP = page.waitForResponse(
+  (r) => r.url().includes('/api/start') && r.request().method() === 'POST',
+  { timeout: 30_000 },
+);
 await page.click('[aria-label="Create a live document for my agent"]', { timeout: 30_000 });
+const started = await (await startRespP).json();
 await page.waitForTimeout(1500);
 const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
-const paste = /\/a\/([A-Za-z0-9]+) using this token: (mx_[A-Za-z0-9_-]+)/.exec(prompt);
-ok(!!paste, 'the copied paste carries the bearer token inline');
+const id = started.id;
+const pasteToken = typeof started.token === 'string' && /^mx_[A-Za-z0-9_-]+$/.test(started.token) ? started.token : null;
+ok(!!id && !!pasteToken, 'the create button mints a doc and returns a bearer in the API body');
+// The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
+ok(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
+ok(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
 ok(!/\/start\?k=/.test(prompt), 'and carries no start link');
 ok(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
-ok(prompt.includes(`afbin setup --server ${B}`), 'the paste points to local CLI setup and guidance');
-if (!paste) { console.log('cannot continue without the inline token'); process.exit(1); }
-const [, id, pasteToken] = paste;
+ok(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
+if (!id || !pasteToken) { console.log('cannot continue without the doc id and token'); process.exit(1); }
 
-// The start-link protocol remains independently live: a bearer re-arms it.
+// The start-link protocol remains independently live: the owner re-arms it.
 const armed = await fetch(`${B}/a/${id}/start`, {
   method: 'POST',
   headers: { Authorization: `Bearer ${pasteToken}` },

@@ -25,8 +25,8 @@ test("optional flags preserve quoted arguments and never evaluate shell syntax",
   assert.throws(() => parseLaunchFlags("trailing\\"), /trailing backslash/);
 });
 
-test("remote preserves command flags and bare startup selects setup", () => {
- assert.equal(parseCommand([]).command,'setup');
+test("remote preserves command flags and bare startup selects help", () => {
+ assert.equal(parseCommand([]).command,'help');
  assert.deepEqual(parseCommand(['remote','codex','--yolo','--model','a b']),{command:'remote',positionals:['codex','--yolo','--model','a b'],flags:{}});
 });
 
@@ -51,7 +51,12 @@ for (const entry of [["remote"], ["remote", "codex", "--yolo"]]) test(`real term
   const port = (server.address() as { port: number }).port;
   const child = pty.spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("../src/main.ts", import.meta.url)), ...entry], {
     cwd: process.cwd(), cols: 100, rows: 30,
-    env: { ...process.env, PATH: dir, ARTIFACTBIN_TOKEN: "test", ARTIFACTBIN_URL: `http://127.0.0.1:${port}` },
+    // Isolate HOME and every skill-target root: eager init installs the detected codex skill, which must
+    // land inside the temp dir, never the real home.
+    env: { ...process.env, PATH: dir, HOME: dir, ARTIFACTBIN_HOME: join(dir, ".artifactbin"),
+      CLAUDE_CONFIG_DIR: join(dir, ".claude"), CODEX_HOME: join(dir, ".codex"),
+      PI_CODING_AGENT_DIR: join(dir, ".pi", "agent"), XDG_CONFIG_HOME: join(dir, ".config"),
+      ARTIFACTBIN_TOKEN: "test", ARTIFACTBIN_URL: `http://127.0.0.1:${port}` },
   });
   let output = "", selected = false, flags = false;
   child.onData(data => {

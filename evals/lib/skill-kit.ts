@@ -1,7 +1,7 @@
 /**
- * Where the CLI's own `setup` puts skills for each harness under a run home. The eval never writes
- * skills itself: in the `installed` flow the driver runs `afbin setup`, in `not-installed` the agent
- * does, and both land here. Each adapter hands its harness the environment below, so the harness's
+ * Where the CLI's eager init puts skills for each harness under a run home. The eval never writes
+ * skills itself: in the `installed` flow the driver runs `afbin auth` (init runs first), in `not-installed`
+ * the agent does, and both land here. Each adapter hands its harness the environment below, so the harness's
  * ordinary discovery finds the directory. OpenCode also reads skills from the project, so its
  * adapter copies the installed directory beside the task's files once it exists.
  */
@@ -11,7 +11,7 @@ import type { Harness } from './contracts';
 import { skillTargets, type SkillHarness } from '../../services/cli/src/skill-install';
 
 export interface SkillKit {
-  /** The skill directory `afbin setup --harness <h>` installs to under this run home. */
+  /** The skill directory eager init installs to for this harness under this run home. */
   dir: string;
   /** Every skill directory a harness that loads them one at a time (pi) is pointed at. */
   skillDirs: string[];
@@ -19,7 +19,7 @@ export interface SkillKit {
 
 export const HARNESS_TO_SKILL: Record<Harness, SkillHarness> = { 'claude-code': 'claude', codex: 'codex', pi: 'pi', opencode: 'opencode' };
 
-/** The environment each adapter hands its harness, which is also what `afbin setup` is given so both agree. */
+/** The environment each adapter hands its harness, which afbin is also given so eager init detects the same harness. */
 export function harnessEnv(harness: Harness, homeDir: string): Record<string, string> {
   switch (harness) {
     case 'claude-code': return { CLAUDE_CONFIG_DIR: homeDir };

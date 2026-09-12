@@ -109,8 +109,8 @@ describe('<AgentLink>', () => {
   });
 });
 
-it('the landing offers CLI setup without minting an empty document',()=>{
+it('the landing offers CLI install without minting an empty document',()=>{
  render(<GetStarted />);
- expect(screen.getByRole('button',{name:'Copy the setup command'})).toBeInTheDocument();
+ expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
  expect(fetch).not.toHaveBeenCalled();
 });

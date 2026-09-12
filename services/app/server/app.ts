@@ -47,7 +47,7 @@ import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
 
-/** The `<link rel="help">` and `<meta name="artifactbin:agent">` an agent that fetched any page reads, on the caller's base. */
+/** The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's base. */
 export function withAgentDiscovery(html: string, origin: string): string {
   return html.replace('</head>', () => `${agentDiscoveryHead(agentDiscovery(origin))}</head>`);
 }
@@ -332,9 +332,6 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // address's redirect. `/docs-human` is outside that catch-all by shape, and
   // sits here beside the address it replaced.
   app.get('/docs-human', (c) => page(c));
-  // The token page must likewise win over the later profile-shaped catch-all
-  // (`/tokens/new` otherwise looks like user "tokens", path "new").
-  app.get('/tokens/new', (c) => page(c));
   // The app's API and document handlers.
   mountRoutes(app);
 

@@ -12,6 +12,6 @@ it('the bundled vocabulary comes from the registries',()=>{
 });
 it('the bundled auth guide teaches local setup without self-minting or legacy configuration',()=>{
  const auth=teaching.files['references/publishing-auth.md'];
- expect(auth).toContain('~/.artifactbin/.env');expect(auth).toContain('afbin setup');
+ expect(auth).toContain('~/.artifactbin/.env');expect(auth).toContain('afbin auth');
  expect(auth).not.toMatch(/tokens\/anonymous|MCP|~\/\.artifactbin\.env/);
 });

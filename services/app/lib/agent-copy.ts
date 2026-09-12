@@ -1,24 +1,17 @@
 /**
- * THE COPY-TO-AGENT TEXTS — one source (tok-p3, plan §3c). Every surface that hands a document to an agent
- * pastes one of these FIVE strings; nothing else in the codebase spells them. `base` may carry a trailing
- * slash; the link never doubles it.
+ * THE COPY-TO-AGENT TEXTS — one source. Every surface that hands a document to an agent pastes one of
+ * these strings; nothing else in the codebase spells them. `base` may carry a trailing slash; the link
+ * never doubles it. No token is ever exposed to the agent: afbin authenticates itself on demand.
  *
- *   anonymousPaste  logged-out home, the document /api/start just minted: the token INLINE (user decision).
- *   ownedPaste      logged-in, a document the account owns: "using your token" — the docs carry the
- *                   get-a-token flow; the text never links to /tokens/new.
- *   existingPaste   an existing document handed over: the link alone (the agent uses the token it holds).
+ *   existingPaste   the single tokenless starter for a handed-over document: the link plus how to reach
+ *                   afbin. Both /api/start (anonymous or owned) and the agent-prompt route use it.
  *   startLinkPaste  the start-link flow: today's wording, unchanged. lib/start-links `startPrompt` IS this.
- *   anonymousClaimRelay  the safety net under the ladder: what an agent relays when an anonymous token DID
- *                   publish, so the orphaned document is recoverable. The docs' `[[ claim ]]` renders from it.
+ *   anonymousClaimRelay  the safety net: what an agent relays when an anonymous token DID publish, so the
+ *                   orphaned document is recoverable. The docs' `[[ claim ]]` renders from it.
  */
-export function anonymousPaste(base: string, artifactId: string, token: string): string {
-  return `Help me edit my artifact at ${artifactUrl(base, artifactId)} using this token: ${token}. ${docsHint(base)}`;
-}
-export function ownedPaste(base: string, artifactId: string): string {
-  return `Help me edit my artifact at ${artifactUrl(base, artifactId)} using your token. ${docsHint(base)}`;
-}
 export function existingPaste(base: string, artifactId: string): string {
-  return `Help me edit my artifact at ${artifactUrl(base, artifactId)}. ${docsHint(base)}`;
+  const origin = base.replace(/\/$/, '');
+  return `Help me edit my artifact at ${artifactUrl(base, artifactId)}. Use the afbin CLI to operate artifactbin, or (curl -fsSL ${origin}/chat/install.sh | sh) if not installed. Run afbin help first.`;
 }
 export function startLinkPaste(base: string, artifactId: string, secret: string): string {
   return `Help me edit my artifact. Follow instructions at ${artifactUrl(base, artifactId)}/start?k=${secret}`;
@@ -36,6 +29,3 @@ export function anonymousClaimRelay(base: string, artifactId: string): string {
 
 const artifactUrl = (base: string, artifactId: string): string =>
   `${base.replace(/\/$/, '')}/a/${artifactId}`;
-
-const docsHint = (base: string): string =>
-  `Use afbin (afbin help): pull, edit local JSX, validate, push. Connect: afbin setup --server ${base.replace(/\/$/, '')}. Guide: ${base.replace(/\/$/, '')}/llms.txt.`;

@@ -58,7 +58,8 @@ export interface OAuthClient {
 export interface RefreshGrant {
   token: string;
   clientId: string;
-  userId: string;
+  /** Null for an anonymous grant: the rotated access token is minted unowned. */
+  userId: string | null;
   resource: string;
   scope: string;
 }
@@ -164,7 +165,7 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       await sweep();
       const next = refreshToken();
       const oldHash = hash(presented);
-      const row = (await db.query<{ subject_id: string; group_id: string; payload: Record<string, unknown> | string }>(
+      const row = (await db.query<{ subject_id: string | null; group_id: string; payload: Record<string, unknown> | string }>(
         `WITH consumed AS (
            UPDATE ${credentials} AS current
               SET consumed_at = now()

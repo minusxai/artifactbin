@@ -11,6 +11,7 @@
 import { HARNESSES, type Harness, type Price } from './contracts';
 import type { Args } from './args';
 import { planMode, type ModePlan } from './mode';
+import type { PromptLevel } from './tasks';
 
 export interface Leg {
   harness: Harness;
@@ -25,6 +26,8 @@ export interface Leg {
   price: Price | null;
   /** False for a text-only model — the prompt then says not to fetch the rendered PNG. */
   vision: boolean;
+  /** The prompt SHAPE — independent of `mode`; see `lib/tasks.ts`. */
+  promptLevel: PromptLevel;
   /**
    * How this leg reaches the product, and whether that is what was asked for:
    * a harness that cannot do the asked mode runs the nearest thing it can and
@@ -62,6 +65,7 @@ export function legFromArgs(args: Args, env: Record<string, string | undefined>)
     label: args.label ?? args.harness,
     price,
     vision: args.vision,
+    promptLevel: args.promptLevel,
     mode: planMode(args.harness as Harness, args.mode),
   };
 }

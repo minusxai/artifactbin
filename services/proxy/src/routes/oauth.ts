@@ -73,17 +73,32 @@ export interface OAuthRoutesOptions {
   publicBaseUrl?: string;
 }
 
-async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string; resource: string; scope: string }): Promise<{ id: string; token: string; expiresAt?: string }> {
+/**
+ * An anonymous grant (no bound account) receives a long-lived, claimable
+ * bearer — the same shape the removed manual token page minted — so a single
+ * token carries the agent's work until someone signs in and claims it, rather
+ * than fragmenting across short-lived rotations.
+ */
+const ANON_DEVICE_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60;
+
+async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId: string | null; resource: string; scope: string }): Promise<{ id: string; token: string; expiresIn: number }> {
+  const anonymous = !grant.userId;
+  const expiresIn = anonymous ? ANON_DEVICE_TOKEN_TTL_SECONDS : ACCESS_TOKEN_TTL_SECONDS;
+  // The app refuses audience/scope on a non-session mint, so an anonymous
+  // credential is a general bearer — exactly what the anonymous door serves.
+  const payload = anonymous
+    ? { expiresInHours: expiresIn / 3600 }
+    : { expiresInHours: expiresIn / 3600, audience: grant.resource, scope: grant.scope };
   const mint = new Request(new URL('/api/tokens/anonymous', request.url), {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ expiresInHours: ACCESS_TOKEN_TTL_SECONDS / 3600, audience: grant.resource, scope: grant.scope }),
+    body: JSON.stringify(payload),
   });
-  const res = await o.upstream(mint, { credential: 'session', userId: grant.userId });
+  const res = await o.upstream(mint, anonymous ? ANONYMOUS : { credential: 'session', userId: grant.userId as string });
   if (!res.ok) throw new Error(`oauth exchange: the app refused the mint (${res.status})`);
-  const body = await res.json().catch(() => null) as { id?: string; token?: string; expiresAt?: string } | null;
+  const body = await res.json().catch(() => null) as { id?: string; token?: string } | null;
   if (!body?.id || !body.token) throw new Error('oauth exchange: the app minted no token');
-  return { id: body.id, token: body.token, ...(body.expiresAt ? { expiresAt: body.expiresAt } : {}) };
+  return { id: body.id, token: body.token, expiresIn };
 }
 
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
@@ -103,24 +118,34 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   });
   app.get('/oauth/device', async (c) => {
     const userCode = c.req.query('user_code') ?? '';
-    if (!await o.pairing.inspect(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin setup again.</p>', 400);
+    if (!await o.pairing.inspect(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin auth again.</p>', 400);
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) {
       const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
-      return page('Connect artifactbin', `<h1>Connect artifactbin</h1><form method="GET" action="/login"><input type="hidden" name="callbackUrl" value="${esc(callback)}"><button type="submit">Log in to connect</button></form>`);
+      return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${esc(userCode)}</strong>. Log in to connect this agent to your account, or continue anonymously — an anonymous connection publishes without an account, and you can claim what it creates later by signing in.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><input type="hidden" name="decision" value="anonymous"><button type="submit">Continue anonymously</button></form><form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${esc(callback)}"><button type="submit">Log in to connect</button></form>`);
     }
     return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${esc(userCode)}</strong>. This gives the CLI access to your artifacts as <strong>${esc(actor.email ?? 'your account')}</strong>.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><button type="submit">Approve connection</button><button type="submit" name="decision" value="deny">Deny connection</button></form>`);
   });
   app.post('/oauth/device/approve', async (c) => {
     if (c.req.header('origin') !== base(c.req.raw)) return c.json({ error: 'invalid_origin' }, 403);
+    const form = await c.req.formData();
+    const userCode = String(form.get('user_code') ?? '');
+    const decision = form.get('decision');
+    // Anonymous connection: no account, so no session is required — but it is
+    // still origin-bound above, and gated on the EXPLICIT choice, never
+    // inferred from a missing session (which would silently downgrade a real
+    // approval whose session had lapsed).
+    if (decision === 'anonymous') {
+      if (!await o.pairing.approveAnonymously(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+      return page('Connection approved', '<h1>Connected anonymously</h1><p>Return to your terminal. You can close this page. Sign in later to claim what this connection publishes.</p>');
+    }
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
-    const form = await c.req.formData();
-    if (form.get('decision') === 'deny') {
-      if (!await o.pairing.deny(String(form.get('user_code') ?? ''),base(c.req.raw))) return page('Connection expired','<h1>Connection expired</h1>',400);
+    if (decision === 'deny') {
+      if (!await o.pairing.deny(userCode, base(c.req.raw))) return page('Connection expired','<h1>Connection expired</h1>',400);
       return page('Connection denied','<h1>Connection denied</h1><p>No access was granted.</p>');
     }
-    if (!await o.pairing.approve(String(form.get('user_code') ?? ''), base(c.req.raw), actor.userId)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+    if (!await o.pairing.approve(userCode, base(c.req.raw), actor.userId)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
     return page('Connection approved', '<h1>Connection approved</h1><p>Return to your terminal. You can close this page.</p>');
   });
   app.post('/oauth/device/token', async (c) => {
@@ -136,9 +161,9 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       const minted = await mintFor(o, c.req.raw, grant);
       const refreshToken = await o.oauth.issueRefresh({ ...grant, clientId, accessTokenId: minted.id });
       return reply({ access_token: minted.token, refresh_token: refreshToken, client_id: clientId,
-        token_type: 'Bearer', expires_in: ACCESS_TOKEN_TTL_SECONDS, scope: ARTIFACT_SCOPE });
+        token_type: 'Bearer', expires_in: minted.expiresIn, scope: ARTIFACT_SCOPE });
     } catch {
-      return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin setup to start a new approval.' }, 503);
+      return reply({ error: 'temporarily_unavailable', error_description: 'Run afbin auth to start a new approval.' }, 503);
     }
   });
 

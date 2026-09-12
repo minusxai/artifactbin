@@ -48,29 +48,32 @@ describe('the brief', () => {
 });
 
 describe('llms.txt and the discovery head', () => {
-  it('the first line is the blurb, and the meta tag is the blurb plus the guide address, under 150 characters', () => {
+  it('the first line is the blurb, and the meta tag names afbin plus the install one-liner, under 150 characters', () => {
     const text = llmsText(BASE);
     expect(text.split('\n')[0]).toBe(agentBlurb());
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.instruction).toBe(`${agentBlurb()} Guide: ${BASE}/llms.txt`);
+    expect(help.instruction).toBe(`afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh`);
     expect(help.instruction.length).toBeLessThanOrEqual(150);
     expect(help.instruction).toContain('afbin');
+    // The blurb is still line 1 of the one-pager, still used elsewhere; the meta no longer repeats it.
+    expect(help.instruction).not.toContain(agentBlurb());
   });
 
-  it('the one-pager says what artifactbin is, how to install and connect, both URL forms, and where the reference is', () => {
+  it('the one-pager says what artifactbin is, how to install, both URL forms, and where the reference is — no setup, no token', () => {
     const text = llmsText(BASE);
-    for (const line of [`curl -fsSL ${BASE}/chat/install.sh | sh`, `afbin setup --server ${BASE}`, 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin pull', 'afbin validate', 'afbin push', 'skill']) {
+    for (const line of [`curl -fsSL ${BASE}/chat/install.sh | sh`, 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin pull', 'afbin validate', 'afbin push', 'skill']) {
       expect(text, line).toContain(line);
     }
+    expect(text).not.toContain('afbin setup');
     expect(text).not.toContain('[[');
     expect(text).not.toMatch(/\/raw\b|MCP|\/docs\//);
     expect(llmsText(`${BASE}/`)).toBe(text);
   });
 
-  it('the head names create, edit and operate, and carries the instruction on the caller base', () => {
-    expect(AGENT_HELP_TITLE).toBe('Agents: read this first to create, edit or operate any artifact here');
+  it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
+    expect(AGENT_HELP_TITLE).toBe('Agents: read this to create, edit, or operate artifacts on the CLI using afbin');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
-    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="artifactbin:agent" content="${agentBlurb()} Guide: https://x.test/llms.txt">`);
+    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh">`);
   });
 });

@@ -55,8 +55,7 @@ const USER_AGENT_HARNESSES: ReadonlyArray<readonly [pattern: string, harness: Ha
 
 /**
  * Which declaration maps to which harness. The KEYS are `DECLARED_AGENT_SLUGS` from contracts — the ONE
- * allowlist, which the proxy reads too (it tags `/tokens/new?source=<agent>` at a refused mint door).
- * Typed as a total record over that union, so a slug added there without a mapping here fails to compile.
+ * allowlist. Typed as a total record over that union, so a slug added there without a mapping here fails to compile.
  */
 const DECLARED_AGENT_HARNESSES: Readonly<Record<DeclaredAgentSlug, Harness>> = {
   chatgpt: 'chatgpt',

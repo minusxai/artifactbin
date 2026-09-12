@@ -1,4 +1,3 @@
-import { AGENT_HEADER, declaredAgentSlug } from '@artifactbin/contracts';
 import { currentHeaders } from './request-context';
 import { PUBLIC_BASE_URL } from '@/lib/config';
 
@@ -36,22 +35,17 @@ export function json(body: unknown, status = 200, headers: Record<string, string
 }
 
 /**
- * The uniform bearer/browser refusal, with the recovery addresses an agent needs: the setup command,
- * the one-pager that explains it, and the human's token door.
- *
- * `tokens` is the HUMAN's door, and it is SOURCE-TAGGED when the caller declared a harness
- * (`Artifactbin-Agent`), so the person who ends up on `/tokens/new` arrives on a page that knows which
- * agent sent them. The declaration is self-reported and only ever decides copy — never access.
+ * The uniform bearer/browser refusal. There is no token door to point at: afbin authenticates itself
+ * the first time it needs the server, so the agent's move is simply to retry the command. `guide` is
+ * the one-pager for an agent that has nothing installed yet.
  */
 export function unauthorized(request: Request): Response {
   const base = baseUrl(request);
-  const source = declaredAgentSlug(request.headers.get(AGENT_HEADER));
   return json(
     {
       error: 'unauthorized',
-      help: `afbin setup --server ${base}`,
+      help: 'Retry — afbin authenticates itself when it needs the server; there is nothing to paste.',
       guide: `${base}/llms.txt`,
-      tokens: `${base}/tokens/new${source ? `?source=${source}` : ''}`,
     },
     401,
     { 'Cache-Control': 'no-store' },

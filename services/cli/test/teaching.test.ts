@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
 import {localSkillFiles,manPage} from '../src/teaching';
+import {commandHelp} from '../src/commands';
 import {roffLiteral} from '../src/man';
 test('bundled skill links resolve locally and every template example, including the brief\'s, validates offline',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-teaching-'));
@@ -16,7 +17,7 @@ test('bundled skill links resolve locally and every template example, including 
   }
   await writeFile(join(root,'sales.csv'),'month,region,revenue\n2026-07-01,East,12\n2026-08-01,West,9\n');
   for(const template of ['editorial','dashboard','deck','scrolly','example']){
-   const output:string[]=[];const context={cwd:root,home:root,interactive:false,stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('bundled teaching must stay offline')};
+   const output:string[]=[];const context={cwd:root,home:root,env:{},interactive:false,stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('bundled teaching must stay offline')};
    assert.equal(await runCli(['help',template],context),0);await writeFile(join(root,template+'.jsx'),output.join(''));output.length=0;
    assert.equal(await runCli(['validate',template+'.jsx','--json'],context),0,output.join(''));
   }
@@ -31,7 +32,7 @@ test('bundled guidance never teaches removed transports or reference spellings',
 test('help formats, destinations and the manual come from one command registry',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-help-'));const out:string[]=[];
  const problems:string[]=[];
- const context={cwd:root,home:root,interactive:false,stdout:(s:string)=>out.push(s),stderr:(s:string)=>problems.push(s),fetch:async()=>assert.fail('help must stay offline')};
+ const context={cwd:root,home:root,env:{},interactive:false,stdout:(s:string)=>out.push(s),stderr:(s:string)=>problems.push(s),fetch:async()=>assert.fail('help must stay offline')};
  try{
   assert.equal(await runCli(['help','--format','markdown'],context),0);
   const reference=out.join('');out.length=0;
@@ -58,6 +59,23 @@ test('help formats, destinations and the manual come from one command registry',
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+test('bare help prints the brief; help commands prints the command registry; both stay offline',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-help-brief-'));
+ const context={cwd:root,home:root,env:{},interactive:false,fetch:async()=>assert.fail('help must stay offline')};
+ try{
+  const brief:string[]=[];
+  assert.equal(await runCli(['help'],{...context,stdout:(s:string)=>brief.push(s),stderr:()=>{}}),0);
+  const briefText=brief.join('');
+  // Structural, not wording-pinned: the brief carries the skill headings and is not the command list.
+  assert.match(briefText,/## Read first/);assert.match(briefText,/## Example/);
+  assert.doesNotMatch(briefText,/^---/);
+  assert.notEqual(briefText,commandHelp());
+  const list:string[]=[];
+  assert.equal(await runCli(['help','commands'],{...context,stdout:(s:string)=>list.push(s),stderr:()=>{}}),0);
+  assert.equal(list.join(''),commandHelp());
+  assert.match(list.join(''),/afbin push/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
 test('man literals preserve text without allowing roff requests or escapes',()=>{
  assert.equal(roffLiteral(".request\n'control\ntext \\escape - flag\nmid.line isn't a request"),
   "\\&.request\n\\&'control\ntext \\eescape \\- flag\nmid.line isn't a request");

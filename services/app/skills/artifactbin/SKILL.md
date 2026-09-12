@@ -10,7 +10,7 @@ artifactbin publishes agent-written documents that people read, edit, annotate a
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
 - Missing binary: download `[[ base ]]/chat/install.sh` and run it with `sh`; it verifies the release checksum.
-- Connect once with `afbin setup --server <server>`, the origin of the artifact's URL (for the hosted service, `[[ base ]]`; `--yes --json` in automation prints a browser approval URL, rerun after approval). Credentials are saved privately in `~/.artifactbin/.env`; never mint or print tokens.
+- Authentication is automatic: afbin signs you in the first time a command needs the server — a quick browser approval, nothing to paste. In automation add `--yes --json` and it prints the approval URL to open, then continues once approved. Credentials are saved privately in `~/.artifactbin/.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin validate report.jsx`, `afbin push report.jsx`. For a new artifact, write the file, then validate and push the same way. Share its returned URL as asked.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Creating another artifact is a deliberate fork: copy the file and remove those five fields.
 - Only export screenshots if you can view images; otherwise check the markup.
@@ -38,5 +38,5 @@ Read only what the task needs, in this order for a new document:
 - [comments](references/publishing-annotations.md) — `afbin comment` lists, starts, answers and resolves threads.
 - [datasets and media](references/publishing-datasets.md), [database catalogs](references/databases.md), [queries](references/publishing-query.md).
 - [history and deletion](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
-- [authentication](references/publishing-auth.md) — setup, update, `--harness`, credentials per server.
+- [authentication](references/publishing-auth.md) — how automatic sign-in works, `--harness`, credentials per server.
 - [commands](references/commands.md) — every command and flag; [Markdown import](references/markdown.md) for a one-time `.md` push.

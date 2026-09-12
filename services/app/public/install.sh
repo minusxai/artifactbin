@@ -208,7 +208,7 @@ cat <<EOF
 
 artifactbin is ready.
 Open http://localhost:$HOST_PORT
-To publish from an agent, install @artifactbin/cli and run afbin setup --server http://localhost:$HOST_PORT
+To publish from an agent, install @artifactbin/cli; afbin authenticates itself, or run afbin auth --server http://localhost:$HOST_PORT
 Follow logs: docker logs -f artifactbin
 Re-run this command to upgrade.
 

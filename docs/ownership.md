@@ -4,7 +4,8 @@
   IP-rate-limited. Artifacts belong to the token.
 - **Claim**: sign up, paste the token on `/tokens` — everything it published
   (past and future) attaches to your account.
-- **CLI browser authentication**: `afbin setup` opens browser approval automatically and saves
+- **CLI browser authentication**: afbin opens browser approval automatically the first time a command
+  needs the server (run `afbin auth` to do it deliberately) and saves
   an account connection privately in `~/.artifactbin/.env`. Access tokens cover the `/api` resource;
   rotating refresh tokens keep approved clients signed in without extending access-token lifetime.
   Noninteractive setup returns a pending approval URL and expiry; browser consent remains required.

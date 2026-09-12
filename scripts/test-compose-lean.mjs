@@ -172,8 +172,8 @@ async function main() {
     && !startBody.prompt.includes('\n')
     && !startBody.prompt.includes('\r')
     && !!token
-    && startBody.prompt.includes(`using this token: ${token}`);
-  say('the one-line paste hands the agent its token', pasteCarriesToken, pasteCarriesToken ? 'mx_…' : 'missing or mismatched token');
+    && !startBody.prompt.includes('mx_');
+  say('the one-line paste is tokenless (afbin authenticates itself)', pasteCarriesToken, pasteCarriesToken ? 'ok' : 'a token leaked into the paste');
   if (!token) throw new Error('POST /api/start handed out no token');
   const id = startBody.id;
   const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };

@@ -20,7 +20,7 @@ const code = (s: string) => s.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\/
 
 describe('the human docs address', () => {
   it('every human link points at /docs-human', () => {
-    for (const f of ['components/LandingFooter.tsx', 'components/PageChrome.tsx', 'web/pages/TokensNew.tsx', 'web/App.tsx', 'lib/story/reader-chrome.ts']) {
+    for (const f of ['components/LandingFooter.tsx', 'components/PageChrome.tsx', 'web/App.tsx', 'lib/story/reader-chrome.ts']) {
       expect(code(read(f)), f).toContain('/docs-human');
     }
   });
@@ -36,6 +36,6 @@ describe('the human docs address', () => {
   it('the static shell carries no agent pointer of its own: the server injects the one source on every page', () => {
     const html = read('web/index.html');
     expect(html).not.toContain('rel="help"');
-    expect(html).not.toContain('artifactbin:agent');
+    expect(html).not.toContain('name="afbin"');
   });
 });

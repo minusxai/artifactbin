@@ -206,7 +206,6 @@ describe('what the dashboard leads with', () => {
     // The SAME door, open, with both paths on the page: an empty library must
     // not be a page whose only content is a closed strip.
     expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
-    expect(screen.getByLabelText('Copy the setup command')).toBeInTheDocument();
     expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(panel.compareDocumentPosition(examples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -304,4 +303,23 @@ describe('a profile', () => {
     expect(screen.queryByLabelText('Assets')).toBeNull();
   });
 
+});
+
+// Ported here when the manual /tokens/new page was removed: this covers the
+// HomePage anonymous-draft shelf, not the deleted page, so it belongs with the
+// other HomePage surface tests.
+describe('anonymous home drafts', () => {
+  it('renders the held-browser shelf and login nudge', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.includes('/session') ? { kind: 'anon', user: null } : {
+      signedIn: false,
+      drafts: [{
+        id: 'art_draft', url: '/a/art_draft', title: 'Browser draft', format: 'markup',
+        version: 1, updated_at: '2026-08-31T00:00:00.000Z', visibility: 'unlisted',
+      }],
+    }), { status: 200 })));
+    render(<MemoryRouter><HomePage /></MemoryRouter>);
+    expect(await screen.findByText(/held by this browser/i)).toBeTruthy();
+    expect(screen.getByText('Browser draft')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /log in to keep them/i })).toHaveAttribute('href', '/login');
+  });
 });

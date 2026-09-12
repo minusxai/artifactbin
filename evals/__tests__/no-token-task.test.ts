@@ -45,6 +45,9 @@ describe('askedForAuthorization', () => {
     expect(askedForAuthorization('I will not mint a token. Open https://artifactbin.dev/tokens/new?source=pi and paste it back.')).toBe(true);
     expect(askedForAuthorization('No credential here — set up the MCP server.')).toBe(false);
     expect(askedForAuthorization('Run afbin setup to approve browser authentication, then I can publish.')).toBe(true);
+    // The new model: afbin authenticates itself; `afbin auth` is the deliberate command. Both must count.
+    expect(askedForAuthorization('Run afbin auth to sign in through your browser, then I can publish.')).toBe(true);
+    expect(askedForAuthorization('I have no credential yet. Just run afbin and it will open browser approval to sign you in.')).toBe(true);
     expect(askedForAuthorization('Approve this request: http://localhost:3030/oauth/device?user_code=ABCD-EFGH')).toBe(true);
   });
 

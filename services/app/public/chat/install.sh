@@ -63,7 +63,7 @@ main() {
         printf '\nRun this in your terminal (and add it to your shell profile):\n  export PATH="$HOME/.local/bin:$PATH"\n'
       else printf 'Add %s to your PATH, or run the executable by its full path.\n' "$install_dir"; fi;;
   esac
-  printf '\nNext:\n  afbin setup\n\nSign in through your browser and select local agent skills.\n'
+  printf '\nNext: use afbin (run `afbin help`). afbin signs you in when needed.\n'
 }
 
 # A function keeps a piped download from executing an incomplete installer.

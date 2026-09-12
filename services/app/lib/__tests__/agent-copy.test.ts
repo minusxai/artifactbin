@@ -1,38 +1,32 @@
 /**
- * THE COPY-TO-AGENT TEXTS, ONE SOURCE (tok-p3, plan §3c). Four pastes, character-exact, from lib/agent-copy —
- * every surface (AgentLink, the agent-prompt route, NextSteps, start-links) imports these; no second copy.
+ * THE COPY-TO-AGENT TEXTS, ONE SOURCE. The product is fully behind the afbin CLI: no token is ever
+ * handed to an agent, so there is ONE tokenless starter for a handed-over document (`existingPaste`,
+ * used by both /api/start and the agent-prompt route) plus the unchanged start-link paste.
  *
- *   anonymousPaste  logged-out home, the document /api/start just minted — the token INLINE (user decision 2026-08-31)
- *   ownedPaste      logged-in, a document the account owns — "using your token", NO link to /tokens/new in the text
- *   existingPaste   an existing document handed over — the agent uses the token it holds
+ *   existingPaste   a document handed over — the link plus how to reach afbin, no token
  *   startLinkPaste  the start-link flow, unchanged wording; lib/start-links `startPrompt` IS this function
- *
- * Every paste ends with the one guide address, llms.txt on the caller's base.
  */
 import { describe, expect, it } from 'vitest';
-import { anonymousPaste, existingPaste, ownedPaste, startLinkPaste } from '@/lib/agent-copy';
+import { existingPaste, startLinkPaste } from '@/lib/agent-copy';
 import { startPrompt } from '@/lib/start-links';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
-const DOCS = '. Use afbin (afbin help): pull, edit local JSX, validate, push. Connect: afbin setup --server https://x.test. Guide: https://x.test/llms.txt.';
+const STARTER =
+  'Help me edit my artifact at https://x.test/a/ab3cd9. Use the afbin CLI to operate artifactbin, or (curl -fsSL https://x.test/chat/install.sh | sh) if not installed. Run afbin help first.';
 
-describe('the four pastes', () => {
-  it('anonymous: link + the token inline', () => {
-    expect(anonymousPaste(B, ID, 'mx_secret')).toBe('Help me edit my artifact at https://x.test/a/ab3cd9 using this token: mx_secret' + DOCS);
-  });
-  it('owned: link + "using your token", and never a /tokens/new link', () => {
-    expect(ownedPaste(B, ID)).toBe('Help me edit my artifact at https://x.test/a/ab3cd9 using your token' + DOCS);
-    expect(ownedPaste(B, ID)).not.toContain('/tokens/new');
-  });
-  it('existing: the link alone', () => {
-    expect(existingPaste(B, ID)).toBe('Help me edit my artifact at https://x.test/a/ab3cd9' + DOCS);
+describe('the tokenless pastes', () => {
+  it('existing: the link plus how to reach afbin, and never a token', () => {
+    expect(existingPaste(B, ID)).toBe(STARTER);
+    expect(existingPaste(B, ID)).not.toContain('mx_');
+    expect(existingPaste(B, ID)).not.toContain('/tokens/new');
+    expect(existingPaste(B, ID)).not.toMatch(/token/i);
   });
   it('start link: today\'s wording, and startPrompt is the same function', () => {
     expect(startLinkPaste(B, ID, 'k123')).toBe('Help me edit my artifact. Follow instructions at https://x.test/a/ab3cd9/start?k=k123');
     expect(startPrompt).toBe(startLinkPaste);
   });
   it('a trailing slash on the base does not double up', () => {
-    expect(existingPaste('https://x.test/', ID)).toBe('Help me edit my artifact at https://x.test/a/ab3cd9' + DOCS);
+    expect(existingPaste('https://x.test/', ID)).toBe(STARTER);
   });
 });

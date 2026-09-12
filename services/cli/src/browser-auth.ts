@@ -101,12 +101,12 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     if (data.error !== 'authorization_pending') {
       if (data.error === 'expired_token' || data.error === 'access_denied') await unlink(file);
       const code=data.error==='access_denied'?'access_denied':data.error==='expired_token'?'approval_expired':'auth_failed';
-      throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.','Run afbin setup again.');
+      throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.','Run afbin auth again.');
     }
     await (options.sleep ?? sleep)(Math.min(pending.interval,Math.max(0,pending.expiresAt-clock())));
   } while (clock() < pending.expiresAt);
   await unlink(file);
-  throw new CliError('approval_expired','Browser approval expired.','Run afbin setup again.');
+  throw new CliError('approval_expired','Browser approval expired.','Run afbin auth again.');
 }
 function validPending(value: Pending, server: string): boolean {
   if (!value || value.server !== server || typeof value.deviceCode !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.deviceCode)

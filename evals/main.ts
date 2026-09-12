@@ -39,7 +39,7 @@ import { actionTransport, cliPreinstalled, planTransport } from './lib/mode';
 import { startApprover } from './lib/approver';
 import { skillKit } from './lib/skill-kit';
 import { CLI_VERSION } from '../services/cli/src/version';
-import { runCliSetup } from './lib/setup';
+import { runCliAuth } from './lib/auth';
 import {browserShims,materializeCli} from './lib/cli-kit';
 import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
@@ -197,7 +197,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     // The baseline pays the same fixed context as a task: in the installed flow the skills are on disk.
     let baseSkills = undefined as ReturnType<typeof skillKit> | undefined;
     if (cliPreinstalled(leg.mode.run) && credential?.cookie) {
-      await runCliSetup({ cliBin: materializeCli(path.join(baseWorkspace.homeDir, 'bin')), homeDir: baseWorkspace.homeDir, harness: leg.harness, server: productUrl, publicOrigin, cookie: credential.cookie, log: (m) => log(`${leg.label}: baseline ${m}`) });
+      await runCliAuth({ cliBin: materializeCli(path.join(baseWorkspace.homeDir, 'bin')), homeDir: baseWorkspace.homeDir, harness: leg.harness, server: productUrl, publicOrigin, cookie: credential.cookie, log: (m) => log(`${leg.label}: baseline ${m}`) });
       baseSkills = skillKit(baseWorkspace.homeDir, leg.harness);
     }
     const baseline = await measureBaseline({
@@ -327,8 +327,8 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   if (cliPreinstalled(leg.mode.run)) {
     cliBin = materializeCli(path.join(homeDir, 'bin'));
     if (plan.access.kind === 'token' && r.credential?.cookie) {
-      const setup = await runCliSetup({ cliBin, homeDir, harness: leg.harness, server: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) });
-      setupApprovals = setup.approvals;
+      const auth = await runCliAuth({ cliBin, homeDir, harness: leg.harness, server: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) });
+      setupApprovals = auth.approvals;
       skills = skillKit(homeDir, leg.harness);
     }
   }
@@ -362,7 +362,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
   const baseline = prepared.baseline;
 
-  const prompt = buildPrompt(task, access, { vision: leg.vision });
+  const prompt = buildPrompt(task, access, { vision: leg.vision, promptLevel: leg.promptLevel });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
   const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, skills };
@@ -371,7 +371,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
   // beside the spawn, rather than read off the ledger — whose first entry is already past the agent's
   // boot, and therefore only a floor. After `prepare`, which is the driver's setup, not the agent's time.
-  // The not-installed flow: the driver stands in for the person who approves the AGENT's `afbin setup`,
+  // The not-installed flow: the driver stands in for the person who approves the AGENT's `afbin auth`,
   // but only when this task was meant to have an account at all — the token-less task keeps its wall.
   // The pairing is read off this task's proxy ledger, the driver's own file: the agent's home is private.
   const approver = !cliPreinstalled(leg.mode.run) && r.credential?.cookie && plan.access.kind === 'token'

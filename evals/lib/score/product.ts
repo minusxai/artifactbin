@@ -128,8 +128,12 @@ export function productMetrics(input: { served: ServedDocument; baseline: Served
   };
 }
 
-/** Actionable authorization through browser-first setup, a pending device URL, or the token page. */
-const A_WAY_FORWARD = /\bafbin\s+setup\b|\/oauth\/device\?[^\s]*user_code=|\/tokens\b|\btokens?\s+page\b/i;
+/**
+ * Actionable authorization: `afbin auth`, or afbin described as signing you in / opening browser approval
+ * (the new model, where the CLI authenticates itself), or a pending device URL, or — from stale advice —
+ * `afbin setup` and the old token page, both kept because a model may still name the retired surfaces.
+ */
+const A_WAY_FORWARD = /\bafbin\s+(?:auth|setup)\b|\bafbin\b[^.!?\n]{0,80}(?:authenticat|sign(?:s)?\s+you\s+in|browser\s+approval)|\/oauth\/device\?[^\s]*user_code=|\/tokens\b|\btokens?\s+page\b/i;
 
 /**
  * …and the same message must not also be reporting that the agent went ahead anyway. Past tense on

@@ -24,8 +24,18 @@ export const helpTopics:Record<string,string>={
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
+/** The top-level skill doc, without its YAML frontmatter: the brief printed by bare `afbin help`. */
+export function briefDocument():string{return localSkillFiles['SKILL.md'].replace(/^---\n[\s\S]*?\n---\n/,'');}
+const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Every command is offline unless it names a remote resource.\n\n`
+ +commands.map(command=>`## ${command.name}\n\n\`\`\`text\n${commandHelp(command.name)}\`\`\`\n`).join('\n');
 /** One bundled documentation set: help, the manual and the installed skills render the same registry. */
 export function helpDocument(topic?:string,format='text'):string{
+ // The command list has its own topic name. It shadows the bundled references/commands.md doc,
+ // so `afbin help commands` prints the live registry rather than the prose reference.
+ if(topic==='commands'){
+  if(format==='man')return manPage();
+  return format==='markdown'?commandsMarkdown():commandHelp();
+ }
  if(format==='man'){
   if(!isCommand(topic))throw new CliError('unsupported_format',`The manual documents commands, not the ${topic} topic.`,'Read topic guidance with --format text or markdown.');
   return manPage(topic);
@@ -35,11 +45,12 @@ export function helpDocument(topic?:string,format='text'):string{
   if(text===undefined)throw new CliError('unknown_help_topic',`Unknown help topic ${topic}.`,'Run afbin help.');
   return text;
  }
+ // Bare `afbin help` reads the brief; a named command prints its own help. Markdown/man keep the registry.
+ if(!topic&&format!=='markdown')return briefDocument();
  if(format!=='markdown')return commandHelp(topic);
  const section=(name:string,heading:string)=>`${heading}\n\n\`\`\`text\n${commandHelp(name)}\`\`\`\n`;
  if(topic)return section(topic,`# afbin ${topic}`);
- return `# afbin\n\nLocal files and published artifacts. Every command is offline unless it names a remote resource.\n\n`
-  +commands.map(command=>section(command.name,`## ${command.name}`)).join('\n');
+ return commandsMarkdown();
 }
 /** --output never replaces an existing path: help has no overwrite permission. */
 export async function writeHelp(text:string,destination:string,cwd:string,format:string):Promise<{format:string;output:string;bytes:number}>{

@@ -6,8 +6,8 @@ it('publishing routes authentication to local setup guidance without teaching se
  expect(doc).toContain('publishing-auth.md');
 });
 describe('authentication guidance',()=>{
- it('names the private file, explicit setup and required browser approval',()=>{
+ it('names the private file, afbin auth and required browser approval',()=>{
   const doc=renderDoc('artifactbin/references/publishing-auth.md','https://example.test');
-  for(const term of ['setup','~/.artifactbin/.env','Browser approval','--yes'])expect(doc).toContain(term);
+  for(const term of ['afbin auth','~/.artifactbin/.env','browser approval'])expect(doc).toContain(term);
  });
 });
