@@ -31,3 +31,11 @@ test('profile YAML pulls, edits, recovers a lost reply and subsequently pushes o
   const status=await invoke(['status','--type','profile'],async()=>{throw Error('status must stay offline');});assert.equal(status.code,0,JSON.stringify(status));assert.equal(status.result.files[0].status,'unchanged');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+// ---- Seeded by the orchestrator for workstream W2b (cli-account-docs). Turn into a passing, non-todo test. ----
+test('account resource tracking lives in the state store as account records plus the workspace binding, never accounts.json',{todo:true},async()=>{
+ // Pull the profile into an isolated workspace; assert readdir(root) is ['profile.yaml'], State has {server,account} under kind
+ // 'workspace' and {resource,sha256} under kind 'account' keyed 'profile.yaml', and a forced pull that overwrites a local edit
+ // reports an absolute backup path under <home>/.artifactbin/backups/local/.
+ assert.fail('implement');
+});

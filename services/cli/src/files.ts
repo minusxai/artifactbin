@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { chmod, link, lstat, mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { basename, dirname, join } from 'node:path';
+import { configDir } from './config';
 
 export const digest = (data: string | Uint8Array): string => createHash('sha256').update(data).digest('hex');
 export const isMissing = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
@@ -42,4 +43,16 @@ export async function atomicWrite(path: string, data: string | Uint8Array, optio
     await handle.close();
     try { await unlink(temporary); } catch (error) { if (!isMissing(error)) throw error; }
   }
+}
+
+/**
+ * Keep a copy of a working file that a forced operation is about to overwrite.
+ * Backups live under the config directory, never inside the workspace; the
+ * absolute path is returned so a command can name it in its output.
+ */
+export async function localBackup(home: string, path: string, bytes: Buffer, env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  const target = join(configDir(home, env), 'backups', 'local', randomUUID(), basename(path));
+  await mkdir(dirname(target), {recursive: true, mode: 0o700});
+  await atomicWrite(target, bytes, {exclusive: true});
+  return target;
 }

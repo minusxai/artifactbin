@@ -16,7 +16,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {readOptional} from './files';
 import {recoverFiles} from './journal';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 import {homedir} from 'node:os';
 import {parseCommand,CliError,type ParsedCommand} from './commands';
 import {loadWorkspace} from './workspace';
@@ -54,14 +54,14 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    emit(json?{help:text}:text);return 0;
   }
-  let workspace=await loadWorkspace(context.cwd);
+  let workspace=await loadWorkspace(context.cwd,home);
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
   const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.lock?.server??account?.manifest?.server??(context.env??process.env).ARTIFACTBIN_URL;
   if(['push','pull','delete'].includes(command)&&(!account||command==='pull')&&!flags['dry-run']&&await readOptional(join(workspace.root,'.artifactbin','pending-operation.json')))throw new CliError('pending_recovery','Recover the pending operation before changing this workspace.','Repeat the original command and inputs.');
   const pendingFiles=await readOptional(join(workspace.root,'.artifactbin','pending-files.json'));
   if(pendingFiles&&['push','pull','delete'].includes(command)&&!flags['dry-run']){
-   await withProcessLock(workspace.root,()=>recoverFiles(workspace.root));workspace=await loadWorkspace(context.cwd);
+   await withLock(workspace.home,workspace.root,()=>recoverFiles(workspace.root));workspace=await loadWorkspace(context.cwd,home);
   }
   if(pendingFiles&&command==='validate'&&flags.fix)throw new CliError('pending_recovery','Finish the interrupted file commit before applying fixes.','Run afbin push or afbin pull to recover it.');
   if(!account&&(command==='push'||command==='validate')){
@@ -92,7 +92,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
   if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
-  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd);}
+  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.root)){
    const result=await finishLocalPush(workspace,positionals,!!flags.force);if(result){emit(result);return 0;}
   }
@@ -145,7 +145,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='pull'&&flags.output==='-'){const result=await pullToStdout(workspace,positionals,client,parsed,stdout);if(result)emit(result);return 0;}
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run'],type:flags.type as string|undefined}));return 0;}
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
-  if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd);}
+  if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account){emit({...await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;}
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');

@@ -53,3 +53,10 @@ test('CLI push imports once, while dry-run only sends preflight and leaves no lo
   output.length=0;calls.length=0;assert.equal(await runCli(['push','draft.md','--json'],context),2);assert.equal(JSON.parse(output.join('')).error.code,'markdown_already_converted');assert.deepEqual(calls,[]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+// ---- Seeded by the orchestrator for workstream W2b (cli-account-docs). Turn into a passing, non-todo test. ----
+test('a markdown conversion record lives in the state store and the workspace gains no .artifactbin directory',{todo:true},async()=>{
+ // Convert report.md with an isolated home; assert State.get(realpath(root),'conversion','report.md') is {target:'report.jsx',sha256:<hex>}
+ // and readdir(root) holds only report.md and report.jsx. A second conversion of report.md is refused as already converted.
+ assert.fail('implement');
+});

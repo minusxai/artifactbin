@@ -2,6 +2,7 @@ import {realpath} from 'node:fs/promises';
 import {dirname,extname,join,relative,resolve} from 'node:path';
 import {parse as parseYaml} from 'yaml';
 import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
+import {homedir} from 'node:os';
 import {normalizeServer} from './config';
 import {CliError} from './commands';
 import {parseDocument,type LocalDocument,type DocumentMetadata} from './document';
@@ -12,9 +13,9 @@ import type {ArtifactResourceFile} from '@artifactbin/contracts';
 export interface Snapshot {id:string;version:number;edit_id:string;state:string;markup?:string;format?:string;title?:string|null;theme?:string|null;template?:string|null;visibility?:DocumentMetadata['visibility'];link_role?:DocumentMetadata['link'];parent_id?:string|null;[key:string]:unknown}
 export interface TrackedFile {source?:ResourceSource;baseline:string;id:string;base:string;file:string;url:string;snapshot:Snapshot;observed?:Snapshot;selected?:Snapshot;versions?:Record<string,Snapshot>;paths?:Record<string,string>}
 export interface WorkspaceLock {schema:1;server:string;account:string;root:string;files:Record<string,TrackedFile>}
-export interface Workspace {virtualFiles?:Record<string,Buffer>;root:string;cwd:string;lock:WorkspaceLock|null;raw:Buffer|null}
+export interface Workspace {virtualFiles?:Record<string,Buffer>;home:string;root:string;cwd:string;lock:WorkspaceLock|null;raw:Buffer|null}
 export interface LocalFile {path:string;bytes:Buffer|null;document?:LocalDocument;resource?:ArtifactResourceFile;tracked?:TrackedFile;renamedFrom?:string;status:'new'|'unchanged'|'modified'|'missing'|'renamed'}
-export async function loadWorkspace(cwd=process.cwd()):Promise<Workspace>{
+export async function loadWorkspace(cwd=process.cwd(),home=homedir()):Promise<Workspace>{
  cwd=await realpath(cwd);let root=cwd;
  for(;;){
   const raw=await readOptional(join(root,'afbin.lock'));
@@ -29,10 +30,10 @@ export async function loadWorkspace(cwd=process.cwd()):Promise<Workspace>{
     if(!entry||!ARTIFACT_ID_PATTERN.test(entry.id)||ids.has(entry.id)||!hash(entry.base)||!hash(entry.file)||typeof entry.baseline!=='string'||Buffer.from(entry.baseline,'base64').toString('base64')!==entry.baseline||entry.snapshot?.id!==entry.id||!Number.isSafeInteger(entry.snapshot.version)||entry.snapshot.version<1||!entry.snapshot.edit_id||!hash(entry.snapshot.state))throw new CliError('invalid_lock',`Invalid tracking entry for ${path}.`);
     ids.add(entry.id);
    }
-   return{root,cwd,lock,raw};
+   return{home,root,cwd,lock,raw};
   }
-  if(await readOptional(join(root,'.artifactbin','accounts.json'))||await readOptional(join(root,'.artifactbin','conflicts.json'))||await readOptional(join(root,'.artifactbin','pending-operation.json'))||await readOptional(join(root,'.artifactbin','pending-request.json'))||await readOptional(join(root,'.artifactbin','pending-files.json')))return{root,cwd,lock:null,raw:null};
-  const parent=dirname(root);if(parent===root)return{root:cwd,cwd,lock:null,raw:null};root=parent;
+  if(await readOptional(join(root,'.artifactbin','accounts.json'))||await readOptional(join(root,'.artifactbin','conflicts.json'))||await readOptional(join(root,'.artifactbin','pending-operation.json'))||await readOptional(join(root,'.artifactbin','pending-request.json'))||await readOptional(join(root,'.artifactbin','pending-files.json')))return{home,root,cwd,lock:null,raw:null};
+  const parent=dirname(root);if(parent===root)return{home,root:cwd,cwd,lock:null,raw:null};root=parent;
  }
 }
 const hash=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);

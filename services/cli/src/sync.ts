@@ -7,7 +7,7 @@ import {stampNodeIds} from '../../app/lib/story/node-ids';
 import {CliError} from './commands';
 import {digest,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles} from './journal';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 import {parseDocument,writeDocument,metadataFields,type DocumentMetadata} from './document';
 import {snapshotDocument} from './local';
 import {loadWorkspace,inspectWorkspace,type Workspace,type LocalFile,type Snapshot,type WorkspaceLock,type TrackedFile} from './workspace';
@@ -77,12 +77,12 @@ export async function finishLocalPush(workspace:Workspace,paths:string[],force=f
  if(plans.some(plan=>plan.mode!=='none'&&plan.mode!=='missing'))return null;
  const needsWrite=(plan:PushPlan)=>plan.mode!=='missing'&&(!!plan.file.renamedFrom||plan.file.bytes?.toString('base64')!==plan.file.tracked?.baseline);
  if(!plans.some(needsWrite))return{operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:plan.mode==='missing'?'missing_file':'no_local_changes'}))};
- return withProcessLock(workspace.root,async()=>{
-  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd);
+ return withLock(workspace.home,workspace.root,async()=>{
+  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const refreshed=await planPush(workspace,paths,{force});if(refreshed.some(plan=>plan.mode!=='none'&&plan.mode!=='missing'))return null;
   const operations=[];
   for(const plan of refreshed){
-   if(needsWrite(plan)){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd);}
+   if(needsWrite(plan)){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
    operations.push({path:plan.file.path,status:plan.file.renamedFrom?'renamed':'skipped',reason:plan.mode==='missing'?'missing_file':'no_remote_changes'});
   }
   return{operations};
@@ -140,16 +140,16 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   }
   return{dry_run:true,operations:results};
  }
- return withProcessLock(workspace.root,async()=>{
-  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd);
+ return withLock(workspace.home,workspace.root,async()=>{
+  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.root);
   const operations:Array<Record<string,unknown>>=[];
-  if(pending){await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered'});workspace=await loadWorkspace(workspace.cwd);}
+  if(pending){await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered'});workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   try{
   const plans=await planPush(workspace,paths,options);
   for(let plan of plans){
    if(plan.mode==='missing'){operations.push({path:plan.file.path,status:'skipped',reason:'missing_file'});continue;}
-   if(plan.mode==='none'){if(plan.file.renamedFrom||plan.file.bytes?.toString('base64')!==plan.file.tracked?.baseline){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd);}operations.push({path:plan.file.path,status:plan.file.renamedFrom?'renamed':'skipped',reason:'no_remote_changes'});continue;}
+   if(plan.mode==='none'){if(plan.file.renamedFrom||plan.file.bytes?.toString('base64')!==plan.file.tracked?.baseline){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}operations.push({path:plan.file.path,status:plan.file.renamedFrom?'renamed':'skipped',reason:'no_remote_changes'});continue;}
    plan=await observeConditions(plan,client,!!options.force);
    // A preceding document in this batch may already have published these bytes.
    for(const dependency of plan.dependencies){
@@ -168,7 +168,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
      await checkRetiredCreate(workspace.root,dependency.path);
      const bytes=dependency.bytes;
      const staged=await stageRequest(workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path:'/artifacts',method:'POST',body:dependency.input},file:{path:dependency.path,bytes:bytes.toString('base64')}});
-     const snapshot=await recoverRequest(workspace,client,staged);plan.ids[dependency.path]=snapshot.id;operations.push({path:dependency.path,status:'published',id:snapshot.id});workspace=await loadWorkspace(workspace.cwd);
+     const snapshot=await recoverRequest(workspace,client,staged);plan.ids[dependency.path]=snapshot.id;operations.push({path:dependency.path,status:'published',id:snapshot.id});workspace=await loadWorkspace(workspace.cwd,workspace.home);
     }
    }
    if(plan.dependencies.length&&plan.mode!=='metadata'){
@@ -181,7 +181,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    const mappings=Object.fromEntries(plan.dependencies.map(d=>[plan.ids[d.path],d.authored]));
    let staged=await stageRequest(workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom,paths:mappings}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.root,staged,plan.confirmed,client.account);
-   const snapshot=await recoverRequest(workspace,client,staged);operations.push({path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{})});workspace=await loadWorkspace(workspace.cwd);
+   const snapshot=await recoverRequest(workspace,client,staged);operations.push({path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{})});workspace=await loadWorkspace(workspace.cwd,workspace.home);
   }
   return{operations};
   }catch(error){
@@ -279,8 +279,8 @@ function readSnapshot(response:Record<string,unknown>,pending:PendingRequest):Sn
 export async function finishSavedRequest(workspace:Workspace,server?:string):Promise<string|undefined>{
  const initial=await readPendingRequest(workspace.root);if(!initial?.response)return;
  if(server&&server!==initial.server)throw new CliError('account_mismatch','Saved recovery belongs to another server.');
- return withProcessLock(workspace.root,async()=>{
-  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd);
+ return withLock(workspace.home,workspace.root,async()=>{
+  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.root);if(!pending?.response)return;
   await acknowledgeSavedResponse(workspace,pending);return pending.file.path;
  });

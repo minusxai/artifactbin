@@ -5,7 +5,7 @@ import {CliError} from './commands';
 import {parseDocument,writeDocument} from './document';
 import {atomicWrite,digest,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles} from './journal';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 import type {Workspace} from './workspace';
 const text=(source:string,literal=false)=>source.replace(literal?/&/g:/&(?!(?:#\d+|#x[\da-f]+|[a-z][a-z\d]+);)/gi,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\{/g,'&#123;').replace(/\}/g,'&#125;');
 const attribute=(value:string)=>text(value,true).replace(/"/g,'&quot;');
@@ -54,7 +54,7 @@ export async function prepareMarkdown(workspace:Workspace,paths:string[]):Promis
 }
 export async function commitMarkdown(plan:MarkdownPlan):Promise<void>{
  if(!plan.conversions.length)return;
- await withProcessLock(plan.workspace.root,async()=>{
+ await withLock(plan.workspace.home,plan.workspace.root,async()=>{
   const records=await conversionRecord(plan.workspace.root);
   for(const item of plan.conversions){
    const current=await readOptional(await confinedPath(plan.workspace.root,item.source));

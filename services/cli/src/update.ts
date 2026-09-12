@@ -10,7 +10,7 @@ import {CLI_VERSION} from './version';
 import {CliError} from './commands';
 import {normalizeServer} from './config';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
-import {withProcessLock} from './process-lock';
+import {HOME_SCOPE,withLock} from './state';
 import {installSkills,planSkills,skillHarnesses,safeSkillPath,type SkillInstallation,type SkillPlan,type SkillHarness} from './skill-install';
 const run=promisify(execFile);
 /** The selected server names the release it speaks; its bytes come from the project's own releases. */
@@ -121,7 +121,7 @@ export async function updateCli(options:UpdateOptions){
   pending={schema:1,installation,manifest,skills:skillBytes.toString(),selected:options.harnesses};
  }
  const operation=pending;
- return withProcessLock(options.home,async()=>{
+ return withLock(options.home,HOME_SCOPE,async()=>{
   const current=await readOptional(pendingPath);
   if(current&&!saved)throw new CliError('pending_recovery','Another update was staged. Rerun afbin update to recover it.');
   if(saved&&current?.toString()!==saved.toString())throw new CliError('pending_recovery','Pending update changed. Rerun afbin update.');

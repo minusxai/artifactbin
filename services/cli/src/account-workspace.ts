@@ -10,7 +10,7 @@ import {CliError,type ParsedCommand} from './commands';
 import {parseLiteralYaml} from './document';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
 import {confinedPath,stageFiles,recoverFiles,type FileChange} from './journal';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 import {recoverableOperation} from './recoverable-operation';
 import {readConflicts} from './conflict-state';
 import {deleteResources} from './delete';
@@ -229,7 +229,7 @@ export async function remoteAccountCommand(workspace:Workspace,parsed:ParsedComm
  if(plan.manifest)client.account=plan.manifest.account;
  const sessions=parsed.flags.type==='session'?plan.paths:parsed.flags.type==='profile'?[]:plan.paths.filter(path=>plan.manifest?.files[path]?.resource.type==='session');
  const profiles=plan.paths.filter(path=>!sessions.includes(path));
- if(parsed.command==='pull')return withProcessLock(workspace.root,async()=>{
+ if(parsed.command==='pull')return withLock(workspace.home,workspace.root,async()=>{
   const operations:unknown[]=[];
   if(sessions.length){
    const result=await pullSessions(workspace,parsed,{...plan,paths:sessions},client);

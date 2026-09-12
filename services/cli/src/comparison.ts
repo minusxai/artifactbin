@@ -7,7 +7,7 @@ import {snapshotDocument,localSourceDiff,localDiff} from './local';
 import {snapshotResource,writeResourceFile} from './resource-file';
 import {atomicWrite,digest} from './files';
 import {recoverFiles,stageFiles} from './journal';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 import {inspectWorkspace,loadWorkspace,type LocalFile,type Workspace,type Snapshot} from './workspace';
 import {skillStatus} from './skill-install';
 import type {HttpClient} from './http';
@@ -16,8 +16,8 @@ import type {HttpClient} from './http';
 export async function remoteStatus(workspace:Workspace,client:HttpClient,home?:string,env?:NodeJS.ProcessEnv){
  const skills=home!==undefined?{skills:await skillStatus(home,env)}:{};
  if(!workspace.lock)return{remote:'current',files:[],...skills};
- return withProcessLock(workspace.root,async()=>{
-  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd);
+ return withLock(workspace.home,workspace.root,async()=>{
+  await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const lock=structuredClone(workspace.lock!);const files=[];
   for(const file of await inspectWorkspace(workspace)){
    const base=file.tracked!.snapshot;
@@ -98,9 +98,9 @@ export async function diffCommand(workspace:Workspace,parsed:ParsedCommand,serve
 
 /** Cache immutable observations under the workspace lock without moving its accepted base. */
 async function cacheVersion(workspace:Workspace,path:string,snapshot:Snapshot){
- await withProcessLock(workspace.root,async()=>{
+ await withLock(workspace.home,workspace.root,async()=>{
   await recoverFiles(workspace.root);
-  const fresh=await loadWorkspace(workspace.cwd);const tracked=fresh.lock?.files[path];
+  const fresh=await loadWorkspace(workspace.cwd,workspace.home);const tracked=fresh.lock?.files[path];
   if(!tracked||tracked.id!==snapshot.id)throw new CliError('workspace_changed','Tracking changed while reading history.','Retry the comparison in the current workspace.');
   const lock=structuredClone(fresh.lock!);
   lock.files[path].versions={...tracked.versions,[String(snapshot.version)]:snapshot};

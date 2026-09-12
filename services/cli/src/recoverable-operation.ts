@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {MUTATION_REPLY_TIMEOUT_MS} from '@artifactbin/contracts';
 import {CliError} from './errors';
 import {atomicWrite,digest,privateDirectory,readOptional,syncDirectory} from './files';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 import {readPendingRequest} from './pending-request';
 import type {Workspace} from './workspace';
 import type {HttpClient} from './http';
@@ -14,7 +14,7 @@ const checksum=(value:Omit<Operation,'checksum'>)=>digest(JSON.stringify(value))
 /** One journal coordinates native mutations without exposing transport details to callers. */
 export async function recoverableOperation(workspace:Workspace,client:HttpClient,operation:{path:string;method:string;body:unknown;identity?:unknown;prepare:()=>Promise<void|{body:unknown;context?:unknown}>;finalize?:(response:Record<string,unknown>,context:unknown)=>Promise<void>}):Promise<Record<string,unknown>&{operation:string}>{
  const identity=operation.identity??operation.body;const intent=digest(JSON.stringify([operation.method,operation.path,identity]));
- return withProcessLock(workspace.root,async()=>{
+ return withLock(workspace.home,workspace.root,async()=>{
   if(await readPendingRequest(workspace.root))throw new CliError('pending_recovery','Finish the pending publication before starting another mutation.','Run afbin push to recover it.');
   const directory=join(workspace.root,'.artifactbin'),path=join(directory,'pending-operation.json');const bytes=await readOptional(path);let saved:Operation;
   if(bytes){

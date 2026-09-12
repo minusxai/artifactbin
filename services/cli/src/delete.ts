@@ -55,7 +55,7 @@ export async function deleteArtifact(workspace:Workspace,input:string,client:Htt
   // are. Runs inside the operation's own lock, after its reply is durable.
   finalize:async response=>{
    await recoverFiles(workspace.root);
-   const current=await loadWorkspace(workspace.cwd);
+   const current=await loadWorkspace(workspace.cwd,workspace.home);
    if(!current.lock)return;
    const lock=structuredClone(current.lock);
    const deleted=new Set([ref.id,...(Array.isArray(response.deleted_ids)?response.deleted_ids.filter((id):id is string=>typeof id==='string'):[])]);

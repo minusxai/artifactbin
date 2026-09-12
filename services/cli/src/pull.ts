@@ -12,7 +12,7 @@ import {parseDocument,writeDocument} from './document';
 import {snapshotDocument} from './local';
 import {atomicWrite,digest,privateDirectory,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles,type FileChange} from './journal';
-import {withProcessLock} from './process-lock';
+import {withLock} from './state';
 import {archivePendingRequest,clearPendingRequest,readPendingRequest} from './pending-request';
 import {loadWorkspace,type Workspace,type WorkspaceLock,type Snapshot} from './workspace';
 import {HttpClient} from './http';
@@ -101,7 +101,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
   if(['jsx','yaml','yml','csv','json'].includes(extension)&&(extension==='yml'?'yaml':extension)!==options.format)throw new CliError('invalid_format','--format and the output filename disagree.');
  }
  const run=async()=>{
-  if(!options.dryRun){await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd);}
+  if(!options.dryRun){await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   const pending=await readPendingRequest(workspace.root);
   const targets=await preparePull(workspace,args,!!options.force,client.connection.server,options.output);
   const pendingId=pending?.request.path.match(/^\/artifacts\/([A-Za-z0-9]{6,12})(?:\/edits)?$/)?.[1];
@@ -170,7 +170,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
   if(pending&&lock&&files.length)await clearPendingRequest(workspace.root);
   return{...(options.dryRun?{dry_run:true}:{}),...(recovery?{recovered_request:recovery}:{}),operations};
  };
- return options.dryRun?run():withProcessLock(workspace.root,run);
+ return options.dryRun?run():withLock(workspace.home,workspace.root,run);
 }
 
 async function backupLocal(root:string,path:string,bytes:Buffer):Promise<string>{

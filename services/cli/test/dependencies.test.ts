@@ -25,3 +25,20 @@ test('restores available local dependency paths in srcSet without rewriting lite
   assert.match(result,/title="ref:abc123"/);assert.match(result,/srcSet=".\/small.png 1x, ref:def456 2x"/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+// ---- Seeded by the orchestrator for workstream W3 (cli-dedupe). Turn each into a passing, non-todo test. ----
+test('preflight describes each local asset by sha256, size and filename and never sends its bytes',{todo:true},async()=>{
+ // Push doc.jsx referencing ./photo.png and ./rows.csv with a fetch stub. Assert the /api/artifacts/preflight body carries
+ // dependencies:[{id:'local000001',sha256:<hex of photo bytes>,size:<n>,filename:'photo.png'},{id:'local000002',input:{dataset:...}}]
+ // and that no base64 of the PNG appears anywhere in that request.
+ assert.fail('implement');
+});
+test('an asset the server already owns is referenced without an upload; a miss is uploaded once and then reused',{todo:true},async()=>{
+ // Preflight answers dependencies:[{id:'local000001',format:'image',existing:'img001'}]: assert no POST /api/artifacts for the image
+ // and that the published markup contains ref:img001. Then answer existing:null: assert exactly one image POST, then a second push
+ // of the unchanged document makes no image POST at all.
+ assert.fail('implement');
+});
+test('dry-run reports which assets would be reused and which would be uploaded',{todo:true},async()=>{
+ assert.fail('implement');
+});

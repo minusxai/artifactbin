@@ -20,3 +20,4 @@ export * from './cli-auth';
 export * from './resource-file';
 
 export * from './account-resource';
+export * from './preflight';
