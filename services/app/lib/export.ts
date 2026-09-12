@@ -258,7 +258,7 @@ async function renderOnce(
  * render serve every og unfurl and profile thumbnail for that version.
  * `opts.pageUrl` is a thunk, minted per attempt — see RenderInput.
  */
-function renderArtifactImage(
+export function renderArtifactImage(
   artifact: Pick<ArtifactRow, 'id' | 'version'>,
   format: ExportFormat,
   // `pageUrl` is REQUIRED: every artifact is shot from its live page. The old
