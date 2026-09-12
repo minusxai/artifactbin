@@ -126,10 +126,16 @@ describe('dependency security', () => {
   // SourceEditor bundles the pinned editor and worker at build time. The
   // browser loads those local assets; the Node image needs no second copy.
   it('pins Monaco — the copy that SHIPS — outside the vulnerable DOMPurify advisory range', () => {
+    // ONE HOME per shared devDependency: the app bundles the editor, so the app package declares
+    // the pin and the root declares nothing. The assertion used to demand the pin in BOTH files
+    // and went red the moment the root's copy was removed — a version that exists in one place
+    // cannot also be asserted in two.
+    const read = (file) => JSON.parse(readFileSync(path.join(root, file), 'utf8'));
+    expect(read('services/app/package.json').devDependencies?.['monaco-editor']).toBe('0.53.0');
+    expect(read('package.json').devDependencies?.['monaco-editor'], 'the root must not keep a second copy').toBeUndefined();
+    // Never a runtime dependency anywhere: it is a build input, not something the server loads.
     for (const file of ['package.json', 'services/app/package.json']) {
-      const pkg = JSON.parse(readFileSync(path.join(root, file), 'utf8'));
-      expect(pkg.devDependencies?.['monaco-editor'], file).toBe('0.53.0');
-      expect(pkg.dependencies?.['monaco-editor'], file).toBeUndefined();
+      expect(read(file).dependencies?.['monaco-editor'], file).toBeUndefined();
     }
   });
 });
