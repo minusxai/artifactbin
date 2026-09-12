@@ -25,7 +25,8 @@ skill (the brief, then one small file per topic).
 ## The editor
 
 Every artifact is human-editable in place at its own url — edit is a mode on
-the artifact's own url, for the owner (a session, or the creating token) and
+the artifact's own url, for the owner (a browser session, or the connection
+that created it) and
 for anyone invited as an editor:
 
 - **WYSIWYG**: click into text to edit it; for `markup`, click any element to

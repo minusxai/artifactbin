@@ -16,8 +16,8 @@ export interface Access { base: string; id: string }
 /** The document the driver minted for this task (`lib/retry mintStartDocumentAs`). */
 export interface StartDocument { id: string }
 
-export interface AccessPlanInput { task: Task; base: string; start: StartDocument; credential: { token: string } }
-export interface AccessPlan { access: Access; seed: { id: string; token: string; markup: string } | null }
+interface AccessPlanInput { task: Task; base: string; start: StartDocument; credential: { token: string } }
+interface AccessPlan { access: Access; seed: { id: string; token: string; markup: string } | null }
 
 /**
  * The driver's pre-turn plan, decided in ONE place and performed by the caller: which document the
@@ -37,14 +37,14 @@ export function planAccess({ task, base, start, credential }: AccessPlanInput): 
  * install it (`not-installed` mode). `hardcore` strips all of that: only the brief, the vision note
  * when relevant, and the bare base.
  */
-export const PROMPT_LEVELS = ['hardcore', 'starter'] as const;
+const PROMPT_LEVELS = ['hardcore', 'starter'] as const;
 export type PromptLevel = (typeof PROMPT_LEVELS)[number];
 export const DEFAULT_PROMPT_LEVEL: PromptLevel = 'starter';
 export function parsePromptLevel(raw: string): PromptLevel {
   if (!(PROMPT_LEVELS as readonly string[]).includes(raw)) throw new Error(`unknown --prompt "${raw}" — known: ${PROMPT_LEVELS.join(', ')}`);
   return raw as PromptLevel;
 }
-export interface PromptOptions { vision?: boolean; promptLevel?: PromptLevel }
+interface PromptOptions { vision?: boolean; promptLevel?: PromptLevel }
 const VISION_LINE = 'You cannot view images. Check your work by reading the document markup.';
 
 /**

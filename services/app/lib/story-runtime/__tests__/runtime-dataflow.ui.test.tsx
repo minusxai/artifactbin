@@ -6,16 +6,18 @@
  */
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
+import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore } from '../store';
 import { createMx } from '../mx';
 import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const HELMET =
   '<Helmet>' +
@@ -37,8 +39,7 @@ const STATE: DataflowState = {
 };
 
 function build(body: string) {
-  const parsed = parseJsx(HELMET + body);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(HELMET + body);
   const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
   const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: STATE };
   return { nodes, dataflow };
@@ -257,5 +258,18 @@ describe('StoryRuntimeApp — dataflow', () => {
     expect(mismatch).toBeUndefined();
     errors.mockRestore();
     host.remove();
+  });
+});
+
+describe('<For> over a query table', () => {
+  it('subscribes For to actual query table results and preserves DOM identity after refresh',async()=>{
+   const parsed=parseJsxOrThrow('<For id="orders" each={$orders} keyBy="id"><p id="name">{$_row.name}</p></For>');
+   let rows=[{id:'a',name:'Alice'}];
+   const store=createDataflowStore({flow:{values:[],queries:[{name:'orders',sql:'select * from ref_abc123',params:[],refs:['abc123'],start:0,end:0}]}},{transport:{page:async()=>{throw new Error('not used')},run:async()=>({tables:{orders:{rows,columns:[{name:'id',type:'string'},{name:'name',type:'string'}]}},errors:{}})}});
+   const view=renderWithProviders(<StoryRuntimeApp nodes={parsed.nodes} refData={{}} store={store} colorMode="light" chrome={false}/>);
+   await act(async()=>store.start());await waitFor(()=>expect(screen.getByText('Alice')).toBeTruthy());const alice=screen.getByText('Alice');
+   rows=[{id:'b',name:'Bob'},{id:'a',name:'Alicia'}];await act(async()=>store.refresh());
+   await waitFor(()=>expect(screen.getByText('Alicia')).toBe(alice));expect(screen.getByText('Bob')).toBeTruthy();
+   view.unmount();store.dispose();
   });
 });

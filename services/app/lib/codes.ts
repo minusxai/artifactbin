@@ -25,9 +25,9 @@ import type { ClaimResult } from '@artifactbin/contracts';
 import { getDb } from './db';
 
 /** JSON handed back to the claimer — the kind decides its shape. */
-export type CodePayload = Record<string, unknown>;
+type CodePayload = Record<string, unknown>;
 
-export interface IssueCodeInput {
+interface IssueCodeInput {
   kind: string;
   /** The secret to store (hashed). The caller generates it — entropy is the caller's contract. */
   secret: string;
@@ -38,9 +38,9 @@ export interface IssueCodeInput {
   now?: number;
 }
 
-export type ClaimBySubjectFailure = 'no_code' | 'expired' | 'too_many_attempts' | 'bad_code';
+type ClaimBySubjectFailure = 'no_code' | 'expired' | 'too_many_attempts' | 'bad_code';
 
-export type ClaimBySubjectResult =
+type ClaimBySubjectResult =
   | { ok: true; payload: CodePayload }
   | { ok: false; reason: ClaimBySubjectFailure };
 

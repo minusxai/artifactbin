@@ -92,8 +92,8 @@ the bootstrap JSON. This overlaps downloads without executing the modules or cha
 Dynamic descendants stay lazy. Development uses Vite's own HTML; missing production hints fall back to
 lazy discovery. The managed-iframe gate holds the app entry and verifies reader requests start anyway.
 
-The CSS candidate list is extracted from string literals in kit and selected embed files after comments
-are stripped. Run `npm run generate-story-ui-classes` after editing those inputs. Font assets and manifests are
+The generated CSS candidate list belongs to markup: its inputs, its generator and its freshness test
+are in [story-ui/AGENTS.md](../services/app/lib/story-ui/AGENTS.md). Font assets and manifests are
 created by the asset-copy script; restored dependency caches still need that step.
 
 Use deterministic fixture servers for third-party imports in merge gates. The Sheets fetch stub is
@@ -126,6 +126,28 @@ Run `npm test -- --files scripts/__tests__/ci-plan.test.mjs` for path,
 rename, dependency, workflow wiring and required-result checks. The CI plan is
 printed in the Actions summary so each skipped job is reviewable.
 
+### What each job is for
+
+Every job other than the planner is one of the plan's outputs, and each exists because of a class
+of failure the others cannot see. `checks` is the type and name guard (`npm run validate`) — the
+cheapest signal there is. The Vitest projects run as their own sharded jobs; the browser set is
+described in [operations](operations.md) and the live-provider smoke in [evals](evals.md).
+`build` proves the production build compiles.
+
+Three jobs exist because a green unit suite does not prove a shippable artifact:
+
+- **`image`** builds the full `Dockerfile`, then *runs* the container and serves from it, and
+  drives one page-measuring gate against that container. The build step is where a
+  production-only break lives — the app's stylesheet once compiled to zero rules while every
+  unit test passed — and a dev server never executes it.
+- **`compose`** builds the lean per-service images, checks each one's contents and standalone
+  behaviour, then boots them together and walks the split shape end to end: health, publish,
+  serve, query, emit. It is the only check that the services still honour the same contracts
+  across an HTTP boundary rather than in one process.
+- **`cli`** runs the CLI suite and then builds and smoke-tests the standalone executable on every
+  released OS and architecture. Its failures — a native helper, the PTY, executable discovery —
+  are platform-shaped and invisible to a single-platform run.
+
 ## Dynamic comment identity and interaction
 
 `lib/story/comment-target.ts` defines refinements under an independently validated
@@ -156,7 +178,10 @@ comments, keyed lifecycles, and mobile tap/long-press selection.
 
 ### Local verification evidence
 
-`scripts/test-changed.mjs` owns discovery, the combined 50-file Vitest/CLI budget, execution and
+This section is the MECHANISM; the rule an agent follows — the file cap, exit 2, what to do on
+deferral — lives once, in [AGENTS.md](../AGENTS.md).
+
+`scripts/test-changed.mjs` owns discovery, the combined Vitest/CLI file budget, execution and
 unverified/deferred status. It reads structured Vitest output and fails closed on discovery errors.
 `scripts/check-local.mjs` owns the command/environment boundary for `validate` and `test`;
 `scripts/lib/check-evidence.mjs` records only successful checks with stable inputs. Normal commands

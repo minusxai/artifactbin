@@ -6,12 +6,11 @@
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
-import { parseJsx } from '@/lib/jsx';
 import { DEFAULT_CHART_H, MIN_CHART_H, SINGLE_VALUE_DEFAULT_H } from '@/lib/data/story/question-height';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 function renderApp(source: string) {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   const utils = renderWithProviders(
     <StoryRuntimeApp nodes={parsed.nodes} refData={{}} colorMode="light" chrome={false} />,
   );

@@ -28,14 +28,14 @@
  *
  *   usage: node scripts/gate-hydration.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-let failures = 0;
-const ok = (c, l) => { console.log(`${c ? '  ok ' : 'FAIL'} ${l}`); if (!c) failures += 1; return c; };
+const check = createChecker('hydration');
 
 /**
  * The production shape, reduced: an intro paragraph carrying the measure and
@@ -138,20 +138,20 @@ async function runNoRepaint() {
   // `window.mx` is installed by the runtime before it signals ready — the SSR'd
   // body already carries `data-mx-ast`, so the markup itself says nothing about
   // whether hydration has happened.
-  ok(await waitFor(page, '!!document.querySelector("[data-mx-inline-story]")'), 'the app mounted its inline artifact runtime');
+  check(await waitFor(page, '!!document.querySelector("[data-mx-inline-story]")'), 'the app mounted its inline artifact runtime');
   await page.waitForTimeout(600);
   const after = await page.evaluate(PROBE);
 
-  ok(before !== null && after !== null, 'the document rendered at both ends');
-  ok(before.holderTag === 'div', `the paragraph holding a div is served as a div (${before.holderTag})`);
-  ok(before.holderId === 'lede', `…keeping its id, so its classes still wrap the text (${before.holderId})`);
+  check(before !== null && after !== null, 'the document rendered at both ends');
+  check(before.holderTag === 'div', `the paragraph holding a div is served as a div (${before.holderTag})`);
+  check(before.holderId === 'lede', `…keeping its id, so its classes still wrap the text (${before.holderId})`);
   for (const k of ['holderTag', 'width', 'align', 'fontFamily', 'fontSize']) {
-    ok(before[k] === after[k], `${k} is the same before and after hydration (${before[k]} vs ${after[k]})`);
+    check(before[k] === after[k], `${k} is the same before and after hydration (${before[k]} vs ${after[k]})`);
   }
-  ok(before.align === 'justify', `the measure and justification actually apply (${before.align})`);
+  check(before.align === 'justify', `the measure and justification actually apply (${before.align})`);
   const mismatch = errors.filter((e) => /418|hydrat/i.test(e));
-  ok(mismatch.length === 0, `no hydration mismatch (${mismatch[0] ?? 'clean'})`);
-  ok(errors.length === 0, `no page errors at all (${errors.length}: ${errors[0] ?? ''})`);
+  check(mismatch.length === 0, `no hydration mismatch (${mismatch[0] ?? 'clean'})`);
+  check(errors.length === 0, `no page errors at all (${errors.length}: ${errors[0] ?? ''})`);
   await page.close();
 }
 
@@ -177,11 +177,11 @@ async function runPreload() {
   const html = await (await fetch(`${B}/a/${st.id}`)).text();
   const head = html.slice(0, html.indexOf('</head>'));
   const entry = [...head.matchAll(/<script\b[^>]*\bsrc="([^"]+)"[^>]*>/g)].map(m => m[1]).find(h => /\/assets\/[^/]+\.js$/.test(h));
-  ok(!!entry, `the app module is discoverable in the initial head (${entry ?? 'absent'})`);
-  ok(/\/assets\/[^/]+-[\w-]+\.js$/.test(entry ?? ''), `…at a content-addressed URL (${entry})`);
-  ok(started.filter(r => new URL(r.url).pathname === entry).length === 1, 'the browser fetches the app entry exactly once');
+  check(!!entry, `the app module is discoverable in the initial head (${entry ?? 'absent'})`);
+  check(/\/assets\/[^/]+-[\w-]+\.js$/.test(entry ?? ''), `…at a content-addressed URL (${entry})`);
+  check(started.filter(r => new URL(r.url).pathname === entry).length === 1, 'the browser fetches the app entry exactly once');
   await page.locator('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas').first().waitFor({ timeout: 30_000 });
-  ok(await page.locator('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas').count() > 0, 'the lazily loaded artifact runtime renders the actual chart');
+  check(await page.locator('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas').count() > 0, 'the lazily loaded artifact runtime renders the actual chart');
 
   /*
    * Deliberately NOT asserted here: that the chunk's request starts earlier in
@@ -193,13 +193,13 @@ async function runPreload() {
    * checks above are what can be judged deterministically; the timing is real
    * but not observable from localhost.
    */
-  ok(started.filter(r => /\.js(?:\?|$)/.test(r.url)).length > 1, 'the browser fetched the app and its runtime dependencies');
+  check(started.filter(r => /\.js(?:\?|$)/.test(r.url)).length > 1, 'the browser fetched the app and its runtime dependencies');
 
   // Not a chart: the split has to keep meaning something.
   const prose = await startDocument(B);
   await publish(prose.id, prose.token, PROSE, 'preload gate prose');
   const proseHead = (await (await fetch(`${B}/a/${prose.id}/raw`)).text()).split('</head>')[0];
-  ok(!/modulepreload href="\/story\/chunks\//.test(proseHead) && !proseHead.includes('/story/chunks/'),
+  check(!/modulepreload href="\/story\/chunks\//.test(proseHead) && !proseHead.includes('/story/chunks/'),
     'a prose document does not preload the chart chunk');
 
   await page.close();
@@ -208,16 +208,16 @@ async function runPreload() {
 /** The response headers themselves — the config is necessary but not sufficient. */
 async function runCaching() {
   const manifest = await (await fetch(`${B}/story/manifest.json`)).json().catch(() => null);
-  ok(!!manifest?.entry, `the build published a manifest (${manifest?.entry ?? 'none'})`);
+  check(!!manifest?.entry, `the build published a manifest (${manifest?.entry ?? 'none'})`);
   const urls = [manifest.entry, ...(manifest.lazy ?? [])];
   for (const u of urls) {
     const res = await fetch(`${B}${u}`, { method: 'HEAD' });
     const cc = res.headers.get('cache-control') ?? '';
-    ok(res.status === 200, `${u} is served (${res.status})`);
-    ok(cc.includes('immutable') && cc.includes('max-age=31536000'), `${u} is immutable for a year (${cc})`);
+    check(res.status === 200, `${u} is served (${res.status})`);
+    check(cc.includes('immutable') && cc.includes('max-age=31536000'), `${u} is immutable for a year (${cc})`);
     // Load-bearing, not hygiene: `import()` is CORS-mode and the document has
     // an opaque origin, so without this every chart silently fails to draw.
-    ok(res.headers.get('access-control-allow-origin') === '*', `${u} keeps its CORS header`);
+    check(res.headers.get('access-control-allow-origin') === '*', `${u} keeps its CORS header`);
   }
 }
 
@@ -229,5 +229,4 @@ try {
   await browser.close();
 }
 
-console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
-process.exit(failures ? 1 : 0);
+check.done();

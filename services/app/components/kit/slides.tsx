@@ -20,9 +20,9 @@ import * as React from "react"
 
 import { cn } from "./cn"
 
-export type SlideDeckProps = React.ComponentProps<"div">
+type SlideDeckProps = React.ComponentProps<"div">
 
-export interface SlideProps extends React.ComponentProps<"section"> {
+interface SlideProps extends React.ComponentProps<"section"> {
   /** Short name shown in the birds-eye rail / present counter; navigation falls back to the slide's first heading. */
   title?: string
 }

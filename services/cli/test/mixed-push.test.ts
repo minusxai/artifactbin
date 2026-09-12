@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -8,6 +8,7 @@ import {saveConnection} from '../src/config';
 import {digest} from '../src/files';
 import {parseDocument,writeDocument} from '../src/document';
 import {readRecord} from './tracking';
+import {cliHarness} from './harness';
 
 test('mixed content and metadata push rebases unrelated remote nodes before its conditional atomic write',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-mixed-push-'));let writes=0;
@@ -71,4 +72,23 @@ test('mixed push reconciles before dependency preflight and again using immutabl
   const result=await invoke(['push','doc.jsx']);assert.equal(result.code,0,JSON.stringify(result.result));assert.equal(creates,1);assert.equal(preflights,1);assert.equal(writes,1);
   const saved=await readFile(join(root,'doc.jsx'),'utf8');assert.match(saved,/Remote/);assert.match(saved,/During upload/);assert.match(saved,/sales.csv/);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+describe('a workspace of artifacts and a profile', () => {
+  const harness=(prefix:string)=>cliHarness(prefix,{flags:['--json','--server','https://example.com'],account:null});
+   const account=(response:Response)=>{response.headers.set('X-Artifactbin-Account','usr_seed');return response;};
+
+  test('a workspace tracking artifacts and a profile accepts a bare status, diff and push without mixed_resource_batch',async()=>{
+   const h=await harness('afbin-seed-mixed-');
+   try{
+    await writeFile(join(h.root,'report.jsx'),`---\nid: abc123\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\n---\n<p>Hi</p>\n`);
+    await writeFile(join(h.root,'profile.yaml'),'type: profile\nid: usr_seed\nusername: sree\n');
+    assert.equal(await h.invoke(['pull','--type','profile','--output','profile.yaml','--force'],()=>account(Response.json({type:'profile',id:'usr_seed',username:'sree',email:'s@example.com',name:null,liked:[],following:[],state:'b'.repeat(64)}))),0,h.out.join(''));
+    assert.equal(await h.invoke(['status'],()=>{throw new Error('status is local');}),0,h.out.join(''));
+    const types=new Set(h.last().files.map((f:{type:string})=>f.type));assert.ok(types.has('profile'));assert.ok(types.has('artifact'));
+    assert.equal(await h.invoke(['diff'],()=>{throw new Error('diff is local');}),0,h.out.join(''));
+    assert.equal(await h.invoke(['push'],()=>{throw new Error('unchanged push is offline');}),0,h.out.join(''));
+    assert.ok(h.last().operations.every((op:{status:string})=>op.status==='unchanged'));
+   }finally{await h.cleanup();}
+  });
 });

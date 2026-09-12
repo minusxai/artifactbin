@@ -31,7 +31,7 @@ import { AST_PATH_ATTR } from "@/lib/story-ui/ast-path"
 
 export interface ColumnTemplate { col: string; title?: string; props: Record<string, unknown>; nodes: JsxNode[]; path: string }
 
-export interface DataTableProps {
+interface DataTableProps {
   commentOwner?: string
   /** Absent (the bare registry entry, with no adapter) renders the empty state. */
   rows?: Row[]

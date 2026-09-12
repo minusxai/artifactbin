@@ -2,14 +2,13 @@ import { Grid, GridItem } from '@/components/kit/grid';
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
 import { useEffect } from 'react';
-import { parseJsx } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { createFrameEditSession } from '@/lib/story-runtime/edit/session';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 describe('prose integration preserves the served runtime', () => {
   it('keeps a live component mounted while entering edit and replacing adjacent prose', () => {
-    const parsed = parseJsx('<div><p id="a">one</p><p id="b">two</p><Question id="q" /></div>');
-    if (!parsed.ok) throw Error(parsed.error);
+    const parsed = parseJsxOrThrow('<div><p id="a">one</p><p id="b">two</p><Question id="q" /></div>');
     const mounted = vi.fn(),
       unmounted = vi.fn(),
       post = vi.fn();
@@ -59,8 +58,7 @@ describe('prose integration preserves the served runtime', () => {
 
 it('keeps the prose editor mounted across changed source renders with live siblings', () => {
   const read = (source: string) => {
-    const p = parseJsx(source);
-    if (!p.ok) throw Error(p.error);
+    const p = parseJsxOrThrow(source);
     return p.nodes;
   };
   const first = read('<div id="root"><p id="a">one</p><p id="b">two</p><Question id="q" /></div>');
@@ -91,10 +89,9 @@ it('keeps the prose editor mounted across changed source renders with live sibli
 });
 
 it('retains live islands inside flow columns when entering editing', () => {
-  const parsed = parseJsx(
+  const parsed = parseJsxOrThrow(
     '<Grid id="grid" mode="flow"><GridItem id="column" w={6}><p id="p">Text</p><Question id="live" /></GridItem></Grid>',
   );
-  if (!parsed.ok) throw Error(parsed.error);
   const mounted = vi.fn(),
     unmounted = vi.fn();
   const Question = () => {
@@ -128,10 +125,9 @@ it('retains live islands inside flow columns when entering editing', () => {
 });
 
 it('keeps a dragged text range from selecting its common layout ancestor', () => {
-  const parsed = parseJsx(
+  const parsed = parseJsxOrThrow(
     '<div id="root"><p id="a">first paragraph</p><Grid mode="flow"><GridItem><h2 id="b">column heading</h2></GridItem></Grid></div>',
   );
-  if (!parsed.ok) throw Error(parsed.error);
   const session = createFrameEditSession({
     win: window,
     requestRender: () => {},
@@ -164,7 +160,7 @@ it('keeps a dragged text range from selecting its common layout ancestor', () =>
 
 
 it('reports the actual source block for hover, click, and caret selection in formatted JSX', () => {
-  const parsed = parseJsx(`<section id="root">
+  const parsed = parseJsxOrThrow(`<section id="root">
     <p id="eyebrow">Notes</p>
     <h1 id="heading">Try making a copy</h1>
     <p id="body">Use <strong>Fork</strong> to copy.</p>
@@ -174,7 +170,6 @@ it('reports the actual source block for hover, click, and caret selection in for
     </blockquote>
     <ul id="list"><li id="item">An item</li></ul>
   </section>`);
-  if (!parsed.ok) throw Error(parsed.error);
   const post = vi.fn();
   const session = createFrameEditSession({
     win: window, requestRender: () => {},

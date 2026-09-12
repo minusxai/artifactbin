@@ -30,7 +30,7 @@ export const ALWAYS_OFFERED = ['name', 'comment', 'delete'] as const;
 /** Tags whose typography controls apply to their own text rather than a container's. */
 const TEXT_TAGS = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'span', 'a', 'td', 'th'];
 
-export interface SelectionToolbarPlan {
+interface SelectionToolbarPlan {
   /** Font size / weight / italic / underline steppers. */
   text: boolean;
   /** The class algebra: alignment, text color, the spacing/width row. */

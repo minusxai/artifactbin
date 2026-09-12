@@ -9,7 +9,7 @@ import { createEnv } from '@artifactbin/utils';
 
 describe('createEnv', () => {
   const source = { AUTH__SECRET: 's', AUTH__SECERT: 'typo', RATE_LIMITER__MINT_MAX: '5', PATH: '/usr/bin', AUTH_SECRET: 'old' };
-  const e = createEnv(source, { consumedByPrefix: ['RATE_LIMITER__'], retired: { AUTH_SECRET: 'AUTH__SECRET' } });
+  const e = createEnv(source, { consumedByPrefix: ['RATE_LIMITER__'] });
   it('reads MODULE__NAME and records the read', () => {
     expect(e.env('AUTH', 'SECRET')).toBe('s');
     expect([...e.namesRead()]).toEqual(['AUTH__SECRET']);
@@ -17,8 +17,8 @@ describe('createEnv', () => {
   it('names the unknown ones of our shape, not the machine\'s', () => {
     expect(e.unknownNames()).toEqual(['AUTH__SECERT']);
   });
-  it('names a retired name in use and its replacement', () => {
-    expect(e.retiredInUse()).toEqual([{ name: 'AUTH_SECRET', replacement: 'AUTH__SECRET' }]);
+  it('ignores a name that is not of our shape — an unnamespaced name is not a setting', () => {
+    expect(e.unknownNames()).not.toContain('AUTH_SECRET');
   });
   it('insists on a name when asked to', () => {
     expect(() => e.must('AUTH', 'MISSING')).toThrow(/AUTH__MISSING/);

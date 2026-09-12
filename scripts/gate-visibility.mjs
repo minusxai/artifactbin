@@ -11,18 +11,19 @@
  *   2. /a/<id> self-heals to /@username/... in the location bar, and a
  *      mangled pretty URL (wrong user, stale title) heals too
  *   3. the ShareLink dialog really flips visibility from the page
- *   4. the dashboard's folder move lands through the PICKER, and the canonical
- *      URL does NOT follow it — nesting is never in a URL
- *   5. a folder is a document: its own visibility decides who may open it, and
- *      the server decides per viewer what it lists
+ *   4. a folder is a document: it is born private, a private one is the same
+ *      uniform 404 a private document is, and a profile lists the public ones
+ *      only. (Everything ELSE about folders — the picker, the verbs, the
+ *      per-viewer child listing — is gate-folders', which proved it first.)
  *
- * The login code is read from the same local MAIL SINK gate-email-login uses:
+ * The login code is read from the local MAIL SINK, as every logged-in gate does:
  *
  *   usage:
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
 
  *     node scripts/gate-visibility.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -30,8 +31,7 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('visibility');
 
 const EMAIL = `mxmx_test_vis_${Date.now().toString(36)}@example.com`;
 
@@ -143,76 +143,19 @@ const wire = await page.evaluate(async (id) => (await (await fetch(`/api/my/arti
 const withEditId = await stranger.request.get(`${BASE}/a/${story.id}?key=${wire.edit_id}`);
 check(withEditId.status() === 404, 'edit_id does NOT work as a read key');
 
-// ── 4. the dashboard's folder move, through the PICKER ────────────────────
-// Placement is an id on the wire and a NAME on the screen: the row chooses
-// from the account's own folders, and its own subtree is greyed (the cycle
-// rule, drawn) rather than refused after the fact.
-const reports = await api('/api/artifacts', { format: 'folder', title: 'Reports' });
-check(reports.format === 'folder', 'a folder is created with no content');
-await page.goto(`${BASE}/`, { waitUntil: 'load' });
-// The strip is the folder's home on the dashboard.
-await page.waitForSelector('[aria-label="Open folder Reports"]', { timeout: 20000 });
-check(true, 'the dashboard lists the folder in its own strip');
-// Retry only opening the menu, before attempting its action. Waiting for the
-// picker after both clicks cannot recover a lost opening click: the Move
-// locator times out first, outside that retry. Never repeat the move itself.
-const more = page.getByRole('button', { name: 'More actions for Cookie Proof', exact: true });
-const move = page.getByRole('button', { name: 'Move Cookie Proof', exact: true });
-for (let attempt = 0; attempt < 3; attempt++) {
-  if (await more.getAttribute('aria-expanded') !== 'true') await more.click();
-  try {
-    await move.waitFor({ state: 'visible', timeout: 2000 });
-    break;
-  } catch (error) {
-    if (attempt === 2) throw error;
-  }
-}
-await move.click();
-await page.getByRole('textbox', { name: 'Filter folders', exact: true }).waitFor({ timeout: 15000 });
-await Promise.all([
-  page.waitForResponse((r) => r.request().method() === 'PATCH' && r.status() === 200, { timeout: 15000 }),
-  page.locator('[aria-label="Move to Reports"]').first().click(),
-]);
-await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-// THE ADDRESS DOES NOT MOVE. Nesting is never in a URL: a folder is an
-// artifact with its own address, and the trail is drawn on its page.
-check(
-  new URL(page.url()).pathname === `/@${username}/${doc.id}-cookie-proof`,
-  `the canonical URL is id-anchored and survives the move (${new URL(page.url()).pathname})`,
-);
-const placed = await page.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}`)).json()), doc.id);
-check(placed.parent_id === reports.id, 'and the row really moved (parent_id names the folder)');
-
-// ── 5. a folder is read by its own ACL, and lists by the reader's ─────────
-// A folder's PAGE is app chrome and its ROW is an ordinary artifact, so "who
-// may open it" is the artifact's own visibility; what it LISTS is decided per
-// viewer on the server and inlined into the HTML.
+// ── 4. a folder's own VISIBILITY, which is the only folder fact here ──────
+/*
+ * The picker move, the owner's verbs, the child listing and the profile's
+ * creation controls are gate-folders' subject and were proved here a second
+ * time, four of them verbatim. What belongs to THIS gate is the same question
+ * it asks of a document: who may open one, and what a stranger is shown of it.
+ */
 const shelf = await api('/api/artifacts', { format: 'folder', title: 'Shelf', visibility: 'public' });
-const shown = await api('/api/artifacts', { title: 'Public Child', markup: '<h1>public child</h1>', visibility: 'public', parent_id: shelf.id });
-check(shown.parent_id === shelf.id, 'a document is filed under the folder at publish');
-await api('/api/artifacts', { title: 'Hidden Child', markup: '<h1>hidden child</h1>', parent_id: shelf.id });
-
-// EVERYONE gets the app page for a folder — there is no document to serve —
-// and the listing is in the first HTML byte.
-await page.goto(`${BASE}/a/${shelf.id}`, { waitUntil: 'load' });
-check((await page.locator('iframe[title="artifact"]').count()) === 0, 'a folder is never framed — it has no document');
-await page.locator('[aria-label^="Open Public Child"]').waitFor({ timeout: 20000 });
-await page.locator('[aria-label^="Open Hidden Child"]').waitFor({ timeout: 20000 });
-check(true, 'the owner sees every child of their folder');
-
-// A STRANGER gets the same page and sees the PUBLIC child only: unlisted and
-// private children are listed nowhere.
-const strangerFolder = await stranger.goto(`${BASE}/a/${shelf.id}`, { waitUntil: 'load' });
-check(strangerFolder.status() === 200, 'a public folder opens for a stranger');
-await stranger.waitForSelector('[aria-label^="Open Public Child"]', { timeout: 20000 });
-check(!(await stranger.textContent('body')).includes('Hidden Child'), 'a stranger never sees a private child in the listing');
-check((await stranger.locator('[aria-label="Rename folder"]').count()) === 0, 'and is offered none of the owner\u2019s verbs on it');
-
-// A PRIVATE folder is the uniform 404, exactly like a private document.
+await api('/api/artifacts', { title: 'Public Child', markup: '<h1>public child</h1>', visibility: 'public', parent_id: shelf.id });
 const vault = await api('/api/artifacts', { format: 'folder', title: 'Vault' });
 check(vault.visibility === 'private', 'an owned folder is born private');
 const strangerVault = await stranger.goto(`${BASE}/a/${vault.id}`, { waitUntil: 'load' });
-check(strangerVault.status() === 404, 'a private folder is the uniform 404 for a stranger');
+check(strangerVault.status() === 404, 'a private folder is the uniform 404 for a stranger, exactly like a private document');
 
 // The profile ROOT is public surface (public docs list there; an all-private
 // profile renders EMPTY, never 404 — an existence oracle otherwise).
@@ -220,20 +163,11 @@ const strangerList = await stranger.goto(`${BASE}/@${username}`, { waitUntil: 'l
 await stranger.getByLabel('Open folder Shelf', { exact: true }).waitFor({ state: 'visible' });
 check(strangerList.status() === 200 && !(await stranger.textContent('body')).includes('Cookie Proof'),
   'a stranger sees no private document on the profile');
-// Public folders belong on the public index; private folders stay absent.
 check(await stranger.locator('[aria-label="Open folder Shelf"]').isVisible()
   && (await stranger.locator('[aria-label="Open folder Vault"]').count()) === 0,
-  'a stranger’s profile lists public folders and withholds private ones');
-// …and no way to MAKE one. The create control is its own capability now
-// (components/Shelf `canCreateFolders`), reserved for the workspace.
-check((await stranger.locator('[aria-label="New folder"]').count()) === 0,
-  'and is offered no way to make one');
+'a stranger’s profile lists public folders and withholds private ones');
 
 await browser.close();
 sink.close();
 
-if (failures.length) {
-  console.error(`\n${failures.length} failure(s):\n- ${failures.join('\n- ')}`);
-  process.exit(1);
-}
-console.log('\nvisibility + pretty-url gate: all green');
+check.done();

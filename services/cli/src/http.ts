@@ -2,7 +2,7 @@ import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {CliError} from './commands';
 import {loadConnection,saveConnection,normalizeServer,type Connection} from './config';
-export interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;authenticate?:()=>Promise<Connection>}
+interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;authenticate?:()=>Promise<Connection>}
 export class HttpClient {
  connection:Connection;
  account?:string;
@@ -89,14 +89,14 @@ export function httpStatus(error:unknown):number|undefined{
  return typeof status==='number'?status:undefined;
 }
 
-export function apiUrl(path:string,server:string):URL{
+function apiUrl(path:string,server:string):URL{
   if(!path.startsWith('/')||path.startsWith('//')||path.includes('\\')||path.includes('#'))throw new CliError('invalid_api_path','Use an API path beginning with /; full URLs are not allowed.');
   const url=new URL(path.startsWith('/api/')?path:`/api${path}`,server);
   if(url.origin!==server||!url.pathname.startsWith('/api/'))throw new CliError('invalid_api_path','The path must remain inside the selected server API.');
  return url;
 }
 
-export function viewerUrl(path:string,server:string):URL{
+function viewerUrl(path:string,server:string):URL{
   if(!path.startsWith('/a/')||path.includes('\\')||path.includes('#'))throw new CliError('invalid_view_path','Use a viewer path beginning with /a/.');
   const url=new URL(path,server);
   if(url.origin!==server||!url.pathname.startsWith('/a/'))throw new CliError('invalid_view_path','The path must remain inside the selected server.');

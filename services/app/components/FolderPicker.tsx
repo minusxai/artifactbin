@@ -27,7 +27,7 @@ import { useTrustedPortalContainer } from '@/components/TrustedUi';
 import { Folder, X } from 'lucide-react';
 
 export interface PickerFolder { id: string; title: string | null; ancestor_ids: string[] }
-export interface FolderPickerProps {
+interface FolderPickerProps {
   /** Every folder the account holds (any order). */
   folders: PickerFolder[];
   /** The row being moved: its own subtree is disabled when it is a folder. */
@@ -162,7 +162,7 @@ export function FolderPicker({ folders, moving, current, onMove, onClose, floati
 }
 
 /** What the mover needs to know about the row it is moving. */
-export interface MoveTarget {
+interface MoveTarget {
   id: string;
   format?: string;
   /** Where it sits now — the wire's own field (null = root). */

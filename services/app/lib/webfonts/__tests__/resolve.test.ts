@@ -9,7 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { resolveWebFont, setWebFontSourcesForTests, UnknownFontError, webFontAssets, webFontObjectKey } from '../index';
 import { useAppHarness } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 const harness = useAppHarness();
 

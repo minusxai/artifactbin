@@ -24,7 +24,7 @@ import { assetUrlFor } from '../../../../services/app/lib/story/asset-url';
  * variant grades. Named apart from the rest so `validate` can ask "does this
  * task grade any of these?" in one place rather than three.
  */
-export const ASSET_CHECKS = ['urls_kept', 'assets_served', 'assets_ok'] as const;
+const ASSET_CHECKS = ['urls_kept', 'assets_served', 'assets_ok'] as const;
 
 /** Declared apart from the scorer for the reason `publish.ts` gives: `contracts.ts` reads these names. */
 export const COMMENT_CHECKS = ['responded', 'changed', 'resolved', ...ASSET_CHECKS] as const;
@@ -32,17 +32,17 @@ export const COMMENT_CHECKS = ['responded', 'changed', 'resolved', ...ASSET_CHEC
 // ---------------------------------------------------------------- the thread
 
 /** One comment in a thread, as the annotation wire spells it. */
-export interface ThreadComment {
+interface ThreadComment {
   author: { kind: string; label: string | null; transport: string };
 }
 
 /** One annotation thread, as `{annotations: […]}` carries it. */
-export interface AnnotationThread {
+interface AnnotationThread {
   status: string;
   thread: ThreadComment[];
 }
 
-export interface ThreadMetrics {
+interface ThreadMetrics {
   /** A reply from the AGENT — not merely a second comment. */
   responded: boolean;
   resolved: boolean;
@@ -153,7 +153,7 @@ export function splitVerbatim(html: string, seededText: string): boolean {
  */
 
 /** Every `<img src>` in a served document's body, in order, as written. */
-export function imageSources(html: string): string[] {
+function imageSources(html: string): string[] {
   return [...bodyOf(html).matchAll(/<img\b[^>]*>/gi)]
     .map((m) => /\ssrc\s*=\s*("([^"]*)"|'([^']*)')/i.exec(m[0]))
     .map((m) => (m ? (m[2] ?? m[3] ?? '') : ''))

@@ -3,7 +3,7 @@
  * E_FIELD_NOT_FOUND validation and (later) fieldMeta injection.
  */
 
-export interface FieldRef {
+interface FieldRef {
   /** JSON-pointer-ish path to the reference, e.g. '/layer/1/encoding/y/field'. */
   path: string;
   field: string;

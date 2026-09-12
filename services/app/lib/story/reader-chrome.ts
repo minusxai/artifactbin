@@ -17,20 +17,19 @@
  *
  *  1. the LOGO (`.mx-reader-home`, aria "Home"): a plain link to `/`, and
  *     the only "hosted on artifactbin" mark left;
- *  2. the RAIL: like · comment · share (`data-mx-reader-action`), then the two
- *     panel triggers exactly as they always were — `controls` ("Open artifact
- *     controls": appearance, the sign-in door, fork, provenance) and `menu`
- *     ("Open menu": the app drawer) — 44px targets with tiny mono labels;
+ *  2. the RAIL: like · comment · share (`data-mx-reader-action`), then two
+ *     panel triggers — `controls` ("Open artifact controls": appearance, the
+ *     sign-in door, fork, provenance) and `menu` ("Open menu": the app
+ *     drawer) — 44px targets with tiny mono labels;
  *  3. the BYLINE: the author's `@handle` (their profile), the title, and the
  *     ⊕ create link;
  *  4. the share toast and the copy fallback field;
  *  5. the scrim and the two panels.
  *
  * Like and comment are UI ONLY for now: the entry logs them to the console
- * with the artifact id, and nothing is fetched. Share is real. The credits
- * footer this replaces ("made with ♥ by … · hosted on artifactbin") is
- * retired: the author is the byline, the host is the logo, and provenance
- * lives in the settings panel.
+ * with the artifact id, and nothing is fetched. Share is real. There is no
+ * credits footer: the author is the byline, the host is the logo, and
+ * provenance lives in the settings panel.
  *
  * A framed copy (the owner's shell) hides all of it by CSS (`:root.mx-framed`)
  * — the parent supplies its own chrome — and a capture render never asks for
@@ -44,13 +43,13 @@ import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
 import { githubStarMarkup } from '@/lib/github-star';
 
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
-export interface ReaderSignIn {
+interface ReaderSignIn {
   unlocks: 'commenter' | 'editor';
   callbackUrl: string;
 }
 
 /** The fork ASK: an anchor the shell performs, since an opaque document cannot POST. */
-export interface ReaderFork {
+interface ReaderFork {
   href: string;
 }
 

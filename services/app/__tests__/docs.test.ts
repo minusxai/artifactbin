@@ -14,12 +14,12 @@ it('the bundled auth guide teaches local setup without self-minting or legacy co
  const auth=teaching.files['references/publishing-auth.md'];
  expect(auth).toContain('~/.artifactbin/.env');expect(auth).toContain('afbin auth');
  expect(auth).toContain('browser approval');
- expect(auth).not.toMatch(/tokens\/anonymous|MCP|~\/\.artifactbin\.env/);
+ // tokens/anonymous, MCP and the old dotfile spelling are retired-surfaces.test.ts's row for
+ // the bundle's auth guide.
 });
 // From publishing-doc-tokens.test.ts: the publishing guide ROUTES authentication to that
 // guide instead of answering it itself, and so never teaches self-minting.
 it('the bundled publishing guide sends authentication to the auth guide',()=>{
  const publishing=teaching.files['references/publishing.md'];
  expect(publishing).toContain('publishing-auth.md');
- expect(publishing).not.toContain('tokens/anonymous');
 });

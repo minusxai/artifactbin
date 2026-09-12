@@ -26,6 +26,7 @@ COPY services/browser/package.json ./services/browser/package.json
 COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 COPY services/cli/package.json ./services/cli/package.json
+COPY services/test-support/package.json ./services/test-support/package.json
 COPY services/app/scripts/copy-assets.mjs ./services/app/scripts/copy-assets.mjs
 COPY services/cli/scripts/prepare-pty.mjs ./services/cli/scripts/prepare-pty.mjs
 # THE INSTALL LAYER IS KEYED ON MANIFESTS ONLY — `npm ci` reads the root files
@@ -58,6 +59,7 @@ COPY services/browser/package.json ./services/browser/package.json
 COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 COPY services/cli/package.json ./services/cli/package.json
+COPY services/test-support/package.json ./services/test-support/package.json
 
 # THE LEAN INSTALL, by npm's own resolution — never a hand-written list: the
 # workspace filter installs only this package's closure. The assertions are part

@@ -2,7 +2,7 @@
 import type { Node as EditorNode } from 'prosemirror-model';
 import type { Transaction } from 'prosemirror-state';
 import type { JsxElement } from '@/lib/jsx';
-export interface IdentityTextMap {
+interface IdentityTextMap {
   fromId: string;
   toId: string;
   fromText: string;

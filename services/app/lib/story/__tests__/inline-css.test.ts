@@ -1,21 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { isolateStoryCss, isolateStoryNodes } from '../inline-css';
-import { parseJsx } from '@/lib/jsx';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 describe('inline document CSS isolation', () => {
   it('preserves custom chart font names but aliases trusted UI families in SVG attributes', () => {
     const css = '@font-face{font-family:"My Font";src:url(/webfonts/a.woff2)}@font-face{font-family:"IBM Plex Sans";src:url(/webfonts/b.woff2)}';
     expect(isolateStoryCss(css)).toContain('font-family:"My Font"');
-    const parsed = parseJsx('<svg><text fontFamily="IBM Plex Sans">Label</text></svg>');
-    if (!parsed.ok) throw Error(parsed.error);
+    const parsed = parseJsxOrThrow('<svg><text fontFamily="IBM Plex Sans">Label</text></svg>');
     expect(JSON.stringify(isolateStoryNodes(parsed.nodes, css))).toContain('mx-author-');
   });
   it('keeps cached imported webfonts', () => {
     expect(isolateStoryCss('@font-face{font-family:F;src:url(/webfonts/font.woff2)}')).toContain('/webfonts/font.woff2');
   });
   it('maps inline font references and unsafe image-set values without changing numeric styles or iframe payloads', () => {
-    const parsed = parseJsx('<p id="kept" style={{fontFamily:"IBM Plex Sans",fontSize:14,backgroundImage:\'image-set("https://evil.test/p" 1x)\'}}>Text</p><Iframe><p style={{fontFamily:"My Font"}}>Inner</p></Iframe>');
-    if (!parsed.ok) throw Error(parsed.error);
+    const parsed = parseJsxOrThrow('<p id="kept" style={{fontFamily:"IBM Plex Sans",fontSize:14,backgroundImage:\'image-set("https://evil.test/p" 1x)\'}}>Text</p><Iframe><p style={{fontFamily:"My Font"}}>Inner</p></Iframe>');
     const nodes = isolateStoryNodes(parsed.nodes, '@font-face{font-family:"IBM Plex Sans";src:url(/webfonts/a.woff2)}');
     const first = nodes[0];
     if (first.type !== 'element') throw Error('Missing p');

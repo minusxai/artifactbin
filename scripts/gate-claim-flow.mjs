@@ -17,6 +17,7 @@
  *
  *   usage: node scripts/gate-claim-flow.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { becomeOwner } from './lib/start-doc.mjs';
@@ -24,8 +25,7 @@ import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { out.push(`${c ? '  ok ' : 'FAIL'} ${l}`); return c; };
+const check = createChecker('claim-flow');
 
 const api = async (path, init = {}, token) => {
   const res = await fetch(`${B}${path}`, {
@@ -47,7 +47,7 @@ const doc = async (title) => api('/api/artifacts', {
 }, anon.token);
 const kept = await doc('Quarterly Review');
 const left = await doc('Scratch Notes');
-ok(!!kept.id && !!left.id, 'an anonymous visitor published two documents');
+check(!!kept.id && !!left.id, 'an anonymous visitor published two documents');
 
 // The browser holds the token exactly as the UI would have left it.
 await p.goto(B, { waitUntil: 'load' });
@@ -60,20 +60,20 @@ const email = `mxmx_test_claim_${Date.now().toString(36)}@example.com`;
 await loginViaEmail(p, B, sink, email);
 // The masthead's identity line is the HANDLE now, not the address, so being
 // signed in is that link existing (components/HeaderBar).
-ok(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');
+check(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');
 
 // ── the banner names the drafts, without being asked for a token ────────────
 await p.waitForSelector('[aria-label="Unclaimed drafts"]', { timeout: 20000 }).catch(() => {});
 const banner = await p.locator('[aria-label="Unclaimed drafts"]').count();
-ok(banner === 1, 'the dashboard offers the drafts made before signing in');
+check(banner === 1, 'the dashboard offers the drafts made before signing in');
 const text = banner ? await p.locator('[aria-label="Unclaimed drafts"]').innerText() : '';
-ok(/Quarterly Review/.test(text), 'and names them, so you can tell whose they are');
+check(/Quarterly Review/.test(text), 'and names them, so you can tell whose they are');
 // And there is NOWHERE to paste a credential: the account page lists CLI
 // connections to revoke, and nothing anywhere asks a person for a token.
 await p.goto(`${B}/account`, { waitUntil: 'load' });
 await p.waitForTimeout(1000);
-ok((await p.locator('[aria-label="Token to claim"]').count()) === 0, 'the account page asks for no pasted token');
-ok(!/mx_\.\.\./.test(await p.locator('body').innerText()), 'and offers no token field at all');
+check((await p.locator('[aria-label="Token to claim"]').count()) === 0, 'the account page asks for no pasted token');
+check(!/mx_\.\.\./.test(await p.locator('body').innerText()), 'and offers no token field at all');
 
 // Return to the dashboard offer before exercising its opt-in controls.
 await p.goto(B, { waitUntil: 'load' });
@@ -84,9 +84,9 @@ await p.waitForSelector('[aria-label="Unclaimed drafts"]', { timeout: 20_000 }).
 // server answered from the cookie); this is the other half: the secret is not
 // sitting in localStorage where an XSS could take it and keep it.
 const stored = await p.evaluate(() => [localStorage.getItem('mx_tokens'), localStorage.getItem('mx_token')]);
-ok(stored.every((v) => v === null), 'the browser keeps no token in localStorage');
+check(stored.every((v) => v === null), 'the browser keeps no token in localStorage');
 const cookies = await p.context().cookies(B);
-ok(cookies.some((c) => /mx-agent-session/.test(c.name) && c.httpOnly), 'it holds an httpOnly session cookie instead');
+check(cookies.some((c) => /mx-agent-session/.test(c.name) && c.httpOnly), 'it holds an httpOnly session cookie instead');
 
 // ── untick one, claim the rest ──────────────────────────────────────────────
 // Both documents belong to ONE token here, so unticking it claims nothing —
@@ -95,27 +95,27 @@ await p.locator('[aria-label^="Claim "]').first().uncheck();
 await p.locator('[aria-label="Add to my account"]').click();
 await p.waitForTimeout(1500);
 let mine = await (await fetch(`${B}/api/my/artifacts`, { headers: { cookie: (await p.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ') } })).json();
-ok((mine.artifacts ?? []).length === 0, 'nothing is claimed while the box is unticked');
+check((mine.artifacts ?? []).length === 0, 'nothing is claimed while the box is unticked');
 
 // Now tick it and claim for real.
 await p.locator('[aria-label^="Claim "]').first().check();
 await p.locator('[aria-label="Add to my account"]').click();
 await p.waitForSelector('[aria-label="Claim result"]', { timeout: 20000 });
-ok(/Added/.test(await p.locator('[aria-label="Claim result"]').innerText()), 'claiming reports what it added');
+check(/Added/.test(await p.locator('[aria-label="Claim result"]').innerText()), 'claiming reports what it added');
 
 const cookieHeader = (await p.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
 mine = await (await fetch(`${B}/api/my/artifacts`, { headers: { cookie: cookieHeader } })).json();
 const titles = (mine.artifacts ?? []).map((a) => a.title).sort();
-ok(titles.includes('Quarterly Review') && titles.includes('Scratch Notes'),
+check(titles.includes('Quarterly Review') && titles.includes('Scratch Notes'),
   `both documents now belong to the account (${titles.join(', ')})`);
 
 // ── the token still edits, and the offer does not come back ─────────────────
 const stillEdits = await api(`/api/artifacts/${kept.id}`, {}, anon.token);
-ok(stillEdits.id === kept.id, 'the token still works — claiming changed ownership, not validity');
+check(stillEdits.id === kept.id, 'the token still works — claiming changed ownership, not validity');
 
 await p.goto(B, { waitUntil: 'load' });
 await p.waitForTimeout(2500);
-ok((await p.locator('[aria-label="Unclaimed drafts"]').count()) === 0,
+check((await p.locator('[aria-label="Unclaimed drafts"]').count()) === 0,
   'and the banner does not nag again once the drafts are claimed');
 
 // ── someone else's token is never offered ───────────────────────────────────
@@ -128,9 +128,8 @@ const claimable = await (await fetch(`${B}/api/tokens/claimable`, {
 })).json();
 // The stranger's token is anonymous and fresh, so it IS offerable to whoever
 // holds it — the point of this check is that the CLAIMED one is not re-offered.
-ok(!claimable.claimable.some((c) => c.token === anon.token), 'an already-claimed token is never offered again');
+check(!claimable.claimable.some((c) => c.token === anon.token), 'an already-claimed token is never offered again');
 
-console.log(out.join('\n'));
 sink.close();
 await b.close();
-process.exit(out.some((l) => l.startsWith('FAIL')) ? 1 : 0);
+check.done();

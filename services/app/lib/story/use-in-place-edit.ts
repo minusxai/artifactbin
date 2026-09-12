@@ -38,7 +38,7 @@ import { editBlock } from '@/lib/editor-v2/block-edit';
 import { replaceProseRegion } from '@/lib/editor-v2/source-edit';
 import { composeSource, type ComposableFormatEdit } from '@/lib/story/edit-compose';
 
-export interface InPlaceEditOptions {
+interface InPlaceEditOptions {
   onError?: (message: string) => void;
   onRejectedEdit?: (fragment: string) => void;
   /** The live document's iframe. Never remounted — that is the whole point. */

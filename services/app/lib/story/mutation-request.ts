@@ -11,7 +11,7 @@ import { json } from '@/lib/http';
 import { DECL_NAME_RE, type Scalar, type Row } from './dataflow';
 import { parseLocalTables } from './local-tables';
 
-export interface MutationRequest {
+interface MutationRequest {
   localTables?: Record<string, Row[]>;
   mutation: string;
   values?: Record<string, Scalar>;

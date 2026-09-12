@@ -1,12 +1,11 @@
 import { expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { parseJsx } from '@/lib/jsx';
 import { DataTable } from '@/components/kit/data-table';
 import { renderStoryNodes } from '../interpreter';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 it('repeats keyed signal rows and keeps instance identity on reorder', () => {
-  const parsed = parseJsx('<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>');
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow('<For id="orders" each={$orders} keyBy="order_id"><p id="customer">{$_row.customer}</p></For>');
   const a = {order_id: 'a', customer: 'Alice'}, b = {order_id: 'b', customer: 'Bob'};
   const tree = (orders: unknown[]) => <>{renderStoryNodes(parsed.nodes, {components:{}, values:{orders}})}</>;
   const view = render(tree([a,b]));
@@ -21,8 +20,7 @@ it('repeats keyed signal rows and keeps instance identity on reorder', () => {
 });
 
 it('uses table results, renders empty results and rejects invalid keys visibly', () => {
-  const parsed = parseJsx('<For id="orders" each={$orders} keyBy="id"><p id="name">{$_row.name}</p></For>');
-  if(!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow('<For id="orders" each={$orders} keyBy="id"><p id="name">{$_row.name}</p></For>');
   const tree = (rows: Record<string,unknown>[]) => <>{renderStoryNodes(parsed.nodes,{components:{},tables:{orders:{rows}}})}</>;
   const view=render(tree([{id:1,name:'numeric'},{id:'1',name:'string'}]));
   expect(screen.getByText('numeric').id).not.toBe(screen.getByText('string').id);
@@ -32,8 +30,7 @@ it('uses table results, renders empty results and rejects invalid keys visibly',
 });
 
 it('rewrites labels and ARIA references per instance while refusing injected handlers and URLs', () => {
-  const parsed=parseJsx('<For id="orders" each={$orders} keyBy="id"><label id="label" for="field">Name</label><input id="field" aria-labelledby="label"/><a id="link" href="$_row.url" onclick="bad">Visit</a></For>');
-  if(!parsed.ok) throw new Error(parsed.error);
+  const parsed=parseJsxOrThrow('<For id="orders" each={$orders} keyBy="id"><label id="label" for="field">Name</label><input id="field" aria-labelledby="label"/><a id="link" href="$_row.url" onclick="bad">Visit</a></For>');
   const view=render(<>{renderStoryNodes(parsed.nodes,{components:{},tables:{orders:{rows:[{id:'a',url:'javascript:alert(1)'},{id:'b',url:'https://example.com'}]}}})}</>);
   const labels=[...view.container.querySelectorAll('label')], fields=[...view.container.querySelectorAll('input')];
   labels.forEach((label,i)=>{expect(label.htmlFor).toBe(fields[i].id);expect(fields[i].getAttribute('aria-labelledby')).toBe(label.id)});
@@ -42,16 +39,14 @@ it('rewrites labels and ARIA references per instance while refusing injected han
 });
 
 it('scopes unkeyed DataTable template DOM IDs without inventing durable row targets',()=>{
- const parsed=parseJsx('<DataTable id="table" rows={[{name:"Alice"},{name:"Bob"}]} columns={[{name:"name",type:"string"}]}><Column col="name"><p id="person">{$_row.name}</p></Column></DataTable>');
- if(!parsed.ok)throw new Error(parsed.error);
+ const parsed=parseJsxOrThrow('<DataTable id="table" rows={[{name:"Alice"},{name:"Bob"}]} columns={[{name:"name",type:"string"}]}><Column col="name"><p id="person">{$_row.name}</p></Column></DataTable>');
  const view=render(<>{renderStoryNodes(parsed.nodes,{components:{DataTable:DataTable as React.ComponentType<Record<string,unknown>>}})}</>);
  expect(screen.getByText('Alice').id).not.toBe(screen.getByText('Bob').id);
  expect(view.container.querySelector('[data-mx-comment-target]')).toBeNull();
 });
 
 it('gives a missing-item fallback a real owner surface and refuses shared bindings',()=>{
- const parsed=parseJsx('<For id="orders" each={$orders} keyBy="id"><input value="$shared"/></For>');
- if(!parsed.ok)throw new Error(parsed.error);
+ const parsed=parseJsxOrThrow('<For id="orders" each={$orders} keyBy="id"><input value="$shared"/></For>');
  const view=render(<>{renderStoryNodes(parsed.nodes,{components:{},tables:{orders:{rows:[{id:'a'}]}}})}</>);
  expect(screen.getByRole('alert').textContent).toContain('Bound controls');
  expect((view.container.querySelector('#orders') as HTMLElement).style.display).not.toBe('contents');
@@ -60,8 +55,7 @@ it('gives a missing-item fallback a real owner surface and refuses shared bindin
 
 
 it('renders unkeyed rows by index with scoped DOM references and only an owner comment surface',()=>{
- const parsed=parseJsx('<For id="orders" each={$orders}><label id="label" for="field">{$_row.name}</label><input id="field" aria-labelledby="label"/></For>');
- if(!parsed.ok)throw new Error(parsed.error);
+ const parsed=parseJsxOrThrow('<For id="orders" each={$orders}><label id="label" for="field">{$_row.name}</label><input id="field" aria-labelledby="label"/></For>');
  const tree=(orders:unknown[]) => <>{renderStoryNodes(parsed.nodes,{components:{},values:{orders}})}</>;
  const view=render(tree([{name:'Alice'},{name:'Bob'}]));
  const alice=screen.getByText('Alice');
@@ -77,7 +71,7 @@ it('renders unkeyed rows by index with scoped DOM references and only an owner c
 });
 
 it.each(['keyBy=""','keyBy={12}','keyBy={$field}'])('rejects an explicitly malformed optional key: %s',(key)=>{
- const parsed=parseJsx(`<For each={$orders} ${key}><p>{$_row.name}</p></For>`);if(!parsed.ok)throw new Error(parsed.error);
+ const parsed=parseJsxOrThrow(`<For each={$orders} ${key}><p>{$_row.name}</p></For>`);
  render(<>{renderStoryNodes(parsed.nodes,{components:{},values:{orders:[{name:'Alice'}]}})}</>);
  expect(screen.getByRole('alert').textContent).toContain('keyBy');
 });

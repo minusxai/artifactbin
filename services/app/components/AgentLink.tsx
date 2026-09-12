@@ -7,14 +7,10 @@
  * instruction carries no credential: the agent reaches the server through the
  * afbin CLI, which authenticates itself in the browser.
  *
- * ONE BEHAVIOUR, EVERY SURFACE. The landing hero used to opt out of the
- * navigation (a `reveal` prop that showed the instruction and stayed put)
- * while the landing FOOTER, the docs page and the signed-in home all
- * navigated — the same button, drawn three times on two pages, meaning two
- * different things. There is no prop for it now: create, copy, say so, count
- * the reader down, go. The instruction is on the document page too
- * (`CopyAgentPrompt`), which is where the clipboard-failed wording already
- * sent people, so arriving there loses nothing.
+ * ONE BEHAVIOUR, EVERY SURFACE — landing hero, landing footer, docs page and
+ * signed-in home. There is no prop to opt out of the navigation: create,
+ * copy, say so, count the reader down, go. The instruction is on the document
+ * page too (`CopyAgentPrompt`), so arriving there loses nothing.
  *
  * THE PAUSE IS NARRATED. A beat before navigating is what makes the "copied"
  * feedback land, but an unexplained one reads as a hang and the move that

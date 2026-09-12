@@ -4,7 +4,7 @@ import path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { getRequestListener } from '@hono/node-server';
-import { withHttpServer } from '@/__tests__/net';
+import { withHttpServer } from '@artifactbin/test-support/net';
 import { inProcess, overHttp, actorReceiver, actorOf } from '@artifactbin/utils';
 import { createProxy } from '../../../proxy/src/parts';
 import { testProxyOptions } from '../../../proxy/__tests__/helpers';

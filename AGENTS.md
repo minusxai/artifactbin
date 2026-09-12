@@ -48,7 +48,7 @@
   the proxy. Local and HTTP service implementations must preserve the same contracts.
 - Keep bearer secrets out of URLs, documents, logs and storage; test tokens and real user credentials
   are distinct. Use `mxmx_test_*` accounts for disposable browser flows. Read local OTPs with
-  `npm run dev:otp -- <email>` from the protected outbox, never a public app endpoint.
+  `npm run dev:otp`, never a public app endpoint.
 - UI tests use accessible names; interactive controls need accessible labels. App tooltips use
   `components/Tooltip.tsx`, not native `title` tooltips.
 - Tests should exercise real handlers against isolated state. Reset database and limiter state between
@@ -57,12 +57,13 @@
 
 ## Commands
 
-Run commands from this repository root.
+Run these from the repository root. Keep the list complete as root scripts come and go.
 
 - `npm ci` — install the pinned workspace dependencies.
 - `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition; default http://localhost:3030.
 - `npm run dev:app` — app with local SQL/browser, without the proxy; same default port.
+- `npm run dev:otp -- <email>` — a local login code from the protected outbox.
 - `npm run validate` — name guard and incremental TypeScript, including unused declarations;
   shared utils/contracts also use `noUncheckedIndexedAccess` for downstream compatibility.
 - `npm test` — affected api/node/ui + CLI tests, at most 50 files combined. Exit 2: use PR CI,
@@ -70,21 +71,22 @@ Run commands from this repository root.
   `-- --reuse` reuses matching evidence. Config/package edits may defer everything; that is expected.
 - CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:integration`, `build`,
   `test:gates` and agent smoke. Do not invoke these locally to work around deferral.
-- `npm run generate:routes`, `npm run generate-story-ui-classes`, `npm run render:schema` — generated inputs.
+- `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`, `build:runtime` —
+  generated inputs.
+- `npm run generate:theme-previews`, `generate:og` — theme previews and unfurl images.
+- `npm run release:cli` — bump the CLI release; see Change checks.
 - `npm run eval -- --help` and `npm run eval:report -- --help` — agent eval CLI; see
   [docs/evals.md](docs/evals.md) before running paid legs.
 
 ## Change checks
 
-- CLI releases require `npm run release:cli`, then `npm run generate:teaching -w services/cli`.
-  The release command updates the CLI version, lockfile, installer and
-  `services/app/public/chat/release.json` together. Without the bump, the live installer serves
-  the old binary. CI publishes on a version change after main passes; downstream deployments
-  must advance their submodule pin to ship the release pointer.
-
+- CLI releases require `npm run release:cli`, then `npm run generate:teaching -w services/cli`;
+  without the bump the live installer serves the old binary. What each step rewrites is in
+  [services/cli/README.md](services/cli/README.md). CI publishes on a version change after main
+  passes; downstream deployments must advance their submodule pin to ship the release pointer.
 - Schema changes update `services/app/lib/schema.ts`, schema ownership tests, and generated SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
-  setup planner's `ENV_EXAMPLE_BASE64` snapshot in `scripts/lib/setup-plan.mjs` where applicable.
+  setup planner's `.env.example` snapshot via `npm run generate:env-snapshot` (its test fails when it has drifted).
 - PGLite owns one serialized connection per process. Do not enqueue an out-of-transaction query from
   inside a transaction callback. Send notifications/telemetry after commit; preserve atomic edits.
 - Preserve access checks on reads, writes, exports, live streams and dataset mutations. Public/unlisted
@@ -96,8 +98,8 @@ Run commands from this repository root.
 
 ## Delegated work
 
-The orchestrator defines and seeds contracts, core tests and a bounded brief; the implementer completes
-that brief without further delegation. Review the diff and matching verification evidence; reproduce risky behavior or invalidated checks.
-Use isolated worktrees, data directories and port blocks; never two implementers in one checkout.
-Only one agent runs browser gates at a time. Keep PRs scoped per repository and check their CI before merge.
-See [docs/agent-workflows.md](docs/agent-workflows.md) for the handoff and review procedure.
+The orchestrator defines and seeds contracts, core tests and a bounded brief; the implementer
+completes that brief without further delegation. Use isolated worktrees, data directories and port
+blocks; never two implementers in one checkout, and only one agent runs browser gates at a time.
+Keep PRs scoped per repository. The handoff and review procedure is in
+[docs/agent-workflows.md](docs/agent-workflows.md).

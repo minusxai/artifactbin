@@ -11,6 +11,7 @@ import { splitHelmet, validateHelmet } from '@/lib/story/helmet';
 import { collectRefNameUses, validateDataflow } from '@/lib/story/dataflow';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_UI_COMPONENT_NAME_LIST, STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const SRC = kitchenSinkMarkup({ dataset: 'ksdataset01', recipe: 'ksrecipe01', image: 'ksimage01', pdf: 'kspdf01' });
 
@@ -18,8 +19,7 @@ describe('kitchen-sink doc', () => {
   it('parses and passes the full story publish gate', () => {
     expect(parseJsx(SRC).ok).toBe(true);
     // The publish gate's shape: the Helmet by its own grammar, the BODY by lib/jsx (jsx-tier).
-    const parsed = parseJsx(SRC);
-    if (!parsed.ok) throw new Error(parsed.error);
+    const parsed = parseJsxOrThrow(SRC);
     expect(validateHelmet(parsed.nodes)).toEqual([]);
     const split = splitHelmet(parsed.nodes);
     expect(validateJsx(split.body, { components: JSX_STORY_COMPONENT_NAMES, allowedHtmlTags: STORY_HTML_TAGS, stylePolicy: 'no-inline-style' })).toEqual([]);

@@ -4,11 +4,11 @@ import {parsePing,parseSrcset} from '@/lib/story/managed-url-list';
 export interface ManagedAssetsConfig {origin: string; resolveUrl: string}
 export type ManagedAssetKind='image'|'font'|'pdf'|'script'|'binary';
 export type ManagedAssetRelay=(url:string,kind?:ManagedAssetKind,signal?:AbortSignal)=>Promise<{url:string}|{refused:string}>;
-export interface ManagedAssetResolver {
+interface ManagedAssetResolver {
   resolve(url:string,kind:ManagedAssetKind):Promise<string>;
   dispose():void;
 }
-export function isManagedAssetUrl(url:URL,origin:string):boolean {
+function isManagedAssetUrl(url:URL,origin:string):boolean {
   return url.origin===origin&&!url.username&&!url.password&&!url.hash&&(
     (/^\/assets\/[a-f0-9]{64}$/.test(url.pathname)&&[...url.searchParams.keys()].every(key=>key==='v'||key==='w'))||
     (/^\/assets\/ref\/[A-Za-z0-9]{6}$/.test(url.pathname)&&!url.search)

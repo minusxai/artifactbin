@@ -1,8 +1,8 @@
 /**
  * POST /api/tokens — the OPERATOR's mint. Not agent-facing (an agent is
  * connected by the afbin CLI's browser approval, which spends the internal
- * mint); `npm run mint` and the ops scripts call this with the deployment's
- * shared secret.
+ * mint). The caller is the downstream deployment's stack walk, which presents
+ * the deployment's shared secret.
  *
  * The secret is read per REQUEST, not at module load, so a test (or an
  * operator rotating the value) is answered by the value this process holds

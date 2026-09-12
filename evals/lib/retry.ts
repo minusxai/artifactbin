@@ -17,7 +17,7 @@
  */
 const TRANSIENT_STATUS = new Set([502, 503, 504, 429]);
 
-export interface RetryOptions {
+interface RetryOptions {
   attempts?: number;
   /** Grows linearly: a deployment mid-roll needs seconds, not milliseconds. */
   delayMs?: number;
@@ -35,7 +35,7 @@ export function isTransientStatus(status: number): boolean {
  * asked four times with backoff between. Caught by pointing the real thing at a
  * server that returns 400: it made four requests where it should have made one.
  */
-export class FatalError extends Error {}
+class FatalError extends Error {}
 
 /**
  * Runs `attempt` until it returns without signalling a transient failure.

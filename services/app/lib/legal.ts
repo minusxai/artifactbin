@@ -26,7 +26,7 @@
 
 export type LegalSlug = 'privacy' | 'terms';
 
-export interface LegalSection {
+interface LegalSection {
   heading: string;
   /** Paragraphs, in order. */
   body?: string[];
@@ -34,7 +34,7 @@ export interface LegalSection {
   bullets?: string[];
 }
 
-export interface LegalDoc {
+interface LegalDoc {
   slug: LegalSlug;
   title: string;
   /** Shown under the title; the date the text last changed. */

@@ -23,8 +23,8 @@
  * viewport is a photograph of the 640px copy.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx } from '@/lib/jsx';
 import { assetUrlFor, mapExternalImageSources, type WebAssetBox } from '../asset-url';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const URL_A = 'https://cdn.example/photo.png';
 
@@ -40,8 +40,7 @@ const imgs = (n: number, url = URL_A) =>
   `<div>${Array.from({ length: n }, (_, i) => `<img src="${url}" alt="i${i}" />`).join('')}</div>`;
 
 const mapped = (source: string, lookup: (u: string) => WebAssetBox | boolean, opts?: { capture?: boolean }) => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error('parse');
+  const parsed = parseJsxOrThrow(source);
   return mapExternalImageSources(parsed.nodes, lookup, opts);
 };
 
@@ -156,8 +155,7 @@ describe('size variants', () => {
   });
 
   it('leaves a <Video> poster alone — it is a background, not a laid-out image', () => {
-    const parsed = parseJsx(`<Video src="https://v.example/v.mp4" poster="${URL_A}" />`);
-    if (!parsed.ok) throw new Error('parse');
+    const parsed = parseJsxOrThrow(`<Video src="https://v.example/v.mp4" poster="${URL_A}" />`);
     const out = JSON.stringify(mapExternalImageSources(parsed.nodes, () => wide));
     expect(out).toContain(assetUrlFor(URL_A, wide));
     expect(out).not.toContain('srcSet');

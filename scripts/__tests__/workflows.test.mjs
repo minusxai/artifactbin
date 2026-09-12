@@ -1,0 +1,214 @@
+/**
+ * THE PUBLISH AND CI WORKFLOWS, as source text — all four consumed images, the lean
+ * pass, and the compose job.
+ *
+ * The published images exist to be PULLED by a deployment: app, SQL, and
+ * browser by the proprietary split shape, and the full one by a self-host
+ * that wants one container. The OSS proxy remains built and exercised in CI,
+ * but is not published because no deployment pulls it. A publish.yml that
+ * stops building any consumed image is
+ * a silent drift: the app image moves on, the service images rot at an old
+ * commit, and a deployment composes halves that were never shipped together.
+ * Pinned here, structurally (parsed YAML, not regex): every job exists, each
+ * names ITS Dockerfile (not the root one — that is the full image), builds
+ * from the REPO ROOT context (the Dockerfiles COPY `services/` from it), for
+ * the staging box's arch, and is tagged like every other image this repo
+ * publishes.
+ *
+ * CI builds the full image separately. The compose job builds each lean image
+ * once, checks contents, standalone behavior and size, then boots those same
+ * images together and walks the service boundaries.
+ */
+import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import yaml from 'yaml';
+import { describe, expect, it } from 'vitest';
+
+const root = path.resolve(import.meta.dirname, '../..');
+const publishPath = path.join(root, '.github', 'workflows', 'publish.yml');
+const ciPath = path.join(root, '.github', 'workflows', 'ci.yml');
+const wf = yaml.parse(readFileSync(publishPath, 'utf8'));
+const ci = yaml.parse(readFileSync(ciPath, 'utf8'));
+
+const buildPush = (job) => wf.jobs[job]?.steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
+const metadata = (job) => wf.jobs[job]?.steps.find((s) => s.uses?.startsWith('docker/metadata-action'));
+
+/** The four images a deployment pulls, and the Dockerfile each is built from. */
+const PUBLISHED_IMAGES = [
+  { suffix: '', file: 'Dockerfile' },
+  { suffix: '-app', file: 'services/app/Dockerfile' },
+  { suffix: '-sql', file: 'services/sql/Dockerfile' },
+  { suffix: '-browser', file: 'services/browser/Dockerfile' },
+];
+
+describe.each(PUBLISHED_IMAGES)('publish.yml: the %s image', ({ suffix, file }) => {
+  const job = suffix ? `publish${suffix}` : 'publish';
+  it(`has a ${job} job that builds and pushes ghcr.io/<owner>/artifactbin${suffix}`, () => {
+    expect(wf.jobs[job], `publish.yml has no ${job} job`).toBeDefined();
+    const images = metadata(job)?.with?.images;
+    expect(String(images)).toContain(`artifactbin${suffix}`);
+  });
+  it(`builds from ${file} with the REPO ROOT as context, for linux/amd64, and pushes`, () => {
+    const with_ = buildPush(job)?.with ?? {};
+    expect(with_.file).toBe(file);
+    expect(with_.context).toBe('.');
+    expect(with_.platforms).toBe('linux/amd64');
+    expect(with_.push).toBe(true);
+  });
+  it('is tagged like every other image this repo publishes (sha + latest)', () => {
+    const tags = String(metadata(job)?.with?.tags ?? '');
+    expect(tags).toContain('type=sha,prefix=');
+    expect(tags).toContain('type=raw,value=latest');
+  });
+});
+
+describe('publish.yml: the image set as a whole', () => {
+  it('publishes exactly the four consumed images, no more and no fewer', () => {
+    const allImages = Object.keys(wf.jobs)
+      .flatMap((j) => wf.jobs[j].steps)
+      .filter((s) => s.uses?.startsWith('docker/metadata-action'))
+      .map((s) => String(s.with?.images));
+    for (const { suffix } of PUBLISHED_IMAGES) {
+      // The image name rides a `${{ github.repository_owner }}` prefix in the
+      // YAML, so match on the suffix the deployment pulls.
+      expect(allImages.some((i) => i.includes(`artifactbin${suffix}`)), `artifactbin${suffix} gone from publish.yml`).toBe(true);
+    }
+    expect(allImages).toHaveLength(4);
+    expect(wf.jobs['publish-proxy']).toBeUndefined();
+    expect(allImages.some((i) => i.includes('artifactbin-proxy'))).toBe(false);
+  });
+  it('carries no stale multi-target vocabulary (app-lean / target:)', () => {
+    const publish = readFileSync(publishPath, 'utf8');
+    for (const stale of ['app-lean', 'target:']) {
+      expect(publish, `publish.yml still says "${stale}"`).not.toContain(stale);
+    }
+  });
+  it('the root Dockerfile carries no stale multi-target vocabulary either', () => {
+    const dockerfile = readFileSync(path.join(root, 'Dockerfile'), 'utf8');
+    for (const stale of ['app-lean', 'target:']) {
+      expect(dockerfile, `the root Dockerfile still says "${stale}"`).not.toContain(stale);
+    }
+  });
+  it('dispatches the exact commit only after every public image is published', () => {
+    const publish = readFileSync(publishPath, 'utf8');
+    expect(publish).toContain('needs: [publish, publish-app, publish-sql, publish-browser]');
+    expect(publish).toContain('gh workflow run artifactbin-staging-deploy.yaml');
+    expect(publish).toContain('-f oss_sha="${GITHUB_SHA}"');
+  });
+});
+
+describe('the public repository boundary', () => {
+  it('contains no proprietary deployment identifiers in any tracked source file', () => {
+    const files = execFileSync('git', ['ls-files', '-z'], { cwd: root }).toString().split('\0').filter(Boolean);
+    const markers = [['artifactbin', 'prod'].join('-'), ['afbin', 'prod'].join('_')];
+    const leaks = files.flatMap((file) => {
+      const full = path.join(root, file);
+      let text = ''; try { text = readFileSync(full, 'utf8'); } catch { return []; }
+      return markers.filter((marker) => text.includes(marker)).map((marker) => `${file}: ${marker}`);
+    });
+    expect(leaks).toEqual([]);
+  });
+});
+
+describe('workflow supply-chain pins', () => {
+  it('uses immutable full commit SHAs for every third-party action', () => {
+    for (const file of ['ci.yml', 'publish.yml', 'publish-cli.yml']) {
+      const text = readFileSync(path.join(root, '.github/workflows', file), 'utf8');
+      const refs = [...text.matchAll(/uses:\s+([^\s#]+)\s*(?:#.*)?$/gm)].map((m) => m[1]);
+      expect(refs.length, file).toBeGreaterThan(0);
+      for (const ref of refs) expect(ref, `${file}: ${ref}`).toMatch(/@[0-9a-f]{40}$/);
+    }
+  });
+});
+
+describe('dependency security', () => {
+  // SourceEditor bundles the pinned editor and worker at build time. The
+  // browser loads those local assets; the Node image needs no second copy.
+  it('pins Monaco — the copy that SHIPS — outside the vulnerable DOMPurify advisory range', () => {
+    // ONE HOME per shared devDependency: the app bundles the editor, so the app package declares
+    // the pin and the root declares nothing. The assertion used to demand the pin in BOTH files
+    // and went red the moment the root's copy was removed — a version that exists in one place
+    // cannot also be asserted in two.
+    const read = (file) => JSON.parse(readFileSync(path.join(root, file), 'utf8'));
+    expect(read('services/app/package.json').devDependencies?.['monaco-editor']).toBe('0.53.0');
+    expect(read('package.json').devDependencies?.['monaco-editor'], 'the root must not keep a second copy').toBeUndefined();
+    // Never a runtime dependency anywhere: it is a build input, not something the server loads.
+    for (const file of ['package.json', 'services/app/package.json']) {
+      expect(read(file).dependencies?.['monaco-editor'], file).toBeUndefined();
+    }
+  });
+});
+
+describe('ci.yml: the image job proves what ships', () => {
+  const steps = ci.jobs.image?.steps ?? [];
+  it('boots the FULL image built from the root Dockerfile', () => {
+    const fullBuild = steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
+    expect(fullBuild?.with?.file).toBe('Dockerfile');
+    expect(fullBuild?.with?.context).toBe('.');
+  });
+  it('runs the LEAN pass: all five lean images through image-checks.mjs, in a job the roll-up gates', () => {
+    const hosting = Object.entries(ci.jobs).filter(([, job]) =>
+      (job?.steps ?? []).some((s) => String(s.run ?? '').includes('image-checks.mjs')),
+    );
+    expect(hosting.length, 'no job in ci.yml runs image-checks.mjs').toBeGreaterThan(0);
+    const leanRuns = hosting.flatMap(([, job]) => (job.steps ?? []).map((s) => String(s.run ?? '')));
+    for (const kind of ['app', 'proxy', 'sql', 'browser', 'events']) {
+      const composition = yaml.parse(readFileSync(path.join(root, 'docker-compose.lean.yml'), 'utf8'));
+      expect(composition.services[kind].build.dockerfile).toBe(`services/${kind}/Dockerfile`);
+      expect(leanRuns.some((r) => r.includes(`image-checks.mjs ${kind}`)), `image-checks never checks the ${kind} image`).toBe(true);
+    }
+    const gated = ci.jobs.test?.needs ?? [];
+    for (const [name] of hosting)
+      expect(gated, `the roll-up does not wait on ${name}, so its lean pass cannot fail a merge`).toContain(name);
+  });
+});
+
+describe('ci.yml: the compose job walks the split shape', () => {
+  it('exists, boots docker-compose.lean.yml and runs test-compose-lean.mjs', () => {
+    const job = ci.jobs.compose;
+    expect(job, 'ci.yml has no compose job').toBeDefined();
+    const runs = (job?.steps ?? []).map((s) => String(s.run ?? ''));
+    expect(runs.some((r) => r.includes('docker-compose.lean.yml')), 'the compose job never boots docker-compose.lean.yml').toBe(true);
+    expect(runs.some((r) => r.includes('test-compose-lean.mjs')), 'the compose job never runs the walk').toBe(true);
+  });
+  it('builds the lean images once and checks the same images before the composition walk', () => {
+    expect(ci.jobs).not.toHaveProperty('lean');
+    const runs = (ci.jobs.compose?.steps ?? []).map((s) => String(s.run ?? ''));
+    const build = runs.findIndex((r) => r.includes('docker compose build'));
+    const checks = runs.findIndex((r) => r.includes('image-checks.mjs'));
+    const boot = runs.findIndex((r) => r.includes('docker compose up'));
+    expect(build).toBeGreaterThanOrEqual(0);
+    expect(checks).toBeGreaterThan(build);
+    expect(boot).toBeGreaterThan(checks);
+    expect(runs[boot]).toContain('--no-build');
+    for (const kind of ['app', 'proxy', 'sql', 'browser', 'events']) {
+      expect(runs[checks]).toContain(`image-checks.mjs ${kind} artifactbin-lean-${kind}`);
+    }
+  });
+  it('is given the ~30 minutes the plan budgets for it', () => {
+    expect(Number(ci.jobs.compose?.['timeout-minutes'] ?? 0)).toBeGreaterThanOrEqual(30);
+  });
+  it('provides every secret required by the hardened lean composition', () => {
+    const env = ci.jobs.compose?.env;
+    for (const name of ['AUTH__SECRET', 'CONTRACT__ACTOR_SECRET', 'INTERNAL__SERVICE_SECRET', 'POSTGRES_PASSWORD']) {
+      expect(env?.[name], `compose boot is missing ${name}`).toBeTruthy();
+    }
+  });
+});
+
+describe('every lean Dockerfile installs only its own package', () => {
+  // A Dockerfile whose runtime install reaches outside its package is the
+  // maze coming back: the whole point of the lean images is that npm's own
+  // workspace resolution — `-w services/<its own package>` — decides the
+  // closure, never a hand-written list.
+  it.each([
+    ['app', 'services/app/Dockerfile'],
+    ['proxy', 'services/proxy/Dockerfile'],
+    ['sql', 'services/sql/Dockerfile'],
+    ['browser', 'services/browser/Dockerfile'],
+  ])('%s installs with -w services/%s', (_name, file) => {
+    const text = readFileSync(path.join(root, file), 'utf8');
+    expect(text).toContain(`-w services/${_name}`);
+  });
+});

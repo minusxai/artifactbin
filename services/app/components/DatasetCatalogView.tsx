@@ -27,7 +27,7 @@ export function CatalogRows({ result, label = 'Table preview' }: { result: Catal
 const PAGE_SIZE = 50;
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const selectClass = 'rounded border border-edge bg-surface px-3 py-2 font-mono text-xs text-fg';
-export type ExplorerCatalog = Pick<DatasetCatalog, 'kind' | 'defaultSchema' | 'refreshSeconds'> & { tables: Array<{ schema: string; name: string }> };
+type ExplorerCatalog = Pick<DatasetCatalog, 'kind' | 'defaultSchema' | 'refreshSeconds'> & { tables: Array<{ schema: string; name: string }> };
 export type CatalogQuery = (sql: string, options: { limit: number; offset: number; refresh?: boolean }) => Promise<CatalogPreview>;
 
 /** Readers query only the public catalog. Credentials and notebook SQL never enter this adapter. */

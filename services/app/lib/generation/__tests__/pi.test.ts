@@ -1,5 +1,5 @@
 import { afterAll, expect, it } from "vitest";
-import { withHttpServer } from "@/__tests__/net";
+import { withHttpServer } from "@artifactbin/test-support/net";
 import { createPiGeneration } from "../pi";
 import { parseGenerationModels } from "../configuration";
 

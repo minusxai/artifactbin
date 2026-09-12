@@ -35,14 +35,15 @@
  *
  *     node scripts/gate-folders.mjs [base]
  */
+import { servedTopLevel } from './lib/page-facts.mjs';
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('folders');
 const stamp = Date.now().toString(36);
 const OWNER_EMAIL = `mxmx_test_folders_owner_${stamp}@example.com`;
 const EDITOR_EMAIL = `mxmx_test_folders_editor_${stamp}@example.com`;
@@ -124,7 +125,7 @@ check(html.includes('Opening Note') && html.includes('Quiet Note'), 'both childr
 check(html.includes('Field Notes'), 'and so is the folder’s own name');
 
 await owner.goto(`${BASE}/a/${folder.id}`, { waitUntil: 'load' });
-check((await owner.locator('iframe[title="artifact"]').count()) === 0, 'a folder is never framed — it has no document');
+check(await servedTopLevel(owner), 'a folder is never framed — it has no document');
 await owner.locator('[aria-label^="Open Opening Note"]').waitFor({ timeout: 20000 });
 await owner.locator('[aria-label^="Open Quiet Note"]').waitFor({ timeout: 20000 });
 check(true, 'the owner’s page draws both children');
@@ -328,8 +329,4 @@ check(errors.length === 0, `no page error on either render of the listing${error
 await browser.close();
 sink.close();
 
-if (failures.length) {
-  console.error(`\n${failures.length} failure(s):\n- ${failures.join('\n- ')}`);
-  process.exit(1);
-}
-console.log('\nfolders gate: all green');
+check.done();

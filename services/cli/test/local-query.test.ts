@@ -1,9 +1,10 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
+import {cliHarness} from './harness';
 
 test('local SQL uses bound parameters, supports mixed-case file extensions, and never authenticates',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-local-query-'));let network=0;
@@ -28,4 +29,20 @@ test('local query pagination rejects a cursor after the input data changes',asyn
   const second=await invoke(['--cursor',cursor]);assert.equal(second.code,0);assert.deepEqual(second.result.results[0].rows,[{n:20}]);assert.equal(second.result.results[0].next_cursor,null);
   await writeFile(join(root,'rows.json'),'[{"n":42}]');const stale=await invoke(['--cursor',cursor]);assert.equal(stale.result.error.code,'invalid_cursor');
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+describe('declared mutations', () => {
+  const head=(id:string,extra:Record<string,unknown>={})=>({id,version:2,edit_id:'e2',state:'b'.repeat(64),format:'markup',title:'Report',visibility:'unlisted',markup:'<p>Remote</p>',capabilities:{read:true,edit:true,mutation_receipts:true},...extra});
+   const harness=(prefix:string)=>cliHarness(prefix);
+
+  test('query --write --dry-run validates a declared mutation without executing it, and --name --write runs it durably',async()=>{
+   const h=await harness('afbin-seed-declared-mutation-');
+   try{
+    await writeFile(join(h.root,'doc.yaml'),'type: artifact\nid: abc123\n');
+    assert.equal(await h.invoke(['query','doc.yaml','--write','--name','add_row','--param','name=x','--dry-run','--json'],({method,path})=>method==='GET'?Response.json(head('abc123',{mutations:[{name:'add_row',params:[{name:'name',type:'string'}]}]})):Response.json({error:`unexpected ${method} ${path}`},{status:500})),0,h.out.join(''));
+    assert.equal(h.last().dry_run,true);assert.ok(h.calls.every(c=>c.method==='GET'),'dry-run never mutates');
+    assert.equal(await h.invoke(['query','doc.yaml','--write','--name','add_row','--param','name=x','--json'],({method,path})=>method==='POST'&&path==='/api/artifacts/abc123/mutate'?Response.json({id:'abc123',version:3,affected:1,rowCount:1}):Response.json(head('abc123',{mutations:[{name:'add_row',params:[{name:'name',type:'string'}]}]}))),0,h.out.join(''));
+    const mutate=h.calls.find(c=>c.method==='POST');assert.ok(mutate?.key,'declared mutations use a durable operation');assert.deepEqual((mutate?.body as {name:string;values:unknown}).values,{name:'x'});
+   }finally{await h.cleanup();}
+  });
 });

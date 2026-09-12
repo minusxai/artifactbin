@@ -146,7 +146,7 @@ function markupEcho(sent: unknown, stored: string | null): Record<string, unknow
  * would have to sniff each element to know what it is reading. So the asset
  * half is `asset_warnings`, present only when there is something to say.
  */
-export const assetWarningsEcho = (warnings: AssetWarning[] | undefined): Record<string, unknown> =>
+const assetWarningsEcho = (warnings: AssetWarning[] | undefined): Record<string, unknown> =>
   (warnings?.length ? { asset_warnings: warnings } : {});
 
 /**
@@ -159,7 +159,7 @@ export const assetWarningsEcho = (warnings: AssetWarning[] | undefined): Record<
  * instead of refusing it (lib/jsx/repair), so this key is the contract, not a
  * courtesy. Present only when something was repaired.
  */
-export const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<string, unknown> =>
+const sourceRepairsEcho = (repairs: SourceRepair[] | undefined): Record<string, unknown> =>
   (repairs?.length ? { source_repairs: repairs } : {});
 
 /** Full wire shape for a single-artifact read. */

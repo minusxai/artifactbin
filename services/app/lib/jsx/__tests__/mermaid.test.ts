@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseJsx } from '../parse';
 import { validateJsx } from '../validate';
 import { STORY_HTML_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 function errors(source: string) {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   return validateJsx(parsed.nodes, { components: STORY_UI_COMPONENT_NAME_LIST, allowedHtmlTags: STORY_HTML_TAGS, stylePolicy: 'no-inline-style' });
 }
 

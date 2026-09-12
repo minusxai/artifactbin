@@ -8,7 +8,7 @@ import {assetInput,planDependencies,substituteDependencies} from './dependencies
 import {atomicWrite,digest,readOptional} from './files';
 import {CliError} from './commands';
 import {resourceContent} from './resource-file';
-export interface Diagnostic {code:string;message:string;fix?:string;start?:number;end?:number;severity?:'error'|'notice'}
+interface Diagnostic {code:string;message:string;fix?:string;start?:number;end?:number;severity?:'error'|'notice'}
 export async function validateFiles(workspace:Workspace,paths?:string[],fix=false,options:{skipMissingTracked?:boolean}={}){
  const files:Array<{path:string;valid:boolean;fixed:boolean;diagnostics:Diagnostic[]}>=[];
  for(const file of await inspectWorkspace(workspace,paths)){

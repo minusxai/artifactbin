@@ -1,9 +1,11 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {HttpClient} from '../src/http';
+import {HttpClient,httpStatus} from '../src/http';
+import {createServer} from 'node:http';
+import {CliError} from '../src/errors';
 
 test('ordinary writes use one conditional request, and actual 401 refreshes once without a validation GET',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-http-'));const calls:Array<{path:string;method:string;token:string|null}>=[];
@@ -45,4 +47,24 @@ test('interactive reauthentication retries the same request once and dry-run nev
  assert.equal(approvals,1);assert.equal(requests.length,2);assert.equal(requests[0],requests[1]);
  approvals=0;requests.length=0;await assert.rejects(new HttpClient({...options,readOnly:true}).request('/artifacts/preflight','POST',{}),/auth_required/);assert.equal(approvals,0);assert.equal(requests.length,1);
  const failed=new HttpClient({...options,fetch:async()=>Response.json({error:'unauthorized'},{status:401})});await assert.rejects(failed.request('/artifacts'),/auth_required/);assert.equal(approvals,1);
+});
+
+describe('reaching the server at all', () => {
+  test('an unreachable server is a refusal naming the server, and a plain-text failure keeps its HTTP status',async()=>{
+   const closed=createServer();await new Promise<void>(resolve=>closed.listen(0,'127.0.0.1',resolve));
+   const port=(closed.address() as {port:number}).port;await new Promise<void>(resolve=>closed.close(()=>resolve()));
+   await assert.rejects(new HttpClient({connection:{server:`http://127.0.0.1:${port}`,token:'test'}}).request('/remote/sessions/rs_1'),(error:unknown)=>{
+    assert.ok(error instanceof CliError);assert.equal(error.code,'transport_error');
+    assert.match(error.message,new RegExp(`Cannot reach http://127.0.0.1:${port}`));assert.match(error.fix??'',/--server/);
+    return true;
+   });
+   const server=createServer((_req,res)=>{res.writeHead(500,{'Content-Type':'text/plain'});res.end('Internal Server Error');});
+   await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+   try{
+    const address=server.address() as {port:number};
+    await assert.rejects(new HttpClient({connection:{server:`http://127.0.0.1:${address.port}`,token:'test'}}).request('/remote/sessions'),(error:unknown)=>{
+     assert.ok(error instanceof CliError);assert.equal(error.code,'http_500');assert.equal(httpStatus(error),500);return true;
+    });
+   }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
+  });
 });

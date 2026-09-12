@@ -3,7 +3,7 @@ import sharp from 'sharp';
 import type { BrowserService } from '@artifactbin/contracts';
 import { browserClient, serveBrowser } from '@artifactbin/browser';
 import { createBrowser } from '@artifactbin/browser/local';
-import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { gzipSync } from 'node:zlib';
 
 const assetOrigin = 'https://cached-assets.invalid';

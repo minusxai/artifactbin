@@ -19,6 +19,7 @@
 
  *   node scripts/gate-collab-edit.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -26,7 +27,6 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
 /*
  * The role control is the HOUSE dropdown (components/SelectMenu), not a native
  * <select>: an option list is drawn by the OS, which put system chrome in the
@@ -41,7 +41,7 @@ const pickRole = async (page, email, label) => {
 /** True once the row for `email` reads `label` (bounded), false if it never does. */
 const roleReads = (page, email, label, budgetMs = 10000) =>
   roleTrigger(page, email).filter({ hasText: label }).waitFor({ state: 'attached', timeout: budgetMs }).then(() => true, () => false);
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('collab-edit');
 const stamp = Date.now().toString(36);
 const OWNER_EMAIL = `mxmx_test_collab_owner_${stamp}@example.com`;
 const EDITOR_EMAIL = `mxmx_test_collab_editor_${stamp}@example.com`;
@@ -212,5 +212,4 @@ check((await editor.locator('[aria-label="Edit artifact"]').count()) === 0, 'rel
 
 await browser.close();
 await sink.close();
-if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }
-console.log('\nall good');
+check.done();

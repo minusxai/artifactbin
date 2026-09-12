@@ -1,5 +1,5 @@
 /** Accepted generic uploads and the MIME type served for each final extension. */
-export const FILE_TYPES = {
+const FILE_TYPES = {
   mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
   mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', m4a: 'audio/mp4', flac: 'audio/flac',
   glb: 'model/gltf-binary', gltf: 'model/gltf+json', obj: 'model/obj', fbx: 'application/octet-stream', stl: 'model/stl',

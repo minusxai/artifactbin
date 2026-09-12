@@ -5,7 +5,7 @@ import { checkedLocalRows } from './local-tables';
 export { localWriteTarget, SIGNALS_TABLE } from './local-target';
 
 /** A local target is a declared table Value or the reserved scalar projection. */
-export type LocalMutation = Pick<MutationDecl, 'sql' | 'target' | 'expectedAffected'>;
+type LocalMutation = Pick<MutationDecl, 'sql' | 'target' | 'expectedAffected'>;
 export interface LocalMutationResult {
   target: string;
   table: TableResult;

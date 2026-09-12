@@ -36,7 +36,7 @@ import { STORY_THEME_NAMES } from '@/lib/validation/atlas-schemas';
 export type { StoryThemeName };
 export { STORY_THEME_NAMES };
 
-export interface StoryThemeFonts {
+interface StoryThemeFonts {
   /** Display (heading) font family — a family registered in lib/data/story/story-fonts.ts. */
   display: string;
   /** Body font family. */

@@ -1,3 +1,10 @@
+import {describe,expect,it,vi} from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import {TaskSchema,type Task} from '../lib/contracts';
+import {discoverTasks} from '../lib/task-set';
+import {planAccess} from '../lib/tasks';
+
 /**
  * THE PER-TASK SCORER SEAM.
  *
@@ -8,10 +15,6 @@
  * a new task wanted. A KIND now owns its check names, its driver-side setup and
  * its product-side checks in one module, and `main.ts` asks the registry.
  */
-import { describe, expect, it, vi } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-import { TaskSchema, type Task } from '../lib/contracts';
 import {
   DriverFailure,
   TASK_KINDS,
@@ -23,7 +26,6 @@ import {
   type SetupContext,
   type TaskScorer,
 } from '../lib/score/kinds';
-import { discoverTasks } from '../lib/task-set';
 
 const TASKS_DIR = path.resolve(__dirname, '../tasks');
 
@@ -180,7 +182,8 @@ describe('the `comment` kind', () => {
   it('is refused at load without the comment it posts', () => {
     const base = { id: 'c', kind: 'comment', brief: 'b', seed: '<p>a</p>', checks: ['published'] };
     expect(() => TaskSchema.parse(base)).toThrow(/comment/);
-    expect(() => TaskSchema.parse({ ...base, comment: { path: '1', body: 'split it' } })).not.toThrow();
+    expect(TaskSchema.parse({ ...base, comment: { path: '1', body: 'split it' } }))
+      .toMatchObject({ kind: 'comment', comment: { path: '1', body: 'split it' } });
   });
 
   /**
@@ -193,8 +196,10 @@ describe('the `comment` kind', () => {
   it('wants the paragraph `changed` grades — and only from the task that grades it', () => {
     const base = { id: 'c', kind: 'comment', brief: 'b', seed: '<p>a</p>', comment: { path: '1', body: 'split it' } };
     expect(() => TaskSchema.parse({ ...base, checks: ['published', 'changed'] })).toThrow(/seedSplitText/);
-    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'changed'], seedSplitText: 'x' })).not.toThrow();
-    expect(() => TaskSchema.parse({ ...base, checks: ['published'] })).not.toThrow();
+    expect(TaskSchema.parse({ ...base, checks: ['published', 'changed'], seedSplitText: 'x' }))
+      .toMatchObject({ checks: ['published', 'changed'], seedSplitText: 'x' });
+    // …and a task that does not grade `changed` is loaded without the text it would have graded.
+    expect(TaskSchema.parse({ ...base, checks: ['published'] }).seedSplitText).toBeUndefined();
   });
 
   it('wants the URLs the asset checks grade, and refuses one the comment never asked for', () => {
@@ -207,7 +212,8 @@ describe('the `comment` kind', () => {
     expect(() => TaskSchema.parse({ ...base, checks: ['published', 'urls_kept'] })).toThrow(/assetUrls/);
     expect(() => TaskSchema.parse({ ...base, checks: ['published', 'assets_served'] })).toThrow(/assetUrls/);
     expect(() => TaskSchema.parse({ ...base, checks: ['published', 'assets_ok'] })).toThrow(/assetUrls/);
-    expect(() => TaskSchema.parse({ ...base, checks: ['published', 'urls_kept'], assetUrls: [url] })).not.toThrow();
+    expect(TaskSchema.parse({ ...base, checks: ['published', 'urls_kept'], assetUrls: [url] }))
+      .toMatchObject({ checks: ['published', 'urls_kept'], assetUrls: [url] });
     // …and the URL the scorer grades must be the URL the agent was ASKED for: two
     // copies of a string in one file is exactly where drift starts.
     expect(() => TaskSchema.parse({ ...base, checks: ['published', 'urls_kept'], assetUrls: ['https://example.test/b.svg'] }))
@@ -267,5 +273,24 @@ describe('runChecks — a failed driver READ is not an agent failure either', ()
     const out = await runChecks(scorerFor('comment'), checkCtx({ task: t }));
     expect(out).toMatchObject({ ok: false, step: 'reading the thread' });
     fetchSpy.mockRestore();
+  });
+});
+
+describe('the access plan', () => {
+  /**
+   * WHAT THE DRIVER DOES BEFORE THE TURN. Every task is authenticated by its mode and handed a document
+   * the driver made as the eval account, so the plan has exactly one decision left in it: seed or not.
+   */
+  const base='http://127.0.0.1:5220';
+  const task=TaskSchema.parse({id:'publish',brief:'Publish the report.',checks:['published']});
+  const start={id:'abc123'};
+  const credential={token:'mx_account'};
+  it('points the agent at the document the driver made, and seeds nothing it was not asked to',()=>{
+   expect(planAccess({task,base,start,credential})).toEqual({access:{base,id:'abc123'},seed:null});
+  });
+  it('seeds that same document with the task’s markup, using the driver’s own credential',()=>{
+   const result=planAccess({task:{...task,seed:'<p>Seed</p>'},base,start,credential});
+   expect(result.access).toEqual({base,id:'abc123'});
+   expect(result.seed).toEqual({id:'abc123',token:'mx_account',markup:'<p>Seed</p>'});
   });
 });

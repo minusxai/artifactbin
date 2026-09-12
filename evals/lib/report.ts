@@ -29,14 +29,14 @@ export interface RunData {
 /** An image metric's captures for one run, keyed by `variantKey`. */
 export type ImageSet = Record<string, string>;
 
-export interface MergedMetric {
+interface MergedMetric {
   metric: string;
   kind: MetricRow['kind'];
   /** One entry per column; null when that run never recorded the metric. */
   values: Array<MetricRow['value'] | ImageSet | null>;
 }
 
-export interface MergedReport {
+interface MergedReport {
   columns: RunMeta[];
   flows: Array<{ flow: string; metrics: MergedMetric[] }>;
 }
@@ -83,7 +83,7 @@ export function mergeRuns(runs: RunData[]): MergedReport {
   };
 }
 
-export interface ColumnSummary {
+interface ColumnSummary {
   label: string;
   /** Flows whose `pass` row is true / flows that have a pass row. */
   passed: number;

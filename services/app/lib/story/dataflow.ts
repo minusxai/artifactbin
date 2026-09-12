@@ -53,7 +53,7 @@ export const QUERY_TAG = 'Query';
 export const MUTATION_TAG = 'Mutation';
 
 /** `<Value type>`: the four dataset column types, plus an inline table. */
-export type ValueType = ColumnType | 'table';
+type ValueType = ColumnType | 'table';
 const VALUE_TYPES: readonly ValueType[] = ['string', 'number', 'boolean', 'date', 'table'];
 
 /** What a scalar Value holds at runtime (and what a SQL `$param` binds to). */
@@ -71,7 +71,7 @@ export interface ScalarValueDecl extends Span {
   default: Scalar;
 }
 
-export interface TableValueDecl extends Span {
+interface TableValueDecl extends Span {
   kind: 'table';
   name: string;
   rows: Row[];
@@ -231,7 +231,7 @@ export function coerceScalarInput(type: ValueType | undefined, raw: string): Sca
 }
 
 /** What a reference position expects: a table, a scalar, or (on `run=`) a mutation. */
-export type RefKind = 'table' | 'scalar' | 'mutation';
+type RefKind = 'table' | 'scalar' | 'mutation';
 
 /**
  * Where a `$name` is READ, and what kind it must name. Components are matched
@@ -290,7 +290,7 @@ export const REF_ATTRS: {
  * general one and this is the single, named exception, for the single value an
  * author composes instead of picking.
  */
-export const TEMPLATE_REF_ATTRS: {
+const TEMPLATE_REF_ATTRS: {
   components: Record<string, ReadonlySet<string>>;
   html: Record<string, ReadonlySet<string>>;
 } = {
@@ -304,7 +304,7 @@ export const isTemplateRefPosition = (tag: string, attr: string, isComponent: bo
     ?.has(isComponent ? attr : attr.toLowerCase());
 
 /** One `$name` occurrence in the body. */
-export interface RefNameUse extends Span {
+interface RefNameUse extends Span {
   name: string;
   tag: string;
   attr: string;
@@ -313,7 +313,7 @@ export interface RefNameUse extends Span {
 
 // ── parsing the two Helmet children ─────────────────────────────────────────
 
-export type ParseDeclResult<T> = { ok: true; decl: T } | { ok: false; errors: ValidationError[] };
+type ParseDeclResult<T> = { ok: true; decl: T } | { ok: false; errors: ValidationError[] };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}([T ].*)?$/;
 

@@ -14,11 +14,11 @@
  */
 
 export const IMAGE_SIZES = ['laptop', 'mobile'] as const;
-export type ImageSize = (typeof IMAGE_SIZES)[number];
+type ImageSize = (typeof IMAGE_SIZES)[number];
 
 /** `playwright` = element screenshot of the served document; `export` = the product's own `/export` PNG. */
 export const IMAGE_RENDERERS = ['playwright', 'export'] as const;
-export type ImageRenderer = (typeof IMAGE_RENDERERS)[number];
+type ImageRenderer = (typeof IMAGE_RENDERERS)[number];
 
 export interface ImageVariant {
   size: ImageSize;

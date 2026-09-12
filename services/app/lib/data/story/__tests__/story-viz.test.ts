@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
 import { updateQuestionVizInJsx, updateQuestionDataInJsx, updateQuestionChartInJsx, updateQuestionTitleInJsx, readQuestionChart, questionTable, DYNAMIC_VIZ } from '../story-viz';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const BAR = { kind: 'vega-lite', spec: { mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } } };
 const LINE = { kind: 'vega-lite', spec: { mark: 'line', encoding: { x: { field: 'month', type: 'temporal' }, y: { field: 'sales', type: 'quantitative' } } } };
@@ -21,8 +22,7 @@ const PATH = '0.0';
 
 /** Read an attribute's parsed value back out of a serialized body. */
 function attrOf(source: string, name: string): unknown {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error('source did not parse');
+  const parsed = parseJsxOrThrow(source);
   const stack = [...parsed.nodes];
   while (stack.length) {
     const n = stack.shift()!;

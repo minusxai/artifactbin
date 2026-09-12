@@ -6,12 +6,12 @@
  * exactly like the deck rail, and the first paint is the final geometry.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { discoverOutline, hasOutline, MIN_OUTLINE_SECTIONS } from '@/lib/story-runtime/outline';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   return parsed.nodes;
 };
 const sections = (n: number, extra = '') =>

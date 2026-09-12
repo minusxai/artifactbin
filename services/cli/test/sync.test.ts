@@ -1,6 +1,6 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,realpath,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
@@ -9,6 +9,11 @@ import {parseDocument} from '../src/document';
 import {digest} from '../src/files';
 import {stageRequest,savePendingResponse} from '../src/pending-request';
 import {tracking,readRecord,writeRecord} from './tracking';
+import {parseResourceFile} from '../src/resource-file';
+import {fork,type ChildProcess} from 'node:child_process';
+import {once} from 'node:events';
+import {cliHarness} from './harness';
+
 
 test('push recovers a lost create reply with frozen bytes, then publishes newer local edits without a GET',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-sync-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
@@ -278,4 +283,135 @@ test('a confirmed saved reply finishes local recovery without credentials or net
   assert.equal(code,0,output.join(''));assert.equal(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).metadata.id,'abc123');
   assert.equal(await readRecord(root,root,'pending-request','current'),null);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+describe('deleting a folder', () => {
+  test('retrying a lost folder-delete reply forgets every deleted identity while preserving local files',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-delete-retry-'));let deletes=0;
+   const invoke=async(args:string[])=>{const output:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(input,init)=>{
+    if(init?.method==='DELETE'){deletes++;if(deletes===1)throw new Error('deleted, but reply lost');return Response.json({ok:true,deleted_ids:['abc123','def456']},{headers:{'X-Artifactbin-Account':'usr_one'}});}
+    const id=new URL(String(input)).pathname.split('/').at(-1)!;
+    return Response.json({id,version:1,edit_id:'one',state:digest(id),format:id==='abc123'?'folder':'markup',markup:id==='abc123'?'':'<p>Child</p>'},{headers:{'X-Artifactbin-Account':'usr_one'}});
+   }});return{code,result:JSON.parse(output.join(''))};};
+   try{
+    await saveConnection({server:'https://example.com',token:'mx_test'},root);
+    assert.equal((await invoke(['pull','abc123','--output','folder.jsx'])).code,0);assert.equal((await invoke(['pull','def456','--output','child.jsx'])).code,0);
+    const folder=await readFile(join(root,'folder.jsx'));const child=await readFile(join(root,'child.jsx'));
+    assert.notEqual((await invoke(['delete','folder.jsx'])).code,0);
+    assert.equal(Object.keys((await tracking(root,root)).files).length,2);
+    const retried=await invoke(['delete','folder.jsx']);assert.equal(retried.code,0,JSON.stringify(retried.result));assert.equal(deletes,2);
+    assert.deepEqual((await tracking(root,root)).files,{});
+    assert.deepEqual(await readFile(join(root,'folder.jsx')),folder);assert.deepEqual(await readFile(join(root,'child.jsx')),child);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+});
+
+describe('pulling a dataset', () => {
+  test('YAML pull round-trips authorized governance and separate data, preserving local edits against an unchanged head',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-resource-pull-'));let contentReads=0;
+   const head={id:'data123',format:'dataset',version:1,edit_id:'one',state:digest('one'),title:'Sales',access:'readwrite',shares:[{email:'reader@example.com',role:'viewer'}],dataset_policy:null,policy_revision:0};
+   const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input)=>{
+    if(new URL(String(input)).pathname.endsWith('/content')){contentReads++;return Response.json([{score:42}]);}
+    return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
+   }});return{code,result:JSON.parse(out.join(''))};};
+   try{
+    await saveConnection({server:'https://example.com',token:'test'},root);
+    const pulled=await invoke(['pull','data123','--format','YAML','--output','sales.yaml']);assert.equal(pulled.code,0,JSON.stringify(pulled.result));
+    const file=parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8'));assert.equal(file.type,'dataset');if(file.type!=='dataset')assert.fail();assert.equal(file.access,'readwrite');assert.equal(file.policy_revision,0);assert.deepEqual(file.shares,head.shares);assert.equal(file.source,'sales.json');
+    assert.deepEqual(JSON.parse(await readFile(join(root,'sales.json'),'utf8')),[{score:42}]);
+    await writeFile(join(root,'sales.json'),'[{"score":43}]\n');await writeFile(join(root,'sales.yaml'),(await readFile(join(root,'sales.yaml'),'utf8')).replace('Sales','My sales'));
+    const refreshed=await invoke(['pull','sales.yaml']);assert.equal(refreshed.code,0,JSON.stringify(refreshed.result));assert.equal(contentReads,1,'unchanged immutable content uses its saved bytes');
+    assert.equal(parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8')).title,'My sales');assert.deepEqual(JSON.parse(await readFile(join(root,'sales.json'),'utf8')),[{score:43}]);
+    const tracked=await tracking(root,root);assert.deepEqual(Object.keys(tracked.files),['sales.yaml']);assert.deepEqual(JSON.parse(Buffer.from(tracked.files['sales.yaml'].source!.bytes,'base64').toString()),[{score:42}]);
+    head.version=2;head.state=digest('two');head.edit_id='two';
+    assert.equal((await invoke(['pull','sales.yaml'])).result.error.code,'merge_conflict');
+    const forced=await invoke(['pull','sales.yaml','--force']);assert.equal(forced.code,0,JSON.stringify(forced.result));
+    assert.deepEqual(JSON.parse(await readFile(join(root,'sales.json'),'utf8')),[{score:42}]);
+    const backup=forced.result.operations[0].source_backups[0];assert.match(backup,/^\//,'a local backup is reported by absolute path outside the workspace');
+    assert.deepEqual(JSON.parse(await readFile(backup,'utf8')),[{score:43}]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+});
+
+describe('a lost mutation reply', () => {
+  test('a lost mutation reply resumes the frozen operation with the same identity and rejects changed input',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-write-recovery-'));const keys:string[]=[];let lose=true;
+   const invoke=async()=>{const out:string[]=[];const code=await runCli(['query','abc123','--write','--input','change.sql','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+    if(init?.method==='POST'){keys.push(new Headers(init.headers).get('Idempotency-Key')!);if(lose){lose=false;throw Error('reply lost');}return Response.json({id:'abc123',version:2,affected:1,rowCount:2},{headers:{'X-Artifactbin-Account':'account'}});}
+    assert.match(String(input),/artifacts\/abc123$/);return Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'dataset',access:'readwrite',capabilities:{edit:true,mutation_receipts:true}},{headers:{'X-Artifactbin-Account':'account'}});
+   }});return {code,result:JSON.parse(out.join(''))};};
+   try{
+    await saveConnection({server:'https://example.com',token:'test'},root);await writeFile(join(root,'change.sql'),'insert into public.rows (n) values (2)');
+    const first=await invoke();assert.equal(first.result.error.code,'outcome_unknown');assert.ok(keys[0]);
+    const pending=await readRecord(root,root,'pending-operation','current');assert.ok(pending);assert.ok(!JSON.stringify(pending).includes('"token":"test"'));
+    await writeFile(join(root,'change.sql'),'delete from public.rows');const changed=await invoke();assert.equal(changed.result.error.code,'pending_recovery');assert.equal(keys.length,1);
+    await writeFile(join(root,'change.sql'),'insert into public.rows (n) values (2)');const retry=await invoke();assert.equal(retry.code,0,JSON.stringify(retry));assert.deepEqual(keys,[keys[0],keys[0]]);assert.equal(retry.result.affected,1);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+});
+
+describe('surviving a server restart', () => {
+  test('publication replay survives server SIGKILL, expires to id recovery, and never recreates a deleted result',{timeout:30000},async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-server-restart-'));let child:ChildProcess|undefined;
+   const start=async()=>{
+    child=fork(new URL('./fixtures/publication-worker.ts',import.meta.url),[],{execArgv:['--import','tsx'],stdio:['ignore','ignore','pipe','ipc'],env:{PATH:process.env.PATH,NODE_ENV:'development',DATABASE_URL:`pglite://${join(root,'db')}`,OBJECT_STORE__LOCAL_DIR:join(root,'objects'),APP__PUBLIC_BASE_URL:'http://localhost:3000',AUTH__SECRET:'disposable-restart-fixture-secret'}});
+    const [ready]=await once(child,'message');assert.equal(ready.ready,true);
+   };
+   const call=async(message:Record<string,unknown>)=>{const response=once(child!,'message');child!.send(message);const [value]=await response;assert.equal(value.failure,undefined);return value;};
+   const stop=async()=>{if(child&&child.exitCode===null&&child.signalCode===null){const exit=once(child,'exit');child.kill('SIGKILL');await exit;}};
+   try{
+    await start();const {token}=await call({action:'mint'});const request={action:'create',token,key:'restart-operation-key-123'};
+    const initial=await call(request);assert.equal(initial.status,201);await stop();await start();
+    const replay=await call(request);assert.deepEqual(replay,initial);
+    await call({action:'expire'});const expired=await call(request);assert.equal(expired.body.id,initial.body.id);assert.equal(expired.body.response_expired,true);
+    assert.equal((await call({action:'delete',token,id:initial.body.id})).status,200);
+    await stop();await start();const deleted=await call(request);assert.equal(deleted.status,410);assert.equal(deleted.body.error,'result_deleted');assert.equal(deleted.body.id,initial.body.id);
+   }finally{await stop();await rm(root,{recursive:true,force:true});}
+  });
+});
+
+describe('forking a local draft', () => {
+  const tracked=(id:string,markup:string)=>`---\nid: ${id}\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\ntitle: Report\nvisibility: unlisted\nshares:\n  - email: a@example.com\n    role: editor\n---\n${markup}\n`;
+   const harness=(prefix:string)=>cliHarness(prefix,{account:null});
+
+  test('fork copies a local draft offline: no identity, forked_from set, private, no shares, source untouched',async()=>{
+   const h=await harness('afbin-seed-fork-');
+   try{
+    await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Hello</p>'));
+    const code=await h.invoke(['fork','report.jsx','--output','copy.jsx','--json']);
+    assert.equal(code,0,h.out.join(''));assert.equal(h.network(),0);
+    const copy=await readFile(join(h.root,'copy.jsx'),'utf8');
+    for(const key of ['id:','edit_id:','head_version:','state:','version:'])assert.ok(!copy.includes(`\n${key}`),`${key} must be stripped`);
+    assert.match(copy,/forked_from: abc123/);assert.match(copy,/visibility: private/);assert.ok(!copy.includes('a@example.com'));assert.ok(copy.endsWith('<p>Hello</p>\n'));
+    assert.equal(await readFile(join(h.root,'report.jsx'),'utf8'),tracked('abc123','<p>Hello</p>'));
+    assert.notEqual(await h.invoke(['fork','report.jsx','--output','copy.jsx','--json']),0,'never overwrite an existing destination');
+    assert.equal(h.last().error.code,'output_exists');
+   }finally{await h.cleanup();}
+  });
+
+  test('fork --dry-run reports the destination and sharing defaults without writing',async()=>{
+   const h=await harness('afbin-seed-fork-dry-');
+   try{
+    await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Hello</p>'));
+    assert.equal(await h.invoke(['fork','report.jsx','--dry-run','--json']),0,h.out.join(''));
+    const result=h.last();assert.equal(result.dry_run,true);assert.equal(result.operations[0].forked_from,'abc123');assert.equal(result.operations[0].visibility,'private');
+    await assert.rejects(stat(join(h.root,result.operations[0].path)));
+   }finally{await h.cleanup();}
+  });
+});
+
+describe('deleting many typed targets', () => {
+  const harness=(prefix:string)=>cliHarness(prefix,{flags:['--json','--server','https://example.com'],account:null});
+   const account=(response:Response)=>{response.headers.set('X-Artifactbin-Account','usr_seed');return response;};
+
+  test('delete accepts multiple typed targets, reports every returned identity and keeps local files',async()=>{
+   const h=await harness('afbin-seed-typed-delete-');
+   try{
+    await writeFile(join(h.root,'notes.yaml'),'type: file\nid: fil123\nsource: notes.txt\n');await writeFile(join(h.root,'notes.txt'),'keep me\n');
+    const code=await h.invoke(['delete','--type','folder','fld123','notes.yaml'],({method,path})=>account(Response.json(method==='DELETE'?{ok:true,deleted_ids:path.includes('fld123')?['fld123','abc123']:['fil123']}:{id:path.split('/').pop(),format:path.includes('fld')?'folder':'file',capabilities:{delete:true}})));
+    assert.equal(code,0,h.out.join(''));
+    const results=h.last().results;assert.equal(results.length,2);assert.deepEqual(results[0].result.deleted_ids,['fld123','abc123']);assert.deepEqual(results[1].result.deleted_ids,['fil123']);
+    assert.equal(await readFile(join(h.root,'notes.txt'),'utf8'),'keep me\n');assert.equal(await readFile(join(h.root,'notes.yaml'),'utf8'),'type: file\nid: fil123\nsource: notes.txt\n');
+   }finally{await h.cleanup();}
+  });
 });

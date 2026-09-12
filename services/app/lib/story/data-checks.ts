@@ -19,7 +19,7 @@ import { splitHelmet } from './helmet';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, type RefLoader } from './refs';
 import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
 
-export type DataCheckResult =
+type DataCheckResult =
   | { ok: true; refs: Array<{ id: string; kind: string }> }
   | { ok: false; error: 'invalid_refs' | 'invalid_sql'; details: string[] };
 

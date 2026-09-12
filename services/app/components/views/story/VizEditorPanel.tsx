@@ -35,7 +35,7 @@ import {
  *  that need only the x/y/color zones this UI exposes. */
 const CHART_TYPES = ['table', 'bar', 'line', 'area', 'scatter', 'pie'] as const;
 
-export interface VizEditorPanelProps {
+interface VizEditorPanelProps {
   /** The Question's current `viz` prop (undefined = renders a table). */
   viz: unknown;
   /** The Question's `title` prop — the header strip above the chart. */

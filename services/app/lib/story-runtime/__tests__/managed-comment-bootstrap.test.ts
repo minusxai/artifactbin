@@ -2,6 +2,8 @@ import {fileURLToPath} from 'node:url';
 import {expect,it} from 'vitest';
 import {JSDOM} from 'jsdom';
 import {buildSync} from 'esbuild';
+import {runInNewContext} from 'node:vm';
+import {AUTHOR_REALM_LOCKDOWN} from '../author-realm-lockdown';
 import {AUTHOR_SCRIPT_BOOTSTRAP} from '../author-script-bootstrap';
 
 async function exercise(source:string,managed=true) {
@@ -29,4 +31,17 @@ it('executes the production-minified bootstrap without depending on bundler clos
   const built=buildSync({entryPoints:[fileURLToPath(new URL('../author-script-bootstrap.ts',import.meta.url))],bundle:true,minify:true,write:false,format:'iife',globalName:'compiled',platform:'browser',target:'es2022'});
   const source=new Function(built.outputFiles[0].text+';return compiled.AUTHOR_SCRIPT_BOOTSTRAP;')();
   await exercise(source);
+});
+
+it('removes WebRTC constructors immutably before author execution',()=>{
+ const realm:Record<string,unknown>={RTCPeerConnection:function(){},webkitRTCPeerConnection:function(){},mozRTCPeerConnection:function(){}};
+ runInNewContext(AUTHOR_REALM_LOCKDOWN,realm);
+ for(const name of ['RTCPeerConnection','webkitRTCPeerConnection','mozRTCPeerConnection']){
+  expect(Object.getOwnPropertyDescriptor(realm,name)).toMatchObject({value:undefined,writable:false,configurable:false});
+  expect(()=>Object.defineProperty(realm,name,{value:function(){}})).toThrow();
+ }
+});
+it('includes the denial in the actual author bootstrap, not just the helper',()=>{
+ expect(AUTHOR_SCRIPT_BOOTSTRAP).toContain(AUTHOR_REALM_LOCKDOWN);
+ expect(AUTHOR_SCRIPT_BOOTSTRAP.indexOf(AUTHOR_REALM_LOCKDOWN)).toBeLessThan(AUTHOR_SCRIPT_BOOTSTRAP.indexOf("message.type === 'run'"));
 });

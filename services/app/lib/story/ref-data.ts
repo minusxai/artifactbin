@@ -14,7 +14,7 @@ import type { VizRecipeContent } from '@/lib/validation/atlas-schemas';
  * <Query> and only the query's result reaches the document (the island's
  * `dataflow`, lib/story/dataflow.ts).
  */
-export type ResolvedRefData =
+type ResolvedRefData =
   | { kind: 'viz'; recipe: VizRecipeContent }
   | { kind: 'file'; url:string }
   /**
@@ -120,7 +120,7 @@ const REF_IMAGE_POSITIONS: ReadonlyArray<{ component: boolean; tag: string; prop
 const REF_FILE_POSITION = { component: true, tag: 'File', prop: 'src' } as const;
 
 /** What a resolved ref contributes: url and box as strings, the blur as a style object. */
-export type RefPropPatch = Record<string, string | Record<string, string>>;
+type RefPropPatch = Record<string, string | Record<string, string>>;
 
 function resolveImageAndFileProps(
   node: { isComponent: boolean; tag: string },

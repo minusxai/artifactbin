@@ -39,7 +39,8 @@ describe('the markup field description', () => {
   it('points at the installed local reference', () => {
     expect(text).toContain('afbin help markup');
     expect(text).toContain('source="ref:<id>"');
-    expect(text).not.toContain('/docs/');
+    // That it never sends an agent to a remote /docs/ page is retired-surfaces.test.ts's row
+    // for the markup tool-schema guidance.
   });
 
   it('stays short enough to survive in a tool schema', () => {

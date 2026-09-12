@@ -22,7 +22,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { useAppHarness, request, agentCookie } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { GET as docAssets } from '@/app/a/[id]/assets/route';
 import { POST as createArtifact, GET as listArtifacts } from '@/app/api/artifacts/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';

@@ -501,15 +501,15 @@ export interface StorySsrBundle {
 
 /** First thing the runtime says to its parent: here is this session's nonce. Posted before any author code exists. */
 export const STORY_SESSION_MESSAGE = 'mx:session';
-export interface StorySessionMessage { type: typeof STORY_SESSION_MESSAGE; nonce: string }
+interface StorySessionMessage { type: typeof STORY_SESSION_MESSAGE; nonce: string }
 
 /** Parent → frame: enter or leave edit mode. The frame lazy-loads its edit chunk on the first `on`. */
 export const STORY_EDIT_MODE_MESSAGE = 'mx:edit-mode';
-export interface StoryEditModeMessage { type: typeof STORY_EDIT_MODE_MESSAGE; on: boolean }
+interface StoryEditModeMessage { type: typeof STORY_EDIT_MODE_MESSAGE; on: boolean }
 
 /** Frame → parent: edit mode is live (hosts are editable and listening). */
 export const STORY_EDIT_READY_MESSAGE = 'mx:edit-ready';
-export interface StoryEditReadyMessage { type: typeof STORY_EDIT_READY_MESSAGE; nonce: string }
+interface StoryEditReadyMessage { type: typeof STORY_EDIT_READY_MESSAGE; nonce: string }
 
 /**
  * Frame → parent: the user finished editing a text host (blur), or is about to
@@ -518,25 +518,25 @@ export interface StoryEditReadyMessage { type: typeof STORY_EDIT_READY_MESSAGE; 
  * the same sanitizing write-back the canvas used (lib/data/story/jsx-edit).
  */
 export const STORY_INLINE_MESSAGE = 'mx:inline';
-export interface StoryInlineMessage {type:typeof STORY_INLINE_MESSAGE;tag:'strong'|'em'|'u'}
+interface StoryInlineMessage {type:typeof STORY_INLINE_MESSAGE;tag:'strong'|'em'|'u'}
 export const STORY_PASTE_MESSAGE = 'mx:paste';
-export interface StoryPasteMessage {type:typeof STORY_PASTE_MESSAGE;value:string;kind:'markdown'|'text'}
+interface StoryPasteMessage {type:typeof STORY_PASTE_MESSAGE;value:string;kind:'markdown'|'text'}
 
 export const STORY_BLOCK_EDIT_MESSAGE = 'mx:block-edit';
-export interface StoryBlockEditMessage {type:typeof STORY_BLOCK_EDIT_MESSAGE;nonce:string;command:BlockEdit}
+interface StoryBlockEditMessage {type:typeof STORY_BLOCK_EDIT_MESSAGE;nonce:string;command:BlockEdit}
 export const STORY_HISTORY_MESSAGE = 'mx:history';
-export interface StoryHistoryMessage {type:typeof STORY_HISTORY_MESSAGE;nonce:string;direction:'undo'|'redo'}
+interface StoryHistoryMessage {type:typeof STORY_HISTORY_MESSAGE;nonce:string;direction:'undo'|'redo'}
 
-export interface StoryEditErrorMessage {type:'mx:edit-error';nonce:string;message:string}
+interface StoryEditErrorMessage {type:'mx:edit-error';nonce:string;message:string}
 export const STORY_FLOW_EDIT_MESSAGE = 'mx:flow-edit';
-export interface StoryFlowEditMessage { selection?:EditorSelectionChange; type: typeof STORY_FLOW_EDIT_MESSAGE; nonce: string; path: string; expected: string; replacement: string; group?:string }
+interface StoryFlowEditMessage { selection?:EditorSelectionChange; type: typeof STORY_FLOW_EDIT_MESSAGE; nonce: string; path: string; expected: string; replacement: string; group?:string }
 
 export const STORY_TEXT_EDIT_MESSAGE = 'mx:text-edit';
-export interface StoryTextEditMessage { type: typeof STORY_TEXT_EDIT_MESSAGE; nonce: string; path: string; innerHtml: string }
+interface StoryTextEditMessage { type: typeof STORY_TEXT_EDIT_MESSAGE; nonce: string; path: string; innerHtml: string }
 
 /** Frame → parent: there is uncommitted typing (from the first `input` to the commit). Gates remote adoption. */
 export const STORY_TYPING_MESSAGE = 'mx:typing';
-export interface StoryTypingMessage { type: typeof STORY_TYPING_MESSAGE; nonce: string; active: boolean }
+interface StoryTypingMessage { type: typeof STORY_TYPING_MESSAGE; nonce: string; active: boolean }
 
 /** One ancestor in the toolbar's breadcrumb: enough to label it and re-select it. */
 export interface StoryEditCrumb { path: string; tag: string; hint: string }
@@ -578,7 +578,7 @@ export interface StoryEditSelection {
 
 /** Frame → parent: the selection changed, or moved (re-posted on in-frame scroll, throttled to a frame). */
 export const STORY_SELECTION_MESSAGE = 'mx:selection';
-export interface StorySelectionMessage { type: typeof STORY_SELECTION_MESSAGE; nonce: string; selection: StoryEditSelection | null }
+interface StorySelectionMessage { type: typeof STORY_SELECTION_MESSAGE; nonce: string; selection: StoryEditSelection | null }
 
 /**
  * Frame → parent: the owner selected readable text in view mode and chose the
@@ -586,7 +586,7 @@ export interface StorySelectionMessage { type: typeof STORY_SELECTION_MESSAGE; n
  * with the request so the destination mode opens on what they were reading.
  */
 export const STORY_SELECTION_ACTION_MESSAGE = 'mx:selection-action';
-export interface StorySelectionActionMessage {
+interface StorySelectionActionMessage {
   type: typeof STORY_SELECTION_ACTION_MESSAGE;
   nonce: string;
   action: 'edit' | 'annotate' | 'select';
@@ -610,11 +610,11 @@ export interface StorySelectionActionsMessage {
  * doors share one ingest, one size cap and one type list.
  */
 export const STORY_IMAGE_DROP_MESSAGE = 'mx:image-drop';
-export interface StoryImageDropMessage { type: typeof STORY_IMAGE_DROP_MESSAGE; nonce: string; file: File }
+interface StoryImageDropMessage { type: typeof STORY_IMAGE_DROP_MESSAGE; nonce: string; file: File }
 
 /** Frame → parent: Delete/Backspace pressed while NO text host had focus — the parent decides what it removes. */
 export const STORY_EDIT_KEY_MESSAGE = 'mx:edit-key';
-export interface StoryEditKeyMessage { type: typeof STORY_EDIT_KEY_MESSAGE; nonce: string; key: 'Delete' | 'Backspace' | 'Escape' }
+interface StoryEditKeyMessage { type: typeof STORY_EDIT_KEY_MESSAGE; nonce: string; key: 'Delete' | 'Backspace' | 'Escape' }
 
 /**
  * Parent → frame: apply a format to an element NOW, locally, without a
@@ -623,7 +623,7 @@ export interface StoryEditKeyMessage { type: typeof STORY_EDIT_KEY_MESSAGE; nonc
  * edit into the source; the frame's DOM already shows it.
  */
 export const STORY_APPLY_FORMAT_MESSAGE = 'mx:apply-format';
-export interface StoryApplyFormatMessage { type: typeof STORY_APPLY_FORMAT_MESSAGE; path: string; className?: string; style?: string }
+interface StoryApplyFormatMessage { type: typeof STORY_APPLY_FORMAT_MESSAGE; path: string; className?: string; style?: string }
 
 /**
  * Parent → frame: wrap the current text selection inside the host at `path`
@@ -631,7 +631,7 @@ export interface StoryApplyFormatMessage { type: typeof STORY_APPLY_FORMAT_MESSA
  * Selection; it answers with an `mx:text-edit` carrying the new innerHTML.
  */
 export const STORY_APPLY_LINK_MESSAGE = 'mx:apply-link';
-export interface StoryApplyLinkMessage { type: typeof STORY_APPLY_LINK_MESSAGE; path: string; href: string | null }
+interface StoryApplyLinkMessage { type: typeof STORY_APPLY_LINK_MESSAGE; path: string; href: string | null }
 
 /**
  * Frame → parent: a `<GridItem>` was dragged or resized to a new rect.
@@ -643,7 +643,7 @@ export interface StoryApplyLinkMessage { type: typeof STORY_APPLY_LINK_MESSAGE; 
  */
 export const STORY_LAYOUT_EDIT_MESSAGE = 'mx:layout-edit';
 export interface StoryLayoutRect { path: string; x: number; y: number; w: number; h: number }
-export interface StoryLayoutEditMessage {
+interface StoryLayoutEditMessage {
   type: typeof STORY_LAYOUT_EDIT_MESSAGE;
   nonce: string;
   rects: StoryLayoutRect[];
@@ -656,7 +656,7 @@ export interface StoryLayoutEditMessage {
  * affordance has to live there; the write-back is the parent's as always.
  */
 export const STORY_SLIDE_TITLE_MESSAGE = 'mx:slide-title';
-export interface StorySlideTitleMessage {
+interface StorySlideTitleMessage {
   type: typeof STORY_SLIDE_TITLE_MESSAGE;
   nonce: string;
   path: string;
@@ -674,12 +674,12 @@ export interface StorySlideTitleMessage {
  */
 export const STORY_COMMIT_MESSAGE = 'mx:commit';
 export const STORY_COMMITTED_MESSAGE = 'mx:committed';
-export interface StoryCommitMessage { type: typeof STORY_COMMIT_MESSAGE; restore?:EditorBookmark }
-export interface StoryCommittedMessage { type: typeof STORY_COMMITTED_MESSAGE; nonce: string }
+interface StoryCommitMessage { type: typeof STORY_COMMIT_MESSAGE; restore?:EditorBookmark }
+interface StoryCommittedMessage { type: typeof STORY_COMMITTED_MESSAGE; nonce: string }
 
 /** Parent → frame: select an element by path (a breadcrumb click, a panel opening), or clear with null. */
 export const STORY_SELECT_MESSAGE = 'mx:select';
-export interface StorySelectMessage { type: typeof STORY_SELECT_MESSAGE; path: string | null }
+interface StorySelectMessage { type: typeof STORY_SELECT_MESSAGE; path: string | null }
 
 /* ────────────────────────────────────────────────────────────────────────────
  * ANNOTATIONS — comments the owner pins to nodes; the frame only ever sees
@@ -747,7 +747,7 @@ export interface StoryAnnotationsMessage {
 
 /** Frame → parent: the owner clicked an annotated node to open its thread. */
 export const STORY_ANNOTATION_PIN_MESSAGE = 'mx:annotation-pin';
-export interface StoryAnnotationPinMessage {
+interface StoryAnnotationPinMessage {
   type: typeof STORY_ANNOTATION_PIN_MESSAGE;
   nonce: string;
   id: string;
@@ -756,7 +756,7 @@ export interface StoryAnnotationPinMessage {
 
 /** Frame → parent: the pointer entered or left an annotated document node. */
 export const STORY_ANNOTATION_HOVER_MESSAGE = 'mx:annotation-hover';
-export interface StoryAnnotationHoverMessage {
+interface StoryAnnotationHoverMessage {
   type: typeof STORY_ANNOTATION_HOVER_MESSAGE;
   nonce: string;
   id: string | null;
@@ -764,7 +764,7 @@ export interface StoryAnnotationHoverMessage {
 
 /** Frame → parent: the current viewport geometry of every anchored open thread. */
 export const STORY_ANNOTATION_LAYOUT_MESSAGE = 'mx:annotation-layout';
-export interface StoryAnnotationLayoutMessage {
+interface StoryAnnotationLayoutMessage {
   type: typeof STORY_ANNOTATION_LAYOUT_MESSAGE;
   nonce: string;
   positions: Array<{ id: string; rect: StoryEditRect; status?: 'exact' | 'missing' | 'ambiguous' }>;
@@ -778,7 +778,7 @@ export interface StoryAnnotationLayoutMessage {
  */
 export const STORY_ANNOTATIONS_EVENT = 'annotations';
 
-export type StoryEditFrameMessage =
+type StoryEditFrameMessage =
   | StoryEditErrorMessage | StoryBlockEditMessage | StoryHistoryMessage | StoryFlowEditMessage | StoryEditReadyMessage | StoryTextEditMessage | StoryTypingMessage | StorySelectionMessage
   | StorySelectionActionMessage
   | StoryEditKeyMessage | StoryCommittedMessage | StoryLayoutEditMessage | StorySlideTitleMessage

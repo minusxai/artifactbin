@@ -29,8 +29,8 @@ export interface Workspace {virtualFiles?:Record<string,Buffer>;home:string;root
 export interface LocalFile {path:string;bytes:Buffer|null;document?:LocalDocument;resource?:ArtifactResourceFile;tracked?:TrackedFile;renamedFrom?:string;status:'new'|'unchanged'|'modified'|'missing'|'renamed'}
 
 /** The workspace record every tracked scope carries: which server and account own it. */
-export interface WorkspaceRecord {server:string;account:string}
-export interface TrackingUpdate {server:string;account:string;set?:Record<string,TrackedFile>;remove?:string[]}
+interface WorkspaceRecord {server:string;account:string}
+interface TrackingUpdate {server:string;account:string;set?:Record<string,TrackedFile>;remove?:string[]}
 /** Synchronous by design: the caller runs it inside one `state.transaction`. */
 export function writeTracking(state:State,root:string,update:TrackingUpdate):void{
  state.put(root,'workspace',root,{server:normalizeServer(update.server),account:update.account} satisfies WorkspaceRecord);

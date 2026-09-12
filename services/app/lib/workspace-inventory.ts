@@ -4,7 +4,7 @@ import { LIVE_ARTIFACT_SQL, type ArtifactSummary } from '@/lib/artifacts';
 
 export interface WorkspaceStats { artifacts: number; assets: number; views: number }
 export interface AssetSelection { page: number; query: string; formats: string[]; visibilities: string[] }
-export const ASSETS_PAGE_SIZE = 50;
+const ASSETS_PAGE_SIZE = 50;
 type InventoryRow = Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'version' | 'visibility' | 'ancestor_ids' | 'updated_at'>;
 const COLS = 'id, title, format, version, visibility, ancestor_ids, updated_at';
 const OWNED = `user_id = $1 AND ${LIVE_ARTIFACT_SQL}`;

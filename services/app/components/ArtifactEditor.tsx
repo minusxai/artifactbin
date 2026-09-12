@@ -53,7 +53,7 @@ interface Loaded {
  * the document immediately instead of blanking while the editor re-fetches
  * what the server just sent — the round trip was the whole "flash".
  */
-export interface EditorSeed {
+interface EditorSeed {
   id: string;
   title: string | null;
   markup: string | null;

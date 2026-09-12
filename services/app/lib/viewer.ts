@@ -51,7 +51,7 @@ export interface RequestActor {
   heldTokenIds?: string[];
 }
 
-export const NO_ACTOR: RequestActor = { viewer: null, tokenId: null, credential: 'none' };
+const NO_ACTOR: RequestActor = { viewer: null, tokenId: null, credential: 'none' };
 
 /** A cookie authorized this request — the only case a same-site guard applies to. */
 export const isCookieCredential = (actor: Pick<RequestActor, 'credential'>): boolean =>

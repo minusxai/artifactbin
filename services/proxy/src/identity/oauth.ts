@@ -2,9 +2,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
 
-export const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
+const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
 export const ACCESS_TOKEN_TTL_SECONDS = 6 * 60 * 60;
-export const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export {ARTIFACT_SCOPE} from '@artifactbin/contracts';
 
 const AUTHORIZATION_CODE = 'authorization_code';
@@ -41,7 +41,7 @@ export function sameRedirectTarget(registered: string, requested: string): boole
     && !a.username && !b.username;
 }
 
-export interface AuthorizationGrant {
+interface AuthorizationGrant {
   userId: string | null;
   clientId: string;
   redirectUri: string;
@@ -49,13 +49,13 @@ export interface AuthorizationGrant {
   scope: string;
 }
 
-export interface OAuthClient {
+interface OAuthClient {
   clientId: string;
   clientName: string;
   redirectUris: string[];
 }
 
-export interface RefreshGrant {
+interface RefreshGrant {
   token: string;
   clientId: string;
   /** Null for an anonymous grant: the rotated access token is minted unowned. */

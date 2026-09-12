@@ -33,7 +33,7 @@ import { checkedLocalRows } from '@/lib/story/local-tables';
 export interface MutationAnswer { dataset: string; local?: LocalMutationResult }
 
 /** A window of one query's rows — what a table reads past the cap. */
-export interface TablePage {
+interface TablePage {
   offset: number;
   limit: number;
   sort?: { col: string; dir: 'asc' | 'desc' };
@@ -133,7 +133,7 @@ export interface DataflowStore {
   replaceFlow(next: { flow: Dataflow; state?: DataflowState }): void;
 }
 
-export interface CreateStoreOptions {
+interface CreateStoreOptions {
   /** Debounce before a re-run (default 150 ms) — a slider must not fire per pixel. */
   debounceMs?: number;
   transport?: QueryTransport | null;

@@ -10,8 +10,8 @@ import { newEditId } from '@/lib/story/splice';
 import { finalizeArtifactMetadata } from '@/lib/story/parsed-artifact-metadata';
 import { queryDeps } from '@/lib/story/dataflow';
 
-export interface MigrationDiagnostic { artifactId?: string; version?: number; reason: string }
-export interface SourceMigration { source: string; changed: boolean; diagnostics: MigrationDiagnostic[] }
+interface MigrationDiagnostic { artifactId?: string; version?: number; reason: string }
+interface SourceMigration { source: string; changed: boolean; diagnostics: MigrationDiagnostic[] }
 
 type LegacyMeta = Record<string, unknown> & { objectKey?: string; columns?: DatasetColumn[]; catalog?: DatasetCatalog };
 
@@ -43,7 +43,7 @@ const attr = (el: JsxElement, name: string): string | null => {
   return value?.static && typeof value.json === 'string' ? value.json : null;
 };
 
-export interface MarkupMigrationOptions { folderIds?: Set<string>; knownTargetIds?: Set<string> }
+interface MarkupMigrationOptions { folderIds?: Set<string>; knownTargetIds?: Set<string> }
 export function migrateMarkupSource(source: string,options:MarkupMigrationOptions={}): SourceMigration {
   const parsed = parseJsx(source);
   if (!parsed.ok) return { source, changed: false, diagnostics: [{ reason: `invalid JSX: ${parsed.error}` }] };
@@ -126,11 +126,11 @@ export function migrateMarkupSource(source: string,options:MarkupMigrationOption
   return { source: migrated, changed: migrated !== source, diagnostics: [] };
 }
 
-export interface DatasetMigrationOptions { after?: string; expected?: Record<string,string>; batchSize: number; dryRun?: boolean; maxHistoricalVersionsPerArtifact?: number; validate?: (source: string, artifact: Record<string, unknown>, version?: number) => Promise<string[]>; beforeCommit?: (artifactId: string) => void | Promise<void>; failBeforeCommit?: () => void }
-export interface MigrationSnapshot { head: Record<string,unknown>; history: Record<string,unknown>[] }
-export interface DatasetMigrationPlan { artifactId: string; fingerprint: string; before: MigrationSnapshot; after: MigrationSnapshot }
+interface DatasetMigrationOptions { after?: string; expected?: Record<string,string>; batchSize: number; dryRun?: boolean; maxHistoricalVersionsPerArtifact?: number; validate?: (source: string, artifact: Record<string, unknown>, version?: number) => Promise<string[]>; beforeCommit?: (artifactId: string) => void | Promise<void>; failBeforeCommit?: () => void }
+interface MigrationSnapshot { head: Record<string,unknown>; history: Record<string,unknown>[] }
+interface DatasetMigrationPlan { artifactId: string; fingerprint: string; before: MigrationSnapshot; after: MigrationSnapshot }
 const fingerprint = (snapshot: MigrationSnapshot): string => createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
-export interface DatasetMigrationReport { plans: DatasetMigrationPlan[]; nextCursor: string | null; processed: number; changed: number; datasets: number; documents: number; versions: number; conflicts: MigrationDiagnostic[]; done: boolean; dryRun: boolean }
+interface DatasetMigrationReport { plans: DatasetMigrationPlan[]; nextCursor: string | null; processed: number; changed: number; datasets: number; documents: number; versions: number; conflicts: MigrationDiagnostic[]; done: boolean; dryRun: boolean }
 
 export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMigrationOptions): Promise<DatasetMigrationReport> {
   if (!Number.isInteger(options.batchSize) || options.batchSize < 1 || options.batchSize > 100) throw new Error('dataset-catalog-migration: batchSize must be an integer from 1 through 100');

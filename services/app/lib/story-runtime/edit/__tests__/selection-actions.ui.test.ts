@@ -1,9 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { parseJsx } from '@/lib/jsx';
 import { createFrameSelectionActions, SELECTION_ACTION_COARSE_CLASS, SELECTION_ACTIONS_ATTR } from '../selection-actions';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
-const parsed = parseJsx('<p>select these words</p>');
-if (!parsed.ok) throw new Error('fixture does not parse');
+const parsed = parseJsxOrThrow('<p>select these words</p>');
 
 let actions: ReturnType<typeof createFrameSelectionActions>;
 const onAction = vi.fn();
@@ -130,8 +129,7 @@ describe('view-mode text selection actions', () => {
       + '<h1 data-mx-ast="0.0">the heading that was selected</h1>'
       + '<div data-mx-ast="0.1"><div data-mx-ast="0.1.0"><p data-mx-ast="0.1.0.0">1.0 · Build</p></div></div>'
       + '</div>';
-    const deep = parseJsx('<div><h1>the heading that was selected</h1><div><div><p>1.0 · Build</p></div></div></div>');
-    if (!deep.ok) throw new Error('fixture does not parse');
+    const deep = parseJsxOrThrow('<div><h1>the heading that was selected</h1><div><div><p>1.0 · Build</p></div></div></div>');
     actions.setNodes(deep.nodes);
     actions.update({ type: 'mx:selection-actions', edit: false, annotate: true });
 
@@ -179,8 +177,7 @@ describe('view-mode text selection actions', () => {
   });
 
   it('targets the deepest source element at the selection edges, not their outer ancestor', async () => {
-    const nested = parseJsx('<div><p><strong>inner</strong> outer</p></div>');
-    if (!nested.ok) throw new Error('nested fixture does not parse');
+    const nested = parseJsxOrThrow('<div><p><strong>inner</strong> outer</p></div>');
     document.body.innerHTML = '<div data-mx-ast="0"><p data-mx-ast="0.0"><strong data-mx-ast="0.0.0">inner</strong> outer</p></div>';
     actions.setNodes(nested.nodes);
     actions.update({ type: 'mx:selection-actions', edit: true, annotate: false });
@@ -211,8 +208,7 @@ describe('view-mode text selection actions', () => {
    * The words themselves travel with it.
    */
   it('annotates the BLOCK containing the selection, and carries the quote and its parts', async () => {
-    const nested = parseJsx('<div><p><strong>inner</strong> outer</p></div>');
-    if (!nested.ok) throw new Error('nested fixture does not parse');
+    const nested = parseJsxOrThrow('<div><p><strong>inner</strong> outer</p></div>');
     document.body.innerHTML = '<div data-mx-ast="0"><p data-mx-ast="0.0"><strong data-mx-ast="0.0.0">inner</strong> outer</p></div>';
     actions.setNodes(nested.nodes);
     actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
@@ -571,7 +567,7 @@ it('long-presses a graphic on touch and cancels a moving gesture', () => {
 });
 
 it('keeps unkeyed repeat text feedback on the owner without a positional text range',async()=>{
- const source=parseJsx('<For id="orders" each={$orders}><p id="name">{$_row.name}</p></For>');if(!source.ok)throw new Error(source.error);
+ const source=parseJsxOrThrow('<For id="orders" each={$orders}><p id="name">{$_row.name}</p></For>');
  document.body.innerHTML='<div id="orders" data-mx-ast="0"><p>Alice</p><p>Bob</p></div>';
  actions.setNodes(source.nodes);actions.update({type:'mx:selection-actions',edit:false,annotate:true});
  await selectText();

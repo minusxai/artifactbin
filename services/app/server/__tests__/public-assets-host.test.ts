@@ -12,7 +12,7 @@ import {mintToken} from '@/lib/tokens';
 import {createArtifact} from '@/lib/artifacts';
 import {storeFileContent} from '@/lib/story/file-store';
 import {internalAssetResponse} from '../../../browser/src/internal-assets';
-import {withHttpServer} from '@/__tests__/net';
+import {withHttpServer} from '@artifactbin/test-support/net';
 import {getRequestListener} from '@hono/node-server';
 import {createProxy} from '@artifactbin/proxy';
 import {testProxyOptions} from '../../../proxy/__tests__/helpers';

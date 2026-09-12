@@ -89,7 +89,7 @@ export function documentWrites(entries: LedgerEntry[]): number {
 }
 
 /** One numeric row, as the driver records it. */
-export interface LedgerRow {
+interface LedgerRow {
   metric: string;
   /** Null is "unavailable" — the recorder writes nothing and the report shows "—". */
   value: number | null;
@@ -181,7 +181,7 @@ export function scoredArtifactId(input: { finalMessage: string | null; ledger: L
   return artifactIdFromText(input.finalMessage ?? '') ?? targetArtifactId(input.ledger) ?? input.startId;
 }
 
-export interface LedgerMetrics {
+interface LedgerMetrics {
   /**
    * Whether this ledger saw ANY traffic. False means the agent reached the
    * product without crossing this machine — a provider's own server-side
@@ -232,7 +232,7 @@ export interface LedgerMetrics {
 }
 
 /** What the caller knows that the ledger cannot: when the agent's process actually started. */
-export interface LedgerMetricsOptions {
+interface LedgerMetricsOptions {
   startedAtMs?: number;
 }
 

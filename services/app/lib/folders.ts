@@ -34,7 +34,7 @@ import type { ShelfRow } from '@/lib/shelf';
  * a root folder is level 0 and the sixth row down is level 5: the rule is that
  * a resulting row's level stays BELOW this number.
  */
-export const MAX_FOLDER_DEPTH = 6;
+const MAX_FOLDER_DEPTH = 6;
 
 /** How many days of history the children table's sparkline covers. */
 const SPARKLINE_DAYS = 14;
@@ -47,7 +47,7 @@ export const CHILDREN_COLUMNS: DatasetColumn[] = [
 ];
 
 /** One refusal for unknown, not-a-folder, not-yours, cycle and too deep — naming them apart is an existence oracle. */
-export type ParentRefusal = { error: 'invalid_parent' };
+type ParentRefusal = { error: 'invalid_parent' };
 
 /**
  * The refusal itself, exported because one door answers it without ever
@@ -67,7 +67,7 @@ export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): 
  * document and had to reach the kit through the island. The listing is app
  * chrome now, so the shape belongs beside the module that computes it.
  */
-export interface FolderCrumb {
+interface FolderCrumb {
   id: string;
   title: string | null;
   /** Where the crumb links — the ancestor's own address. */
@@ -397,7 +397,7 @@ export async function childrenTableFor(
  * measured), ordered back into root→parent by the array rather than by the
  * database.
  */
-export async function folderHeadFor(
+async function folderHeadFor(
   folder: Pick<ArtifactRow, 'id' | 'title' | 'ancestor_ids'>,
   viewer: Viewer,
 ): Promise<{ id: string; title: string | null; trail: FolderCrumb[] }> {

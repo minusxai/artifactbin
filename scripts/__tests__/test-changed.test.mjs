@@ -1,37 +1,14 @@
+/**
+ * THE LOCAL TEST BOUNDARY, exercised at its real command boundary with a disposable Git repo and a fake
+ * installed Vitest executable. No registry, full suite, or real CLI is launched.
+ *
+ * What is worth testing here is the budget and its failure modes: an over-cap run must defer rather than
+ * silently run a subset, a broken discovery must fail visibly rather than report a pass, and "nothing was
+ * affected" must be unverified rather than green. The argument parser had three unit cases of its own;
+ * every case below drives it through the real command line instead.
+ */
 import { describe, expect, it } from 'vitest';
-import { shouldRunCli, overCap, parseArgs, DEFAULT_CAP } from '../test-changed.mjs';
-
-describe('test-changed', () => {
-  it('runs the CLI suite only when the diff touches services/cli', () => {
-    expect(shouldRunCli(['services/cli/src/push.ts'])).toBe(true);
-    expect(shouldRunCli(['services/cli/test/config.test.ts'])).toBe(true);
-    expect(shouldRunCli(['services/app/lib/skills/index.ts', 'AGENTS.md'])).toBe(false);
-    expect(shouldRunCli([])).toBe(false);
-    // A cli-adjacent app path is not the CLI package.
-    expect(shouldRunCli(['services/app/__tests__/cli-sync-integration.test.ts'])).toBe(false);
-  });
-
-  it('refuses only an over-cap run, and --all always allows it', () => {
-    expect(overCap(1, 100, false)).toBe(false);
-    expect(overCap(100, 100, false)).toBe(false); // at the cap, still runs
-    expect(overCap(101, 100, false)).toBe(true);
-    expect(overCap(314, 100, false)).toBe(true);
-    expect(overCap(314, 100, true)).toBe(false); // --all ignores the cap
-  });
-
-  it('parses args in any order; a bad or missing -n falls back to the default cap', () => {
-    expect(parseArgs([])).toEqual({ dry: false, all: false, cap: DEFAULT_CAP, base: undefined });
-    expect(parseArgs(['--all'])).toEqual({ dry: false, all: true, cap: DEFAULT_CAP, base: undefined });
-    expect(parseArgs(['-n', '250']).cap).toBe(250);
-    expect(parseArgs(['-n250']).cap).toBe(250);
-    expect(parseArgs(['-n', 'oops']).cap).toBe(DEFAULT_CAP);
-    expect(parseArgs(['origin/main']).base).toBe('origin/main');
-    expect(parseArgs(['--dry', 'origin/main'])).toEqual({ dry: true, all: false, cap: DEFAULT_CAP, base: 'origin/main' });
-  });
-});
-
-// Exercise the real command boundary with a disposable Git repo and a fake
-// installed Vitest executable. No registry, full suite, or real CLI is launched.
+import { DEFAULT_CAP } from '../test-changed.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -67,46 +44,48 @@ function fixture({ count = 1, cli = 0, discoveryExit = 0, malformed = false, run
 }
 
 describe('local test command budget', () => {
-  it('runs affected mjs tests and counts them in the 50-file limit', () => {
+  it('budgets both suites against one 50-file limit, and fails closed when discovery breaks', () => {
     expect(DEFAULT_CAP).toBe(50);
     const small = fixture({ count: 1 });
     expect(small.status, small.stderr).toBe(0);
     expect(small.commands.map(c => c[0])).toEqual(['list', 'run']);
+
     const large = fixture({ count: 51 });
     expect(large.status).toBe(2);
     expect(large.commands.map(c => c[0])).toEqual(['list']);
     expect(large.stderr).toContain('Deferred to CI');
     expect(large.stderr).toContain('PR');
     expect(large.stderr).not.toMatch(/--all|raise the cap|test:all/);
-  });
-  it('counts CLI files in the same budget before running either suite', () => {
-    const result = fixture({ count: 1, cli: 50 });
-    expect(result.status).toBe(2);
-    expect(result.commands.map(c => c[0])).toEqual(['list']);
-  });
-  it('fails closed on discovery errors and malformed output', () => {
+
+    // CLI files spend the SAME budget, and are counted before either suite runs.
+    const withCli = fixture({ count: 1, cli: 50 });
+    expect(withCli.status).toBe(2);
+    expect(withCli.commands.map(c => c[0])).toEqual(['list']);
+
+    // A discovery that exits non-zero, or answers with something that is not a file list, is an error
+    // — never an empty selection reported as a pass.
     for (const options of [{ discoveryExit: 1 }, { malformed: true }]) {
-      const result = fixture(options);
-      expect(result.status).toBe(1);
-      expect(result.stderr).toMatch(/discovery/i);
-      expect(result.commands.map(c => c[0])).toEqual(['list']);
+      const broken = fixture(options);
+      expect(broken.status).toBe(1);
+      expect(broken.stderr).toMatch(/discovery/i);
+      expect(broken.commands.map(c => c[0])).toEqual(['list']);
     }
   });
-  it('stops after a Vitest failure, without running CLI tests', () => {
-    const result = fixture({ count: 1, cli: 1, runExit: 7 });
-    expect(result.status).toBe(7);
-    expect(result.stderr).not.toContain('tsx');
+
+  it('runs exactly what it selected: both suites in order, a focused CLI file alone, nothing after a failure', () => {
+    const both = fixture({ count: 1, cli: 1 });
+    expect(both.status, both.stderr).toBe(0);
+    expect(both.commands.map(c => c[0])).toEqual(['list', 'run', 'cli']);
+
+    const focused = fixture({ count: 0, cli: 1 }, ['--files', 'services/cli/test/c0.test.ts']);
+    expect(focused.status, focused.stderr).toBe(0);
+    expect(focused.commands).toEqual([['cli']]);
+
+    const failed = fixture({ count: 1, cli: 1, runExit: 7 });
+    expect(failed.status).toBe(7);
+    expect(failed.stderr).not.toContain('tsx');
   });
-  it('runs a focused CLI file without discovering or running Vitest', () => {
-    const result = fixture({ count: 0, cli: 1 }, ['--files', 'services/cli/test/c0.test.ts']);
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.commands).toEqual([['cli']]);
-  });
-  it('runs both small suites after budgeting, including CLI cwd handling', () => {
-    const result = fixture({ count: 1, cli: 1 });
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.commands.map(c => c[0])).toEqual(['list', 'run', 'cli']);
-  });
+
   it('reports no affected tests as unverified, not a successful test run', () => {
     const result = fixture({ count: 0 });
     expect(result.status).toBe(2);

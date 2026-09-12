@@ -13,7 +13,7 @@ import { emit } from './events';
 import { generateTokenId } from './ids';
 import type { Harness } from './client-identity';
 
-export const TOKEN_PREFIX = 'mx_';
+const TOKEN_PREFIX = 'mx_';
 
 /**
  * SQL predicate shared by every app query that treats a token as a live
@@ -40,7 +40,7 @@ export function sourcedTokenName(source: string): string {
   return `${source}-${crypto.randomBytes(3).toString('hex')}`;
 }
 
-export interface MintedToken {
+interface MintedToken {
   id: string;
   name: string | null;
   token: string; // plaintext — returned once, never recoverable
@@ -55,7 +55,7 @@ export const MAX_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 /** The shortest: one hour. */
 export const MIN_TOKEN_TTL_MS = 60 * 60 * 1000;
 
-export interface MintOptions {
+interface MintOptions {
   /**
    * Lifetime from now in ms. Omitted ⇒ DEFAULT_TOKEN_TTL_MS. `null` ⇒ non-expiring (reserved for the
    * account's own 'web' token; every agent-facing surface passes a number). Out of [MIN, MAX] ⇒ throws
@@ -69,7 +69,7 @@ export interface MintOptions {
 }
 
 /** Derived, never stored twice: revoked wins over expired; NULL expires_at never expires (grandfathered rows). */
-export type TokenStatus = 'active' | 'expired' | 'revoked';
+type TokenStatus = 'active' | 'expired' | 'revoked';
 export function tokenStatus(
   row: { deleted_at: string | Date | null; expires_at: string | Date | null },
   now: number = Date.now(),
@@ -141,7 +141,7 @@ export async function ensureUserToken(userId: string): Promise<string> {
   return (await mintToken('web', userId, undefined, { expiresInMs: null })).id;
 }
 
-export interface ResolvedToken {
+interface ResolvedToken {
   id: string;
   userId: string | null;
   clientHarness: Harness | null;

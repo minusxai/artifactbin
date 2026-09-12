@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { fetchCsvFromUrl } from '../csv-url';
 import { IngestError } from '../types';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 const CSV = 'region,units\nnorth,42\n';
 

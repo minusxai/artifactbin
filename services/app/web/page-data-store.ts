@@ -1,6 +1,6 @@
 /** Fetched JSON only: never retains mounted runtimes, scripts, editor drafts or credentials. */
 export interface PageDataSnapshot<T> { data: T | null; pending: boolean; error: Error | null }
-export interface PageDataResource<T> {
+interface PageDataResource<T> {
   snapshot(): PageDataSnapshot<T>;
   subscribe(listener: () => void): () => void;
   load(loader: (signal: AbortSignal) => Promise<T>, options?: { force?: boolean }): Promise<void>;

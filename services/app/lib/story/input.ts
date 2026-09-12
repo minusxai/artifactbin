@@ -61,8 +61,8 @@ export const isDocumentFormat = (format: string): boolean => format === 'markup'
  * content on a folder — a second spelling there would go stale the first time a
  * tier is added and let that tier through the one door that must not take it.
  */
-export const TEXT_CONTENT_FIELDS = ['markup'] as const;
-export const DATA_CONTENT_FIELDS = ['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl', 'file'] as const;
+const TEXT_CONTENT_FIELDS = ['markup'] as const;
+const DATA_CONTENT_FIELDS = ['dataset', 'sheetUrl', 'csvUrl', 'imageUrl', 'viz', 'image', 'pdf', 'pdfUrl', 'file'] as const;
 export const CONTENT_FIELDS = [...TEXT_CONTENT_FIELDS, ...DATA_CONTENT_FIELDS] as const;
 
 import type { SourceRepair } from '@/lib/jsx/repair';

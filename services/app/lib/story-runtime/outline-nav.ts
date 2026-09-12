@@ -18,7 +18,7 @@
  */
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 
-export const OUTLINE_TARGET_ATTR = 'data-mx-target';
+const OUTLINE_TARGET_ATTR = 'data-mx-target';
 
 /** The rail's rows, and each one's heading in the DOCUMENT (never the rail's own text). */
 function pairs(doc: Document | HTMLElement): Array<{ row: HTMLElement; heading: HTMLElement | null }> {

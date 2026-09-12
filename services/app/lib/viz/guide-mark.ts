@@ -35,7 +35,7 @@ export const GUIDE_OPACITY = 0.28;
 // Wide (band) guide for bar charts: a full-slot fill needs a softer opacity than the thin line.
 export const GUIDE_BAND_OPACITY = 0.16;
 
-export interface GuideMarkOptions {
+interface GuideMarkOptions {
   /** Facet columns identifying the one repeated cell whose guide should show. */
   facetFields?: string[];
 }

@@ -4,13 +4,12 @@
  * the old parent-side rail had, kept identical so decks read the same.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx } from '@/lib/jsx';
 import type { JsxNode } from '@/lib/jsx';
 import { discoverSlides, hasSlideRail } from '@/lib/story-runtime/slides';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   return parsed.nodes;
 };
 

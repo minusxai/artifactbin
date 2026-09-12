@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
 import type {ArtifactRow,TokenActor} from './artifacts';
 
-export interface CreationReply {status: number; body: Record<string,unknown>}
+interface CreationReply {status: number; body: Record<string,unknown>}
 export interface CreationOperation {
   scope: string;
   key: string;

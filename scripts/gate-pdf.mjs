@@ -23,14 +23,14 @@
  *
  *   usage: node scripts/gate-pdf.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { samplePdf } from './lib/sample-pdf.mjs';
 import { startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
+const check = createChecker('pdf');
 
 const PDF = samplePdf(3);
 
@@ -55,8 +55,8 @@ if (fileRes.status !== 201) {
   console.error(`could not publish the pdf (${fileRes.status} ${JSON.stringify(file)})`);
   process.exit(2);
 }
-ok(file.format === 'pdf', `the file is stored as a pdf (${file.format})`);
-ok(file.pages === 3, `the page count was read from the file (${file.pages})`);
+check(file.format === 'pdf', `the file is stored as a pdf (${file.format})`);
+check(file.pages === 3, `the page count was read from the file (${file.pages})`);
 
 // 2. the document that links it, published PUBLIC so a stranger may read it
 const markup = '<div data-design="tw" className="@container p-10">'
@@ -88,12 +88,12 @@ const card = await page.evaluate(() => {
     target: link ? link.getAttribute('target') : null,
   };
 });
-ok(card.text !== null, 'the reader is served a file card');
-ok((card.text ?? '').includes('Quarterly review'), `the card names the file (${JSON.stringify(card.text)})`);
-ok((card.text ?? '').includes('3 pages'), 'the card says how long the file is');
-ok(/kB|bytes|MB/.test(card.text ?? ''), 'the card says how big the file is');
-ok(card.href === `/a/${file.id}/raw?v=1`, `the card links the file itself (${card.href})`);
-ok(card.target === '_blank', 'the link opens in a new tab');
+check(card.text !== null, 'the reader is served a file card');
+check((card.text ?? '').includes('Quarterly review'), `the card names the file (${JSON.stringify(card.text)})`);
+check((card.text ?? '').includes('3 pages'), 'the card says how long the file is');
+check(/kB|bytes|MB/.test(card.text ?? ''), 'the card says how big the file is');
+check(card.href === `/a/${file.id}/raw?v=1`, `the card links the file itself (${card.href})`);
+check(card.target === '_blank', 'the link opens in a new tab');
 
 /*
  * A REAL CLICK. The document is sandboxed with allow-popups and
@@ -113,17 +113,17 @@ const [popup, download] = await Promise.all([
   page.waitForEvent('download', { timeout: 8_000 }).catch(() => null),
   page.click('[data-slot="file-link"]'),
 ]);
-ok(popup !== null || download !== null, 'a real click opened the file');
-ok(asked.some((u) => u.endsWith(`/a/${file.id}/raw?v=1`)),
+check(popup !== null || download !== null, 'a real click opened the file');
+check(asked.some((u) => u.endsWith(`/a/${file.id}/raw?v=1`)),
   `…at the file's own address (${JSON.stringify(asked.slice(-3))})`);
 if (download) {
   // The name the browser would save it under: `Quarterly review.pdf` comes from
   // Content-Disposition, `raw.pdf` or `raw` would be the URL's own last
   // segment. This is the one thing headless CAN say about that header.
-  ok(download.suggestedFilename() === 'Quarterly review.pdf',
+  check(download.suggestedFilename() === 'Quarterly review.pdf',
     `the download is named by Content-Disposition, not by the URL (${download.suggestedFilename()})`);
 } else {
-  ok(true, 'the popup rendered rather than downloading — a viewer is present (headful)');
+  check(true, 'the popup rendered rather than downloading — a viewer is present (headful)');
 }
 
 /*
@@ -144,13 +144,13 @@ const headers = {
   cache: res.headers()['cache-control'],
   length: (await res.body()).byteLength,
 };
-ok(headers.type === 'application/pdf', `served as application/pdf (${headers.type})`);
-ok(headers.disposition === 'inline; filename="Quarterly review.pdf"', `inline, named after the document (${headers.disposition})`);
-ok(headers.csp === 'sandbox', `sandboxed, so the response context is opaque (${headers.csp})`);
-ok(headers.nosniff === 'nosniff', 'nosniff holds the browser to the type we sniffed');
-ok(headers.ranges === 'bytes', 'ranges are served, so a viewer can seek');
-ok((headers.cache ?? '').includes('immutable'), `the versioned address is immutable (${headers.cache})`);
-ok(headers.length === PDF.byteLength, `the whole file arrived (${headers.length} of ${PDF.byteLength})`);
+check(headers.type === 'application/pdf', `served as application/pdf (${headers.type})`);
+check(headers.disposition === 'inline; filename="Quarterly review.pdf"', `inline, named after the document (${headers.disposition})`);
+check(headers.csp === 'sandbox', `sandboxed, so the response context is opaque (${headers.csp})`);
+check(headers.nosniff === 'nosniff', 'nosniff holds the browser to the type we sniffed');
+check(headers.ranges === 'bytes', 'ranges are served, so a viewer can seek');
+check((headers.cache ?? '').includes('immutable'), `the versioned address is immutable (${headers.cache})`);
+check(headers.length === PDF.byteLength, `the whole file arrived (${headers.length} of ${PDF.byteLength})`);
 
 // A SEEK: the last 32 bytes, which is where a viewer starts (the xref table).
 const seekRes = await context.request.get(`${B}/a/${file.id}/raw?v=1`, { headers: { Range: 'bytes=-32' } });
@@ -159,22 +159,20 @@ const seek = {
   range: seekRes.headers()['content-range'],
   bytes: (await seekRes.body()).toString('latin1'),
 };
-ok(seek.status === 206, `a range request is answered 206 (${seek.status})`);
-ok(seek.range === `bytes ${PDF.byteLength - 32}-${PDF.byteLength - 1}/${PDF.byteLength}`, `…with the right range (${seek.range})`);
-ok(seek.bytes === PDF.subarray(PDF.byteLength - 32).toString('latin1'), 'the bytes are the file\'s own last 32');
+check(seek.status === 206, `a range request is answered 206 (${seek.status})`);
+check(seek.range === `bytes ${PDF.byteLength - 32}-${PDF.byteLength - 1}/${PDF.byteLength}`, `…with the right range (${seek.range})`);
+check(seek.bytes === PDF.subarray(PDF.byteLength - 32).toString('latin1'), 'the bytes are the file\'s own last 32');
 
 // The document's CSP is UNCHANGED by any of this: a link is navigation, and
 // nothing here asked for a new connect-src, frame-src or object-src.
 const docCsp = (await context.request.get(`${B}/a/${owner.id}`)).headers()['content-security-policy'];
 // The runtime now permits its same-origin author wrapper in every document.
 // A File card must not widen that policy or enable a PDF/object embed.
-ok(Boolean(plainCsp) && docCsp === plainCsp.replaceAll(`/a/${plain.id}/`, `/a/${owner.id}/`),
+check(Boolean(plainCsp) && docCsp === plainCsp.replaceAll(`/a/${plain.id}/`, `/a/${owner.id}/`),
   'the document needed no new CSP allowance for the card');
 
 await context.close();
 await browser.close();
 
-const failed = out.filter((l) => l.startsWith('FAIL'));
-console.log(failed.length ? `\n${failed.length} failed` : '\nall ok');
 console.log('NOTE: headless Chromium has no PDF viewer, so nothing above proves the file RENDERS — that check is headful and by hand.');
-process.exit(failed.length ? 1 : 0);
+check.done();

@@ -160,3 +160,91 @@ describe('CI avoids superseded work and duplicate integration setup', () => {
     expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
   });
 });
+
+/**
+ * The three-minute budget is held by the SHAPE of the workflow — what runs where, and how often —
+ * never by a cap or a threshold. Nothing below asserts a duration: a job that runs long must be
+ * fixed at its cause, and a test that failed on seconds would only teach everyone to re-run.
+ */
+describe('CI job shape', () => {
+  const ci = () => yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+  const nightly = () => yaml.parse(readFileSync(path.join(root, '.github/workflows/agent-smoke-nightly.yml'), 'utf8'));
+  const steps = (jobs) => Object.values(jobs).flatMap((job) => job.steps ?? []);
+
+  it('restores the whole install, so no job re-runs the postinstall by hand', () => {
+    for (const workflow of [ci(), nightly()]) {
+      const caches = steps(workflow.jobs).filter((step) => step.id === 'install');
+      expect(caches.length).toBeGreaterThan(0);
+      for (const cache of caches) {
+        // The postinstall's products live OUTSIDE node_modules; cached apart, a cache hit (which
+        // skips `npm ci`, and so the postinstall) would leave every document without its fonts.
+        expect(cache.with.path).toContain('node_modules');
+        expect(cache.with.path).toContain('services/app/public/fonts');
+        expect(cache.with.path).toContain('services/app/lib/data/story/story-font-manifest.json');
+        expect(cache.with.key).toContain("hashFiles('package-lock.json')");
+      }
+      for (const step of steps(workflow.jobs)) expect(step.run ?? '').not.toContain('copy-assets.mjs');
+    }
+  });
+
+  it('fans the gate set over three runners and pulls the Postgres image the datasets gate drives', () => {
+    const { jobs } = ci();
+    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    const run = jobs.gates.steps.find((step) => /scripts\/gates\.mjs/.test(step.run ?? ''));
+    expect(run.run).toContain('--servers=4');
+    expect(run.run).toContain('--shard=${{ matrix.shard }}/4');
+    // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
+    const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
+    expect(pulls).toHaveLength(1);
+    expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
+  });
+
+  it('runs one paid smoke leg on a pull request and the cold-start leg on a schedule', () => {
+    const { jobs } = ci();
+    expect(jobs['agent-smoke'].strategy.matrix.include.map((row) => row.mode)).toEqual(['installed']);
+    // Both legs stage the platform binary (the bundle cannot resolve DuckDB from a run home). Named
+    // as the exact command, not as a substring anywhere in the job, so a comment cannot satisfy it.
+    const binary = 'npm run build:binary -w services/cli';
+    expect(jobs['agent-smoke'].steps.some((step) => step.run?.trim() === binary)).toBe(true);
+
+    const night = nightly();
+    expect(night.on.schedule?.[0]?.cron).toMatch(/^\S+( \S+){4}$/);
+    expect(Object.keys(night.on)).toContain('schedule');
+    const smoke = night.jobs['agent-smoke'];
+    expect(smoke.steps.some((step) => (step.run ?? '').includes('--mode=not-installed'))).toBe(true);
+    expect(smoke.steps.some((step) => step.run?.trim() === binary)).toBe(true);
+    // It reports; it never gates. Nothing in ci.yml waits on it and it is not a planned job.
+    expect(jobs.test.needs).not.toContain('agent-smoke-nightly');
+    expect(CI_JOBS).not.toContain('agent-smoke-nightly');
+  });
+
+  it('runs the CLI suite once and the per-platform binary smoke on every row', () => {
+    const { cli } = ci().jobs;
+    expect(cli.strategy.matrix.os).toContain('ubuntu-24.04');
+    const suite = cli.steps.filter((step) => (step.run ?? '').includes('npm test -w services/cli'));
+    expect(suite).toHaveLength(1);
+    expect(suite[0].if).toBe("matrix.os == 'ubuntu-24.04'");
+    // What is genuinely per-platform is the compiled binary; nothing else repeats per row.
+    for (const command of ['npm run build:binary -w services/cli', 'npm run test:binary -w services/cli']) {
+      expect(cli.steps.find((step) => step.run === command).if).toBeUndefined();
+    }
+    expect(cli.steps.some((step) => (step.run ?? '').includes('--import tsx --test'))).toBe(false);
+  });
+
+  it('reports every job duration from a job that cannot fail the run', () => {
+    const { jobs } = ci();
+    const named = Object.keys(jobs).filter((job) => job !== 'timings');
+    expect(jobs.timings.needs).toEqual(expect.arrayContaining(named));
+    expect(jobs.timings.if).toBe('always()');
+    expect(jobs.timings['continue-on-error']).toBe(true);
+    // Reading the run's own job list needs a scope the workflow does not grant by default.
+    expect(jobs.timings.permissions.actions).toBe('read');
+    const report = jobs.timings.steps.at(-1).run;
+    expect(report).toContain('GITHUB_STEP_SUMMARY');
+    expect(report).toContain('/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs');
+    // Never a gate: absent from the planner's job list and from the required roll-up's needs.
+    expect(CI_JOBS).not.toContain('timings');
+    expect(jobs.test.needs).not.toContain('timings');
+    expect(jobs.timings.steps.some((step) => (step.run ?? '').includes('exit 1'))).toBe(false);
+  });
+});

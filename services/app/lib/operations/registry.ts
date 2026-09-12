@@ -51,7 +51,7 @@ export interface OpContext {
   author: AnnotationAuthor;
 }
 
-export interface OperationError {
+interface OperationError {
   status: number;
   code: string;
   fix: string;

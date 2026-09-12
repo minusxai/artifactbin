@@ -31,7 +31,7 @@ export function normalizeMetadata(value:unknown):DocumentMetadata {
  validateMetadata(metadata);
  return metadata;
 }
-export function validateMetadata(value:unknown):asserts value is DocumentMetadata {
+function validateMetadata(value:unknown):asserts value is DocumentMetadata {
  if(!value||typeof value!=='object'||Array.isArray(value))throw new CliError('invalid_fence','Metadata must be a YAML mapping.');
  for(const [key,field] of Object.entries(value)){
   if(![...identityFields,...metadataFields].includes(key as never))throw new CliError('unknown_fence_key',`Unknown metadata key ${key}.`,`Use: ${[...metadataFields,...identityFields].join(', ')}.`);

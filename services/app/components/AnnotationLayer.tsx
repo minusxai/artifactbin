@@ -52,7 +52,7 @@ import {
   type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
 
-export interface AnnotationLayerProps {
+interface AnnotationLayerProps {
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count can follow it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   id: string;

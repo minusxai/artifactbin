@@ -8,13 +8,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { renderStoryNodes } from '../interpreter';
 import { STORY_UI_COMPONENTS } from '../registry';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 function staticRender(src: string) {
-  const parsed = parseJsx(src);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(src);
   return render(<>{renderStoryNodes(parsed.nodes as JsxNode[], { components: STORY_UI_COMPONENTS })}</>);
 }
 

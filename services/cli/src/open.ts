@@ -15,7 +15,7 @@ import type {Workspace} from './workspace';
  * The view URL is derivable from the identity a local file already carries, so opening a
  * tracked file costs no request and no credentials.
  */
-export interface OpenOptions {server:string;noBrowser?:boolean;json?:boolean;launch?:(url:string)=>Promise<void>}
+interface OpenOptions {server:string;noBrowser?:boolean;json?:boolean;launch?:(url:string)=>Promise<void>}
 const DRAFT_FIX='Publish it with afbin push, then open it; drafts are never uploaded for preview.';
 
 export async function openResources(workspace:Workspace,refs:string[],options:OpenOptions):Promise<{operations:Record<string,unknown>[]}>{

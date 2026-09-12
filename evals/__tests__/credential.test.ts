@@ -1,14 +1,16 @@
+import {describe,expect,it} from 'vitest';
+import {createHash} from 'node:crypto';
+import fs, {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
+import os, {tmpdir} from 'node:os';
+import path, {join} from 'node:path';
+import {parseCredentialSource,acquireCredential,callbackCode,codeFromMail,credentialSourceFor,localLoginEmail,memoizeCredential,pickLoginMail,pkcePair,codeFromOutbox,shareForScoring,deploymentLoginEmail,type InboundMail} from '../lib/credential';
+import {privateConnectionPaths} from '../lib/private-connections';
+
 /**
  * The token never rides the prompt in plugin and MCP modes: the driver logs in like a person (email code, read
  * from the eval's Resend inbox) and grants like an MCP client (OAuth + PKCE), once per leg. Decided 2026-09-03.
  * Seeded RED by the orchestrator.
  */
-import { describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { acquireCredential, callbackCode, codeFromMail, credentialSourceFor, localLoginEmail, memoizeCredential, pickLoginMail, pkcePair, codeFromOutbox, shareForScoring, deploymentLoginEmail, type InboundMail } from '../lib/credential';
 
 describe('credential source per mode', () => {
   const inbox = { RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'mxmx_eval@social-worm.resend.app' };
@@ -365,5 +367,29 @@ describe('deploymentLoginEmail — one inbox, one door per harness', () => {
   });
   it('an address the caller already tagged is used verbatim', () => {
     expect(deploymentLoginEmail('mxmx_eval+smoke@social-worm.resend.app', 'pi')).toBe('mxmx_eval+smoke@social-worm.resend.app');
+  });
+});
+
+describe('private connections', () => {
+  it('protects the entire current configuration directory and any old credentials left on disk',()=>{
+   const home=mkdtempSync(join(tmpdir(),'eval-private-'));
+   try{
+    expect(privateConnectionPaths(home)).toEqual([]);
+    mkdirSync(join(home,'.artifactbin'));writeFileSync(join(home,'.artifactbin.env'),'');
+    expect(privateConnectionPaths(home)).toEqual([join(home,'.artifactbin'),join(home,'.artifactbin.env')]);
+   }finally{rmSync(home,{recursive:true,force:true});}
+  });
+});
+
+describe('the credential sources a run may name', () => {
+  it('refuses a retired source by name, listing the two there are', () => {
+    for (const retired of ['none', 'paste', 'secret']) {
+      expect(() => parseCredentialSource(retired)).toThrow(new RegExp(`unknown --credential "${retired}"`));
+      expect(() => parseCredentialSource(retired)).toThrow(/inbox-oauth, outbox-oauth/);
+    }
+  });
+  it('the two that remain parse, and a run with neither configured fails loudly', () => {
+    for (const s of ['inbox-oauth', 'outbox-oauth'] as const) expect(parseCredentialSource(s)).toBe(s);
+    expect(() => credentialSourceFor('installed', {}, {})).toThrow(/RESEND_EVAL_API_KEY/);
   });
 });

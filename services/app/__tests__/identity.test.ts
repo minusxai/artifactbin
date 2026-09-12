@@ -23,6 +23,7 @@ import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { ID_RE } from '@/lib/ids';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { readFrames } from '@/__tests__/sse';
 
 const harness = useAppHarness();
 
@@ -51,27 +52,6 @@ async function renameArtifact(oldId: string, newId: string): Promise<void> {
 }
 
 /** Read SSE data frames until `count` arrive or the budget runs out. */
-async function readFrames(body: ReadableStream<Uint8Array>, count: number, budgetMs = 3000): Promise<Record<string, unknown>[]> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const frames: Record<string, unknown>[] = [];
-  let buffer = '';
-  const deadline = Date.now() + budgetMs;
-  while (frames.length < count && Date.now() < deadline) {
-    const chunk = await Promise.race([
-      reader.read(),
-      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now())),
-    ]);
-    if (chunk.done || !chunk.value) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-    for (const line of buffer.split('\n\n')) {
-      if (line.startsWith('data: ')) frames.push(JSON.parse(line.slice(6)));
-    }
-    buffer = '';
-  }
-  void reader.cancel().catch(() => {});
-  return frames;
-}
 
 beforeEach(async () => {
   await resetLiveSubscriptions();

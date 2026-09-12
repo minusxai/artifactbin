@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { buildStoryDocument } from '@/lib/story/document';
 import { storyUpdateParts } from '@/lib/story/update-parts';
 import { assetLookupFrom, assetUrlFor, mapExternalImageSources, type WebAssetBox } from '@/lib/story/asset-url';
-import { parseJsx } from '@/lib/jsx';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const URL_A = 'https://picsum.photos/id/237/300/200';
 // A component in the body so the document carries an island at all.
@@ -33,8 +33,7 @@ const known = (u: string) => u === URL_A;
 
 describe('mapExternalImageSources', () => {
   it('rewrites a known url and leaves an unknown one', () => {
-    const nodes = parseJsx(`<div><img src="${URL_A}" /><img src="https://other.example/x.png" /></div>`);
-    if (!nodes.ok) throw new Error('parse');
+    const nodes = parseJsxOrThrow(`<div><img src="${URL_A}" /><img src="https://other.example/x.png" /></div>`);
     const out = JSON.stringify(mapExternalImageSources(nodes.nodes, known));
     expect(out).toContain(assetUrlFor(URL_A));
     expect(out).toContain('https://other.example/x.png');
@@ -66,8 +65,7 @@ describe('the three renderings agree', () => {
 
   it('the live frame is node-for-node what the page renders — versions, variants and all', () => {
     const parts = storyUpdateParts(SOURCE, held);
-    const parsed = parseJsx(SOURCE);
-    if (!parsed.ok) throw new Error('parse');
+    const parsed = parseJsxOrThrow(SOURCE);
     expect(parts!.nodes).toEqual(mapExternalImageSources(parsed.nodes, held));
   });
 

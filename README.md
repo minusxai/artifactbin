@@ -55,7 +55,7 @@ Local development requires Node.js 22 and npm; embedded PGLite needs no Docker.
 ```bash
 git clone https://github.com/minusxai/artifactbin
 cd artifactbin
-npm install
+npm ci
 npm run setup
 npm run dev
 ```

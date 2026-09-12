@@ -6,7 +6,7 @@
  */
 import type { Browser, Page } from 'playwright';
 
-export interface DocumentInspection {
+interface DocumentInspection {
   consoleErrors: string[];
   failedResponses: string[];
   scrollWidth: number;

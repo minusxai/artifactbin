@@ -1,20 +1,19 @@
 import {act,render,waitFor} from '@testing-library/react';
 import {it,expect} from 'vitest';
 import {StoryRuntimeApp} from '../StoryRuntimeApp';
-import {parseJsx} from '@/lib/jsx';
 import {STORY_UI_COMPONENTS} from '@/lib/story-ui/registry';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {createElement} from 'react';
 import {splitHelmet} from '@/lib/story/helmet';
 import {initialValues,initialTables} from '@/lib/story/dataflow';
 import {createDataflowStore} from '../store';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 it('reserves managed frame dimensions in the inert SSR registry',()=>{
   const html=renderToStaticMarkup(createElement(STORY_UI_COMPONENTS.Iframe,{title:'Demo',height:450,compiled:{html:'<p>secret</p>',scripts:[]}}));
   expect(html).toContain('height:450px');expect(html).toContain('aria-label="Demo"');expect(html).toContain('data-mx-managed-frame=""');expect(html).not.toContain('secret');
 });
 it('renders separate managed regions without author DOM in the parent',async()=>{
-  const parsed=parseJsx('<Iframe title="One"><p>Inner</p><script>{`void 0`}</script></Iframe><Iframe title="Two"><canvas/></Iframe>');
-  if(!parsed.ok)throw Error(parsed.error);
+  const parsed=parseJsxOrThrow('<Iframe title="One"><p>Inner</p><script>{`void 0`}</script></Iframe><Iframe title="Two"><canvas/></Iframe>');
   const view=render(<StoryRuntimeApp nodes={parsed.nodes} refData={{}} colorMode="light"/>);
   await waitFor(()=>expect(view.container.querySelectorAll('iframe')).toHaveLength(2));
   expect(view.container.querySelectorAll('[data-mx-managed-frame]')).toHaveLength(2);
@@ -22,8 +21,7 @@ it('renders separate managed regions without author DOM in the parent',async()=>
   expect(view.container.textContent).not.toContain('Inner');view.unmount();
 });
 it('composes reactive branches with isolated frames and disposes the hidden branch',async()=>{
-  const parsed=parseJsx('<Helmet><Value name="visible" type="boolean" default={true}/></Helmet>{$visible ? <Iframe id="view" title="Conditional canvas"><style>{`canvas {position:fixed}`}</style><canvas/><script>{`window.label = "$visible";`}</script></Iframe> : <p>Closed</p>}');
-  if(!parsed.ok)throw Error(parsed.error);
+  const parsed=parseJsxOrThrow('<Helmet><Value name="visible" type="boolean" default={true}/></Helmet>{$visible ? <Iframe id="view" title="Conditional canvas"><style>{`canvas {position:fixed}`}</style><canvas/><script>{`window.label = "$visible";`}</script></Iframe> : <p>Closed</p>}');
   const {content,body:nodes}=splitHelmet(parsed.nodes);
   const flow={values:content.values,queries:content.queries,mutations:content.mutations};
   const state={values:initialValues(flow),tables:initialTables(flow),errors:{}};

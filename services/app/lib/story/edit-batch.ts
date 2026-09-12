@@ -12,7 +12,7 @@ import {
 
 export interface StringEdit { oldString: string; newString: string }
 export interface BatchChange { splice: Splice; span: TouchedSpan }
-export type BatchResult =
+type BatchResult =
   | { ok: true; source: string; changes: BatchChange[] }
   | { ok: false; reason: 'empty_batch' | 'too_many_edits' | 'too_large' | 'no_match' | 'multiple_matches' | 'identical'; editIndex?: number };
 export const MAX_BATCH_EDITS = 64;

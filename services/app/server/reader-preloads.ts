@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Manifest } from 'vite';
 
 /** Build-owned reader discovery. Hints never execute code or change access. */
-export type ReaderPreloader = (html: string) => string;
+type ReaderPreloader = (html: string) => string;
 
 const READER_ENTRIES = ['pages/Profile.tsx', 'pages/Artifact.tsx', '../lib/story-runtime/InlineStoryRuntime.tsx'];
 interface Hint { href: string; style: boolean }

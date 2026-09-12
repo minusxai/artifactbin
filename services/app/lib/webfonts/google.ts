@@ -11,7 +11,7 @@
  * SKIPPED rather than guessed at: what we cannot describe we will not store.
  */
 
-export interface GoogleFontFace {
+interface GoogleFontFace {
   family: string;
   subset: string;
   /** The gstatic URL to copy from — never served to a reader. */

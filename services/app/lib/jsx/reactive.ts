@@ -1,5 +1,5 @@
 /** The complete executable vocabulary: data reads and pure scalar operators, never JavaScript evaluation. */
-export type ReactiveScalar = string | number | boolean | null;
+type ReactiveScalar = string | number | boolean | null;
 export type ReactiveExpression =
   | {kind: 'literal'; value: ReactiveScalar}
   | {kind: 'signal'; name: string}

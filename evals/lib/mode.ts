@@ -15,7 +15,7 @@
 import type {Harness} from './contracts';
 export const EVAL_MODES=['installed','not-installed'] as const;
 export type EvalMode=(typeof EVAL_MODES)[number];
-export type ActionTransport='cli';
+type ActionTransport='cli';
 export const DEFAULT_MODE:EvalMode='installed';
 export interface ModePlan {asked:EvalMode;run:EvalMode;substitutedWhy:null}
 export function parseMode(raw:string):EvalMode{
@@ -26,5 +26,5 @@ export function actionTransport(_mode:EvalMode):ActionTransport{return 'cli';}
 export function planMode(_harness:Harness,asked:EvalMode):ModePlan{return {asked,run:asked,substitutedWhy:null};}
 /** The driver stages afbin on PATH and runs its auth before the agent starts. */
 export function cliPreinstalled(mode:EvalMode):boolean{return mode==='installed';}
-export interface TransportPlan {run:ActionTransport;asked:ActionTransport;substitutedWhy:null}
+interface TransportPlan {run:ActionTransport;asked:ActionTransport;substitutedWhy:null}
 export function planTransport(_harness:Harness,asked:ActionTransport):TransportPlan{return {asked,run:asked,substitutedWhy:null};}
