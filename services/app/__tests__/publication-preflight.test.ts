@@ -176,6 +176,21 @@ it('two dependency ids naming the same bytes both resolve to the one artifact th
  ]);
 });
 
+it('an avif is a file, because the image door will not take one',async()=>{
+ const token=await mintToken('preflight-avif');
+ // The CLI's create body already publishes an avif through the generic file
+ // door — the image tier accepts png|jpeg|webp|gif|svg and nothing else — so
+ // preflight has to call it the same thing. A declared format that disagreed
+ // with the artifact the upload creates would never match again on the next
+ // push: the dedupe would be a permanent miss rather than a wrong answer.
+ const response=await preflightAsset(token.token,{id:'local000001',sha256:'a'.repeat(64),size:1234,filename:'logo.avif'},'file');
+ expect(response.status,await response.clone().text()).toBe(200);
+ expect((await response.json()).dependencies).toEqual([{id:'local000001',format:'file',existing:null}]);
+ // …and it is refused where an image belongs, rather than quietly passing.
+ const asImage=await preflightAsset(token.token,{id:'local000001',sha256:'a'.repeat(64),size:1234,filename:'logo.avif'},'image');
+ expect(asImage.status).toBe(400);
+});
+
 it('a dataset dependency still travels with its rows and reports existing:null',async()=>{
  const token=await mintToken('preflight-dataset-result');
  const response=await preflight(request('/api/artifacts/preflight',{method:'POST',token:token.token,json:{

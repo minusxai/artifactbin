@@ -23,8 +23,20 @@ export function fileContentType(filename: string): string | null {
     ? FILE_TYPES[extension as keyof typeof FILE_TYPES] : null;
 }
 
-/** The extensions that go through the image door — sniffed, re-encoded to webp, measured, given a narrow variant. */
-const IMAGE_EXTENSIONS: readonly string[] = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'avif'];
+/**
+ * The extensions that go through the IMAGE door — sniffed, re-encoded to webp,
+ * measured, given a narrow variant.
+ *
+ * This is exactly what {@link IMAGE_CONTENT_TYPES} (lib/story/image-store)
+ * accepts, and it has to stay exactly that. `avif` is the interesting absence:
+ * it is a perfectly good {@link FILE_TYPES} upload and the browser renders it,
+ * but the image door refuses those bytes, so calling one an `image` here would
+ * have preflight validate a document against a tier the upload would then be
+ * rejected from — and, worse, would have the declared format disagree with the
+ * artifact the CLI actually creates, so its hash could never match on the next
+ * push. An avif is a `file`, the same thing the create body already makes it.
+ */
+const IMAGE_EXTENSIONS: readonly string[] = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'];
 
 /**
  * WHICH ASSET TIER A LOCAL FILE BELONGS TO, decided from its name alone — the
