@@ -118,11 +118,11 @@ test('an asset the server already owns is referenced without an upload; a miss i
   const first=await pushMissed();assert.equal(first.code,0,JSON.stringify(first.result));
   assert.equal(missing.stats.images,1,'a miss is uploaded exactly once');
   assert.equal(first.result.operations.find((operation:any)=>operation.path==='photo.png').status,'published');
-  const requests=missing.length;
+  const requests=missing.requests.length;
   const second=await pushMissed();assert.equal(second.code,0,JSON.stringify(second.result));
-  assert.equal(missing.length,requests,'an unchanged document with unchanged assets makes no request at all');
+  assert.equal(missing.requests.length,requests,'an unchanged document with unchanged assets makes no request at all');
   assert.equal(second.result.operations.find((operation:any)=>operation.path==='doc.jsx').status,'skipped');
-  const published=missing.find(entry=>entry.path==='/api/artifacts'&&entry.body.markup);assert.ok(published);
+  const published=missing.requests.find(entry=>entry.path==='/api/artifacts'&&entry.body.markup);assert.ok(published);
   assert.match(published.body.markup,/ref:[A-Za-z0-9]{6,}/);assert.doesNotMatch(published.body.markup,/ref:local00/);
   assert.match(await readFile(join(missed,'work','doc.jsx'),'utf8'),/\.\/photo\.png/);
  }finally{await rm(seeded,{recursive:true,force:true});await rm(missed,{recursive:true,force:true});}
