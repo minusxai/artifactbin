@@ -52,11 +52,8 @@ export const GATE_SPECS = Object.freeze([
     why: 'Publishes its own dataset and dataflow documents, then logs in a private reader to exercise direct and relayed queries.',
     needsMail: true, needsClipboard: false, timeoutMs: 249_000,
   },
-  // measured: implementer 34s; orchestrator 33s
-  { name: 'editor-exit', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 102_000 },
   // measured: implementer 35s; orchestrator 36s
-  { name: 'editor-v2', start: 'shared', needsMail: false, needsClipboard: true, serialGroup:'clipboard', timeoutMs:180_000 },
-  { name: 'editor-flow', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 108_000 },
+  { name: 'editor-v2', start: 'shared', needsMail: true, needsClipboard: true, serialGroup:'clipboard', timeoutMs:180_000 },
   // measured: orchestrator 30s, including two readers, owner relay and PNG export
   { name: 'editable-table', start: 'shared', needsMail: true, needsClipboard: false, timeoutMs: 120_000 },
   // Table/DAG/Sprint navigation and sprint creation through the shared dialog.
