@@ -23,7 +23,7 @@ import path from 'node:path';
 import type { HarnessAdapter, HarnessRunContext } from './contracts';
 import type { Leg } from './leg';
 import type { SkillKit } from './skill-kit';
-import { runInvocation } from './spawn';
+import { runInvocation, agentEnvironment } from './spawn';
 import { taskCost } from './price';
 
 /** Says nothing, does nothing, touches nothing — so what it costs is the floor and not the work. */
@@ -77,7 +77,7 @@ export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> 
   await opts.adapter.prepare(ctx);
   const spawned = await runInvocation({ ...opts.adapter.invocation(ctx), redact: [opts.apiKey] }, {
     cwd,
-    baseEnv: { ...process.env, PATH:[browserShims(path.join(ctx.homeDir,'shims')),materializeCli(path.join(ctx.homeDir,'bin')),process.env.PATH??''].join(path.delimiter) },
+    baseEnv: { ...agentEnvironment(process.env), PATH:[browserShims(path.join(ctx.homeDir,'shims')),materializeCli(path.join(ctx.homeDir,'bin')),process.env.PATH??''].join(path.delimiter) },
     timeoutMs: opts.timeoutMs,
     stdoutPath: path.join(opts.dir, 'transcript.jsonl'),
     stderrPath: path.join(opts.dir, 'stderr.log'),

@@ -47,7 +47,7 @@ import { taskCost } from './lib/price';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
 import { ledgerMetrics, ledgerRows, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
-import { runInvocation, checkoutIsolationRoots } from './lib/spawn';
+import { runInvocation, checkoutIsolationRoots, agentEnvironment } from './lib/spawn';
 import { countCheckoutReads } from './lib/local-reads';
 import { RunRecorder } from './lib/rows';
 import { devOutboxPath, serverDataDir, serverEnv, serverPorts, startServer } from './lib/server';
@@ -364,7 +364,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
     // Installed: the staged afbin leads PATH. Not installed: only the installer's own target, `~/.local/bin` of the run home.
-    baseEnv: { ...process.env, ...r.agentEnv, PATH:[browserShims(path.join(homeDir, 'shims')), cliBin ?? path.join(homeDir, '.local', 'bin'),r.agentEnv.PATH??process.env.PATH??''].join(path.delimiter) },
+    baseEnv: { ...agentEnvironment(process.env), ...r.agentEnv, PATH:[browserShims(path.join(homeDir, 'shims')), cliBin ?? path.join(homeDir, '.local', 'bin'),r.agentEnv.PATH??process.env.PATH??''].join(path.delimiter) },
     timeoutMs: config.run.timeoutMs,
     stdoutPath: path.join(runDir, 'transcript.jsonl'),
     stderrPath: path.join(runDir, 'stderr.log'),
