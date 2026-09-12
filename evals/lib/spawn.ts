@@ -281,6 +281,26 @@ export function pathWithoutForeignAfbin(PATH: string, home: string, isUnder: (en
   }).join(path.delimiter);
 }
 
+/**
+ * THE ENVIRONMENT AN AGENT MAY SEE. Never the driver's own: the driver holds the eval inbox key
+ * (`RESEND_EVAL_API_KEY`, which reads the login codes for the eval account), the runner's Actions
+ * variables and every provider key, and `{ ...process.env }` handed all of it to every agent. Pi read
+ * its environment, found the inbox key and the login email, and wrote out a plan to fetch the OTP from
+ * Resend and sign in around the CLI (run 34709587428, report task). Only what a shell on a clean machine
+ * carries passes through; the adapter adds its own key and home, and the proxy its variables, on top.
+ */
+const AGENT_ENV_ALLOWLIST = new Set(['HOME', 'PATH', 'PWD', 'TMPDIR', 'TMP', 'TEMP', 'LANG', 'LANGUAGE', 'TERM', 'COLORTERM', 'SHELL', 'USER', 'LOGNAME', 'TZ', 'CI', 'NO_COLOR']);
+const NEVER_AGENT_ENV = /(_API_KEY|_TOKEN|_SECRET|PASSWORD|EVAL_LOGIN|RESEND)/i;
+export function agentEnvironment(source: NodeJS.ProcessEnv): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(source)) {
+    if (value === undefined) continue;
+    if (NEVER_AGENT_ENV.test(key)) continue;
+    if (AGENT_ENV_ALLOWLIST.has(key) || key.startsWith('LC_')) out[key] = value;
+  }
+  return out;
+}
+
 export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; checkoutRoots?: string[]; turnCap?: TurnCap; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
