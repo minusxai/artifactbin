@@ -161,3 +161,46 @@ it('keeps a dragged text range from selecting its common layout ancestor', () =>
   expect(document.querySelector('[data-mx-node-chrome]')).toHaveStyle({ display: 'none' });
   session.dispose();
 });
+
+
+it('reports the actual source block for hover, click, and caret selection in formatted JSX', () => {
+  const parsed = parseJsx(`<section id="root">
+    <p id="eyebrow">Notes</p>
+    <h1 id="heading">Try making a copy</h1>
+    <p id="body">Use <strong>Fork</strong> to copy.</p>
+    <blockquote id="quote">
+      <h2 id="subheading">Details</h2>
+      <p id="nested">Nested paragraph</p>
+    </blockquote>
+    <ul id="list"><li id="item">An item</li></ul>
+  </section>`);
+  if (!parsed.ok) throw Error(parsed.error);
+  const post = vi.fn();
+  const session = createFrameEditSession({
+    win: window, requestRender: () => {},
+    channel: { nonce: 'x'.repeat(32), post, innerHtmlOf: (el) => el.innerHTML },
+  });
+  session.setNodes(parsed.nodes);
+  const view = render(<>{renderStoryNodes(parsed.nodes, {
+    components: {}, decorateElement: session.decorate, decorateChildren: session.decorateChildren,
+  })}</>);
+  try {
+    window.getSelection()!.removeAllRanges();
+    for (const [id, tag] of [['eyebrow', 'p'], ['heading', 'h1'], ['body', 'p'], ['subheading', 'h2'], ['nested', 'p'], ['item', 'li']]) {
+      const el = view.container.querySelector(`#${id}`)!;
+      fireEvent.pointerOver(el);
+      expect(el.closest('[data-mx-edit-hover]'), id).not.toBeNull();
+      fireEvent.click(el);
+      expect(post.mock.calls.filter(([m]) => m.type === 'mx:selection').at(-1)?.[0], id)
+        .toMatchObject({ selection: { nodeId: id, tag } });
+      const text = el.querySelector('p')?.firstChild ?? el.firstChild!;
+      window.getSelection()!.setBaseAndExtent(text, 0, text, 0);
+      fireEvent(document, new Event('selectionchange'));
+      expect(post.mock.calls.filter(([m]) => m.type === 'mx:selection').at(-1)?.[0], id)
+        .toMatchObject({ selection: { nodeId: id, tag } });
+    }
+  } finally {
+    window.getSelection()!.removeAllRanges();
+    session.dispose();
+  }
+});

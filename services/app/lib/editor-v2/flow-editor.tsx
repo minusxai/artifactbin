@@ -8,7 +8,7 @@ import { EditorView, Decoration, DecorationSet } from 'prosemirror-view';
 import { splitListItem, sinkListItem, liftListItem } from 'prosemirror-schema-list';
 import { baseKeymap, chainCommands } from 'prosemirror-commands';
 import { keymap } from 'prosemirror-keymap';
-import { serializeJsx, type JsxNode } from '@/lib/jsx';
+import { serializeJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { mergeIdentityMaps } from './annotation-map';
 import { captureBookmark, type EditorSelectionChange } from './bookmark';
 import { clipboardAst, type ClipboardKind } from './clipboard';
@@ -85,20 +85,31 @@ export function FlowEditor({ nodes, path, onChange, onView, onError, onBusy, can
           first = Number(parts.pop()),
           parent = parts.join('.');
         const decorations: Decoration[] = [];
-        const visit = (node: typeof state.doc, pos: number, path: string) => {
-          decorations.push(Decoration.node(pos, pos + node.nodeSize, { 'data-mx-ast': path }));
-          let index = 0;
-          node.forEach((child, offset) => {
-            if (child.attrs.synthetic) {
-              index += sourceNodes(child).length;
-              return;
-            }
-            if (!child.isText) visit(child, pos + 1 + offset, `${path}.${index}`);
-            index++;
+        // Engine blocks omit source whitespace and introduce synthetic text
+        // wrappers. Walk the authored siblings alongside them; engine child
+        // ordinals are never AST paths. IDs also prevent a pending structural
+        // edit from pointing the toolbar at a different source node.
+        const visit = (container: typeof state.doc, source: JsxNode[], pos: number, parentPath: string, base = 0) => {
+          let cursor = 0;
+          container.forEach((node, offset) => {
+            if (node.isText || node.isInline || node.attrs.synthetic) return;
+            const original = node.attrs.source as JsxElement | null;
+            if (!original) return;
+            const id = original.attributes.find((a) => a.name === 'id')?.value;
+            const index = source.findIndex((candidate, i) => i >= cursor &&
+              candidate.type === 'element' && candidate.tag === original.tag &&
+              (!id?.static || candidate.attributes.some((a) => a.name === 'id' && a.value.static && a.value.json === id.json)));
+            if (index < 0) return;
+            cursor = index + 1;
+            const path = [parentPath, String(base + index)].filter(Boolean).join('.');
+            const position = pos + offset;
+            decorations.push(Decoration.node(position, position + node.nodeSize, { 'data-mx-ast': path }));
+            const authored = source[index];
+            if (authored.type === 'element' && !node.isTextblock)
+              visit(node, authored.children, position + 1, path);
           });
         };
-        let index = 0;
-        state.doc.forEach((node, pos) => visit(node, pos, [parent, String(first + index++)].filter(Boolean).join('.')));
+        visit(state.doc, latest.current.nodes, 0, parent, first);
         return DecorationSet.create(state.doc, decorations);
       },
       attributes: {
@@ -219,7 +230,12 @@ export function FlowEditor({ nodes, path, onChange, onView, onError, onBusy, can
   }, []);
   useLayoutEffect(() => {
     const view = viewRef.current;
-    if (!view || composing.current || serializeJsx(sourceNodes(view.state.doc)) === incoming) return;
+    if (!view || composing.current) return;
+    if (serializeJsx(sourceNodes(view.state.doc)) === incoming) {
+      // A normalized source echo can change AST paths without changing prose.
+      view.updateState(view.state);
+      return;
+    }
     const doc = editorDocument(nodes);
     const position = Math.min(view.state.selection.from, doc.content.size);
     view.updateState(
@@ -230,6 +246,6 @@ export function FlowEditor({ nodes, path, onChange, onView, onError, onBusy, can
       }),
     );
     latest.current.onView?.(view);
-  }, [incoming, nodes, compositionEpoch]);
+  }, [incoming, nodes, path, compositionEpoch]);
   return <div ref={mount} className="mx-prose-region" style={{ display: 'contents' }} />;
 }

@@ -120,3 +120,17 @@ it('does not start a native HTML drag when adjusting selected text', () => {
   expect(fireEvent.dragStart(view.container.querySelector('p')!)).toBe(false);
   expect(onChange).not.toHaveBeenCalled();
 });
+
+
+it('refreshes source paths when whitespace normalizes or the prose region moves', () => {
+  const onChange = vi.fn();
+  const view = render(<FlowEditor nodes={nodes('<h1>Title</h1>\n<p>Body</p>')} path="0.1" onChange={onChange} />);
+  const paragraph = view.container.querySelector('p')!;
+  expect(paragraph).toHaveAttribute('data-mx-ast', '0.3');
+  view.rerender(<FlowEditor nodes={nodes('<h1>Title</h1><p>Body</p>')} path="0.1" onChange={onChange} />);
+  expect(view.container.querySelector('p')).toBe(paragraph);
+  expect(paragraph).toHaveAttribute('data-mx-ast', '0.2');
+  view.rerender(<FlowEditor nodes={nodes('<h1>Title</h1><p>Body</p>')} path="0.4" onChange={onChange} />);
+  expect(paragraph).toHaveAttribute('data-mx-ast', '0.5');
+  expect(onChange).not.toHaveBeenCalled();
+});
