@@ -732,12 +732,11 @@ jobs:
           retention-days: 90
       - name: Verify runtime compatibility
         run: node services/cli/scripts/small-node.mjs --verify-only
-      # THE SUITE RUNS ONCE, on ubuntu-24.04. The other three rows exist for the thing that is
-      # genuinely per-platform — a binary compiled for that OS and architecture — so they build it
-      # and run its smoke, and nothing else. Re-running config/launcher/runner under tsx on every
-      # row cost 15s on macos-15-intel and 0s of new information: those three files exercise the
-      # config store, executable discovery and PTY handling through Node, which the ubuntu row
-      # already covers, and what differs across platforms is what `test:binary` actually drives.
+      # Run shared source behavior once on the release runtime. The packaged binary
+      # is the per-platform contract, exercised by test:binary on all four targets.
+      - name: Use release runtime for CLI source tests
+        if: matrix.os == 'ubuntu-24.04'
+        run: echo "$GITHUB_WORKSPACE/node_modules/.cache/cli-node" >> "$GITHUB_PATH"
       - if: matrix.os == 'ubuntu-24.04'
         run: npm test -w services/cli
       - run: npm run build -w services/cli
@@ -745,9 +744,6 @@ jobs:
         run: npm run build:binary -w services/cli
         env:
           CLI__NODE: ${{ github.workspace }}/node_modules/.cache/cli-node/node
-      - name: CLI behavior on the release runtime
-        working-directory: services/cli
-        run: ../../node_modules/.cache/cli-node/node --import tsx --test test/*.test.ts
       - run: npm run test:binary -w services/cli
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
