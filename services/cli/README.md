@@ -32,6 +32,14 @@ pushes make no HTTP request. Use `--remote` to refresh a comparison. `push --dry
 saving files or publishing. `afbin -h`, command `-h`, `afbin help <topic>` and the installed man page
 teach the same flags and rules.
 
+Nothing is written into your working directory. All local state — which files are tracked, the server
+state last accepted, account resources, Markdown conversions and interrupted operations — lives in one
+private SQLite database at `~/.artifactbin/state.sqlite` (`ARTIFACTBIN_HOME` moves it), and a tracked
+file is recorded by the SHA-256 of its bytes rather than by a copy of them. There is nothing to commit
+and nothing to add to `.gitignore`. A forced overwrite keeps the replaced bytes under
+`~/.artifactbin/backups/local` and prints that absolute path. Images, PDFs and files are identified by
+content hash, so publishing bytes you already own reuses that artifact instead of uploading them again.
+
 A command reference is `<url|id|path>[@version]`; existing filenames win. Published references in
 markup use `ref:<id>`, including Query/Mutation sources. SQL names tables; `$query` binds a result.
 Old reference spellings are rejected. Relative dependencies publish with their document.

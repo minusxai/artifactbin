@@ -46,6 +46,15 @@ Folders use `ancestor_ids` and app chrome (`web/pages/Folder.tsx`, page data `ki
 listing markup. Child writes notify the parent channel so listings refresh. Trash uses `deleted_at` and
 `LIVE_ARTIFACT_SQL`; retention and purge belong to `lib/trash`.
 
+`services/cli/src/state.ts` owns the CLI's only local state: one SQLite database at
+`~/.artifactbin/state.sqlite` (`ARTIFACTBIN_HOME` relocates it), whose records are keyed by workspace
+root, kind and key — tracking, account resources, Markdown conversions, conflicts and recovery
+journals alike. Nothing is ever written into a user's workspace: no lockfile, no tracking directory,
+and a tracked file keeps the sha256 of its local bytes rather than a copy of them. Forced overwrites
+keep the replaced bytes under `~/.artifactbin/backups/local` and report that absolute path.
+Cross-process exclusion is a zero-byte lock database beside the store, released by the OS even after
+SIGKILL.
+
 ## Documents, edits and data
 
 `lib/story/document.ts` renders the same `StoryRuntimeApp` composition hydrated by the runtime entry.

@@ -10,7 +10,7 @@ describe('the installed short skill',()=>{
  });
  it('uses the same push for create and update with local validation',()=>{
   for(const text of ['afbin pull','afbin push report.jsx','new artifact','afbin validate'])expect(sheet).toContain(text);
-  expect(renderDoc('artifactbin/references/publishing.md','https://example.test')).toContain('afbin.lock');
+  expect(renderDoc('artifactbin/references/publishing.md','https://example.test')).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
   expect(sheet).toContain('YAML fence');
   expect(sheet).toContain('edit_id');
  });
