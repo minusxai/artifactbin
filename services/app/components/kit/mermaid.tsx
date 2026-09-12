@@ -37,6 +37,7 @@ function paletteFor(element: HTMLElement, dark: boolean): MermaidPalette {
     primary: color('--primary', '#2563eb'), border: color('--border', '#9ca3af'),
     card: color('--card', dark ? '#1f2937' : '#ffffff'),
     muted: color('--muted', dark ? '#1f2937' : '#f3f4f6'),
+    accent: color('--accent', dark ? '#1f2937' : '#f3f4f6'),
     mutedForeground: color('--muted-foreground', dark ? '#9ca3af' : '#6b7280'),
     // The theme's own face as the browser resolved it here; a web font the
     // reader's machine lacks falls through the stack, as it does everywhere else.

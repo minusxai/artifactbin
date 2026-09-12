@@ -28,6 +28,7 @@ describe('Mermaid', () => {
     expect(renderMermaid).toHaveBeenCalledWith('flowchart TD; A-->B', expect.objectContaining({
       card: expect.stringMatching(/^#[0-9a-f]{6}$/),
       muted: expect.stringMatching(/^#[0-9a-f]{6}$/),
+      accent: expect.stringMatching(/^#[0-9a-f]{6}$/),
       mutedForeground: expect.stringMatching(/^#[0-9a-f]{6}$/),
       fontFamily: expect.any(String),
       fontMono: expect.any(String),

@@ -13,6 +13,8 @@ export interface MermaidPalette {
   card: string;
   /** Group/cluster fill — the theme's muted surface. */
   muted: string;
+  /** The theme's quiet surface tint (`--accent`, never the accent colour) — notes and subgraphs. */
+  accent: string;
   /** Edges, arrowheads and edge labels. */
   mutedForeground: string;
   /** The host element's resolved font stack and a clamped label size (`13px`). */
@@ -26,14 +28,34 @@ export interface MermaidImage { src: string; type: string; width?: number; heigh
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/** `#rrggbb` mixed toward `#rrggbb` by `amount` (0..1) — a tint Mermaid's hex-only variables can take. */
+export function mixHex(color: string, toward: string, amount: number): string {
+  const channel = (hex: string, i: number) => Number.parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  return '#' + [0, 1, 2].map(i => {
+    const value = Math.round(channel(color, i) + (channel(toward, i) - channel(color, i)) * amount);
+    return Math.min(255, Math.max(0, value)).toString(16).padStart(2, '0');
+  }).join('');
+}
+
 /**
  * The document's own rules for the drawing, appended after Mermaid's. Mermaid
  * scopes every rule to the diagram id, so these carry the same prefix and one
- * more class to win: theme variables reach node fills and line colours, but not
- * the edge label's face or its half-transparent ground.
+ * more class to win. Theme variables paint every flowchart node alike; the
+ * kinds are told apart here by the element each shape draws — a plain rect or
+ * path for a step, a rounded rect or circle for a start/end, a polygon for a
+ * decision — so the theme's surfaces and its one accent read in the drawing.
  */
 function documentStyles(id: string, palette: MermaidPalette): string {
+  const tint = mixHex(palette.background, palette.primary, 0.12);
   return [
+    // Steps and stores: the muted surface under a hairline.
+    `#${id} .nodes .node rect, #${id} .nodes .node path { fill: ${palette.muted}; stroke: ${palette.border}; }`,
+    // Start/end (rounded, stadium-like) and circles: the accent, as a tint under an accent stroke.
+    `#${id} .nodes .node rect[rx]:not([rx="0"]), #${id} .nodes .node circle { fill: ${tint}; stroke: ${palette.primary}; }`,
+    // Decisions and the other polygons: paper with an accent outline.
+    `#${id} .nodes .node polygon { fill: ${palette.card}; stroke: ${palette.primary}; }`,
+    // Subgraphs: the quiet tint behind a dashed rule.
+    `#${id} .clusters .cluster rect { fill: ${palette.accent}; stroke: ${palette.border}; stroke-dasharray: 4 3; }`,
     // Edge labels are apparatus: the utility face, small, muted, on an opaque ground so the line never shows through.
     `#${id} .edgeLabels .edgeLabel rect { opacity: 1; fill: ${palette.background}; stroke: none; }`,
     `#${id} .edgeLabels .edgeLabel text, #${id} .edgeLabels .edgeLabel tspan { font-family: ${palette.fontMono}; font-size: 11px; fill: ${palette.mutedForeground}; }`,
@@ -51,6 +73,7 @@ export function renderMermaid(code: string, palette: MermaidPalette): Promise<Me
   const render = async () => {
     const error = mermaidSourceError(code);
     if (error) throw new Error(error);
+    const tint = mixHex(palette.background, palette.primary, 0.12);
     mermaid.initialize({
       startOnLoad: false, securityLevel: 'strict', htmlLabels: false,
       maxTextSize: 20_000, maxEdges: 500, suppressErrorRendering: true,
@@ -74,6 +97,17 @@ export function renderMermaid(code: string, palette: MermaidPalette): Promise<Me
         edgeLabelBackground: palette.background,
         // Groups: the muted surface under the same hairline.
         clusterBkg: palette.muted, clusterBorder: palette.border, titleColor: palette.foreground,
+        // Sequence diagrams: actors on the muted surface, notes on the quiet tint, the
+        // accent only where a lifeline is active.
+        actorBkg: palette.muted, actorBorder: palette.border, actorTextColor: palette.foreground,
+        actorLineColor: palette.border, signalColor: palette.mutedForeground, signalTextColor: palette.foreground,
+        labelBoxBkgColor: palette.muted, labelBoxBorderColor: palette.border, labelTextColor: palette.foreground,
+        loopTextColor: palette.foreground, noteBkgColor: palette.accent, noteBorderColor: palette.border,
+        noteTextColor: palette.foreground, activationBkgColor: tint, activationBorderColor: palette.primary,
+        sequenceNumberColor: palette.background,
+        // State diagrams: transitions like edges, alternate rows on the muted surface.
+        transitionColor: palette.mutedForeground, transitionLabelColor: palette.mutedForeground,
+        stateLabelColor: palette.foreground, altBackground: palette.muted, labelBackgroundColor: palette.background,
       },
       // Tighter than Mermaid 12's defaults, which pad every node out to 120px and
       // wrap its label at 120px: a tile scales the drawing to fit, so every pixel

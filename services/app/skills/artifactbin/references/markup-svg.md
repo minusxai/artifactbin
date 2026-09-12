@@ -24,6 +24,9 @@ limited to 20,000 characters; diagram configuration/frontmatter is refused.
 The app owns strict rendering, theme and resource limits; click callbacks
 are disabled. Syntax errors show a readable error and keep the source; in edit
 mode, select a diagram to change its source and title in the inspector.
+The theme paints node kinds apart: steps `[text]` sit on the muted surface,
+decisions `{text}` take the accent outline, rounded `(text)` and circle
+`((text))` nodes take the accent tint — so mark start/end nodes rounded.
 Do not draw UI wireframes in Mermaid: use spatial HTML/CSS screen panels.
 
 ## Inline SVG
