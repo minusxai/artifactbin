@@ -12,6 +12,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
 import { APP_ROOT, REPO_ROOT, codeOf, sourceFiles } from '@/test/helpers/source-files';
@@ -219,10 +220,14 @@ describe('the app counts no door of its own', () => {
  * including eval JSON. Retirement is scoped — proxy-owned settings and audit fixtures remain valid.
  */
 describe('the retired env names', () => {
+  // This file NAMES every retired setting, so it must exempt itself — derived from its own URL
+  // rather than written as a literal, because a literal goes stale the moment the file is renamed
+  // and the guard then flags ITSELF, which reads exactly like a real violation.
+  const SELF = path.relative(REPO_ROOT, fileURLToPath(import.meta.url));
   const EXEMPT = new Set([
     'services/app/lib/config.ts',
     'services/app/lib/__tests__/env-namespacing.test.ts',
-    'services/app/lib/__tests__/retired-names.test.ts',
+    SELF,
     'services/utils/__tests__/env.test.ts',
   ]);
   const proxyComposition = new Set([

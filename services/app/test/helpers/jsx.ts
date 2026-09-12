@@ -1,12 +1,18 @@
 /**
  * THE ONE JSX-PARSE GUARD for tests whose fixture must parse before anything is asserted.
  *
- * `const parsed = parseJsx(src); if (!parsed.ok) throw new Error(parsed.error);` appeared at 75
- * call sites across 52 files in `story-ui`, `story-runtime` and `story`. Every copy exists for the
- * same reason — `ParseResult` is a discriminated union, so the narrowing is mandatory before
- * `parsed.nodes` is reachable — and the copies had drifted into four different messages, two of
- * which (`'parse'`, `'fixture does not parse'`) throw away the parser's own diagnosis and leave a
- * broken fixture looking like a broken assertion.
+ * `const parsed = parseJsx(src); if (!parsed.ok) throw new Error(parsed.error);` stood at 73 call
+ * sites across the 51 files that now import this helper, in `story-ui`, `story-runtime`, `story`,
+ * `editor-v2`, `sql` and `jsx`. Every copy existed for the same reason — `ParseResult` is a
+ * discriminated union, so the narrowing is mandatory before `parsed.nodes` is reachable — and the
+ * copies had drifted into four different messages, two of which (`'parse'`, `'fixture does not
+ * parse'`) threw away the parser's own diagnosis and left a broken fixture looking like a broken
+ * assertion.
+ *
+ * TWO SITES THAT LOOK LIKE THIS AND ARE NOT, deliberately left alone:
+ * `lib/jsx/__tests__/syntax-error.test.ts` guards the INVERSE (`if (parsed.ok) throw`), and
+ * `lib/data/story/__tests__/jsx-edit-layout.test.ts` asserts `expect(parsed.ok).toBe(true)` before
+ * narrowing, which is an assertion rather than a guard.
  *
  * This is a genuine gap rather than a bypassed helper: nothing in `test/helpers/` covered it.
  *
