@@ -3,9 +3,12 @@
 Read [AGENTS.md](AGENTS.md) first for working rules and links to subsystem design notes.
 
 - **Test-driven, in that order**: contracts and types first, a failing test second, the implementation third, then
-  the full suite. A test that was never red is decoration.
-- `npm run validate` type-checks; `npm test` runs the API, Node, UI and CLI suites; `npm run test:gates`
-  drives the browser gates against a running dev server (`npm run dev`).
+  the affected tests. A test that was never red is decoration.
+- Run only fast checks locally: `npm run validate` type-checks (incremental), and `npm test` runs just the
+  tests your change affects (`vitest --changed`), stopping with guidance if that would exceed 100 test files.
+  The full suite (`npm run test:all`), `npm run test:integration`, `npm run build` and the browser gates
+  (`npm run test:gates`) are slow — leave them to CI, which runs them per affected module. See
+  [AGENTS.md](AGENTS.md).
 - Keep modules deep: a feature's complexity lives in one `lib/` module with a narrow interface; route handlers
   only translate results into HTTP. Use the owning service’s config module; preserve documented lazy browser imports.
 - Open pull requests against `main`. Small, focused PRs land fastest.
