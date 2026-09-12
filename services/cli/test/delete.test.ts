@@ -4,6 +4,7 @@ import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
+import {tracking} from './tracking';
 import {saveConnection} from '../src/config';
 import {digest} from '../src/files';
 test('retrying a lost folder-delete reply forgets every deleted identity while preserving local files',async()=>{
@@ -18,9 +19,9 @@ test('retrying a lost folder-delete reply forgets every deleted identity while p
   assert.equal((await invoke(['pull','abc123','--output','folder.jsx'])).code,0);assert.equal((await invoke(['pull','def456','--output','child.jsx'])).code,0);
   const folder=await readFile(join(root,'folder.jsx'));const child=await readFile(join(root,'child.jsx'));
   assert.notEqual((await invoke(['delete','folder.jsx'])).code,0);
-  assert.equal(Object.keys(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files).length,2);
+  assert.equal(Object.keys((await tracking(root,root)).files).length,2);
   const retried=await invoke(['delete','folder.jsx']);assert.equal(retried.code,0,JSON.stringify(retried.result));assert.equal(deletes,2);
-  assert.deepEqual(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files,{});
+  assert.deepEqual((await tracking(root,root)).files,{});
   assert.deepEqual(await readFile(join(root,'folder.jsx')),folder);assert.deepEqual(await readFile(join(root,'child.jsx')),child);
  }finally{await rm(root,{recursive:true,force:true});}
 });

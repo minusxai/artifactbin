@@ -7,6 +7,7 @@ import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {digest} from '../src/files';
 import {parseResourceFile} from '../src/resource-file';
+import {tracking} from './tracking';
 
 test('YAML pull round-trips authorized governance and separate data, preserving local edits against an unchanged head',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-resource-pull-'));let contentReads=0;
@@ -23,11 +24,12 @@ test('YAML pull round-trips authorized governance and separate data, preserving 
   await writeFile(join(root,'sales.json'),'[{"score":43}]\n');await writeFile(join(root,'sales.yaml'),(await readFile(join(root,'sales.yaml'),'utf8')).replace('Sales','My sales'));
   const refreshed=await invoke(['pull','sales.yaml']);assert.equal(refreshed.code,0,JSON.stringify(refreshed.result));assert.equal(contentReads,1,'unchanged immutable content uses its saved bytes');
   assert.equal(parseResourceFile(await readFile(join(root,'sales.yaml'),'utf8')).title,'My sales');assert.deepEqual(JSON.parse(await readFile(join(root,'sales.json'),'utf8')),[{score:43}]);
-  const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.deepEqual(Object.keys(lock.files),['sales.yaml']);assert.deepEqual(JSON.parse(Buffer.from(lock.files['sales.yaml'].source.bytes,'base64').toString()),[{score:42}]);
+  const tracked=await tracking(root,root);assert.deepEqual(Object.keys(tracked.files),['sales.yaml']);assert.deepEqual(JSON.parse(Buffer.from(tracked.files['sales.yaml'].source!.bytes,'base64').toString()),[{score:42}]);
   head.version=2;head.state=digest('two');head.edit_id='two';
   assert.equal((await invoke(['pull','sales.yaml'])).result.error.code,'merge_conflict');
   const forced=await invoke(['pull','sales.yaml','--force']);assert.equal(forced.code,0,JSON.stringify(forced.result));
   assert.deepEqual(JSON.parse(await readFile(join(root,'sales.json'),'utf8')),[{score:42}]);
-  const backup=forced.result.operations[0].source_backups[0];assert.deepEqual(JSON.parse(await readFile(join(root,backup),'utf8')),[{score:43}]);
+  const backup=forced.result.operations[0].source_backups[0];assert.match(backup,/^\//,'a local backup is reported by absolute path outside the workspace');
+  assert.deepEqual(JSON.parse(await readFile(backup,'utf8')),[{score:43}]);
  }finally{await rm(root,{recursive:true,force:true});}
 });

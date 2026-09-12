@@ -1,6 +1,6 @@
 import {basename,dirname,extname,join,relative} from 'node:path';
 import type {ArtifactResourceFile} from '@artifactbin/contracts';
-import type {Snapshot,TrackedFile} from './workspace';
+import {baselineOf,type Snapshot,type TrackedFile,type Workspace} from './workspace';
 import type {HttpClient} from './http';
 import {confinedPath,type FileChange} from './journal';
 import {digest,readOptional} from './files';
@@ -10,7 +10,8 @@ import {rowsCsv} from './tabular';
 import {parseResourceFile,reconcileResource,snapshotResource,writeResourceFile,type ResourceSource} from './resource-file';
 
 /** Prepare YAML and native source bytes together; the caller journals the complete local commit. */
-export async function prepareResourcePull(root:string,path:string,snapshot:Snapshot,previous:TrackedFile|undefined,before:Buffer|null,client:HttpClient,force=false){
+export async function prepareResourcePull(workspace:Workspace,path:string,snapshot:Snapshot,previous:TrackedFile|undefined,before:Buffer|null,client:HttpClient,force=false){
+ const root=workspace.root;
  const type=snapshot.format==='markup'?'artifact':snapshot.format==='folder'?'folder':snapshot.format==='dataset'?'dataset':'file';
  const changes:FileChange[]=[];
  const backups:Array<{path:string;bytes:Buffer}>=[];
@@ -29,8 +30,9 @@ export async function prepareResourcePull(root:string,path:string,snapshot:Snaps
   const local=await readOptional(absolute);
   let bytes=same?Buffer.from(previous!.source!.bytes,'base64'):type==='artifact'?Buffer.from(snapshot.markup??''):fetched!.bytes;
   if(type==='dataset'&&!same)bytes=definition?Buffer.from(endLine(bytes.toString())):Buffer.from(extname(sourcePath).toLowerCase()==='.csv'?rowsCsv(datasetRows(bytes)):JSON.stringify(datasetRows(bytes),null,2)+'\n');
-  source={path:sourcePath,bytes:bytes.toString('base64'),version:snapshot.version};
-  prototype={type,source:relative(dirname(path),sourcePath)} as ArtifactResourceFile;
+  const declared=relative(dirname(path),sourcePath);
+  source={path:sourcePath,declared,bytes:bytes.toString('base64'),version:snapshot.version};
+  prototype={type,source:declared} as ArtifactResourceFile;
   const changed=local&&(!previous?.source||!local.equals(Buffer.from(previous.source.bytes,'base64')));
   if(changed&&!same&&!force){
    throw new CliError('merge_conflict',`${sourcePath} has overlapping local and remote content.`,undefined,{fields:['source'],path,local:local.toString('base64'),remote:bytes.toString('base64'),encoding:'base64',head:snapshot},3);
@@ -39,11 +41,12 @@ export async function prepareResourcePull(root:string,path:string,snapshot:Snaps
   if(!local||(!changed||force)&&!local.equals(bytes))changes.push({path:sourcePath,before:local?digest(local):null,data:bytes});
  }
  const canonical=snapshotResource(snapshot,prototype);
- const baseline=Buffer.from(writeResourceFile(canonical));let bytes=baseline;
- if(before&&previous&&!force&&!before.equals(Buffer.from(previous.baseline,'base64'))){
-  const merged=reconcileResource(parseResourceFile(Buffer.from(previous.baseline,'base64').toString()),parseResourceFile(before.toString()),canonical);
-  if(!merged.ok)throw new CliError('merge_conflict',`${path} has overlapping resource settings.`,undefined,{fields:merged.fields,path,base:Buffer.from(previous.baseline,'base64').toString(),local:before.toString(),remote:baseline.toString(),head:snapshot},3);
+ const canonicalBytes=Buffer.from(writeResourceFile(canonical));let bytes=canonicalBytes;
+ const accepted=previous?await baselineOf(workspace,path,previous):null;
+ if(before&&previous&&accepted&&!force&&digest(before)!==previous.file){
+  const merged=reconcileResource(parseResourceFile(accepted.toString()),parseResourceFile(before.toString()),canonical);
+  if(!merged.ok)throw new CliError('merge_conflict',`${path} has overlapping resource settings.`,undefined,{fields:merged.fields,path,base:accepted.toString(),local:before.toString(),remote:canonicalBytes.toString(),head:snapshot},3);
   bytes=Buffer.from(writeResourceFile(merged.resource));
  }
- return {bytes,baseline,source,changes,backups};
+ return {bytes,accepted:canonicalBytes,source,changes,backups};
 }

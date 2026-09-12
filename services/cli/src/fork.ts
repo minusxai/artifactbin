@@ -95,7 +95,7 @@ async function localDraft(workspace:Workspace,path:string,type:string|undefined)
  const bytes=await readOptional(await confinedPath(workspace.root,path));
  if(!bytes)throw new CliError('missing_file',`Missing ${path}.`);
  const extension=extname(path).toLowerCase();
- const tracked=workspace.lock?.files[path];
+ const tracked=workspace.tracking?.files[path];
  const base=basename(path,extname(path));
  if(extension==='.jsx'){
   const document=parseDocument(bytes.toString());

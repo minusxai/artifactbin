@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
@@ -8,6 +8,7 @@ import {saveConnection} from '../src/config';
 import {parseDocument} from '../src/document';
 import {digest} from '../src/files';
 import {stageRequest,savePendingResponse} from '../src/pending-request';
+import {tracking,readRecord,writeRecord} from './tracking';
 
 test('push recovers a lost create reply with frozen bytes, then publishes newer local edits without a GET',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-sync-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
@@ -110,7 +111,7 @@ test('remote status observes a newer head without replacing the local sync base'
   await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   head={...head,version:2,edit_id:'two',state:digest('two'),markup:'<p id="p001">Second</p>'};
   const remote=await invoke(['status','--remote']);assert.equal(remote.code,0,JSON.stringify(remote.result));assert.equal(remote.result.files[0].remote,'changed');assert.ok(Array.isArray(remote.result.skills));
-  const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.equal(lock.files['doc.jsx'].snapshot.version,1);assert.equal(lock.files['doc.jsx'].observed.version,2);
+  const tracked=(await tracking(root,root)).files['doc.jsx'];assert.equal(tracked.snapshot.version,1);assert.equal(tracked.observed!.version,2);
   const before=reads;assert.equal((await invoke(['status'])).code,0);assert.equal(reads,before);
   const diff=await invoke(['diff','doc.jsx','--remote']);assert.equal(diff.code,0,JSON.stringify(diff.result));assert.match(diff.result.diffs[0].diff,/-.*Second/);assert.match(diff.result.diffs[0].diff,/\+.*First/);
  }finally{await rm(root,{recursive:true,force:true});}
@@ -125,9 +126,9 @@ test('delete dry-run preserves tracking and confirmed delete keeps the local fil
  }});return{code,result:JSON.parse(output.join(''))};};
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
-  const original=await readFile(join(root,'doc.jsx'));const lock=await readFile(join(root,'afbin.lock'));
-  assert.equal((await invoke(['delete','doc.jsx','--dry-run'])).code,0);assert.deepEqual(await readFile(join(root,'afbin.lock')),lock);
-  const deleted=await invoke(['delete','doc.jsx']);assert.equal(deleted.code,0,JSON.stringify(deleted.result));assert.deepEqual(await readFile(join(root,'doc.jsx')),original);assert.deepEqual(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files,{});
+  const original=await readFile(join(root,'doc.jsx'));const before=await tracking(root,root);
+  assert.equal((await invoke(['delete','doc.jsx','--dry-run'])).code,0);assert.deepEqual(await tracking(root,root),before);
+  const deleted=await invoke(['delete','doc.jsx']);assert.equal(deleted.code,0,JSON.stringify(deleted.result));assert.deepEqual(await readFile(join(root,'doc.jsx')),original);assert.deepEqual((await tracking(root,root)).files,{});
   // The second head read is the delete's own pre-read: it names the kind being
   // deleted for --type, reports the delete capability, and identifies the
   // account before the durable operation record claims its key.
@@ -169,7 +170,7 @@ test('pushing a renamed unchanged file updates tracking locally without credenti
   assert.equal(await runCli(['pull','abc123','--output','before.jsx','--json'],{...context,fetch:async()=>Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Same</p>'},{headers:{'X-Artifactbin-Account':'usr_one'}})}),0);
   const {rename,unlink}=await import('node:fs/promises');await rename(join(root,'before.jsx'),join(root,'after.jsx'));await unlink(join(root,'.artifactbin','.env'));
   assert.equal(await runCli(['push','after.jsx','--json'],{...context,fetch:async()=>assert.fail('network during local rename')}),0,out.join(''));
-  const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.deepEqual(Object.keys(lock.files),['after.jsx']);
+  assert.deepEqual(Object.keys((await tracking(root,root)).files),['after.jsx']);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('pull recovers an interrupted local commit before treating its partially written file as dirty',async()=>{
@@ -178,10 +179,11 @@ test('pull recovers an interrupted local commit before treating its partially wr
  const context={cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})};
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal(await runCli(['pull','abc123','--output','doc.jsx'],context),0);
-  const {stageFiles}=await import('../src/journal');const old=await readFile(join(root,'doc.jsx'));const lockBytes=await readFile(join(root,'afbin.lock'));const lock=JSON.parse(lockBytes.toString());const next=Buffer.from(old.toString().replace('<p>Same</p>','<p>Staged</p>'));
-  lock.files['doc.jsx'].baseline=next.toString('base64');lock.files['doc.jsx'].file=digest(next);
-  await stageFiles(root,[{path:'doc.jsx',before:digest(old),data:next},{path:'afbin.lock',before:digest(lockBytes),data:Buffer.from(JSON.stringify(lock))}]);
-  await writeFile(join(root,'doc.jsx'),next); // process died after its first replacement
+  const {stageFiles}=await import('../src/journal');
+  const accepted=await readFile(join(root,'doc.jsx'));const dirty=Buffer.from(accepted.toString().replace('<p>Same</p>','<p>Edited</p>'));
+  await writeFile(join(root,'doc.jsx'),dirty);
+  // A forced pull staged the head bytes back over the edit, then the process died before applying them.
+  await stageFiles(root,await realpath(root),[{path:'doc.jsx',before:digest(dirty),data:accepted}]);
   assert.equal(await runCli(['pull','doc.jsx'],context),0);assert.match((await readFile(join(root,'doc.jsx'))).toString(),/Same/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -191,12 +193,16 @@ test('pull preserves dependency mappings and restores available paths across rep
  const invoke=()=>runCli(['pull','abc123','--output','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})});
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal(await invoke(),0);
-  const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));lock.files['doc.jsx'].paths={def456:'./small.png'};
-  await writeFile(join(root,'afbin.lock'),JSON.stringify(lock));await writeFile(join(root,'small.png'),'image');
+  // The state a push of a document with a local image leaves behind: the mapping is tracked,
+  // and the working file names the local path the author wrote.
+  const restored=(await readFile(join(root,'doc.jsx'),'utf8')).replace('ref:def456 1x','./small.png 1x');
+  await writeFile(join(root,'doc.jsx'),restored);await writeFile(join(root,'small.png'),'image');
+  const entry=(await tracking(root,root)).files['doc.jsx'];
+  await writeRecord(root,root,'tracked','doc.jsx',{...entry,file:digest(restored),paths:{def456:'./small.png'}});
   for(let i=0;i<2;i++){
    assert.equal(await invoke(),0);
    const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));assert.match(local.body,/srcSet=".\/small.png 1x"/);assert.match(local.body,/title="ref:def456"/);
-   assert.deepEqual(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files['doc.jsx'].paths,{def456:'./small.png'});
+   assert.deepEqual((await tracking(root,root)).files['doc.jsx'].paths,{def456:'./small.png'});
   }
  }finally{await rm(root,{recursive:true,force:true});}
 });
@@ -207,10 +213,10 @@ test('missing tracked files are reported and skipped by push without deleting or
   await saveConnection({server:'https://example.com',token:'mx_test'},root);
   assert.equal(await runCli(['pull','abc123','--output','doc.jsx'],{cwd:root,home:root,interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}})}),0);
   await rm(join(root,'doc.jsx'));await rm(join(root,'.artifactbin','.env'));
-  const before=await readFile(join(root,'afbin.lock'));const output:string[]=[];
+  const before=await tracking(root,root);const output:string[]=[];
   assert.equal(await runCli(['push','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('missing file must not cause a request')}),0,output.join(''));
   assert.deepEqual(JSON.parse(output.join('')).operations,[{path:'doc.jsx',status:'skipped',reason:'missing_file'}]);
-  assert.deepEqual(await readFile(join(root,'afbin.lock')),before);
+  assert.deepEqual(await tracking(root,root),before);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('a refused overlapping edit returns a local conflict diff without another read or changing the working file',async()=>{
@@ -238,11 +244,12 @@ test('forced pull resolves an ambiguous conditional write while preserving its p
   await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const proposal=(await readFile(join(root,'doc.jsx'),'utf8')).replace('Original','My proposal');await writeFile(join(root,'doc.jsx'),proposal);
   assert.notEqual((await invoke(['push','doc.jsx'])).code,0);
-  const pending=JSON.parse(await readFile(join(root,'.artifactbin','pending-request.json'),'utf8'));
+  const pending=await readRecord<{key:string}>(root,root,'pending-request','current');assert.ok(pending);
   const recovered=await invoke(['pull','doc.jsx','--force']);assert.equal(recovered.code,0,JSON.stringify(recovered.result));
   assert.match(await readFile(join(root,'doc.jsx'),'utf8'),/Other writer/);
-  const archive=JSON.parse(await readFile(join(root,'.artifactbin','recovered-requests',pending.key+'.json'),'utf8'));assert.equal(Buffer.from(archive.local,'base64').toString(),proposal);
-  await assert.rejects(readFile(join(root,'.artifactbin','pending-request.json')),{code:'ENOENT'});
+  const archive=await readRecord<{local:string}>(root,root,'archive',`recovered-requests/${pending.key}`);
+  assert.equal(Buffer.from(archive!.local,'base64').toString(),proposal);
+  assert.equal(await readRecord(root,root,'pending-request','current'),null);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 test('a deleted create result retires recovery, never recreates that file, and does not block other publications',async()=>{
@@ -255,7 +262,7 @@ test('a deleted create result retires recovery, never recreates that file, and d
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);await writeFile(join(root,'doc.jsx'),'<p>Original</p>');
   assert.notEqual((await invoke('doc.jsx')).code,0);assert.equal((await invoke('doc.jsx')).result.error.code,'result_deleted');
-  await assert.rejects(readFile(join(root,'.artifactbin','pending-request.json')),{code:'ENOENT'});
+  assert.equal(await readRecord(root,root,'pending-request','current'),null);
   await writeFile(join(root,'doc.jsx'),'<p>Edited after deletion</p>');assert.equal((await invoke('doc.jsx')).result.error.code,'result_deleted');assert.equal(calls,2);
   await writeFile(join(root,'new.jsx'),'<p>New artifact</p>');const next=await invoke('new.jsx');assert.equal(next.code,0,JSON.stringify(next.result));assert.equal(calls,3);
  }finally{await rm(root,{recursive:true,force:true});}
@@ -265,10 +272,10 @@ test('a confirmed saved reply finishes local recovery without credentials or net
  const root=await mkdtemp(join(tmpdir(),'afbin-offline-ack-'));
  try{
   const body='<p>Saved reply</p>';await writeFile(join(root,'doc.jsx'),body);
-  const pending=await stageRequest(root,{server:'https://example.com',credential:'old-credential-hash',request:{path:'/artifacts',method:'POST',body:{markup:body}},file:{path:'doc.jsx',bytes:Buffer.from(body).toString('base64')}});
-  await savePendingResponse(root,pending,{id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">Saved reply</p>'},'usr_one');
+  const scope=await realpath(root);const pending=await stageRequest(root,scope,{server:'https://example.com',credential:'old-credential-hash',request:{path:'/artifacts',method:'POST',body:{markup:body}},file:{path:'doc.jsx',bytes:Buffer.from(body).toString('base64')}});
+  await savePendingResponse(root,scope,pending,{id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p id="p001">Saved reply</p>'},'usr_one');
   const output:string[]=[];const code=await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('saved response must not require a request')});
   assert.equal(code,0,output.join(''));assert.equal(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).metadata.id,'abc123');
-  await assert.rejects(readFile(join(root,'.artifactbin','pending-request.json')),{code:'ENOENT'});
+  assert.equal(await readRecord(root,root,'pending-request','current'),null);
  }finally{await rm(root,{recursive:true,force:true});}
 });

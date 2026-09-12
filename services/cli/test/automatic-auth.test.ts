@@ -84,7 +84,9 @@ test('local work and dry-run do not bootstrap auth or create credentials',async(
    const code=await runCli([...args,'--json'],{home,cwd:home,env:{},interactive:false,stdout:()=>{},stderr:()=>{},auth:{open:async()=>assert.fail('unexpected browser')},fetch:async()=>assert.fail('unexpected network')});
    assert.equal(code,0,args.join(' '));
   }
-  await assert.rejects(stat(join(home,'.artifactbin')),{code:'ENOENT'});
+  // The private state directory may hold the local store; it must hold no credentials.
+  await assert.rejects(stat(join(home,'.artifactbin','.env')),{code:'ENOENT'});
+  await assert.rejects(stat(join(home,'.artifactbin','servers')),{code:'ENOENT'});
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
