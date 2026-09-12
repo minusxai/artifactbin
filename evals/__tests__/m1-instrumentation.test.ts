@@ -1,10 +1,9 @@
 /**
  * M1 — what the eval must be able to WATCH.
  *
- * Two things the driver has never observed, because it always handed the agent a credential and always
- * measured from the first HTTP call: whether an agent mints its own token when nobody gives it one, and
- * how long its human waited before a URL existed. These pin both, plus the guardrail that stops a fast
- * empty stub from beating a real skeleton.
+ * What the driver did not observe while it measured from the first HTTP call: how long its human
+ * waited before a URL existed. This pins that, plus the guardrail that stops a fast empty stub from
+ * beating a real skeleton.
  */
 import { describe, it, expect } from 'vitest';
 import { ledgerMetrics, scoredArtifactId } from '../lib/ledger';
@@ -18,24 +17,6 @@ const entry = (over: Partial<LedgerEntry>): LedgerEntry => ({
 });
 
 const TASK = { id: 'demo', brief: 'Publish something.' } as unknown as Task;
-
-describe('selfMinted — did the agent take a token instead of asking for one', () => {
-  it('is true when the agent posted the anonymous mint', () => {
-    const m = ledgerMetrics([
-      entry({ t: 1_000 }),
-      entry({ t: 1_200, method: 'POST', path: '/api/tokens/anonymous', status: 201 }),
-    ]);
-    expect(m.selfMinted).toBe(true);
-  });
-
-  it('is false when it never did', () => {
-    expect(ledgerMetrics([entry({})]).selfMinted).toBe(false);
-  });
-
-  it('is null when nothing was observed at all — silence is not innocence', () => {
-    expect(ledgerMetrics([]).selfMinted).toBeNull();
-  });
-});
 
 describe('msToFirstPublish — how long the human waited for a link', () => {
   const ledger = [
@@ -101,12 +82,6 @@ describe('the token-less task', () => {
 });
 
 describe('the edges the seed did not pin', () => {
-  it('selfMinted counts the ATTEMPT, not the grant — a refused mint is still an agent taking a token', () => {
-    // The OSS default caps anonymous minting at 0/hour, so a self-minting agent's first sign is a 429.
-    const m = ledgerMetrics([entry({ method: 'POST', path: '/api/tokens/anonymous', status: 429, error: 'rate_limited' })]);
-    expect(m.selfMinted).toBe(true);
-  });
-
   it('msToFirstPublish counts a conditional body write', () => {
     const m = ledgerMetrics([
       entry({ t: 3_000, method: 'PUT', path: '/api/artifacts/ab3cd9', status: 200, artifactId: 'ab3cd9' }),

@@ -38,7 +38,6 @@ const pathOnly = (p: string) => p.split('?')[0];
 const KNOWN_ROUTES: RegExp[] = [
   /^\/docs-human$/,
   /^\/llms\.txt$/,
-  /^\/api\/tokens\/anonymous$/,
   /^\/api\/start$/,
   /^\/api\/preview$/,
   /^\/api\/query$/,
@@ -211,12 +210,6 @@ export interface LedgerMetrics {
   /** Bytes those fetches returned; null when the ledger predates `bytes` or saw nothing. */
   docsBytes: number | null;
   /**
-   * The agent minted its OWN token (`POST /api/tokens/anonymous`) instead of asking its human for one.
-   * An anonymous token publishes documents the human cannot reach, so this is the behaviour the token
-   * ladder exists to remove — and until now the eval never watched, because a credential was always supplied.
-   */
-  selfMinted: boolean | null;
-  /**
    * Ms from the RUN ANCHOR to the first write answering 2xx — how long the human waited for a URL they
    * could open. The anchor is `opts.startedAtMs` (process spawn); with none it degrades to the first
    * ledger entry's `t`, which hides agent boot and is therefore only a floor.
@@ -296,10 +289,6 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
     usedEditsEndpoint: judged(entries.some((e) => e.status < 300 && /^\/api\/artifacts\/[A-Za-z0-9]+\/edits/.test(pathOnly(e.path)))),
     docsFetches: judged(docsGets.length),
     docsBytes,
-    // The ATTEMPT is the behaviour, not the grant: the OSS default caps anonymous minting at 0/hour, so
-    // an agent reaching for its own token most often shows up as a 429. Judged like its neighbours —
-    // a ledger that saw nothing did not see the agent decline to mint.
-    selfMinted: judged(entries.some((e) => e.method === 'POST' && pathOnly(e.path) === '/api/tokens/anonymous')),
     msToFirstPublish,
     // Naturally null rather than `judged()`: no successful write ever carried markup, nothing to count.
     skeletonSections: firstGoodMarkupWrite === undefined ? null : (firstGoodMarkupWrite.reqMarkup!.match(HEADING_TAG) ?? []).length,

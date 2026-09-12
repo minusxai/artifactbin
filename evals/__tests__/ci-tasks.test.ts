@@ -33,7 +33,7 @@ describe('the agent-smoke matrix', () => {
   it('runs the CLI with installed local skills', () => {
     expect(ROWS).toHaveLength(1);
     expect(ROWS[0].mode).toBe('installed');
-    expect(tasksOf(ROWS[0])).toEqual(expect.arrayContaining(['cli', 'data', 'edit', 'no-token']));
+    expect(tasksOf(ROWS[0])).toEqual(expect.arrayContaining(['cli', 'data', 'edit', 'comment']));
   });
 
   it('names only tasks that exist AND are in the CI set — never a comparison brief', () => {

@@ -125,10 +125,13 @@ describe('endpoint and transport metrics', () => {
     expect(ledgerMetrics([e({ method: 'DELETE', path: '/api/artifacts/abc123', status: 404 })]).inventedEndpoints).toBe(0);
     expect(ledgerMetrics([e({ path: '/a/abc123/versions/2', status: 404 })]).inventedEndpoints).toBe(1);
     expect(ledgerMetrics([e({ path: '/api/v1/documents', status: 404 })]).inventedEndpoints).toBe(1);
+    // Nothing teaches a token door any more — the CLI authenticates itself — so an agent that goes
+    // looking for one is inventing an endpoint like any other.
+    expect(ledgerMetrics([e({ method: 'POST', path: '/api/tokens/anonymous', status: 404 })]).inventedEndpoints).toBe(1);
   });
 
   it('knows every route the docs teach', () => {
-    for (const p of ['/api/artifacts/abc123/annotations/ann_2vlmssgwhdloxo0zdlx', '/api/artifacts/abc123/annotations', '/api/tokens/anonymous', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/a/abc123', '/a/abc123/start?k=x', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
+    for (const p of ['/api/artifacts/abc123/annotations/ann_2vlmssgwhdloxo0zdlx', '/api/artifacts/abc123/annotations', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/a/abc123', '/a/abc123/start?k=x', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
       expect(ledgerMetrics([e({ path: p, status: 404 })]).inventedEndpoints).toBe(0);
     }
   });

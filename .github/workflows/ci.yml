@@ -285,7 +285,7 @@ jobs:
       matrix:
         include:
           - mode: installed
-            tasks: comment,data,edit,cli,no-token
+            tasks: comment,data,edit,cli
     if: needs.plan.outputs.agent-smoke == 'true' && vars.AGENT_SMOKE_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
