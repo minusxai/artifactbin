@@ -58,7 +58,7 @@ export default defineConfig({
           name: 'node',
           environment: 'node',
           include: ['services/app/lib/**/__tests__/**/*.test.{ts,tsx}', 'services/app/components/**/__tests__/**/*.test.{ts,tsx}', 'evals/**/__tests__/**/*.test.{ts,tsx}', 'services/{contracts,utils,sql,browser,proxy,events}/**/__tests__/**/*.test.{ts,tsx}', 'scripts/**/__tests__/**/*.test.mjs'],
-          // The three heavy tests below match this project's include globs but
+          // The heavy tests below match this project's include globs but
           // boot Docker (a disposable Postgres) or real Chromium; they run in
           // the `integration` project instead, kept out of the default `npm
           // test`. Excluded here so they are collected exactly once — there,
@@ -71,6 +71,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/postgres.test.ts',
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
+            'services/browser/__tests__/internal-assets.test.ts',
           ],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],
         },
@@ -79,7 +80,7 @@ export default defineConfig({
         // Heavy, environment-dependent tests: a disposable Dockerised Postgres
         // (postgres/notebook-postgres, guarded by `describe.skipIf` on
         // `docker image inspect postgres:17-alpine`) and a real headless
-        // Chromium (the browser contract, which HARD-fails without one). Kept
+        // Chromium (browser contract and internal asset rendering). Kept
         // out of the default `npm test` for a fast inner loop; CI runs this
         // project in the `node` job, which already provisions both (see
         // .github/workflows/ci.yml). Same shape as `node` — node env, root
@@ -93,6 +94,7 @@ export default defineConfig({
             'services/app/lib/datasets/__tests__/postgres.test.ts',
             'services/app/lib/datasets/__tests__/notebook-postgres.test.ts',
             'services/browser/__tests__/contract.test.ts',
+            'services/browser/__tests__/internal-assets.test.ts',
           ],
           exclude: ['**/node_modules/**'],
           setupFiles: ['./services/app/test/setup/vitest.setup.ts'],

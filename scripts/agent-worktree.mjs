@@ -11,8 +11,8 @@
  *   node scripts/agent-worktree.mjs --phase p4 --brief b.md --pin-submodule <path>=<commit>
  *   node scripts/agent-worktree.mjs --phase p2 --remove                          # tear it down (branch kept)
  *
- * Options: --base <branch> (default main) · --dir <path> (default ../<repo>-<phase>) · --install (npm install there)
- *          --from <port> (first block to try) · --secrets (append fresh AUTH__SECRET / CONTRACT__ACTOR_SECRET)
+ * Options: --base <branch> (default main) · --dir <path> (default ../<repo>-<phase>) · --install (checked npm ci; reuse matching install)
+ *          --reuse (resume an existing task tree) · --from <port> (first block to try) · --secrets (append fresh AUTH__SECRET / CONTRACT__ACTOR_SECRET)
  *          --harness claude|codex|pi (print the exact launch line for that coding agent, lessons baked in)
  *
  * Harness launch and handoff guidance lives in docs/agent-workflows.md: codex needs
@@ -21,10 +21,11 @@
  * combined with it); pi takes the key by indirection so no value is ever
  * printed; claude runs through the Agent tool and reports by task notification.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensureDependencies } from './lib/worktree-install.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const arg = (name, dflt) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : dflt; };
@@ -63,6 +64,17 @@ if (flag('--remove')) {
   process.exit(0);
 }
 
+// Resume the same task without replacing its environment, data, or brief.
+if (flag('--reuse') && fs.existsSync(dir)) {
+  if (git(['rev-parse', '--show-toplevel'], dir) !== fs.realpathSync(dir)
+    || git(['branch', '--show-current'], dir) !== branch) {
+    throw new Error('Refusing to reuse a directory that is not this task worktree.');
+  }
+  if (flag('--install')) ensureDependencies(dir);
+  console.log(`[worktree] Reusing ${dir} on ${branch}; existing environment and brief preserved.`);
+  process.exit(0);
+}
+
 const brief = arg('--brief');
 if (!brief || !fs.existsSync(brief)) { console.error('--brief <file> is required and must exist'); process.exit(2); }
 const base = arg('--base', 'main');
@@ -96,7 +108,7 @@ fs.mkdirSync(path.dirname(exclude), { recursive: true });
 if (!fs.existsSync(exclude) || !fs.readFileSync(exclude, 'utf8').includes('.agent/')) fs.appendFileSync(exclude, '\n.agent/\n');
 
 // 5. install, when asked
-if (flag('--install')) spawnSync('npm', ['install', '--silent'], { cwd: dir, stdio: 'inherit' });
+if (flag('--install')) ensureDependencies(dir);
 
 console.log(`${dir}  branch ${branch}  base ${base}${pin ? `  submodule ${pin}` : ''}\n${env.split('\n')[0]}\nbrief: ${path.join(dir, '.agent', 'BRIEF.md')}   env: ${path.join(dir, '.env')}`);
 if (harness) console.log(`\nharness: ${harness}\n${HARNESS_LAUNCH[harness](dir)}`);

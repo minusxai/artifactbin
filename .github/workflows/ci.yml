@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# New commits supersede earlier checks on the same PR. Main runs stay independent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Every job here only reads the repo; the GITHUB_TOKEN should be able to do
 # exactly that and nothing else (CodeQL: actions/missing-workflow-permissions).
 permissions:
@@ -118,13 +123,9 @@ jobs:
         run: npm ci
       - if: steps.node-modules.outputs.cache-hit == 'true'
         run: node services/app/scripts/copy-assets.mjs
-      # The node project drives a REAL headless Chromium too: the browser
-      # service's contract suite (services/browser) launches one, and without
-      # an installed browser 14 of its 17 cases fail here while the api and
-      # gates jobs — which do install it — pass. Same cache key as those jobs,
-      # so this job restores what they already downloaded rather than paying
-      # for its own copy.
+      # Only shard 1 runs integration tests; the other shards need no browser or Docker.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: matrix.shard == 1
         id: playwright
         with:
           path: ~/.cache/ms-playwright
@@ -132,11 +133,12 @@ jobs:
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
-      - if: steps.playwright.outputs.cache-hit != 'true'
+      - if: matrix.shard == 1 && steps.playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-      - if: steps.playwright.outputs.cache-hit == 'true'
+      - if: matrix.shard == 1 && steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      - run: docker pull postgres:17-alpine
+      - if: matrix.shard == 1
+        run: docker pull postgres:17-alpine
       - run: npm run build -w services/cli
       - env:
           CI__PLAN: ${{ needs.plan.outputs.plan }}

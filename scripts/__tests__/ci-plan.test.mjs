@@ -145,3 +145,18 @@ describe('required CI result', () => {
     expect(checkCiResults(p, { ...results(p), api: 'failure' })).toContain('api');
   });
 });
+
+describe('CI avoids superseded work and duplicate integration setup', () => {
+  it('cancels earlier runs only for the same PR, never main', () => {
+    const workflow = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    expect(workflow.concurrency.group).toContain('github.event.pull_request.number');
+    expect(workflow.concurrency['cancel-in-progress']).toContain("github.event_name == 'pull_request'");
+  });
+  it('provisions Chromium and Postgres only on the integration shard', () => {
+    const { jobs } = yaml.parse(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'));
+    const provisioning = jobs.node.steps.filter(step => step.id === 'playwright' || /playwright install|docker pull/.test(step.run ?? ''));
+    expect(provisioning.length).toBeGreaterThan(0);
+    for (const step of provisioning) expect(step.if).toContain('matrix.shard == 1');
+    expect(jobs.node.steps.find(step => step.run === 'npm run test:integration').if).toContain('matrix.shard == 1');
+  });
+});
