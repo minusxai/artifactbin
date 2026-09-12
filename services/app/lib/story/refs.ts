@@ -22,6 +22,7 @@ import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
+import { normalize, type TopLevelSpec } from 'vega-lite';
 
 export interface RefUse {
   id: string;
@@ -309,11 +310,26 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
  * chart bound to `data="$sales"` is checked against what `sales` really
  * yields, exactly as a `ref:` chart is checked against its dataset).
  */
+/** The message Vega-Lite's normaliser throws for a spec it cannot read, or null for one it can. */
+function vegaLiteStructureError(spec: Record<string, unknown>): string | null {
+  try { normalize(structuredClone(spec) as unknown as TopLevelSpec); return null; }
+  catch (error) { return error instanceof Error ? error.message : String(error); }
+}
+
 export function validateVizAgainstColumns(viz: Record<string, unknown>, columns: DatasetColumn[], label: string): string[] {
   const kind = viz.kind;
   if (kind !== 'vega-lite' && kind !== 'vega') return [];
   const spec = viz.spec as Record<string, unknown> | undefined;
   if (!spec || typeof spec !== 'object') return [];
+  // STRUCTURE FIRST, with the library's own normaliser. Field checks below assume a spec Vega-Lite
+  // can read; one it cannot (a top-level `facet` beside `mark`/`encoding`, where Vega-Lite wants a
+  // `spec` wrapper) passed every field check, published, and threw at render time in the reader's
+  // browser — "Cannot destructure property 'transform' of 'spec'" on a dashboard tile (eval run
+  // 34703431814, pi). The same call here refuses it before publish, with the same message.
+  if (kind === 'vega-lite') {
+    const structural = vegaLiteStructureError(spec);
+    if (structural) return [`${label}: viz is not a Vega-Lite spec the renderer can read — ${structural}`];
+  }
   if (hasUnverifiableTransform(spec)) return []; // transforms rewrite fields — skip, same as minusx validate
   const names = new Set(columns.map((c) => c.name));
   const derived = collectDerivedFieldNames(spec);
@@ -353,7 +369,7 @@ export function validateRecipeUse(
       if (!col) {
         out.push(`recipe ${recipeLabel} slot "${slot.name}" binds "${c}" — not a dataset column (columns: ${columns.map((x) => x.name).join(', ')})`);
       } else if (!slot.accepts.includes(colKind(col.type))) {
-        out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)}`);
+        out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)} — change the query so "${c}" is ${slot.accepts.join(' or ')} (a cast such as cast("${c}" as text), or an aggregate), or bind another column`);
       }
     }
   }

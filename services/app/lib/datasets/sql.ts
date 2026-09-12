@@ -275,7 +275,7 @@ function compileStatement(catalog: DatasetCatalog, input: string | Node, params:
     if (node.type === 'select' && Array.isArray(node.from) && node.from.some(f => (f as Node).type === 'call')) fail('table functions are not allowed');
     if (node.type === 'call') {
       const fn = node.function as { name: string; schema?: string };
-      if (fn.schema || !FUNCTIONS.has(fn.name)) fail('function is not allowed');
+      if (fn.schema || !FUNCTIONS.has(fn.name)) fail(`function ${fn.schema ? `${fn.schema}.` : ''}${fn.name} is not allowed`);
     }
     if (node.type === 'cast' || node.type === 'constant') {
       dataType(node.type === 'cast' ? node.to : node.dataType);
