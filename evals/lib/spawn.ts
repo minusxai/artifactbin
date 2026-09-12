@@ -255,6 +255,32 @@ function resolveOnPath(cmd: string, PATH: string | undefined): string {
   throw new Error(`--run-as: cannot find "${cmd}" on PATH`);
 }
 
+/**
+ * The agent's PATH with every foreign afbin gone and nothing else lost. A directory that holds an
+ * executable `afbin` outside `home` is swapped for `<home>/path-mirror/<n>`, a directory of symlinks
+ * to its other executables; directories under `home` (the staged CLI, the installer's target) and
+ * directories without an afbin pass through unchanged. Exported for the test.
+ */
+export function pathWithoutForeignAfbin(PATH: string, home: string, isUnder: (entry: string, root: string) => boolean): string {
+  const mirrors = path.join(path.resolve(home), 'path-mirror');
+  let n = 0;
+  return PATH.split(path.delimiter).filter(Boolean).map((entry) => {
+    if (isUnder(entry, home)) return entry;
+    let foreign = false;
+    try { foreign = (fs.statSync(path.join(entry, 'afbin')).mode & 0o111) !== 0; } catch { foreign = false; }
+    if (!foreign) return entry;
+    const mirror = path.join(mirrors, String(n++));
+    fs.mkdirSync(mirror, { recursive: true });
+    for (const name of fs.readdirSync(entry)) {
+      if (name === 'afbin') continue;
+      const target = path.join(entry, name);
+      try { if (!(fs.statSync(target).mode & 0o111)) continue; } catch { continue; }
+      try { fs.symlinkSync(target, path.join(mirror, name)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+    }
+    return mirror;
+  }).join(path.delimiter);
+}
+
 export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; checkoutRoots?: string[]; turnCap?: TurnCap; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
@@ -289,17 +315,12 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   // NEVER A FOREIGN afbin. The not-installed flow measures whether the agent can find and install the
   // CLI, and the installed flow measures THIS checkout's build — so a developer machine's own afbin
   // must not be reachable from either. On a local not-installed leg `which afbin` answered the global
-  // ~/.local/bin/afbin (v0.1.8) and the agent never installed anything. Every PATH entry that holds an
-  // executable named afbin is dropped unless it sits under the run home, which is where the driver
-  // stages the CLI and where the installer puts it.
-  if (env.PATH) {
-    const home = opts.homeDir ? path.resolve(opts.homeDir) : null;
-    env.PATH = env.PATH.split(path.delimiter).filter((entry) => {
-      if (!entry) return false;
-      if (home && isUnder(entry, home)) return true;
-      try { return !(fs.statSync(path.join(entry, 'afbin')).mode & 0o111); } catch { return true; }
-    }).join(path.delimiter);
-  }
+  // ~/.local/bin/afbin (v0.1.8) and the agent never installed anything. Dropping that directory was
+  // wrong too: on the same machine it also holds `claude` and `codex`, and both legs died at
+  // execvp. So a PATH entry that carries an afbin outside the run home is REPLACED by a mirror of
+  // itself — symlinks to every other executable — which is exactly a clean machine's PATH. CI
+  // runners have no global afbin and are untouched.
+  if (env.PATH) env.PATH = pathWithoutForeignAfbin(env.PATH, opts.homeDir ?? opts.cwd, isUnder);
 
   // The privileged half of the switch — the one step that needs a sudoer. Injectable so the hand-over and
   // the reclaim can be asserted as argv, with no sudo anywhere in the suite.

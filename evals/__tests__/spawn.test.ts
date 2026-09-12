@@ -74,19 +74,28 @@ describe('runInvocation', () => {
     expect(fs.readFileSync(path.join(cwd, 'output.csv'), 'utf8')).toBe('value\n1');
   });
 
-  it('drops every PATH entry that carries a foreign afbin and keeps the run home\'s own (a local not-installed leg found ~/.local/bin/afbin and installed nothing)', async () => {
+  it('replaces a PATH directory that carries a foreign afbin with a mirror of its other executables — a local leg once found ~/.local/bin/afbin, and dropping that directory instead lost claude and codex', async () => {
     const foreign = path.join(dir, 'foreign-bin'); const home = path.join(dir, 'home'); const staged = path.join(home, 'bin'); const plain = path.join(dir, 'plain-bin');
     for (const d of [foreign, staged, plain]) fs.mkdirSync(d, { recursive: true });
     fs.writeFileSync(path.join(foreign, 'afbin'), '#!/bin/sh\necho foreign\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(foreign, 'harness-tool'), '#!/bin/sh\necho harness\n', { mode: 0o755 });
     fs.writeFileSync(path.join(staged, 'afbin'), '#!/bin/sh\necho staged\n', { mode: 0o755 });
     fs.writeFileSync(path.join(plain, 'other-tool'), '#!/bin/sh\n', { mode: 0o755 });
-    const result = await runInvocation(node('console.log(process.env.PATH)'), {
+    const script = `
+      const fs = require('node:fs'), path = require('node:path');
+      const entries = process.env.PATH.split(path.delimiter);
+      const has = (name) => entries.filter((e) => fs.existsSync(path.join(e, name)));
+      console.log(JSON.stringify({ afbin: has('afbin'), harness: has('harness-tool').length, other: has('other-tool').length, staged: entries.includes(${JSON.stringify(staged)}), foreignKept: entries.includes(${JSON.stringify(foreign)}) }));
+    `;
+    const result = await runInvocation(node(script), {
       cwd: dir, homeDir: home, baseEnv: { ...process.env, PATH: [foreign, staged, plain, process.env.PATH ?? ''].join(path.delimiter) }, timeoutMs: 20_000, ...paths(),
     });
-    const entries = result.stdout.trim().split(path.delimiter);
-    expect(entries).not.toContain(foreign);
-    expect(entries).toContain(staged);
-    expect(entries).toContain(plain);
+    const seen = JSON.parse(result.stdout.trim());
+    expect(seen.afbin).toEqual([staged]);   // the run home's own afbin is the only one
+    expect(seen.harness).toBe(1);           // the foreign directory's OTHER executables survive, via the mirror
+    expect(seen.other).toBe(1);
+    expect(seen.staged).toBe(true);
+    expect(seen.foreignKept).toBe(false);
   });
 
   it.skipIf(process.platform !== 'darwin')('hides eval records and the real connection while the staged plugin and task connection remain readable', async () => {
