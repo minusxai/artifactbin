@@ -1,11 +1,10 @@
 /** A one-time local onramp. JSX owns identity and editing after conversion. */
 import {Marked} from 'marked';
 import {extname,join,relative,resolve} from 'node:path';
-import {rmdir,stat} from 'node:fs/promises';
+import {rmdir} from 'node:fs/promises';
 import {CliError} from './commands';
-import {configDir} from './config';
 import {parseDocument,writeDocument} from './document';
-import {digest,isMissing,readOptional} from './files';
+import {digest,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles} from './journal';
 import {State,withLock} from './state';
 import type {Workspace} from './workspace';
@@ -49,11 +48,6 @@ async function conversionRecord(state:State|null,root:string):Promise<Record<str
  }
  return records;
 }
-async function openStore(home:string):Promise<State|null>{
- try{await stat(join(configDir(home),'state.sqlite'));}
- catch(error){if(isMissing(error))return null;throw error;}
- return State.open(home);
-}
 /**
  * `stageFiles` still journals through a directory inside the workspace; once the
  * journal has been applied the empty directory goes too, so importing Markdown
@@ -67,7 +61,7 @@ async function clearStaging(root:string):Promise<void>{
 }
 export async function prepareMarkdown(workspace:Workspace,paths:string[]):Promise<MarkdownPlan>{
  const conversions:Conversion[]=[],selected:string[]=[];const virtualFiles={...workspace.virtualFiles};
- const state=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await openStore(workspace.home):null;
+ const state=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await State.openIfPresent(workspace.home):null;
  let records:Record<string,ConversionEntry>={};
  try{records=await conversionRecord(state,workspace.root);}finally{state?.close();}
  for(const path of paths){

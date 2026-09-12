@@ -6,9 +6,8 @@ import {createTwoFilesPatch} from 'diff';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import {ACCOUNT_RESOURCE_TYPES,type AccountResource,type ProfileResource,type SessionResource} from '@artifactbin/contracts';
 import {CliError,type ParsedCommand} from './commands';
-import {configDir} from './config';
 import {parseLiteralYaml} from './document';
-import {digest,isMissing,localBackup,readOptional} from './files';
+import {digest,localBackup,readOptional} from './files';
 import {confinedPath,stageFiles,recoverFiles,type FileChange} from './journal';
 import {State,withLock} from './state';
 import {recoverableOperation} from './recoverable-operation';
@@ -48,13 +47,8 @@ function declaredAccountType(bytes:Buffer):'profile'|'session'|undefined{
  * The store is the CLI's own state, never the workspace's: a read must not
  * create it. An absent database is simply a workspace nothing is tracked in.
  */
-async function openStore(home:string):Promise<State|null>{
- try{await stat(join(configDir(home),'state.sqlite'));}
- catch(error){if(isMissing(error))return null;throw error;}
- return State.open(home);
-}
 async function withStore<T>(workspace:Workspace,run:(state:State|null)=>Promise<T>):Promise<T>{
- const state=await openStore(workspace.home);
+ const state=await State.openIfPresent(workspace.home);
  try{return await run(state);}finally{state?.close();}
 }
 /**

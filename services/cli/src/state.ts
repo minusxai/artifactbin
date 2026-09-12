@@ -14,7 +14,7 @@
  * an OS-level SQLite lock that is released even after SIGKILL.
  */
 import {createHash} from 'node:crypto';
-import {chmod, lstat, mkdir} from 'node:fs/promises';
+import {chmod, lstat, mkdir, stat} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import type {DatabaseSync} from 'node:sqlite';
@@ -30,7 +30,7 @@ export type StateKind =
   | 'pending-operation'  // key: 'current'    value: Operation (recoverable-operation.ts)
   | 'conflict'           // key: artifact id  value: {path, code, details}
   | 'conversion'         // key: source path  value: {target, sha256}
-  | 'account'            // key: path         value: {resource, sha256}; plus key '' for {server, account}
+  | 'account'            // key: path         value: {resource, sha256}; the binding lives on the 'workspace' record
   | 'retired-create'     // key: path         value: {id, path, server, key}
   | 'archive';           // key: <kind>/<id>  value: anything kept for forensics, never read by commands
 
@@ -73,6 +73,13 @@ export class State {
       );
     `);
     return new State(db, path);
+  }
+
+  /** Reads never create local state: null when no store exists yet for this home. */
+  static async openIfPresent(home: string, env: NodeJS.ProcessEnv = process.env): Promise<State | null> {
+    try { await stat(join(configDir(home, env), 'state.sqlite')); }
+    catch (error) { if (isMissing(error)) return null; throw error; }
+    return State.open(home, env);
   }
 
   close(): void { this.db.close(); }
