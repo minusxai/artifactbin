@@ -3,7 +3,7 @@ import { GET } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/users';
 import { request, useAppHarness } from './harness';
 import * as feed from '@/lib/feed';
-import { accountWorkspaceInsightsFor } from '@/lib/workspace';
+import { accountWorkspaceInsightsFor, accountWorkspaceFor } from '@/lib/workspace';
 import { mintToken } from '@/lib/tokens';
 import { EVENTS_SCHEMA } from '@/lib/config';
 import { ensureEventsSchema } from '@artifactbin/events/local';
@@ -55,4 +55,17 @@ it('keeps source metadata and analytics queries out of core while retaining shar
     expect(statements.some(sql => sql.includes('analytics_events'))).toBe(false);
     expect(statements.filter(sql => sql.includes('FROM artifacts')).some(sql => /\bmeta\b/.test(sql))).toBe(false);
   } finally { query.mockRestore(); }
+});
+
+it('deferred lifetime counts preserve distinct visitors, exclude trash and remain in full workspaces', async () => {
+  const db = await harness.db(), user = await createUser({ email: 'mxmx_test_counts@example.com' });
+  const token = await mintToken('counts');
+  await db.query("INSERT INTO artifacts (id,user_id,token_id,format,title,content,meta,version) VALUES ('cnt123',$1,$2,'markup','Counted','','{}',1),('trash1',$1,$2,'markup','Trash','','{}',1)", [user.id, token.id]);
+  await db.query("UPDATE artifacts SET deleted_at=now() WHERE id='trash1'");
+  await db.query("INSERT INTO analytics_events (event,artifact_id,visitor) VALUES ('view','cnt123','same'),('view','cnt123','same'),('view','cnt123','different'),('view','cnt123',NULL),('edit','cnt123','ignored'),('view','trash1','hidden')");
+  const insights = await accountWorkspaceInsightsFor(user.id);
+  expect(insights.views).toEqual({ cnt123: 3 });
+  const full = await accountWorkspaceFor(user.id, user.email);
+  expect(full.artifacts).toHaveLength(1);
+  expect(full.artifacts[0]).toMatchObject({ id: 'cnt123', views: 3 });
 });

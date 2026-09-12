@@ -31,7 +31,9 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run build
       - name: Measure candidate
-        run: node scripts/performance-loads.mjs . performance-results/candidate.json
+        run: |
+          node scripts/performance-loads.mjs . performance-results/candidate.json
+          node scripts/performance-exports.mjs . performance-results/candidate-exports.json
       - name: Build baseline on the same runner
         env:
           PERF__BASE_REF: ${{ inputs.baseline || '3709d83f699ceb723d559526af5ade1db72bb640' }}
@@ -40,7 +42,9 @@ jobs:
           npm ci --prefix /tmp/artifactbin-performance-base
           npm run build --prefix /tmp/artifactbin-performance-base
       - name: Measure baseline with the identical harness
-        run: node scripts/performance-loads.mjs /tmp/artifactbin-performance-base performance-results/baseline.json
+        run: |
+          node scripts/performance-loads.mjs /tmp/artifactbin-performance-base performance-results/baseline.json
+          node scripts/performance-exports.mjs /tmp/artifactbin-performance-base performance-results/baseline-exports.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
