@@ -94,7 +94,7 @@ describe('the token-less task', () => {
 
   it('builds a prompt that names the store and hands over NO credential', () => {
     const prompt = buildPrompt(TASK, { kind: 'none', base: 'https://x.test' });
-    expect(prompt).toContain('https://x.test');
+    expect(prompt).toContain('publish to artifactbin at https://x.test');
     expect(prompt).not.toMatch(/mx_[A-Za-z0-9_-]+/);
     expect(prompt).not.toContain('/start?k=');
   });
@@ -174,11 +174,11 @@ describe('the edges the seed did not pin', () => {
 describe('the no-credential access line', () => {
   const NONE = { kind: 'none', base: 'https://x.test' } as const;
 
-  it('teaches local help without inventing a saved connection or a supplied document', () => {
+  it('teaches the afbin CLI without inventing a saved connection or a supplied document', () => {
     const line = buildPrompt(TASK, NONE);
-    expect(line).toContain('The artifactbin server is');
-    expect(line).toContain('https://x.test');
-    expect(line).toContain('not been given a token or a document');
+    expect(line).toContain('publish to artifactbin at https://x.test');
+    expect(line).toContain('afbin');
+    expect(line).toContain('Run afbin help first');
     expect(line).not.toMatch(/saved|mx_[A-Za-z0-9_-]+|\/docs\//);
   });
 

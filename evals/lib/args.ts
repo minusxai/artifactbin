@@ -9,6 +9,7 @@
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { DEFAULT_MODE, parseMode, type EvalMode } from './mode';
+import { DEFAULT_PROMPT_LEVEL, parsePromptLevel, type PromptLevel } from './tasks';
 import { parseCredentialSource, type CredentialSource } from './credential';
 
 export interface Args {
@@ -33,6 +34,8 @@ export interface Args {
   vision: boolean;
   /** How the agent REACHES the product — see `lib/mode.ts`. */
   mode: EvalMode;
+  /** The prompt SHAPE — `starter` (default) or `hardcore`; see `lib/tasks.ts`. Independent of `mode`. */
+  promptLevel: PromptLevel;
   /**
    * WHERE this leg's token comes from, overriding what the mode would choose (`lib/credential.ts`):
    * `paste` (the product's own copy-text handoff), `inbox-oauth` (log in with a code from the eval's
@@ -79,6 +82,7 @@ Runs ONE leg — one harness, one model — over the selected tasks and writes a
   --price-web-search <dollars>  $ per provider-side web-search call.
   --no-vision               Tell the leg its model cannot read images.
   --mode <mode>             installed (the driver installs afbin and runs its setup first) or not-installed (the agent installs it); see lib/mode.ts.
+  --prompt <level>          Prompt shape: starter (default, teaches the afbin CLI) or hardcore (brief and bare base only); see lib/tasks.ts.
   --credential <source>     Where this leg's token comes from (see lib/credential.ts).
   --tasks <id,id>           Run only these task ids.
   --shard <i/n>             Run shard i of n; a task is never split.
@@ -132,7 +136,7 @@ function deploymentUrl(raw: string): string {
 }
 
 export function parseArgs(argv: string[]): Args {
-  const args: Args = { out: path.join(EVALS_DIR, '.metrics'), ci: false, retry: true, report: true, vision: true, mode: DEFAULT_MODE };
+  const args: Args = { out: path.join(EVALS_DIR, '.metrics'), ci: false, retry: true, report: true, vision: true, mode: DEFAULT_MODE, promptLevel: DEFAULT_PROMPT_LEVEL };
   for (let i = 0; i < argv.length; i++) {
     const raw = argv[i];
     // Split only on the FIRST `=`, so a value may contain one.
@@ -152,6 +156,7 @@ export function parseArgs(argv: string[]): Args {
       case '--price-web-search': args.priceWebSearch = rate(value(), '--price-web-search'); break;
       case '--no-vision': args.vision = false; break;
       case '--mode': args.mode = parseMode(value()); break;
+      case '--prompt': args.promptLevel = parsePromptLevel(value()); break;
       case '--credential': args.credential = parseCredentialSource(value()); break;
       case '--tasks': args.tasks = list(value()); break;
       case '--shard': args.shard = value(); break;

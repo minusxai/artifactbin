@@ -10,7 +10,7 @@ import {planMode} from '../lib/mode';
 import {buildPrompt} from '../lib/tasks';
 import type {Harness,HarnessRunContext,Task} from '../lib/contracts';
 import {skillTargets} from '../../services/cli/src/skill-install';
-const ctx=(harness:Harness,home:string,installed:boolean):HarnessRunContext=>({leg:{harness,model:'m',envVar:'TEST_KEY',apiKey:'k',label:harness,price:null,vision:true,mode:planMode(harness,installed?'installed':'not-installed')},prompt:'p',cwd:home,homeDir:home,apiKey:'k',maxTurns:1,maxBudgetUsd:1,...(installed?{skills:skillKit(home,harness)}:{})});
+const ctx=(harness:Harness,home:string,installed:boolean):HarnessRunContext=>({leg:{harness,model:'m',envVar:'TEST_KEY',apiKey:'k',label:harness,price:null,vision:true,promptLevel:'starter',mode:planMode(harness,installed?'installed':'not-installed')},prompt:'p',cwd:home,homeDir:home,apiKey:'k',maxTurns:1,maxBudgetUsd:1,...(installed?{skills:skillKit(home,harness)}:{})});
 it('names the directory afbin setup installs to for each harness, under the environment the adapter passes',()=>{
  const home='/tmp/afbin-home';const map={'claude-code':'claude',codex:'codex',pi:'pi',opencode:'opencode'} as const;
  for(const h of ['claude-code','codex','pi','opencode'] as const)expect(skillKit(home,h).dir).toBe(skillTargets(home,harnessEnv(h,home))[map[h]]);
@@ -35,9 +35,16 @@ it('serves the checkout release through the installer without the https-only fla
  expect(local).not.toContain("--proto '=https'");
  expect(local).toContain('Checksum verification failed');
 });
-it('gives both flows the same prompt',()=>{
+it('gives both CLI-staging flows the same prompt: mode is not an input to buildPrompt',()=>{
+ // `installed` and `not-installed` differ only in how the driver stages the CLI; the agent reads the
+ // identical starter text either way. buildPrompt takes no mode, so this is the one starter prompt.
  const task={id:'t',brief:'Publish it.',handoff:'cli',checks:[]} as unknown as Task;
- const p=buildPrompt(task,{kind:'token',base:'http://127.0.0.1:1',token:'x',id:'abc123'});
- expect(p).toContain('The artifactbin server is http://127.0.0.1:1.');expect(p).toContain('Work on artifact abc123');
- expect(p).not.toMatch(/\.env|afbin setup|installed/);
+ const access={kind:'token',base:'http://127.0.0.1:1',token:'x',id:'abc123'} as const;
+ const p=buildPrompt(task,access,{promptLevel:'starter'});
+ expect(p).toBe(buildPrompt(task,access));
+ expect(p).toContain('afbin');
+ expect(p).toContain('curl -fsSL http://127.0.0.1:1/chat/install.sh | sh');
+ expect(p).toContain('Run afbin help first');
+ expect(p).toContain('http://127.0.0.1:1/a/abc123');
+ expect(p).not.toMatch(/\.env|afbin setup/);
 });
