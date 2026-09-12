@@ -531,7 +531,6 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // canonicalized the agent's markup, not a failure of the flow.
   const gated = gatedChecks(checked.ok ? [...task.checks] : task.checks.filter((c) => !checked.ungated.includes(c)), {
     trafficObserved: lm.observed,
-    vocabularyInstalled: installed,
     transportSubstituted: transport.substitutedWhy !== null || leg.mode.substitutedWhy !== null,
     // The same signal `checkoutReads` was computed from: a harness that emitted no tool calls
     // cannot be asked what it read, so `no_local_checkout_reads` stops gating (verdict.ts).

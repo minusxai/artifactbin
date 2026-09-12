@@ -55,7 +55,9 @@ const VISION_LINE = 'You cannot view images. Check your work by reading the docu
 export function buildPrompt(task: Task, access: Access, opts: PromptOptions = {}): string {
   const level = opts.promptLevel ?? DEFAULT_PROMPT_LEVEL;
   const vision = opts.vision === false ? [VISION_LINE] : [];
-  // Hardcore gives ONLY the base — never the artifact id, the installer or afbin.
-  if (level === 'hardcore') return [task.brief, ...vision, `Use ${access.base}.`].join('\n\n');
+  // Hardcore gives the document link and nothing else — never the installer or the word afbin. A person
+  // pastes a link, not a base URL; the first hardcore run (34704712847) gave only the base, so no agent
+  // could edit the document it was scored against and used_start_document failed 16 of 16.
+  if (level === 'hardcore') return [task.brief, ...vision, `The document is at ${access.base.replace(/\/$/, '')}/a/${access.id}.`].join('\n\n');
   return [existingPaste(access.base, access.id), task.brief, ...vision].join('\n\n');
 }

@@ -34,13 +34,12 @@ const LEDGER_ONLY = new Set([
  * null, which the report renders "—".
  */
 /**
- * The same rule, for the same reason, one axis over: in `plugins`/`mcp` mode
- * the protocol is INSTALLED rather than read, so there is no docs fetch to
- * observe and `read_docs_before_write: false` would grade the mode instead of
- * the agent. Three of the comparison tasks list it, so it has to stop gating
- * rather than merely stop being recorded.
+ * RETIRED WITH THE HTTP ERA. `read_docs_before_write` (a docs GET before the first write) and
+ * `no_unknown_endpoints` (404s on unknown routes) described agents that drove the HTTP API by hand.
+ * Since the CLI became the only surface the skills are on disk in every mode and afbin never invents
+ * a route, so the first could never be true and the second only fired on discovery probes. Neither
+ * is gated or reported any more; `used_cli` — did the agent drive afbin at all — is the CLI-era gate.
  */
-const NEEDS_A_DOCS_FETCH = new Set(['read_docs_before_write']);
 
 /**
  * And once more, one axis further over: `no_local_checkout_reads` is read out of
@@ -63,7 +62,7 @@ const NEEDS_TOOL_TELEMETRY = new Set(['no_local_checkout_reads','used_cli']);
 
 interface GateOptions {
   trafficObserved: boolean;
-  vocabularyInstalled?: boolean;
+
   /** The task asked for MCP and this harness has no client, so it ran over REST. */
   transportSubstituted?: boolean;
   /**
@@ -76,7 +75,6 @@ interface GateOptions {
 
 export function gatedChecks(gated: string[], opts: GateOptions): string[] {
   let out = opts.trafficObserved ? gated : gated.filter((c) => !LEDGER_ONLY.has(c));
-  if (opts.vocabularyInstalled) out = out.filter((c) => !NEEDS_A_DOCS_FETCH.has(c));
   if (opts.toolTelemetryObserved === false) out = out.filter((c) => !NEEDS_TOOL_TELEMETRY.has(c));
   return out;
 }
@@ -95,8 +93,10 @@ const ALWAYS_REPORT = new Set([
   // one failure the ledger cannot see: the driver's calls are marked and skipped,
   // so a broken seed would otherwise read as an agent that did nothing.
   'setup_ok', 'checks_ok',
-  'published', 'published_first_try', 'read_docs_before_write', 'no_unknown_endpoints',
-  'canonical_stable', 'has_title', 'used_start_document', 'harness_ok',
+  // `read_docs_before_write`, `no_unknown_endpoints` and `canonical_stable` were dropped with the HTTP
+  // era: the first two could no longer be true, and the third (markup echoed equals markup sent) is
+  // false on every CLI push because the product canonicalises what the CLI sends — noise in every report.
+  'published', 'published_first_try', 'has_title', 'used_start_document', 'used_cli', 'harness_ok',
   'no_console_errors', 'no_failed_responses', 'fits_390px',
   // Whether the agent read this checkout describes any run at all — and a column
   // where it is false is a column that measured the disk instead of the wire.

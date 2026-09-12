@@ -353,7 +353,7 @@ export function validateRecipeUse(
       if (!col) {
         out.push(`recipe ${recipeLabel} slot "${slot.name}" binds "${c}" — not a dataset column (columns: ${columns.map((x) => x.name).join(', ')})`);
       } else if (!slot.accepts.includes(colKind(col.type))) {
-        out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)}`);
+        out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)} — change the query so "${c}" is ${slot.accepts.join(' or ')} (a cast such as cast("${c}" as text), or an aggregate), or bind another column`);
       }
     }
   }

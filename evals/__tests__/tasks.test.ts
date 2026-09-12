@@ -35,13 +35,13 @@ it('a cold-install publish task explicitly selects its task proxy before authent
  expect(prompt).not.toContain('https://artifactbin.dev');
 });
 
-it('hardcore gives only the brief and the bare base — no starter, no afbin, no artifact id, and it never throws',()=>{
+it('hardcore gives the brief and the document link — no starter text, no afbin, no installer — and it never throws',()=>{
  const prompt=buildPrompt(task,ACCESS,{promptLevel:'hardcore'});
  expect(prompt).toContain(task.brief);
- expect(prompt).toContain('Use https://example.test.');
+ expect(prompt).toContain('The document is at https://example.test/a/abc123.');
  expect(prompt).not.toContain('afbin');
  expect(prompt).not.toContain('install.sh');
- expect(prompt).not.toContain('abc123');
+ expect(prompt).not.toContain('Run afbin help');
  expect(prompt).not.toMatch(/mx_[A-Za-z0-9_-]+/);
  // Every task takes both levels: there is no access shape left that one of them cannot describe.
  expect(()=>buildPrompt({...task,seed:'<p>Seed</p>'},ACCESS,{promptLevel:'hardcore'})).not.toThrow();

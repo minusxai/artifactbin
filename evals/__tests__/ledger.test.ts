@@ -246,6 +246,13 @@ describe('targetArtifactId', () => {
     expect(targetArtifactId([e('GET', '/docs/llm', 200)])).toBeNull();
   });
 
+  it('prefers the last write that carried MARKUP over a later dataset write — a finished report was scored as its dataset (run 34704052816)', () => {
+    const doc = { ...e('PUT', '/api/artifacts/report1', 200, 'report1'), reqMarkup: '<h1>Coffee</h1>' };
+    expect(targetArtifactId([doc, e('PUT', '/api/artifacts/dataset1', 200, 'dataset1'), e('PUT', '/api/artifacts/dataset1', 200, 'dataset1')])).toBe('report1');
+    // With no markup write at all, the last write still decides (a dataset-only task).
+    expect(targetArtifactId([e('POST', '/api/artifacts', 201, 'dataset1')])).toBe('dataset1');
+  });
+
   it('skips an artifact the agent later DELETEd — Claude Opus 5 makes a scratch document, exports it to look, and deletes it', () => {
     const entries = [
       e('PUT', '/api/artifacts/cvPGM1', 200, 'cvPGM1'),

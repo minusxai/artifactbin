@@ -44,8 +44,8 @@ describe('checksToRecord', () => {
 
   it('always records the checks that describe ANY run, gated or not', () => {
     const rec = checksToRecord(all, ['published']);
-    expect(Object.keys(rec)).toEqual(expect.arrayContaining(['published', 'has_title', 'canonical_stable', 'used_start_document', 'harness_ok']));
-    expect(rec.canonical_stable).toBe(false); // informative, still shown
+    expect(Object.keys(rec)).toEqual(expect.arrayContaining(['published', 'has_title', 'used_start_document', 'harness_ok']));
+    expect(rec).not.toHaveProperty('canonical_stable'); // retired with the HTTP era: false on every CLI push
   });
 
   it('drops a task-specific check the task does not gate', () => {
@@ -86,11 +86,12 @@ describe('the checkout-reads check needs tool telemetry to gate', () => {
   const checksOf = (file: string) => (JSON.parse(fs.readFileSync(path.join(EVAL_TASKS, file), 'utf8')) as { checks: string[] }).checks;
   const FILES = ['dashboard.eval.json', 'deck.eval.json', 'report.eval.json', 'scrolly.eval.json'];
 
-  it('drops it when the harness emitted no tool telemetry, and keeps every other check', () => {
+  it('drops it — and used_cli, read the same way — when the harness emitted no tool telemetry, and keeps every other check', () => {
     for (const f of FILES) {
       const gated = gatedChecks(checksOf(f), { trafficObserved: true, toolTelemetryObserved: false });
       expect(gated, f).not.toContain('no_local_checkout_reads');
-      expect(gated, f).toEqual(checksOf(f).filter((c) => c !== 'no_local_checkout_reads'));
+      expect(gated, f).not.toContain('used_cli');
+      expect(gated, f).toEqual(checksOf(f).filter((c) => c !== 'no_local_checkout_reads' && c !== 'used_cli'));
     }
   });
 
@@ -98,6 +99,7 @@ describe('the checkout-reads check needs tool telemetry to gate', () => {
     const gated = gatedChecks(checksOf('scrolly.eval.json'), { trafficObserved: true, toolTelemetryObserved: false });
     const checks: Record<string, boolean | null> = Object.fromEntries(checksOf('scrolly.eval.json').map((c) => [c, true]));
     checks.no_local_checkout_reads = null;
+    checks.used_cli = null;
     expect(verdictFor(checks, gated)).toEqual({ passed: true, failed: [] });
   });
 

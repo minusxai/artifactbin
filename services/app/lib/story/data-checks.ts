@@ -18,6 +18,7 @@ import type { DatasetColumn } from './dataset-shape';
 import { splitHelmet } from './helmet';
 import { refId, validateRecipeUse, validateRefs, validateVizAgainstColumns, type RefLoader } from './refs';
 import { getTemplate, VIZ_TEMPLATES } from '@/lib/viz/viz-templates';
+import { normalize, type TopLevelSpec } from 'vega-lite';
 
 type DataCheckResult =
   | { ok: true; refs: Array<{ id: string; kind: string }> }
@@ -98,6 +99,12 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   return { kind: 'ok', columns, rowSchemas };
 }
 
+/** The message Vega-Lite's normaliser throws for a spec it cannot read, or null for one it can read. */
+export function vegaLiteStructureError(spec: Record<string, unknown>): string | null {
+  try { normalize(structuredClone(spec) as unknown as TopLevelSpec); return null; }
+  catch (error) { return error instanceof Error ? error.message : String(error); }
+}
+
 /** Every `<Question data="$q" viz>` checked against q's result columns (encodings, or recipe slots). */
 async function validateQueryBindings(body: JsxNode[], columns: Record<string, DatasetColumn[]>, load: RefLoader): Promise<string[]> {
   const out: string[] = [];
@@ -118,6 +125,14 @@ async function validateQueryBindings(body: JsxNode[], columns: Record<string, Da
   };
   visit(body);
   for (const { name, viz } of questions) {
+    // STRUCTURE FIRST, with Vega-Lite's own normaliser, HERE and not in refs.ts: this module is
+    // server-only, while refs.ts is bundled into afbin for `afbin validate` and vega-lite is
+    // ESM-with-top-level-await that the CJS binary build refuses. A spec the normaliser rejects (a
+    // top-level `facet` beside `mark`/`encoding`, where it wants a `spec` wrapper) passed every field
+    // check, published, and threw in the reader's browser — "Cannot destructure property 'transform'
+    // of 'spec'" on a dashboard tile (eval run 34703431814, pi). Refused before publish now.
+    const structural = viz.kind === 'vega-lite' && viz.spec && typeof viz.spec === 'object' ? vegaLiteStructureError(viz.spec as Record<string, unknown>) : null;
+    if (structural) { out.push(`query $${name}: viz is not a Vega-Lite spec the renderer can read — ${structural}`); continue; }
     out.push(...validateVizAgainstColumns(viz, columns[name], `query $${name}`));
     const recipeRef = viz.kind === 'recipe' && typeof viz.recipe === 'string' ? viz.recipe : null;
     if (recipeRef) {
