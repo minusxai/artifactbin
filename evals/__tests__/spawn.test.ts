@@ -545,8 +545,8 @@ describe('firstUrlAtMs — what it watches, and what it deliberately does not (m
     expect(r.firstUrlAtMs!).toBeGreaterThanOrEqual(400);
   });
 
-  it('ignores a `/start` link — that is the document the agent was GIVEN, not one it made', async () => {
-    const r = await runInvocation(node('console.log("I was given https://x.test/a/ab3cd9/start?k=abc and did nothing")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
+  it('stays null while the agent has named no document at all', async () => {
+    const r = await runInvocation(node('console.log("Installing afbin, then I will publish")'), { cwd: dir, baseEnv: process.env, timeoutMs: 20_000, ...paths() });
     expect(r.firstUrlAtMs).toBeNull();
   });
 

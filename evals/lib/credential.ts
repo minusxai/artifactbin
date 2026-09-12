@@ -1,12 +1,9 @@
 /**
- * HOW A LEG GETS ITS CREDENTIAL — and why the token stops riding the prompt.
+ * HOW A LEG GETS ITS CREDENTIAL — a real account, logged in the way a person logs in.
  *
- * The copy-text treatment (`fetched_skill+api_action`) IS the paste: a logged-out person copies the
- * product's own line, token and all, into their agent. That is the product under test and it is left
- * alone. The other three treatments are what a person with the PLUGIN has, and that person never
- * pastes a token — they log in, they click Approve, and their agent finds the connection where the
- * skill says it lives (`~/.artifactbin.env`) or in its MCP configuration. So the driver does the same
- * thing, over plain HTTP, with no browser:
+ * The product is CLI-only: afbin authenticates itself with an OAuth device pairing that a signed-in
+ * person approves in a browser. The driver stands in for that person, so it needs the same two things
+ * they have — a session and a token — and it gets them over plain HTTP, with no browser:
  *
  *   1. `POST /api/auth/email-otp/send-verification-otp {email, type:'sign-in'}` — Better Auth's own
  *      email-OTP plugin (`services/proxy/src/auth/human.ts`);
@@ -15,17 +12,19 @@
  *      Resend inbound address (`GET /emails/receiving`), while a server this driver BOOTED writes its
  *      mail to a file instead of sending it (`lib/server devOutboxPath`, `services/proxy/src/mail.ts`) —
  *      so a local run needs no inbox and no key at all. One reader is swapped, nothing else;
- *   3. `POST /api/auth/sign-in/email-otp {email, otp}` → the session cookie;
+ *   3. `POST /api/auth/sign-in/email-otp {email, otp}` → the session cookie, which is what approves the
+ *      agent's pairing (`lib/auth.ts` before the turn, `lib/approver.ts` during it) and what shares the
+ *      run's documents for scoring (`shareForScoring`);
  *   4. the OAuth grant an MCP client makes: dynamic registration, PKCE, the consent form fetched WITH
  *      the cookie and posted back verbatim (its `resource`/`scope` are checked exactly, so they are
  *      read off the form rather than guessed), the code taken off the 303's `Location` — no listener
- *      is ever opened — and exchanged at `/oauth/token`.
+ *      is ever opened — and exchanged at `/oauth/token`. That bearer is the DRIVER's: it seeds the
+ *      document and reads the product back. It never reaches the agent, which authenticates itself.
  *
  * MEASURED against https://artifactbin.dev before this module was written (`scripts/spike-inbox-oauth.ts`):
  * the granted token is ACCOUNT-owned (a document it creates with no visibility is born `private`, and
- * `GET /api/artifacts` lists the account's other documents), it opens an MCP session, AND it is accepted
- * as a bearer on `/api/artifacts` — one credential serves both action transports. Login mail took 3 s
- * on one run and 50 s on another, hence the two-minute cap below.
+ * `GET /api/artifacts` lists the account's other documents) AND it is accepted as a bearer on
+ * `/api/artifacts`. Login mail took 3 s on one run and 50 s on another, hence the two-minute cap below.
  *
  * ONE login per leg: every task and every second attempt reuses what this returns.
  */
@@ -36,8 +35,8 @@ import type { CredentialEnv } from './env';
 import { type EvalMode } from './mode';
 import { slug } from './slug';
 
-/** Where a leg's token comes from. */
-export const CREDENTIAL_SOURCES = ['paste', 'inbox-oauth', 'outbox-oauth', 'secret'] as const;
+/** Where a leg's token comes from. Both log in as a real account; only the MAILBOX differs. */
+export const CREDENTIAL_SOURCES = ['inbox-oauth', 'outbox-oauth'] as const;
 export type CredentialSource = (typeof CREDENTIAL_SOURCES)[number];
 
 /** `--credential` — an override for the source `credentialSourceFor` would have chosen. */
@@ -50,18 +49,16 @@ export function parseCredentialSource(raw: string): CredentialSource {
 
 export interface Credential {
   token: string;
-  /** `anonymous` is a token the product minted with no account behind it — what `/api/start` hands out. */
-  owner: 'anonymous' | 'account';
-  /** The account the token belongs to, when the driver logged in to get it. */
-  email?: string;
+  /** The account the token belongs to — the address the driver logged in as. */
+  email: string;
   /**
    * The session the driver logged in WITH, kept beside the token it granted. The bearer is enough for
    * everything an agent does; it is not enough to SHARE — the sharing door is browser-only on purpose
    * (`services/app/app/api/my/artifacts/[id]/sharing/route.ts`), because handing out a link is a human
-   * act. So the human half of the login travels too, and `shareForScoring` uses it. Absent for `secret`
-   * (a pre-provisioned token names no session) and for `paste` (there is no credential at all).
+   * act — nor to APPROVE the agent's device pairing, which is the only way afbin is ever authenticated.
+   * So the human half of the login travels too (`shareForScoring`, `lib/auth.ts`, `lib/approver.ts`).
    */
-  cookie?: string;
+  cookie: string;
 }
 
 /** The mail as the Resend inbound list returns it — only the fields the choice is made on. */
@@ -87,20 +84,19 @@ export interface CredentialOptions {
 }
 
 /**
- * WHICH source a mode uses. The paste is the copy-text treatment's whole point, so it is never
- * replaced; the other three want an account, and say so loudly when no way to get one is configured
- * (a silent fall back to an anonymous token would quietly change what the column measures).
+ * WHICH source a mode uses. Every mode wants a real account with a live SESSION, and says so loudly
+ * when no way to get one is configured: afbin is authenticated only by a device pairing that somebody
+ * approves in a browser, so a run whose driver cannot approve one is a run whose agent has no
+ * credential at all — and a silent fall back would look like a model that could not publish.
  *
- * A LOCAL server comes first, before the shared inbox and before a pre-provisioned token: it is the
- * only account that is genuinely this run's own — a fresh database, an address nobody else uses, and no
- * five-an-hour login door shared with every other run. Without it CI's `agent smoke` (which boots a
- * local server and has neither a Resend inbox nor an account token) died on the throw below.
+ * A LOCAL server comes first, before the shared inbox: it is the only account that is genuinely this
+ * run's own — a fresh database, an address nobody else uses, and no five-an-hour login door shared
+ * with every other run. It is what CI's `agent smoke` has, and it needs no inbox and no key.
  */
 export function credentialSourceFor(mode: EvalMode, env: CredentialEnv, opts: CredentialOptions = {}): CredentialSource {
   if (opts.localOutbox) return 'outbox-oauth';
   if (env.RESEND_EVAL_API_KEY && env.EVAL_LOGIN_EMAIL) return 'inbox-oauth';
-  if (env.EVAL_ACCOUNT_TOKEN) return 'secret';
-  throw new Error(`${mode} needs an ACCOUNT: boot a local server (the driver logs in through its dev outbox), or set RESEND_EVAL_API_KEY and EVAL_LOGIN_EMAIL (the driver logs in and grants like an MCP client), or EVAL_ACCOUNT_TOKEN (a pre-provisioned account token)`);
+  throw new Error(`${mode} needs an ACCOUNT the driver can log in as, because it must approve the agent's device pairing in a browser: boot a local server (the driver reads the code from its dev outbox), or set RESEND_EVAL_API_KEY and EVAL_LOGIN_EMAIL (the driver reads it from the eval inbox)`);
 }
 
 /**
@@ -136,11 +132,11 @@ export function deploymentLoginEmail(configured: string, harness: Harness): stri
  * made again, once per boot.
  */
 export function memoizeCredential<A extends unknown[]>(
-  acquire: (...args: A) => Promise<Credential | null>,
+  acquire: (...args: A) => Promise<Credential>,
   opts: { reusable: boolean },
-): (...args: A) => Promise<Credential | null> {
+): (...args: A) => Promise<Credential> {
   if (!opts.reusable) return acquire;
-  let pending: Promise<Credential | null> | null = null;
+  let pending: Promise<Credential> | null = null;
   return (...args: A) => (pending ??= acquire(...args));
 }
 
@@ -236,21 +232,13 @@ export interface AcquireOptions {
 }
 
 /**
- * The leg's credential. `paste` answers null — there is nothing to acquire, the product hands its token
- * to the agent itself and the driver only reads it back out of the paste when a task needs it.
+ * The leg's credential: an account, its bearer token, and the SESSION behind both.
  *
- * There is deliberately no `none` here any more. Withholding the credential is a property of the TASK
- * (`handoff: none`, `lib/tasks planAccess`), not a flag on the leg: while it was both, a run's rubric
- * and its credential were settable independently, and the token-less leg was graded on whether it
- * published by a run that had given it no way to publish.
+ * There is deliberately nothing here that skips the login. A pre-provisioned token would name no
+ * session, and a session is what approves the agent's device pairing — so a leg holding one could
+ * never authenticate afbin, which is the product's only credential path.
  */
-export async function acquireCredential(source: CredentialSource, opts: AcquireOptions): Promise<Credential | null> {
-  if (source === 'paste') return null;
-  if (source === 'secret') {
-    const token = opts.env.EVAL_ACCOUNT_TOKEN;
-    if (!token) throw new Error('EVAL_ACCOUNT_TOKEN is not set');
-    return { token, owner: 'account' };
-  }
+export async function acquireCredential(source: CredentialSource, opts: AcquireOptions): Promise<Credential> {
   const call = opts.fetch ?? globalThis.fetch;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   // The dance is ONE code path from here on; only WHERE the login code is read differs.
@@ -267,7 +255,7 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
   const origin = opts.origin ?? opts.base;
   const cookie = await logIn({ base: opts.base, origin, email, read, fetch: call, sleep });
   const token = await grantAsMcpClient({ base: opts.base, origin, cookie, fetch: call });
-  return { token, owner: 'account', email, cookie };
+  return { token, email, cookie };
 }
 
 /** What `shareForScoring` needs: the product, the session, and the documents to hand out links to. */

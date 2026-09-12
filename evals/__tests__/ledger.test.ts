@@ -32,12 +32,12 @@ describe('ledgerMetrics', () => {
     expect(m.inventedEndpoints).toBe(0);
   });
 
-  it('read_docs_before_write: a docs or start-link GET must precede the first write', () => {
+  it('read_docs_before_write: a docs GET must precede the first write, and reading the DOCUMENT is not reading the docs', () => {
     expect(ledgerMetrics(entries).readDocsBeforeWrite).toBe(true);
     const noDocs = entries.filter((e) => e.path !== '/docs/llm');
     expect(ledgerMetrics(noDocs).readDocsBeforeWrite).toBe(false);
-    const startLink: LedgerEntry = { t: 0, ms: 1, method: 'GET', path: '/a/x/start?k=abc', status: 200, ua: null, auth: null, error: null };
-    expect(ledgerMetrics([startLink, ...noDocs]).readDocsBeforeWrite).toBe(true);
+    const openedTheDocument: LedgerEntry = { t: 0, ms: 1, method: 'GET', path: '/a/x/raw?chrome=0', status: 200, ua: null, auth: null, error: null };
+    expect(ledgerMetrics([openedTheDocument, ...noDocs]).readDocsBeforeWrite).toBe(false);
   });
 
   it('treats POST /api/artifacts, PUT and /edits as writes; a first-try publish has one attempt and no 4xx', () => {
@@ -131,7 +131,7 @@ describe('endpoint and transport metrics', () => {
   });
 
   it('knows every route the docs teach', () => {
-    for (const p of ['/api/artifacts/abc123/annotations/ann_2vlmssgwhdloxo0zdlx', '/api/artifacts/abc123/annotations', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/a/abc123', '/a/abc123/start?k=x', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
+    for (const p of ['/api/artifacts/abc123/annotations/ann_2vlmssgwhdloxo0zdlx', '/api/artifacts/abc123/annotations', '/api/start', '/api/preview', '/api/artifacts', '/api/artifacts/abc123', '/api/artifacts/abc123/edits', '/api/artifacts/abc123/versions', '/api/artifacts/abc123/versions/3', '/a/abc123', '/a/abc123/export?format=png', '/a/abc123/raw?chrome=0']) {
       expect(ledgerMetrics([e({ path: p, status: 404 })]).inventedEndpoints).toBe(0);
     }
   });
@@ -190,7 +190,7 @@ describe('docs cost', () => {
     const m = ledgerMetrics([
       e({ path: '/docs/llm', bytes: 23590 }),
       e({ path: '/docs/markup?x=1', bytes: 26921 }),
-      e({ path: '/a/abc123/start?k=s', bytes: 2100 }), // the start brief is the handoff, not the docs path
+      e({ path: '/a/abc123/raw?chrome=0', bytes: 2100 }), // reading the document is not reading the docs
       e({ method: 'PUT', path: '/api/artifacts/abc123', bytes: 400 }),
     ]);
     expect(m.docsFetches).toBe(2);

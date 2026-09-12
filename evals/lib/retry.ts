@@ -4,7 +4,7 @@
  * An agent's turn is paid for the moment it starts; the driver's request that
  * sets the task up is not, and losing the first to a blip in the second is the
  * worst trade in the run. Measured: three tasks of one production leg died on
- * `POST /api/start → 502`, all within 200 ms of each other, at the moment three
+ * the start-document mint, all within 200 ms of each other, at the moment three
  * proxies opened at once against a deployment that was mid-roll. Nothing about
  * the agent, the mode or the product was learned — the column simply had three
  * holes, and its total stopped being comparable to the others'.
@@ -63,46 +63,20 @@ export async function withRetry<T>(what: string, attempt: () => Promise<T | null
 
 export interface StartDocument {
   id: string;
-  prompt: string;
 }
 
 /**
- * Mint the task's start document, through the proxy the agent will use — the
- * product builds the document URL in the paste from the request's origin, so this call is what
- * puts the proxy's address in the agent's hands. Retried for the reason above:
- * the agent's turn is paid and this is not.
- */
-export async function mintStartDocument(
-  agentBase: string,
-  driverHeader: string,
-  opts: RetryOptions = {},
-): Promise<StartDocument> {
-  return withRetry(`POST ${agentBase}/api/start`, async () => {
-    const res = await fetch(`${agentBase}/api/start`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', [driverHeader]: '1' },
-      body: '{}',
-    });
-    if (isTransientStatus(res.status)) return null;
-    if (!res.ok) throw new FatalError(`POST /api/start → ${res.status}`);
-    return (await res.json()) as StartDocument;
-  }, opts);
-}
-
-/**
- * The start document for a leg that holds an ACCOUNT credential.
+ * THE DOCUMENT EVERY TASK STARTS FROM, created as the eval account.
  *
- * `/api/start` mints an ANONYMOUS token and a document that belongs to it — which is the copy-text
- * product, and exactly what the plugin treatments are not: their token belongs to the eval's account,
- * so their start document must too, or the agent is handed a document its own credential cannot write.
- * The driver creates it as that account instead, with the same placeholder shape the start document
- * has (so `published` still compares the agent's work against a document it did not write), and
- * `unlisted` so every anonymous product-truth read — `/a/<id>/raw?chrome=0`, `/export`, the browser
- * checks — keeps working exactly as before. Measured on artifactbin.dev: an account-owned unlisted
- * document reads anonymously (89 KB of HTML, placeholder visible).
+ * The account is the one the agent's own CLI will authenticate as, so the document it is pointed at
+ * must belong to that account too, or it is handed something its credential cannot write. It carries
+ * the placeholder shape a start document has (so `published` still compares the agent's work against a
+ * document it did not write) and is `unlisted`, so every anonymous product-truth read —
+ * `/a/<id>/raw?chrome=0`, `/export`, the browser checks — sees it. Measured on artifactbin.dev: an
+ * account-owned unlisted document reads anonymously (89 KB of HTML, placeholder visible).
  *
- * Marked with the driver header for the same reason the anonymous mint is: it is the DRIVER's call and
- * must not land in the agent's ledger. Retried for the same reason too.
+ * Marked with the driver header: it is the DRIVER's call and must not land in the agent's ledger.
+ * Retried because the agent's turn is paid for and this is not.
  */
 export const START_PLACEHOLDER_MARKUP = '<div data-design="tw" className="@container p-8"><h1 className="text-2xl font-bold">Untitled</h1><p>Waiting for your agent…</p></div>';
 
@@ -122,7 +96,7 @@ export async function mintStartDocumentAs(
     if (!res.ok) throw new FatalError(`POST /api/artifacts (as the eval account) → ${res.status}`);
     const body = (await res.json()) as { id?: string };
     if (!body.id) throw new FatalError('POST /api/artifacts (as the eval account) returned no id');
-    // No paste: the agent is handed the base, the id and its own saved connection instead.
-    return { id: body.id, prompt: '' };
+    // The agent is handed the base and the id; its credential is its own to obtain.
+    return { id: body.id };
   }, opts);
 }

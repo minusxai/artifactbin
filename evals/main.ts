@@ -34,9 +34,9 @@ import { EvalConfigSchema, type EvalConfig, type Task } from './lib/contracts';
 import { legFromArgs, type Leg } from './lib/leg';
 import { discoverTasks, parseShard, selectTasks, shardTasks } from './lib/task-set';
 import { checksToRecord, gatedChecks, verdictFor } from './lib/score/verdict';
-import { buildPrompt, needsStartDocument, planAccess } from './lib/tasks';
+import { buildPrompt, planAccess } from './lib/tasks';
 import { actionTransport, cliPreinstalled, planTransport } from './lib/mode';
-import { startApprover } from './lib/approver';
+import { approverNeeded, startApprover } from './lib/approver';
 import { skillKit } from './lib/skill-kit';
 import { CLI_VERSION } from '../services/cli/src/version';
 import { runCliAuth } from './lib/auth';
@@ -52,7 +52,7 @@ import { devOutboxPath, serverDataDir, serverEnv, serverPorts, startServer } fro
 import { mapConcurrent } from './lib/pool';
 import { exitWhenDone, settleWithin, TEARDOWN_MS } from './lib/shutdown';
 import { DRIVER_HEADER, startProxy } from './lib/proxy';
-import { mintStartDocument, mintStartDocumentAs } from './lib/retry';
+import { mintStartDocumentAs } from './lib/retry';
 import { seedDocument } from './lib/seed';
 import { acquireCredential, credentialSourceFor, deploymentLoginEmail, localLoginEmail, memoizeCredential, shareForScoring, type Credential } from './lib/credential';
 import { agentProxyEnv, startMitmProxy } from './lib/mitm';
@@ -99,11 +99,10 @@ interface LegRun {
   runAs?: string;
   /**
    * The leg's credential, acquired ONCE and memoized by the caller: every task and every second
-   * attempt reuses the same login (`lib/credential`). Null for the copy-text treatment, whose token
-   * the product hands to the agent itself. `origin` is the address the product TRUSTS when that is
-   * not the one the driver dials — a booted server publishes the leg's proxy as its public base URL.
+   * attempt reuses the same login (`lib/credential`). `origin` is the address the product TRUSTS when
+   * that is not the one the driver dials — a booted server publishes the leg's proxy as its base URL.
    */
-  credentialFor: (base: string, origin?: string) => Promise<Credential | null>;
+  credentialFor: (base: string, origin?: string) => Promise<Credential>;
 }
 
 async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: string, browser: Browser, run: LegRun): Promise<Outcome[]> {
@@ -157,13 +156,11 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   }
 
   // WHO the agent will be. One login per leg, against the product's own address rather than a task's
-  // proxy: the driver's setup traffic has no business in a task's ledger, and the token has to outlive
-  // every proxy the leg opens. `paste` acquires nothing — see lib/credential.
+  // proxy: the driver's setup traffic has no business in a task's ledger, and the session has to
+  // outlive every proxy the leg opens — it is what approves the agent's pairing (see lib/credential).
   const credential = await run.credentialFor(productUrl, productOrigin);
-  if (credential) {
-    registerSecret(credential.token);
-    log(`${leg.label}: publishing as ${credential.email ?? 'the eval account'} (${credential.owner})`);
-  }
+  registerSecret(credential.token);
+  log(`${leg.label}: publishing as ${credential.email}`);
 
   /** This task's own proxy and its own ledger. Ports are ephemeral, so any number may be live at once. */
   async function startTaskProxy(taskId: string): Promise<{ agentBase: string; agentEnv: Record<string, string>; ledgerPath: string; stop: () => Promise<void> }> {
@@ -196,7 +193,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     const baseWorkspace = createWorkspace(leg.label, 'baseline');
     // The baseline pays the same fixed context as a task: in the installed flow the skills are on disk.
     let baseSkills = undefined as ReturnType<typeof skillKit> | undefined;
-    if (cliPreinstalled(leg.mode.run) && credential?.cookie) {
+    if (cliPreinstalled(leg.mode.run)) {
       await runCliAuth({ cliBin: materializeCli(path.join(baseWorkspace.homeDir, 'bin')), homeDir: baseWorkspace.homeDir, harness: leg.harness, server: productUrl, publicOrigin, cookie: credential.cookie, log: (m) => log(`${leg.label}: baseline ${m}`) });
       baseSkills = skillKit(baseWorkspace.homeDir, leg.harness);
     }
@@ -253,8 +250,8 @@ interface TaskRun {
   startedAt: string;
   /** Unix user the harness process runs as, when CI isolates it from this checkout (`lib/spawn`). */
   runAs?: string;
-  /** The account this leg publishes as, or null when the product's own paste hands the token over. */
-  credential: Credential | null;
+  /** The account this leg publishes as: the driver's own login, never handed to the agent. */
+  credential: Credential;
 }
 
 async function runTask(r: TaskRun): Promise<Outcome> {
@@ -278,59 +275,37 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     fs.writeFileSync(abs, contents);
   }
 
-  // The start document is minted THROUGH the proxy: the product builds the document URL in the paste from the request's
-  // origin, so this is what puts the proxy's address in the agent's hands. The driver's own call lands in
-  // the ledger before `from` and is sliced out of the run window.
+  // The document this task starts from, created THROUGH the proxy as the eval account — so the URL the
+  // agent is handed is on the proxy's address, and the document belongs to the account its own CLI will
+  // authenticate as. The driver's own call carries `DRIVER_HEADER` and never lands in the agent's ledger.
   // Retried, because this call is the DRIVER's and the agent's turn is not: three tasks of one
-  // production leg died here on `POST /api/start → 502`, all inside 200 ms, when three proxies
-  // opened at once against a deployment mid-roll. Nothing was learned and the column had three
-  // holes. Only transient statuses retry — a 4xx is an answer (lib/retry.ts).
-  // A leg with an ACCOUNT credential does not spend `/api/start`: that mints an anonymous token, and its
-  // document would belong to somebody other than the token the agent was given. The driver creates the
-  // start document itself, as that account, `unlisted` so every anonymous product-truth read below is
-  // unchanged (measured — lib/retry.mintStartDocumentAs).
-  //
-  // A `handoff: none` TASK mints nothing at all: `/api/start` hands out an anonymous token, and a driver
-  // that spent it would be handing the agent the very credential the task exists to withhold. So `start`
-  // is null there, and every reader below says what it means with no start document rather than inventing
-  // one. The TASK decides — there is no leg-level knob that could disagree with its rubric.
-  const start = needsStartDocument(task)
-    ? r.credential
-      ? await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token)
-      : await mintStartDocument(r.agentBase, DRIVER_HEADER)
-    : null;
-  // The paste must name the base the agent will be given, or the agent's traffic misses the ledger.
-  if (start && !r.credential && !start.prompt.includes(r.agentBase)) throw new Error(`start paste is not on ${r.agentBase}`);
+  // production leg died on this mint, all inside 200 ms, when three proxies opened at once against a
+  // deployment mid-roll. Nothing was learned and the column had three holes. Only transient statuses
+  // retry — a 4xx is an answer (lib/retry.ts).
+  const start = await mintStartDocumentAs(r.agentBase, DRIVER_HEADER, r.credential.token);
 
   // EVERYTHING the driver does before the turn, decided in one place (`lib/tasks planAccess`) and
-  // performed here: seed the document this task edits and write its private CLI credentials.
-  // A `handoff: none` task gets neither.
+  // performed here: point the agent at the document, and seed the markup a task that edits or is
+  // commented on needs to find there.
   const plan = planAccess({ task, base: r.agentBase, start, credential: r.credential });
   if (plan.seed) await seedDocument(r.agentBase, plan.seed.id, plan.seed.token, plan.seed.markup);
   const access = plan.access;
-  // THE ONE CREDENTIAL THE DRIVER HOLDS for this task, read back OFF the plan rather than decided a
-  // second time beside it: `planAccess` answers `kind: 'token'` in exactly the cases the driver was
-  // handed one (an account credential, or the paste token a CLI task makes it read),
-  // and `kind: 'none'` for the token-less task, which is the whole point of that task. A task KIND
-  // spends it — `comment`'s setup posts the comment and its checks read the thread back
-  // (`lib/score/kinds`) — so deriving it here keeps one decision rather than two that can disagree.
-  const driverToken = plan.access.kind === 'token' ? plan.access.token : null;
-  // Install the same local skill bundle shipped with the CLI. The private connection points
-  // at this task's recording proxy; authoring guidance contains no credentials.
+  // THE CREDENTIAL THE DRIVER HOLDS for this task. It is never the agent's — afbin obtains its own
+  // through the device door — but a task KIND spends it: `comment`'s setup posts the comment and its
+  // checks read the thread back (`lib/score/kinds`).
+  const driverToken = r.credential.token;
   // THE INSTALLED FLOW'S PRECONDITION, produced by the product: the driver installs afbin and runs its
-  // setup — approving the pairing as the person would — so the CLI itself saved the connection and put
-  // the skills where this harness looks, before the harness starts. A token-less task gets nothing.
+  // auth — approving the pairing as the person would — so the CLI itself saved the connection and put
+  // the skills where this harness looks, before the harness starts.
   const installed = cliPreinstalled(leg.mode.run);
   let cliBin: string | null = null;
   let skills: ReturnType<typeof skillKit> | undefined;
   let setupApprovals: number | null = null;
-  if (cliPreinstalled(leg.mode.run)) {
+  if (installed) {
     cliBin = materializeCli(path.join(homeDir, 'bin'));
-    if (plan.access.kind === 'token' && r.credential?.cookie) {
-      const auth = await runCliAuth({ cliBin, homeDir, harness: leg.harness, server: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) });
-      setupApprovals = auth.approvals;
-      skills = skillKit(homeDir, leg.harness);
-    }
+    const auth = await runCliAuth({ cliBin, homeDir, harness: leg.harness, server: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) });
+    setupApprovals = auth.approvals;
+    skills = skillKit(homeDir, leg.harness);
   }
   // WHAT THIS KIND OF TASK NEEDS, and then the baseline — in that order, which is `prepareTask`'s
   // whole job (`lib/score/kinds`). A `comment` task's setup posts a comment, and the anchor stamp is
@@ -339,16 +314,13 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   //
   // The start document as served BEFORE the agent ran is what `published` compares against, because
   // the start document is not blank — it serves "Untitled / Waiting for your agent…", so "has
-  // content" cannot tell a written document from an untouched one. With NO start document — the
-  // token-less task, which mints none — there is nothing to compare against and nothing to prepare:
-  // the baseline reader answers null and `productMetrics` says so itself, falling back to "does the
-  // served document have content".
+  // content" cannot tell a written document from an untouched one.
   const scorer = scorerFor(task.kind);
   const driverHeaders = { [DRIVER_HEADER]: '1' };
   const prepared = await prepareTask(
     scorer,
-    { task, base: r.agentBase, id: start?.id ?? null, token: driverToken, driverHeaders, log: (m) => log(`${leg.label}/${task.id}: ${m}`) },
-    async () => (start ? servedDocument(`${r.productUrl}/a/${start.id}/raw?chrome=0`) : null),
+    { task, base: r.agentBase, id: start.id, token: driverToken, driverHeaders, log: (m) => log(`${leg.label}/${task.id}: ${m}`) },
+    async () => servedDocument(`${r.productUrl}/a/${start.id}/raw?chrome=0`),
   );
   if (!prepared.ok) {
     // The DRIVER failed, not the agent — and the driver's calls carry `DRIVER_HEADER`, so the ledger
@@ -366,15 +338,15 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
   const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, skills };
-  log(`${leg.label}/${task.id}: ${start ? `doc ${start.id}` : 'no credential, no document'} — running ${leg.harness} (${leg.model})`);
+  log(`${leg.label}/${task.id}: doc ${start.id} — running ${leg.harness} (${leg.model})`);
   await adapter.prepare(ctx);
   // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
   // beside the spawn, rather than read off the ledger — whose first entry is already past the agent's
   // boot, and therefore only a floor. After `prepare`, which is the driver's setup, not the agent's time.
-  // The not-installed flow: the driver stands in for the person who approves the AGENT's `afbin auth`,
-  // but only when this task was meant to have an account at all — the token-less task keeps its wall.
-  // The pairing is read off this task's proxy ledger, the driver's own file: the agent's home is private.
-  const approver = !cliPreinstalled(leg.mode.run) && r.credential?.cookie && plan.access.kind === 'token'
+  // The not-installed flow: the driver stands in for the person who approves the AGENT's `afbin auth`
+  // (`approverNeeded` — the installed flow approved its own before the turn). The pairing is read off
+  // this task's proxy ledger, the driver's own file: the agent's home is private.
+  const approver = approverNeeded(leg.mode.run)
     ? startApprover({ ledgerPath: r.ledgerPath, agentBase: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
     : null;
   const startedAtMs = Date.now();
@@ -410,28 +382,23 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
   // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
-  const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start?.id ?? null });
+  const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
 
-  // AND THEN THE PERSON SHARES IT. Under an account credential every document the agent made is born
-  // PRIVATE, while every read below is anonymous — the reader's view is the whole point of the score —
-  // so a flawless run read as `published: false` (PR #16 CI, the `data` task). Before the first of those
-  // reads the driver does what the person behind the agent does next: makes the run's artifacts unlisted
-  // through the owner's own sharing door. The start document is already unlisted and datasets and images
-  // are born unlisted, so this only ever moves the ones the agent created for itself. A pre-provisioned
-  // `EVAL_ACCOUNT_TOKEN` names no session, so there is no door to knock on and the run is left alone.
-  if (r.credential?.owner === 'account' && r.credential.cookie) {
-    const shared = await shareForScoring({
-      base: r.agentBase,
-      cookie: r.credential.cookie,
-      ids: [...writtenArtifactIds(ledger), ...(targetId ? [targetId] : [])],
-      headers: { [DRIVER_HEADER]: '1' },
-    });
-    log(`${leg.label}/${task.id}: shared ${shared.length} artifact(s) for scoring`);
-  }
+  // AND THEN THE PERSON SHARES IT. Every document the agent made is born PRIVATE to the account, while
+  // every read below is anonymous — the reader's view is the whole point of the score — so a flawless
+  // run read as `published: false` (PR #16 CI, the `data` task). Before the first of those reads the
+  // driver does what the person behind the agent does next: makes the run's artifacts unlisted through
+  // the owner's own sharing door. The start document is already unlisted and datasets and images are
+  // born unlisted, so this only ever moves the ones the agent created for itself.
+  const shared = await shareForScoring({
+    base: r.agentBase,
+    cookie: r.credential.cookie,
+    ids: [...writtenArtifactIds(ledger), ...(targetId ? [targetId] : [])],
+    headers: { [DRIVER_HEADER]: '1' },
+  });
+  log(`${leg.label}/${task.id}: shared ${shared.length} artifact(s) for scoring`);
 
-  // No target is the token-less leg's real possible answer: an agent that never got a credential and
-  // never took one published nothing, and there is no document to read. A 404-shaped blank scores as
-  // unpublished, which is exactly what happened.
+  // No target at all is an agent that published nothing: a 404-shaped blank scores as unpublished.
   const docUrl = targetId ? `${r.productUrl}/a/${targetId}` : null;
   const served = docUrl ? await servedDocument(`${docUrl}/raw?chrome=0`) : { status: 404, html: '' };
   const pm = productMetrics({ served, baseline });
@@ -456,7 +423,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const checked = await runChecks(scorer, {
     task,
     productUrl: r.productUrl,
-    startId: start?.id ?? null,
+    startId: start.id,
     token: driverToken,
     driverHeaders,
     served,
@@ -524,9 +491,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     no_unknown_endpoints: lm.inventedEndpoints === 0,
     canonical_stable: lm.canonicalStable,
     has_title: pm.hasTitle,
-    // Null, never false, when there was no start document to use (the token-less leg) — the same rule
-    // every unobservable check in this map follows.
-    used_start_document: start ? targetId === start.id : null,
+    used_start_document: targetId === start.id,
     harness_ok: result.ok,
     no_console_errors: inspection ? inspection.consoleErrors.length === 0 : null,
     no_failed_responses: inspection ? inspection.failedResponses.length === 0 : null,
@@ -588,7 +553,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   rec.finalize(passed);
-  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId ?? 'none'}${!start || targetId === start.id ? '' : ' (NOT the start document)'}`);
+  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId ?? 'none'}${targetId === start.id ? '' : ' (NOT the start document)'}`);
   return passed;
 }
 

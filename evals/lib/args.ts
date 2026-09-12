@@ -37,10 +37,9 @@ export interface Args {
   /** The prompt SHAPE — `starter` (default) or `hardcore`; see `lib/tasks.ts`. Independent of `mode`. */
   promptLevel: PromptLevel;
   /**
-   * WHERE this leg's token comes from, overriding what the mode would choose (`lib/credential.ts`):
-   * `paste` (the product's own copy-text handoff), `inbox-oauth` (log in with a code from the eval's
-   * Resend inbox and grant like an MCP client), `outbox-oauth` (the same login, with the code read out
-   * of a locally booted server's dev outbox) or `secret` (a pre-provisioned `EVAL_ACCOUNT_TOKEN`).
+   * WHERE this leg's account comes from, overriding what the run would choose (`lib/credential.ts`):
+   * `inbox-oauth` (log in with a code from the eval's Resend inbox and grant like an MCP client) or
+   * `outbox-oauth` (the same login, with the code read out of a locally booted server's dev outbox).
    */
   credential?: CredentialSource;
   tasks?: string[];

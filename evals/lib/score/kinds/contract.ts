@@ -30,15 +30,10 @@ export interface SetupContext {
   task: Task;
   /** The base the AGENT will be given — this task's own recording proxy. */
   base: string;
-  /**
-   * The start document the agent is handed — NULL for a task that is handed none
-   * (`handoff: none`, the token-less guard: minting a document spends the very
-   * credential that task withholds). A kind that needs one says so in `validate`
-   * and may refuse here with a `DriverFailure`.
-   */
-  id: string | null;
-  /** The credential the driver holds. Null when the task's handoff never gave it one. */
-  token: string | null;
+  /** The document the driver made for this task, which the agent is pointed at. */
+  id: string;
+  /** The DRIVER's own account token — never the agent's, which afbin obtains for itself. */
+  token: string;
   /**
    * Headers that mark a call as the driver's. `lib/proxy` swaps recording for a
    * no-op when it sees them, which is what keeps the driver's own setup out of
@@ -54,9 +49,10 @@ export interface CheckContext {
   task: Task;
   /** The product's OWN address — a scoring read must not land in the agent's ledger. */
   productUrl: string;
-  /** The document the agent was GIVEN, which is not always the one it wrote (`scoredArtifactId`) — and null when it was given none. */
-  startId: string | null;
-  token: string | null;
+  /** The document the agent was GIVEN, which is not always the one it wrote (`scoredArtifactId`). */
+  startId: string;
+  /** The DRIVER's own account token — never the agent's. */
+  token: string;
   driverHeaders: Record<string, string>;
   /** The scored document as served (`/a/<id>/raw?chrome=0`). */
   served: ServedDocument;
@@ -94,7 +90,6 @@ export class DriverFailure extends Error {
 }
 
 export type Prepared =
-  /** `baseline` is null when there is no start document to read one from — see `SetupContext.id`. */
   | { ok: true; baseline: ServedDocument | null }
   | { ok: false; step: string; error: string };
 

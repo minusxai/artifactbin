@@ -8,7 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { ledgerMetrics, scoredArtifactId } from '../lib/ledger';
 import type { LedgerEntry } from '../lib/contracts';
-import { acquireCredential, credentialSourceFor, parseCredentialSource } from '../lib/credential';
+import { credentialSourceFor, parseCredentialSource } from '../lib/credential';
 import { buildPrompt } from '../lib/tasks';
 import type { Task } from '../lib/contracts';
 
@@ -55,29 +55,21 @@ describe('skeletonSections — was the early publish a document or a placeholder
 });
 
 /**
- * The token-less run — a TASK now (`handoff: none`), never a leg-level flag. `--credential none` was
- * the knob that let a run's rubric and its credential be set independently, which is how the
- * token-less leg came back graded on a document it was right not to publish.
+ * WHERE A CREDENTIAL CAN COME FROM AT ALL. The product is CLI-only, so every retired way of handing a
+ * token to an agent — the paste, a pre-provisioned secret, withholding one on purpose — is gone, and
+ * the two that remain are the same account login read from two different mailboxes.
  */
-describe('the token-less task', () => {
-  it('refuses the retired `--credential none`, naming the four sources that are left', () => {
-    expect(() => parseCredentialSource('none')).toThrow(/unknown --credential "none"/);
-    expect(() => parseCredentialSource('none')).toThrow(/paste, inbox-oauth, outbox-oauth, secret/);
+describe('the credential sources', () => {
+  it('refuses a retired source by name, listing the two there are', () => {
+    for (const retired of ['none', 'paste', 'secret']) {
+      expect(() => parseCredentialSource(retired)).toThrow(new RegExp(`unknown --credential "${retired}"`));
+      expect(() => parseCredentialSource(retired)).toThrow(/inbox-oauth, outbox-oauth/);
+    }
   });
 
-  it('the four that remain all still parse', async () => {
-    for (const s of ['paste', 'inbox-oauth', 'outbox-oauth', 'secret'] as const) expect(parseCredentialSource(s)).toBe(s);
-    // …and `paste` still acquires nothing, which is a different reason for null from handing the
-    // agent nothing: the product gives the agent its own token in the paste.
-    await expect(acquireCredential('paste', { base: 'https://x.test', env: {} } as never)).resolves.toBeNull();
-    expect(() => credentialSourceFor('installed', {}, {})).toThrow(/EVAL_ACCOUNT_TOKEN/);
-  });
-
-  it('builds a prompt that names the store and hands over NO credential', () => {
-    const prompt = buildPrompt(TASK, { kind: 'none', base: 'https://x.test' });
-    expect(prompt).toContain('publish to artifactbin at https://x.test');
-    expect(prompt).not.toMatch(/mx_[A-Za-z0-9_-]+/);
-    expect(prompt).not.toContain('/start?k=');
+  it('the two that remain parse, and a run with neither configured fails loudly', () => {
+    for (const s of ['inbox-oauth', 'outbox-oauth'] as const) expect(parseCredentialSource(s)).toBe(s);
+    expect(() => credentialSourceFor('installed', {}, {})).toThrow(/RESEND_EVAL_API_KEY/);
   });
 });
 
@@ -146,23 +138,19 @@ describe('the edges the seed did not pin', () => {
   });
 });
 
-describe('the no-credential access line', () => {
-  const NONE = { kind: 'none', base: 'https://x.test' } as const;
-
-  it('teaches the afbin CLI without inventing a saved connection or a supplied document', () => {
-    const line = buildPrompt(TASK, NONE);
-    expect(line).toContain('publish to artifactbin at https://x.test');
+describe('the line the agent is given', () => {
+  it('teaches the afbin CLI and names the document, inventing no saved connection and no token', () => {
+    const line = buildPrompt(TASK, { base: 'https://x.test', id: 'abc123' });
+    expect(line).toContain('https://x.test/a/abc123');
     expect(line).toContain('afbin');
     expect(line).toContain('Run afbin help first');
     expect(line).not.toMatch(/saved|mx_[A-Za-z0-9_-]+|\/docs\//);
   });
-
 });
 
-describe('scoring a run that was never given a document', () => {
-  it('falls through to null instead of a start document that does not exist', () => {
-    // The token-less leg mints no start document, so the third fallback has nothing to name. Null means
-    // "there is no artifact to score" — the honest answer for an agent that published nothing at all.
+describe('scoring a run whose agent named nothing', () => {
+  it('falls through to null when there is no answer, no ledger write and no document to fall back on', () => {
+    // Null means "there is no artifact to score" — the honest answer for a run that published nothing.
     expect(scoredArtifactId({ finalMessage: null, ledger: [], startId: null })).toBeNull();
   });
 

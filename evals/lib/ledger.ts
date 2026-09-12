@@ -53,7 +53,7 @@ const KNOWN_ROUTES: RegExp[] = [
   /^\/api\/my\//,
   /^\/api\/session\/token$/,
   /^\/a\/[A-Za-z0-9]+$/,
-  /^\/a\/[A-Za-z0-9]+\/(start|raw|export|query|events|mutate)$/,
+  /^\/a\/[A-Za-z0-9]+\/(raw|export|query|events|mutate)$/,
   /^\/(webfonts|fonts|story|geojson)\//,
   /^\/[^/]*\.(png|svg|ico|js|css|woff2?)$/,
   /^\/@[a-z0-9_]+/,
@@ -115,7 +115,7 @@ export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
     { metric: 'invented_endpoints', value: m.inventedEndpoints },
     { metric: 'docs_fetches', value: m.docsFetches },
     { metric: 'docs_bytes', value: m.docsBytes },
-    // 1 for the document the start link minted, plus every write that stored a new version.
+    // 1 for the document the driver made, plus every write that stored a new version.
     { metric: 'versions', value: m.observed ? 1 + documentWrites(entries) : null },
   ];
 }
@@ -128,16 +128,15 @@ export function isDocsAddress(path: string): boolean {
   return p === '/docs' || p.startsWith('/docs/') || p === '/llms.txt';
 }
 
-/** Reading the protocol: any docs address, or the start link's instructions. */
+/** Reading the protocol before writing: a GET of a docs address. */
 function isDocsRead(e: LedgerEntry): boolean {
-  const p = pathOnly(e.path);
-  return e.method === 'GET' && (isDocsAddress(p) || /^\/a\/[A-Za-z0-9]+\/start$/.test(p));
+  return e.method === 'GET' && isDocsAddress(pathOnly(e.path));
 }
 
 /**
  * The artifact the agent actually published to: the last one it wrote to
- * successfully and did not delete afterwards. Not necessarily the document the
- * start link named — an agent may ignore it and create its own, and it must
+ * successfully and did not delete afterwards. Not necessarily the document it
+ * was given — an agent may ignore it and create its own, and it must
  * still be scored on what it made. The deletion clause is from a real run:
  * Claude Opus 5 creates a scratch document, exports it to look at its own
  * rendering, and DELETEs it — the last write, and a 404 to score.
@@ -175,8 +174,8 @@ export function writtenArtifactIds(entries: LedgerEntry[]): string[] {
  * cannot tell a scratch write from the deliverable; the start document is last
  * because an agent that ignored it must be scored on what it made instead.
  *
- * `startId` is null for the token-less leg, which mints no start document: then the last fallback has
- * nothing to name and the answer is null — there is no artifact to score.
+ * `startId` is null only where a caller has no document to fall back on; the answer is then null,
+ * which means "there is no artifact to score".
  */
 export function scoredArtifactId(input: { finalMessage: string | null; ledger: LedgerEntry[]; startId: string | null }): string | null {
   return artifactIdFromText(input.finalMessage ?? '') ?? targetArtifactId(input.ledger) ?? input.startId;

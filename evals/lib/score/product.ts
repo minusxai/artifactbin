@@ -1,6 +1,6 @@
 /**
  * Product truth for a run, from what the product SERVES. The driver never holds
- * the agent's token (the start link handed it to the agent), so it reads the
+ * the agent's credential (afbin holds its own), so it reads the
  * public document rather than the owner API: `/a/<id>/raw?chrome=0` is the
  * document itself, and an anonymous document is born public.
  */
@@ -28,14 +28,12 @@ const PRETTY_URL = /\/@[a-z0-9_]+(?:\/[^\s/]+)*\/([A-Za-z0-9]{6,12})-[^\s]*/g;
  * names the document, and scoring the start document instead is how a real run
  * came back as a titleless failure.
  *
- * A `/start?k=` link is excluded on purpose: it names the document the agent was
- * GIVEN, so treating it as an answer scores the untouched original. The LAST
- * link wins: an agent lists what it tried and ends with the deliverable.
+ * The LAST link wins: an agent lists what it tried and ends with the deliverable.
  */
 export function artifactIdFromText(text: string): string | null {
   const links = [
     ...[...text.matchAll(PRETTY_URL)].map((m) => ({ index: m.index, id: m[1] })),
-    ...[...text.matchAll(ARTIFACT_URL)].filter((m) => !(m[2] ?? '').startsWith('/start')).map((m) => ({ index: m.index, id: m[1] })),
+    ...[...text.matchAll(ARTIFACT_URL)].map((m) => ({ index: m.index, id: m[1] })),
   ];
   return links.length ? links.reduce((a, b) => (b.index > a.index ? b : a)).id : null;
 }

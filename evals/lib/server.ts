@@ -37,20 +37,18 @@ export const serverDataDir = (legDir: string): string => path.join(legDir, 'serv
 export const devOutboxPath = (dataDir: string): string => path.join(dataDir, 'dev-mail.jsonl');
 
 /**
- * WHICH RATE LIMITS A LEG'S SERVER RUNS, AND WHY THE PATH IS ABSOLUTE.
+ * WHICH RATE LIMITS A LEG'S SERVER RUNS, AND WHY A CONFIGURED PATH IS RESOLVED HERE.
  *
- * The eval mints anonymously on every leg, so it needs the DEV policy file — the shipped default closes
- * anonymous minting outright. The path must be resolved HERE, against the repo root, because `startServer`
- * spawns the bundle with `cwd: <repo>/services/app` (the bundle resolves `dist/web` and `public/` against
- * it): a relative `services/proxy/dev_rate_limits.yml` therefore resolves to
- * `services/app/services/proxy/dev_rate_limits.yml`, which does not exist, and the loader REFUSES THE BOOT
- * rather than quietly meeting requests with numbers nobody chose. That is the loader working — the bug is
- * handing it a path that depends on a cwd this driver deliberately does not control, and it cost the four
+ * A leg runs the product's SHIPPED limits: it holds an account, so nothing it or its agent does goes
+ * through the anonymous door the dev policy file exists to widen. Only `config.json` can name another
+ * file, and its value is resolved against the repo root, because `startServer` spawns the bundle with
+ * `cwd: <repo>/services/app` (the bundle resolves `dist/web` and `public/` against it): a relative
+ * `services/proxy/dev_rate_limits.yml` would otherwise resolve to
+ * `services/app/services/proxy/dev_rate_limits.yml`, which does not exist, and the loader REFUSES THE
+ * BOOT rather than quietly meeting requests with numbers nobody chose. That is the loader working — the
+ * bug is handing it a path that depends on a cwd this driver does not control, and it cost the four
  * "agent smoke" jobs on PR #32.
- *
- * A value from `config.json` is resolved the same way, so a hand-edited relative path cannot bring it back.
  */
-export const EVAL_POLICY_FILE = 'services/proxy/dev_rate_limits.yml';
 
 export function serverEnv(opts: { base: Record<string, string | undefined>; ports: Ports; dataDir: string; repoRoot: string; extra: Record<string, string> }): Record<string, string> {
   const env: Record<string, string> = {};
@@ -72,8 +70,10 @@ export function serverEnv(opts: { base: Record<string, string | undefined>; port
     EMAIL__DEV_OUTBOX_PATH: devOutboxPath(opts.dataDir),
     ...opts.extra,
     // LAST, and resolved: never a path the child's cwd decides. `path.resolve` leaves an absolute value
-    // exactly as given and joins a relative one to the repo root.
-    PROXY__RATE_LIMIT_CONFIG_FILE: path.resolve(opts.repoRoot, opts.extra.PROXY__RATE_LIMIT_CONFIG_FILE ?? EVAL_POLICY_FILE),
+    // exactly as given and joins a relative one to the repo root. Absent, the product loads its own.
+    ...(opts.extra.PROXY__RATE_LIMIT_CONFIG_FILE
+      ? { PROXY__RATE_LIMIT_CONFIG_FILE: path.resolve(opts.repoRoot, opts.extra.PROXY__RATE_LIMIT_CONFIG_FILE) }
+      : {}),
   };
 }
 

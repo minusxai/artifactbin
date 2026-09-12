@@ -20,6 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DRIVER_HEADER } from './proxy';
+import { cliPreinstalled, type EvalMode } from './mode';
 import type { LedgerEntry } from './contracts';
 
 export type PairingSource =
@@ -41,6 +42,21 @@ export interface Approver {
   /** User codes approved so far, in order. */
   readonly approved: string[];
   stop(): void;
+}
+
+/**
+ * DOES THIS RUN NEED AN APPROVER WATCHING THE AGENT'S TRAFFIC?
+ *
+ * Only `not-installed`: there the AGENT runs `afbin auth` mid-turn and nobody else can approve its
+ * pairing, so a run without this watcher is a run whose agent never gets a credential. In `installed`
+ * the driver already ran `afbin auth` itself before the turn and approved that pairing from the home it
+ * owns (`lib/auth.ts`), so there is nothing left on the agent's side to watch for.
+ *
+ * Stated as a predicate rather than inline at the call site, because "the approver is wired for the
+ * mode that needs it" is the one thing a not-installed leg cannot recover from.
+ */
+export function approverNeeded(mode: EvalMode): boolean {
+  return !cliPreinstalled(mode);
 }
 
 interface Pairing { code: string; expiresAt: number | null }

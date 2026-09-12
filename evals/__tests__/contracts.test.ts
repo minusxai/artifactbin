@@ -26,10 +26,17 @@ describe('tasks/*.json', () => {
     expect(() => TaskSchema.parse({ id: 't', brief: 'x', checks: ['not_a_check'] })).toThrow();
   });
 
-  it('a token-handoff task that seeds a document says what must survive a targeted edit', () => {
+  it('a task that seeds a document says what must survive a targeted edit', () => {
     const edit = TaskSchema.parse(read('tasks/edit.json'));
-    expect(edit.handoff).toBe('token');
+    expect(edit.seed).toBeDefined();
     expect(edit.seed).toContain(edit.seedKeepText!);
+  });
+
+  it('a task declares no credential of its own — the mode authenticates every run', () => {
+    for (const file of fs.readdirSync(path.join(EVALS, 'tasks'))) {
+      const raw = read(`tasks/${file}`) as Record<string, unknown>;
+      expect(Object.keys(raw), file).not.toContain('handoff');
+    }
   });
 
   it('tasks do not choose transport, and every charted data task stages its own CSV', () => {

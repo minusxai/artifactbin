@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import http from 'node:http';
-import { isTransientStatus, mintStartDocument, mintStartDocumentAs, withRetry } from '../lib/retry';
+import { isTransientStatus, mintStartDocumentAs, withRetry } from '../lib/retry';
 
 const noSleep = { sleep: async () => {} };
 
@@ -24,7 +24,7 @@ describe('withRetry', () => {
 
   it('rides out a transient run of failures — the case that cost three tasks', async () => {
     let calls = 0;
-    const got = await withRetry('POST /api/start', async () => { calls++; return calls < 3 ? null : 'doc'; }, noSleep);
+    const got = await withRetry('POST /api/artifacts', async () => { calls++; return calls < 3 ? null : 'doc'; }, noSleep);
     expect(got).toBe('doc');
     expect(calls).toBe(3);
   });
@@ -53,19 +53,19 @@ describe('withRetry', () => {
  * server that answers 502 the way production did — twice, immediately — and
  * then works. Without it, "it retries" is a claim about a mock.
  */
-describe('mintStartDocument against a genuinely failing server', () => {
+describe('the start-document mint against a genuinely failing server', () => {
   it('rides out the 502s production actually returned, and comes back with the document', async () => {
     let hits = 0;
     const server = http.createServer((_req, res) => {
       hits++;
       if (hits <= 2) { res.writeHead(502); res.end('Bad Gateway'); return; }
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ id: 'abc123', prompt: `open http://x/a/abc123/start?k=zz` }));
+      res.writeHead(201, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 'abc123' }));
     });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as { port: number }).port;
 
-    const doc = await mintStartDocument(`http://127.0.0.1:${port}`, 'x-driver', { delayMs: 1 });
+    const doc = await mintStartDocumentAs(`http://127.0.0.1:${port}`, 'x-driver', 'mx_account', { delayMs: 1 });
     expect(doc.id).toBe('abc123');
     expect(hits).toBe(3);
     await new Promise<void>((r) => server.close(() => r()));
@@ -75,7 +75,7 @@ describe('mintStartDocument against a genuinely failing server', () => {
     const server = http.createServer((_req, res) => { res.writeHead(503); res.end(); });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as { port: number }).port;
-    await expect(mintStartDocument(`http://127.0.0.1:${port}`, 'x-driver', { attempts: 2, delayMs: 1 }))
+    await expect(mintStartDocumentAs(`http://127.0.0.1:${port}`, 'x-driver', 'mx_account', { attempts: 2, delayMs: 1 }))
       .rejects.toThrow(/unavailable/);
     await new Promise<void>((r) => server.close(() => r()));
   });
@@ -86,16 +86,16 @@ describe('mintStartDocument against a genuinely failing server', () => {
     const server = http.createServer((_req, res) => { hits++; res.writeHead(400); res.end(); });
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
     const port = (server.address() as { port: number }).port;
-    await expect(mintStartDocument(`http://127.0.0.1:${port}`, 'x-driver', { delayMs: 1 })).rejects.toThrow(/400/);
+    await expect(mintStartDocumentAs(`http://127.0.0.1:${port}`, 'x-driver', 'mx_account', { delayMs: 1 })).rejects.toThrow(/400/);
     expect(hits).toBe(1);
     await new Promise<void>((r) => server.close(() => r()));
   });
 });
 
 /**
- * A leg with an ACCOUNT credential does not spend `/api/start` — that mints an ANONYMOUS token, and
- * the whole point is that the agent's documents belong to the eval's account. The driver creates the
- * start document itself, as that account, and the ledger skips the call (`DRIVER_HEADER`).
+ * Every task starts from a document the driver created AS THE EVAL ACCOUNT — the account the agent's
+ * own CLI will authenticate as, so the document it is handed is one its credential can write. The
+ * ledger skips the call (`DRIVER_HEADER`), because it is the driver's and not the agent's.
  */
 describe('mintStartDocumentAs — the account-owned start document', () => {
   it('creates an unlisted placeholder as the account, marked as the driver’s own call', async () => {
@@ -123,20 +123,7 @@ describe('mintStartDocumentAs — the account-owned start document', () => {
     await new Promise<void>((r) => server.close(() => r()));
   });
 
-  it('rides out a 502 the same way the anonymous mint does, and surfaces a 4xx at once', async () => {
-    let hits = 0;
-    const server = http.createServer((_req, res) => {
-      hits++;
-      if (hits === 1) { res.writeHead(502); res.end(); return; }
-      res.writeHead(201, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ id: 'acct02' }));
-    });
-    await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-    const port = (server.address() as { port: number }).port;
-    expect((await mintStartDocumentAs(`http://127.0.0.1:${port}`, 'x-driver', 'mx_account', { delayMs: 1 })).id).toBe('acct02');
-    expect(hits).toBe(2);
-    await new Promise<void>((r) => server.close(() => r()));
-
+  it('surfaces a refusal at once — a 403 is the account being told no, not a blip', async () => {
     const refusing = http.createServer((_req, res) => { res.writeHead(403); res.end(); });
     await new Promise<void>((r) => refusing.listen(0, '127.0.0.1', r));
     const p2 = (refusing.address() as { port: number }).port;

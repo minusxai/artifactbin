@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'yaml';
 import { discoverTasks, selectTasks } from '../lib/task-set';
-import { needsStartDocument, planAccess } from '../lib/tasks';
+import { planAccess } from '../lib/tasks';
 import { parseMode } from '../lib/mode';
 
 const ROOT = path.resolve(__dirname, '../..');
@@ -44,12 +44,12 @@ describe('the agent-smoke matrix', () => {
 
   it('and every row can actually PLAN every task it names — the general form of the rule above', () => {
     for (const r of ROWS) {
-      expect(parseMode(r.mode)).toBe('installed');
+      // The row's mode is one the driver knows; which one is the matrix's business, not this test's.
+      expect(() => parseMode(r.mode), r.mode).not.toThrow();
       for (const id of tasksOf(r)) {
         const task = byId.get(id)!;
-        const start = needsStartDocument(task) ? { id: 'abc123', prompt: 'Help me edit my artifact at http://x.test/a/abc123 using this token: mx_paste' } : null;
         expect(
-          () => planAccess({ task, base: 'http://x.test', start, credential: { token: 'mx_account' } }),
+          () => planAccess({ task, base: 'http://x.test', start: { id: 'abc123' }, credential: { token: 'mx_account' } }),
           `${r.mode} × ${id}`,
         ).not.toThrow();
       }

@@ -62,10 +62,10 @@ describe('serverEnv', () => {
    *
    * So the RUNNER resolves it, against the repo root it already knows, and the test asks the filesystem.
    */
-  it('hands the server an ABSOLUTE policy-file path that EXISTS — a relative one resolves under the child\'s cwd and refuses the boot', () => {
-    expect(path.isAbsolute(env.PROXY__RATE_LIMIT_CONFIG_FILE!)).toBe(true);
-    expect(env.PROXY__RATE_LIMIT_CONFIG_FILE).toBe(path.join(REPO_ROOT, 'services/proxy/dev_rate_limits.yml'));
-    expect(fs.existsSync(env.PROXY__RATE_LIMIT_CONFIG_FILE!), `${env.PROXY__RATE_LIMIT_CONFIG_FILE} does not exist`).toBe(true);
+  it('names no policy file of its own — a leg runs the limits the product ships', () => {
+    // The dev file exists to widen the ANONYMOUS mint, and a leg has an account: nothing it does goes
+    // through that door. Measuring the shipped numbers is the point of booting the shipped build.
+    expect(env).not.toHaveProperty('PROXY__RATE_LIMIT_CONFIG_FILE');
   });
 
   it('and a RELATIVE one in the config extras is resolved too, not passed through', () => {

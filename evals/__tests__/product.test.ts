@@ -143,7 +143,4 @@ describe('artifactIdFromText', () => {
     expect(artifactIdFromText('https://artifactbin.dev/a/AAAAA1 then https://artifactbin.dev/@me/x/BBBBB2-final')).toBe('BBBBB2');
   });
 
-  it('ignores a START link, which names the document the agent was GIVEN, not one it made', () => {
-    expect(artifactIdFromText('https://artifactbin.dev/a/K8a1Dg/start?k=abc')).toBeNull();
-  });
 });

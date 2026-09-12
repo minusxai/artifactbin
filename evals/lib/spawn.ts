@@ -292,8 +292,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
       // transcript, because the timestamp is the point. It watches the RETAINED text — what everything
       // downstream is scored from — so a partial-message line the adapter filters away cannot start the
       // clock for a link that never reaches `stdout`. `artifactIdFromText` is the id shape the scorer
-      // already knows, including its refusal of a `/start` link: that names the document the agent was
-      // GIVEN. One scan per chunk until the first hit, then never again.
+      // already knows. One scan per chunk until the first hit, then never again.
       if (firstUrlAtMs === null && artifactIdFromText(text) !== null) firstUrlAtMs = Date.now() - started;
       stdout += text;
       if (stdout.length > cap) {

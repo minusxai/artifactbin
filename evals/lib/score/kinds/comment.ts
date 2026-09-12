@@ -272,13 +272,11 @@ export const commentScorer = {
    * other for two pictures to be added. Each must be free of the other's data,
    * so `seedSplitText` is owed only by the task that grades `changed` and
    * `assetUrls` only by the task that grades the asset checks. What is common to
-   * both — the comment, the seed, the credential to post with — is owed always.
+   * both — the comment and the seed — is owed always.
    */
   validate(task) {
     if (!task.comment) return 'a comment task must declare the `comment` it posts (path, body)';
     if (!task.seed) return 'a comment task must declare the `seed` it comments on';
-    // Creation is a BROWSER door, so the driver has to hold the credential itself.
-    if (task.handoff !== 'token') return 'a comment task needs `handoff: "token"`: only the driver can post the comment';
     const graded = new Set<string>(task.checks);
     if (graded.has('changed') && !task.seedSplitText) {
       return 'a comment task grading `changed` must declare `seedSplitText` — the paragraph it grades';
@@ -307,10 +305,6 @@ export const commentScorer = {
     const { task, base, id, token } = ctx;
     const comment = task.comment;
     if (!comment) return;
-    if (!token) throw new DriverFailure('credential', `task ${task.id} posts a comment and so needs a token handoff`);
-    // Unreachable while `validate` insists on `handoff: "token"` — which is also what mints the start
-    // document — but stated rather than asserted away: a task handed no document has nothing to comment on.
-    if (!id) throw new DriverFailure('start document', `task ${task.id} posts a comment and so needs a start document`);
     const driver = { ...ctx.driverHeaders, 'content-type': 'application/json' };
 
     const exchange = await fetch(`${base}/api/session/token`, {
@@ -360,7 +354,6 @@ export const commentScorer = {
     const unanswered = { responded: null, changed: null, resolved: null, urls_kept: null, assets_served: null, assets_ok: null };
     if (!task.comment) return unanswered;
     // Same rule as `setup`: this kind's whole subject is a thread on the document the agent was GIVEN.
-    if (!ctx.startId) throw new DriverFailure('start document', `task ${task.id} has no start document to read a thread from`);
     const threads = await readThreads(ctx.productUrl, ctx.startId, ctx.token, ctx.driverHeaders);
     const tm = threadMetrics(threads);
     ctx.record('answered_by', tm.agentLabel, 'text');
@@ -384,11 +377,11 @@ export const commentScorer = {
  * commented"), and using it for "we could not ask" scores a 500 or an expired token as an agent that
  * ignored the comment — the same instrument-blindness `setup_ok` exists to refuse one step earlier.
  */
-async function readThreads(base: string, id: string, token: string | null, driverHeaders: Record<string, string>): Promise<AnnotationThread[]> {
+async function readThreads(base: string, id: string, token: string, driverHeaders: Record<string, string>): Promise<AnnotationThread[]> {
   const url = `${base}/api/artifacts/${id}/annotations?status=all`;
   let res: Response;
   try {
-    res = await fetch(url, { headers: { ...driverHeaders, ...(token ? { authorization: `Bearer ${token}` } : {}) } });
+    res = await fetch(url, { headers: { ...driverHeaders, authorization: `Bearer ${token}` } });
   } catch (e) {
     throw new DriverFailure('reading the thread', `GET ${url} — ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -412,7 +405,6 @@ async function readThreads(base: string, id: string, token: string | null, drive
 async function assetChecks(ctx: CheckContext): Promise<Record<string, boolean | null>> {
   const urls = ctx.task.assetUrls ?? [];
   if (urls.length === 0) return { urls_kept: null, assets_served: null, assets_ok: null };
-  if (!ctx.startId) throw new DriverFailure('start document', `task ${ctx.task.id} has no start document to read markup from`);
   const markup = await readStoredMarkup(ctx.productUrl, ctx.startId, ctx.token, ctx.driverHeaders);
   ctx.record('image_count', imageCount(ctx.served.html), 'number');
   // The caption was asked for on the LAST picture the comment named — the one it says
@@ -426,9 +418,8 @@ async function assetChecks(ctx: CheckContext): Promise<Record<string, boolean | 
 }
 
 /** The document as the OWNER reads it back — what the product actually stored. */
-async function readStoredMarkup(base: string, id: string, token: string | null, driverHeaders: Record<string, string>): Promise<string> {
+async function readStoredMarkup(base: string, id: string, token: string, driverHeaders: Record<string, string>): Promise<string> {
   const url = `${base}/api/artifacts/${id}`;
-  if (!token) throw new DriverFailure('reading the stored markup', `GET ${url} — the driver holds no token`);
   let res: Response;
   try {
     res = await fetch(url, { headers: { ...driverHeaders, authorization: `Bearer ${token}` } });

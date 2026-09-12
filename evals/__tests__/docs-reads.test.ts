@@ -35,9 +35,8 @@ describe('countDocsReads (pure)', () => {
     ]);
     expect(n).toBe(4);
   });
-  it('does not count publishing or the start link, even when the body mentions /docs', () => {
+  it('does not count publishing or reading a document, even when the body mentions /docs', () => {
     const n = countDocsReads([
-      { name: 'bash', input: { command: `curl -s -X POST ${B}/a/AbC123/start?k=xyz` } },
       { name: 'bash', input: { command: `curl -X PUT ${B}/api/artifacts/AbC123 --data-binary @doc.json` } },
       { name: 'bash', input: { command: `curl -X POST ${B}/api/artifacts -d '{"markup":"<p>see /docs/llm</p>"}'` } },
       { name: 'bash', input: { command: `curl -s ${B}/a/AbC123/raw` } },
