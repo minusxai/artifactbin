@@ -46,6 +46,9 @@ export const claudeCode: HarnessAdapter = {
   invocation(ctx: HarnessRunContext) {
     const env: Record<string, string> = { CLAUDE_CONFIG_DIR: ctx.homeDir, ANTHROPIC_API_KEY: ctx.apiKey };
     // Empty strict config prevents inheriting unrelated servers from the user's machine.
+    // `--mcp-config <configs...>` is VARIADIC (Claude Code 2.1.269): without the `--`
+    // terminator it swallows the prompt as a second config path and the CLI exits before
+    // the agent starts — "MCP config file not found: <cwd>/<prompt>" (run 34694871143).
     return {
       argv: [
         'claude', '-p',
@@ -55,7 +58,7 @@ export const claudeCode: HarnessAdapter = {
         '--max-budget-usd', String(ctx.maxBudgetUsd),
         '--dangerously-skip-permissions',
         '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
-        ctx.prompt,
+        '--', ctx.prompt,
       ],
       env,
       unsetEnv: NESTED_SESSION_MARKERS,
