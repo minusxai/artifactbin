@@ -148,3 +148,30 @@ it('takes dataset editors to the shared edit workspace for data actions', async 
   fireEvent.click(screen.getByLabelText('Share'));
   expect(await screen.findByRole('link',{name:'Manage access policies'})).toHaveAttribute('href','/a/abc123/edit');
 });
+
+
+it('shows the saved social thumbnail immediately and refreshes it with the document version', () => {
+  const editPreview = vi.fn();
+  const { rerender } = render(<ShareLink className="x" artifactId="Ab3xK9" version={3} onSocialPreview={editPreview} />);
+  expect(screen.queryByAltText('Current social preview')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('Share'));
+  const image = screen.getByAltText('Current social preview');
+  expect(image.getAttribute('src')).toContain('/a/Ab3xK9/export?format=jpg&mode=card&v=3&');
+  expect(editPreview).not.toHaveBeenCalled();
+  fireEvent.load(image);
+  expect(screen.queryByText('Loading preview…')).not.toBeInTheDocument();
+  rerender(<ShareLink className="x" artifactId="Ab3xK9" version={4} onSocialPreview={editPreview} />);
+  expect(screen.getByAltText('Current social preview').getAttribute('src')).toContain('v=4&');
+  expect(screen.getByText('Loading preview…')).toBeInTheDocument();
+});
+
+it('keeps the existing editor reachable when the thumbnail cannot load', () => {
+  const editPreview = vi.fn();
+  render(<ShareLink className="x" artifactId="Ab3xK9" onSocialPreview={editPreview} />);
+  fireEvent.click(screen.getByLabelText('Share'));
+  fireEvent.error(screen.getByAltText('Current social preview'));
+  expect(screen.getByText('Preview unavailable')).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('Edit social preview'));
+  expect(editPreview).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+});
