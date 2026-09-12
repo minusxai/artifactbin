@@ -29,7 +29,9 @@ it('stages the platform binary when it exists — the .mjs cannot resolve DuckDB
   expect(execFileSync(join(bin,'afbin'),{encoding:'utf8'}).trim()).toBe('binary');
  }finally{rmSync(dist,{recursive:true,force:true});}
 });
-it('the staged CLI can run a local-file query — the reason the binary is preferred',()=>{
+// Only where `build:binary` ran: the unit-test job builds the bundle alone, and the bundle is exactly the
+// build that cannot resolve DuckDB from a run home — the eval workflows build the binary before a leg.
+it.skipIf(!existsSync(platformBinary()))('the staged CLI can run a local-file query — the reason the binary is preferred',()=>{
  const root=mkdtempSync(join(tmpdir(),'afbin-eval-duck-'));
  try{
   const bin=materializeCli(join(root,'bin'));
