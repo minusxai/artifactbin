@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createAuthorScriptSession, startAuthorScript } from '../author-script';
 import { createDataflowStore } from '../store';
 import { AUTHOR_SCRIPT_FRAME_TITLE } from '../author-script-contract';
-import {AUTHOR_SCRIPT_BOOTSTRAP,AUTHOR_SCRIPT_DOCUMENT} from '../author-script-bootstrap';
+import {AUTHOR_SCRIPT_DOCUMENT} from '../author-script-bootstrap';
 
 afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe('isolated author script host', () => {
-  it('ships a syntactically valid self-contained bootstrap',()=>expect(()=>new Function(AUTHOR_SCRIPT_BOOTSTRAP)).not.toThrow());
+  // That the bootstrap PARSES is subsumed by managed-comment-bootstrap.test.ts, which
+  // runs the shipped bootstrap — and the production-minified build of it — for real.
   it('coalesces state only, keeps the initial snapshot, and cancels disposed delivery',()=>{
     vi.useFakeTimers();
     const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null as null | ((event:{data:unknown})=>void)};
