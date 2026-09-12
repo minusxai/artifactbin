@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import pty from 'node-pty';
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -332,4 +333,26 @@ it('a piped installer uses the real setup checklist and installs only the toggle
   expect(JSON.parse(fs.readFileSync(path.join(home, '.artifactbin/settings.json'), 'utf8')).harnesses).toEqual(['pi', 'opencode']);
   expect(result.output).not.toContain('Restart ');
   expect(fs.readFileSync(path.join(home, 'auth-calls'), 'utf8')).toBe('auth\n');
+});
+
+it('prefers verified gzip transport, caches compressed bytes and checks decoded executable identity', () => {
+  const dir = path.join(tmp, 'releases', version), raw = fs.readFileSync(path.join(dir, 'afbin-darwin-arm64'));
+  const zipped = gzipSync(raw);
+  fs.writeFileSync(path.join(dir, 'afbin-darwin-arm64.gz'), zipped);
+  fs.appendFileSync(path.join(dir, 'SHA256SUMS'), `${createHash('sha256').update(zipped).digest('hex')}  afbin-darwin-arm64.gz\n`);
+  fs.rmSync(path.join(dir, 'afbin-darwin-arm64'));
+  const result = run();
+  expect(result.status, result.stderr).toBe(0);
+  expect(installed(target)).toBe('afbin-test\n');
+  expect(fs.readFileSync(path.join(home, '.cache/afbin', `afbin-darwin-arm64.gz-${version}`))).toEqual(zipped);
+  fs.rmSync(path.join(target, 'afbin')); fs.rmSync(path.join(tmp, 'curl.log'));
+  expect(run().status).toBe(0);
+  expect(curlCalls().some(line => line.includes('.gz'))).toBe(false);
+  // Valid transport containing the wrong executable must still fail before replacement.
+  fs.writeFileSync(path.join(target, 'afbin'), 'keep');
+  const wrong = gzipSync(Buffer.from('wrong executable'));
+  fs.writeFileSync(path.join(dir, 'afbin-darwin-arm64.gz'), wrong);
+  fs.writeFileSync(path.join(dir, 'SHA256SUMS'), `${createHash('sha256').update(raw).digest('hex')}  afbin-darwin-arm64\n${createHash('sha256').update(wrong).digest('hex')}  afbin-darwin-arm64.gz\n`);
+  expect(run().status).not.toBe(0);
+  expect(fs.readFileSync(path.join(target, 'afbin'), 'utf8')).toBe('keep');
 });

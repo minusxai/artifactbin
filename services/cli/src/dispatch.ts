@@ -8,7 +8,7 @@ import {resultOutput} from './result-output';
 import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
-import {setupSkills,setupSummary} from './setup';
+import {setupSkills,setupSummary,setupService} from './setup';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
 import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
 import {CLI_VERSION} from './version';
@@ -53,6 +53,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
+   if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout('SQL service is ready for offline local queries.\n');return 0;}
    const result=await setupSkills({home,env:context.env,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    if(json)emit(result);else stdout(setupSummary(result.installations,await realpath(home),style));
    return 0;

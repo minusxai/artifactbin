@@ -8,8 +8,8 @@ Publish and edit artifacts through local files, with offline help and validation
 curl -fsSL https://artifactbin.dev/chat/install.sh | sh
 ```
 
-The installer needs only `curl` and a POSIX shell: it downloads the standalone executable for this
-platform, verifies its published SHA-256 and installs it in `~/.local/bin` (`--dir` and `--version`
+The installer needs `curl`, `gzip`, a SHA-256 tool and a POSIX shell: it downloads the standalone executable for this
+platform as gzip, verifies both compressed and executable SHA-256 checksums and installs it in `~/.local/bin` (`--dir` and `--version`
 select another destination or release). A failed verification leaves an existing installation
 untouched; an installation that already is the requested release is left alone without a download,
 and verified downloads are kept in `~/.cache/afbin` so a reinstall never fetches twice. The installer
@@ -20,13 +20,25 @@ unchecking a previously installed skill leaves its files in place and opts out o
 For an unattended install, use `sh install.sh --yes`; without a terminal the defaults are accepted
 automatically, with no sign-in or waiting for browser approval. The interactive installer runs
 `afbin auth` after successful skill setup; if sign-in is cancelled, run `afbin auth` later.
-`afbin setup` itself stays local. A server with a CLI built beside it
+Skill setup stays offline. `afbin setup --service sql` explicitly downloads and checks the optional SQL engine. A server with a CLI built beside it
 (`npm run build:binary -w services/cli`) serves that build
 itself, so `curl http://localhost:3030/chat/install.sh | sh` downloads the binary from that server.
 On a terminal the installer colours its output and shows a download progress bar;
 `NO_COLOR` turns colour off and `FORCE_COLOR` turns it on elsewhere. Self-hosted servers serve the
 same script, pinned to the release they were built with;
 `/install.sh` is the separate self-hosted **server** installer.
+
+Standalone releases use Node's small-ICU build: English locale formatting is included; other locale
+formatting may fall back to English. Unicode normalization, IDN URLs and the Intl APIs remain.
+Core downloads exclude DuckDB. The first local CSV/JSON/document query downloads the matching,
+checksummed SQL package, then runs it locally in the CLI's Node runtime. No local rows are uploaded.
+Prepare it before disconnecting with `afbin setup --service sql`; later queries reuse the verified
+cache under `~/.artifactbin/services/sql` (`ARTIFACTBIN_HOME` relocates it). Each executable pins the
+package identity, so a CLI upgrade may need another first-use download. Corrupt cache entries fail
+closed with a removal/retry instruction. The npm/source CLI uses its installed DuckDB dependency.
+For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS origin (HTTP loopback
+also works); it serves `/afbin-vVERSION/afbin-sql-OS-ARCH.gz`. Checksums stay pinned in the executable.
+The browser service is not shipped in the CLI; image exports continue to use the server.
 
 Remove it again with `curl -fsSL https://artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
 executable, `~/.artifactbin`, cached downloads and the agent skills afbin manages, and never touches

@@ -26,7 +26,7 @@ export const helpTopics:Record<string,string>={
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
 /** The top-level skill doc, without its YAML frontmatter: the brief printed by bare `afbin help`. */
 export function briefDocument():string{return localSkillFiles['SKILL.md'].replace(/^---\n[\s\S]*?\n---\n/,'');}
-const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Every command is offline unless it names a remote resource.\n\n`
+const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help and validation stay offline. Local SQL may download its engine once; prepare it with afbin setup --service sql before disconnecting.\n\n`
  +commands.map(command=>`## ${command.name}\n\n\`\`\`text\n${commandHelp(command.name)}\`\`\`\n`).join('\n');
 /** One bundled documentation set: help, the manual and the installed skills render the same registry. */
 export function helpDocument(topic?:string,format='text'):string{

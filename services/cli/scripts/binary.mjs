@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
 import { inject } from "postject";
 const require = createRequire(import.meta.url);
+const runtime = process.env.CLI__NODE ? resolve(process.env.CLI__NODE) : process.execPath;
 const root = dirname(require.resolve("node-pty/package.json"));
 execFileSync(process.execPath,["scripts/build.mjs"],{stdio:"inherit"});
 await mkdir("dist", { recursive: true });
@@ -88,18 +89,18 @@ await writeFile(
     disableExperimentalSEAWarning: true,
     useCodeCache: false,
     useSnapshot: false,
-    assets: { pty: resolve("dist/pty.json.gz"), duckdb:duckdb.asset },
+    assets: { pty: resolve("dist/pty.json.gz"), "sql-manifest":duckdb.asset },
   }),
 );
 execFileSync(
-  process.execPath,
+  runtime,
   ["--experimental-sea-config", "dist/sea-config.json"],
   { stdio: "inherit" },
 );
 const binary = resolve(
   `dist/afbin-${process.platform}-${process.arch}${process.platform === "win32" ? ".exe" : ""}`,
 );
-await copyFile(process.execPath, binary);
+await copyFile(runtime, binary);
 await chmod(binary, 0o755);
 if (process.platform === "darwin")
   execFileSync("codesign", ["--remove-signature", binary]);
@@ -107,6 +108,7 @@ await inject(binary, "NODE_SEA_BLOB", await readFile("dist/sea.blob"), {
   sentinelFuse: "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2",
   ...(process.platform === "darwin" ? { machoSegmentName: "NODE_SEA" } : {}),
 });
+execFileSync("strip", process.platform === "darwin" ? ["-x",binary] : ["--strip-all",binary]);
 if (process.platform === "darwin")
   execFileSync("codesign", ["--sign", "-", binary]);
 execFileSync(binary, ["--help"], { stdio: "inherit", cwd: tmpdir() });
@@ -115,8 +117,12 @@ const skills=Buffer.from(JSON.stringify({version:teaching.version,protocol:teach
 await writeFile("dist/afbin-skills.json",skills);
 await copyFile("dist/share/man/man1/afbin.1","dist/afbin.1");
 const sha256=data=>createHash('sha256').update(data).digest('hex');
-await writeFile(`${binary}.manifest.json`,JSON.stringify({version:teaching.version,protocol:teaching.protocol,platform:process.platform,arch:process.arch,binary:{file:`afbin-${process.platform}-${process.arch}`,sha256:sha256(await readFile(binary))},skills:{file:'afbin-skills.json',sha256:sha256(skills)}},null,2)+'\n');
+const rawBytes=await readFile(binary),compressed=gzipSync(rawBytes,{level:9});
+await writeFile(`${binary}.gz`,compressed);
+await writeFile(`${binary}.manifest.json`,JSON.stringify({version:teaching.version,protocol:teaching.protocol,platform:process.platform,arch:process.arch,binary:{file:`afbin-${process.platform}-${process.arch}`,sha256:sha256(rawBytes),gzip:{file:`${basename(binary)}.gz`,sha256:sha256(compressed)}},skills:{file:'afbin-skills.json',sha256:sha256(skills)}},null,2)+'\n');
 // The checksum list a release carries, so a local artifactbin can serve this build to its own installer.
-const released=[basename(binary),`${basename(binary)}.manifest.json`,'afbin-skills.json','afbin.1'];
+const released=[basename(binary),`${basename(binary)}.manifest.json`,'afbin-skills.json','afbin.1',`${basename(binary)}.gz`,duckdb.file,basename(duckdb.asset)];
 await writeFile('dist/SHA256SUMS',(await Promise.all(released.map(async file=>`${sha256(await readFile(join('dist',file)))}  ${file}`))).join('\n')+'\n');
 console.log(`Built ${binary} with matching local skills, release manifest and SHA256SUMS.`);
+
+await writeFile(`${binary}.sizes.json`,JSON.stringify({platform:process.platform,arch:process.arch,node:execFileSync(runtime,['--version'],{encoding:'utf8'}).trim(),smallIcu:execFileSync(runtime,['-p','String(process.config.variables.icu_small)'],{encoding:'utf8'}).trim(),coreInstalled:rawBytes.length,coreDownload:compressed.length,sqlInstalled:duckdb.manifest.files.reduce((sum,file)=>sum+file.size,0),sqlDownload:(await readFile(join('dist',duckdb.file))).length},null,2)+'\n');

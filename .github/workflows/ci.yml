@@ -610,7 +610,7 @@ jobs:
     if: needs.plan.outputs.cli == 'true'
     name: CLI (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
@@ -629,7 +629,21 @@ jobs:
       - if: matrix.os != 'ubuntu-24.04'
         run: node --import tsx --test services/cli/test/config.test.ts services/cli/test/launcher.test.ts services/cli/test/runner.test.ts
       - run: npm run build -w services/cli
-      - run: npm run build:binary -w services/cli
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            node_modules/.cache/cli-node/node
+            node_modules/.cache/cli-node/recipe.json
+          key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
+      - name: Build and verify pinned small-ICU Node
+        run: node services/cli/scripts/small-node.mjs
+      - name: Build compact standalone CLI
+        run: npm run build:binary -w services/cli
+        env:
+          CLI__NODE: ${{ github.workspace }}/node_modules/.cache/cli-node/node
+      - name: CLI behavior on the release runtime
+        working-directory: services/cli
+        run: ../../node_modules/.cache/cli-node/node --import tsx --test test/*.test.ts
       - run: npm run test:binary -w services/cli
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
