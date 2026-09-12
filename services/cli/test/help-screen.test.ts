@@ -21,7 +21,7 @@ test('the overview groups every command once, with the first clause of its descr
  const text=overviewScreen(plain);
  assert.doesNotMatch(text,ANSI);
  assert.ok(text.startsWith(`afbin ${CLI_VERSION}\n`));
- assert.match(text,/^Google Docs for agents\.$/m);
+ assert.match(text,/^Artifactbin: Google docs for agents$/m);
  assert.match(text,/^Usage: afbin <command>/m);
  for(const [heading] of COMMAND_GROUPS)assert.match(text,new RegExp(`^${heading}:$`,'m'));
  for(const command of commands){

@@ -169,7 +169,7 @@ style() {
 headline() {
   rule_width=$(( cols - 4 )); [ "$rule_width" -le 46 ] || rule_width=46
   printf '\n  %s%sa%sf%sb%si%sn%s %s%s%s\n' "$bold" "$c1" "$c2" "$c3" "$c4" "$c5" "$reset" "$bold" "$version" "$reset"
-  printf '  %sGoogle Docs for agents.%s\n' "$dim" "$reset"
+  printf '  %sArtifactbin: Google docs for agents%s\n' "$dim" "$reset"
   printf '  %s%s\n\n' "$(gradient "$rule_width" "$rule_width" "$rule_char")" "$reset"
 }
 # COUNT copies of CHAR, coloured along the five-stop gradient laid over WIDTH cells.

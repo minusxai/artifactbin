@@ -137,7 +137,7 @@ it('reports each step, the downloaded size and the time it took', () => {
   const result = run();
   expect(result.status, result.stderr).toBe(0);
   expect(result.stdout).toContain(`afbin ${version}`);
-  expect(result.stdout).toContain('Google Docs for agents.');
+  expect(result.stdout).toContain('Artifactbin: Google docs for agents');
   expect(result.stdout).toMatch(/^ {2}-{20,}$/m);
   expect(result.stdout).toMatch(/Release afbin-v\S+ has a macOS arm64 build/);
   expect(result.stdout).toMatch(/Downloading afbin-darwin-arm64 \(\d+ B\)/);

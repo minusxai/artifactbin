@@ -9,7 +9,7 @@ export const COMMAND_GROUPS:ReadonlyArray<readonly [string,readonly string[]]>=[
  ['Published resources',['list','log','export','query','delete','comment','open']],
  ['Setup and help',['setup','auth','update','remote','help']],
 ];
-const TAGLINE='Google Docs for agents.';
+const TAGLINE='Artifactbin: Google docs for agents';
 /** Derive every displayed topic from the bundled help so new guides remain discoverable. */
 function topicEntries(s:Style):Entry[]{
  const groups=new Map<string,string[]>();
