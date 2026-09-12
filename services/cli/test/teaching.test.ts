@@ -107,4 +107,16 @@ test('the compiled bundle names no server, and every copy is addressed to the on
   await installSkills(['pi'],{home,env:{},origin:'https://other.example'});
   assert.ok((await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8')).includes('https://other.example/chat/install.sh'));
  }finally{await rm(home,{recursive:true,force:true});}
+
+ // The terminal screens are the default HUMAN path and never take the plain-text branch.
+ const screen:string[]=[];
+ const screenRoot=await mkdtemp(join(tmpdir(),'afbin-help-screen-'));
+ try{
+  assert.equal(await runCli(['help'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:true,color:false,stdout:(x:string)=>screen.push(x),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')}),0);
+  assert.doesNotMatch(screen.join(''),/__AFBIN_SERVER__/);
+  const topic:string[]=[];
+  assert.equal(await runCli(['help','publishing-auth'],{cwd:screenRoot,home:screenRoot,env:{ARTIFACTBIN_URL:self},interactive:true,color:false,stdout:(x:string)=>topic.push(x),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')}),0);
+  assert.ok(topic.join('').includes(`${self}/chat/install.sh`));
+  assert.doesNotMatch(topic.join(''),/__AFBIN_SERVER__/);
+ }finally{await rm(screenRoot,{recursive:true,force:true});}
 });

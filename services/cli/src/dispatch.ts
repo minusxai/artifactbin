@@ -26,6 +26,7 @@ import {deleteComments} from './delete';
 import {diffCommand,remoteStatus} from './comparison';
 import {localStatus} from './local';
 import {helpDocument,writeHelp} from './teaching';
+import {withTeachingOrigin} from './teaching-origin';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
 import {DEFAULT_SERVER,loadConnection} from './config';
@@ -69,7 +70,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const format=typeof bundled.format==='string'?bundled.format:'text';const topic=command==='help'?positionals[0]:command;
    // A person at a terminal gets the screens; automation, --json and --output keep the brief and plain text.
    const screen=!json&&format==='text'&&bundled.output===undefined&&interactive?helpScreen(topic,{...styleOptions,columns}):undefined;
-   const text=screen??helpDocument(topic,format,declaredServer);
+   // Everything printed is addressed, by construction: the screens render the
+   // command registry today, but a topic body reaching them must not print a
+   // placeholder at a person.
+   const text=screen!==undefined?withTeachingOrigin(screen,declaredServer):helpDocument(topic,format,declaredServer);
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    emit(json?{help:text}:text);return 0;
   }
