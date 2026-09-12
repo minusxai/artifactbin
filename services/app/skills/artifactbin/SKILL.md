@@ -16,7 +16,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - Only export screenshots if you can view images; otherwise check the markup.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write you retry push to recover its result.
 
-`afbin -h`, `afbin <command> -h` and `afbin help <topic>` work offline and print the same references installed beside this file.
+`afbin -h`, `afbin <command> -h` and `afbin help <topic>` work offline and print the same references that sit in `references/` beside this file; bare `afbin help` prints this file's absolute location, so never search the filesystem for them.
 
 ## Example
 

@@ -78,7 +78,10 @@ export interface StartDocument {
  * Marked with the driver header: it is the DRIVER's call and must not land in the agent's ledger.
  * Retried because the agent's turn is paid for and this is not.
  */
-export const START_PLACEHOLDER_MARKUP = '<div data-design="tw" className="@container p-8"><h1 className="text-2xl font-bold">Untitled</h1><p>Waiting for your agent…</p></div>';
+const AGENT_LINE = "Agents: edit this document with the afbin CLI — read /llms.txt on this site, then afbin pull this page's URL.";
+export const START_PLACEHOLDER_MARKUP = '<div data-design="tw" className="@container p-8"><h1 className="text-2xl font-bold">Untitled</h1><p>Waiting for your agent…</p>'
+  // Mirrors the product's placeholder (services/app/lib/start-placeholder.ts): the pointer a text-only fetcher sees.
+  + `<p className="sr-only">${AGENT_LINE}</p></div>`;
 
 export async function mintStartDocumentAs(
   agentBase: string,

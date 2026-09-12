@@ -91,7 +91,14 @@ function readSql(text: string, bind: (name: string) => string, budget: Budget): 
   if ((budget.input += text.length) > 2_000_000) fail('expanded query is too large');
   const bound = bindParameters(text, bind);
   let statements;
-  try { statements = parse(bound); } catch { return fail('unsupported or invalid syntax'); }
+  try { statements = parse(bound); } catch (error) {
+    // The parser's own reason, and the one fault it describes worst: pgsql-ast-parser says only
+    // "Unexpected end of input" for a FROM subquery without an alias, which cost an agent three
+    // refused queries and 190 s of guessing (eval run 34714728585, pi deck).
+    const reason = String((error as Error)?.message ?? '').split('\n')[0].trim().slice(0, 120);
+    const alias = reason === 'Unexpected end of input' && /\bfrom\s*\(/i.test(bound) ? '; a subquery in FROM needs an alias, e.g. from (…) as t' : '';
+    return fail(`unsupported or invalid syntax${reason ? ` (${reason})` : ''}${alias}`);
+  }
   if (statements.length !== 1) fail('exactly one read statement is required');
   return statements[0] as unknown as Node;
 }

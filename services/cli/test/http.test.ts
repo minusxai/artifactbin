@@ -68,3 +68,14 @@ describe('reaching the server at all', () => {
    }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
   });
 });
+
+test('a refusal that carries details but no message names the details, so a person sees the cause without --json',async()=>{
+ const details=['<Query name="monthly">: Dataset SQL: function strptime is not allowed','<Query name="volume">: Dataset SQL: function strptime is not allowed'];
+ const client=new HttpClient({connection:{server:'https://example.com',token:'t'},fetch:async()=>Response.json({error:'invalid_sql',details},{status:400})});
+ await assert.rejects(client.request('/artifacts/abc123','PUT',{markup:'<p/>'}),(error:unknown)=>{
+  assert.ok(error instanceof CliError);assert.equal(error.code,'invalid_sql');
+  assert.equal(error.message,`invalid_sql: ${details.join('; ')}`);
+  assert.deepEqual((error.details as {details:string[]}).details,details);
+  return true;
+ });
+});

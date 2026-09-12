@@ -10,7 +10,7 @@
  */
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
+import {mkdir,mkdtemp,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {commands,commandHelp,parseCommand} from '../src/commands';
@@ -387,4 +387,20 @@ test('removed browser flag is rejected before authentication or network access',
  assert.equal(JSON.parse(output.join('')).error.code,'unknown_flag');
  assert.equal(calls,0);
  for(const topic of ['commands','publishing-auth','brief'])assert.doesNotMatch(helpDocument(topic),/--no-browser/);
+});
+
+test('bare afbin help names where the skill and its references are installed, as an absolute path',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-help-skill-'));const bin=join(root,'bin');
+ try{
+  await mkdir(bin);await writeFile(join(bin,'pi'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  const out:string[]=[];
+  const context={cwd:root,home:root,env:{PATH:bin},interactive:false,stdout:(s:string)=>out.push(s),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')};
+  assert.equal(await runCli(['help'],context),0);
+  const skill=join(await realpath(root),'.pi','agent','skills','artifactbin');
+  assert.equal(out.join(''),`${briefDocument()}\nInstalled skill: ${skill} — the same references, as files under references/ there.\n`);
+  assert.ok(await readFile(join(skill,'SKILL.md'),'utf8'));
+  out.length=0;
+  assert.equal(await runCli(['help','--json'],context),0);
+  assert.equal(JSON.parse(out.join('')).help,briefDocument());
+ }finally{await rm(root,{recursive:true,force:true});}
 });

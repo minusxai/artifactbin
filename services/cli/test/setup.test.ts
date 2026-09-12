@@ -1,6 +1,6 @@
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
@@ -23,8 +23,10 @@ test('setup selects before writing, remembers opt-outs and groups installed skil
   }}),0,out.join(''));
   const text=out.join('');
   assert.match(text,/  Agent skills\n/);
-  assert.match(text,/    .*Claude Code\s+~\/\.claude\/skills\/artifactbin/);
-  assert.match(text,/    .*Codex\s+~\/\.codex\/skills\/artifactbin/);
+  const real=await realpath(home);
+  assert.ok(text.includes(`Claude Code  ${real}/.claude/skills/artifactbin`),text);
+  assert.ok(text.includes(`Codex        ${real}/.codex/skills/artifactbin`),text);
+  assert.ok(!text.includes('~/'),text);
   assert.equal((text.match(/Restart /g)??[]).length,1);
   assert.match(text,/Restart Claude Code and Codex to load your new skills\./);
   await assert.rejects(stat(join(home,'.pi','agent','skills','artifactbin')),{code:'ENOENT'});

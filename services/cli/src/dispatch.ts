@@ -10,7 +10,7 @@ import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
 import {setupSkills,setupSummary} from './setup';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
-import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
+import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness,skillStatus} from './skill-install';
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
 import {readFile,realpath} from 'node:fs/promises';
@@ -59,7 +59,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   if(json)emit(result);else stdout(setupSummary(result.installations,await realpath(home),style));
+   if(json)emit(result);else stdout(setupSummary(result.installations,style));
    return 0;
   }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
@@ -75,7 +75,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // placeholder at a person.
    const text=screen!==undefined?withTeachingOrigin(screen,declaredServer):helpDocument(topic,format,declaredServer);
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
-   emit(json?{help:text}:text);return 0;
+   if(json){emit({help:text});return 0;}
+   // The printed brief says its references are files beside SKILL.md; without the absolute path an agent
+   // searched the whole filesystem for them (three tasks, 100–120 s each, eval run 34714026643).
+   const installed=!topic&&screen===undefined?(await skillStatus(await realpath(home),context.env)).filter(item=>item.installed).map(item=>item.path):[];
+   emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
   let workspace=await loadWorkspace(context.cwd,home);
   const account=await accountPlan(workspace,parsed);
@@ -108,6 +112,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='open'){emit(await openResources(workspace,positionals,{server:selectedServer,json,launch:context.auth?.open??openBrowser}));return 0;}
   if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
   if(command==='query'){
+   // `afbin query <ref> 'select …'` reads as a natural call; as a second ref it ran the first target and buried the
+   // refusal of the second under its rows (pi deck, eval run 34714026643). Refuse it before anything runs.
+   const inlineSql=positionals.find(ref=>/^\s*(select|with|show|describe|explain|pragma)\b/i.test(ref));
+   if(inlineSql!==undefined)throw new CliError('sql_in_argument',`sql_in_argument: SQL cannot be an argument: ${inlineSql.trim().slice(0,40)}…`);
    queryParameters(flags.param as string[]|undefined);
    querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
    const result=await localQuery(workspace,parsed,querySql,selectedServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout,style);return 0;}

@@ -10,13 +10,13 @@ export async function setupSkills(options:SetupOptions){
  const selected=await selectSkills(options);
  return installSkills(selected,options);
 }
-export function setupSummary(installations:readonly SkillInstallation[],home:string,s:Style):string{
- const pretty=(path:string)=>path.startsWith(home+'/')?'~'+path.slice(home.length):path;
+/** Absolute paths, never `~`: an agent reading this expanded `~` to /root and looked in the wrong home (eval run 34714026643). */
+export function setupSummary(installations:readonly SkillInstallation[],s:Style):string{
  const rows=['',`  ${s.bold('Agent skills')}`];
  if(!installations.length)rows.push(`    ${s.dim('No skills selected. Run afbin setup whenever you’re ready.')}`);
  for(const item of installations){
-  for(const harness of item.harnesses)rows.push(`    ${s.green('✓')} ${harnessLabels[harness].padEnd(12)} ${s.dim(pretty(item.path))} ${s.dim(`(${item.status==='unchanged'?'up to date':item.status})`)}`);
-  if(item.backup)rows.push(`      ${s.dim(`Previous skill backed up at ${pretty(item.backup)}`)}`);
+  for(const harness of item.harnesses)rows.push(`    ${s.green('✓')} ${harnessLabels[harness].padEnd(12)} ${s.dim(item.path)} ${s.dim(`(${item.status==='unchanged'?'up to date':item.status})`)}`);
+  if(item.backup)rows.push(`      ${s.dim(`Previous skill backed up at ${item.backup}`)}`);
  }
  const restart=[...new Set(installations.filter(i=>i.restart_required).flatMap(i=>i.harnesses).filter(h=>h==='claude'||h==='codex'))].map(h=>harnessLabels[h]);
  if(restart.length)rows.push('',`  ${s.yellow(`Restart ${restart.join(' and ')} to load your new skills.`)}`);

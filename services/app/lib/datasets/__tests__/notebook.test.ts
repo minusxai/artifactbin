@@ -98,6 +98,11 @@ describe('notebook execution boundary', () => {
     const large = cells.slice(0,20).map(cell => ({...cell,sql:'SELECT 1 /*' + ' '.repeat(60_000) + '*/'}));
     expect(() => compileNotebookSql(sources,{cells:large},'c0')).toThrow('notebook is too large');
   });
+  it('a refused parse names the parser\'s reason, and a FROM subquery without an alias is told so', () => {
+    expect(() => compileDatasetSql(catalog, 'SELECT * FROM (SELECT * FROM models.revenue)')).toThrow('unsupported or invalid syntax (Unexpected end of input); a subquery in FROM needs an alias, e.g. from (…) as t');
+    expect(() => compileDatasetSql(catalog, 'SELEC * FROM models.revenue')).toThrow(/unsupported or invalid syntax \(Syntax error at line 1 col 7:/);
+    expect(compileDatasetSql(catalog, 'SELECT * FROM (SELECT * FROM models.revenue) t').sql).toContain('revenue');
+  });
   it('fails closed without trusted source metadata or with ambiguous source definitions', () => {
     expect(() => compileDatasetSql({...catalog,notebookSources:undefined},'SELECT * FROM revenue')).toThrow('notebook source metadata');
     expect(() => compileDatasetSql({...catalog,tables:[{...catalog.tables[0],sql:'SELECT 1'}]},'SELECT * FROM revenue')).toThrow('exactly one source');

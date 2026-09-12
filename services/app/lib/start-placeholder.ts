@@ -12,6 +12,9 @@
  * document has no theme yet, and green is the one that reads as a live terminal.
  */
 const WAITING_LINE = 'Waiting for your agent…';
+/** For a reader that keeps only the page's TEXT (a fetch tool that renders HTML to markdown drops the
+ * head tags and the tail comment): the way on, in the document itself. Screen-reader-only for people. */
+const AGENT_LINE = "Agents: edit this document with the afbin CLI — read /llms.txt on this site, then afbin pull this page's URL.";
 const ACTIONABLE_LINE = 'Paste what you copied into your coding agent.';
 export const START_PLACEHOLDER_MARKUP =
   '<div data-design="tw" className="@container flex min-h-[var(--mx-vh,760px)] flex-col items-center justify-center gap-4 px-6 text-center">' +
@@ -19,4 +22,4 @@ export const START_PLACEHOLDER_MARKUP =
   `<p className="font-mono text-sm text-muted-foreground">${ACTIONABLE_LINE}</p>` +
   `<p className="font-mono text-xs text-muted-foreground">${WAITING_LINE}` +
   '<span className="ml-1.5 inline-block h-4 w-2 align-middle animate-caret-blink bg-emerald-500"></span>' +
-  '</p></div>';
+  `</p><p className="sr-only">${AGENT_LINE}</p></div>`;
