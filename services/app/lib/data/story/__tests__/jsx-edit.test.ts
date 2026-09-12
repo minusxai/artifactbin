@@ -1,23 +1,20 @@
 /**
- * WYSIWYG AST write-back for format:'jsx' stories.
+ * WYSIWYG AST write-back for format:'jsx' stories — the TEXT path.
  *
- * `applyDomEditsToJsx` maps a contenteditable host's edited innerHTML back onto the JSX
- * source: locate the element by its `data-mx-ast` path, convert the HTML to sanitized JSX
- * nodes (validator-allowlisted tags/attrs only — hostile paste stripped, never saved),
- * splice component/embed children back from the ORIGINAL AST, and re-serialize.
+ * `applyDomEditsToJsx` maps a contenteditable host's edited innerHTML back onto
+ * the JSX source: locate the element by its `data-mx-ast` path, convert the
+ * HTML to sanitized JSX nodes (validator-allowlisted tags/attrs only — hostile
+ * paste stripped, never saved), splice component/embed children back from the
+ * ORIGINAL AST, and re-serialize. `isEditableTextHost` decides which elements
+ * are offered to that path at all, so it lives here.
  */
 import { describe, it, expect } from 'vitest';
 
-import { applyDomEditsToJsx, applyFormatEditsToJsx, insertImageInJsx, isEditableTextHost, removeJsxNodeAtPath } from '@/lib/data/story/jsx-edit';
+import { applyDomEditsToJsx, isEditableTextHost } from '@/lib/data/story/jsx-edit';
 import { parseJsx, validateJsxSource, type JsxElement } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
-import { parseJsxOrThrow } from '@/test/helpers/jsx';
-
-/** Every write-back result must be valid, renderable story JSX. */
-function expectValidStoryJsx(source: string) {
-  expect(validateJsxSource(source, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS)).toEqual([]);
-}
+import { expectValidStoryJsx, parseJsxOrThrow } from '@/test/helpers/jsx';
 
 describe('applyDomEditsToJsx — text edits', () => {
   it('replaces a paragraph\'s text (simple text edit)', () => {
@@ -255,176 +252,5 @@ describe('isEditableTextHost', () => {
 
   it('an ordinary <p> beside the svg still is a text host', () => {
     expect(isEditableTextHost(inside('<div><p>prose</p></div>'))).toBe(true);
-  });
-});
-
-describe('applyFormatEditsToJsx — className/style attr write-back (typography toolbar)', () => {
-  it('sets className on a plain HTML element that had none', () => {
-    const src = '<div><p>Hello</p></div>';
-    const out = applyFormatEditsToJsx(src, [{ astPath: '0.0', className: 'text-2xl font-bold' }]);
-    expect(out).toBe('<div><p className="text-2xl font-bold">Hello</p></div>');
-    expectValidStoryJsx(out);
-  });
-
-  it('replaces an existing className in place', () => {
-    const src = '<div className="p-8"><h2 className="text-xl mt-4">Head</h2></div>';
-    const out = applyFormatEditsToJsx(src, [{ astPath: '0.0', className: 'text-3xl mt-4' }]);
-    expect(out).toBe('<div className="p-8"><h2 className="text-3xl mt-4">Head</h2></div>');
-    expectValidStoryJsx(out);
-  });
-
-  it('an empty className removes the attribute', () => {
-    const src = '<p className="text-xl">x</p>';
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0', className: '  ' }])).toBe('<p>x</p>');
-  });
-
-  it('applies multiple edits in one pass', () => {
-    const src = '<div><p>a</p><p>b</p></div>';
-    const out = applyFormatEditsToJsx(src, [
-      { astPath: '0.0', className: 'text-sm' },
-      { astPath: '0.1', className: 'text-lg' },
-    ]);
-    expect(out).toBe('<div><p className="text-sm">a</p><p className="text-lg">b</p></div>');
-  });
-
-  it('skips components, stale paths and text nodes — source comes back unchanged', () => {
-    const src = '<div><Card>x</Card>text</div>';
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0.0', className: 'text-xl' }])).toBe(src);
-    expect(applyFormatEditsToJsx(src, [{ astPath: '9.9', className: 'text-xl' }])).toBe(src);
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0.1', className: 'text-xl' }])).toBe(src);
-  });
-
-  it('returns unparseable source unchanged (never throws)', () => {
-    const src = '<div><p>broken';
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0.0', className: 'text-xl' }])).toBe(src);
-  });
-
-  it('sets an inline style string (color picker) without touching className', () => {
-    const src = '<p className="text-xl">x</p>';
-    const out = applyFormatEditsToJsx(src, [{ astPath: '0', style: 'color: rgb(255, 0, 0);' }]);
-    expect(out).toBe('<p className="text-xl" style="color: rgb(255, 0, 0);">x</p>');
-    expectValidStoryJsx(out);
-  });
-
-  it('an empty style removes the attribute; className edits compose in the same call', () => {
-    const src = '<p className="a" style="color: red">x</p>';
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0', style: '' }])).toBe('<p className="a">x</p>');
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0', className: 'b', style: 'color: blue' }]))
-      .toBe('<p className="b" style="color: blue">x</p>');
-  });
-
-  it('an edit with neither field applies nothing', () => {
-    const src = '<p className="a">x</p>';
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0' }])).toBe(src);
-  });
-
-  it('replaces a legacy `class` attribute in place — never a duplicate className', () => {
-    const src = '<h1 class="text-5xl font-bold">x</h1>';
-    const out = applyFormatEditsToJsx(src, [{ astPath: '0', className: 'text-lg font-bold' }]);
-    expect(out).toBe('<h1 className="text-lg font-bold">x</h1>');
-    expectValidStoryJsx(out);
-  });
-
-  it('heals an element carrying BOTH class and className to a single className', () => {
-    const src = '<h1 class="a" className="b">x</h1>';
-    expect(applyFormatEditsToJsx(src, [{ astPath: '0', className: 'c' }])).toBe('<h1 className="c">x</h1>');
-  });
-
-  it('composes with applyDomEditsToJsx — text edit then class edit on the same host', () => {
-    const src = '<div><p className="text-base">Hello</p></div>';
-    const afterText = applyDomEditsToJsx(src, [{ astPath: '0.0', innerHtml: 'Goodbye <strong>all</strong>' }]).source;
-    const out = applyFormatEditsToJsx(afterText, [{ astPath: '0.0', className: 'text-2xl' }]);
-    expect(out).toBe('<div><p className="text-2xl">Goodbye <strong>all</strong></p></div>');
-    expectValidStoryJsx(out);
-  });
-});
-
-describe('insertImageInJsx', () => {
-  it('appends an <img ref:> inside the top-level container and stays valid story JSX', () => {
-    const src = '<div data-design="tw" className="p-8"><h1 className="text-2xl">Title</h1></div>';
-    const out = insertImageInJsx(src, 'Ab12Cd');
-    expect(out).toContain('src="ref:Ab12Cd"');
-    // Inside the container (before its close), not a stray top-level sibling.
-    expect(out).toMatch(/<img[^>]*ref:Ab12Cd[^>]*\/>\s*<\/div>/);
-    expectValidStoryJsx(out);
-  });
-
-  it('appends at the top level when the body has no container element', () => {
-    const out = insertImageInJsx('Just text', 'Zz99Yy');
-    expect(out).toContain('src="ref:Zz99Yy"');
-    expectValidStoryJsx(out);
-  });
-
-  it('round-trips: the inserted body re-parses unchanged', () => {
-    const src = '<div className="p-4"><p>hi</p></div>';
-    const out = insertImageInJsx(src, 'Q1w2E3');
-    expect(parseJsx(out).ok).toBe(true);
-  });
-
-  it('leaves the body untouched for a malformed image id', () => {
-    const src = '<div className="p-4"><p>hi</p></div>';
-    expect(insertImageInJsx(src, 'bad id!')).toBe(src);
-    expect(insertImageInJsx(src, 'short')).toBe(src);
-  });
-
-  it('leaves the body untouched when the source does not parse', () => {
-    const src = '<div className="p-4"><p>oops';
-    expect(insertImageInJsx(src, 'Ab12Cd')).toBe(src);
-  });
-});
-
-describe('removeJsxNodeAtPath — element deletion (the editor\'s delete affordance)', () => {
-  it('removes a nested plain element', () => {
-    const src = '<div className="p-4"><p>keep</p><p>drop</p></div>';
-    const out = removeJsxNodeAtPath(src, '0.1');
-    expect(out).toBe('<div className="p-4"><p>keep</p></div>');
-    expectValidStoryJsx(out);
-  });
-
-  it('removes a component embed (a <Question>) — siblings keep their content', () => {
-    const src = '<div className="p-4"><h1>Report</h1><Question title="Rev" data="ref:dsSale1" /><p>after</p></div>';
-    const out = removeJsxNodeAtPath(src, '0.1');
-    expect(out).not.toContain('Question');
-    expect(out).toContain('<h1>Report</h1>');
-    expect(out).toContain('<p>after</p>');
-    expectValidStoryJsx(out);
-  });
-
-  it('removes one of several top-level elements', () => {
-    const src = '<div><p>a</p></div><div><p>b</p></div>';
-    const out = removeJsxNodeAtPath(src, '1');
-    expect(out).toBe('<div><p>a</p></div>');
-    expectValidStoryJsx(out);
-  });
-
-  it('refuses to remove the LAST top-level element — a document must keep a body', () => {
-    const src = '<div className="p-4"><p>everything</p></div>';
-    expect(removeJsxNodeAtPath(src, '0')).toBe(src);
-  });
-
-  it('a stale/unresolvable path leaves the source untouched', () => {
-    const src = '<div><p>x</p></div>';
-    expect(removeJsxNodeAtPath(src, '9.9')).toBe(src);
-    expect(removeJsxNodeAtPath(src, '0.5')).toBe(src);
-    expect(removeJsxNodeAtPath(src, 'evil')).toBe(src);
-    expect(removeJsxNodeAtPath(src, '')).toBe(src);
-  });
-
-  it('only elements are deletable — a text-node path is refused', () => {
-    const src = '<div><p>some text</p></div>';
-    // 0.0.0 is the text node inside the <p>.
-    expect(removeJsxNodeAtPath(src, '0.0.0')).toBe(src);
-  });
-
-  it('returns unparseable source unchanged (never throws)', () => {
-    const src = '<div><p>broken';
-    expect(removeJsxNodeAtPath(src, '0.0')).toBe(src);
-  });
-
-  it('a deep delete keeps the rest of the tree byte-identical', () => {
-    const src = '<div className="p-8"><section><h2 className="text-xl">A</h2><ul><li>one</li><li>two</li></ul></section></div>';
-    const out = removeJsxNodeAtPath(src, '0.0.1.0'); // the first <li>
-    expect(out).toBe('<div className="p-8"><section><h2 className="text-xl">A</h2><ul><li>two</li></ul></section></div>');
-    expectValidStoryJsx(out);
   });
 });

@@ -19,7 +19,10 @@
  * It returns the SUCCESS branch of `ParseResult`, so a call site keeps its variable and its
  * `parsed.nodes` reads unchanged — only the guard line goes.
  */
-import { parseJsx } from '@/lib/jsx';
+import { expect } from 'vitest';
+import { parseJsx, validateJsxSource } from '@/lib/jsx';
+import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
+import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import type { ParseResult } from '@/lib/jsx/types';
 
 /** The success branch: `{ ok: true; nodes: JsxNode[] }`. */
@@ -34,3 +37,14 @@ export function parseJsxOrThrow(source: string): ParsedJsx {
   if (!parsed.ok) throw new Error(`fixture does not parse: ${parsed.error}\n${source}`);
   return parsed;
 }
+
+/**
+ * EVERY WRITE-BACK RESULT MUST BE VALID, RENDERABLE STORY JSX — the invariant
+ * the three `lib/data/story/__tests__/jsx-*edit*.test.ts` files check after
+ * each edit. One copy, because the allowlists it validates against are the
+ * product's, not a test's.
+ */
+export function expectValidStoryJsx(source: string) {
+  expect(validateJsxSource(source, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS)).toEqual([]);
+}
+
