@@ -173,7 +173,9 @@ static C++ support and the official Node ET_EXEC layout (avoiding the injectorâ€
 CI rejects other ELF layouts and runtime GLIBC requirements above 2.28. `services/cli/scripts/binary.mjs` strips the executable before
 final signing and emits raw and gzip assets, with separate transport/executable hashes. Raw assets
 remain for existing installers and self-updaters; new clients prefer gzip and verify decoded bytes
-before atomic replacement. CI emits per-platform `.sizes.json` measurements.
+before atomic replacement. Intel Mac injection uses hash-pinned LIEF 0.17.6 Python wheels; the old
+postject writer corrupts TLS in these binaries (Node issue #59553). The injector verifies the unique
+SEA fuse and exact embedded bytes before signing. CI emits per-platform `.sizes.json` measurements.
 
 SQL's contract and in-process execution stay unchanged. The standalone composition redirects only
 the engine's sanctioned lazy native import. Its executable embeds a package manifest, not DuckDB;

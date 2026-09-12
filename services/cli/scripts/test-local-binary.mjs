@@ -37,7 +37,8 @@ try{
  assert.equal(first.rows.length,20);assert.ok(first.next_cursor);
  const second=JSON.parse((await run(binary,['query','rows.json','--cursor',first.next_cursor,'--json'],{cwd:home,env:offlineEnv,timeout:30000})).stdout).results[0];
  assert.deepEqual(second.rows,[{n:20}]);assert.equal(second.next_cursor,null);
- await writeFile(join(home,'query.jsx'),'<Helmet><Value name="minimum" type="number" value={10} /><Query name="answer">{`select $minimum as value`}</Query></Helmet><p>Local SQL</p>');
+ await writeFile(join(home,'query.jsx'),'<Helmet><Value name="minimum" type="number" default={10} /><Query name="answer">{`select $minimum as value`}</Query></Helmet><p>Local SQL</p>');
+ await run(binary,['validate','query.jsx','--json'],{cwd:home,env:offlineEnv,timeout:10000});
  const declared=JSON.parse((await run(binary,['query','query.jsx','--name','answer','--param','minimum=42','--json'],{cwd:home,env:offlineEnv,timeout:30000})).stdout).results[0];
  assert.deepEqual(declared.rows,[{value:42}]);
 

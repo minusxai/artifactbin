@@ -159,7 +159,11 @@ npm run build:binary -w services/cli
 # services/cli/dist/afbin-<platform>-<arch>[.exe]
 ```
 
-Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Native files extract into a private temporary directory for the process lifetime. Each of the four release targets has its own build and smoke gate. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
+Build on each target OS/architecture using Node 22. The build creates a [Node single executable application](https://nodejs.org/docs/latest-v22.x/api/single-executable-applications.html), embeds node-pty and its native helper, and applies ad-hoc signing on macOS. It needs no separately installed Node runtime or node_modules on the destination. Terminal native files extract into a private temporary directory for the process lifetime; SQL uses the verified persistent cache described above. Each of the four release targets has its own build and smoke gate. Public macOS distribution would additionally need your signing/notarization process. No binaries are committed.
+
+Intel Mac packaging also needs Python 3.8–3.14. The build creates a private virtual environment
+and installs hash-pinned LIEF 0.17.6 to avoid the old injector’s Mach-O TLS corruption. Python and
+LIEF are build tools.
 
 ## V0 boundaries
 
