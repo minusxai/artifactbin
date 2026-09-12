@@ -145,4 +145,12 @@ describe('the chrome the selection drives', () => {
     fireEvent.click(screen.getByLabelText('Delete element'));
     await waitFor(() => expect(lastQueued()?.source).not.toContain('id="lede"'));
   });
+
+  it('opens the diagram inspector for a selected Mermaid, with its source ready to edit', async () => {
+    mount();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Mermaid', path: '0.4' }) });
+    expect(screen.getByLabelText('Diagram inspector')).toBeTruthy();
+    expect((screen.getByLabelText('Diagram source') as HTMLTextAreaElement).value).toBe('flowchart TD; A-->B');
+  });
+
 });

@@ -80,7 +80,8 @@ export const SOURCE =
   + '<div data-design="tw" className="p-4"><h1 id="h">Title</h1>'
   + '<p id="lede" className="lede">hello</p>'
   + '<Question data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar"}}} />'
-  + '<Number data="$rows" col="x" /></div>';
+  + '<Number data="$rows" col="x" />'
+  + '<Mermaid title="Flow" code="flowchart TD; A--&gt;B" /></div>';
 
 /** The live frame and everything it said, rebuilt by `installEditorFrame`. */
 export const env = {
