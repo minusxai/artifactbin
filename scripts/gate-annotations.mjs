@@ -220,6 +220,7 @@ const run = async () => {
     await page.locator('[aria-label="Show resolved conversation"]').click();
     await page.locator('[aria-label="Annotation actions"]').click();
     await page.locator('[aria-label="Delete annotation"]').click();
+    await page.getByLabel('Confirm delete comment', { exact: true }).click();
     const allGone = await until(() => page.locator('[aria-label="Resolved annotation thread"]').count(), (n) => n === 0, 8000);
     ok(allGone === 0, 'delete erases the thread from the history');
     const wireAfter = await (await fetch(`${BASE}/api/artifacts/${id}/annotations?status=all`, { headers: { Authorization: `Bearer ${token}` } })).json();

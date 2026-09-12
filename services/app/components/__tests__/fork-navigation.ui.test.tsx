@@ -11,6 +11,7 @@ it('sends a cookie-less fork response to login through the client router', async
   const router=createMemoryRouter([{path:'/',element:<ForkArtifact id="abcdef"/>},{path:'/login',element:<p aria-label="Login page">Login</p>}]);
   render(<RouterProvider router={router}/>);
   fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
   await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
   expect(new URLSearchParams(router.state.location.search).get('callbackUrl')).toContain('intent=fork');
 });
@@ -21,6 +22,7 @@ it.each([401, 409])('keeps query and hash in the login callback for %s', async s
   const router=createMemoryRouter([{path:'*',element:<ForkArtifact id="abcdef"/>}], {initialEntries:['/a/abcdef?$region=west#selection']});
   render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
   await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
   expect(new URLSearchParams(router.state.location.search).get('callbackUrl')).toBe('/a/abcdef?$region=west&intent=fork#selection');
 });
@@ -30,6 +32,7 @@ it('commits a successful copy through the router', async () => {
   const router=createMemoryRouter([{path:'*',element:<ForkArtifact id="abcdef"/>}]);
   render(<RouterProvider router={router}/>);
   fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
   await waitFor(() => expect(router.state.location.pathname).toBe('/@owner/copy01-document'));
 });
 
@@ -38,6 +41,7 @@ it('keeps a forbidden response visible rather than sending the user to login', a
   const router=createMemoryRouter([{path:'*',element:<ForkArtifact id="abcdef"/>}]);
   render(<StrictMode><RouterProvider router={router}/></StrictMode>);
   fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
   await waitFor(() => expect(screen.getByLabelText('Fork refused')).toHaveTextContent('forbidden'));
   expect(router.state.location.pathname).toBe('/');
 });
@@ -48,6 +52,7 @@ it.each([201,401,409])('ignores a %s completion after the fork UI unmounts', asy
   const router=createMemoryRouter([{path:'/',element:<ForkArtifact id="abcdef"/>},{path:'/account',element:<p>Account</p>}]);
   render(<RouterProvider router={router}/>);
   fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
   await act(async () => { await router.navigate('/account'); });
   const location = window.location;
   const hardNavigate = vi.fn();

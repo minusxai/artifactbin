@@ -17,6 +17,7 @@
  * CLAIM_OFFER_WINDOW_HOURS), so ignoring it is already the way to decline, and
  * no invisible state accumulates.
  */
+import { useConfirmation } from './ConfirmDialog';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from '@/lib/navigation';
 import { Button, PANEL } from '@/components/ui';
@@ -29,6 +30,7 @@ interface Claimable {
 
 export default function ClaimBanner() {
   const router = useRouter();
+  const { confirmAction, confirmation } = useConfirmation();
   const [offers, setOffers] = useState<Claimable[]>([]);
   const [picked, setPicked] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
@@ -80,7 +82,7 @@ export default function ClaimBanner() {
   }, [offers, picked, router]);
 
   const reject = useCallback(async (tokenId: string) => {
-    if (!confirm('Reject these drafts? The token is gone for good and cannot be recovered.')) return;
+
     setRejecting(tokenId);
     const res = await fetch('/api/tokens/reject', {
       method: 'POST',
@@ -89,8 +91,7 @@ export default function ClaimBanner() {
     }).catch(() => null);
     setRejecting(null);
     if (!res?.ok) {
-      setResult('Could not reject these drafts. Try again.');
-      return;
+      throw new Error('Could not reject these drafts. Try again.');
     }
     setResult(null);
     setOffers((prev) => prev.filter((offer) => offer.tokenId !== tokenId));
@@ -105,6 +106,7 @@ export default function ClaimBanner() {
 
   return (
     <section aria-label="Unclaimed drafts" className={`${PANEL} mb-6 p-4`}>
+      {confirmation}
       {offers.length > 0 && (
         <>
           <p className="font-sans text-sm text-fg">
@@ -136,7 +138,7 @@ export default function ClaimBanner() {
                     variant="danger"
                     aria-label={`Reject ${o.tokenId}`}
                     disabled={busy || rejecting === o.tokenId}
-                    onClick={() => void reject(o.tokenId)}
+                    onClick={() => void confirmAction({ title: 'Reject these drafts?', description: `Reject ${label}? This browser’s token will be permanently revoked and cannot be recovered.`, action: 'Reject drafts', confirmLabel: 'Confirm reject', danger: true }, () => reject(o.tokenId))}
                     className="shrink-0 px-2 py-1"
                   >
                     {rejecting === o.tokenId ? 'rejecting…' : 'reject'}

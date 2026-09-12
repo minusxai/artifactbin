@@ -10,7 +10,7 @@ import { existingPaste } from '@/lib/agent-copy';
 const B = 'https://x.test';
 const ID = 'ab3cd9';
 const STARTER =
-  'Help me edit my artifact at https://x.test/a/ab3cd9. Use the afbin CLI to operate artifactbin, or (curl -fsSL https://x.test/chat/install.sh | sh) if not installed. Run afbin help first.';
+  'Help me edit my artifact at https://x.test/a/ab3cd9. Use the afbin CLI to operate artifactbin, or (curl -fsSL https://x.test/chat/install.sh | sh) if not installed. Run afbin help first. Pass --server https://x.test to every afbin server command.';
 
 describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {
@@ -21,6 +21,18 @@ describe('the tokenless paste', () => {
   });
   it('carries the installer, so an agent that lacks afbin can get it', () => {
     expect(existingPaste(B, ID)).toContain('curl -fsSL https://x.test/chat/install.sh | sh');
+  });
+  it.each(['https://x.test', 'http://127.0.0.1:45407/'])('selects the handed-over server for every remote command: %s', (base) => {
+    expect(existingPaste(base, ID)).toContain(`Pass --server ${base.replace(/\/$/, '')} to every afbin server command`);
+  });
+  it.each(['https://artifactbin.dev', 'https://artifactbin.dev/'])('keeps the default production handoff short: %s', (base) => {
+    expect(existingPaste(base, ID)).not.toContain('--server');
+    expect(existingPaste(base, ID)).toContain('Run afbin help first.');
+  });
+  it('keeps the local handoff within the browser flow’s single-line copy budget', () => {
+    const prompt = existingPaste('http://127.0.0.1:45407', ID);
+    expect(prompt.length).toBeLessThan(300);
+    expect(prompt).not.toContain('\n');
   });
   it('a trailing slash on the base does not double up', () => {
     expect(existingPaste('https://x.test/', ID)).toBe(STARTER);

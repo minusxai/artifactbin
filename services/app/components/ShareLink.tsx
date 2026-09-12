@@ -1,3 +1,4 @@
+import { useConfirmation } from './ConfirmDialog';
 'use client';
 
 /**
@@ -92,7 +93,7 @@ export default function ShareLink({
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   /** Closing writes with documents that write here asks once — see below. */
-  const [confirmReadOnly, setConfirmReadOnly] = useState(false);
+  const { confirmAction, confirmation } = useConfirmation();
 
   // Revert through an effect so unmounting mid-flash cancels the timer.
   useEffect(() => {
@@ -123,6 +124,7 @@ export default function ShareLink({
     }).catch(() => null);
     if (res?.ok) setState((await res.json()) as SharingState);
     else setError('could not update sharing');
+    return !!res?.ok;
   };
 
   const copyLink = () => {
@@ -170,8 +172,10 @@ export default function ShareLink({
     // Closing writes never touches the ROWS — every mutate call re-checks — but
     // it does stop the documents that write, so it says which ones first. With
     // nothing writing here there is nothing to warn about, and it just flips.
-    if (next === 'read' && writers.length > 0 && !confirmReadOnly) { setConfirmReadOnly(true); return; }
-    setConfirmReadOnly(false);
+    if (next === 'read' && writers.length > 0) { void confirmAction({ title: 'Make this dataset read-only?', action: 'Make read-only', confirmLabel: 'Confirm read-only', cancelLabel: 'Keep writable', danger: true,
+        description: `${writers.length} document${writers.length === 1 ? '' : 's'} write${writers.length === 1 ? 's' : ''} here. Their buttons will stop working until you turn writes back on. The rows stay.` }, async () => {
+        if (!await put({ access: 'read' })) throw new Error('Could not update sharing. Try again.');
+      }); return; }
     void put({ access: next });
   };
   const toggle = () => setOpen((o) => !o);
@@ -315,30 +319,7 @@ export default function ShareLink({
                       ))}
                     </div>
                   )}
-                  {confirmReadOnly && (
-                    <div role="alert" className="mt-2 rounded-[4px] border border-danger/40 bg-danger-soft p-2 leading-relaxed">
-                      <span className="text-danger">{writers.length} document{writers.length === 1 ? '' : 's'} write{writers.length === 1 ? 's' : ''} here.</span>{' '}
-                      Their buttons will stop working until you turn writes back on. The rows stay.
-                      <div className="mt-1.5 flex gap-1">
-                        <button
-                          type="button"
-                          aria-label="Confirm read-only"
-                          onClick={() => { setConfirmReadOnly(false); void put({ access: 'read' }); }}
-                          className="cursor-pointer rounded-[4px] border border-danger/40 px-2 py-1 text-danger hover:bg-danger/10"
-                        >
-                          make read-only
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Keep writable"
-                          onClick={() => setConfirmReadOnly(false)}
-                          className="cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-muted hover:text-fg"
-                        >
-                          keep writable
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {confirmation}
                 </div>
               )}
               {/* PEOPLE — under every visibility. `can view` on a public

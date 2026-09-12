@@ -566,6 +566,7 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
       await waitFor(() => expect(router.pushed).toContain('http://localhost:3000/@me/copy01-doc'));
       expect(assign).not.toHaveBeenCalled();
       // The owner's sheet also loads its sharing state, so the fork call is
@@ -593,6 +594,8 @@ describe('the fork row', () => {
       // A guard that READS state lets both through — and this door creates a
       // real artifact each time.
       act(() => { row.click(); row.click(); });
+      const confirm = screen.getByLabelText('Confirm fork');
+      act(() => { confirm.click(); confirm.click(); });
       await waitFor(() => expect(router.pushed.length).toBe(1));
       const forkCalls = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
         .filter((call) => String(call[0]).endsWith('/fork'));
@@ -610,6 +613,7 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
       const notice = await screen.findByLabelText('Fork refused');
       expect(notice).toHaveTextContent('ref_ab12cd is not yours to write');
       expect(assign).not.toHaveBeenCalled();
@@ -628,6 +632,7 @@ describe('the fork row', () => {
       );
       openDocumentControls();
       fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
       await waitFor(() => expect(router.pushed.length).toBe(1));
       expect(assign).not.toHaveBeenCalled();
       // The reader's own selection travels with them — the callback is this
