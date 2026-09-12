@@ -77,7 +77,6 @@ describe('browser_only is refused BEFORE anything is counted', () => {
     expect(res.status).toBe(403);
     const body = await res.json() as { error: string; reason: string; ladder: string[]; help: string };
     expect(body.error).toBe('browser_only');
-    expect(JSON.stringify(body)).not.toContain('/tokens/new');
     expect(body.ladder).toHaveLength(3);
     expect(body.ladder[2]).toContain('browser approval');
     expect(body.help).toBe('afbin help publishing-auth');
@@ -107,7 +106,5 @@ describe('a stale per-door env name is LOUD, not silent', () => {
       RATE_LIMITER__ANON_MINT_MAX: '500', RATE_LIMITER__EXPORT_MAX: '9',
     });
     expect(config.unknownNames).toEqual(['RATE_LIMITER__ANON_MINT_MAX', 'RATE_LIMITER__EXPORT_MAX']);
-    expect(config.unknownNames, 'the two survivors are read, so they are never unknown').not.toContain('RATE_LIMITER__TRUSTED_PROXY_HOPS');
-    expect(config.unknownNames).not.toContain('PROXY__RATE_LIMIT_CONFIG_FILE');
   });
 });

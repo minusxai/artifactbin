@@ -40,7 +40,6 @@ describe('the create-button door', () => {
     expect(text).toContain('afbin help');
     // The refusal points at the CLI and at how to get it — never at a page to visit.
     expect(text).toContain('/chat/install.sh');
-    expect(text).not.toContain('/tokens/new');
     for (const banned of ['token', 'paste', 'claim', 'mint', 'MCP', '/raw', '/docs/']) {
       expect(text.toLowerCase(), `the refusal must not say "${banned}"`).not.toContain(banned.toLowerCase());
     }

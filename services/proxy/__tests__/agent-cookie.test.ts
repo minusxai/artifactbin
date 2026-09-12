@@ -1,3 +1,12 @@
+/**
+ * THE AGENT COOKIE'S LIFECYCLE — registration, the authority it carries, and every way it stops
+ * carrying it: revoked browser session, expired nonce, a primary token that is no longer live, and the
+ * old cookie shape that has no browser nonce at all.
+ *
+ * It was filed as `session-cutover`, a name describing a migration that has landed. What the cases
+ * actually exercise is current behaviour the session part does not: `session.test.ts` RESOLVES a cookie
+ * that already exists, while these register one and take it away again.
+ */
 import {beforeEach,describe,expect,it} from 'vitest';
 import {createHash} from 'node:crypto';
 import {encodeAgentSession,setCookieHeader} from '@artifactbin/utils';
@@ -5,7 +14,7 @@ import {createProxy,type ProxyOptions} from '../src/parts';
 import {ensureProxySchema} from '../src/schema';
 import {testDb} from './helpers';
 
-const secret='restore-session-cutover-secret'.padEnd(32,'0');
+const secret='agent-cookie-lifecycle-secret'.padEnd(32,'0');
 const sessionId='s'.repeat(43);
 const token={id:'tok_live',userId:null};
 const options=():ProxyOptions=>({
@@ -16,7 +25,7 @@ const options=():ProxyOptions=>({
 });
 const cookie=async()=>setCookieHeader(encodeAgentSession({tokenIds:[token.id],sessionId},secret),false).split(';')[0]!;
 
-describe('agent browser session rollback compatibility',()=>{
+describe('the agent browser cookie',()=>{
   beforeEach(async()=>{await ensureProxySchema(testDb(),'auth');await testDb().query("DELETE FROM auth.credentials");});
   it('accepts a live newer cookie but never resurrects it after browser-session revocation',async()=>{
     await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,$2,now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex'),token.id]);
