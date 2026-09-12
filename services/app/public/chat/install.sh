@@ -4,18 +4,21 @@ set -eu
 main() {
   version=0.1.11
   install_dir="${HOME}/.local/bin"
+  yes=0
   style
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --yes|-y) yes=1; shift;;
       --version|--dir)
         [ "$#" -ge 2 ] || fail "Missing value for $1"
         case "$1" in --version) version=$2;; --dir) install_dir=$2;; esac
         shift 2;;
       --help|-h)
         cat <<'USAGE'
-Install afbin: sh install.sh [--version 0.1.11] [--dir PATH]
+Install afbin: sh install.sh [--version 0.1.11] [--dir PATH] [--yes]
   --version X.Y.Z   install this release instead of the pinned one
   --dir PATH        install directory (default ~/.local/bin)
+  --yes, -y         accept saved or detected agent skills without a checklist
 Colour follows NO_COLOR and FORCE_COLOR; the download progress bar needs a terminal.
 USAGE
         return 0;;
@@ -41,6 +44,8 @@ USAGE
   trap interrupted HUP INT TERM
   asset="afbin-$platform-$arch"
   release="https://github.com/minusxai/artifactbin/releases/download/afbin-v$version"
+  # TLS is demanded from GitHub; a local artifactbin serving its own build is reached over its own origin.
+  case "$release" in https://*) tls='--proto =https --proto-redir =https --tlsv1.2';; *) tls='';; esac
 
   # The checksum list is tiny: fetch it first so a missing release or platform fails before the download.
   fetch SHA256SUMS || fail "Release afbin-v$version could not be fetched (network error, or no such release)." "$(curl_detail)"
@@ -52,7 +57,7 @@ USAGE
   exe="$install_dir/afbin"
   if [ -f "$exe" ] && [ ! -L "$exe" ] && [ "$(checksum "$exe")" = "$expected" ]; then
     done_line "afbin $version is already installed at $(pretty "$exe")"
-    finish; return 0
+    first_run; finish; return 0
   fi
   # Verified downloads are kept for reinstalls, so an uninstall-install loop never fetches twice.
   cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/afbin"; cached="$cache_dir/$asset-$version"
@@ -95,23 +100,16 @@ USAGE
   finish
 }
 
-# afbin installs its skills for the agent CLIs on PATH the first time it runs; run it now so they are
-# ready before the next agent starts, and so a broken executable shows up here rather than later.
+# The CLI owns skill selection, installation and the summary. Read the controlling terminal so
+# `curl ... | sh` can still offer the checklist without consuming the script on stdin.
 first_run() {
-  if "$install_dir/afbin" help --json </dev/null >/dev/null 2>"$download_dir/first-run.err"; then
-    skills=0
-    while IFS= read -r line; do
-      case "$line" in
-        "Skill installed: "*|"Skill updated: "*) skills=1; done_line "${line%%:*} at $(pretty "${line#*: }")";;
-        "Restart "*) warn_line "$(tilde "$line")";;
-      esac
-    done < "$download_dir/first-run.err"
-    [ "$skills" -eq 1 ] || done_line 'afbin runs; skills install when an agent CLI is on PATH'
+  if [ "$yes" -eq 0 ] && [ -t 1 ] && [ -t 2 ] && ( : < /dev/tty ) 2>/dev/null; then
+    "$install_dir/afbin" setup < /dev/tty && return 0
   else
-    warn_line "afbin is installed, but its first run failed: $(tail -n 1 "$download_dir/first-run.err")"
+    "$install_dir/afbin" setup --yes < /dev/null && return 0
   fi
+  warn_line 'afbin is installed. Run afbin setup to finish choosing your agent skills.'
 }
-tilde() { case "$1" in *"$HOME"*) printf '%s~%s' "${1%%"$HOME"*}" "${1#*"$HOME"}";; *) printf '%s' "$1";; esac; }
 
 # PATH advice for this shell and the next, then the first command to run.
 finish() {
@@ -217,12 +215,12 @@ file_size() { if [ -f "$1" ]; then wc -c < "$1" | tr -d ' '; else echo 0; fi; }
 
 # Download one release file quietly; curl's diagnostics are kept for the failure message.
 fetch() {
-  curl --proto '=https' --proto-redir '=https' --tlsv1.2 -fsSL --retry 3 --continue-at - \
-    --connect-timeout 10 --speed-limit 4096 --speed-time 60 "$release/$1" -o "$download_dir/$1" 2>"$download_dir/curl.err"
+  curl $tls -fsSL --retry 3 --continue-at - --connect-timeout 10 --speed-limit 4096 --speed-time 60 \
+    "$release/$1" -o "$download_dir/$1" 2>"$download_dir/curl.err"
 }
 curl_detail() { [ ! -s "$download_dir/curl.err" ] || tail -n 1 "$download_dir/curl.err"; }
 content_length() {
-  curl --proto '=https' --proto-redir '=https' --tlsv1.2 -s -I -L --connect-timeout 10 "$1" 2>/dev/null \
+  curl $tls -s -I -L --connect-timeout 10 "$1" 2>/dev/null \
     | tr -d '\r' | awk 'tolower($1) == "content-length:" { n = $2 } END { print n + 0 }'
 }
 

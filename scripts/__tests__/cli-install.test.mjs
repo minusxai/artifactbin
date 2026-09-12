@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import pty from 'node-pty';
 import { createHash } from 'node:crypto';
@@ -6,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it } from 'vitest';
 
+const require = createRequire(import.meta.url);
 const checkout = path.resolve(import.meta.dirname, '../..');
 const script = path.join(checkout, 'services/app/public/chat/install.sh');
 const version = JSON.parse(fs.readFileSync(path.join(checkout, 'services/cli/package.json'), 'utf8')).version;
@@ -34,7 +36,7 @@ beforeEach(() => {
 echo "curl $*" >> "$AFBIN_TEST_DIR/curl.log"
 out=''; url=''; head=''
 while [ "$#" -gt 0 ]; do
- case "$1" in -o|--output) out="$2"; shift;; -I|--head) head=1;; https://*) url="$1";; esac
+ case "$1" in -o|--output) out="$2"; shift;; -I|--head) head=1;; http://*|https://*) url="$1";; esac
  shift
 done
 release=\${url%/*}; release=\${release##*/afbin-v}
@@ -55,13 +57,14 @@ const run = (args = [], { dir = target, env = {} } = {}) => spawnSync('sh', [scr
   encoding: 'utf8', cwd: home, env: { ...baseEnv(), ...env },
 });
 /** The same run inside a pseudo-terminal, where the installer may colour its output and show curl's progress bar. */
-const runInTerminal = (args = [], env = {}) => new Promise((resolve) => {
+const runInTerminal = (args = [], env = {}, onData, piped = false) => new Promise((resolve, reject) => {
   let output = '';
-  const child = pty.spawn('sh', [script, '--dir', target, ...args], {
+  const child = pty.spawn('sh', piped ? ['-c', 'cat "$1" | sh -s -- --dir "$2"', 'installer-test', script, target] : [script, '--dir', target, ...args], {
     name: 'xterm-256color', cols: 100, rows: 30, cwd: home, env: { ...baseEnv(), TERM: 'xterm-256color', LANG: 'en_US.UTF-8', ...env },
   });
-  child.onData((data) => { output += data; });
-  child.onExit(({ exitCode }) => resolve({ status: exitCode, output }));
+  const timeout = setTimeout(() => { child.kill(); reject(new Error('Installer timed out: ' + output)); }, 20000);
+  child.onData((data) => { output += data; onData?.(output, child); });
+  child.onExit(({ exitCode }) => { clearTimeout(timeout); resolve({ status: exitCode, output }); });
 });
 const curlCalls = () => (fs.existsSync(path.join(tmp, 'curl.log')) ? fs.readFileSync(path.join(tmp, 'curl.log'), 'utf8').trim().split('\n') : []);
 const ANSI = /\x1b\[/;
@@ -177,26 +180,30 @@ it('keeps a verified copy in the cache and reinstalls from it without downloadin
   expect(curlCalls().some((line) => line.includes('afbin-darwin-arm64'))).toBe(true);
   expect(fs.readFileSync(cached, 'utf8')).toBe('#!/bin/sh\necho afbin-test\n');
 });
-it('runs the installed afbin once so it installs its agent skills, and reports them in its own style', () => {
-  publish(version, '#!/bin/sh\necho "Skill installed: $HOME/.claude/skills/artifactbin" >&2\necho "Restart Claude Code to load the installed skill at $HOME/.claude/skills/artifactbin." >&2\necho afbin-test\n');
+it('delegates setup and its output to the installed CLI, including repeat installs', () => {
+  publish(version, '#!/bin/sh\necho "$*" >> "$HOME/setup-args"\nprintf "  Agent skills\\n    ✓ Claude Code  ~/.claude/skills/artifactbin\\n\\n  Restart Claude Code to load your new skills.\\n"\n');
   const result = run();
   expect(result.status, result.stderr).toBe(0);
-  expect(result.stdout).toContain('Skill installed at ~/.claude/skills/artifactbin');
-  expect(result.stdout).toContain('Restart Claude Code to load the installed skill at ~/.claude/skills/artifactbin.');
-  expect(result.stdout).not.toContain('afbin-test');
-  expect(result.stdout).not.toContain('Skill installed:');
+  expect(result.stdout).toContain('    ✓ Claude Code  ~/.claude/skills/artifactbin');
+  expect(result.stdout).toContain('Restart Claude Code to load your new skills.');
+  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup --yes\n');
+  expect(run().status).toBe(0);
+  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup --yes\nsetup --yes\n');
 });
-it('says so when the first run finds no agent on PATH, and warns without failing when that run breaks', () => {
-  const quiet = run();
-  expect(quiet.status, quiet.stderr).toBe(0);
-  expect(quiet.stdout).toMatch(/afbin runs; skills install when an agent CLI is on PATH/);
+it('keeps the executable and explains how to retry when setup fails', () => {
   publish(version, '#!/bin/sh\necho boom >&2\nexit 1\n');
-  fs.rmSync(path.join(target, 'afbin')); fs.rmSync(path.join(home, '.cache'), { recursive: true });
   const broken = run();
   expect(broken.status, broken.stderr).toBe(0);
-  expect(broken.stdout).toMatch(/first run failed/);
-  expect(broken.stdout).toContain('boom');
+  expect(broken.stdout).toContain('Run afbin setup to finish choosing your agent skills.');
+  expect(broken.stderr).toContain('boom');
   expect(fs.readFileSync(path.join(target, 'afbin'), 'utf8')).toContain('boom');
+});
+it('gives setup a terminal and passes --yes only when explicitly requested', async () => {
+  publish(version, '#!/bin/sh\necho "$*" >> "$HOME/setup-args"\nif [ -t 0 ]; then echo terminal >> "$HOME/setup-args"; fi\n');
+  expect((await runInTerminal()).status).toBe(0);
+  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup\nterminal\n');
+  expect((await runInTerminal(['--yes'])).status).toBe(0);
+  expect(fs.readFileSync(path.join(home, 'setup-args'), 'utf8')).toBe('setup\nterminal\nsetup --yes\n');
 });
 it('honours XDG_CACHE_HOME for the download cache', () => {
   const result = run([], { env: { XDG_CACHE_HOME: path.join(tmp, 'xdg cache') } });
@@ -261,4 +268,41 @@ it('prints usage for --help and rejects unknown options', () => {
   expect(bad.status).toBe(1);
   expect(bad.stderr).toContain('Unknown option: --nope');
   expect(curlCalls()).toHaveLength(0);
+});
+
+it('accepts a plain-http release base from a local server, and then stops demanding TLS', () => {
+  // A local artifactbin serves its own build and rewrites the release base to its origin.
+  const local = fs.readFileSync(script, 'utf8').replace('https://github.com/minusxai/artifactbin/releases/download/afbin-v$version', 'http://127.0.0.1:3030/chat/releases/afbin-v$version');
+  expect(local).not.toBe(fs.readFileSync(script, 'utf8'));
+  const localScript = path.join(tmp, 'local-install.sh'); fs.writeFileSync(localScript, local);
+  const result = spawnSync('sh', [localScript, '--dir', target], { encoding: 'utf8', cwd: home, env: baseEnv() });
+  expect(result.status, result.stderr).toBe(0);
+  expect(installed(target)).toBe('afbin-test\n');
+  expect(curlCalls().every((line) => line.includes('http://127.0.0.1:3030/chat/releases/afbin-v'))).toBe(true);
+  expect(curlCalls().every((line) => !line.includes('--proto') && !line.includes('--tlsv1.2'))).toBe(true);
+  fs.rmSync(path.join(tmp, 'curl.log'));
+  expect(run().status).toBe(0);
+  expect(curlCalls().every((line) => line.includes('--proto =https') && line.includes('--tlsv1.2'))).toBe(true);
+});
+
+it('a piped installer uses the real setup checklist and installs only the toggled selection', async () => {
+  const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
+  const main = path.join(checkout, 'services/cli/src/main.ts');
+  publish(version, `#!/bin/sh\nexec ${quote(process.execPath)} --import ${quote(require.resolve('tsx'))} ${quote(main)} "$@"\n`);
+  for (const name of ['claude', 'codex', 'pi', 'opencode']) fs.writeFileSync(path.join(bin, name), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+  let answered = false;
+  const result = await runInTerminal([], { TSX_TSCONFIG_PATH: path.join(checkout, 'tsconfig.json') }, (text, child) => {
+    if (!answered && text.includes('OpenCode')) {
+      answered = true;
+      child.write(' \u001b[B \r'); // Uncheck Claude and Codex; keep pi and OpenCode.
+    }
+  }, true);
+  expect(result.status, result.output).toBe(0);
+  expect(answered).toBe(true);
+  expect(result.output).toContain('Choose your agent skills');
+  expect(result.output).toContain('Agent skills');
+  for (const dir of ['.pi/agent/skills/artifactbin', '.config/opencode/skills/artifactbin']) expect(fs.existsSync(path.join(home, dir, 'SKILL.md'))).toBe(true);
+  for (const dir of ['.claude/skills/artifactbin', '.codex/skills/artifactbin']) expect(fs.existsSync(path.join(home, dir))).toBe(false);
+  expect(JSON.parse(fs.readFileSync(path.join(home, '.artifactbin/settings.json'), 'utf8')).harnesses).toEqual(['pi', 'opencode']);
+  expect(result.output).not.toContain('Restart ');
 });

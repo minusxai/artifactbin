@@ -13,8 +13,15 @@ platform, verifies its published SHA-256 and installs it in `~/.local/bin` (`--d
 select another destination or release). A failed verification leaves an existing installation
 untouched; an installation that already is the requested release is left alone without a download,
 and verified downloads are kept in `~/.cache/afbin` so a reinstall never fetches twice. The installer
-then runs afbin once, so the skills for the agent CLIs on PATH are installed before the next agent
-starts. On a terminal the installer colours its output and shows a download progress bar;
+then runs `afbin setup`: a checklist starts with detected agents selected (or your saved choices).
+Use ↑/↓ to move, Space to toggle and Enter to install. Skills appear together under an indented
+summary, followed by any restart instructions. Run `afbin setup` again to change your selection;
+unchecking a previously installed skill leaves its files in place and opts out of future updates.
+For an unattended install, use `sh install.sh --yes`; without a terminal the defaults are accepted
+automatically. Setup is local and never signs you in. A server with a CLI built beside it
+(`npm run build:binary -w services/cli`) serves that build
+itself and its installer installs it, so a local `curl http://localhost:3030/chat/install.sh | sh` never
+leaves the machine. On a terminal the installer colours its output and shows a download progress bar;
 `NO_COLOR` turns colour off and `FORCE_COLOR` turns it on elsewhere. Self-hosted servers serve the
 same script, pinned to the release they were built with;
 `/install.sh` is the separate self-hosted **server** installer.

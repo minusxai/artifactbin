@@ -62,6 +62,7 @@ export const commands: Command[] = [
  {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --no-browser.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --no-browser --json']},
  {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help.',min:0,max:1,flags:['format','output'],examples:['afbin help example','afbin help markup','afbin help dashboard']},
  {name:'auth',usage:'',description:'Authenticate this machine in the browser; report the signed-in account, or anonymous.',min:0,max:0,flags:[],examples:['afbin auth','afbin auth --no-browser --json']},
+ {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in.',min:0,max:0,flags:['harness'],examples:['afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session'],examples:['afbin remote pi','afbin remote --name Backend codex','afbin remote --session rs_123']},
 ];

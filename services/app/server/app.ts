@@ -14,7 +14,7 @@
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
  */
 import {agentDiscovery,agentDiscoveryHead} from '@/lib/agent-discovery';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { loadStorySsr } from '@/lib/story/ssr.server';
@@ -133,6 +133,22 @@ export interface AppServerOptions {
   /** Dev: Vite's connect middleware, mounted before everything else for its own assets. */
   devMiddleware?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void;
   publicDir?: string;
+  /** Where `npm run build:binary -w services/cli` leaves a CLI build (services/cli/dist). When its version is the
+   * one the served installer pins, this server serves that build and the installer installs it from here. */
+  cliReleaseDir?: string;
+}
+
+const GITHUB_RELEASES = 'https://github.com/minusxai/artifactbin/releases/download/afbin-v$version';
+/** The version of the CLI build in a local release directory, read from the manifest its build writes. */
+function localCliRelease(dir: string): string | null {
+  try {
+    for (const file of readdirSync(dir)) {
+      if (!/^afbin-[a-z0-9]+-[a-z0-9]+\.manifest\.json$/.test(file)) continue;
+      const version: unknown = JSON.parse(readFileSync(path.join(dir, file), 'utf8')).version;
+      if (typeof version === 'string') return version;
+    }
+  } catch { /* no local build */ }
+  return null;
 }
 
 /** Which document, if any, a path names — `/a/<id>` or a pretty URL. */
@@ -203,6 +219,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
+  const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
   let indexCache: string | null = null;
   const index = async (url: string): Promise<string> => {
     if (opts.indexHtml) return opts.indexHtml(url);
@@ -326,6 +343,22 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('cache-control', 'public, max-age=300');
     c.header('x-content-type-options', 'nosniff');
   });
+  // A CLI built on this machine is served by this server, so a local install never leaves it: the installer
+  // then names this origin instead of GitHub. Production has no local build and serves the file unchanged.
+  app.get('/chat/install.sh', (c) => {
+    const script = readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
+    const pinned = script.match(/^ {2}version=(\S+)$/m)?.[1];
+    const local = pinned !== undefined && localCliRelease(cliReleaseDir) === pinned;
+    return c.text(local ? script.replace(GITHUB_RELEASES, () => `${baseUrl(c.req.raw)}/chat/releases/afbin-v$version`) : script);
+  });
+  app.use('/chat/releases/*', async (c, next) => {
+    const [release = '', file = '', ...rest] = c.req.path.split('/').slice(3);
+    const version = release.startsWith('afbin-v') ? release.slice('afbin-v'.length) : '';
+    if (rest.length || !/^\d+\.\d+\.\d+$/.test(version) || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(file) || localCliRelease(cliReleaseDir) !== version) return c.notFound();
+    await next();
+    c.header('cache-control', 'no-store');
+  });
+  app.use('/chat/releases/*', serveStatic({ root: path.relative(process.cwd(), cliReleaseDir) || '.', rewriteRequestPath: (p) => p.replace(/^\/chat\/releases\/[^/]+\//, '/'), onFound: () => {}, onNotFound: () => {} }));
   app.use('/*', serveStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
   // The tour for people, registered AHEAD of the API mount: `/docs/*` is one

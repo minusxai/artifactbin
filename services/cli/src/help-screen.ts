@@ -1,15 +1,24 @@
 import {commands,flags,globalFlags,CliError,type Command} from './commands';
 import {CLI_VERSION} from './version';
+import {helpTopics,examples} from './teaching';
 import {createStyle,wrap,visibleWidth,type Style,type StyleOptions} from './style';
 /** Human help for a terminal, rendered from the same registry as the plain text, manual and skills. */
 export interface ScreenOptions extends StyleOptions {columns?:number}
 export const COMMAND_GROUPS:ReadonlyArray<readonly [string,readonly string[]]>=[
  ['Local files',['pull','push','fork','status','diff','validate']],
  ['Published resources',['list','log','export','query','delete','comment','open']],
- ['Setup and help',['auth','update','remote','help']],
+ ['Setup and help',['setup','auth','update','remote','help']],
 ];
 const TAGLINE='Google Docs for agents.';
-const TOPICS=['example','markup','data','themes','templates','errors'];
+/** Derive every displayed topic from the bundled help so new guides remain discoverable. */
+function topicEntries(s:Style):Entry[]{
+ const groups=new Map<string,string[]>();
+ for(const topic of ['brief',...Object.keys(helpTopics).sort()]){
+  const group=['brief','commands','example'].includes(topic)?'Start here':topic==='templates'||topic.startsWith('templates-')||topic in examples?'Templates':topic==='themes'||topic.startsWith('themes-')?'Themes':topic.startsWith('publishing')?'Publishing':topic==='markup'||topic.startsWith('markup-')?'Markup':'Authoring';
+  groups.set(group,[...(groups.get(group)??[]),topic]);
+ }
+ return ['Start here','Authoring','Markup','Templates','Themes','Publishing'].map(group=>({label:`  ${s.dim(group)}`,text:groups.get(group)!.map(topic=>s.cyan(topic)).join(', ')}));
+}
 /** The first clause of a command's description: enough for one overview row. */
 export function summary(command:Command):string{return command.description.split(/[;.]/)[0].trim();}
 const width=(options:ScreenOptions)=>Math.min(120,Math.max(60,options.columns??100));
@@ -34,7 +43,9 @@ export function overviewScreen(options:ScreenOptions):string{
  for(const [group,entries] of commandEntries)out.push(heading(group),...rows(entries,w,column),'');
  out.push(heading('Global options'),...rows(global,w,columnFor(global)),'');
  out.push(...wrap(`${s.cyan('<ref>')} = <url|id|path>[@version]; published references use ref:<id>.`,w));
- out.push(...wrap(`Run ${s.cyan('afbin help <command>')} for flags and examples, ${s.cyan('afbin help <topic>')} for ${TOPICS.join(', ')}, and ${s.cyan('afbin help brief')} for the agent brief.`,w));
+ out.push('',heading('Help topics'),...wrap(`Run ${s.cyan('afbin help <topic>')} with any topic below:`,w),'');
+ const topics=topicEntries(s);out.push(...rows(topics,w,columnFor(topics)),'');
+ out.push(...wrap(`Run ${s.cyan('afbin help <command>')} for flags and examples, or ${s.cyan('afbin help brief')} for the agent brief.`,w));
  return out.join('\n')+'\n';
 }
 export function commandScreen(name:string,options:ScreenOptions):string{

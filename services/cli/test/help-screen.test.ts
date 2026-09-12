@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {commands,commandHelp} from '../src/commands';
 import {colorSupport,createStyle,stripAnsi,visibleWidth} from '../src/style';
 import {COMMAND_GROUPS,overviewScreen,commandScreen,summary} from '../src/help-screen';
-import {briefDocument} from '../src/teaching';
+import {briefDocument,helpTopics,helpDocument} from '../src/teaching';
 import {runCli} from '../src/dispatch';
 import {CLI_VERSION} from '../src/version';
 
@@ -46,6 +46,14 @@ test('colour adds escapes only: stripping them restores the plain screens exactl
  assert.match(overviewScreen({color:true,depth:'truecolor',columns:100}),/\x1b\[38;2;\d+;\d+;\d+m/);
  assert.match(overviewScreen({color:true,depth:'256',columns:100}),/\x1b\[38;5;\d+m/);
  assert.doesNotMatch(overviewScreen({color:true,depth:'16',columns:100}),/\x1b\[38;[25];/);
+});
+test('the overview lists every bundled help topic, and each listed topic can be opened',()=>{
+ const text=overviewScreen(plain).split('Help topics:')[1];
+ assert.ok(text,'a discoverable help topic section');
+ for(const topic of [...Object.keys(helpTopics),'brief']){
+  assert.ok(text.split(/[\s,]+/).includes(topic),`missing topic ${topic}`);
+  assert.ok(helpDocument(topic).length,`empty help ${topic}`);
+ }
 });
 test('a command screen carries usage, every flag the parser accepts, and the examples',()=>{
  for(const command of commands){

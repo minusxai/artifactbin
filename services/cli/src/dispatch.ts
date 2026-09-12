@@ -8,11 +8,12 @@ import {resultOutput} from './result-output';
 import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
+import {setupSkills,setupSummary} from './setup';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
 import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
-import {readFile} from 'node:fs/promises';
+import {readFile,realpath} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {recoverFiles,stagedFiles} from './journal';
 import {withLock} from './state';
@@ -50,9 +51,15 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':highlightJson(JSON.stringify(value,null,2),style)+'\n');};
   if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`${style.wordmark('afbin')} ${style.bold(CLI_VERSION)} ${style.dim(`(protocol ${CLI_PROTOCOL_VERSION})`)}`);return 0;}
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
+  // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
+  if(command==='setup'&&!flags.help){
+   const result=await setupSkills({home,env:context.env,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
+   if(json)emit(result);else stdout(setupSummary(result.installations,await realpath(home),style));
+   return 0;
+  }
   // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
   // harnesses. It never authenticates or touches the network, and is a no-op once the skill is current.
-  await ensureInit({home,env:context.env,stderr,style});
+  if(command!=='setup')await ensureInit({home,env:context.env,stderr,style});
   if(flags.help||command==='help'){
    const bundled=command==='help'?flags:{};
    const format=typeof bundled.format==='string'?bundled.format:'text';const topic=command==='help'?positionals[0]:command;
