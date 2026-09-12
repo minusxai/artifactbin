@@ -30,7 +30,7 @@ function routePaths(dir: string, prefix: string, out: string[] = []): string[] {
 
 /** Routes that are deliberately NOT operations, each with its reason beside it here. */
 const EXCEPTIONS = new Set([
-  '/api/artifacts/preflight', // read-only preparation of proposed publication bytes, including local dependencies
+  '/api/artifacts/preflight', // read-only publication planning: proposed dataset rows, and local assets named by hash
   '/api/artifacts/{id}/content', // immutable binary content download; no document rendering or imports
   '/api/artifacts/{id}/annotations', // the list view — the primary read is get_artifact, which inlines the open set
 ]);
