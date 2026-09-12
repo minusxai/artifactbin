@@ -87,7 +87,7 @@ export async function measureBaseline(opts: BaselineOptions): Promise<Baseline> 
     workspaceRoot: opts.workspace?.root ?? opts.dir,
     checkoutRoots: opts.checkoutRoots,
     // The probe asks for one turn; a harness that takes more than that is not measuring a floor.
-    turnCap: { maxTurns: ctx.maxTurns, countsAsTurn: (line) => opts.adapter.countsAsTurn(line) },
+    turnCap: { maxTurns: ctx.maxTurns, countsAsTurn: (line) => opts.adapter.countsAsTurn(line), turnKey: opts.adapter.turnKey ? (line) => opts.adapter.turnKey!(line) : undefined },
     ...(opts.runAs ? { runAs: opts.runAs } : {}),
   });
   const result = opts.adapter.reduce(spawned.stdout);

@@ -102,6 +102,12 @@ export function agentProxyEnv(proxyUrl: string, ca: Ca): Record<string, string> 
     // Additive, so it takes our CA alone.
     NODE_EXTRA_CA_CERTS: ca.caPath,
     NODE_USE_ENV_PROXY: '1',
+    // NODE_USE_ENV_PROXY makes every Node process print "[UNDICI-EHPA] Warning: EnvHttpProxyAgent is
+    // experimental" at startup — afbin included, so the agent saw two lines of noise on every command
+    // and Pi piped each one through `grep -v UNDICI` (runs 34694871143, 34696655937). Node emits it
+    // before any user code, so only this flag can silence it; verified harmless for claude, codex, pi
+    // and opencode (`--version` under it) and for the afbin bundle.
+    NODE_OPTIONS: '--disable-warning=UNDICI-EHPA',
   };
 }
 

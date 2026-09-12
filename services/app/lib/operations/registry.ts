@@ -631,7 +631,8 @@ const queryResourceOp:Operation={
  name:'query_resource',title:'Query dataset rows or declared document queries',http:{method:'POST',path:'/api/artifacts/{id}/query'},
  description:'Read bounded dataset SQL or selected declared document queries, with scalar parameters and state-bound pagination. Never mutates rows.',
  input:{id:z.string(),sql:z.string().optional(),name:z.string().optional(),values:z.record(z.string(),z.union([z.string(),z.number(),z.boolean(),z.null()])).optional(),limit:z.number().int().min(1).max(100).optional(),cursor:z.string().optional(),refresh:z.boolean().optional()},
- annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},errors:[NOT_FOUND],
+ annotations:{readOnly:true},example:{input:{id:'aB3xK9',limit:20}},
+ errors:[NOT_FOUND,{status:400,code:'invalid_sql',fix:'the statement was refused — the message names the reason (an undeclared $parameter, a disallowed function, unsupported syntax); fix the SQL or pass the parameter with --param'}],
  async run(ctx,input){const {id,...body}=input;return fromResponse(await queryResourceForRequest(ctx.actor,String(id),body,ctx.request));},
 };
 

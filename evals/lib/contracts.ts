@@ -335,6 +335,14 @@ export interface HarnessAdapter {
    * counts as `turns`, so the number in the report and the number the cap watches cannot disagree.
    */
   countsAsTurn(line: string): boolean;
+  /**
+   * Pure: which STEP a counted line belongs to, for a harness that prints one step across several
+   * lines. Claude Code emits one `assistant` line per content block — thinking, text, tool_use — of the
+   * same API message, so counting lines charged a turn with 13 thinking blocks as 13 turns and killed a
+   * deck with its corrected push in flight at "41 turns" that were 20 messages (run 34696655937). When
+   * present, the driver counts distinct keys; a null key counts the line on its own.
+   */
+  turnKey?(line: string): string | null;
   /** Pure: keep this stdout line? Omitted means keep everything. See `HarnessInvocation.keepLine`. */
   keepLine?(line: string): boolean;
 }

@@ -91,7 +91,15 @@ export function forwardExchange(
 
   // A locally booted server must see the AGENT's host, because it mints the start link from it. A live
   // deployment must see its OWN: artifactbin.dev answers a foreign Host with a 307 to its login page.
-  const headers = rewriteHost ? { ...req.headers, host: target.host } : req.headers;
+  //
+  // NEVER ASK UPSTREAM TO COMPRESS. The ledger reads the response body: the device door's user code,
+  // an error code, an artifact id, the installer text it rewrites. A live deployment gzips JSON for any
+  // client that offers it, and the CLI's fetch offers it by default — so every pairing the CLI started
+  // was recorded as 201 opaque bytes with no user code, the approver never saw it, and all 20 tasks of
+  // run 34697239503 died polling `authorization_pending`. Only pairings an agent started by hand with
+  // curl (no Accept-Encoding) were ever approved. Identity encoding costs bandwidth, not correctness.
+  const headers: http.IncomingHttpHeaders = rewriteHost ? { ...req.headers, host: target.host } : { ...req.headers };
+  delete headers['accept-encoding'];
   const upstream = transport.request(
     { host: target.hostname, port: target.port || undefined, method, path: url, headers, servername: target.hostname },
     (up) => {

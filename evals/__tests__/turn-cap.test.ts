@@ -18,13 +18,15 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { runInvocation } from '../lib/spawn';
+import { runInvocation, turnCounter } from '../lib/spawn';
 import { adapterFor } from '../lib/harness';
 import type { Harness, HarnessAdapter } from '../lib/contracts';
 
 const fx = (name: string) => fs.readFileSync(path.join(__dirname, 'fixtures', name), 'utf8');
-const countTurns = (adapter: HarnessAdapter, stream: string) =>
-  stream.split('\n').filter((line) => line && adapter.countsAsTurn(line)).length;
+const countTurns = (adapter: HarnessAdapter, stream: string) => {
+  const isNewTurn = turnCounter({ countsAsTurn: (l) => adapter.countsAsTurn(l), turnKey: adapter.turnKey ? (l) => adapter.turnKey!(l) : undefined });
+  return stream.split('\n').filter((line) => isNewTurn(line)).length;
+};
 
 /** One line of each harness's real stream that IS a step of the agent's loop. */
 const TURN_LINE: Record<Harness, string> = {
@@ -84,6 +86,20 @@ describe('countsAsTurn is the same count reduce() reports, on real recorded outp
     const counted = countTurns(adapterFor('claude-code'), stream);
     expect(counted).toBe(2);
     expect(counted).toBeLessThanOrEqual(adapterFor('claude-code').reduce(stream).turns!);
+  });
+
+  it('claude-code: one API message is one turn however many blocks it streams — thinking, text and tool_use lines share the message id', () => {
+    const block = (id: string, type: string) => JSON.stringify({ type: 'assistant', message: { id, content: [{ type }] } });
+    const stream = [
+      JSON.stringify({ type: 'system', subtype: 'init' }),
+      block('msg_1', 'thinking'), block('msg_1', 'text'), block('msg_1', 'tool_use'),
+      JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result' }] } }),
+      block('msg_2', 'thinking'), block('msg_2', 'tool_use'),
+      JSON.stringify({ type: 'result', subtype: 'success', is_error: false, num_turns: 4, result: 'done' }),
+    ].join('\n');
+    expect(countTurns(adapterFor('claude-code'), stream)).toBe(2);
+    // A line with no id still counts on its own, so an unforeseen stream shape never escapes the cap.
+    expect(countTurns(adapterFor('claude-code'), [TURN_LINE['claude-code'], TURN_LINE['claude-code']].join('\n'))).toBe(2);
   });
 
   it('nothing between the steps counts — a partial message is not a turn', () => {

@@ -59,6 +59,25 @@ export interface TurnCap {
   maxTurns: number;
   /** The adapter's own predicate over one stdout line (`HarnessAdapter.countsAsTurn`). */
   countsAsTurn: (line: string) => boolean;
+  /** The adapter's step identity for a counted line (`HarnessAdapter.turnKey`); distinct keys are counted once. */
+  turnKey?: (line: string) => string | null;
+}
+
+/**
+ * One counter over a stream: says whether THIS line starts a turn the cap has not seen. A line that is
+ * not a step never counts; a step with a key counts the first time that key appears; a step without a
+ * key counts every time. Shared by the driver and the tests so they cannot count differently.
+ */
+export function turnCounter(cap: Pick<TurnCap, 'countsAsTurn' | 'turnKey'>): (line: string) => boolean {
+  const seen = new Set<string>();
+  return (line) => {
+    if (!line || !cap.countsAsTurn(line)) return false;
+    const key = cap.turnKey?.(line) ?? null;
+    if (key === null) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  };
 }
 
 /**
@@ -236,6 +255,32 @@ function resolveOnPath(cmd: string, PATH: string | undefined): string {
   throw new Error(`--run-as: cannot find "${cmd}" on PATH`);
 }
 
+/**
+ * The agent's PATH with every foreign afbin gone and nothing else lost. A directory that holds an
+ * executable `afbin` outside `home` is swapped for `<home>/path-mirror/<n>`, a directory of symlinks
+ * to its other executables; directories under `home` (the staged CLI, the installer's target) and
+ * directories without an afbin pass through unchanged. Exported for the test.
+ */
+export function pathWithoutForeignAfbin(PATH: string, home: string, isUnder: (entry: string, root: string) => boolean): string {
+  const mirrors = path.join(path.resolve(home), 'path-mirror');
+  let n = 0;
+  return PATH.split(path.delimiter).filter(Boolean).map((entry) => {
+    if (isUnder(entry, home)) return entry;
+    let foreign = false;
+    try { foreign = (fs.statSync(path.join(entry, 'afbin')).mode & 0o111) !== 0; } catch { foreign = false; }
+    if (!foreign) return entry;
+    const mirror = path.join(mirrors, String(n++));
+    fs.mkdirSync(mirror, { recursive: true });
+    for (const name of fs.readdirSync(entry)) {
+      if (name === 'afbin') continue;
+      const target = path.join(entry, name);
+      try { if (!(fs.statSync(target).mode & 0o111)) continue; } catch { continue; }
+      try { fs.symlinkSync(target, path.join(mirror, name)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error; }
+    }
+    return mirror;
+  }).join(path.delimiter);
+}
+
 export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; checkoutRoots?: string[]; turnCap?: TurnCap; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
@@ -260,12 +305,22 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
   for (const key of Object.keys(env)) {
     if (/^npm_/i.test(key) || key === 'INIT_CWD' || key === 'NODE_PATH') delete env[key];
   }
+  const isUnder = (entry: string, root: string) => {
+    const relative = path.relative(path.resolve(root), path.resolve(entry));
+    return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+  };
   if (env.PATH && opts.checkoutRoots?.length) {
-    env.PATH = env.PATH.split(path.delimiter).filter((entry) => !opts.checkoutRoots!.some((root) => {
-      const relative = path.relative(path.resolve(root), path.resolve(entry));
-      return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
-    })).join(path.delimiter);
+    env.PATH = env.PATH.split(path.delimiter).filter((entry) => !opts.checkoutRoots!.some((root) => isUnder(entry, root))).join(path.delimiter);
   }
+  // NEVER A FOREIGN afbin. The not-installed flow measures whether the agent can find and install the
+  // CLI, and the installed flow measures THIS checkout's build — so a developer machine's own afbin
+  // must not be reachable from either. On a local not-installed leg `which afbin` answered the global
+  // ~/.local/bin/afbin (v0.1.8) and the agent never installed anything. Dropping that directory was
+  // wrong too: on the same machine it also holds `claude` and `codex`, and both legs died at
+  // execvp. So a PATH entry that carries an afbin outside the run home is REPLACED by a mirror of
+  // itself — symlinks to every other executable — which is exactly a clean machine's PATH. CI
+  // runners have no global afbin and are untouched.
+  if (env.PATH) env.PATH = pathWithoutForeignAfbin(env.PATH, opts.homeDir ?? opts.cwd, isUnder);
 
   // The privileged half of the switch — the one step that needs a sudoer. Injectable so the hand-over and
   // the reclaim can be asserted as argv, with no sudo anywhere in the suite.
@@ -315,10 +370,11 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
      * RETAINED text, the same lines everything downstream is scored from, so a partial-message line an
      * adapter filters away can never be mistaken for a turn.
      */
+    const isNewTurn = opts.turnCap ? turnCounter(opts.turnCap) : null;
     const countTurns = (text: string) => {
       const cap = opts.turnCap;
-      if (!cap || turnCapped || !text) return;
-      for (const line of text.split('\n')) if (line && cap.countsAsTurn(line)) turns += 1;
+      if (!cap || !isNewTurn || turnCapped || !text) return;
+      for (const line of text.split('\n')) if (isNewTurn(line)) turns += 1;
       // Strictly past: a run that used exactly its allowance is finishing, and killing it there would
       // throw away the result event the reducer needs. This fires only for a run that ignored the cap.
       if (turns > cap.maxTurns) {

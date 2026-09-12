@@ -19,8 +19,13 @@ export const helpTopics:Record<string,string>={
  /** The brief's complete commented document, as a file to copy and adapt. */
  example:teaching.example,
  data:referenceTopics['markup-data'],
- themes:`Available themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice. Use help themes-<name> for a detailed guide.`,
- templates:`Available templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> to print a local example.`,
+ // The OVERVIEWS, not a bare name list. `afbin help themes` used to print only the six names and "use
+ // help themes-<name>", so an agent choosing a mood opened three theme guides in a row (eval run
+ // 34696655937: opencode deck and scrolly, pi scrolly — three reads and three turns each) while one
+ // that read references/themes.md, which carries a one-line description per theme and says to pick
+ // ONE, opened one. The reference is the better answer to the same question; same for templates.
+ themes:`${referenceTopics['themes']}\n\nAvailable themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice.`,
+ templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> to print a local starter.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));

@@ -38,6 +38,12 @@ export const claudeCode: HarnessAdapter = {
   countsAsTurn(line: string): boolean {
     return line.startsWith('{"type":"assistant"');
   },
+  /** One API message is one turn, however many content blocks it streamed as separate lines. */
+  turnKey(line: string): string | null {
+    if (!line.startsWith('{"type":"assistant"')) return null;
+    const id = (parseJsonl(line)[0]?.message as { id?: unknown } | undefined)?.id;
+    return typeof id === 'string' && id ? id : null;
+  },
 
   async prepare() {
     // Nothing: the key rides the environment and the config dir is created by the CLI.
