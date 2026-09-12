@@ -2,6 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncE
 import { createPageDataStore, type PageDataSnapshot } from './page-data-store';
 import { useSession } from './session';
 import { useRefreshable } from '@/lib/navigation';
+import { markInitialContentReady } from './initial-content';
 import { NavigationPreloadContext } from './navigation-preload-context';
 
 export async function fetchPageData<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -39,5 +40,6 @@ export function usePageData<T>(key: string, options?: { seed?: () => T | null; e
   }, [refresh, options?.enabled, sessionError, store, key, navigationId]);
   useEffect(() => { if (options?.pauseRevalidation && resource.snapshot().data !== null) resource.cancel(); }, [resource, options?.pauseRevalidation]);
   const snapshot: PageDataSnapshot<T> = pages && !session && sessionError ? { data: null, pending: false, error: sessionError } : state;
+  useEffect(() => { if (snapshot.data !== null || snapshot.error) markInitialContentReady(); }, [snapshot.data, snapshot.error]);
   return { ...snapshot, refresh, seed: resource.seed, invalidate: resource.invalidate, snapshot: resource.snapshot };
 }

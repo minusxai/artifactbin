@@ -157,6 +157,11 @@ describe('reader bundle hygiene', () => {
     expect(engine).toEqual([]);
   });
 
+  it('keeps the dataset viewer out of the static text-reader graph', () => {
+    const dataset = path.join(ROOT, 'components/DatasetCatalogView.tsx');
+    expect(reach.files.has(dataset) ? chainTo(dataset, reach.parent) : null).toBeNull();
+  });
+
   it.each(FORBIDDEN)('never statically reaches %s', (pkg) => {
     const importer = reach.packages.get(pkg);
     expect(

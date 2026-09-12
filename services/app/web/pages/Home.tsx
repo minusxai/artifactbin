@@ -118,7 +118,7 @@ export function HomePage() {
         </div>
       ) : (
         <WorkspaceLayout workspace={home} insights={state.insights} insightsError={state.insightsError} onCreated={load}>
-          {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts.map((row) => ({ ...row, sparkline: state.insights?.sparklines[row.id] ?? null })) as never} />}
+          {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts.map((row) => ({ ...row, views: state.insights?.views?.[row.id], sparkline: state.insights?.sparklines[row.id] ?? null })) as never} />}
           <SharedWithYou items={home.shared} />
         </WorkspaceLayout>
       )}

@@ -13,9 +13,7 @@ const project = (row: InventoryRow) => ({ ...row, url: `/a/${row.id}` });
 
 export async function workspaceDocumentsFor(userId: string) {
   const db = await getDb();
-  const result = await db.query<InventoryRow & { views: number }>(`SELECT ${COLS},
-    (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
-     WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
+  const result = await db.query<InventoryRow>(`SELECT ${COLS}
     FROM artifacts WHERE ${OWNED} AND format IN ('markup', 'folder')
     ORDER BY updated_at DESC, id DESC LIMIT 1000`, [userId]);
   return result.rows;

@@ -8,12 +8,13 @@
  *
  * Mounted from the ROOT layout: every page, artifact readers included. The
  * reader's first load is guarded weight (see reader-bundle-hygiene), so the
- * library enters through a dynamic import after hydration — the same
+ * library enters through a dynamic import after useful content has painted — the same
  * boundary that keeps Monaco and vega out of the critical path. That lazy
  * import is a sanctioned exception to the no-dynamic-imports convention,
  * documented here on purpose.
  */
 import { useEffect } from 'react';
+import { onInitialContentReady } from '@/web/initial-content';
 
 type Mixpanel = (typeof import('mixpanel-browser'))['default'];
 
@@ -32,22 +33,34 @@ const ready = new Promise<Mixpanel>((r) => {
 export default function MixpanelClient({ token, host }: { token: string | null; host: string }) {
   useEffect(() => {
     if (!token) return;
-    void import('mixpanel-browser').then(({ default: mixpanel }) => {
-      mixpanel.init(token, {
-        api_host: host,
-        // Autocapture (clicks, form submits, rage clicks) + history-change
-        // pageviews cover the App Router's SPA navigations — posthog parity.
-        autocapture: true,
-        track_pageview: 'full-url',
-        persistence: 'localStorage',
-        // Session replay: record every session, with page text visible —
-        // the default record_mask_text_selector ('*') masks every text node.
-        // Form inputs stay masked regardless of this selector.
-        record_sessions_percent: 100,
-        record_mask_text_selector: '',
+    let cancelled = false, firstFrame = 0, secondFrame = 0;
+    const stop = onInitialContentReady(() => {
+      // Two frames give the useful commit a paint opportunity before analytics
+      // downloads/initializes. Hidden tabs naturally wait until they are shown.
+      firstFrame = requestAnimationFrame(() => {
+        secondFrame = requestAnimationFrame(() => {
+          if (cancelled) return;
+          void import('mixpanel-browser').then(({ default: mixpanel }) => {
+            if (cancelled) return;
+            mixpanel.init(token, {
+              api_host: host,
+              // Autocapture (clicks, form submits, rage clicks) + history-change
+              // pageviews cover the App Router's SPA navigations — posthog parity.
+              autocapture: true,
+              track_pageview: 'full-url',
+              persistence: 'localStorage',
+              // Session replay: record every session, with page text visible —
+              // the default record_mask_text_selector ('*') masks every text node.
+              // Form inputs stay masked regardless of this selector.
+              record_sessions_percent: 100,
+              record_mask_text_selector: '',
+            });
+            resolveReady(mixpanel);
+          }).catch(() => {});
+        });
       });
-      resolveReady(mixpanel);
     });
+    return () => { cancelled = true; stop(); cancelAnimationFrame(firstFrame); cancelAnimationFrame(secondFrame); };
   }, [token, host]);
   return null;
 }

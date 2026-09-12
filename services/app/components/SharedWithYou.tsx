@@ -4,7 +4,7 @@ import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { FormatBadge, formatLabel, LINK, MicroLabel, PANEL, TABLE_ROW, timeAgo } from '@/components/ui';
 import { SHARE_ROLE_LABEL, SHARE_ROLES } from '@/lib/share-roles';
-import type { SharedArtifactSummary } from '@/lib/users';
+import type { WorkspaceSharedItem } from '@/lib/workspace';
 
 /**
  * The dashboard's recipient-side view of `artifact_shares` — the rediscovery
@@ -42,7 +42,7 @@ function FilterChip({ value, label, active, onToggle }: {
   );
 }
 
-type SharedListItem = Omit<SharedArtifactSummary, 'ancestor_ids'>;
+type SharedListItem = WorkspaceSharedItem;
 
 export default function SharedWithYou({ items }: { items: SharedListItem[] }) {
   const [query, setQuery] = useState('');

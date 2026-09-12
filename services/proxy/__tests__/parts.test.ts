@@ -5,8 +5,8 @@ import { proxyParts } from '../src/parts';
 import { PAGE_HEADERS, policyFile, testProxyOptions } from './helpers';
 
 describe('proxyParts', () => {
-  it('names are exactly ["session","internalBoundary","rateLimit","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
-    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['session', 'internalBoundary', 'rateLimit', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
+  it('names are exactly ["publicBuildAssets","session","internalBoundary","rateLimit","loginRoutes","oauthRoutes","forwardedHeaders","forward"] in that order', async () => {
+    expect((await proxyParts(await testProxyOptions())).map((p) => p.name)).toEqual(['publicBuildAssets', 'session', 'internalBoundary', 'rateLimit', 'loginRoutes', 'oauthRoutes', 'forwardedHeaders', 'forward']);
   });
   it('forward is LAST — positional ownership replaces the hand-kept prefix list', async () => {
     const parts = await proxyParts(await testProxyOptions());
@@ -25,6 +25,6 @@ describe('proxyParts', () => {
   });
   it('assemble refuses two parts with one name over the real list', async () => {
     const parts = await proxyParts(await testProxyOptions());
-    expect(() => assemble([...parts, parts[0]])).toThrow(/duplicate part "session"/);
+    expect(() => assemble([...parts, parts[0]])).toThrow(/duplicate part "publicBuildAssets"/);
   });
 });

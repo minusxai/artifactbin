@@ -3,6 +3,7 @@ import {act,screen,waitFor} from '@testing-library/react';
 import {render} from '@/test/helpers/surface-ui';
 import {setupSurface,surfaceProps,SurfaceEvents} from '@/test/helpers/inline-surface';
 import ArtifactSurface from '../ArtifactSurface';
+import ArtifactShell from '../ArtifactShell';
 import {parseJsx} from '@/lib/jsx';
 import type {ArtifactLiveEvent} from '@/lib/story/live';
 let served:ArtifactLiveEvent;
@@ -42,4 +43,16 @@ it('ignores an invalid replacement rather than discarding the still-readable doc
  await waitFor(()=>expect(fetch).toHaveBeenCalled());
  expect(view.container.querySelector('[data-mx-inline-story]')).toBe(root);
  expect(screen.getByText('Document body')).toBeInTheDocument();
+});
+
+it('warms editing code only for a viewer who may edit, and cancels it on permission loss', async () => {
+  const idle = vi.fn(() => 42), cancel = vi.fn();
+  vi.stubGlobal('requestIdleCallback', idle); vi.stubGlobal('cancelIdleCallback', cancel);
+  const view = render(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+  await screen.findByText('Document body');
+  expect(idle).not.toHaveBeenCalled();
+  view.rerender(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+  expect(idle).toHaveBeenCalledOnce();
+  view.rerender(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+  expect(cancel).toHaveBeenCalledWith(42);
 });

@@ -151,3 +151,19 @@ it('route mapping shares artifact/folder keys, keeps static routes data-free, an
   for(const path of ['/chat','/assets','/privacy','/login']) expect(map(path)?.key).toBeUndefined();
   for(const path of ['/a/ABC123/raw','/api/query','/docs','/api/auth/callback','/not-an-app']) expect(map(path)).toBeNull();
 });
+
+it('starts initial home data while Home code is still pending and adopts it once on mount', async () => {
+  const code = deferred<void>();
+  vi.spyOn(routePages.HomePage, 'preload').mockImplementation(() => code.promise);
+  const fetcher = vi.fn(async (_url: string) => new Response(JSON.stringify({ label: 'library' })));
+  vi.stubGlobal('fetch', fetcher);
+  function Home() { const { data } = usePageData<{ label: string }>('/api/page/home?part=core'); return <main aria-label="Initial library">{data?.label ?? 'pending'}</main>; }
+  const ui = (show: boolean) => <MemoryRouter initialEntries={['/']}><NavigationPreloads>{show && <Home />}</NavigationPreloads></MemoryRouter>;
+  const view = render(ui(false));
+  await act(async () => {});
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher.mock.calls[0]?.[0]).toBe('/api/page/home?part=core');
+  await act(async () => { code.resolve(); view.rerender(ui(true)); });
+  expect(screen.getByLabelText('Initial library')).toHaveTextContent('library');
+  expect(fetcher).toHaveBeenCalledOnce();
+});
