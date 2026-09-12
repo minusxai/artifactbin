@@ -60,7 +60,14 @@ export async function queryResource(actor:TokenActor,id:string,body:Record<strin
    const table=outcome?.state.tables[name];if(table)results.push(result(name,table));
   }
   await authorize();return json({results},200,{[REVALIDATE_ACTOR_HEADER]:'1'});
- }catch(error){if(error instanceof DatasetError)return json({error:'query_failed',message:error.message},error.status);throw error;}
+ }catch(error){
+  if(error instanceof DatasetError)return json({error:'query_failed',message:error.message},error.status);
+  // The SQL validator refuses a statement with a bare Error ("Dataset SQL: …"); that is the caller's
+  // statement, not a server fault, and preflight already reports it as invalid_sql. Left to escape it
+  // became a 500 the agent could not read (a local eval leg: pi lost four calls to `undeclared parameter $team`).
+  if(error instanceof Error&&error.message.startsWith('Dataset SQL: '))return json({error:'invalid_sql',message:error.message},400);
+  throw error;
+ }
 }
 
 export async function queryResourceForRequest(actor:TokenActor,id:string,body:Record<string,unknown>,request:Request):Promise<Response>{
