@@ -14,21 +14,20 @@ when working on the relevant subsystem. Historical rollout narratives remain in 
   Report what actually ran; never claim red/green or end-to-end evidence you did not observe.
 - Validate risky assumptions with executable probes; record open assumptions and evidence in the plan.
   Rank implementation milestones by the risks that could change the plan. Finish with runnable checks.
-- Run the full suite, commit and push to the PR, and verify the affected user flow on the running app.
-  Keep PR bodies empty unless the user explicitly requests a description. Do not add descriptive PR comments.
-- **Verification MUST run in parallel, and as one pass, never as a serial chain.** Before editing text that
-  tests pin (docs, skills, copy, error bodies), grep for every test and gate that reads it (`buildQuickSheet`,
-  `agentDiscovery`, `renderDoc`, the exact phrase) and change them in the same edit. Then start `test:api`,
-  `test:node`, `test:ui`, the CLI suite and `npm run build` as concurrent processes; run only the gates that
-  touch the changed surface first and the full gate set once at the end. The suites already use every core;
-  wall-clock is lost only by running them one after another, by fixing one pinned assertion per pass, or by
-  waiting on a subagent instead of doing independent work meanwhile. Fix-cycles after the first pass are a
-  planning failure to report, not a routine.
+- **Run only fast checks locally; everything heavy runs on CI.** While working, run two commands:
+  `npm run validate` (name guards + incremental TypeScript) and `npm test` — it runs only the tests your
+  uncommitted change affects (`vitest --changed`), and above 100 test files stops with instructions rather
+  than running a slow set. Just run `npm test`; never preview or count yourself. Then commit, push, and let
+  CI run the rest. Verify the affected user flow on the running app when it is user-facing. Keep PR bodies
+  empty unless explicitly requested; add no descriptive PR comments.
+- **Never run the full or heavy suites locally as a routine — they are slow and belong to CI:** the full
+  suite (`npm run test:all`), the `integration` project (Docker Postgres + real Chromium), the browser gates,
+  `npm run build` and the agent smoke. CI runs them sharded and only for affected modules; push, read CI, and
+  fix a failure in ONE pass, not a serial chain. Before editing text that tests pin (docs, skills, copy,
+  error bodies), grep for every test and gate that reads it (`buildQuickSheet`, `agentDiscovery`, `renderDoc`,
+  the exact phrase) and change them in the same edit, so `npm test` catches it before CI does.
 - After a merge, update the local main branch to the latest origin/main, then `git worktree prune` and
   remove the finished per-branch worktrees so stale copies do not pile up.
-- Iterate with `vitest` in watch mode on only the affected files (`npx vitest <path-or-pattern>`); do NOT
-  run the `integration` project or the browser gates in the inner loop — both are heavy (real Docker/DB,
-  real Chromium) and are CI/PR-time checks, not per-edit ones.
 - Use top-level imports. Preserve intentional lazy browser chunks and engine-selecting imports;
   document new exceptions at the boundary and verify the resulting bundle.
 - Read environment variables through the owning service's audited config/env module. CLI scripts and
@@ -57,11 +56,16 @@ Run commands from this repository root (the submodule root in a downstream check
 - `npm run validate` — residual-name guard and TypeScript, including unused declarations/parameters, plus
   `validate:shared`: `services/utils` and `services/contracts` under `noUncheckedIndexedAccess`, since
   downstream consumers compile these packages with that flag.
-- `npm test` — API, Node, UI and CLI tests. `test:api`, `test:node`, `test:ui` select Vitest projects.
-- `npm run build` — browser bundles and the production server. Type checks do not replace this check.
-- `npm run test:gates -- --list` — discover current browser gates; do not copy gate counts into docs.
-- `npm run build && npm run test:gates` — disposable production servers and browser flows.
-  Use `--only=<names>` for focused checks and `--servers=1` when diagnosing interference.
+- `npm test` — FAST, run locally: only the tests your uncommitted change affects (`vitest --changed` over
+  api/node/ui, never the heavy `integration` project; the CLI suite only when `services/cli` changed). Above
+  100 test files it runs nothing and prints how to proceed — `npm test -- --all`, `npm test -- -n <N>`, or
+  `npm run test:all`. `npm test -- <ref>` diffs against a git ref; `npm run test:dry` lists affected files.
+  A `package.json`/vitest-config edit forces a full rerun, so `npm test` hits the cap and points at
+  `npm run test:all` — intended.
+- CI/PR-time only, slow — do NOT run locally as a routine (CI shards them per affected module):
+  `npm run test:all` (whole API/Node/UI/CLI suite; `test:api`/`test:node`/`test:ui` select projects),
+  `npm run test:integration` (Docker Postgres + real Chromium), `npm run build` (bundles + prod server), and
+  `npm run test:gates` (browser flows; `-- --list`, `--only=<names>`, `--servers=1`).
 - `npm run generate:routes`, `npm run generate-story-ui-classes`, `npm run render:schema` — generated inputs.
 - `npm run eval -- --help` and `npm run eval:report -- --help` — agent eval CLI; see
   [docs/evals.md](docs/evals.md) before running paid legs.

@@ -23,8 +23,9 @@
   an uptime monitor at `/api/health` and read the app's log to learn WHICH hop
   failed — `[health] upstream unhealthy: sql, events`, logged only when one
   does.
-- `npm run validate` type-checks (never `npm run build` to verify);
-  `npm test` runs the Vitest suite against in-memory PGLite.
+- `npm run validate` type-checks (never `npm run build` to verify); `npm test` runs only the tests your
+  change affects (`vitest --changed`) against in-memory PGLite — `npm run test:all` runs the whole Vitest
+  suite. Leave the full and heavy suites to CI (see [AGENTS.md](../AGENTS.md)).
 - **Live editing needs LISTEN/NOTIFY**, which both storage modes provide
   (PGLite in-process, Postgres via one dedicated client). A missed
   notification is harmless: every wakeup triggers a fresh read, so the
