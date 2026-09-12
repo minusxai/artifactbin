@@ -53,9 +53,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830

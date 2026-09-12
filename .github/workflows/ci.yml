@@ -81,9 +81,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - run: npm run validate
@@ -128,9 +129,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # Only shard 1 runs integration tests; the other shards need no browser or Docker.
@@ -197,9 +199,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - run: npx vitest run --project=ui --shard=${{ matrix.shard }}/2
@@ -236,9 +239,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # Build the Vite SPA, document runtime and bundled Hono server.
@@ -274,9 +278,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The export tests drive real headless Chromium (lib/export.ts). The
@@ -348,9 +353,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -452,9 +458,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -577,9 +584,10 @@ jobs:
         with:
           path: |
             node_modules
+            services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
