@@ -70,7 +70,7 @@ interface BodyRewrite { path: string; from: string; to: string; /** `json` (the 
  * proxy (and, being plain http on 127.0.0.1, without the installer's https-only curl flags), and
  * `/chat/releases/afbin-v<version>/<asset>` answers the platform binary and its SHA256SUMS from `dist/`.
  */
-interface LocalRelease { version: string; distDir: string }
+export interface LocalRelease { version: string; distDir: string }
 
 export function forwardExchange(
   req: http.IncomingMessage,
@@ -122,7 +122,13 @@ export function forwardExchange(
         if (rewrite) {
           const text = Buffer.concat(rewriteChunks).toString('utf8');
           const body = Buffer.from(rewrite.kind === 'text' ? rewriteInstallerForLocal(text, rewrite.from, rewrite.to) : text.split(rewrite.from).join(rewrite.to));
-          res.writeHead(up.statusCode ?? 502, { ...up.headers, 'content-length': String(body.length) });
+          // The rewritten body is complete and its length known, so the upstream's framing headers must
+          // go: Node refuses Content-Length beside Transfer-Encoding, and a chunked upstream (which is
+          // what an installer served through a CDN looks like) would otherwise kill the response.
+          const headers = { ...up.headers, 'content-length': String(body.length) };
+          delete headers['transfer-encoding'];
+          delete headers['content-encoding'];
+          res.writeHead(up.statusCode ?? 502, headers);
           res.end(body);
         }
         const status = up.statusCode ?? 502;
@@ -188,12 +194,12 @@ export async function startProxy(opts: { port: number; target: string; ledgerPat
     if (!self) return [];
     const list: BodyRewrite[] = [];
     if (opts.rewriteDeviceOrigin) list.push({ path: '/oauth/device', from: opts.rewriteDeviceOrigin, to: self });
-    if (opts.localRelease) list.push({ path: '/chat/install.sh', from: 'https://github.com/minusxai/artifactbin/releases/download/afbin-v', to: `${self}/chat/releases/afbin-v`, kind: 'text' });
+    if (opts.localRelease) list.push(installerRewrite(opts.localRelease, self));
     return list;
   };
   const server = http.createServer((req, res) => {
     const pathname = (req.url ?? '/').split('?')[0];
-    if (opts.localRelease && pathname.startsWith(`/chat/releases/afbin-v${opts.localRelease.version}/`)) return serveLocalRelease(pathname, opts.localRelease, res);
+    if (isLocalReleasePath(pathname, opts.localRelease)) return serveLocalRelease(pathname, opts.localRelease, res);
     forwardExchange(req, res, { target, transport, rewriteHost: !!opts.rewriteHost, record, rewriteBody: rewrites() });
   });
 
@@ -212,6 +218,16 @@ export async function startProxy(opts: { port: number; target: string; ledgerPat
   };
 }
 
+/** The GitHub release URL the shipped installer downloads from; rewritten so the download lands on the proxy, which serves `dist/`. */
+export const RELEASE_DOWNLOAD_PREFIX = 'https://github.com/minusxai/artifactbin/releases/download/afbin-v';
+export function installerRewrite(_release: LocalRelease, self: string): BodyRewrite {
+  return { path: '/chat/install.sh', from: RELEASE_DOWNLOAD_PREFIX, to: `${self}/chat/releases/afbin-v`, kind: 'text' };
+}
+/** Is this a request for the checkout's own release, which the proxy answers itself from `dist/`? */
+export function isLocalReleasePath(pathname: string, release: LocalRelease | undefined): release is LocalRelease {
+  return !!release && pathname.startsWith(`/chat/releases/afbin-v${release.version}/`);
+}
+
 /** The installer's https-only curl flags cannot fetch from a plain-http loopback proxy; the local rewrite drops them. */
 export function rewriteInstallerForLocal(body: string, from: string, to: string): string {
   return body.split(from).join(to).replace(/--proto '=https' --proto-redir '=https' --tlsv1\.2 /g, '');
@@ -219,7 +235,7 @@ export function rewriteInstallerForLocal(body: string, from: string, to: string)
 
 /** The only files the proxy will ever serve; a request selects one of these constants or nothing. */
 const RELEASE_BINARIES = ['afbin-darwin-arm64', 'afbin-darwin-x64', 'afbin-linux-arm64', 'afbin-linux-x64'] as const;
-function serveLocalRelease(pathname: string, release: LocalRelease, res: http.ServerResponse): void {
+export function serveLocalRelease(pathname: string, release: LocalRelease, res: http.ServerResponse): void {
   const requested = pathname.split('/').pop() ?? '';
   if (requested === 'SHA256SUMS') {
     const lines = RELEASE_BINARIES.filter((n) => fs.existsSync(path.join(release.distDir, n)))
