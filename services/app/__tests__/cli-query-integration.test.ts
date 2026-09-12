@@ -77,6 +77,16 @@ it('native remote reads share dataset SQL, paginate, reject stale cursors and en
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+it('a dataset query naming an undeclared $parameter is refused as a 400 the agent can read, never a 500 (local eval leg: pi lost four calls to it)',async()=>{
+ const token=await mintToken('mxmx_test_cli_undeclared_param');
+ const made=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{n:1},{n:2}],access:'readwrite'}}));expect(made.status).toBe(201);const doc=await made.json();
+ const response=await queryRead(request(`/api/artifacts/${doc.id}/query`,{method:'POST',token:token.token,json:{sql:'select sum(n) as total from public.rows where ($team = \'all\' or n = $team)'}}),{params:Promise.resolve({id:doc.id})});
+ expect(response.status).toBe(400);
+ const body=await response.json();
+ expect(body.error).toBe('invalid_sql');
+ expect(body.message).toMatch(/undeclared parameter \$team/);
+});
+
 it('a dry-run write validates against the real head and leaves every row where it was',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-cli-dry-write-'));
  try{
