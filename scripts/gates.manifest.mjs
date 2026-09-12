@@ -165,7 +165,11 @@ export const GATE_SPECS = Object.freeze([
   // measured: implementer 14s
   { name: 'social-preview', start: 'shared', needsMail: false, needsClipboard: false, timeoutMs: 60_000 },
   // measured: implementer 3s; orchestrator 3s
-  { name: 'simpler-start', start: 'shared', needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000 },
+  {
+    name: 'simpler-start', start: 'custom',
+    why: 'Drives the one-line handoff from the home page in a real browser and proves no credential rides in the paste, the response, or any second door.',
+    needsMail: false, needsClipboard: true, serialGroup: 'clipboard', timeoutMs: 60_000,
+  },
   // measured: implementer 4s; orchestrator 4s
   {
     name: 'visibility', start: 'custom',
