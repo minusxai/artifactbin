@@ -286,6 +286,13 @@ jobs:
         include:
           - mode: installed
             tasks: comment,data,edit,cli
+          # THE OTHER HALF OF THE PRODUCT'S ONLY CREDENTIAL PATH. Here nothing is staged: the agent has
+          # to find the installer, run it, and run a command whose first use starts a device pairing —
+          # which the driver approves off the task's proxy ledger, as the person would in a browser
+          # (`evals/lib/approver.ts`). Two tasks are enough to exercise it; the flow is the same for the
+          # rest, and each one is a paid agent run.
+          - mode: not-installed
+            tasks: cli,comment
     if: needs.plan.outputs.agent-smoke == 'true' && vars.AGENT_SMOKE_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
