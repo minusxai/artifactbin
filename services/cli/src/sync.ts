@@ -33,8 +33,11 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   const dependencies=file.document?await planDependencies(file.document.body,file.path,workspace.root):[];
   // Every asset enters publication as its placeholder; the server's hash preflight decides reuse.
   const ids:Record<string,string>={};
-  for(const dependency of dependencies)ids[dependency.path]=dependency.id;
+  // For change detection only: a dependency whose bytes match what this document last published keeps its published id.
+  const knownIds:Record<string,string>={};
+  for(const dependency of dependencies){ids[dependency.path]=dependency.id;const known=file.tracked?.dependencies?.[dependency.path];knownIds[dependency.path]=known&&known.sha256===dependency.sha256?known.id:dependency.id;}
   const source=file.document?substituteDependencies(file.document.body,dependencies,ids):undefined;
+  const knownSource=file.document?substituteDependencies(file.document.body,dependencies,knownIds):undefined;
   const resourceSource=file.resource?await readResourceSource(file.resource,file.path,workspace.root):undefined;
   const resource=file.resource;
   const resourceSettings=resource?{...metadataInput(resource),...(resource.type==='dataset'&&resource.access!==undefined?{access:resource.access}:{})}:undefined;
@@ -54,7 +57,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
    if(resource.policy_revision===undefined)throw new CliError('policy_revision_required','The YAML policy requires its observed policy_revision.','Pull the dataset YAML before changing its policy.');
    delta.policy=resource.policy;delta.expectedPolicyRevision=resource.policy_revision;
   }
-  const changedBody=file.document?canonicalizeMarkup(source!)!==base.markup:resource?!!resourceSource&&resourceSource.bytes!==file.tracked.source?.bytes:digest(file.bytes)!==file.tracked.file;
+  const changedBody=file.document?canonicalizeMarkup(knownSource!)!==base.markup:resource?!!resourceSource&&resourceSource.bytes!==file.tracked.source?.bytes:digest(file.bytes)!==file.tracked.file;
   const historical=metadata?.version!==undefined;
   const mode=options.force||historical?'replace':!changedBody&&!Object.keys(delta).length?'none':changedBody&&file.document&&!Object.keys(delta).length?'edit':!changedBody?'metadata':'replace';
   if(policyChanged&&mode!=='metadata')throw new CliError('combined_policy_write','Content replacement and policy changes were both refused.','Publish content and pull its current state before making the policy-only change. Metadata and sharing can accompany the policy.');
@@ -180,7 +183,8 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    const method=plan.mode==='metadata'?'PATCH':plan.mode==='replace'?'PUT':'POST';
    const path=plan.mode==='create'?'/artifacts':`/artifacts/${plan.id}${plan.mode==='edit'?'/edits':''}`;
    const mappings=Object.fromEntries(plan.dependencies.map(d=>[plan.ids[d.path],d.authored]));
-   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom,paths:mappings}});
+   const published=Object.fromEntries(plan.dependencies.map(d=>[d.path,{id:plan.ids[d.path],sha256:d.sha256}]));
+   let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom,paths:mappings,dependencies:published}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
    const snapshot=await recoverRequest(workspace,client,staged);operations.push({path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{})});workspace=await loadWorkspace(workspace.cwd,workspace.home);
   }
@@ -260,7 +264,7 @@ async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingReque
  }
  if(!account)throw new CliError('unsupported_server','The server did not return the current account identity.','Update the server before using workspace sync.');
  const source=pending.file.source?{...pending.file.source,version:pending.request.method==='PATCH'?(pending.file.tracked?.source?.version??pending.file.tracked?.snapshot.version):snapshot.version}:undefined;
- const entry:TrackedFile={source,id:snapshot.id,url:typeof snapshot.url==='string'?snapshot.url:`${pending.server}/a/${snapshot.id}`,file:digest(accepted),snapshot,paths:pending.file.paths};
+ const entry:TrackedFile={source,id:snapshot.id,url:typeof snapshot.url==='string'?snapshot.url:`${pending.server}/a/${snapshot.id}`,file:digest(accepted),snapshot,paths:pending.file.paths,dependencies:pending.file.dependencies};
  await stageFiles(workspace.home,workspace.root,[{path:pending.file.path,before:digest(current),data:written}],state=>writeTracking(state,workspace.root,{server:pending.server,account,set:{[pending.file.path]:entry},...(pending.file.renamedFrom?{remove:[pending.file.renamedFrom]}:{})}));
  await recoverFiles(workspace.home,workspace.root);await clearConflict(workspace.home,workspace.root,snapshot.id);await clearPendingRequest(workspace.home,workspace.root);return snapshot;
 }

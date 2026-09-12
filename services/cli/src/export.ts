@@ -103,13 +103,13 @@ function selectFormat(refs:string[],options:ExportOptions):string{
 
 /** Rendering photographs a published head, so a local file must prove it still is that head. */
 function publishedHead(workspace:Workspace,path:string):string{
- const tracked=workspace.lock?.files[path];
+ const tracked=workspace.tracking?.files[path];
  if(!tracked)throw new CliError('renderer_unavailable',`${path} is not tracked as a published artifact, so there is no head to render.`,RENDERER_FIX);
  return tracked.id;
 }
 async function unchangedHead(workspace:Workspace,path:string):Promise<void>{
  // `file` is the sha256 of the local bytes last accepted, so the comparison needs no stored copy of them.
- const tracked=workspace.lock!.files[path];
+ const tracked=workspace.tracking!.files[path];
  const bytes=await readOptional(await confinedPath(workspace.root,path));
  if(!bytes||digest(bytes)!==tracked.file)throw new CliError('renderer_unavailable',`${path} differs from its observed head; drafts are never uploaded for rendering.`,RENDERER_FIX);
 }
@@ -199,7 +199,7 @@ function originalExtension(target:ExportTarget):string|undefined{
 
 /** Exports never establish tracking, never replace a tracked source file, and never write state into the workspace. */
 async function write(workspace:Workspace,path:string,bytes:Buffer,force:boolean):Promise<Record<string,unknown>>{
- if(workspace.lock?.files[path])throw new CliError('output_exists',`${path} is a tracked source file.`,'Choose a destination outside the workspace tracking.');
+ if(workspace.tracking?.files[path])throw new CliError('output_exists',`${path} is a tracked source file.`,'Choose a destination outside the workspace tracking.');
  const destination=await confinedPath(workspace.root,path);
  const before=await readOptional(destination);
  if(before&&!force)throw new CliError('output_exists',`${path} already exists.`,'Choose a free --output path, or use --force to replace it after a recoverable backup.');

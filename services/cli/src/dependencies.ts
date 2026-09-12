@@ -1,7 +1,7 @@
 import {readFile,realpath} from 'node:fs/promises';
 import {basename,dirname,extname,relative,resolve} from 'node:path';
 import {parseJsx,type JsxNode} from '../../app/lib/jsx';
-import {fileContentType} from '../../app/lib/story/file-types';
+import {assetFormatOf,fileContentType} from '../../app/lib/story/file-types';
 import {REFERENCE_POSITIONS} from '../../app/lib/story/reference-positions';
 import {urlListUrls} from '../../app/lib/jsx/url-attrs';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
@@ -10,16 +10,6 @@ import {digest} from './files';
 import {confinedPath} from './journal';
 export type DependencyFormat='image'|'pdf'|'file'|'dataset';
 export interface Dependency {bytes:Buffer;path:string;authored:string;id:string;sha256:string;size:number;filename:string;format:DependencyFormat;input:Record<string,unknown>;uses:Array<{start:number;end:number;attribute:string;authored?:string;list?:boolean;original?:string}>}
-const IMAGE_CONTENT_TYPES=new Set(['image/png','image/jpeg','image/webp','image/gif','image/svg+xml']);
-/**
- * The published format of an asset, decided by its filename alone — the rule the server applies to
- * the create body it will receive, so a preflight can describe the file by hash instead of bytes.
- * Datasets are decided before this by their CSV/JSON extension; `null` means the file is unsupported.
- */
-export function assetFormatOf(filename:string):'image'|'pdf'|'file'|null{
- const contentType=fileContentType(basename(filename));if(!contentType)return null;
- return IMAGE_CONTENT_TYPES.has(contentType)?'image':contentType==='application/pdf'?'pdf':'file';
-}
 const referenceAttributes=new Set([...REFERENCE_POSITIONS.map(position=>position.attribute),'source','data','recipe']);
 export async function planDependencies(source:string,path:string,root:string):Promise<Dependency[]>{
  root=await realpath(root);

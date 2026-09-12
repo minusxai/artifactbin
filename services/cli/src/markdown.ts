@@ -1,7 +1,6 @@
 /** A one-time local onramp. JSX owns identity and editing after conversion. */
 import {Marked} from 'marked';
-import {extname,join,relative,resolve} from 'node:path';
-import {rmdir} from 'node:fs/promises';
+import {extname,relative,resolve} from 'node:path';
 import {CliError} from './commands';
 import {parseDocument,writeDocument} from './document';
 import {digest,readOptional} from './files';
@@ -54,11 +53,6 @@ async function conversionRecord(state:State|null,root:string):Promise<Record<str
  * leaves the user's files and nothing else. This disappears with the file
  * journal itself, when staged files become `staged-file` records.
  */
-const STAGING_DIRECTORY='.artifactbin';
-async function clearStaging(root:string):Promise<void>{
- try{await rmdir(join(root,STAGING_DIRECTORY));}
- catch(error){const code=(error as NodeJS.ErrnoException).code;if(code!=='ENOENT'&&code!=='ENOTEMPTY')throw error;}
-}
 export async function prepareMarkdown(workspace:Workspace,paths:string[]):Promise<MarkdownPlan>{
  const conversions:Conversion[]=[],selected:string[]=[];const virtualFiles={...workspace.virtualFiles};
  const state=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await State.openIfPresent(workspace.home):null;
@@ -89,10 +83,10 @@ export async function commitMarkdown(plan:MarkdownPlan):Promise<void>{
     if(!current||digest(current)!==item.before)throw new CliError('local_changed',`${item.source} changed during Markdown conversion; no JSX was written.`);
     if(records[item.source]||await readOptional(await confinedPath(root,item.target)))throw new CliError('conversion_target_exists',`Conversion destination ${item.target} already exists.`);
    }
-   await stageFiles(root,plan.conversions.map(item=>({path:item.target,before:null,data:item.bytes})));
+   await stageFiles(plan.workspace.home,root,plan.conversions.map(item=>({path:item.target,before:null,data:item.bytes})));
    state.transaction(()=>{for(const item of plan.conversions)state.put(root,'conversion',item.source,{target:item.target,sha256:item.before});});
-   await recoverFiles(root);
-   await clearStaging(root);
+   await recoverFiles(plan.workspace.home,root);
+   
   }finally{state.close();}
  });
 }

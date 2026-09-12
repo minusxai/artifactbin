@@ -1,5 +1,5 @@
 import {join,relative,resolve} from 'node:path';
-import {readdir,rmdir,stat} from 'node:fs/promises';
+import {readdir,stat} from 'node:fs/promises';
 import {isDeepStrictEqual} from 'node:util';
 import {stringify} from 'yaml';
 import {createTwoFilesPatch} from 'diff';
@@ -57,11 +57,6 @@ async function withStore<T>(workspace:Workspace,run:(state:State|null)=>Promise<
  * goes too and the workspace keeps only the user's files. This disappears with
  * the file journal itself, when staged files become `staged-file` records.
  */
-const STAGING_DIRECTORY='.artifactbin';
-async function clearStaging(root:string):Promise<void>{
- try{await rmdir(join(root,STAGING_DIRECTORY));}
- catch(error){const code=(error as NodeJS.ErrnoException).code;if(code!=='ENOENT'&&code!=='ENOTEMPTY')throw error;}
-}
 /** An interrupted write of this workspace, waiting for the command that started it to finish it. */
 const pendingOperation=(workspace:Workspace)=>withStore(workspace,async state=>!!state?.get(workspace.root,'pending-operation','current'));
 /** Everything an unchanged push must still finish: an interrupted operation, or staged files not yet applied. */
@@ -90,7 +85,7 @@ const trackedOfType=(saved:Tracking|null,type:'profile'|'session')=>Object.entri
  * left to the command that names it explicitly.
  */
 async function discoverArtifactPaths(workspace:Workspace,saved:Tracking|null):Promise<string[]>{
- const found=new Set(Object.keys(workspace.lock?.files??{}));
+ const found=new Set(Object.keys(workspace.tracking?.files??{}));
  let names:string[];
  try{names=(await readdir(workspace.root,{withFileTypes:true})).filter(entry=>entry.isFile()).map(entry=>entry.name);}catch{return [...found];}
  for(const name of names.sort()){
@@ -104,7 +99,7 @@ async function discoverArtifactPaths(workspace:Workspace,saved:Tracking|null):Pr
 async function inspectArtifacts(workspace:Workspace,paths:string[]):Promise<LocalFile[]>{
  if(!paths.length)return [];
  try{return await inspectWorkspace(workspace,paths);}
- catch{return inspectWorkspace(workspace,Object.keys(workspace.lock?.files??{}));}
+ catch{return inspectWorkspace(workspace,Object.keys(workspace.tracking?.files??{}));}
 }
 const artifactType=(file:LocalFile)=>file.document?'artifact':file.resource?file.resource.type:'file';
 
@@ -137,7 +132,7 @@ export async function accountPlan(workspace:Workspace,parsed:ParsedCommand):Prom
  if(selected)return {kind:'resource',paths:paths.length?paths:trackedOfType(saved,selected),artifacts,manifest:saved};
  if(paths.length)return {kind:'resource',paths,artifacts,manifest:saved};
  if(!positionals.length&&saved&&Object.keys(saved.files).length)
-  return {kind:'resource',paths:Object.keys(saved.files),artifacts:summary?await discoverArtifactPaths(workspace,saved):Object.keys(workspace.lock?.files??{}),manifest:saved};
+  return {kind:'resource',paths:Object.keys(saved.files),artifacts:summary?await discoverArtifactPaths(workspace,saved):Object.keys(workspace.tracking?.files??{}),manifest:saved};
  return null;
 }
 async function entries(workspace:Workspace,plan:AccountPlan){
@@ -166,9 +161,9 @@ export async function localAccountCommand(workspace:Workspace,parsed:ParsedComma
   return {valid:artifacts.valid&&accounts.every(file=>file.valid),files:[...artifacts.files,...accounts]};
  }
  if(parsed.command==='status'){
-  const conflicts=await readConflicts(workspace.root);
+  const conflicts=await readConflicts(workspace.home,workspace.root);
   const tracked=await inspectArtifacts(workspace,plan.artifacts);
-  return {remote:'last_observed',server:workspace.lock?.server??plan.manifest?.server??null,files:[
+  return {remote:'last_observed',server:workspace.tracking?.server??plan.manifest?.server??null,files:[
    ...tracked.map(file=>({path:file.path,type:artifactType(file),status:file.tracked&&conflicts[file.tracked.id]?'conflicted':file.status,id:file.tracked?.id,version:(file.tracked?.observed??file.tracked?.snapshot)?.version,base_version:file.tracked?.snapshot.version,...(file.renamedFrom?{renamed_from:file.renamedFrom}:{})})),
    ...files.map(file=>({path:file.path,id:file.resource?.id??file.entry?.resource.id,status:file.status,type:entryType(file)})),
   ]};
@@ -206,13 +201,13 @@ async function save(workspace:Workspace,path:string,resource:AccountResource,byt
   const duplicate=Object.entries(saved?.files??{}).find(([other,entry])=>other!==path&&entry.resource.id===resource.id)?.[0];
   if(duplicate&&await readOptional(join(workspace.root,duplicate)))throw new CliError('duplicate_identity',`${duplicate} already tracks this ${resource.type}.`);
   const changes:FileChange[]=working?[{path,before:bytes?digest(bytes):null,data:working}]:[];
-  if(changes.length)await stageFiles(workspace.root,changes);
+  if(changes.length)await stageFiles(workspace.home,workspace.root,changes);
   state.transaction(()=>{
    state.put(workspace.root,'workspace',workspace.root,{server:client.connection.server,account},{exclusive:true});
    if(duplicate)state.delete(workspace.root,'account',duplicate);
    state.put(workspace.root,'account',path,{resource,sha256:digest(Buffer.from(yaml(resource)))});
   });
-  if(changes.length){await recoverFiles(workspace.root);await clearStaging(workspace.root);}
+  if(changes.length){await recoverFiles(workspace.home,workspace.root);}
  }finally{state.close();}
 }
 /** Where a pulled session lands: its tracked path, an explicit --output, or a free name. */

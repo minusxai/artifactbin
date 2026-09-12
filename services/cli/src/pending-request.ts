@@ -9,7 +9,7 @@ import type {ResourceSource} from './resource-file';
 export interface RequestIntent {
  server:string;account?:string;credential:string;
  request:{path:string;method:string;body:Record<string,unknown>};
- file:{source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;paths?:Record<string,string>;renamedFrom?:string};
+ file:{source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;paths?:Record<string,string>;dependencies?:Record<string,{id:string;sha256:string}>;renamedFrom?:string};
 }
 export interface PendingRequest extends RequestIntent {version:1;key:string;checksum:string;response?:Record<string,unknown>;responseAccount?:string;responseChecksum?:string}
 const CURRENT='current';

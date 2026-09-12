@@ -23,7 +23,7 @@ import {restoreDependencyPaths} from './dependencies';
 import {parseResourceFile,readResourceSource,snapshotResource,writeResourceFile,type ResourceSource} from './resource-file';
 export interface Snapshot {id:string;version:number;edit_id:string;state:string;markup?:string;format?:string;title?:string|null;theme?:string|null;template?:string|null;visibility?:DocumentMetadata['visibility'];link_role?:DocumentMetadata['link'];parent_id?:string|null;[key:string]:unknown}
 /** `file` is the sha256 of the accepted base representation: what the server holds, as it lands locally. */
-export interface TrackedFile {source?:ResourceSource;id:string;file:string;url:string;snapshot:Snapshot;observed?:Snapshot;selected?:Snapshot;versions?:Record<string,Snapshot>;paths?:Record<string,string>}
+export interface TrackedFile {source?:ResourceSource;id:string;file:string;url:string;snapshot:Snapshot;observed?:Snapshot;selected?:Snapshot;versions?:Record<string,Snapshot>;paths?:Record<string,string>;dependencies?:Record<string,{id:string;sha256:string}>}
 export interface WorkspaceTracking {server:string;account:string;files:Record<string,TrackedFile>}
 export interface Workspace {virtualFiles?:Record<string,Buffer>;home:string;root:string;cwd:string;tracking:WorkspaceTracking|null}
 export interface LocalFile {path:string;bytes:Buffer|null;document?:LocalDocument;resource?:ArtifactResourceFile;tracked?:TrackedFile;renamedFrom?:string;status:'new'|'unchanged'|'modified'|'missing'|'renamed'}

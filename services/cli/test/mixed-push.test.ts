@@ -7,6 +7,7 @@ import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {digest} from '../src/files';
 import {parseDocument,writeDocument} from '../src/document';
+import {readRecord} from './tracking';
 
 test('mixed content and metadata push rebases unrelated remote nodes before its conditional atomic write',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-mixed-push-'));let writes=0;
@@ -38,9 +39,9 @@ test('mixed push records overlapping proposals and dry-run leaves no conflict st
   await saveConnection({server:'https://example.com',token:'test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   const local=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));local.body=local.body.replace('First','Local');local.metadata.title='My title';await writeFile(join(root,'doc.jsx'),writeDocument(local));
   head={...head,version:2,edit_id:'two',state:digest('two'),markup:head.markup.replace('First','Remote')};
-  assert.equal((await invoke(['push','doc.jsx','--dry-run'])).code,3);await assert.rejects(readFile(join(root,'.artifactbin','conflicts.json')),{code:'ENOENT'});
+  assert.equal((await invoke(['push','doc.jsx','--dry-run'])).code,3);assert.equal(await readRecord(root,root,'conflict','abc123'),null);
   assert.equal((await invoke(['push','doc.jsx'])).code,3);
-  const conflict=JSON.parse(await readFile(join(root,'.artifactbin','conflicts.json'),'utf8')).conflicts.abc123;
+  const conflict=(await readRecord<{path:string;code:string;details:any}>(root,root,'conflict','abc123'))!;assert.ok(conflict);
   assert.match(conflict.details.local,/Local/);assert.match(conflict.details.remote,/Remote/);
   assert.equal((await invoke(['status'])).result.files[0].status,'conflicted');
  }finally{await rm(root,{recursive:true,force:true});}
