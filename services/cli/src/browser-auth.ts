@@ -13,6 +13,8 @@ import { loadConnection, normalizeServer, saveConnection, type Connection } from
 import {withProcessLock} from './process-lock';
 
 interface Pending { server: string; deviceCode: string; userCode: string; verificationUrl: string; expiresAt: number; interval: number }
+/** An unattended agent gives up polling for approval after this bound, failing fast with an actionable error instead of holding the full device-code window. */
+const AGENT_APPROVAL_WAIT_MS = 45_000;
 export class ApprovalRequired extends Error {
   readonly code = 'approval_required';
   constructor(readonly verificationUrl: string, readonly userCode: string, readonly expiresAt: number) {
@@ -88,7 +90,8 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     try { if (!options.noBrowser) await (options.open ?? openBrowser)(pending.verificationUrl); }
     catch (error) { options.notify?.(error instanceof Error ? error.message : 'Open the approval URL in your browser.'); }
   }
-  do {
+  const deadline = options.interactive ? pending.expiresAt : Math.min(pending.expiresAt, clock() + AGENT_APPROVAL_WAIT_MS);
+  while (clock() < deadline) {
     const {response,data} = await post('/oauth/device/token', {device_code:pending.deviceCode});
     if (response.ok) {
       if (typeof data.access_token !== 'string' || typeof data.refresh_token !== 'string' || typeof data.client_id !== 'string'
@@ -103,8 +106,9 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
       const code=data.error==='access_denied'?'access_denied':data.error==='expired_token'?'approval_expired':'auth_failed';
       throw new CliError(code,code==='access_denied'?'Browser approval was denied.':code==='approval_expired'?'Browser approval expired.':'Browser authentication failed.','Run afbin auth again.');
     }
-    await (options.sleep ?? sleep)(Math.min(pending.interval,Math.max(0,pending.expiresAt-clock())));
-  } while (clock() < pending.expiresAt);
+    await (options.sleep ?? sleep)(Math.min(pending.interval,Math.max(0,deadline-clock())));
+  }
+  if (!options.interactive && clock() < pending.expiresAt) throw approval;
   await unlink(file);
   throw new CliError('approval_expired','Browser approval expired.','Run afbin auth again.');
 }

@@ -48,3 +48,6 @@ services/app/public/libraries/
 
 # Bytecode from local CLI acceptance probes.
 /scripts/probes/__pycache__/
+
+# agent worktrees (local only)
+.claude/worktrees/

@@ -68,6 +68,14 @@ Run commands from this repository root (the submodule root in a downstream check
 
 ## Change checks
 
+- Releasing the CLI: `services/app/public/chat/release.json` is the pointer `afbin update` reads, and
+  `curl … /chat/install.sh | sh` installs the version it names. `npm run release:cli` bumps
+  `services/cli/package.json`, `package-lock.json`, the installer and `release.json` together; then run
+  `npm run generate:teaching -w services/cli`. A merged CLI change WITHOUT a bump leaves the live
+  installer serving the old binary. `.github/workflows/release-cli.yml` publishes the GitHub release when
+  the CLI version changes on main and CI passes; the downstream image ships the new `release.json` when
+  its submodule pin advances.
+
 - Schema changes update `services/app/lib/schema.ts`, schema ownership tests, and generated SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
   setup planner's `ENV_EXAMPLE_BASE64` snapshot in `scripts/lib/setup-plan.mjs` where applicable.

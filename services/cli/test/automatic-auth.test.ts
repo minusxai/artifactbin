@@ -57,6 +57,26 @@ test('no-browser still waits without a TTY; approval is never implied by default
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
+test('an unattended agent fails fast with approval_required and keeps the pairing for a retry',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-fastfail-'));let now=0;let approved=false;
+ const bigPairing=()=>Response.json({device_code:'d'.repeat(43),user_code:'ABCD',verification_uri_complete:origin+'/oauth/device?user_code=ABCD',expires_in:300,interval:5});
+ const opts=()=>({home,interactive:false,noBrowser:true,now:()=>now,sleep:async(ms:number)=>{now+=ms;},notify:()=>{},open:async()=>assert.fail('browser suppressed'),
+  fetch:(async(input:unknown)=>{const u=String(input);
+   if(u.endsWith('/oauth/device'))return bigPairing();
+   if(u.endsWith('/oauth/device/token'))return approved?credentials():Response.json({error:'authorization_pending'},{status:400});
+   return Response.json({},{status:404});}) as unknown as typeof fetch});
+ try{
+  // No approver: give up at the ~45s bound with an actionable error, not the full 300s window.
+  await assert.rejects(deviceAuthenticate(origin,opts()),error=>(error as {code:string}).code==='approval_required');
+  assert.equal(now,45000);
+  assert.equal(await loadConnection(origin,home,{}),null);
+  // The pairing was kept: a retry (approved out of band) reuses it and completes.
+  approved=true;
+  const conn=await deviceAuthenticate(origin,opts());
+  assert.equal(conn.token,'new_access');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
 test('local work and dry-run do not bootstrap auth or create credentials',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-no-bootstrap-'));
  try{
