@@ -63,6 +63,15 @@ describe('the inline document surface', () => {
   expect(post).not.toHaveBeenCalled();post.mockRestore();
  });
 
+ it.each([{label:'Public source',href:'/a/source1'},{label:'a private document',href:null}])('shows server-redacted fork provenance in settings: $label',async(forkedFrom)=>{
+  const view=render(<ArtifactSurface {...surfaceProps()} author={{username:'author',forkedFrom}} />);
+  await screen.findByText('Document body');fireEvent.click(screen.getByLabelText('Open artifact controls'));
+  const line=view.container.querySelector('[data-mx-forked-from]');
+  expect(line).toHaveTextContent('forked from '+forkedFrom.label);
+  if(forkedFrom.href)expect(screen.getByLabelText('Open the artifact this was forked from')).toHaveAttribute('href',forkedFrom.href);
+  else expect(line?.querySelector('a')).toBeNull();
+ });
+
  it('closes the owned stream and removes document DOM and styles on unmount',async()=>{
   const view=render(<ArtifactSurface {...surfaceProps()} />);await screen.findByText('Document body');
   const stream=SurfaceEvents.last;view.unmount();

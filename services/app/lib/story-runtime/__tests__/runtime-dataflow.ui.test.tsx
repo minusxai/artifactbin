@@ -6,11 +6,12 @@
  */
 import { act } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
 import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
+import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore } from '../store';
 import { createMx } from '../mx';
@@ -257,5 +258,18 @@ describe('StoryRuntimeApp — dataflow', () => {
     expect(mismatch).toBeUndefined();
     errors.mockRestore();
     host.remove();
+  });
+});
+
+describe('<For> over a query table', () => {
+  it('subscribes For to actual query table results and preserves DOM identity after refresh',async()=>{
+   const parsed=parseJsxOrThrow('<For id="orders" each={$orders} keyBy="id"><p id="name">{$_row.name}</p></For>');
+   let rows=[{id:'a',name:'Alice'}];
+   const store=createDataflowStore({flow:{values:[],queries:[{name:'orders',sql:'select * from ref_abc123',params:[],refs:['abc123'],start:0,end:0}]}},{transport:{page:async()=>{throw new Error('not used')},run:async()=>({tables:{orders:{rows,columns:[{name:'id',type:'string'},{name:'name',type:'string'}]}},errors:{}})}});
+   const view=renderWithProviders(<StoryRuntimeApp nodes={parsed.nodes} refData={{}} store={store} colorMode="light" chrome={false}/>);
+   await act(async()=>store.start());await waitFor(()=>expect(screen.getByText('Alice')).toBeTruthy());const alice=screen.getByText('Alice');
+   rows=[{id:'b',name:'Bob'},{id:'a',name:'Alicia'}];await act(async()=>store.refresh());
+   await waitFor(()=>expect(screen.getByText('Alicia')).toBe(alice));expect(screen.getByText('Bob')).toBeTruthy();
+   view.unmount();store.dispose();
   });
 });
