@@ -89,10 +89,26 @@ try {
     assert.equal(await other.evaluate(async ({ id, email }) => (await fetch(`/api/my/artifacts/${id}/sharing`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ shares: [{ email, role: 'viewer' }] }) })).status, { id: shared.id, email }), 200);
   }
   await ownerContext.close();
+  // Equalize server state before comparing browser cache modes. Otherwise the
+  // faster candidate reaches the warm-cache phase while its freshly seeded
+  // thumbnail renders still consume the app/browser worker; the slower baseline
+  // has had longer to finish them. Cold here means cold BROWSER cache.
+  await page.goto(base, { waitUntil: 'domcontentloaded' });
+  await page.getByLabel('Open Workspace sample 38', { exact: true }).waitFor();
+  const previews = await page.evaluate(() => [...new Set([...document.images].map(image => image.src).filter(src => src.includes('/export?')))]);
+  assert(previews.length > 0, 'library preview fixtures were not discovered');
+  console.log(`Preparing ${previews.length} thumbnail cache entries before timed loads`);
+  for (const url of previews) {
+    const response = await page.request.get(url, { timeout: 120000 });
+    assert.equal(response.status(), 200, 'thumbnail preparation failed');
+    assert.match(response.headers()['content-type'] ?? '', /^image\//);
+    await response.body(); await response.dispose();
+  }
+  console.log('Thumbnail preparation complete');
   const result = {
     revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    conditions: { runtime: process.version, browser: browser.version(), gateway: 'HTTP/1.1 with gzip', database: 'in-process PGLite', store: 'local disk', viewport: '1440x1000', latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4, repetitions: 7, owned: 40, shared: 20, paragraphs: 35, analytics: 'real bundle; outbound telemetry blocked' },
-    core: {}, loads: [],
+    conditions: { runtime: process.version, browser: browser.version(), gateway: 'HTTP/1.1 with gzip', database: 'in-process PGLite', store: 'local disk; thumbnail cache prewarmed', viewport: '1440x1000', latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4, repetitions: 7, owned: 40, shared: 20, paragraphs: 35, analytics: 'real bundle; outbound telemetry blocked' },
+    previewsPrepared: previews.length, core: {}, loads: [],
   };
   const core = await page.evaluate(async () => { const response = await fetch('/api/page/home?part=core'); return response.text(); });
   const parsed = JSON.parse(core);
@@ -138,7 +154,8 @@ try {
           const core = resources.find(r => r.name.includes('/api/page/home?part=core'));
           const session = resources.find(r => r.name.includes('/api/page/session'));
           const scripts = resources.filter(r => /\.js(?:\?|$)/.test(r.name));
-          return { route, cache, repetition, visible: document.visibilityState, usefulMs, ttfbMs: nav.responseStart,
+          return { route, cache, repetition, visible: document.visibilityState, usefulMs, ttfbMs: nav.responseStart, navRequestMs: nav.requestStart, navFetchMs: nav.fetchStart, navResponseEndMs: nav.responseEnd, navTransferredBytes: nav.transferSize,
+            coreRequestCount: resources.filter(r => r.name.includes('/api/page/home?part=core')).length,
             coreStartMs: core?.startTime, coreEndMs: core?.responseEnd, sessionStartMs: session?.startTime,
             jsEncodedBytes: scripts.reduce((n, r) => n + r.encodedBodySize, 0),
             jsTransferredBytes: scripts.reduce((n, r) => n + r.transferSize, 0),

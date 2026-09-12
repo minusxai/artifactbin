@@ -201,6 +201,8 @@ are released. Access checks still precede this module, keys remain versioned,
 and volatile previews never enter durable storage.
 
 The paired-performance workflow builds the production reference and candidate
-on one runner and records seven cold/warm browser samples for Home and prose.
+on one runner, prepares the visible-library thumbnail cache, then records seven
+cold/warm browser samples for Home and prose. Preparing thumbnails equalizes
+server render work before the browser-cache comparison.
 Its PGLite/local-object-store measurements are controlled lab evidence, not
 production rollout results. Raw JSON includes resource timing and payload sizes.
