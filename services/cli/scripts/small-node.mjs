@@ -5,6 +5,9 @@ import {execFileSync} from 'node:child_process';
 import {availableParallelism} from 'node:os';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {verifyLinuxRuntime} from './runtime-compatibility.mjs';
+const mode=process.argv[2];
+assert.ok(mode===undefined||mode==='--build-only'||mode==='--verify-only','Unknown runtime build mode');
 const version='22.22.3';
 // https://nodejs.org/dist/v22.22.3/SHASUMS256.txt
 const checksum='f3e6a578db1ab335a4a72785c1e87ad18a2cf6d2fc25747a1d741fb34af0bd0f';
@@ -17,6 +20,7 @@ const recipe={version,checksum,intl:'small-icu',platform:process.platform,arch:p
 const root=resolve('node_modules/.cache/cli-node'),binary=join(root,'node');
 await mkdir(root,{recursive:true});
 let exists=false;try{await access(binary);exists=JSON.stringify(JSON.parse(await readFile(join(root,'recipe.json'),'utf8')))===JSON.stringify(recipe);}catch{}
+if(!exists&&mode==='--verify-only')throw new Error('No compiled runtime matching the pinned recipe. Verification never compiles.');
 if(!exists)await rm(binary,{force:true});
 if(!exists){
  const archive=join(root,`node-v${version}.tar.xz`);
@@ -34,14 +38,13 @@ if(!exists){
  }
  await copyFile(join(source,'out/Release/node'),binary);await chmod(binary,0o755);
 }
+// Record compilation separately so later checks cannot discard a reusable candidate.
+await writeFile(join(root,'recipe.json'),JSON.stringify(recipe)+'\n');
+if(mode==='--build-only'){console.log(`Compiled runtime candidate: ${binary}`);process.exit(0);}
 execFileSync(binary,['-e',`const a=require('node:assert/strict');a.equal(process.version,'v${version}');a.equal(process.config.variables.icu_small,true);a.deepEqual(Intl.DateTimeFormat.supportedLocalesOf(['en','fr','ja']),['en']);a.equal('e\\u0301'.normalize(),'é');a.equal(new URL('https://bücher.example').hostname,'xn--bcher-kva.example');require('node:sqlite');require('node:sea');require('node:crypto').randomBytes(32);`],{stdio:'inherit'});
 if(process.platform==='linux'){
  // Match official Node's ET_EXEC layout; postject's old LIEF corrupts large GNU hashes in PIE.
  // https://github.com/nodejs/postject/pull/108
- assert.match(execFileSync('readelf',['-h',binary],{encoding:'utf8'}),/Type:\s+EXEC\b/,'SEA runtime must use ET_EXEC');
- const symbols=execFileSync('readelf',['--version-info',binary],{encoding:'utf8'});
- for(const match of symbols.matchAll(/Name: GLIBC_(\d+)\.(\d+)/g))assert.ok(Number(match[1])<2||Number(match[1])===2&&Number(match[2])<=28,`Runtime requires ${match[0]}`);
- assert.ok(!/Name: GLIBCXX_/.test(symbols),'C++ runtime must be statically linked');
+ verifyLinuxRuntime(binary);
 }
-await writeFile(join(root,'recipe.json'),JSON.stringify(recipe)+'\n');
 console.log(`Verified small-ICU runtime: ${binary}`);

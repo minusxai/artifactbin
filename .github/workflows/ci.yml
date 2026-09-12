@@ -702,8 +702,8 @@ jobs:
           key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
           # The script compares the complete platform recipe before accepting a fallback cache.
           restore-keys: cli-small-node-${{ matrix.os }}-
-      - name: Build and verify pinned small-ICU Node
-        run: node services/cli/scripts/small-node.mjs
+      - name: Build pinned small-ICU Node candidate
+        run: node services/cli/scripts/small-node.mjs --build-only
       - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         if: steps.cli-runtime-cache.outputs.cache-hit != 'true'
         with:
@@ -711,7 +711,17 @@ jobs:
             node_modules/.cache/cli-node/node
             node_modules/.cache/cli-node/recipe.json
           key: cli-small-node-${{ matrix.os }}-${{ hashFiles('services/cli/scripts/small-node.mjs') }}
-      # Bootstrap the durable runtime dependency from the already-verified build.
+      # Preserve the compiled candidate before verification; publication still requires passing checks.
+      - name: Preserve compiled runtime candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli-node-candidate-${{ matrix.os }}
+          path: |
+            node_modules/.cache/cli-node/node
+            node_modules/.cache/cli-node/recipe.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Package reusable runtime
         run: node services/cli/scripts/prepare-runtime.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -720,6 +730,8 @@ jobs:
           path: runtime-assets/*
           if-no-files-found: error
           retention-days: 90
+      - name: Verify runtime compatibility
+        run: node services/cli/scripts/small-node.mjs --verify-only
       # THE SUITE RUNS ONCE, on ubuntu-24.04. The other three rows exist for the thing that is
       # genuinely per-platform — a binary compiled for that OS and architecture — so they build it
       # and run its smoke, and nothing else. Re-running config/launcher/runner under tsx on every

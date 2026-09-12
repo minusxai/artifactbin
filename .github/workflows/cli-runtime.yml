@@ -51,8 +51,18 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      - name: Build and verify the runtime recipe
-        run: node services/cli/scripts/small-node.mjs
+      - name: Build the runtime recipe candidate
+        run: node services/cli/scripts/small-node.mjs --build-only
+      - name: Preserve compiled runtime candidate
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cli-node-candidate-${{ matrix.os }}
+          path: |
+            node_modules/.cache/cli-node/node
+            node_modules/.cache/cli-node/recipe.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Prepare distributable runtime
         run: node services/cli/scripts/prepare-runtime.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -61,6 +71,8 @@ jobs:
           path: runtime-assets/*
           if-no-files-found: error
           retention-days: 90
+      - name: Verify runtime compatibility
+        run: node services/cli/scripts/small-node.mjs --verify-only
 
   publish:
     needs: build

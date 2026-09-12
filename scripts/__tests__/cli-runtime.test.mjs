@@ -6,6 +6,7 @@ import {createHash} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {parse} from 'yaml';
 import {gzipSync} from 'node:zlib';
+import {verifyLinuxRuntime} from '../../services/cli/scripts/runtime-compatibility.mjs';
 import {runtimePin} from '../../services/cli/scripts/runtime.mjs';
 import {downloadRuntime,packageRuntime} from '../../services/cli/scripts/runtime-package.mjs';
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -74,4 +75,17 @@ if(all.startsWith('run download')){
  const published=run(workflow.jobs.publish.steps[0].run);
  if(scenario==='corrupt'){expect(published.status).not.toBe(0);expect(await readFile(join(root,'calls'),'utf8')).not.toContain('release create');}
  else{expect(published.status,published.stderr).toBe(0);expect(await readdir(join(root,'bundle'))).toHaveLength(9);expect(await readFile(join(root,'bundle/NODE-LICENSE'),'utf8')).toBe('Node license fixture');expect(await readFile(join(root,'calls'),'utf8')).toContain('release create cli-node-v22.22.3-r1');}
+}));
+
+for(const requirement of ['GLIBC_2.28','GLIBC_2.29','GLIBCXX_3.4'])it(`checks large ELF version tables against ${requirement}`,()=>withRoot(async root=>{
+ const readelf=join(root,'readelf');
+ await writeFile(readelf,`#!${process.execPath}\nprocess.stdout.write(process.argv[2]==='-h'?'Type: EXEC (Executable file)':'x'.repeat(1100000)+'\\nName: ${requirement}\\n');`,{mode:0o755});
+ const verify=()=>verifyLinuxRuntime('/unused-fixture',{readelf});
+ if(requirement==='GLIBC_2.28')expect(verify).not.toThrow();else expect(verify).toThrow(/Runtime requires|statically linked/);
+}));
+it('verify-only fails without compiling when no runtime candidate exists',()=>withRoot(async root=>{
+ const script=new URL('../../services/cli/scripts/small-node.mjs',import.meta.url);
+ const result=spawnSync(process.execPath,[script.pathname,'--verify-only'],{cwd:root,env:{...process.env,CI:'1'},encoding:'utf8',timeout:3000});
+ expect(result.error).toBeUndefined();expect(result.status).not.toBe(0);
+ expect(result.stderr).toContain('Verification never compiles');
 }));
