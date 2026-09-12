@@ -37,7 +37,7 @@
  * it at all.
  */
 
-import { visibilityIconPaths } from '@/lib/visibility-icons';
+import { visibilityIconPaths, sharingIconFor } from '@/lib/visibility-icons';
 import type { Visibility } from '@/lib/artifacts';
 import { REPO_URL } from '@/lib/repo';
 import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
@@ -86,6 +86,7 @@ export interface ReaderChromeInput {
   /** Only the owner gets the prominent sharing entry point. */
   share?: boolean;
   visibility?: Visibility;
+  hasInvitedUsers?: boolean;
   /** Stamped on the root (`data-mx-artifact-id`) so the like/comment log can name the document. Omitted when null. */
   artifactId: string | null;
   /** The document's title, for the byline and the share sheet. Omitted when null. */
@@ -207,6 +208,7 @@ const renderForkedFrom = (forkedFrom: ReaderForkedFrom): string => {
  */
 export function renderReaderChrome(input: ReaderChromeInput): string {
   const { artifactId, title, author, signIn = null, fork = null, login = null, edit = false, reactions = null } = input;
+  const sharingIcon = sharingIconFor({ visibility: input.visibility ?? 'private', hasInvitedUsers: input.hasInvitedUsers ?? false });
   const username = author?.username ?? null;
   const forkedFrom = author?.forkedFrom ?? null;
   const following = reactions?.follow?.following ?? false;
@@ -260,7 +262,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     )
     + (input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
-    + (input.share ? action('share', 'Share', `<span data-mx-visibility="${input.visibility ?? 'private'}">${ICON(visibilityIconPaths(input.visibility ?? 'private'))}</span>`, '', '<span class="mx-reader-share-text">Share</span>') : '')
+    + (input.share ? action('share', 'Share', `<span data-mx-visibility="${input.visibility ?? 'private'}" data-mx-sharing-icon="${sharingIcon}">${ICON(visibilityIconPaths(sharingIcon))}</span>`, '', '<span class="mx-reader-share-text">Share</span>') : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
     + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
     + '</div>'

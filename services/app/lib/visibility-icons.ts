@@ -1,8 +1,25 @@
 import type { IconNode } from 'lucide-react';
 import type { Visibility } from '@/lib/artifacts';
 
+export interface SharingVerdict {
+  visibility: Visibility;
+  hasInvitedUsers: boolean;
+}
+export type SharingIcon = Visibility | 'shared';
+
+/** Named grants change a private link's verdict, not its visibility setting. */
+export function sharingIconFor({ visibility, hasInvitedUsers }: SharingVerdict): SharingIcon {
+  return visibility === 'private' && hasInvitedUsers ? 'shared' : visibility;
+}
+
 /** Lucide 1.30 geometry shared by React sharing controls and string-rendered chrome. */
-export const VISIBILITY_ICON_NODES: Record<Visibility, IconNode> = {
+export const VISIBILITY_ICON_NODES: Record<SharingIcon, IconNode> = {
+  shared: [
+    ['path', { d: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', key: 'users-body' }],
+    ['path', { d: 'M16 3.128a4 4 0 0 1 0 7.744', key: 'users-back-head' }],
+    ['path', { d: 'M22 21v-2a4 4 0 0 0-3-3.87', key: 'users-back-body' }],
+    ['circle', { cx: '9', cy: '7', r: '4', key: 'users-head' }],
+  ],
   private: [
     ['rect', { width: '18', height: '11', x: '3', y: '11', rx: '2', ry: '2', key: 'lock-body' }],
     ['path', { d: 'M7 11V7a5 5 0 0 1 10 0v4', key: 'lock-shackle' }],
@@ -21,7 +38,7 @@ export const VISIBILITY_ICON_NODES: Record<Visibility, IconNode> = {
 };
 
 /** Only the fixed, trusted geometry above is serialized; no authored attributes enter here. */
-export function visibilityIconPaths(visibility: Visibility): string {
+export function visibilityIconPaths(visibility: SharingIcon): string {
   return VISIBILITY_ICON_NODES[visibility].map(([tag, attributes]) =>
     `<${tag} ${Object.entries(attributes).filter(([name]) => name !== 'key').map(([name, value]) => `${name}="${value}"`).join(' ')}/>`
   ).join('');

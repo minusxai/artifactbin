@@ -19,6 +19,12 @@ const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   });
 
 describe('renderReaderChrome', () => {
+  it.each([
+    ['private', false, 'private'], ['private', true, 'shared'],
+    ['unlisted', true, 'unlisted'], ['public', true, 'public'],
+  ] as const)('selects %s with invitations=%s as %s', (visibility, hasInvitedUsers, icon) => {
+    expect(chrome({ visibility, hasInvitedUsers })).toContain(`data-mx-sharing-icon="${icon}"`);
+  });
   it('starts every reader breadcrumb with the artifactbin home link', () => {
     const html = chrome();
     expect(html).toContain('<a class="mx-reader-brand-crumb" href="/" target="_top">artifactbin</a>');

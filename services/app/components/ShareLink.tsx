@@ -22,7 +22,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';
 import { Crop, Check, createLucideIcon, Link as LinkIcon, PenLine, X } from 'lucide-react';
-import { VISIBILITY_ICON_NODES } from '@/lib/visibility-icons';
+import { VISIBILITY_ICON_NODES, sharingIconFor, type SharingVerdict } from '@/lib/visibility-icons';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
 import type { DatasetCatalog } from '@/lib/datasets/types';
@@ -43,6 +43,7 @@ interface SharingState {
 }
 
 const VISIBILITY_ICONS = {
+  shared: createLucideIcon('users', VISIBILITY_ICON_NODES.shared),
   public: createLucideIcon('globe', VISIBILITY_ICON_NODES.public),
   unlisted: createLucideIcon('eye-off', VISIBILITY_ICON_NODES.unlisted),
   private: createLucideIcon('lock', VISIBILITY_ICON_NODES.private),
@@ -69,7 +70,7 @@ export default function ShareLink({
   url,
   onClose,
   onSocialPreview,
-  onVisibilityChange,
+  onSharingChange,
 }: {
   className: string;
   /** Enables the ACL dialog; without it this is just the copy button. */
@@ -93,7 +94,7 @@ export default function ShareLink({
   /** Editors may configure the card without managing access. */
   onSocialPreview?: () => void;
   /** Keep a separately rendered toolbar verdict in sync with this dialog. */
-  onVisibilityChange?: (visibility: Visibility) => void;
+  onSharingChange?: (verdict: SharingVerdict) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [open, setOpen] = useState(variant === 'dialog');
@@ -111,8 +112,8 @@ export default function ShareLink({
   }, [copied]);
 
   useEffect(() => {
-    if (state) onVisibilityChange?.(state.visibility);
-  }, [state, onVisibilityChange]);
+    if (state) onSharingChange?.({ visibility: state.visibility, hasInvitedUsers: state.shares.length > 0 });
+  }, [state, onSharingChange]);
 
   const canManage = (owner || editable) && !!artifactId;
 
@@ -167,7 +168,7 @@ export default function ShareLink({
     );
   }
 
-  const VerdictIcon = VISIBILITY_ICONS[state?.visibility ?? 'private'];
+  const VerdictIcon = VISIBILITY_ICONS[sharingIconFor({ visibility: state?.visibility ?? 'private', hasInvitedUsers: (state?.shares.length ?? 0) > 0 })];
   /*
    * The WRITES row (datasets only).
    *

@@ -8,7 +8,7 @@ import { compactSurface } from '@/lib/story/page-transport';
  * server-run dataflow, the open-annotation count).
  */
 import { countOpenAnnotations } from '@/lib/annotations';
-import { canReadArtifact, declarationsForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -26,7 +26,7 @@ import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/input';
 import { canonicalArtifactPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
-import { browserSessionKind, roleFor, sessionActor } from '@/lib/viewer';
+import { actorForArtifacts, browserSessionKind, roleFor, sessionActor } from '@/lib/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate } from '@/lib/share-roles';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -120,6 +120,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     ...(declared?.flow.mutations?.length ? { mutateUrl: mutatePath(artifact.id) } : {}),
     ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } } : {}),
   }) : undefined;
+  const ownerScope = role === 'owner' ? actorForArtifacts(actor) : null;
+  const hasInvitedUsers = ownerScope ? ((await getArtifactFor(ownerScope, id))?.shares?.length ?? 0) > 0 : false;
   return json({
     canonical: canonicalArtifactPath(artifact, authorUsername),
     description: artifact.description,
@@ -137,6 +139,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       editId: artifact.edit_id,
       format: artifact.format,
       visibility: artifact.visibility,
+      ...(ownerScope ? { hasInvitedUsers } : {}),
       title: artifact.title,
       author: { username: authorUsername, forkedFrom },
       ...(runtime ? { runtime } : {}),

@@ -166,6 +166,23 @@ describe('the surface header buttons are owner chrome', () => {
     expect(share.querySelector('svg')?.innerHTML).toBe(option.querySelector('svg')?.innerHTML);
   });
 
+  it('uses the users icon for private invitations and restores the lock when the last person is removed', async () => {
+    let shares = [{ email: 'mxmx_test_guest@example.com', role: 'viewer' }];
+    vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+      if (init?.method === 'PUT') shares = JSON.parse(String(init.body)).shares;
+      return new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares }));
+    }));
+    render(<ArtifactShell role="owner"><ArtifactSurface {...surfaceProps({ hasInvitedUsers: true })} /></ArtifactShell>);
+    const share = document.querySelector<HTMLElement>('[data-mx-reader-action="share"]')!;
+    expect(share.querySelector('[data-mx-sharing-icon="shared"]')).not.toBeNull();
+    fireEvent.click(share);
+    fireEvent.click(await screen.findByLabelText('Remove mxmx_test_guest@example.com'));
+    await waitFor(() => expect(share.querySelector('[data-mx-sharing-icon="private"]')).not.toBeNull());
+    fireEvent.change(screen.getByLabelText('Invite email'), { target: { value: 'mxmx_test_guest@example.com' } });
+    fireEvent.click(screen.getByLabelText('Add email'));
+    await waitFor(() => expect(share.querySelector('[data-mx-sharing-icon="shared"]')).not.toBeNull());
+  });
+
   it('the owner keeps edit and share (via the shell signal)', () => {
     render(
       <ArtifactShell role="owner">
@@ -542,9 +559,9 @@ describe('the refresh row', () => {
 });
 
 describe('the fork row', () => {
-  const forkResponse = (status: number, body: unknown) => vi.fn(async () => ({
-    ok: status === 201, status, json: async () => body,
-  })) as unknown as typeof fetch;
+  const forkResponse = (status: number, body: unknown) => vi.fn(async (url: string) => url.endsWith('/sharing')
+    ? new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares: [] }))
+    : { ok: status === 201, status, json: async () => body }) as unknown as typeof fetch;
 
   /** Assign is observed the way login-form does it: a location whose href setter is a spy. */
   const withLocation = async (run: (assign: ReturnType<typeof vi.fn>) => Promise<void> | void, search = '') => {
