@@ -8,6 +8,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import { DRIVER_HEADER, startProxy, transportFor } from '../lib/proxy';
 import { parseLedger } from '../lib/ledger';
 
@@ -29,7 +30,12 @@ beforeAll(async () => {
         res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ id: 'x', markup: markup.replace('<p><div>', '<div>').replace('</div></p>', '</div>') })); return;
       }
       if (req.url === '/echo?unchanged=1' && req.method === 'PUT') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ id: 'x', markup_changed: false })); return; }
-      if (req.url === '/oauth/device' && req.method === 'POST') { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ device_code: 'd'.repeat(43), user_code: 'AB12-CD34', verification_uri_complete: 'http://x/oauth/device?user_code=AB12-CD34', expires_in: 300, interval: 5 })); return; }
+      if (req.url === '/oauth/device' && req.method === 'POST') {
+        // Like the live deployment: gzip for any client that offers it. The proxy must never offer it.
+        const json = JSON.stringify({ device_code: 'd'.repeat(43), user_code: 'AB12-CD34', verification_uri_complete: 'http://x/oauth/device?user_code=AB12-CD34', expires_in: 300, interval: 5 });
+        if (String(req.headers['accept-encoding'] ?? '').includes('gzip')) { res.writeHead(200, { 'content-type': 'application/json', 'content-encoding': 'gzip' }); res.end(zlib.gzipSync(json)); return; }
+        res.writeHead(200, { 'content-type': 'application/json', 'x-upstream-saw-accept-encoding': String(req.headers['accept-encoding'] ?? 'none') }); res.end(json); return;
+      }
       if (req.url === '/stream') { res.writeHead(200, { 'content-type': 'text/event-stream' }); res.write('data: 1\n\n'); setTimeout(() => res.end('data: 2\n\n'), 30); return; }
       res.writeHead(200, { 'content-type': 'text/plain', 'x-echo-ua': req.headers['user-agent'] ?? '', 'x-echo-host': req.headers.host ?? '' }); res.end('ok ' + req.method + ' ' + req.url);
     });
@@ -200,13 +206,23 @@ describe('the conditional echo', () => {
 });
 
 describe('device pairings', () => {
+  it('never asks upstream to compress — a gzip-offering client (the CLI\'s fetch) still gets a recorded user code (run 34697239503: 0/20, every pairing unapproved)', async () => {
+    const res = await fetch(`${proxy.url}/oauth/device`, { method: 'POST', headers: { 'content-type': 'application/json', 'accept-encoding': 'gzip, deflate, br' }, body: '{}' });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('x-upstream-saw-accept-encoding')).toBe('none');
+    expect((await res.json()).user_code).toBe('AB12-CD34');
+    await new Promise((r) => setTimeout(r, 50));
+    const entries = parseLedger(fs.readFileSync(ledgerPath, 'utf8')).filter((e) => e.path === '/oauth/device' && e.method === 'POST');
+    expect(entries.at(-1)?.userCode).toBe('AB12-CD34');
+  });
+
   it('records the user code and expiry of a pairing the agent started, so the approver needs nothing from the agent\'s home', async () => {
     const before = Date.now();
     const res = await fetch(`${proxy.url}/oauth/device`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     expect(res.status).toBe(200);
     expect((await res.json()).user_code).toBe('AB12-CD34');
     await new Promise((r) => setTimeout(r, 50));
-    const entry = parseLedger(fs.readFileSync(ledgerPath, 'utf8')).find((e) => e.path === '/oauth/device' && e.method === 'POST');
+    const entry = parseLedger(fs.readFileSync(ledgerPath, 'utf8')).filter((e) => e.path === '/oauth/device' && e.method === 'POST').at(-1);
     expect(entry?.userCode).toBe('AB12-CD34');
     expect(entry?.pairingExpiresAt).toBeGreaterThanOrEqual(before + 300_000);
     expect(entry?.pairingExpiresAt).toBeLessThan(before + 300_000 + 60_000);
