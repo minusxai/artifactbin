@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -211,4 +212,22 @@ describe('device pairings', () => {
     expect(entry?.pairingExpiresAt).toBeGreaterThanOrEqual(before + 300_000);
     expect(entry?.pairingExpiresAt).toBeLessThan(before + 300_000 + 60_000);
   });
+});
+
+describe('local release mirror', () => {
+ it('serves verified compressed core and SQL assets while rejecting unlisted files', async () => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'eval-release-'));
+  const assets=['afbin-linux-x64','afbin-linux-x64.gz','afbin-sql-linux-x64.gz'];
+  for(const name of [...assets,'private.txt'])fs.writeFileSync(path.join(dir,name),name);
+  const local=await startProxy({port:0,target:'http://127.0.0.1:1',ledgerPath:path.join(dir,'ledger'),localRelease:{version:'0.1.13',distDir:dir}});
+  try{
+   const base=`${local.url}/chat/releases/afbin-v0.1.13`;
+   const sums=await (await fetch(`${base}/SHA256SUMS`)).text();
+   for(const name of assets){
+    expect(sums).toContain(`${createHash('sha256').update(name).digest('hex')}  ${name}`);
+    const response=await fetch(`${base}/${name}`);expect(response.status).toBe(200);expect(await response.text()).toBe(name);
+   }
+   expect((await fetch(`${base}/private.txt`)).status).toBe(404);
+  }finally{await local.stop();fs.rmSync(dir,{recursive:true,force:true});}
+ });
 });

@@ -36,8 +36,9 @@ Prepare it before disconnecting with `afbin setup --service sql`; later queries 
 cache under `~/.artifactbin/services/sql` (`ARTIFACTBIN_HOME` relocates it). Each executable pins the
 package identity, so a CLI upgrade may need another first-use download. Corrupt cache entries fail
 closed with a removal/retry instruction. The npm/source CLI uses its installed DuckDB dependency.
-For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS origin (HTTP loopback
-also works); it serves `/afbin-vVERSION/afbin-sql-OS-ARCH.gz`. Checksums stay pinned in the executable.
+For development or a trusted mirror, `CLI__SERVICE_BASE_URL` accepts an HTTPS base URL with an optional path prefix (HTTP loopback
+also works); append `afbin-vVERSION/afbin-sql-OS-ARCH.gz` to that base. A locally built server
+uses `CLI__SERVICE_BASE_URL=http://localhost:3030/chat/releases`. Checksums stay pinned in the executable.
 The browser service is not shipped in the CLI; image exports continue to use the server.
 
 Remove it again with `curl -fsSL https://artifactbin.dev/chat/uninstall.sh | sh`. That deletes the

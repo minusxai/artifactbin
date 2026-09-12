@@ -15,7 +15,7 @@ const server=createServer((request,response)=>{requests++;if(request.url.endsWit
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 try{
  const blocker=join(home,'blocked');await writeFile(blocker,'not a temp directory');await writeFile(join(home,'report.jsx'),'<article><h1>Offline release</h1></article>');
- const env={HOME:home,PATH:process.env.PATH,ARTIFACTBIN_URL:`http://127.0.0.1:${server.address().port}`,TMPDIR:blocker,TMP:blocker,TEMP:blocker,CLI__SERVICE_BASE_URL:`http://127.0.0.1:${server.address().port}`};
+ const env={HOME:home,PATH:process.env.PATH,ARTIFACTBIN_URL:`http://127.0.0.1:${server.address().port}`,TMPDIR:blocker,TMP:blocker,TEMP:blocker,CLI__SERVICE_BASE_URL:`http://127.0.0.1:${server.address().port}/chat/releases`};
  for(const args of [['--version','--json'],['-h'],['help','markup'],['help','publishing-auth'],['help','errors'],['help','--format','markdown'],['help','export','--format','man','--output','-'],['help','--format','man','--output','afbin.1','--json'],['validate','report.jsx','--json'],['status','--json'],['diff','--json']]){
   const result=await run(binary,args,{cwd:home,env,timeout:10000,maxBuffer:1048576});assert.equal(result.stderr,'',args.join(' '));if(args.includes('--json'))assert.doesNotThrow(()=>JSON.parse(result.stdout));
  }

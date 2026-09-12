@@ -182,5 +182,6 @@ private cache atomically and verifies cached files before native loading. Concur
 stage independently but share the same immutable checksum directory. No user data enters download
 requests. `afbin setup --service sql` prepares offline use without selecting skills or authenticating.
 CLI upgrades pin their own package checksum; source/npm builds retain their installed dependencies.
-`CLI__SERVICE_BASE_URL` is owned by CLI config and changes only package transport, never trust.
+`CLI__SERVICE_BASE_URL` is owned by CLI config and changes only package transport, never trust. A base URL may include a path prefix;
+the local eval proxy serves the same compressed/core/native assets under `/chat/releases`.
 Browser rendering remains server-side and adds no mandatory browser bytes to this release.

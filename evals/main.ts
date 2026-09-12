@@ -184,7 +184,7 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
     const proxy = await startProxy({ port: 0, target: productUrl, ledgerPath, rewriteDeviceOrigin: publicOrigin, localRelease: { version: CLI_VERSION, distDir: path.join(REPO_ROOT, 'services/cli/dist') } });
     log(`${leg.label}/${taskId}: proxy :${proxy.port}`);
     // The agent is given the PROXY's address; the server mints its links from it.
-    return { agentBase: proxy.url, agentEnv: {}, ledgerPath, stop: proxy.stop };
+    return { agentBase: proxy.url, agentEnv: { CLI__SERVICE_BASE_URL: `${proxy.url}/chat/releases` }, ledgerPath, stop: proxy.stop };
   }
 
   // What this column costs BEFORE it does anything: one turn, one word, no product. It opens the

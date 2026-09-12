@@ -99,5 +99,7 @@ export async function saveConnection(
 export function servicePackageUrl(releaseUrl:string,env:NodeJS.ProcessEnv=process.env):string{
  if(!env.CLI__SERVICE_BASE_URL)return releaseUrl;
  const path=new URL(releaseUrl).pathname.split('/').slice(-2).join('/');
- return `${normalizeServer(env.CLI__SERVICE_BASE_URL)}/${path}`;
+ const base=new URL(env.CLI__SERVICE_BASE_URL),origin=normalizeServer(base.origin);
+ if(base.username||base.password||base.search||base.hash)throw new Error('Use a service base URL without credentials, query or fragment.');
+ return `${origin}${base.pathname.replace(/\/+$/,'')}/${path}`;
 }
