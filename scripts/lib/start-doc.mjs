@@ -35,8 +35,8 @@ export async function startDocument(base) {
   if (typeof body.prompt !== 'string'
     || body.prompt.includes('\n')
     || body.prompt.includes('\r')
-    || !body.prompt.includes(`using this token: ${token}`)) {
-    throw new Error('the start paste is not one line carrying the response token');
+    || body.prompt.includes('mx_')) {
+    throw new Error('the start paste is not one tokenless line');
   }
   return { id: body.id, token, editId: body.edit_id, prompt: body.prompt };
 }

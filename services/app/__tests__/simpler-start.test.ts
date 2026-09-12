@@ -106,10 +106,10 @@ describe('GET /a/<id>/start?k= — the brief', () => {
    * it already holds — and one WITHOUT it should be able to mention the plugin
    * to its user, not be told to install anything itself.
    */
-  it('names the plugin as the smoother path without demanding it', async () => {
+  it('names afbin as the path without demanding a plugin', async () => {
     const s = await start();
     const text = await (await startBrief(request(s.startPath), params(s.id))).text();
-    expect(text).toMatch(/skills|plugin/i);
+    expect(text).toMatch(/afbin/i);
     expect(text).not.toMatch(/must install|install the plugin first/i);
   });
 

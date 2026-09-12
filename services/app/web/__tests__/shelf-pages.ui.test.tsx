@@ -206,7 +206,6 @@ describe('what the dashboard leads with', () => {
     // The SAME door, open, with both paths on the page: an empty library must
     // not be a page whose only content is a closed strip.
     expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
-    expect(screen.getByLabelText('Copy the setup command')).toBeInTheDocument();
     expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(panel.compareDocumentPosition(examples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
