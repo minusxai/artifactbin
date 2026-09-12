@@ -92,5 +92,14 @@ test('eager init installs the detected skill on a local command and is idempoten
   const second:string[]=[];
   assert.equal(await runCli(['help'],{home,cwd:home,env,interactive:false,stdout:()=>{},stderr:s=>second.push(s),fetch:async()=>assert.fail('init must stay offline')}),0);
   assert.equal(second.join(''),'','a current skill is not reinstalled');
+  // afbin status reports each harness' skill directory and whether it is installed/current, offline.
+  const st:string[]=[];
+  assert.equal(await runCli(['status','--json'],{home,cwd:home,env,interactive:false,stdout:s=>st.push(s),stderr:()=>{},fetch:async()=>assert.fail('status is local')}),0);
+  const skills=JSON.parse(st.join('')).skills as Array<{harness:string;path:string;installed:boolean;current:boolean}>;
+  assert.equal(skills.length,4);
+  const pi=skills.find(x=>x.harness==='pi')!;
+  assert.equal(pi.path,join(home,'.pi','agent','skills','artifactbin'));
+  assert.equal(pi.installed,true);assert.equal(pi.current,true);
+  assert.equal(skills.find(x=>x.harness==='codex')!.installed,false);
  }finally{await rm(home,{recursive:true,force:true});}
 });

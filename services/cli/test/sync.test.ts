@@ -109,7 +109,7 @@ test('remote status observes a newer head without replacing the local sync base'
  try{
   await saveConnection({server:'https://example.com',token:'mx_test'},root);assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
   head={...head,version:2,edit_id:'two',state:digest('two'),markup:'<p id="p001">Second</p>'};
-  const remote=await invoke(['status','--remote']);assert.equal(remote.code,0,JSON.stringify(remote.result));assert.equal(remote.result.files[0].remote,'changed');
+  const remote=await invoke(['status','--remote']);assert.equal(remote.code,0,JSON.stringify(remote.result));assert.equal(remote.result.files[0].remote,'changed');assert.ok(Array.isArray(remote.result.skills));
   const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));assert.equal(lock.files['doc.jsx'].snapshot.version,1);assert.equal(lock.files['doc.jsx'].observed.version,2);
   const before=reads;assert.equal((await invoke(['status'])).code,0);assert.equal(reads,before);
   const diff=await invoke(['diff','doc.jsx','--remote']);assert.equal(diff.code,0,JSON.stringify(diff.result));assert.match(diff.result.diffs[0].diff,/-.*Second/);assert.match(diff.result.diffs[0].diff,/\+.*First/);
