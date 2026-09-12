@@ -19,18 +19,18 @@
  *
  *   usage: node scripts/gate-viz-editor.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
 // Printed AS IT HAPPENS, not collected and dumped at the end: this gate has a
 // long signed-in leg, and a silent run gives no way to tell a hang from slow
 // progress — which cost two full timeout runs before anyone could see that it
 // was stuck rather than crawling.
-const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
+const check = createChecker('viz-editor');
 
 const api = async (path, init = {}, token) => {
   const res = await fetch(`${B}${path}`, {
@@ -113,78 +113,78 @@ const optionsOf = async (pg, label) => {
 
 // ── the journey ─────────────────────────────────────────────────────────────
 await openEditor();
-ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'the inspector stays shut until a chart is clicked');
+check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'the inspector stays shut until a chart is clicked');
 
 await clickChart();
-ok(await p.locator('[aria-label="Chart editor"]').isVisible(), 'clicking a chart opens the inspector');
-ok((await triggerText(p, 'Table')).includes('$sales'), 'it opens on the table the document names');
-ok((await triggerText(p, 'Chart type')).includes('table'), 'and reports a viz-less Question as a table');
+check(await p.locator('[aria-label="Chart editor"]').isVisible(), 'clicking a chart opens the inspector');
+check((await triggerText(p, 'Table')).includes('$sales'), 'it opens on the table the document names');
+check((await triggerText(p, 'Chart type')).includes('table'), 'and reports a viz-less Question as a table');
 // The shelf is the DOCUMENT's own declarations — nothing fetched, nothing to wait for.
 const options = await optionsOf(p, 'Table');
-ok(options.some((o) => o.includes('$sales')) && options.some((o) => o.includes('$costs')),
+check(options.some((o) => o.includes('$sales')) && options.some((o) => o.includes('$costs')),
   'the picker offers exactly the tables the document declares');
-ok((await p.locator('[aria-label="Missing table notice"]').count()) === 0,
+check((await p.locator('[aria-label="Missing table notice"]').count()) === 0,
   'and does not call a declared binding "missing"');
 
 await pick('Chart type', 'bar');
 await pick('X-Axis', 'region');
 await pick('Y-Axis', 'revenue');
 await p.waitForTimeout(2500);
-ok((await marks()) > 0, `vega draws the chart that was just built (${await marks()} marks)`);
-ok(!/data unavailable/.test(await frameText()), 'and it is not showing the failure state');
+check((await marks()) > 0, `vega draws the chart that was just built (${await marks()} marks)`);
+check(!/data unavailable/.test(await frameText()), 'and it is not showing the failure state');
 await p.screenshot({ path: '/tmp/viz-editor-built.png' });
 
 // ── it persisted, and the rest of the document is intact ────────────────────
 await p.waitForTimeout(1200); // let the queue drain
 let stored = await api(`/api/artifacts/${start.id}`, {}, token);
-ok(/"mark"\s*:\s*("bar"|\{[^}]*"type"\s*:\s*"bar")/.test(stored.markup), 'the bar mark is in the STORED document');
-ok(stored.markup.includes('"field":"region"') && stored.markup.includes('"field":"revenue"'), 'with both encodings');
-ok(stored.markup.includes('A paragraph that must survive'), 'and the prose around it is untouched');
-ok(stored.markup.includes('<h1 id="heading" className="text-3xl font-bold">Quarterly review</h1>'), 'as is the heading');
+check(/"mark"\s*:\s*("bar"|\{[^}]*"type"\s*:\s*"bar")/.test(stored.markup), 'the bar mark is in the STORED document');
+check(stored.markup.includes('"field":"region"') && stored.markup.includes('"field":"revenue"'), 'with both encodings');
+check(stored.markup.includes('A paragraph that must survive'), 'and the prose around it is untouched');
+check(stored.markup.includes('<h1 id="heading" className="text-3xl font-bold">Quarterly review</h1>'), 'as is the heading');
 
 // ── a SECOND edit, after a reload — where a canonical-form drift would show ──
 await openEditor();
 // Poll rather than sleep: a fixed wait tuned on localhost fails against a
 // deployed server purely for latency, which reads as a broken chart and is not.
 for (let i = 0; i < 40 && !(await marks()); i++) await p.waitForTimeout(500);
-ok((await marks()) > 0, 'the chart is still there after a reload');
+check((await marks()) > 0, 'the chart is still there after a reload');
 await clickChart();
-ok((await triggerText(p, 'Chart type')).includes('bar'), 'the inspector reads the chart back from the document');
+check((await triggerText(p, 'Chart type')).includes('bar'), 'the inspector reads the chart back from the document');
 
 await pick('Chart type', 'line');
 await pick('Table', '$costs');
 await pick('X-Axis', 'month');
 await pick('Y-Axis', 'spend');
 await p.waitForTimeout(2500);
-ok((await marks()) > 0, 'the rebound chart renders — the seeded dataflow already held the other table');
-ok(!/data unavailable/.test(await frameText()), 'and never settles on "data unavailable"');
+check((await marks()) > 0, 'the rebound chart renders — the seeded dataflow already held the other table');
+check(!/data unavailable/.test(await frameText()), 'and never settles on "data unavailable"');
 
 await p.waitForTimeout(1200);
 stored = await api(`/api/artifacts/${start.id}`, {}, token);
-ok(stored.markup.includes('data="$costs"'), 'the second edit repointed the stored document');
-ok(/"mark"\s*:\s*("line"|\{[^}]*"type"\s*:\s*"line")/.test(stored.markup), 'and changed the stored mark');
-ok(!stored.markup.includes('data="$sales"'), 'with no trace of the old binding left behind');
-ok(stored.markup.includes('A paragraph that must survive'), 'and the document survived TWO edits intact');
-ok(stored.version >= 3, `each edit was its own version (v${stored.version})`);
+check(stored.markup.includes('data="$costs"'), 'the second edit repointed the stored document');
+check(/"mark"\s*:\s*("line"|\{[^}]*"type"\s*:\s*"line")/.test(stored.markup), 'and changed the stored mark');
+check(!stored.markup.includes('data="$sales"'), 'with no trace of the old binding left behind');
+check(stored.markup.includes('A paragraph that must survive'), 'and the document survived TWO edits intact');
+check(stored.version >= 3, `each edit was its own version (v${stored.version})`);
 
 // ── back to a table, which is a real state and not a broken chart ───────────
 await pick('Chart type', 'table');
 await p.waitForTimeout(2000);
 stored = await api(`/api/artifacts/${start.id}`, {}, token);
-ok(!/viz=/.test(stored.markup), 'choosing "table" REMOVES the viz prop rather than storing an empty chart');
-ok(stored.markup.includes('data="$costs"'), 'while keeping the data binding');
+check(!/viz=/.test(stored.markup), 'choosing "table" REMOVES the viz prop rather than storing an empty chart');
+check(stored.markup.includes('data="$costs"'), 'while keeping the data binding');
 const tableText = await frameText();
-ok(/month|spend/i.test(tableText), 'and the page falls back to the data table');
+check(/month|spend/i.test(tableText), 'and the page falls back to the data table');
 await p.screenshot({ path: '/tmp/viz-editor-table.png' });
 
 // ── the inspector is not offered where it must not write ────────────────────
 await p.locator('[aria-label="Close chart inspector"]').click();
-ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts it');
+check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts it');
 {
   const f = frame();
   await f.locator('h1').first().click();
   await p.waitForTimeout(300);
-  ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'clicking prose leaves the chart inspector shut');
+  check((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'clicking prose leaves the chart inspector shut');
 }
 
 // ── "loading" belongs to ONE chart, not the document ────────────────────────
@@ -209,9 +209,9 @@ ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts 
   // for real: the document was valid when written and its query fails now.
   const good = twoCharts.replace('select nope from', 'select spend as nope from');
   const st = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Two', markup: good, theme: 'manuscript' }) }, token);
-  ok(!!st.id, 'the two-chart story published');
+  check(!!st.id, 'the two-chart story published');
   const refreshed = await api(`/api/artifacts/${costs.id}`, { method: 'PUT', body: JSON.stringify({ title: 'Monthly costs', dataset: 'month,cost\n2026-01,900' }) }, token);
-  ok(Array.isArray(refreshed.warnings) && JSON.stringify(refreshed.warnings).includes(st.id), 'the dataset refresh WARNED that the story broke');
+  check(Array.isArray(refreshed.warnings) && JSON.stringify(refreshed.warnings).includes(st.id), 'the dataset refresh WARNED that the story broke');
 
   const p2 = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   await becomeOwner(p2, B, token); // a fresh page owns nothing until it holds the cookie
@@ -230,7 +230,7 @@ ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts 
     return fr ? await fr.locator('[data-mx-ast="0.2"]').innerText().catch(() => '') : '';
   };
   for (let i = 0; i < 25; i++) await p2.waitForTimeout(200);
-  ok(/failed/i.test(await brokenText()), 'a chart whose query fails says so, not a permanent "loading"');
+  check(/failed/i.test(await brokenText()), 'a chart whose query fails says so, not a permanent "loading"');
 
   await frame2().locator('[aria-label="Question embed"]').first().click();
   await p2.waitForSelector('[aria-label="Chart editor"]', { timeout: 20000 });
@@ -240,7 +240,7 @@ ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts 
     await p2.waitForTimeout(150);
     if (/loading/i.test(await brokenText())) brokenSaidLoading = true;
   }
-  ok(!brokenSaidLoading, 'and never starts claiming to load because ANOTHER chart is busy');
+  check(!brokenSaidLoading, 'and never starts claiming to load because ANOTHER chart is busy');
   await p2.close();
 }
 
@@ -261,13 +261,13 @@ ok((await p.locator('[aria-label="Chart editor"]').count()) === 0, 'close shuts 
   const applied = await api(`/api/artifacts/${start.id}/edits`, {
     method: 'POST', body: JSON.stringify({ edit_id: before.edit_id, source: shifted }),
   }, token);
-  ok(!!applied.edit_id && applied.edit_id !== before.edit_id, 'the agent edit landed while the inspector was open');
+  check(!!applied.edit_id && applied.edit_id !== before.edit_id, 'the agent edit landed while the inspector was open');
   // The live stream delivers it; the editor adopts because it is idle.
   await p.waitForTimeout(4000);
-  ok((await p.locator('[aria-label="Chart editor"]').count()) === 0,
+  check((await p.locator('[aria-label="Chart editor"]').count()) === 0,
     'the inspector closed rather than silently re-targeting the shifted path');
   const after = await api(`/api/artifacts/${start.id}`, {}, token);
-  ok(after.markup.includes('Agent chart'), 'and the agent\'s work is intact');
+  check(after.markup.includes('Agent chart'), 'and the agent\'s work is intact');
 }
 
 // ── the SIGNED-IN path: a different list endpoint entirely ──────────────────
@@ -300,7 +300,7 @@ try {
   await sf.locator('[aria-label="Question embed"]').first().click();
   await page.waitForSelector('[aria-label="Chart editor"]', { timeout: 20000 });
   const sessionOptions = await optionsOf(page, 'Table');
-  ok(sessionOptions.some((o) => o.includes('$sales')) && sessionOptions.some((o) => o.includes('$costs')),
+  check(sessionOptions.some((o) => o.includes('$sales')) && sessionOptions.some((o) => o.includes('$costs')),
     'a signed-in owner gets the same picker — the document declares it, no list to fetch');
   await pickIn(page, 'Chart type', 'bar');
   await page.waitForTimeout(600);
@@ -316,15 +316,15 @@ try {
   await page.waitForTimeout(600);
   const yCol = await pickCol('Y-Axis');
   await page.waitForTimeout(2500);
-  ok(!!xCol && !!yCol, `the session-mode panel offered real columns (${xCol}, ${yCol})`);
+  check(!!xCol && !!yCol, `the session-mode panel offered real columns (${xCol}, ${yCol})`);
   const sm = sf ? await sf.locator('svg.marks, canvas').count().catch(() => 0) : 0;
-  ok(sm > 0, 'and can build a chart with no stored token at all');
+  check(sm > 0, 'and can build a chart with no stored token at all');
   const after = await api(`/api/artifacts/${start.id}`, {}, token);
-  ok(/"mark"\s*:\s*("bar"|\{[^}]*"type"\s*:\s*"bar")/.test(after.markup), 'which persists through the session-authed edit route');
+  check(/"mark"\s*:\s*("bar"|\{[^}]*"type"\s*:\s*"bar")/.test(after.markup), 'which persists through the session-authed edit route');
   sink.close();
 } catch (err) {
   // Reported, never swallowed: a leg that could not run is not a leg that passed.
-  ok(false, `the signed-in leg could not run — read its OTP with npm run dev:otp -- <email> (${String(err).split('\n').slice(0,4).join(' | ')})`);
+  check(false, `the signed-in leg could not run — read its OTP with npm run dev:otp -- <email> (${String(err).split('\n').slice(0,4).join(' | ')})`);
 }
 
 // ── a chart INSIDE A GRID selects on the FIRST click ────────────────────────
@@ -347,7 +347,7 @@ try {
     + `<GridItem x={6} y={0} w={6} h={4}><Question title="Grid table" data="$gsales" /></GridItem>`
     + `</Grid></div>`;
   const gd = await api('/api/artifacts', { method: 'POST', body: JSON.stringify({ title: 'Grid dash', markup: gridDoc, theme: 'manuscript' }) }, token);
-  ok(!!gd.id, 'the grid dashboard published');
+  check(!!gd.id, 'the grid dashboard published');
   const pg = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   await becomeOwner(pg, B, token);
   await pg.goto(`${B}/a/${gd.id}#edit`, { waitUntil: 'load' });
@@ -355,14 +355,14 @@ try {
   const gf = () => pg.mainFrame();
   // Edit is LIVE when RGL's drag layer exists — that layer is the thing under test.
   for (let i = 0; i < 120 && !(await gf()?.locator('.react-grid-item').count().catch(() => 0)); i++) await pg.waitForTimeout(150);
-  ok((await gf().locator('.react-grid-item').count()) > 0, 'edit mode wrapped the grid in the drag layer — otherwise this proves nothing');
+  check((await gf().locator('.react-grid-item').count()) > 0, 'edit mode wrapped the grid in the drag layer — otherwise this proves nothing');
   for (let i = 0; i < 40 && !(await gf().locator('svg.marks, canvas').count().catch(() => 0)); i++) await pg.waitForTimeout(250);
   // ONE plain click, dead center on the chart — no drag, no shake.
   await gf().locator('[aria-label="Question embed"]').first().click();
   const opened = await pg.waitForSelector('[aria-label="Chart editor"]', { timeout: 8000 }).then(() => true).catch(() => false);
-  ok(opened, 'ONE click on a chart inside a grid opens the inspector');
+  check(opened, 'ONE click on a chart inside a grid opens the inspector');
   await pg.close();
 }
 
 await b.close();
-process.exit(out.some((l) => l.startsWith('FAIL')) ? 1 : 0);
+check.done();

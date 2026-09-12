@@ -1,18 +1,15 @@
 /**
- * THE POLICY FILE — where it is found, what it refuses, and the one claim the whole change rests on:
- * THE PORT IS A NO-OP. `default_rate_limits.yml` reproduces every (method, path) → (policy, max, window,
- * burst, key) pair the old `doorFor` + `DOORS` produced, and the three shipped files differ ONLY in the
- * anonymous mint's ceiling.
+ * THE POLICY FILE — where it is found, what it refuses, the vocabulary it may use, and what the card
+ * route's discount actually buys. The three shipped files differ ONLY in the start door's ceiling.
  *
- * Seeded RED by the planner: `services/proxy/src/rate-limits.ts` is a skeleton whose every body throws.
- * The parity `describe` compares against `doorFor`/`DOORS`, which still exist at seed time and are DELETED
- * by M1 — the implementer replaces this block's old side with the frozen table in `PARITY` below (it is
- * written out in full for exactly that reason) and deletes the import.
+ * The frozen parity table that proved the port off the old `doorFor`/`DOORS` engine was a one-time
+ * migration proof against code that no longer exists; it is gone, along with the case asserting those
+ * modules were deleted. What replaced the engine is asserted here directly, on the shipped files.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createRateLimiter, memoryBackend, routeFor } from '@artifactbin/utils/rate-limits';
+import { createRateLimiter, memoryBackend } from '@artifactbin/utils/rate-limits';
 import { DEFAULT_POLICY_FILE, defaultPolicyFilePath, loadPolicyFile, POLICY_FILE_ENV, resolvePolicyFilePath } from '../src/rate-limits';
 
 const ROOT = path.resolve(__dirname, '../../..');
@@ -46,90 +43,12 @@ describe('the three shipped files', () => {
       expect(f.routes.map((r) => r.path)).toEqual(loaded[0]!.routes.map((r) => r.path));
       expect(f.always, 'nothing is metered globally today — see PLAN §2 R6').toEqual([]);
     }
+    // The vocabulary is exactly the doors that exist: no global, start_link or events_streams,
+    // and no anonymous mint.
+    expect(Object.keys(loaded[0]!.policies).sort()).toEqual(['card', 'edit', 'export', 'login_send', 'login_verify', 'mutate', 'oauth_register', 'oauth_token', 'publish', 'query', 'start_doc']);
     const withoutMint = (f: (typeof loaded)[number]) => JSON.stringify({ ...f.policies, start_doc: null }, (_k, v) => (v instanceof RegExp ? String(v) : v));
     expect(withoutMint(loaded[1]!)).toBe(withoutMint(loaded[0]!));
     expect(withoutMint(loaded[2]!)).toBe(withoutMint(loaded[0]!));
-  });
-});
-
-/**
- * THE FROZEN PARITY TABLE — every representative request, and the policy the OLD code gave it. Measured in
- * planning by walking both implementations (`.agent/PLAN.md` §2 R3, 33 requests, 0 differences).
- * `—` means no limit at all: `doorFor` returned null and nothing global was applied.
- *
- * THE TWO `?mode=card` ROWS ARE THE ONE DELIBERATE DIFFERENCE (M2). `doorFor` gave them EXPORT, because it
- * could not see a query string at all; the file routes them to `card`, which keeps the SAME ceiling on
- * DISTINCT documents and makes re-fetching ONE of them nearly free. That is the whole point of the route —
- * an unfurl of one page is fetched by every reader who sees the link, and none of them asked for a render.
- */
-const PARITY: Array<[method: string, url: string, policy: string | null, max: number, windowSeconds: number, burst: number, key: string, browserOnly: boolean]> = [
-  // The retired public mint is not a route at all any more, in the file or the app.
-  ['POST', '/api/tokens/anonymous', null, 0, 0, 0, '', false],
-  ['GET', '/api/tokens/anonymous', null, 0, 0, 0, '', false],
-  // The create button: `browser_only` on the POST, and only on the POST.
-  ['POST', '/api/start', 'start_doc', 0, 3600, 5, 'ip', true],
-  ['GET', '/api/start', 'start_doc', 0, 3600, 5, 'ip', false],
-  ['POST', '/api/auth/email-otp/send-verification-otp', 'login_send', 5, 3600, 1, 'email', false],
-  ['POST', '/api/auth/sign-in/email', 'login_verify', 60, 900, 1, 'ip', false],
-  ['POST', '/api/auth/email-otp/verify-email', 'login_verify', 60, 900, 1, 'ip', false],
-  ['GET', '/api/auth/session', null, 0, 0, 0, '', false],
-  ['POST', '/oauth/register', 'oauth_register', 30, 60, 1, 'ip', false],
-  ['POST', '/oauth/token', 'oauth_token', 30, 60, 1, 'ip', false],
-  ['GET', '/oauth/authorize', null, 0, 0, 0, '', false],
-  ['POST', '/a/abc123/mutate', 'mutate', 60, 60, 1, 'ip', false],
-  ['POST', '/a/abc123/query', 'query', 600, 60, 1, 'ip', false],
-  ['POST', '/api/query', 'query', 600, 60, 1, 'ip', false],
-  ['GET', '/a/abc123/export', 'export', 30, 60, 1, 'actor', false],
-  ['GET', '/a/abc123/export?mode=png', 'export', 30, 60, 1, 'actor', false],
-  // M2: the query row sits ABOVE the plain export row, so `?mode=card` never reaches `export`.
-  ['GET', '/a/abc123/export?mode=card', 'card', 600, 60, 1, 'actor', false],
-  // the real unfurl shape a served document puts in its og:image — extra params must not lose the row
-  ['GET', '/a/abc123/export?mode=card&v=1&r=2', 'card', 600, 60, 1, 'actor', false],
-  ['POST', '/a/abc123/edits', 'edit', 600, 60, 1, 'actor', false],
-  ['GET', '/a/abc123/edits', 'edit', 600, 60, 1, 'actor', false],
-  ['POST', '/api/artifacts', 'publish', 600, 60, 1, 'actor', false],
-  ['GET', '/api/artifacts', null, 0, 0, 0, '', false],
-  ['PATCH', '/api/artifacts/abc', 'publish', 600, 60, 1, 'actor', false],
-  ['DELETE', '/api/my/artifacts/abc', 'publish', 600, 60, 1, 'actor', false],
-  ['POST', '/mcp', 'publish', 600, 60, 1, 'actor', false],
-  ['GET', '/mcp', null, 0, 0, 0, '', false],
-  ['GET', '/', null, 0, 0, 0, '', false],
-  ['GET', '/a/abc123', null, 0, 0, 0, '', false],
-  ['GET', '/docs', null, 0, 0, 0, '', false],
-  ['GET', '/health', null, 0, 0, 0, '', false],
-  ['GET', '/assets/app.js', null, 0, 0, 0, '', false],
-  ['POST', '/api/tokens', null, 0, 0, 0, '', false],
-  ['GET', '/account', null, 0, 0, 0, '', false],
-  ['POST', '/api/artifacts/abc/versions', 'publish', 600, 60, 1, 'actor', false],
-];
-
-describe('the port is a NO-OP: default_rate_limits.yml reproduces every old door', () => {
-  it('every representative request gets the same policy, the same four numbers and the same browser-only verdict', () => {
-    const file = loadPolicyFile(shipped('default_rate_limits.yml'));
-    const limiter = createRateLimiter({ file, backend: memoryBackend() });
-    const diffs: string[] = [];
-    for (const [method, url, policy, max, windowSeconds, burst, key, browserOnly] of PARITY) {
-      const hit = routeFor(file, method, `http://localhost:6601${url}`);
-      const got = hit ? hit.policies : null;
-      if (policy === null) {
-        if (got !== null) diffs.push(`${method} ${url}: expected NO limit, got ${got!.join('+')}`);
-      } else if (got === null || got.length !== 1 || got[0] !== policy) {
-        diffs.push(`${method} ${url}: expected ${policy}, got ${got === null ? '—' : got.join('+')}`);
-      } else {
-        const p = file.policies[policy]!;
-        const spec = `${p.max}/${p.windowSeconds}/${p.burst}/${p.key}`;
-        if (spec !== `${max}/${windowSeconds}/${burst}/${key}`) diffs.push(`${method} ${url}: ${policy} is ${spec}, expected ${max}/${windowSeconds}/${burst}/${key}`);
-      }
-      const isBrowserOnly = limiter.browserOnly({ method, url: `http://localhost:6601${url}` });
-      if (isBrowserOnly !== browserOnly) diffs.push(`${method} ${url}: browser_only ${isBrowserOnly}, expected ${browserOnly}`);
-    }
-    expect(diffs).toEqual([]);
-    expect(PARITY).toHaveLength(34);
-  });
-
-  it('the vocabulary is exactly the doors that exist: no global, start_link, events_streams — and no anonymous mint', () => {
-    const file = loadPolicyFile(shipped('default_rate_limits.yml'));
-    expect(Object.keys(file.policies).sort()).toEqual(['card', 'edit', 'export', 'login_send', 'login_verify', 'mutate', 'oauth_register', 'oauth_token', 'publish', 'query', 'start_doc']);
   });
 });
 
@@ -229,11 +148,5 @@ describe('every number lives in a file, and nowhere else', () => {
       'scripts/gates.mjs', 'evals/config.json', 'infra/env/proxy.env.example', '.github/workflows/ci.yml',
     ]) scan(rel);
     expect(offenders).toEqual([]);
-  });
-  it('the doors\' engine, vocabulary and env are deleted outright', () => {
-    for (const gone of ['services/contracts/src/doors.ts', 'services/utils/src/doors.ts', 'services/app/lib/rate-limiter/index.ts', 'services/app/lib/rate-limiter/memory.ts']) {
-      expect(existsSync(path.join(ROOT, gone)), `${gone} still exists`).toBe(false);
-    }
-    expect(readFileSync(path.join(ROOT, 'services/proxy/src/parts.ts'), 'utf8')).not.toMatch(/doorFor|anonMintDoor|DoorName/);
   });
 });

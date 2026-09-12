@@ -12,7 +12,7 @@
  * machine on a cloud box must still never be a metadata oracle.
  */
 
-export type WebIngestErrorCode =
+type WebIngestErrorCode =
   | 'invalid_url'        // not a parseable http(s) URL, or carries credentials / a custom port
   | 'forbidden_scheme'   // not https (or http where the policy allows it)
   | 'forbidden_host'     // outside the caller's allowHosts narrowing

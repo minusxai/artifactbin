@@ -1,3 +1,12 @@
+import {PGlite} from '@electric-sql/pglite';
+import {afterAll,beforeAll,beforeEach,describe,expect,it,vi} from 'vitest';
+import {eventName} from '@artifactbin/contracts';
+import {fakeEvents,type FakeEvents} from '@artifactbin/utils';
+import {createHumanAuth,type HumanAuth,humanAuthOptions} from '../src/auth/human';
+import {withHttpServer,type RunningServer} from '@artifactbin/test-support/net';
+import {Kysely} from 'kysely';
+import {pgliteDialect} from '../src/auth/pglite';
+
 /**
  * HUMAN LOGIN — Better Auth core + emailOTP + genericOAuth, configured the
  * way the plan says is load-bearing: sessions DB-backed with the cookie cache
@@ -5,12 +14,6 @@
  * email only, email change verified at the new address, passwords never.
  * On one PGLite, with its tables in the `auth` schema (spike I).
  */
-import { PGlite } from '@electric-sql/pglite';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { eventName } from '@artifactbin/contracts';
-import { fakeEvents, type FakeEvents } from '@artifactbin/utils';
-import { createHumanAuth, type HumanAuth } from '../src/auth/human';
-import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
 
 let pg: PGlite;
 let auth: HumanAuth;
@@ -160,5 +163,44 @@ describe('OIDC', () => {
     events.events.length = 0;
     await oidcRoundTrip({ id: 'oidc-quiet', email: 'quiet@example.com', emailVerified: false });
     expect(verbs()).toEqual([]);
+  });
+});
+
+describe('the options object', () => {
+  /**
+   * humanAuthOptions IS THE OPTIONS, AND NOTHING ELSE (P2 §G.3). The schema
+   * renderer and the runtime (createHumanAuth) must build
+   * Better Auth's config from ONE object — a renderer that holds a copy of
+   * fifty load-bearing options is a copy that drifts. So the options builder is
+   * PURE: no schema opened, no migration run, no discovery fetched. Everything
+   * with a side effect stays in createHumanAuth.
+   */
+
+  let pg: PGlite;
+  beforeAll(async () => { pg = new PGlite(); });
+  afterAll(async () => { await pg.close(); });
+
+  describe('humanAuthOptions', () => {
+    it('is pure: it opens no schema, runs no migration and fetches no discovery', async () => {
+      const before = await pg.query<{ nspname: string }>("select nspname from pg_namespace where nspname not in ('pg_catalog','information_schema','pg_toast')");
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('humanAuthOptions must not fetch'));
+      const dialect = pgliteDialect(pg);
+      const db = new Kysely<Record<string, unknown>>({ dialect });
+      const options = humanAuthOptions(
+        {
+          secret: 'pure-secret'.padEnd(32, '0'), baseURL: 'http://localhost:4794', mail: { send: async () => {} },
+          // Explicit endpoints on purpose: a discoveryUrl would make the purity of this function the only thing standing between boot and a network call.
+          oidc: { providerId: 'acme', clientId: 'cid', clientSecret: 'sec', authorizationUrl: 'http://127.0.0.1:1/authorize', tokenUrl: 'http://127.0.0.1:1/token' },
+        },
+        db.withSchema('auth'),
+      );
+      expect(options).toBeTruthy();
+      expect(options.baseURL).toBe('http://localhost:4794');
+      expect(fetchSpy).not.toHaveBeenCalled();
+      fetchSpy.mockRestore();
+      const after = await pg.query<{ nspname: string }>("select nspname from pg_namespace where nspname not in ('pg_catalog','information_schema','pg_toast')");
+      expect(after.rows.map((r) => r.nspname)).toEqual(before.rows.map((r) => r.nspname));
+      expect((await pg.query<{ n: string }>("select count(*)::text n from information_schema.tables where table_schema = 'auth'")).rows[0].n).toBe('0');
+    });
   });
 });

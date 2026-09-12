@@ -42,7 +42,7 @@ export type MdInline =
   | { kind: 'link'; href: string; children: MdInline[] }
   | { kind: 'break' };
 
-export interface MdListItem {
+interface MdListItem {
   /** A paragraph, and — one level deep only — a nested list under it. */
   children: MdNode[];
 }
@@ -56,14 +56,14 @@ export type MdNode =
 /** The composer toolbar's five verbs; `wrapSelection` is the whole edit. */
 export type MdMarker = 'bold' | 'italic' | 'code' | 'link' | 'list';
 
-export interface MdSelection {
+interface MdSelection {
   text: string;
   start: number;
   end: number;
 }
 
 /** The subset's block nesting: a quote inside a quote inside a quote, no deeper. */
-export const MD_MAX_DEPTH = 3;
+const MD_MAX_DEPTH = 3;
 
 const SCHEMES = ['http:', 'https:', 'mailto:'];
 /** Everything a browser strips out of a URL before it reads the scheme. */

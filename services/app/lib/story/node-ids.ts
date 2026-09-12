@@ -2,10 +2,10 @@
 import crypto from 'crypto';
 import { parseJsx, serializeJsx, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
 
-export interface NodeIdEntry { id: string; path: string; node: JsxElement; legacyKey: string | null }
-export interface NodeIdRepair { path: string; from: string | null; to: string; reason: 'duplicate' | 'invalid' }
-export interface NodeIdAlias { legacyKey: string; nodeId: string; path: string }
-export interface NodeIdOptions {
+interface NodeIdEntry { id: string; path: string; node: JsxElement; legacyKey: string | null }
+interface NodeIdRepair { path: string; from: string | null; to: string; reason: 'duplicate' | 'invalid' }
+interface NodeIdAlias { legacyKey: string; nodeId: string; path: string }
+interface NodeIdOptions {
   previousSource?: string | null;
   /** Lifetime ledger, not just the current head. Only fresh generation excludes these. */
   reservedIds?: Iterable<string>;
@@ -16,7 +16,7 @@ export interface NodeIdOptions {
   /** Removing conflicting legacy attributes requires atomic relation migration by caller. */
   retireLegacyAliases?: boolean;
 }
-export interface NodeIdResult {
+interface NodeIdResult {
   source: string;
   ids: string[];
   minted: number;

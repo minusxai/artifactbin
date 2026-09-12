@@ -8,7 +8,7 @@ import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {CliError} from './commands';
 import {digest} from './files';
 import {confinedPath} from './journal';
-export type DependencyFormat='image'|'pdf'|'file'|'dataset';
+type DependencyFormat='image'|'pdf'|'file'|'dataset';
 export interface Dependency {bytes:Buffer;path:string;authored:string;id:string;sha256:string;size:number;filename:string;format:DependencyFormat;input:Record<string,unknown>;uses:Array<{start:number;end:number;attribute:string;authored?:string;list?:boolean;original?:string}>}
 const referenceAttributes=new Set([...REFERENCE_POSITIONS.map(position=>position.attribute),'source','data','recipe']);
 export async function planDependencies(source:string,path:string,root:string):Promise<Dependency[]>{

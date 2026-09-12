@@ -29,7 +29,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { wrapSelection, type MdMarker } from '@/lib/markdown-lite';
 import { mentionDraft } from '@/lib/mention-draft';
 
-export interface MarkdownFieldProps {
+interface MarkdownFieldProps {
   /** The textarea's own accessible name — the one the page already used. */
   label: string;
   /** The rendered draft's accessible name while Preview is on. */

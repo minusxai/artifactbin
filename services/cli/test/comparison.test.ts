@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -9,6 +9,7 @@ import {HttpClient} from '../src/http';
 import {digest} from '../src/files';
 import {writeDocument} from '../src/document';
 import {writeRecord,tracking} from './tracking';
+import {cliHarness} from './harness';
 
 /** A private state directory per case: the real ~/.artifactbin is never opened. */
 async function fixture(run:(home:string,root:string)=>Promise<void>){
@@ -47,3 +48,18 @@ test('historical binary diff reuses cached bytes without another content request
   assert.deepEqual(second,first);assert.equal(calls,2);assert.deepEqual(await readFile(join(root,'image.png')),local);
   assert.equal((await tracking(home,root)).files['image.png'].file,digest(local),'no stored copy of the binary, only its hash');
 }));
+
+describe('diff over many targets, and log filters', () => {
+   const harness=(prefix:string)=>cliHarness(prefix);
+
+  test('diff accepts multiple targets and --output, and log filters by author per target',async()=>{
+   const h=await harness('afbin-seed-diff-log-');
+   try{
+    await writeFile(join(h.root,'a.jsx'),'<p>A</p>\n');await writeFile(join(h.root,'b.jsx'),'<p>B</p>\n');
+    assert.equal(await h.invoke(['diff','a.jsx','b.jsx','--output','changes.diff','--json'],()=>{throw new Error('local diff must not fetch');}),0,h.out.join(''));
+    assert.equal(h.last().output.endsWith('changes.diff'),true);assert.match(await readFile(join(h.root,'changes.diff'),'utf8'),/a\.jsx[\s\S]*b\.jsx/);
+    assert.equal(await h.invoke(['log','abc123','--filter','author=usr_1','--json'],({path})=>Response.json({versions:[{version:2,author:'usr_1'}],next_cursor:null,requested:path})),0,h.out.join(''));
+    assert.match(h.calls[h.calls.length-1].path,/author=usr_1/);
+   }finally{await h.cleanup();}
+  });
+});

@@ -6,12 +6,12 @@
 import { describe, expect, it } from 'vitest';
 import { dryRunQueries, isQueryFailure, runQueries, type QueryOutcome } from '@/lib/sql/engine';
 import { parseQueryDecl } from '@/lib/story/dataflow';
-import { parseJsx, type JsxElement } from '@/lib/jsx';
+import { type JsxElement } from '@/lib/jsx';
 import type { QueryDecl, Row, TableResult } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const q = (name: string, sql: string): QueryDecl => {
-  const parsed = parseJsx(`<Query name="${name}">{\`${sql}\`}</Query>`);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(`<Query name="${name}">{\`${sql}\`}</Query>`);
   const decl = parseQueryDecl(parsed.nodes[0] as JsxElement);
   if (!decl.ok) throw new Error(JSON.stringify(decl.errors));
   return decl.decl;

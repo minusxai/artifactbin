@@ -13,7 +13,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { splitHelmet } from '@/lib/story/helmet';
@@ -21,6 +21,7 @@ import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore, type QueryTransport } from '../store';
 import { createMx } from '../mx';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const HELMET =
   '<Helmet><Value name="choice" type="string" default="ramen" />'
@@ -30,8 +31,7 @@ const BODY = '<div><Button run="$vote">Vote</Button></div>';
 const STATE: DataflowState = { values: { choice: 'ramen' }, tables: { tally: { rows: [], columns: [] } }, errors: {}, mutationAccess:{vote:null} };
 
 function build(body = BODY) {
-  const parsed = parseJsx(HELMET + body);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(HELMET + body);
   const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
   const flow = { values: content.values, queries: content.queries, mutations: content.mutations };
   return { nodes, dataflow: { flow, state: STATE } };

@@ -1,21 +1,28 @@
 /**
- * `withoutToken` — the inverse of `withToken`, in BOTH agent-session modules (tok-p1, reject).
+ * `withoutToken` — the inverse of `withToken` (tok-p1, reject).
  *
  * The list is ordered and the LAST entry is the primary (see agent-session-shape.test.ts). Dropping one id
  * must keep the order of the rest, so the browser's primary changes only when the primary itself is dropped.
  * Nothing left ⇒ null, which the route turns into a cleared cookie.
  *
- * Also pinned here, a drift measured in the de-risk pass: utils caps the held list at 8 ids and the APP
- * (the cookie WRITER) did not — so the cap never applied. Both writers must agree.
+ * There used to be TWO of these — the app reimplemented what utils already had, and a drift measured in the
+ * de-risk pass showed it: utils capped the held list at 8 ids and the APP (the cookie WRITER) did not, so
+ * the cap never applied. There is one implementation now, and the first case below is what keeps it that
+ * way: the app module must re-export the shared one rather than grow its own again.
  */
 import { describe, expect, it } from 'vitest';
-import { withToken as appWith, withoutToken as appWithout } from '@/lib/agent-session';
+import { withToken, withoutToken } from '@/lib/agent-session';
 import { withToken as utilsWith, withoutToken as utilsWithout } from '../../../utils/src/agent-session';
 
-for (const [name, withToken, withoutToken] of [
-  ['app', appWith, appWithout],
-  ['utils', utilsWith, utilsWithout],
-] as const) {
+describe('the app module', () => {
+  it('re-exports the shared list operations rather than holding its own', () => {
+    expect(withToken).toBe(utilsWith);
+    expect(withoutToken).toBe(utilsWithout);
+  });
+});
+
+{
+  const name = 'shared';
   describe(`withoutToken (${name})`, () => {
     it('drops one id and keeps the order of the rest', () => {
       expect(withoutToken({ tokenIds: ['a', 'b', 'c'] }, 'b')).toEqual({ tokenIds: ['a', 'c'] });

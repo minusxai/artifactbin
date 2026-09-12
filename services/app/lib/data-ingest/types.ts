@@ -33,7 +33,7 @@ export interface IngestResult {
   headers: string[];
 }
 
-export type IngestErrorCode =
+type IngestErrorCode =
   | 'empty'            // no content at all
   | 'no_header'        // header row missing or entirely blank
   | 'too_many_rows'    // over MAX_DATASET_ROWS
@@ -57,7 +57,6 @@ export class IngestError extends Error {
  * accept uploaded files. Generous for a story dataset, far below where a single
  * row hurts Postgres.
  */
-export const MAX_DATASET_ROWS = 500_000;
 export const MAX_DATASET_BYTES = 50 * 1024 * 1024;
 
 /** A parsed CSV, before any type decisions. */

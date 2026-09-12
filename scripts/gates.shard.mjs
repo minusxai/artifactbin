@@ -17,19 +17,21 @@
  * Longest-first greedy: deterministic, within 4/3 of optimal, and it cannot
  * put the two heaviest gates in one shard.
  */
+import { parseShardSpec } from './lib/shard.mjs';
 
-/** `--shard=1/2` → `{index: 1, total: 2}`; absent → null; anything else throws. */
+/**
+ * `--shard=1/2` → `{index: 1, total: 2}`; absent → null; anything else throws.
+ *
+ * The FLAG's grammar is this runner's; what `i/n` means is everyone's, so the
+ * pair itself is parsed by lib/shard.mjs. A shard that cannot exist must be
+ * loud either way: silently running nothing is how a sharded CI job goes green
+ * having tested nothing at all.
+ */
 export function parseShard(arg) {
   if (arg === undefined || arg === null) return null;
-  const match = /^--shard=(\d+)\/(\d+)$/.exec(arg);
+  const match = /^--shard=(.+)$/.exec(arg);
   if (!match) throw new Error(`bad --shard: ${arg} (expected --shard=<index>/<total>, 1-based)`);
-  const index = Number(match[1]);
-  const total = Number(match[2]);
-  // A shard that cannot exist must be loud. Silently running nothing is how a
-  // sharded CI job goes green having tested nothing at all.
-  if (total < 1) throw new Error(`bad --shard: ${arg} (total must be at least 1)`);
-  if (index < 1 || index > total) throw new Error(`bad --shard: ${arg} (index must be within 1..${total})`);
-  return { index, total };
+  return parseShardSpec(match[1], `--shard=${match[1]}`);
 }
 
 /**

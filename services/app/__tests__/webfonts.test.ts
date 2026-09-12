@@ -23,7 +23,7 @@ import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { setWebFontSourcesForTests } from '@/lib/webfonts';
 import { useAppHarness, request } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 useAppHarness();
 

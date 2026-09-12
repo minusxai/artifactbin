@@ -2,15 +2,14 @@ import { renderToString } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
 import { act, fireEvent, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore, type QueryTransport } from '../store';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 const columns = [{name:'id',type:'number' as const},{name:'item',type:'string' as const},{name:'hours',type:'number' as const}];
 function setup(body = '<Column col="id"/><Column col="item"><input aria-label="Item" value="$_row.item" run="$set_item"/></Column><Column col="hours"><input aria-label="Hours {$_row.id}" type="number" value="$_row.hours" run="$set_hours"/></Column>', rows: DataflowState['tables'][string]['rows'] = [{id:1,item:'one',hours:2},{id:2,item:'two',hours:3}]) {
-  const parsed=parseJsx('<Helmet><Query name="tasks" source="ref:abc123">{`select * from public.rows`}</Query><Mutation name="set_item" source="ref:abc123">{`update public.rows set item=$_value where id=$_row.id`}</Mutation><Mutation name="set_hours" source="ref:abc123">{`update public.rows set hours=$_value where id=$_row.id`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id">'+body+'</DataTable>');
-  if (!parsed.ok) throw Error(parsed.error);
+  const parsed=parseJsxOrThrow('<Helmet><Query name="tasks" source="ref:abc123">{`select * from public.rows`}</Query><Mutation name="set_item" source="ref:abc123">{`update public.rows set item=$_value where id=$_row.id`}</Mutation><Mutation name="set_hours" source="ref:abc123">{`update public.rows set hours=$_value where id=$_row.id`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id">'+body+'</DataTable>');
   const {content,body:nodes}=splitHelmet(parsed.nodes);
   const state:DataflowState={values:{},tables:{tasks:{columns,rows}},errors:{},mutationAccess:{set_item:null,set_hours:null}};
   const dataflow={flow:{values:content.values,queries:content.queries,mutations:content.mutations},state};

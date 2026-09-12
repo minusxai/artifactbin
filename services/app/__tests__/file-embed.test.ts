@@ -26,7 +26,7 @@ import { lookupWebAssets } from '@/lib/web-assets';
 import { mintToken } from '@/lib/tokens';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
 import { request, useAppHarness } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 useAppHarness();
 

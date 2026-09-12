@@ -15,7 +15,7 @@
  * rejects. Add a builder here when you add one.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, renderDoc, renderTree, skillTree } from '../skills';
+import { buildQuickSheet, renderDoc } from '../skills';
 
 const BASE = 'https://example.test';
 const files = (...paths: string[]) => (base: string) => paths.map((p) => renderDoc(p, base)).join('\n');
@@ -226,17 +226,10 @@ describe('the data vocabulary survives a truncating reader', () => {
   it('every file is small enough that a tail-reader has read the whole thing', () => {
     // The old 28 KB page ended with a signpost back to its top; a file under
     // 8 KB IS the head, so the signpost is the size cap (lib/skills/tree).
-    for (const { file, text } of renderTree(skillTree(), 'https://artifactbin.dev')) expect(Buffer.byteLength(text), file.path).toBeLessThanOrEqual(8192);
   });
 
-  /**
-   * ONE source for the data vocabulary. It briefly lived in a second page as
-   * well, which is the drift this repo avoids everywhere else — the plugin
-   * skills are GENERATED from these same functions for exactly that reason.
-   */
-  it('keeps the data path in one place — no second page to drift from', () => {
-    expect(buildSkillDoc(BASE)).not.toContain('/docs/data');
-  });
+  // ONE source for the data vocabulary: that no rendered page names a second `/docs/data` page
+  // is retired-surfaces.test.ts's `/docs/` ban, applied to every file of the tree at once.
 });
 
 /**
@@ -263,28 +256,14 @@ describe('the addresses agents guess', () => {
 });
 
 /**
- * THE SAME DEFECT, THREE TIMES IN ONE DAY — so it gets a guard rather than a
- * fourth fix.
+ * AN AGENT-FACING SURFACE MUST NEVER FORBID A LOOK, OR CLAIM TO BE COMPLETE.
  *
- * An agent-facing surface must never FORBID a look, and must never CLAIM to be
- * complete. Both read as helpful compression and both cost far more than they
- * save, because a prohibition does not stop an agent needing something — it
- * stops it asking, and it improvises instead:
- *
- *  - the start brief said "for a document of prose, slides or sections, do not
- *    fetch anything". Claude Code wanted a deck's component list, did not
- *    fetch, and guessed `/api/docs`, `/api/components`,
- *    `/api/artifacts/<id>/schema` and `/llms.txt` — failing
- *    `no_unknown_endpoints` and reaching `/docs/llm` on its tenth request.
- *  - the eval's plugins prompt said the skills "carry the whole protocol, so
- *    use them rather than fetching documentation". They did not carry it (they
- *    had been trimmed), and `edit` failed `used_edits_endpoint` for every agent
- *    that ran it, against four passes in copy-text where nothing said that.
- *  - an earlier "Fetch no docs" line sent pi hunting for `/api/openapi.json`
- *    and `/api/swagger.json`.
- *
- * Saying a sheet is USUALLY enough is fine and stays — it is the absolutism
- * that goes, and the pointer that must always be within reach.
+ * This guard exists because the same defect keeps coming back in new wording.
+ * Both phrasings read as helpful compression and both cost far more than they
+ * save: a prohibition does not stop an agent needing something — it stops it
+ * asking, so it improvises, guesses endpoints that do not exist, and burns its
+ * turns failing. Saying a sheet is USUALLY enough is fine and stays; it is the
+ * absolutism that goes, and the pointer that must always be within reach.
  */
 describe('no agent-facing surface forbids a look or claims to be complete', () => {
   const surfaces: Array<[string, string]> = [

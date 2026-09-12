@@ -27,8 +27,8 @@ export interface ChromeState {
   lastScrollY: number;
 }
 
-export const CHROME_SLACK_PX = 4;
-export const CHROME_DEAD_ZONE_PX = 4;
+const CHROME_SLACK_PX = 4;
+const CHROME_DEAD_ZONE_PX = 4;
 
 /**
  * The next state after a sample. `state === null` is the FIRST sample (load):

@@ -45,7 +45,7 @@ const LOGIN_PROVIDER_ENV_NAMES = {
 } as const;
 const LOGIN_PROVIDER_ENV_NAME_SET = new Set<string>(Object.values(LOGIN_PROVIDER_ENV_NAMES));
 
-export interface ProxyMailConfig {
+interface ProxyMailConfig {
   /** EMAIL__RESEND_API_KEY — absent means the mailer refuses to send (no log-the-code fallback). */
   apiKey?: string;
   /** EMAIL__DEV_OUTBOX_PATH — local/test only; public origins always use Resend. */

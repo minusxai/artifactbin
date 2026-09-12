@@ -2,6 +2,9 @@ import { readFile } from "node:fs/promises";
 import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
+/** Where afbin talks when nothing selects a server. */
+export const DEFAULT_SERVER = "https://artifactbin.dev";
 export interface Connection {
   server: string;
   token: string;
@@ -14,7 +17,7 @@ export function configDir(home = homedir(), env: NodeJS.ProcessEnv = process.env
   return env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin");
 }
 /** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
-export function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
   return join(configDir(home, env), "servers", `${digest(server).slice(0, 16)}.env`);
 }
 const CREDENTIAL_KEYS = /^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT)\s*=\s*(.*?)\s*$/;
@@ -54,11 +57,11 @@ export async function loadConnection(
   const dir = configDir(home, env);
   // `.env` names the default origin and holds its credentials; every other origin has its own file.
   const primary = await readEnvFile(join(dir, ".env"));
-  const defaultServer = normalizeServer(env.ARTIFACTBIN_URL ?? primary.ARTIFACTBIN_URL ?? "https://artifactbin.dev");
+  const defaultServer = normalizeServer(env.ARTIFACTBIN_URL ?? primary.ARTIFACTBIN_URL ?? DEFAULT_SERVER);
   const selected = normalizeServer(server ?? defaultServer);
   if (env.ARTIFACTBIN_TOKEN) {
     // An explicit token is scoped to the explicit origin (or the default) and never inherits refresh credentials.
-    const explicitServer = normalizeServer(env.ARTIFACTBIN_URL ?? "https://artifactbin.dev");
+    const explicitServer = normalizeServer(env.ARTIFACTBIN_URL ?? DEFAULT_SERVER);
     return explicitServer === selected ? { server: selected, token: env.ARTIFACTBIN_TOKEN } : null;
   }
   const saved = primary.ARTIFACTBIN_URL && normalizeServer(primary.ARTIFACTBIN_URL) === selected ? primary : await readEnvFile(credentialPath(selected, home, env));

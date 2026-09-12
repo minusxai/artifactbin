@@ -20,6 +20,9 @@ Libraries · File uploads.
 Any bundled HTTPS library URL can be declared as `<script src>`. The example
 uses a self-contained hosted Three.js bundle with OrbitControls and GLTFLoader;
 it goes through the same cache as a third-party CDN bundle, not a special exception.
+`[[ base ]]` below is the server you publish to: every deployment serves its own
+pinned bundles, so use that origin rather than another install's. The URL must be
+absolute; a path alone is refused.
 Module dependencies must be bundled; relative imports and worker/decoder trees
 are not packaged automatically. Managed external assets require the deployment's
 asset hostname to be configured.

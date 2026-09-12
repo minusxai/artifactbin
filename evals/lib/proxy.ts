@@ -62,7 +62,7 @@ export const DRIVER_HEADER = 'x-eval-driver';
  * select, so the task proxy substitutes itself, exactly as a public host in front of the product would
  * be the origin in production.
  */
-export interface BodyRewrite { path: string; from: string; to: string; /** `json` (the default) rewrites only JSON replies; `text` rewrites any text body. */ kind?: 'json' | 'text' }
+interface BodyRewrite { path: string; from: string; to: string; /** `json` (the default) rewrites only JSON replies; `text` rewrites any text body. */ kind?: 'json' | 'text' }
 
 /**
  * The locally built release, served by the task proxy so the `not-installed` flow installs THIS
@@ -70,7 +70,7 @@ export interface BodyRewrite { path: string; from: string; to: string; /** `json
  * proxy (and, being plain http on 127.0.0.1, without the installer's https-only curl flags), and
  * `/chat/releases/afbin-v<version>/<asset>` answers the platform binary and its SHA256SUMS from `dist/`.
  */
-export interface LocalRelease { version: string; distDir: string }
+interface LocalRelease { version: string; distDir: string }
 
 export function forwardExchange(
   req: http.IncomingMessage,

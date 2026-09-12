@@ -71,7 +71,7 @@ export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
  * NOT part of the document's served stylesheet: a reader must never download
  * or apply editor chrome.
  */
-export const EDIT_MODE_CSS = [
+const EDIT_MODE_CSS = [
   '[data-mx-block-selected] { outline: 1px solid rgba(100,116,139,.18); outline-offset: 2px; }',
   '.ProseMirror { outline: none; white-space: pre-wrap; overflow-wrap: break-word; }',
   '[contenteditable="true"]:focus { outline: none; }',
@@ -101,7 +101,7 @@ interface ActiveHost {
   userEdited: boolean;
 }
 
-export interface FrameEditSessionOptions {
+interface FrameEditSessionOptions {
   win: Window;
   channel: RuntimeChannel;
   root?: HTMLElement;

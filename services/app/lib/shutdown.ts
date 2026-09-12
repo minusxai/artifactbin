@@ -9,7 +9,7 @@
  * A second signal while closing is ignored; a step that throws is logged and
  * the next step still runs; exit is called exactly once.
  */
-export interface ShutdownOptions {
+interface ShutdownOptions {
   /** Run in order; each awaited before the next. */
   steps: Array<() => Promise<void>>;
   signals?: NodeJS.Signals[];

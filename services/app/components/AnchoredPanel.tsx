@@ -31,7 +31,7 @@ import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
 import { Tooltip } from '@/components/Tooltip';
 import { useTrustedPortalContainer } from './TrustedUi';
 
-export interface AnchoredPanelProps {
+interface AnchoredPanelProps {
   /** Accessible name of the PANEL (and the sheet's dialog label on a phone). */
   label: string;
   open: boolean;

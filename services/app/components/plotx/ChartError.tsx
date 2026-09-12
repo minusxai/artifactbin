@@ -1,4 +1,4 @@
-import { LuTriangleAlert, LuInfo } from 'react-icons/lu'
+import { Info, TriangleAlert } from 'lucide-react'
 
 interface ChartErrorProps {
   title?: string
@@ -12,8 +12,8 @@ const TEAL = '#16a085'
 const mix = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`
 
 const VARIANT_STYLES = {
-  warning: { color: ORANGE, Icon: LuTriangleAlert },
-  info: { color: TEAL, Icon: LuInfo },
+  warning: { color: ORANGE, Icon: TriangleAlert },
+  info: { color: TEAL, Icon: Info },
 } as const
 
 export const ChartError = ({ title, message, variant = 'warning' }: ChartErrorProps) => {
@@ -34,7 +34,7 @@ export const ChartError = ({ title, message, variant = 'warning' }: ChartErrorPr
             className="rounded-full p-3 text-xl"
             style={{ background: mix(style.color, 12), color: style.color }}
           >
-            <style.Icon />
+            <style.Icon size="1em" />
           </div>
           <span className="font-mono text-lg font-bold text-foreground">
             {title || defaultTitle}

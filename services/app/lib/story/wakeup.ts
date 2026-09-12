@@ -3,9 +3,9 @@
  */
 import { getDb } from '@/lib/db';
 
-export type WakeupHandler = (payload: string) => void;
+type WakeupHandler = (payload: string) => void;
 
-export interface WakeupTransport {
+interface WakeupTransport {
   /** Subscribe to one channel; resolves to the teardown. */
   subscribe(channel: string, handler: WakeupHandler): Promise<() => Promise<void>>;
 }

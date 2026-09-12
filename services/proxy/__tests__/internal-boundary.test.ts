@@ -42,7 +42,7 @@ describe('/api/internal/* at the edge', () => {
 
   it('refuses a holder of a real credential, and every method and depth of the prefix', async () => {
     await resetTestDb();
-    const token = await mintTestToken({ id: 'tok_internal', userId: 'user_1', pg: testDb().pg() });
+    const token = await mintTestToken({ id: 'tok_internal', userId: 'user_1', query: testDb().query });
     let reached = false;
     const proxy = await proxyFor(async () => { reached = true; return new Response('{}', { status: 200 }); });
     for (const path of ['/api/internal', '/api/internal/tokens', '/api/internal/tokens/deeper', '/api/internal?x=1']) {

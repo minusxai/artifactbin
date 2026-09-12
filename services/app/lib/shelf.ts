@@ -72,9 +72,9 @@ export interface Shelf<T> {
   total: number;
 }
 
-export type ShelfRecency = 'today' | 'yesterday' | 'this-week' | 'last-month' | 'older';
+type ShelfRecency = 'today' | 'yesterday' | 'this-week' | 'last-month' | 'older';
 
-export interface ShelfDateGroup<T> {
+interface ShelfDateGroup<T> {
   key: ShelfRecency;
   label: string;
   rows: T[];

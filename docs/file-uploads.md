@@ -1,14 +1,16 @@
 # File uploads
 
-Upload original bytes with:
+Upload original bytes with the CLI, which signs itself in on the connection it
+already holds:
 
 ```bash
-curl -X POST 'http://localhost:3030/api/artifacts?format=file&filename=scene.glb' \
-  -H "Authorization: Bearer $ARTIFACTBIN_TOKEN" \
-  -H 'Content-Type: model/gltf-binary' --data-binary @scene.glb
+afbin push scene.glb
 ```
 
-The session equivalent is `/api/my/artifacts`. JSON API callers can send
+The HTTP surface underneath is
+`POST /api/artifacts?format=file&filename=scene.glb` with the bytes as the
+body and a `Content-Type` matching the extension. The session equivalent is
+`/api/my/artifacts`. JSON API callers can send
 `{ "file": { "filename": "note.txt", "contentType": "text/plain", "base64": "SGVsbG8K" } }`.
 JSON PUT uses the same file envelope to replace an existing file.
 

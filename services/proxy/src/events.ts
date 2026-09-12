@@ -17,7 +17,7 @@ import type { EventEnvelope, EventPayload, EventsService, EventVerb, ObjectKind 
 import { envelope, type EventObject, type EventSubject } from '@artifactbin/utils';
 
 export type ProxySubject = EventSubject;
-export type ProxyObject<K extends ObjectKind = ObjectKind> = EventObject<K>;
+type ProxyObject<K extends ObjectKind = ObjectKind> = EventObject<K>;
 
 /** Build the row without sending it — pure, the app's `envelope` with the proxy as the source. */
 export function proxyEnvelope<K extends ObjectKind, V extends EventVerb<K>>(

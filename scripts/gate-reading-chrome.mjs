@@ -14,6 +14,7 @@
  *
  *   usage: node scripts/gate-reading-chrome.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
@@ -35,8 +36,7 @@ async function cleanup() {
 }
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const ok = (pass, label) => { console.log(`${pass ? '  ok ' : 'FAIL '} ${label}`); if (!pass) failures.push(label); };
+const check = createChecker('reading-chrome');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Poll `read()` until `want`, or give up. Returns the last value seen. */
@@ -105,25 +105,25 @@ const browser = await chromium.launch();
   await page.waitForLoadState('networkidle');
   await sleep(800);
   const late = await page.evaluate(() => document.querySelector('article')?.getBoundingClientRect().left ?? -1);
-  ok(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
-  ok(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
-  ok(await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length) === 4, 'one row per section');
-  ok(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'), 'the outline is visible at 1440');
+  check(hasOutlineEarly, 'the outline is in the document on FIRST paint (server-rendered)');
+  check(Math.abs(early - late) < 2, `the column did not move after paint (${early} → ${late})`);
+  check(await page.evaluate(() => document.querySelectorAll('.mx-outline-row').length) === 4, 'one row per section');
+  check(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'), 'the outline is visible at 1440');
 
   await page.getByLabel('Go to section 3: 3. The third claim').click();
   await sleep(900);
   const top = await page.evaluate(() => [...document.querySelectorAll('.mx-doc h2')][2].getBoundingClientRect().top);
-  ok(top >= -2 && top < 120, `clicking a row scrolled the section to the top (top=${Math.round(top)})`);
+  check(top >= -2 && top < 120, `clicking a row scrolled the section to the top (top=${Math.round(top)})`);
   const current = await page.evaluate(() => [...document.querySelectorAll('.mx-outline-row')].map((r) => r.getAttribute('aria-current')));
-  ok(current[2] === 'true' && current.filter(Boolean).length === 1, `the row for the section being read is current (${JSON.stringify(current)})`);
+  check(current[2] === 'true' && current.filter(Boolean).length === 1, `the row for the section being read is current (${JSON.stringify(current)})`);
 
   // Not for a page, not for a deck, not for a capture.
   await page.goto(`${BASE}/a/${page2.id}`, { waitUntil: 'networkidle' });
-  ok(await page.evaluate(() => !document.querySelector('.mx-outline')), 'a two-heading page has no outline');
+  check(await page.evaluate(() => !document.querySelector('.mx-outline')), 'a two-heading page has no outline');
   await page.goto(`${BASE}/a/${deck.id}`, { waitUntil: 'networkidle' });
-  ok(await page.evaluate(() => !document.querySelector('.mx-outline') && !!document.querySelector('.mx-rail')), 'a deck keeps its slide rail and gets no outline');
+  check(await page.evaluate(() => !document.querySelector('.mx-outline') && !!document.querySelector('.mx-rail')), 'a deck keeps its slide rail and gets no outline');
   const capture = await fetch(`${BASE}/a/${doc.id}/raw?chrome=0`, { headers: { Authorization: `Bearer ${doc.token}` } }).then((r) => r.text());
-  ok(!capture.includes('mx-outline'), 'the capture render has no outline');
+  check(!capture.includes('mx-outline'), 'the capture render has no outline');
   await ctx.close();
 }
 
@@ -133,18 +133,18 @@ const browser = await chromium.launch();
   const page = await ctx.newPage();
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'networkidle' });
   await sleep(1000);
-  ok(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display === 'none'), 'the outline is hidden on a phone');
-  ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page does not scroll sideways');
+  check(await page.evaluate(() => getComputedStyle(document.querySelector('.mx-outline')).display === 'none'), 'the outline is hidden on a phone');
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page does not scroll sideways');
   const t = await page.evaluate(() => {
     const t = document.querySelector('table');
     return { w: Math.round(t.getBoundingClientRect().width), col: Math.round(t.parentElement.getBoundingClientRect().width), overflows: t.scrollWidth > t.clientWidth, mark: t.getAttribute('data-mx-scrollable') };
   });
-  ok(t.w <= t.col, `the table is capped at its column (${t.w} ≤ ${t.col})`);
-  ok(t.overflows, 'a wide table scrolls INSIDE itself');
-  ok(t.mark === '', `and is marked scrollable so its edge fades (${JSON.stringify(t.mark)})`);
+  check(t.w <= t.col, `the table is capped at its column (${t.w} ≤ ${t.col})`);
+  check(t.overflows, 'a wide table scrolls INSIDE itself');
+  check(t.mark === '', `and is marked scrollable so its edge fades (${JSON.stringify(t.mark)})`);
   await page.evaluate(() => { const t = document.querySelector('table'); t.scrollLeft = t.scrollWidth; t.dispatchEvent(new Event('scroll')); });
   await sleep(100);
-  ok(await page.evaluate(() => document.querySelector('table').getAttribute('data-mx-scrollable')) === 'end', 'the fade drops at the last column');
+  check(await page.evaluate(() => document.querySelector('table').getAttribute('data-mx-scrollable')) === 'end', 'the fade drops at the last column');
   await ctx.close();
 }
 
@@ -157,8 +157,8 @@ const browser = await chromium.launch();
     const t = document.querySelector('table');
     return { w: Math.round(t.getBoundingClientRect().width), col: Math.round(t.parentElement.getBoundingClientRect().width), display: getComputedStyle(t).display, mark: t.getAttribute('data-mx-scrollable') };
   });
-  ok(t.w <= t.col, `on a laptop the table stays inside its column (${t.w} ≤ ${t.col})`);
-  ok(t.mark === null, 'and carries no scroll mark when it fits');
+  check(t.w <= t.col, `on a laptop the table stays inside its column (${t.w} ≤ ${t.col})`);
+  check(t.mark === null, 'and carries no scroll mark when it fits');
   await ctx.close();
 }
 
@@ -181,10 +181,10 @@ const browser = await chromium.launch();
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${doc.token}` },
     body: JSON.stringify({ markup: grown, theme: 'industry', template: 'editorial' }),
   });
-  ok(res.ok, 'the agent write landed');
+  check(res.ok, 'the agent write landed');
 
   const after = await until(async () => page.evaluate(() => document.querySelectorAll('.mx-outline-row').length), (n) => n === before + 1, 15000);
-  ok(after === before + 1, `the new section joined the outline live (${before} → ${after})`);
+  check(after === before + 1, `the new section joined the outline live (${before} → ${after})`);
 
   // …and the new row actually navigates (the bug a one-shot wiring hides).
   //
@@ -205,8 +205,8 @@ const browser = await chromium.launch();
     const h = [...document.querySelectorAll('.mx-doc h2')][4];
     return { y: Math.round(scrollY), top: Math.round(h?.getBoundingClientRect().top ?? -9999), vh: innerHeight };
   });
-  ok(nav.y > 200, `the new row scrolled the page (scrollY=${nav.y})`);
-  ok(nav.top >= -2 && nav.top < nav.vh, `and brought the new section into view (top=${nav.top} of ${nav.vh})`);
+  check(nav.y > 200, `the new row scrolled the page (scrollY=${nav.y})`);
+  check(nav.top >= -2 && nav.top < nav.vh, `and brought the new section into view (top=${nav.top} of ${nav.vh})`);
 
   // …and the table that arrived with it is a marked scroll box on a phone.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -216,8 +216,8 @@ const browser = await chromium.launch();
     (m) => Array.isArray(m) && m.length === 2 && m.every((x) => x === ''),
     10000,
   );
-  ok(Array.isArray(marks) && marks.length === 2 && marks.every((m) => m === ''), `both tables — the original and the live one — are marked scrollable (${JSON.stringify(marks)})`);
-  ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'and the page still does not scroll sideways');
+  check(Array.isArray(marks) && marks.length === 2 && marks.every((m) => m === ''), `both tables — the original and the live one — are marked scrollable (${JSON.stringify(marks)})`);
+  check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'and the page still does not scroll sideways');
   await ctx.close();
 }
 
@@ -225,8 +225,8 @@ const browser = await chromium.launch();
 {
   const res = await fetch(`${BASE}/a/${doc.id}/export`, { headers: { Authorization: `Bearer ${doc.token}` } });
   const buf = Buffer.from(await res.arrayBuffer());
-  ok(res.ok && buf.length > 5000, `the og export still renders (${res.status}, ${buf.length} bytes)`);
-  ok(buf.subarray(0, 4).toString('hex') === '89504e47', 'and is real PNG bytes');
+  check(res.ok && buf.length > 5000, `the og export still renders (${res.status}, ${buf.length} bytes)`);
+  check(buf.subarray(0, 4).toString('hex') === '89504e47', 'and is real PNG bytes');
 }
 
 // ── 6. THE RAIL IN DARK MODE — legibility is a number, so measure it ──────
@@ -274,13 +274,13 @@ const browser = await chromium.launch();
       borderDiffers: cs(cur).borderLeftColor !== cs(idle).borderLeftColor,
     };
   });
-  ok(probe.rows === 4, `the rail renders in dark mode (${probe.rows} rows)`);
-  ok(probe.isDark === true, 'the document really is in dark mode');
-  ok(probe.bgLum < 0.2, `on a dark ground (luminance ${probe.bgLum?.toFixed(3)})`);
-  ok(probe.idle >= 3, `an idle row is legible (${probe.idle?.toFixed(2)}:1, need ≥3)`);
-  ok(probe.current >= 4.5, `the current row meets AA body text (${probe.current?.toFixed(2)}:1, need ≥4.5)`);
-  ok(probe.label >= 3, `the "Contents" label is legible (${probe.label?.toFixed(2)}:1)`);
-  ok(probe.colourDiffers || probe.borderDiffers, `"you are here" is visible (colour ${probe.colourDiffers}, border ${probe.borderDiffers})`);
+  check(probe.rows === 4, `the rail renders in dark mode (${probe.rows} rows)`);
+  check(probe.isDark === true, 'the document really is in dark mode');
+  check(probe.bgLum < 0.2, `on a dark ground (luminance ${probe.bgLum?.toFixed(3)})`);
+  check(probe.idle >= 3, `an idle row is legible (${probe.idle?.toFixed(2)}:1, need ≥3)`);
+  check(probe.current >= 4.5, `the current row meets AA body text (${probe.current?.toFixed(2)}:1, need ≥4.5)`);
+  check(probe.label >= 3, `the "Contents" label is legible (${probe.label?.toFixed(2)}:1)`);
+  check(probe.colourDiffers || probe.borderDiffers, `"you are here" is visible (colour ${probe.colourDiffers}, border ${probe.borderDiffers})`);
 
   // And the reader's own controls: a light document flipped to dark keeps it.
   const lightDoc = await publish(DOC);
@@ -290,7 +290,7 @@ const browser = await chromium.launch();
   await openArtifactControls(page);
   await page.getByLabel('Dark mode', {exact: true}).click();
   await sleep(400);
-  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')
+  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')
     && getComputedStyle(document.querySelector('.mx-outline')).display !== 'none'),
     'and the reader\'s own dark toggle keeps the rail');
   await ctx.close();
@@ -299,6 +299,5 @@ const browser = await chromium.launch();
 await browser.close();
 // A passing run leaves nothing behind; a failing one leaves everything, so
 // the documents it failed on can still be opened.
-if (!failures.length) await cleanup();
-console.log(failures.length ? `\n${failures.length} FAILED` : '\nall ok');
-process.exit(failures.length ? 1 : 0);
+if (!check.failures.length) await cleanup();
+check.done();

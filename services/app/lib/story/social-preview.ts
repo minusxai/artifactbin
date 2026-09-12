@@ -1,9 +1,9 @@
 import { parseJsx, type JsxElement } from '@/lib/jsx';
 import { splitHelmet } from './helmet';
 
-export const SOCIAL_PREVIEW_IMAGE_CROP_META = 'artifactbin:og-image-crop';
-export const SOCIAL_PREVIEW_IMAGE_META = 'artifactbin:og-image';
-export const SOCIAL_PREVIEW_META = 'artifactbin:og-crop';
+const SOCIAL_PREVIEW_IMAGE_CROP_META = 'artifactbin:og-image-crop';
+const SOCIAL_PREVIEW_IMAGE_META = 'artifactbin:og-image';
+const SOCIAL_PREVIEW_META = 'artifactbin:og-crop';
 export const SOCIAL_PREVIEW_WIDTH = 1600;
 export const SOCIAL_PREVIEW_HEIGHT = 840;
 export const SOCIAL_PREVIEW_MIN_CROP_WIDTH = 400;

@@ -19,7 +19,7 @@ import type {Workspace,Snapshot} from './workspace';
  * exists and it asks the server. Export and open both address rendering only through this
  * interface, so a local renderer becomes a second implementation rather than a command change.
  */
-export interface Renderer {
+interface Renderer {
  /** The shareable published view; derivable offline, which is why open never needs the network. */
  viewUrl(id:string):string;
  image(id:string,options:{format:'png'|'jpg';page?:number}):Promise<{bytes:Buffer;contentType:string}>;
@@ -39,7 +39,7 @@ const RENDERER_FIX='push the draft, or export csv/json/yaml/original';
 const EXTENSIONS:Record<string,string>={png:'png',jpg:'jpg',html:'html',csv:'csv',json:'json',yaml:'yaml'};
 const rendered=(format:string):format is typeof RENDERED[number]=>RENDERED.includes(format as never);
 
-export interface ExportOptions {
+interface ExportOptions {
  type?:string;format?:string;output?:string;name?:string;page?:number;force?:boolean;dryRun?:boolean;
  server:string;client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
 }

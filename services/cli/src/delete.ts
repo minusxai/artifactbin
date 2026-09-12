@@ -30,7 +30,7 @@ export async function deleteResources(workspace:Workspace,parsed:ParsedCommand,c
  return batchCommand(positionals,ref=>deleteArtifact(workspace,ref,client,options));
 }
 
-export async function deleteArtifact(workspace:Workspace,input:string,client:HttpClient,options:{force?:boolean;dryRun?:boolean;type?:string}){
+async function deleteArtifact(workspace:Workspace,input:string,client:HttpClient,options:{force?:boolean;dryRun?:boolean;type?:string}){
  const ref=await artifactReference(workspace,input,client.connection.server,true);
  if(options.dryRun)return{dry_run:true,...await client.request('/artifacts/preflight','POST',{id:ref.id,mode:'delete',input:{force:!!options.force}})};
  // The head read names the kind being deleted, so a selected --type that

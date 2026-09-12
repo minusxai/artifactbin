@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from './TrustedUi';
 
 /** Callers own consequences and mutations; the dialog owns safe interaction. */
-export interface ConfirmDialogProps {
+interface ConfirmDialogProps {
   title: string;
   description: ReactNode;
   action: string;

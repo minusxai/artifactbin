@@ -1,4 +1,3 @@
-import {stringify} from 'yaml';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import type {SessionResource} from '@artifactbin/contracts';
 import {CliError} from './errors';
@@ -31,8 +30,6 @@ export function parseSessionResource(input:unknown):SessionResource{
  if(value.type!=='session')throw new CliError('invalid_resource','Expected a session resource.');
  return value;
 }
-
-export function writeSessionResource(resource:SessionResource):string{return stringify(resource,{lineWidth:0});}
 
 /** A default destination that cannot collide with another session's file. */
 export function sessionFileName(id:string):string{return `session-${id}.yaml`;}

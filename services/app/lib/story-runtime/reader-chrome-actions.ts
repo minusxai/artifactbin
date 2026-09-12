@@ -30,7 +30,7 @@ import { chromeAfterSample, type ChromeState } from './reader-chrome-policy';
 import { wireReaderSharing } from './reader-share';
 import { wireGithubStar } from '@/lib/github-star';
 
-export interface ReaderChromeHandle {
+interface ReaderChromeHandle {
   /** Remove every listener this wiring installed. */
   destroy(): void;
 }

@@ -57,7 +57,7 @@ export function Badge({ children, tone = 'default' }: { children: React.ReactNod
  * Content-tier badge — hues from flatuicolors.com/palette/defo (the minusx
  * palette). Flat tint: the hue carries text, hairline, and a whisper of fill.
  */
-export const FORMAT_COLORS: Record<string, string> = {
+const FORMAT_COLORS: Record<string, string> = {
   markup: '#c0392b', // Pomegranate
 };
 

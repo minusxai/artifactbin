@@ -52,7 +52,7 @@ export function parseLaunchFlags(value: string): string[] {
   return args;
 }
 
-export class LaunchCancelled extends Error {}
+class LaunchCancelled extends Error {}
 
 async function selectHarness(choices: typeof harnesses) {
   const input = process.stdin, output = process.stdout;

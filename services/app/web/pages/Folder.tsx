@@ -39,7 +39,7 @@ import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import type { AccountWorkspace } from '@/lib/workspace';
 import { pageDataChanged } from '@/web/page-data-events';
 
-export interface FolderPageProps {
+interface FolderPageProps {
   folder: FolderPageData;
   role: ArtifactRole;
   /** Present only for an account owner; totals and activity remain account-wide. */

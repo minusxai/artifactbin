@@ -4,7 +4,7 @@ import { GridItemContext } from './grid';
 import { mermaidSourceError } from '@/lib/story-ui/mermaid-source';
 import type { MermaidImage, MermaidPalette } from './mermaid-render';
 
-export interface MermaidProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
+interface MermaidProps extends Omit<HTMLAttributes<HTMLElement>, 'children'> {
   code: string;
   title?: string;
   colorMode?: 'light' | 'dark';

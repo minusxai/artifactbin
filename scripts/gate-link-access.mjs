@@ -26,6 +26,7 @@
 
  *   node scripts/gate-link-access.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
@@ -33,8 +34,7 @@ import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('link-access');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function until(read, want, budgetMs = 10000) {
@@ -228,5 +228,4 @@ try {
   await sink.close();
 }
 
-console.log(failures.length ? `\nFAILED (${failures.length}): ${failures.join(' | ')}` : '\nall link-access checks passed');
-process.exit(failures.length ? 1 : 0);
+check.done();

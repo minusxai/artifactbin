@@ -1,5 +1,5 @@
 /**
- * Env plumbing shared by the node-side dev scripts (scripts/dev.mjs, mint.mjs).
+ * Env plumbing shared by the node-side dev scripts (scripts/dev.mjs, gates.mjs).
  *
  * The dev server's port is DERIVED, not hard-coded, so two checkouts of this
  * repo can run side by side: `PORT` wins, else the port in `PUBLIC_BASE_URL`
@@ -52,14 +52,6 @@ export function resolveHmrPort(appPort, env = process.env) {
 export function declaredPort(env = process.env) {
   const port = Number(parseUrl(env.APP__PUBLIC_BASE_URL)?.port);
   return port > 0 ? port : null;
-}
-
-/**
- * Origin the dev-side HTTP clients (mint) should talk to.
- * @param {Record<string, string | undefined>} [env]
- */
-export function resolveBaseUrl(env = process.env) {
-  return env.BASE_URL ?? env.APP__PUBLIC_BASE_URL ?? `http://localhost:${resolvePort(env)}`;
 }
 
 /** @param {string | undefined} value */

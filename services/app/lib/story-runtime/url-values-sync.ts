@@ -27,7 +27,7 @@ import { urlValueParams } from '@/lib/story/url-values';
 import type { DataflowStore } from './store';
 
 /** Where a change is reported. Exactly one is used; `post` wins when present. */
-export interface ValuesUrlSink {
+interface ValuesUrlSink {
   /**
    * The top-level document's own URL capability — `window.__mxValues`
    * (STORY_VALUES_HOOK), which takes `{name: string | null}`: a string sets
@@ -42,7 +42,7 @@ export interface ValuesUrlSink {
 }
 
 /** ~150ms: long enough to swallow a drag, short enough that a click feels answered. */
-export const VALUES_URL_DEBOUNCE_MS = 150;
+const VALUES_URL_DEBOUNCE_MS = 150;
 
 /** The declared scalars of `flow`, at the values `state` holds. */
 function scalarsAt(flow: Dataflow, values: Record<string, Scalar>): Record<string, Scalar> {

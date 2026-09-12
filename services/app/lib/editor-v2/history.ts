@@ -18,7 +18,7 @@ interface Entry {
   group?: string;
   time?: number;
 }
-export type HistoryResult =
+type HistoryResult =
   | {
       ok: true;
       source: string;

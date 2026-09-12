@@ -244,7 +244,7 @@ export const CLAIM_OFFER_WINDOW_HOURS = 24;
 /** The most artifact titles worth naming in a banner; the count carries the rest. */
 const MAX_TITLES = 5;
 
-export interface ClaimableToken {
+interface ClaimableToken {
   /**
    * Echoed back so a client holding the SECRET knows which token to claim.
    * Absent for the id-keyed offer, whose caller holds no secret to match.
@@ -300,7 +300,7 @@ async function offerableTokens(
 const SUMMARY_COLS = 'id, title, description, format, meta, version, visibility, ancestor_ids, created_at, updated_at';
 
 /** A dashboard row: the summary plus its all-time count of unique daily visitors. */
-export type OwnedArtifactSummary = ArtifactSummary & { views: number };
+type OwnedArtifactSummary = ArtifactSummary & { views: number };
 
 /**
  * The one profile view for every visitor, including its owner: public
@@ -411,7 +411,7 @@ export async function listOwnedArtifacts(col: 'user_id' | 'token_id', value: str
   return r.rows;
 }
 
-export interface UserTokenRow {
+interface UserTokenRow {
   id: string;
   name: string | null;
   artifacts: number;

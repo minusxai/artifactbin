@@ -12,7 +12,7 @@ import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from '@/lib/export-ca
 import { publicOrigin } from '@/lib/http';
 import { displayTitle } from '@/lib/story/title';
 
-export type PageOutcome = { kind: 'render' | 'redirect' | 'notFound'; to?: string };
+type PageOutcome = { kind: 'render' | 'redirect' | 'notFound'; to?: string };
 
 const BASE = 'http://localhost:3000';
 
@@ -35,7 +35,7 @@ export async function profilePage(user: string, path: string[] = [], opts: { coo
   return body.kind === 'redirect' ? { kind: 'redirect', to: body.to } : { kind: 'render' };
 }
 
-export interface ArtifactMeta { title?: string; openGraph?: { title: string; images: Array<{ url: string; width: number; height: number }> }; twitter?: { card: 'summary_large_image' } }
+interface ArtifactMeta { title?: string; openGraph?: { title: string; images: Array<{ url: string; width: number; height: number }> }; twitter?: { card: 'summary_large_image' } }
 
 /**
  * What a document unfurls as. Takes the id (fetched under the ACL, so an

@@ -39,7 +39,7 @@ import { settleWithin, TEARDOWN_MS } from './shutdown';
 /** Where the OS keeps its root bundle. First hit wins; both are plain concatenated PEM. */
 const SYSTEM_ROOTS = ['/etc/ssl/cert.pem', '/etc/ssl/certs/ca-certificates.crt'];
 
-export interface Ca {
+interface Ca {
   dir: string;
   /** Our CA alone — for `NODE_EXTRA_CA_CERTS`, which ADDS to the trust store. */
   caPath: string;
@@ -111,7 +111,7 @@ export function agentProxyEnv(proxyUrl: string, ca: Ca): Record<string, string> 
   };
 }
 
-export interface RunningMitm { url: string; port: number; ca: Ca; stop(): Promise<void> }
+interface RunningMitm { url: string; port: number; ca: Ca; stop(): Promise<void> }
 
 export async function startMitmProxy(opts: {
   port: number;

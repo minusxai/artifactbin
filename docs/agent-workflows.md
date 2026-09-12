@@ -24,22 +24,19 @@ partially completed work with its existing commits rather than recreating the se
 work on the host (`gtimeout` or a process alarm on macOS). Never stop another session's server by name
 or port; track and stop only processes the task owns.
 
-The orchestrator reviews the diff, report and verification receipts. Use
-`npm run validate -- --reuse` and `npm test -- --reuse` with the implementer's original test arguments
-in the same checkout. Matching receipts reuse successful evidence for one hour; invalid inputs rerun
-checks. Do not copy receipts across worktrees or present a reused result as a fresh run.
+The orchestrator reviews the diff, report and verification receipts. The local-check rules the
+implementer worked under — the file cap, exit 2, reuse receipts, empty PR bodies — are stated once in
+[AGENTS.md](../AGENTS.md) and apply unchanged to the review; what follows is only what review adds.
+
 Reproduce risky assertions and the changed user flow when evidence is missing or invalidated;
 do not routinely repeat the implementer's entire red/green sequence. CI checks the combined branch.
-Above 50 affected files (Vitest + CLI combined), `npm test` exits 2 without running either suite.
-Report DEFERRED TO CI, commit/push, and open/update a PR with an empty body. Never widen the cap,
-run a full suite locally, or split deferred work into batches. A branch push alone does not trigger CI. Review the diff against the brief and inspect PR checks, including CodeQL when
+Review the diff against the brief and inspect PR checks, including CodeQL when
 configured. Merge only reviewed work and then dispatch remaining authorized work whose dependencies
 are satisfied. A passing test against an old server is not verification: check the process and build you
 started. Browser gates run in one agent at a time; other agents may run isolated unit tests.
 
 After merging lockfile changes, regenerate the lock if needed and run `npm ci --dry-run`. Read install
-output unfiltered: an already populated `node_modules` can hide a missing lock entry. Preserve empty
-PR bodies unless the user explicitly requests a description.
+output unfiltered: an already populated `node_modules` can hide a missing lock entry.
 
 ## Exercising the agent policy
 

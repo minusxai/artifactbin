@@ -25,7 +25,7 @@ export const GEO_BOUNDARY_DATASET = '__mx_geo_boundary';
 /** A vega projection choice paired with a boundary set (vector basemap). */
 type GeoProjection = 'albersUsa' | 'mercator' | 'equalEarth';
 
-export interface GeoAsset {
+interface GeoAsset {
   /** Menu label. */
   label: string;
   /** Public file under `/geojson/<file>.json`. */

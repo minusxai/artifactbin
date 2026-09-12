@@ -4,10 +4,9 @@
  * `env()` used to accept a legacy flat name as a fallback, with a warning. Two
  * spellings for one setting is a trap, and it sprang on the person who owns
  * this repo: a file carrying both, where the namespaced one silently wins and
- * the other looks live. The shim is gone. A retired name is not ignored either
- * — ignoring `AUTH_SECRET` would sign sessions with a per-boot secret and log
- * everyone out for no visible reason — so the process REFUSES TO START and
- * says exactly what to rename.
+ * the other looks live. The shim is gone, and so is the migration map that
+ * replaced it: an unnamespaced name is not a setting, it is text in the
+ * environment, and nothing here reads it.
  */
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -49,29 +48,6 @@ describe('dataset DNS servers',()=>{
       expect(()=>parseDatasetDnsServers(value)).toThrow('DATASET__DNS_SERVERS must contain only literal DNS server IP addresses.');
       try{parseDatasetDnsServers(value);}catch(error){expect(String(error)).not.toContain(value);}
     }
-  });
-});
-
-describe('a retired name', () => {
-  afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
-
-  it('is reported with the name that replaced it, never silently ignored', async () => {
-    const { retiredEnvNamesInUse } = await import('../config');
-    const found = retiredEnvNamesInUse({ AUTH_SECRET: 'x', RESEND_API_KEY: 'y', AUTH__SCHEMA: 'auth' });
-    expect(found).toEqual([
-      { retired: 'AUTH_SECRET', replacement: 'AUTH__SECRET' },
-      { retired: 'RESEND_API_KEY', replacement: 'EMAIL__RESEND_API_KEY' },
-    ]);
-  });
-
-  it('says nothing when the environment is clean', async () => {
-    const { retiredEnvNamesInUse } = await import('../config');
-    expect(retiredEnvNamesInUse({ AUTH__SECRET: 'x', DATABASE_URL: 'pglite://memory' })).toEqual([]);
-  });
-
-  it('leaves the two deliberate exceptions alone — they are the current names', async () => {
-    const { retiredEnvNamesInUse } = await import('../config');
-    expect(retiredEnvNamesInUse({ DATABASE_URL: 'x', S3_URL: 'y' })).toEqual([]);
   });
 });
 

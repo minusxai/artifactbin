@@ -2,8 +2,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Queryable } from '@artifactbin/contracts';
 
-export const PAIRING_TTL_SECONDS = 300;
-export type PairingResult = { status: 'pending' | 'invalid' | 'denied' } | { status: 'approved'; userId: string | null };
+const PAIRING_TTL_SECONDS = 300;
+type PairingResult = { status: 'pending' | 'invalid' | 'denied' } | { status: 'approved'; userId: string | null };
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 const KIND = 'device_pairing';
 

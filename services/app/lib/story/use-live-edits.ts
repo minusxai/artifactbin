@@ -40,7 +40,7 @@ export interface EditorFlushRef {
   current: (() => Promise<void>) | null;
 }
 
-export interface LiveEditState {
+interface LiveEditState {
   /** Head pointer this client is based on — every flush carries it. */
   editId: string;
   version: number;
@@ -50,7 +50,7 @@ export interface LiveEditState {
   pending: boolean;
 }
 
-export interface PendingChange {
+interface PendingChange {
   annotationOps?: AnnotationOperation[];
   source?: string;
   title?: string | null;
@@ -77,7 +77,7 @@ interface FlushResponse {
   detail?: string;
 }
 
-export interface UseLiveEditsOptions {
+interface UseLiveEditsOptions {
   id: string;
   initialEditId: string;
   initialVersion: number;

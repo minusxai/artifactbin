@@ -18,9 +18,9 @@ import type { HelmetContent } from './helmet';
 
 /** The three slots a document may override, in the order the head declares them. */
 const FONT_SLOTS = ['font-display', 'font-body', 'font-mono'] as const;
-export type FontSlot = (typeof FONT_SLOTS)[number];
+type FontSlot = (typeof FONT_SLOTS)[number];
 
-export interface DocumentFonts {
+interface DocumentFonts {
   /** slot → family, only for slots the document actually named. */
   slots: Partial<Record<FontSlot, string>>;
   /** Distinct families, for resolution. */

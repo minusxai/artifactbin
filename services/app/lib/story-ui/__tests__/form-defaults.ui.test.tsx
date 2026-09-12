@@ -13,13 +13,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
-import { parseJsx } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const draw = (src: string) => {
-  const parsed = parseJsx(src);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(src);
   return render(<>{renderStoryNodes(parsed.nodes, { components: STORY_UI_COMPONENTS })}</>);
 };
 

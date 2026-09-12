@@ -48,7 +48,7 @@ export const SKILL_LISTING_MAX_BYTES = 6144;
 const SKILL_READ_FIRST_HEADING = '## Read first';
 const SKILL_READ_FIRST_MAX_BYTES = 2500;
 
-export type SkillAudience = 'agent' | 'human';
+type SkillAudience = 'agent' | 'human';
 
 export interface SkillFile {
   /** Tree-relative path: `artifactbin/SKILL.md` or `artifactbin/references/markup-data.md`. */
@@ -70,7 +70,7 @@ export interface SkillFile {
   body: string;
 }
 
-export interface SkillDir {
+interface SkillDir {
   name: string;
   skill: SkillFile;
   /** Every file of the directory, `SKILL.md` first, then by `order`, then by name. */
@@ -132,7 +132,7 @@ export function buildSkillTree(sources: Record<string, string>): SkillTree {
 }
 
 /** The skill every agent reads first — today's brief. */
-export const ROOT_SKILL = 'artifactbin';
+const ROOT_SKILL = 'artifactbin';
 
 export function expectedSkillName(f: Pick<SkillFile, 'dir' | 'file' | 'ref'>): string {
   return f.ref ? f.file.replace(/\.md$/, '') : f.dir;

@@ -12,6 +12,28 @@ describe('titleOf', () => {
     expect(titleOf('<html><head><title>Coffee &amp; cups — Q2</title></head></html>')).toBe('Coffee & cups — Q2');
     expect(titleOf('<html><head></head></html>')).toBeNull();
   });
+  /**
+   * CodeQL js/double-escaping (high): unescaping `&amp;` before the others turns
+   * `&amp;lt;` into `&lt;` into `<` — text the author wrote as literal markup
+   * comes back as markup. A meta-character must be unescaped LAST, or, as here,
+   * everything must be unescaped in one pass so a decoded `&` is never re-read.
+   */
+  const title = (raw: string) => titleOf(`<title>${raw}</title>`);
+
+  it('does not double-unescape an escaped ampersand', () => {
+    expect(title('&amp;lt;script&amp;gt;')).toBe('&lt;script&gt;');
+    expect(title('Tom &amp;amp; Jerry')).toBe('Tom &amp; Jerry');
+  });
+
+  it('decodes the named entities the product emits', () => {
+    expect(title('Coffee &amp; cups')).toBe('Coffee & cups');
+    expect(title('&lt;b&gt; &quot;q&quot; &#39;a&#39;')).toBe('<b> "q" \'a\'');
+  });
+
+  it('decodes numeric and hex references, and leaves an unknown entity alone', () => {
+    expect(title('&#8212;dash &#x2014;dash')).toBe('—dash —dash');
+    expect(title('50&nbsp;% &notanentity;')).toBe('50\u00a0% &notanentity;');
+  });
 });
 
 describe('productMetrics', () => {
@@ -33,6 +55,27 @@ describe('productMetrics', () => {
   it('a title that is only the product default or whitespace does not count', () => {
     expect(productMetrics({ served: served('<title>  </title><body><p>x</p></body>'), baseline: null }).hasTitle).toBe(false);
     expect(productMetrics({ served: served('<title>Untitled</title><body><p>x</p></body>'), baseline: null }).hasTitle).toBe(false);
+  });
+  const START = served('<html><head><title>artifact</title></head><body><div id="mx-story-root"><h1>Untitled</h1><p>Waiting for your agent…</p></div></body></html>');
+  const WRITTEN = served('<html><head><title>Release notes — v2.4</title></head><body><h1>v2.4</h1><p>Shipped.</p></body></html>');
+
+  it('is TRUE for a document that changed, even when the driver observed no HTTP traffic at all', () => {
+    // Codex reached artifactbin.dev through OpenAI's own server-side browsing tool, so the local
+    // proxy recorded nothing. Whether we could watch the call is not evidence about the document.
+    expect(productMetrics({ served: WRITTEN, baseline: START }).published).toBe(true);
+  });
+
+  it('is FALSE when the served document is still the start document — which HAS content of its own', () => {
+    expect(productMetrics({ served: START, baseline: START }).published).toBe(false);
+  });
+
+  it('is FALSE when the document does not serve', () => {
+    expect(productMetrics({ served: served('', 404), baseline: START }).published).toBe(false);
+  });
+
+  it('falls back to "has real content" when there is no baseline to compare against', () => {
+    expect(productMetrics({ served: WRITTEN, baseline: null }).published).toBe(true);
+    expect(productMetrics({ served: served('<html><body></body></html>'), baseline: null }).published).toBe(false);
   });
 });
 
@@ -75,54 +118,7 @@ describe('dataflowRows', () => {
   });
 });
 
-describe('titleOf — entity decoding is a SINGLE pass', () => {
-  /**
-   * CodeQL js/double-escaping (high): unescaping `&amp;` before the others turns
-   * `&amp;lt;` into `&lt;` into `<` — text the author wrote as literal markup
-   * comes back as markup. A meta-character must be unescaped LAST, or, as here,
-   * everything must be unescaped in one pass so a decoded `&` is never re-read.
-   */
-  const title = (raw: string) => titleOf(`<title>${raw}</title>`);
 
-  it('does not double-unescape an escaped ampersand', () => {
-    expect(title('&amp;lt;script&amp;gt;')).toBe('&lt;script&gt;');
-    expect(title('Tom &amp;amp; Jerry')).toBe('Tom &amp; Jerry');
-  });
-
-  it('decodes the named entities the product emits', () => {
-    expect(title('Coffee &amp; cups')).toBe('Coffee & cups');
-    expect(title('&lt;b&gt; &quot;q&quot; &#39;a&#39;')).toBe('<b> "q" \'a\'');
-  });
-
-  it('decodes numeric and hex references, and leaves an unknown entity alone', () => {
-    expect(title('&#8212;dash &#x2014;dash')).toBe('—dash —dash');
-    expect(title('50&nbsp;% &notanentity;')).toBe('50\u00a0% &notanentity;');
-  });
-});
-
-describe('published is PRODUCT truth, not a count of the calls we happened to see', () => {
-  const START = served('<html><head><title>artifact</title></head><body><div id="mx-story-root"><h1>Untitled</h1><p>Waiting for your agent…</p></div></body></html>');
-  const WRITTEN = served('<html><head><title>Release notes — v2.4</title></head><body><h1>v2.4</h1><p>Shipped.</p></body></html>');
-
-  it('is TRUE for a document that changed, even when the driver observed no HTTP traffic at all', () => {
-    // Codex reached artifactbin.dev through OpenAI's own server-side browsing tool, so the local
-    // proxy recorded nothing. Whether we could watch the call is not evidence about the document.
-    expect(productMetrics({ served: WRITTEN, baseline: START }).published).toBe(true);
-  });
-
-  it('is FALSE when the served document is still the start document — which HAS content of its own', () => {
-    expect(productMetrics({ served: START, baseline: START }).published).toBe(false);
-  });
-
-  it('is FALSE when the document does not serve', () => {
-    expect(productMetrics({ served: served('', 404), baseline: START }).published).toBe(false);
-  });
-
-  it('falls back to "has real content" when there is no baseline to compare against', () => {
-    expect(productMetrics({ served: WRITTEN, baseline: null }).published).toBe(true);
-    expect(productMetrics({ served: served('<html><body></body></html>'), baseline: null }).published).toBe(false);
-  });
-});
 
 describe('artifactIdFromText', () => {
   it('reads the id out of the URL an agent reports, so we score what it says it made', () => {

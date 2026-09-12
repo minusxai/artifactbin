@@ -32,7 +32,7 @@ export async function remoteStatus(workspace:Workspace,client:HttpClient,home?:s
  });
 }
 
-export async function comparisonTargets(workspace:Workspace,input:string|string[]|undefined,server:string){
+async function comparisonTargets(workspace:Workspace,input:string|string[]|undefined,server:string){
  const inputs=input===undefined?[]:Array.isArray(input)?input:[input];
  if(!inputs.length)return(await inspectWorkspace(workspace)).map(file=>({file,version:undefined as number|undefined}));
  const targets:Array<{file:LocalFile;version:number|undefined}>=[];

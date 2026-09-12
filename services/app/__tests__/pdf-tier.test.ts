@@ -23,7 +23,7 @@ import { objectStore } from '@/lib/object-store';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
 import { setWebIngestPolicyForTests } from '@/lib/web-ingest/fetch';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { request, useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();

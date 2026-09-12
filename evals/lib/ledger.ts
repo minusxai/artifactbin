@@ -89,7 +89,7 @@ export function documentWrites(entries: LedgerEntry[]): number {
 }
 
 /** One numeric row, as the driver records it. */
-export interface LedgerRow {
+interface LedgerRow {
   metric: string;
   /** Null is "unavailable" — the recorder writes nothing and the report shows "—". */
   value: number | null;
@@ -143,7 +143,13 @@ function isDocsRead(e: LedgerEntry): boolean {
  */
 export function targetArtifactId(entries: LedgerEntry[]): string | null {
   const written = survivingWrites(entries);
-  return written.length ? written[written.length - 1].artifactId! : null;
+  // The DOCUMENT first: a write that carried markup is the deliverable; a later dataset or asset write
+  // is not. Claude Code published its report, then spent its last turns re-pushing the dataset and hit
+  // its turn cap with no final message (run 34704052816) — the last write was the dataset, so the
+  // scorer fetched a dataset as the document and read a finished report as "not published".
+  const documents = written.filter((e) => typeof e.reqMarkup === 'string' && e.reqMarkup.length > 0);
+  const pick = documents.length ? documents : written;
+  return pick.length ? pick[pick.length - 1].artifactId! : null;
 }
 
 /** The successful writes whose artifact still exists — an agent's own scratch document is deleted again. */
@@ -181,7 +187,7 @@ export function scoredArtifactId(input: { finalMessage: string | null; ledger: L
   return artifactIdFromText(input.finalMessage ?? '') ?? targetArtifactId(input.ledger) ?? input.startId;
 }
 
-export interface LedgerMetrics {
+interface LedgerMetrics {
   /**
    * Whether this ledger saw ANY traffic. False means the agent reached the
    * product without crossing this machine — a provider's own server-side
@@ -232,7 +238,7 @@ export interface LedgerMetrics {
 }
 
 /** What the caller knows that the ledger cannot: when the agent's process actually started. */
-export interface LedgerMetricsOptions {
+interface LedgerMetricsOptions {
   startedAtMs?: number;
 }
 

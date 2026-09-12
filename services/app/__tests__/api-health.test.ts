@@ -12,7 +12,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { request } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { GET as apiHealth } from '@/app/api/health/route';
 import { stackHealth } from '@/lib/health';
 

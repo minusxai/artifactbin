@@ -14,14 +14,15 @@
  *
  *   usage: node scripts/gate-live-reader.mjs [base]
  */
+import { servedTopLevel } from './lib/page-facts.mjs';
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startDocument } from './lib/start-doc.mjs';
 import { openArtifactControls, revealReaderChrome } from './lib/reveal-chrome.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
-const failures = [];
-const ok = (pass, label) => { console.log(`${pass ? '  ok ' : 'FAIL '} ${label}`); if (!pass) failures.push(label); };
+const check = createChecker('live-reader');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const CHART = '{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"x","type":"nominal"},"y":{"field":"y","type":"quantitative"}}}}';
@@ -63,7 +64,7 @@ const browser = await chromium.launch();
   page.on('framenavigated', (f) => { if (f === page.mainFrame()) reloads++; });
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   await page.waitForFunction(() => /the first version/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
-  ok(!(await page.evaluate(() => !!document.querySelector('iframe[title="artifact"]'))), 'the reader gets the document itself, not the app shell');
+  check(await servedTopLevel(page), 'the reader gets the document itself, not the app shell');
   await sleep(3000);
 
   // Where they are, and what they are looking at.
@@ -86,10 +87,10 @@ const browser = await chromium.launch();
     y: window.scrollY,
     chartKept: document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe ?? null,
   }));
-  ok(/THE AGENT REWROTE THIS/.test(after.text), "the reader sees the agent's write, with no reload of their own");
-  ok(reloads === loadsBefore, `and the page was never navigated to do it (${reloads - loadsBefore})`);
-  ok(before.chart && after.chartKept === 'keep', 'the chart kept its rendered element through the update');
-  ok(Math.abs(after.y - before.y) < 60, `and the reader kept their place (${before.y} → ${after.y})`);
+  check(/THE AGENT REWROTE THIS/.test(after.text), "the reader sees the agent's write, with no reload of their own");
+  check(reloads === loadsBefore, `and the page was never navigated to do it (${reloads - loadsBefore})`);
+  check(before.chart && after.chartKept === 'keep', 'the chart kept its rendered element through the update');
+  check(Math.abs(after.y - before.y) < 60, `and the reader kept their place (${before.y} → ${after.y})`);
   await ctx.close();
 }
 
@@ -110,8 +111,8 @@ const browser = await chromium.launch();
     .catch(() => {});
   await sleep(2500);
   const after = await page.evaluate(() => ({ text: document.body.textContent ?? '', y: window.scrollY }));
-  ok(/THE AGENT REWROTE THIS TOO/.test(after.text), 'a prose document reaches its reader too');
-  ok(Math.abs(after.y - before) < 120, `and the reload kept their place (${before} → ${after.y})`);
+  check(/THE AGENT REWROTE THIS TOO/.test(after.text), 'a prose document reaches its reader too');
+  check(Math.abs(after.y - before) < 120, `and the reload kept their place (${before} → ${after.y})`);
   await ctx.close();
 }
 
@@ -123,18 +124,18 @@ const browser = await chromium.launch();
   await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
   await page.waitForFunction(() => /mode probe/.test(document.body.textContent ?? ''), null, { timeout: 20000 });
   await sleep(2500);
-  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('light')), 'an unthemed document opens in the author default (light)');
+  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('light')), 'an unthemed document opens in the author default (light)');
   // The reader's chrome opens hidden; a scroll up is the gesture that reveals it.
   await revealReaderChrome(page);
   await openArtifactControls(page);
   await page.getByLabel('Dark mode', {exact: true}).click();
-  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')), 'the top-right toggle flips the document dark');
+  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')), 'the top-right toggle flips the document dark');
 
   await doc.write(withChart('MODE WRITE LANDED'));
   await page.waitForFunction(() => /MODE WRITE LANDED/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
     .catch(() => {});
   await sleep(1200);
-  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
+  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
     "an agent write updates the document but does not stomp the reader's mode");
   await ctx.close();
 }
@@ -155,7 +156,7 @@ const browser = await chromium.launch();
   await page.waitForFunction(() => /MODE PROSE REWRITTEN/.test(document.body.textContent ?? ''), null, { timeout: 25000 })
     .catch(() => {});
   await sleep(2000);
-  ok(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
+  check(await page.evaluate(() => document.querySelector("[data-mx-inline-story]:not([data-mx-initial-story])").classList.contains('dark')),
     "a no-runtime document's reload carries the reader's mode in window.name");
   await ctx.close();
 }
@@ -169,9 +170,8 @@ const browser = await chromium.launch();
     body: JSON.stringify({ visibility: 'unlisted' }),
   }).catch(() => {});
   const res = await fetch(`${BASE}/a/doesnotexist/events`);
-  ok(res.status === 404, `an unknown document's stream is the uniform 404 (${res.status})`);
+  check(res.status === 404, `an unknown document's stream is the uniform 404 (${res.status})`);
 }
 
 await browser.close();
-console.log(failures.length ? `\n${failures.length} FAILED` : '\nall live-reader checks passed');
-process.exit(failures.length ? 1 : 0);
+check.done();

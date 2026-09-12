@@ -14,12 +14,13 @@
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { createRoot } from 'react-dom/client';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import { createDataflowStore, type DataflowStore } from '../store';
 import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const HELMET =
   '<Helmet>'
@@ -39,8 +40,7 @@ const STATE: DataflowState = {
 };
 
 function build(body: string) {
-  const parsed = parseJsx(HELMET + body);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(HELMET + body);
   const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
   const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: STATE };
   return { nodes, dataflow };

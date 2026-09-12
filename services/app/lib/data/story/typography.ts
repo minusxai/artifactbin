@@ -43,7 +43,7 @@ export const TYPOGRAPHY_GROUPS = {
   align: ['text-left', 'text-center', 'text-right', 'text-justify'],
 } as const satisfies Record<string, readonly string[]>;
 
-export type TypographyGroup = keyof typeof TYPOGRAPHY_GROUPS;
+type TypographyGroup = keyof typeof TYPOGRAPHY_GROUPS;
 
 /** Curated Tailwind spacing steps the space-above/below steppers walk (skip-steps match skill usage). */
 const SPACING_STEPS = ['0', '1', '2', '3', '4', '6', '8', '10', '12', '16', '20', '24'] as const;
@@ -87,7 +87,7 @@ export const STORY_WYSIWYG_CLASSES: readonly string[] = [
 
 const tokens = (className: string): string[] => className.split(/\s+/).filter(Boolean);
 
-export type StoryColorClassKind = 'text' | 'fill';
+type StoryColorClassKind = 'text' | 'fill';
 
 const colorPrefix = (kind: StoryColorClassKind): 'text' | 'bg' => kind === 'text' ? 'text' : 'bg';
 

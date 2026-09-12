@@ -16,7 +16,7 @@ import { SelectMenu } from '@/components/SelectMenu';
 import type { TableChoice } from '@/lib/story/table-catalog';
 import { NUMBER_AGGS, type NumberEmbedBinding, type NumberEmbedEdit } from '@/lib/data/story/story-number';
 
-export interface NumberEditorPanelProps {
+interface NumberEditorPanelProps {
   binding: NumberEmbedBinding;
   /** The tables the document declares (the chart picker's list). */
   tables: TableChoice[];

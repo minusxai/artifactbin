@@ -6,7 +6,7 @@ import {normalizeServer} from './config';
 import {CliError} from './commands';
 import type {TrackedFile} from './workspace';
 import type {ResourceSource} from './resource-file';
-export interface RequestIntent {
+interface RequestIntent {
  server:string;account?:string;credential:string;
  request:{path:string;method:string;body:Record<string,unknown>};
  file:{source?:ResourceSource;path:string;bytes:string;tracked?:TrackedFile;paths?:Record<string,string>;dependencies?:Record<string,{id:string;sha256:string}>;renamedFrom?:string};

@@ -8,7 +8,7 @@ import { objectKey, objectStore, ObjectUnavailable } from '@/lib/object-store';
 import type { StoredContent } from './input';
 import { fileContentType, FILE_EXTENSIONS } from './file-types';
 
-export interface FileMeta {
+interface FileMeta {
   objectKey: string;
   bytes: number;
   contentType: string;

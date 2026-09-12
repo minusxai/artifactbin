@@ -1,0 +1,111 @@
+name: agent smoke (nightly)
+
+# THE COLD-START HALF OF THE PRODUCT'S ONLY CREDENTIAL PATH, once a day instead of once a pull
+# request.
+#
+# `not-installed` is the flow where nothing is staged: no afbin on PATH, no skills, no connection.
+# The agent has to find the installer from the server, run it, and run a command whose first use
+# starts a device pairing, which the driver approves off the task's proxy ledger exactly as a person
+# would in a browser (evals/lib/approver.ts). It is worth running. It is not worth running on the
+# merge path: measured on three consecutive main runs it took 193s, 216s and 319s against the
+# `installed` leg's 179s, 183s and 185s, and its variance is the agent's, not the runner's — the
+# `cli` task alone came in at 28.7s, 38.8s and 111s. A leg whose wall clock is set by how many turns
+# a model spends hunting cannot be held to a 180s budget by fixing a cause, because the cause is the
+# model.
+#
+# So it moves HERE, and coverage does not shrink: both tasks (cli, comment) still run, every night,
+# against main. This workflow is not in the `test` roll-up and is not a required check — it reports
+# and blocks nothing. A red night is a bug report, read the next morning from the run's artifact.
+#
+# SCHEDULED, not manual. A `workflow_dispatch`-only job is a job nobody runs; the dispatch trigger
+# below is for re-running a failed night on demand, never the way this is meant to fire. Scheduled
+# workflows run from the default branch only, which is what we want — this measures main.
+on:
+  schedule:
+    # 04:17 UTC. Off the hour because GitHub queues the top of every hour heavily.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  agent-smoke:
+    name: agent smoke (not-installed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # The same switch the pull-request leg answers to: one variable turns the paid runs off.
+    if: vars.AGENT_SMOKE_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # The same install entry ci.yml's jobs restore — node_modules plus the postinstall's font
+      # products, which live outside it (see .github/workflows/ci.yml for the full reasoning).
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      # The agent runs as a non-sudo account; evidence stays outside the checkout
+      # so granting access to the dev-mail outbox cannot reopen source access.
+      - name: create the eval account
+        # --no-log-init: on the hosted runner useradd otherwise spends ~40 s extending the sparse lastlog/faillog files (measured 34–41 s).
+        run: sudo useradd --no-log-init --create-home --shell /bin/bash eval-agent
+      - name: close the checkout to it
+        run: chmod 700 "$GITHUB_WORKSPACE"
+      - name: prove the eval account cannot read the checkout
+        run: |
+          if sudo -n -u eval-agent test -r "$GITHUB_WORKSPACE/package.json"; then
+            echo "Eval account can read the checkout" >&2
+            exit 1
+          fi
+      # The harness this job drives — one global npm package, no login.
+      - run: npm i -g opencode-ai
+      - run: npm run build -w services/cli
+      # This leg installs afbin the way a cold agent does — `curl …/chat/install.sh | sh` through the
+      # task proxy, which serves THIS checkout's release from services/cli/dist (evals/lib/proxy.ts).
+      # That needs the platform BINARY, not just the JS build: without it the installer 404s and the
+      # agent spends its whole turn budget hunting for one (main run 34691848703, both tasks capped
+      # at 41 turns). It is built here and nowhere on the pull-request path, which never serves it.
+      - run: npm run build:binary -w services/cli
+      - run: npm run build
+      - run: |
+          umask 077
+          npm run eval -- --ci --run-as=eval-agent --out="$RUNNER_TEMP/agent-smoke-metrics" \
+            --tasks=cli,comment --mode=not-installed \
+            --harness=opencode \
+            --model=fireworks-ai/accounts/fireworks/models/glm-5p3-flash \
+            --api-key-env=FIREWORKS_API_KEY \
+            --label='opencode · glm-5p3-flash · not-installed' \
+            --price-in=0.15 --price-out=0.5 --price-cache-read=0.03
+        env:
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ !cancelled() }}
+        with:
+          name: agent-smoke-metrics-not-installed
+          path: ${{ runner.temp }}/agent-smoke-metrics/
+          include-hidden-files: true
+          retention-days: 14

@@ -19,7 +19,7 @@ type TooltipPlacement = TooltipSide | `${TooltipSide}-${Exclude<TooltipAlign, "c
 
 type TooltipRootProps = React.ComponentProps<typeof TooltipPrimitive.Root>
 
-export interface TooltipProps extends Omit<TooltipRootProps, "children"> {
+interface TooltipProps extends Omit<TooltipRootProps, "children"> {
   children: React.ReactElement
   content: React.ReactNode
   contentProps?: Omit<React.ComponentProps<typeof TooltipPrimitive.Content>, "children"> & {

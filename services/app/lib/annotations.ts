@@ -41,7 +41,7 @@ import { resolveJsxNodeAtPath } from '@/lib/story-ui/host-classify';
 export { ANNOTATION_ANCHOR_ATTR };
 
 /** Where an annotation points, in CURRENT head coordinates. `path` is a BODY path (`data-mx-ast`). */
-export interface AnnotationAnchor {
+interface AnnotationAnchor {
   /** The node's opaque annotation-anchor key. */
   key: string;
   /** Stable source identity. `key` remains as a legacy wire alias. */
@@ -112,7 +112,7 @@ export interface CreateAnnotationInput {
   range?: AnnotationRange;
 }
 
-export type CreateAnnotationRefusal =
+type CreateAnnotationRefusal =
   | { refused: 'not_markup' }
   | { refused: 'bad_path' }
   | { refused: 'quote_not_found' | 'ambiguous_quote' }
@@ -126,7 +126,7 @@ export interface AnnotationAction {
 }
 
 /** ~ how much annotated text survives as the snippet. */
-export const ANNOTATION_SNIPPET_MAX = 200;
+const ANNOTATION_SNIPPET_MAX = 200;
 
 interface AnnotationRowDb {
   id: string;

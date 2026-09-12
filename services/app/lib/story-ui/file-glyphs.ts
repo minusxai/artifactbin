@@ -14,7 +14,7 @@
  */
 
 /** Every artifact format, and the lucide glyph that stands for it. */
-export const FILE_FORMAT_GLYPHS: Record<string, string> = {
+const FILE_FORMAT_GLYPHS: Record<string, string> = {
   folder: 'folder',
   markup: 'file-text',
   dataset: 'table',

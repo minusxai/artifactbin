@@ -8,7 +8,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { setWebIngestPolicyForTests } from '../fetch';
 import { ingestImageFromUrl } from '../image';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 

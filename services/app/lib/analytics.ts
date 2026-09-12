@@ -36,7 +36,7 @@ import { ANALYTICS_SECRET, TRUSTED_PROXY_HOPS } from '@/lib/config';
 import { getDb } from '@/lib/db';
 import { emit, type EventSubject } from '@/lib/events';
 
-export type AnalyticsEvent =
+type AnalyticsEvent =
   | 'view'
   | 'export'
   | 'sse_connect'

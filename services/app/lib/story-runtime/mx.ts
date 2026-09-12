@@ -17,7 +17,7 @@
 import type { DataflowState, Scalar, TableResult } from '@/lib/story/dataflow';
 import type { DataflowStore } from './store';
 
-export interface MxApi {
+interface MxApi {
   params: {
     get(name: string): Scalar;
     set(name: string, value: Scalar): void;

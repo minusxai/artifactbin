@@ -85,19 +85,19 @@ export interface ProxyOptions {
 }
 
 /** The context variables the parts share (Hono's `c.set`/`c.get`) — routes/oauth mounts on the same shape. */
-export type ProxyEnv = { Variables: { actor: Actor; limiter: RateLimiter } };
+type ProxyEnv = { Variables: { actor: Actor; limiter: RateLimiter } };
 export type ProxyApp = Hono<ProxyEnv>;
 
 /**
- * IS THIS A REAL BROWSER? MEASURED on production: Chromium sends
- * `origin: <this origin>` and `sec-fetch-site: same-origin` on the home page's fetch, and both survive this
- * proxy to the upstream untouched. A bare HTTP client sends neither. `POST /api/start` — the web page's
- * create button — is the ONLY door this guards: an agent has no business pressing a button, and the
- * refusal is where we hand it the CLI instead.
+ * IS THIS A REAL BROWSER? Chromium sends `origin: <this origin>` and `sec-fetch-site: same-origin`
+ * on the home page's fetch, and both survive this proxy to the upstream untouched. A bare HTTP
+ * client sends neither. `POST /api/start` — the web page's create button — is the ONLY door this
+ * guards: an agent has no business pressing a button, and the refusal is where we hand it the CLI
+ * instead.
  *
  * HOSTS are compared, not whole origins: behind TLS termination the browser says
- * `origin: https://artifactbin.dev` while this hop's own request arrived over `http`, so full-origin
- * equality would refuse the product's own page. `sec-fetch-site` is Fetch Metadata — the browser sets it and
+ * `origin: https://<host>` while this hop's own request arrived over `http`, so full-origin
+ * equality would refuse the deployment's own page. `sec-fetch-site` is Fetch Metadata — the browser sets it and
  * page JavaScript cannot — so its ABSENCE is the reliable half of the signal.
  *
  * SEVERAL hosts may be ours, and that is the difference between a door and an outage: an instance reached on

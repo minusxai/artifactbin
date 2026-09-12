@@ -61,7 +61,7 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
 }
 const RESOURCE_KINDS:Record<string,string>={markup:'artifact',folder:'folder',dataset:'dataset',image:'file',pdf:'file',file:'file'};
 export const resourceKind=(format?:string):string=>RESOURCE_KINDS[format??'']??'artifact';
-export function checkResourceType(requested:unknown,snapshot:Snapshot):void{
+function checkResourceType(requested:unknown,snapshot:Snapshot):void{
  const kind=resourceKind(snapshot.format);
  if(typeof requested==='string'&&requested!==kind)throw new CliError('type_mismatch',`${snapshot.id} is a ${kind}, not a ${requested}.`,'Omit --type, or select the kind this reference addresses.');
 }

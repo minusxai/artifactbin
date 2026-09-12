@@ -23,7 +23,7 @@ import { linked } from '@/lib/relations';
 
 export type { FeedItem };
 
-export const FEED_DEFAULT_LIMIT = 50;
+const FEED_DEFAULT_LIMIT = 50;
 
 /**
  * The schema name is interpolated (a parameter cannot name a schema), so it is
@@ -81,7 +81,7 @@ export async function ownerFeed(userId: string, opts: { limit?: number } = {}): 
 /** How many days of history the dashboard splines show. */
 export const VIEW_SERIES_DAYS = 30;
 
-export interface DailyViews {
+interface DailyViews {
   /** UTC calendar day, 'YYYY-MM-DD'. */
   day: string;
   views: number;
@@ -182,7 +182,7 @@ export async function viewSeriesByUser(userId: string, days: number = VIEW_SERIE
   return dailySeries(r.rows, days);
 }
 
-export interface LikeSummary {
+interface LikeSummary {
   /** Likes currently held by the user's live markup documents. */
   total: number;
   /** Those live likes grouped by the day the relation was first created. */

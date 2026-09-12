@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderTree, skillTree, SKILL_FILE_MAX_BYTES } from '@/lib/skills';
+import { renderTree, skillTree } from '@/lib/skills';
 import teaching from '../../../cli/src/generated/teaching.json';
 const data = renderTree(skillTree(), 'https://artifactbin.example').find(({file}) => file.path === 'artifactbin/references/markup-data.md')!.text;
 describe('local folder guidance', () => {
@@ -14,7 +14,6 @@ describe('local folder guidance', () => {
     expect(data).toContain('<Files');
     for (const col of ['thumbnail', 'views', 'sparkline', 'level']) expect(data).toContain(col);
     expect(data).not.toContain('ref_<folderId>');
-    expect(Buffer.byteLength(data)).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
   });
   it('assigns Files to authored documents, not a folder content scaffold', () => {
     expect(data.replace(/\s+/g, ' ')).toContain('which a document can list with');

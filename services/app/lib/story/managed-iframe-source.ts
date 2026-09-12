@@ -3,10 +3,10 @@ import type {JsxElement, JsxNode} from '@/lib/jsx/types';
 import {parseJsx} from '@/lib/jsx/parse';
 import {parse} from 'acorn';
 import {compileManagedIframe} from './managed-iframe';
-import {remapViewportHeightUnits} from '@/lib/story-surface/viewport-units';
+import {remapStyleBlockViewportUnits} from '@/lib/story-surface/viewport-units';
 
 /** Inline syntax is checked at SAVE only; author source remains inert in the reader. */
-export function validateManagedIframeSource(node:JsxElement):void {
+function validateManagedIframeSource(node:JsxElement):void {
   for(const script of compileManagedIframe(node).scripts)if(script.source!==undefined) {
     try{parse(script.source,{ecmaVersion:'latest',sourceType:script.type==='module'?'module':'script'});}
     catch(error){throw new Error(`Iframe: invalid script: ${error instanceof Error?error.message:String(error)}`);}
@@ -38,6 +38,5 @@ export function transformOutsideManagedIframes(source:string, transform:(source:
 
 /** Parent authored style blocks adopt the document viewport; isolated styles do not. */
 export function remapMarkupStyleViewportUnits(markup:string):string {
-  return transformOutsideManagedIframes(markup, source => source.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi,
-    (_m,open:string,css:string,close:string)=>`${open}${remapViewportHeightUnits(css)}${close}`));
+  return transformOutsideManagedIframes(markup, remapStyleBlockViewportUnits);
 }

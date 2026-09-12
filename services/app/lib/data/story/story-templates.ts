@@ -21,7 +21,7 @@ import { storyGuidance } from './story-guidance';
 export type { StoryTemplateName };
 export { STORY_TEMPLATE_NAMES };
 
-export interface StoryTemplate {
+interface StoryTemplate {
   /** The schema enum value — what `<template>…</template>` carries. */
   name: StoryTemplateName;
   /** Short human label for the picker card. */

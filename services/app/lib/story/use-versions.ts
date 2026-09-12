@@ -37,7 +37,7 @@ export interface ArtifactVersionSnapshot {
   };
 }
 
-export interface UseArtifactVersions {
+interface UseArtifactVersions {
   versions: ArtifactVersionSummary[];
   /** A restore is in flight; callers disable their controls with this. */
   busy: boolean;

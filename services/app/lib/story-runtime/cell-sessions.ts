@@ -1,7 +1,7 @@
 import type { Scalar } from '../story/dataflow';
 
 /** Immutable snapshots shared by every mounted view of a cell. */
-export interface CellSession {
+interface CellSession {
   readonly draft: Scalar;
   readonly original: Scalar;
   readonly row: Readonly<Record<string, Scalar>>;

@@ -1,3 +1,4 @@
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
@@ -32,8 +33,7 @@ import { becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const PHONE = { width: 390, height: 844 };
-const out = [];
-const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
+const check = createChecker('mobile');
 
 const DOC = '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Mobile</h1>'
   + Array.from({ length: 28 }, (_, i) => `<p className="mt-4 text-lg">A document being read on a phone. ${i + 1}</p>`).join('')
@@ -102,7 +102,7 @@ const fitsAcross = (page, label) => page.getByLabel(label, { exact: true }).firs
 // ── 1. the viewer on a phone ───────────────────────────────────────────────
 const view = await open(PHONE);
 await view.waitForTimeout(2500);
-ok(!(await overflows(view)), 'viewer: the page does not scroll sideways');
+check(!(await overflows(view)), 'viewer: the page does not scroll sideways');
 /*
  * THE OWNER'S PAGE DRAWS NO DOCK OF ITS OWN ANY MORE. The framed document
  * carries the same chrome a reader gets — logo, rail, byline — and asks the
@@ -111,23 +111,23 @@ ok(!(await overflows(view)), 'viewer: the page does not scroll sideways');
  * in whichever document actually scrolls: hidden on load, a scroll down keeps
  * it away, a scroll up brings it back.
  */
-ok((await view.getByLabel('Open menu', {exact:true}).count()) === 1
+check((await view.getByLabel('Open menu', {exact:true}).count()) === 1
   && (await view.getByLabel('Open artifact controls', {exact:true}).count()) === 1,
   'viewer: the inline reader draws one menu and one artifact-controls trigger');
 // An owner reads through the sandboxed artifact frame; a public reader may be
 // served the document itself. Exercise whichever window actually scrolls.
 const readingFrame = view.mainFrame();
-ok((await readingFrame.locator('[data-mx-reader-chrome]').count()) === 1, 'viewer: the document carries the chrome');
+check((await readingFrame.locator('[data-mx-reader-chrome]').count()) === 1, 'viewer: the document carries the chrome');
 const hiddenOn = (target) => target.locator('[data-mx-reader-chrome]').evaluate(root => {
   return root?.classList.contains('mx-reader-chrome--hidden') === true;
 });
 const dockHidden = () => hiddenOn(readingFrame);
 await readingFrame.evaluate(() => window.scrollTo(0, 500));
 await view.waitForTimeout(300);
-ok(await dockHidden(), 'viewer: the chrome stays away on a downward scroll');
+check(await dockHidden(), 'viewer: the chrome stays away on a downward scroll');
 await readingFrame.evaluate(() => window.scrollBy(0, -80));
 await view.waitForTimeout(300);
-ok(!(await dockHidden()), 'viewer: the chrome returns on a reverse scroll');
+check(!(await dockHidden()), 'viewer: the chrome returns on a reverse scroll');
 
 // ── 2. the app menu on a phone ─────────────────────────────────────────────
 // Navigation folds out from the page's hamburger.
@@ -135,20 +135,20 @@ await openMenu(view);
 await view.waitForSelector('[aria-label="Menu"]', { timeout: 10_000 });
 await view.waitForTimeout(300);
 const menu = await fitsAcross(view, 'Menu');
-ok(menu.fits, `app menu: fits the screen (${menu.left}..${menu.right}px of ${menu.viewport}px)`);
-ok(!(await overflows(view)), 'app menu: and opening it does not make the page scroll sideways');
+check(menu.fits, `app menu: fits the screen (${menu.left}..${menu.right}px of ${menu.viewport}px)`);
+check(!(await overflows(view)), 'app menu: and opening it does not make the page scroll sideways');
 const clippedItems = await view.locator('[aria-label="Menu"]').evaluate(menu => {
   const w = document.documentElement.clientWidth;
   return [...menu.querySelectorAll('a, button')]
     .filter((el) => el.getBoundingClientRect().right > w + 1).length;
 });
-ok(clippedItems === 0, `app menu: no item is cut off (${clippedItems} clipped)`);
+check(clippedItems === 0, `app menu: no item is cut off (${clippedItems} clipped)`);
 await view.keyboard.press('Escape');
 await openArtifactControls(view);
 await view.waitForSelector('[aria-label="Artifact controls"]');
 const controls = await fitsAcross(view, 'Artifact controls');
-ok(controls.fits, `artifact controls: sheet fits the screen (${controls.left}..${controls.right}px of ${controls.viewport}px)`);
-ok(!(await overflows(view)), 'artifact controls: and opening it does not make the page scroll sideways');
+check(controls.fits, `artifact controls: sheet fits the screen (${controls.left}..${controls.right}px of ${controls.viewport}px)`);
+check(!(await overflows(view)), 'artifact controls: and opening it does not make the page scroll sideways');
 await view.close();
 
 // ── 3. the editor on a phone: `done` and the theme picker must be reachable ─
@@ -160,24 +160,24 @@ await edit.locator('[aria-label="Theme"]').click({ timeout: 30_000 });
 await edit.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
 await edit.waitForTimeout(300);
 const pop = await fitsAcross(edit, 'Themes');
-ok(pop.fits, `theme popover: fits the screen (${pop.left}..${pop.right}px of ${pop.viewport}px)`);
-ok(!(await overflows(edit)), 'theme popover: and opening it does not make the page scroll sideways');
+check(pop.fits, `theme popover: fits the screen (${pop.left}..${pop.right}px of ${pop.viewport}px)`);
+check(!(await overflows(edit)), 'theme popover: and opening it does not make the page scroll sideways');
 // Every theme has to be reachable, not merely present in the DOM.
 const clipped = await edit.locator('[aria-label^="Theme "]').evaluateAll(elements => {
   const w = document.documentElement.clientWidth;
   return elements
     .filter((el) => el.getBoundingClientRect().right > w + 1).length;
 });
-ok(clipped === 0, `theme popover: no theme card is cut off (${clipped} clipped)`);
+check(clipped === 0, `theme popover: no theme card is cut off (${clipped} clipped)`);
 await edit.keyboard.press('Escape');
 await edit.waitForTimeout(300);
 const done = await fitsAcross(edit, 'Exit edit mode');
-ok(done.fits, `editor: \`done\` is on screen (${done.left}..${done.right}px of ${done.viewport}px)`);
-ok(!(await overflows(edit)), 'editor: the page does not scroll sideways');
-ok(!(await barOverflows(edit)), 'editor: and the whole action row fits the bar');
+check(done.fits, `editor: \`done\` is on screen (${done.left}..${done.right}px of ${done.viewport}px)`);
+check(!(await overflows(edit)), 'editor: the page does not scroll sideways');
+check(!(await barOverflows(edit)), 'editor: and the whole action row fits the bar');
 // The real test of reachable: Playwright refuses to click what a user could not.
 const clicked = await edit.locator('[aria-label="Exit edit mode"]').click({ timeout: 5000 }).then(() => true).catch(() => false);
-ok(clicked, 'editor: and it can actually be pressed');
+check(clicked, 'editor: and it can actually be pressed');
 await edit.close();
 
 // ── 4. the desktop layout is not collateral damage ─────────────────────────
@@ -189,7 +189,7 @@ await wide.waitForSelector('[aria-label="Themes"]', { timeout: 10_000 });
 const cols = await wide.locator('[aria-label="Themes"]').evaluate(el => {
   return getComputedStyle(el).gridTemplateColumns.split(' ').length;
 });
-ok(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns)`);
+check(cols >= 2, `desktop: the popover keeps its multi-column grid (${cols} columns)`);
 
 /*
  * AND IT MUST BE REACHABLE, NOT MERELY PRESENT. The toolbar's left group is a
@@ -211,7 +211,7 @@ const reachable = (page, sel) => page.locator(sel).first().evaluate(el => {
 });
 
 const card = await reachable(wide, '[aria-label^="Theme "]');
-ok(card.reachable, `desktop: a theme card can actually be clicked (hit ${card.hit})`);
+check(card.reachable, `desktop: a theme card can actually be clicked (hit ${card.hit})`);
 await wide.keyboard.press('Escape');
 await wide.waitForTimeout(300);
 
@@ -220,7 +220,7 @@ await wide.locator('[aria-label="Color mode"]').click({ timeout: 30_000 });
 await wide.waitForSelector('[aria-label="Color modes"]', { timeout: 10_000 });
 await wide.waitForTimeout(200);
 const option = await reachable(wide, '[aria-label="Color mode dark"]');
-ok(option.reachable, `desktop: a colour-mode option can actually be clicked (hit ${option.hit})`);
+check(option.reachable, `desktop: a colour-mode option can actually be clicked (hit ${option.hit})`);
 await wide.close();
 
 // ── 5. a chart tooltip must be dismissable with a finger ───────────────────
@@ -306,18 +306,18 @@ const arcDrawn = (page) => page.waitForFunction(
 
 const phone = await browser.newPage({ viewport: PHONE, hasTouch: true, isMobile: true, deviceScaleFactor: 3 });
 await phone.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
-ok(await arcDrawn(phone), 'tooltip: the phone document draws an arc mark');
+check(await arcDrawn(phone), 'tooltip: the phone document draws an arc mark');
 
-ok(await touchMark(phone), 'tooltip: the phone document draws an arc mark to touch');
-ok(await cardShown(phone, true), 'tooltip: a touch opens the card');
+check(await touchMark(phone), 'tooltip: the phone document draws an arc mark to touch');
+check(await cardShown(phone, true), 'tooltip: a touch opens the card');
 let tip = await cardState(phone);
-ok(tip.shown, `tooltip: …and it is really up (${JSON.stringify(tip)})`);
-ok(tip.close, 'tooltip: and a touch-opened card carries a close button');
-ok(tip.cardEvents === 'none' && tip.closeEvents !== 'none',
+check(tip.shown, `tooltip: …and it is really up (${JSON.stringify(tip)})`);
+check(tip.close, 'tooltip: and a touch-opened card carries a close button');
+check(tip.cardEvents === 'none' && tip.closeEvents !== 'none',
   `tooltip: the card stays pointer-transparent, the button does not (${tip.cardEvents} / ${tip.closeEvents})`);
 
 await phone.evaluate(() => window.scrollBy(0, 300));
-ok(await cardShown(phone, false), 'tooltip: scrolling the document puts it away');
+check(await cardShown(phone, false), 'tooltip: scrolling the document puts it away');
 
 /*
  * …and the scroll back has to SETTLE before the next touch. A `scroll` event is delivered on a
@@ -335,7 +335,7 @@ const scrollSettled = (page, to) => page.evaluate((y) => new Promise((resolve) =
 
 await scrollSettled(phone, 0);
 await touchMark(phone);
-ok(await cardShown(phone, true), 'tooltip: it opens again after the scroll');
+check(await cardShown(phone, true), 'tooltip: it opens again after the scroll');
 /*
  * A 26px button is a 26px THUMB TARGET, which is half of what a phone needs. The visual stays
  * 26px — a bigger dot would cover the card it sits on — and the TARGET is grown to 44×44 under
@@ -379,13 +379,13 @@ const target = await phone.evaluate(() => {
     x: r.left + r.width / 2, y: r.top + r.height / 2,
   };
 });
-ok(!!target && target.width >= 44 && target.height >= 44,
+check(!!target && target.width >= 44 && target.height >= 44,
   `tooltip: the close button's tap target is at least 44x44 (${target ? `${target.area} around a ${target.visual} button` : 'missing'})`);
-ok(targetHittable,
+check(targetHittable,
   `tooltip: and a tap 20px outside the drawn button still lands on it (corners ${target?.around}, card ${target?.card})`);
 // Tap 18px down-left of the centre: the enlarged target, NOT the drawn button.
 if (target) await phone.touchscreen.tap(target.x - 18, target.y + 18);
-ok(await cardShown(phone, false), 'tooltip: and tapping it dismisses the card');
+check(await cardShown(phone, false), 'tooltip: and tapping it dismisses the card');
 await phone.close();
 
 // The same document with a MOUSE: desktop hover is untouched.
@@ -393,14 +393,14 @@ const desk = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 await desk.goto(`${B}/a/${chartDoc.id}`, { waitUntil: 'load' });
 await arcDrawn(desk);
 const point = await markPoint(desk);
-ok(!!point, 'tooltip: the desktop document draws an arc mark to hover');
+check(!!point, 'tooltip: the desktop document draws an arc mark to hover');
 await desk.mouse.move(point.x - 3, point.y - 3);
 await desk.mouse.move(point.x, point.y);
-ok(await cardShown(desk, true), 'tooltip: a real hover still opens the card');
+check(await cardShown(desk, true), 'tooltip: a real hover still opens the card');
 tip = await cardState(desk);
-ok(!tip.close, `tooltip: and a mouse-opened card carries NO close button (${JSON.stringify(tip)})`);
+check(!tip.close, `tooltip: and a mouse-opened card carries NO close button (${JSON.stringify(tip)})`);
 await desk.mouse.move(4, 4);
-ok(await cardShown(desk, false), 'tooltip: moving the cursor off the mark still closes it');
+check(await cardShown(desk, false), 'tooltip: moving the cursor off the mark still closes it');
 await desk.close();
 
 
@@ -464,7 +464,7 @@ for (let i = 0; i < 400 && !ready.ran; i++) {
   if (ready.ran) break;
   await reader.waitForTimeout(50);
 }
-ok(ready.ran, `slow reader: the SPA mounted its inline document and protected controls (${ready.ran})`);
+check(ready.ran, `slow reader: the SPA mounted its inline document and protected controls (${ready.ran})`);
 
 /*
  * THE ANSWER MEASURED IS THE REVEAL, not the hide. The chrome is now
@@ -483,7 +483,7 @@ for (let i = 0; i < 20 && shownAfter === null; i++) {
   if (!(await hiddenOn(reader))) shownAfter = Date.now() - scrolledAt;
   else await reader.waitForTimeout(25);
 }
-ok(shownAfter !== null && shownAfter <= 500,
+check(shownAfter !== null && shownAfter <= 500,
   `slow reader: the chrome answers the first scroll UP within 500ms, runtime or no runtime (${shownAfter === null ? 'never' : `${shownAfter}ms`})`);
 await slow.close();
 
@@ -499,10 +499,10 @@ await framedView.waitForTimeout(2500);
 const chartFrame = framedView.mainFrame();
 await chartFrame.evaluate(() => window.scrollTo(0, 400));
 await framedView.waitForTimeout(400);
-ok(await hiddenOn(chartFrame), 'framed: the dock leaves on a downward scroll inside the frame');
+check(await hiddenOn(chartFrame), 'framed: the dock leaves on a downward scroll inside the frame');
 await chartFrame.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
 await framedView.waitForTimeout(400);
-ok(!(await hiddenOn(chartFrame)), 'framed: and comes back at the END of the document, where the footer is and there is no further scroll');
+check(!(await hiddenOn(chartFrame)), 'framed: and comes back at the END of the document, where the footer is and there is no further scroll');
 await framedView.close();
 
 /*
@@ -533,7 +533,7 @@ await docFrame.waitForSelector('p', { timeout: 30_000 });
 // A coarse pointer is the whole premise: a leg that silently took the mouse
 // path would pass the "below the words" check by accident near the top of the
 // viewport and test nothing.
-ok(await docFrame.evaluate(() => matchMedia('(pointer: coarse)').matches),
+check(await docFrame.evaluate(() => matchMedia('(pointer: coarse)').matches),
   'touch: the emulated phone reports a coarse pointer');
 
 /** The Range a touch selection leaves behind, and the one event it fires. */
@@ -555,7 +555,7 @@ for (let attempt = 0; attempt < 20; attempt += 1) {
   await touch.waitForTimeout(600);
   if (await bubble.isVisible().catch(() => false)) break;
 }
-ok(await bubble.isVisible(), 'touch: the owner is offered the bubble on a phone at all');
+check(await bubble.isVisible(), 'touch: the owner is offered the bubble on a phone at all');
 
 /*
  * …and now the module is WARM, which is the only way to ask the real question.
@@ -569,14 +569,14 @@ await docFrame.evaluate(() => {
   document.dispatchEvent(new Event('selectionchange'));
 });
 await touch.waitForTimeout(400);
-ok(!(await bubble.isVisible().catch(() => false)), 'touch: collapsing the selection puts the bubble away at once');
+check(!(await bubble.isVisible().catch(() => false)), 'touch: collapsing the selection puts the bubble away at once');
 await touchSelect();
 let raised = false;
 for (let attempt = 0; attempt < 20 && !raised; attempt += 1) {
   await touch.waitForTimeout(250);
   raised = await bubble.isVisible().catch(() => false);
 }
-ok(raised, 'touch: a selection that fires NO pointerup raises the bubble — selectionchange is all a touch gesture gives');
+check(raised, 'touch: a selection that fires NO pointerup raises the bubble — selectionchange is all a touch gesture gives');
 
 const placed = await bubble.evaluate((surface) => {
   const box = surface.getBoundingClientRect();
@@ -589,12 +589,12 @@ const placed = await bubble.evaluate((surface) => {
     width: window.innerWidth, height: window.innerHeight,
   };
 });
-ok(placed.top >= placed.lastBottom - 1,
+check(placed.top >= placed.lastBottom - 1,
   `touch: the bubble hangs BELOW the last line of the selection (top ${Math.round(placed.top)} vs line bottom ${Math.round(placed.lastBottom)}, ${placed.lines} lines)`);
-ok(placed.bottom > placed.top && placed.right > placed.left
+check(placed.bottom > placed.top && placed.right > placed.left
   && placed.top >= -1 && placed.bottom <= placed.height + 1 && placed.left >= -1 && placed.right <= placed.width + 1,
   `touch: the bubble is inside the viewport (${Math.round(placed.left)}..${Math.round(placed.right)} x ${Math.round(placed.top)}..${Math.round(placed.bottom)} of ${placed.width}x${placed.height})`);
-ok(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
+check(placed.buttons.length > 0 && placed.buttons.every((h) => h >= 44),
   `touch: every action is a 44px touch target (${placed.buttons.join(', ')}px)`);
 
 /*
@@ -615,7 +615,7 @@ const bottomControls = await touch.locator('.mx-reader-rail, [data-mx-reader-byl
 }));
 const overlaps = bottomControls.filter(box => placed.left < box.right && placed.right > box.left
   && placed.top < box.bottom && placed.bottom > box.top);
-ok(placed.bottom > placed.top && overlaps.length === 0,
+check(placed.bottom > placed.top && overlaps.length === 0,
   `touch: the bubble stays clear of visible bottom controls (${overlaps.length} overlaps)`);
 
 // A tap, not a click: the whole point is the finger.
@@ -627,10 +627,8 @@ const composer = await (async () => {
   }
   return false;
 })();
-ok(composer, 'touch: tapping Comment opens the composer on those words');
+check(composer, 'touch: tapping Comment opens the composer on those words');
 await touch.close();
 
 await browser.close();
-const failed = out.filter((l) => l.startsWith('FAIL')).length;
-console.log(failed ? `\n${failed} FAILED` : `\nall ${out.length} checks passed`);
-process.exit(failed ? 1 : 0);
+check.done();

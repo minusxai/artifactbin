@@ -34,7 +34,7 @@ export function setWebFontSourcesForTests(next: { cssBase: string; fileHost: str
 }
 
 /** One face of a resolved family, pointing at our own origin. */
-export type WebFontAsset = StoryFontAsset;
+type WebFontAsset = StoryFontAsset;
 
 export class UnknownFontError extends Error {
   constructor(public readonly family: string, message: string) {

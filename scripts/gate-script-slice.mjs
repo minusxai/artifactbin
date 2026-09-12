@@ -1,3 +1,5 @@
+import { inlineStory } from './lib/page-facts.mjs';
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { artifactDocument } from './lib/artifact-document.mjs';
 /**
@@ -13,6 +15,9 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *   5. SSR carried the data: a <Number> over a dataset ref reads correctly
  *   6. a remote edit updates the current document (live down-sync survives the switch)
  *   7. the EDIT canvas renders the script statically — it never executes there
+ *   8. authored JS has DATA capability only: forged reader actions and text
+ *      edits are refused, an undeclared mutation is refused, and a changed or
+ *      removed script replaces or revokes its realm
  *
  * usage: node scripts/gate-script-slice.mjs [base]   (default :3040)
  */
@@ -22,8 +27,7 @@ import { becomeOwner } from './lib/start-doc.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3040';
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('script-slice');
 
 const mint = await connectAgent(BASE);
 const api = async (path, body, method = 'POST') => {
@@ -69,7 +73,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`);
 
-const frameEl = await page.waitForSelector('[data-mx-inline-story]', { timeout: 15000 });
+const frameEl = await inlineStory(page, { timeout: 15000 });
 const frame = page.mainFrame();
 await frame.waitForSelector('h1', { timeout: 15000 });
 const managedRealm = async (host, title) => {
@@ -225,7 +229,7 @@ const broken = await api('/api/artifacts', {
  */
 await becomeOwner(page, BASE, mint.token);
 await page.goto(`${BASE}/a/${doc.id}`, { waitUntil: 'load' });
-await page.waitForSelector('[data-mx-inline-story]', { timeout: 30000 });
+await inlineStory(page);
 await page.waitForTimeout(4000);
 const documentFrame = () => page.mainFrame();
 await page.evaluate(() => { document.querySelector('[data-mx-inline-story]').__probe = 'same-document'; });
@@ -245,6 +249,71 @@ const afterRealm = await managedRealm(documentFrame(), 'Slice script');
 check(await afterRealm.evaluate("document.querySelectorAll('#script-made').length").catch(() => -1) === runsBefore,
   'entering edit did not re-run the managed author script');
 
+/*
+ * 8. AUTHORED JS HAS DATA CAPABILITY, NEVER RENDERER OR ACCOUNT AUTHORITY.
+ *
+ * Sections 2 and 7 proved what the realm cannot REACH (parent, storage,
+ * network, the editor's signing nonce). This one proves what it cannot ASK
+ * FOR: the reader actions and text edits it can post to the top window are
+ * refused, an undeclared mutation is refused, and the data capability it does
+ * have still works — the signal round trip is the control, because a script
+ * that simply failed to run would pass every refusal check above.
+ */
+{
+  const AUTHOR = [
+    "for (const kind of ['like','follow','edit']) top.postMessage({type:'mx:reader-action',kind},'*');",
+    "top.postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'*');",
+    "mx.mutate('undeclared').then(()=>mx.params.set('mutation','escaped'),()=>mx.params.set('mutation','refused'));",
+    'mx.params.subscribe(values=>{ if (values.output !== values.input * 2) mx.params.set("output", values.input * 2); });',
+    "mx.params.set('input',3);",
+  ].join('\n');
+  const scripted = (code) => '<Helmet>'
+    + '<Value name="mutation" type="string" default="waiting" />'
+    + '<Value name="input" type="number" default={0} /><Value name="output" type="number" default={0} />'
+    + `<script>{\`${code}\`}</script></Helmet>`
+    + '<h1 id="heading">Script boundary</h1>'
+    + '<output id="probe-mutation">{$mutation}</output><output id="probe-output">{$output}</output>';
+
+  const isolated = await api('/api/artifacts', { title: 'mxmx_test_script_isolation', markup: scripted(AUTHOR) });
+  const head = async () => (await fetch(`${BASE}/api/artifacts/${isolated.id}`, {
+    headers: { Authorization: `Bearer ${mint.token}` },
+  })).json();
+
+  const p4 = await browser.newPage({ viewport: { width: 1000, height: 700 } });
+  await becomeOwner(p4, BASE, mint.token); // a fresh context owns nothing
+  const accountRequests = [];
+  p4.on('request', (r) => {
+    if (/\/(like|follow|edits|annotations)(?:\?|$)/.test(new URL(r.url()).pathname) && r.method() !== 'GET') {
+      accountRequests.push(r.url());
+    }
+  });
+  await p4.goto(`${BASE}/a/${isolated.id}`);
+  const f4 = await artifactDocument(p4, { timeout: 20000 });
+  const settled = await f4.waitForFunction(
+    () => document.querySelector('#probe-mutation')?.textContent === 'refused'
+      && document.querySelector('#probe-output')?.textContent === '6',
+    null, { timeout: 20000 },
+  ).then(() => true, async () => {
+    console.error('  isolation state', await f4.locator('output').allTextContents());
+    return false;
+  });
+  check(settled, 'an undeclared mx.mutate() is refused while the declared signal still round-trips (3 → 6)');
+  check(accountRequests.length === 0,
+    `forged reader actions invoke no account API (${accountRequests.slice(0, 2).join(', ') || 'none'})`);
+  check((await head()).version === 1, 'and a forged mx:text-edit never reached the source');
+  check(await f4.locator('iframe[title="Isolated artifact script"]').getAttribute('sandbox') === 'allow-scripts',
+    'the author realm is sandboxed to scripts alone');
+
+  // A changed script replaces its old realm, and a removed script revokes it.
+  const oldRealm = await f4.locator('iframe[title="Isolated artifact script"]').elementHandle();
+  await api(`/api/artifacts/${isolated.id}`, { markup: scripted("mx.params.set('output',77)") }, 'PUT');
+  await f4.waitForFunction(() => document.querySelector('#probe-output')?.textContent === '77', null, { timeout: 20000 });
+  check(await oldRealm.evaluate((el) => el.isConnected) === false, 'a changed script replaces its old realm');
+  await api(`/api/artifacts/${isolated.id}`, { markup: '<h1 id="heading">Script removed</h1><Card>Still interactive</Card>' }, 'PUT');
+  await f4.waitForFunction(() => document.querySelector('#heading')?.textContent === 'Script removed', null, { timeout: 20000 });
+  check(await f4.locator('iframe[title="Isolated artifact script"]').count() === 0, 'and a removed script revokes it');
+  await p4.close();
+}
+
 await browser.close();
-if (failures.length) { console.error(`\n${failures.length} failure(s)`); process.exit(1); }
-console.log('\nall checks passed');
+check.done();

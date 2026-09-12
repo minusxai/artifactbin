@@ -11,22 +11,22 @@
  */
 import { BROWSER_SERVICE_URL, EVENTS_SERVICE_URL, SQL_SERVICE_URL } from '@/lib/config';
 
-export type ServiceName = 'sql' | 'browser' | 'events';
+type ServiceName = 'sql' | 'browser' | 'events';
 
 /** The service URLs as configured: null = in-process. */
-export type ServiceUrls = Record<ServiceName, string | null>;
+type ServiceUrls = Record<ServiceName, string | null>;
 
-export interface StackHealth {
+interface StackHealth {
   ok: boolean;
   /** The services whose `/health` did not answer 2xx within the deadline, in `ServiceName` order. */
   failing: ServiceName[];
 }
 
 /** How long one probe may take before it counts as down. */
-export const PROBE_TIMEOUT_MS = 2000;
+const PROBE_TIMEOUT_MS = 2000;
 
 /** The URLs the app was configured with — the ONLY place they are read for readiness. */
-export function configuredServiceUrls(): ServiceUrls {
+function configuredServiceUrls(): ServiceUrls {
   return { sql: SQL_SERVICE_URL || null, browser: BROWSER_SERVICE_URL || null, events: EVENTS_SERVICE_URL || null };
 }
 

@@ -20,7 +20,7 @@ import { SCHEMA_STATEMENTS } from './schema';
  *                      and search_path/schema are the caller's choice; the
  *                      idempotent boot DDL applies to whatever it points at
  */
-export type DbTarget = { engine: 'pglite'; dataDir: string | null } | { engine: 'pg'; url: string };
+type DbTarget = { engine: 'pglite'; dataDir: string | null } | { engine: 'pg'; url: string };
 
 const PGLITE_SCHEME = 'pglite://';
 const DEFAULT_PGLITE_DIR = './data/pglite';

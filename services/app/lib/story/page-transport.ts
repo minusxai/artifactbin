@@ -1,5 +1,5 @@
 /** Browser-safe transport seam: preserve one canonical CSS copy without changing the surface contract. */
-export interface CssSurface {
+interface CssSurface {
   compiledCss: string | null;
   runtime?: { compiledCss: string | null };
 }

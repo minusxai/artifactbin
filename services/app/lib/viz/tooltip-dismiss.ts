@@ -31,7 +31,7 @@
  */
 
 /** How the card that is currently up was opened. */
-export type TooltipOpener = 'mouse' | 'touch' | 'pen' | 'unknown';
+type TooltipOpener = 'mouse' | 'touch' | 'pen' | 'unknown';
 
 /** Marks a tooltip card's own subtree, so the policy never dismisses on a tap INSIDE the card. */
 const CARD_ATTR = 'data-mx-tooltip-card';

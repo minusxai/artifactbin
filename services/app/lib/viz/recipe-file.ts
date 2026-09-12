@@ -24,33 +24,18 @@
  *  - Any other `{{token}}` is a hard error naming the token.
  */
 import {
-  type ColumnFormatConfig,
   type VizRecipeBinding,
-  type VizRecipeContent,
-  type VizSourceVega,
-  type VizSourceVegaLite
+  type VizRecipeContent
 } from '@/lib/validation/atlas-schemas';
 import type { VizResultColumn } from './types';
 
 /** Column kinds a slot may accept (drives drop-zone hints and dummy synthesis). */
-export type VizRecipeAccepts = VizRecipeBinding['accepts'][number];
+type VizRecipeAccepts = VizRecipeBinding['accepts'][number];
 
 export type { VizRecipeBinding, VizRecipeContent };
 
-export type FileRecipeMaterializeResult =
+type FileRecipeMaterializeResult =
   | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega' }
-  | { ok: false; error: string };
-
-/** A recipe address + bindings, as detach provenance records them. */
-export interface FileRecipeRef {
-  path: string;
-  bindings: Record<string, string | string[]>;
-  params?: Record<string, unknown> | null;
-  columnFormats?: Record<string, ColumnFormatConfig> | null;
-}
-
-export type FreezeFileRecipeResult =
-  | { ok: true; source: VizSourceVegaLite | VizSourceVega }
   | { ok: false; error: string };
 
 type Json = string | number | boolean | null | Json[] | { [k: string]: Json };

@@ -41,7 +41,7 @@ export interface Baseline {
   ok: boolean;
 }
 
-export interface BaselineOptions {
+interface BaselineOptions {
   leg: Leg;
   adapter: HarnessAdapter;
   apiKey: string;

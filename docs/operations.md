@@ -35,30 +35,42 @@
   OWN servers from `dist/` — `min(6, availableParallelism())` of them, each with
   in-memory PGLite, its own port and its own object dir — and deals the set
   across them. **The gates run in parallel by default; a serial run is an
-  explicit `--servers=1`, for debugging only.** The runner prints
-  `gates: N server(s), M gate(s)` before it starts and the wall-clock when it
-  ends, so a serial run is visible in any log. That is exactly what CI does
-  (`--servers=4`), and it is the
-  default on purpose: driving a DEV server instead means the SPA is served
+  explicit `--servers=1`, for debugging and for measuring one gate.** The runner
+  prints `gates: N server(s), M gate(s)` before it starts, each gate's seconds
+  as it finishes, and the wall-clock and the five slowest when it ends. That is
+  what CI does, across three shards (`--servers=4 --shard=i/3`), and booting is
+  the default on purpose: driving a DEV server instead means the SPA is served
   through Vite, whose HMR websocket a fixed `connect-src 'self'` CSP refuses, so
   the page never mounts and the gates time out on a checkout where nothing is
-  wrong. `--servers=N` chooses the count (`--servers=0` falls back to
-  `http://localhost:3040`), and `npm run test:gates -- <base>` drives a server
-  you already have — point that one at
-  `PROXY__RATE_LIMIT_CONFIG_FILE=services/proxy/dev_rate_limits.yml`. Run one
-  gate with `--only=<name>` and list what exists with `--list` — the runner
+  wrong. `npm run test:gates -- <base>` drives a server you already have — point
+  that one at `PROXY__RATE_LIMIT_CONFIG_FILE=services/proxy/dev_rate_limits.yml`.
+  `--servers=0` with no base URL is refused rather than guessing an address. Run
+  one gate with `--only=<name>` and list what exists with `--list` — the runner
   discovers every `scripts/gate-*.mjs` from disk, so a new gate joins by
   existing and no hand-written list can fall behind. A gate's verdict is its
   exit code.
-  Highlights: `app-flows` (whole app), `concurrent-edit` (a human typing while
-  an agent edits), `full-kit` (every component through the served document:
-  SSR, hydration, isolation, fonts, export), `script-slice` (an author
-  `<script>` runs in view and is inert in the editor), `shell-seo` (a crawler
-  is served the document itself, text and unfurl tags included), `visibility`
-  (the ACL + pretty URLs, incl. a private artifact's sandboxed iframe carrying
-  the session cookie). Gates that log in need a mail sink; the booted servers
-  share one per run, and a server of your own must be pointed at its own — see
-  each file's header.
+- **Every gate has a row in `scripts/gates.manifest.mjs`**, and the runner
+  refuses to start unless the rows and the files on disk are the same set.
+  A row is `{ name, needsMail, serialGroup?, needsGenerationFixture?, timeoutMs }`
+  and the runner reads every field: the mail sink is only started when some
+  selected gate needs it, the fixture model server likewise, gates in one
+  `serialGroup` never overlap even across servers (the clipboard is one device
+  per machine), and `timeoutMs` both kills a hung gate and is the weight
+  `gates.shard.mjs` balances the CI shards on. It is a MEASUREMENT —
+  `max(60_000, 3 × measured seconds)` rounded up to ten seconds — so a gate that
+  gets slower or faster is re-measured with `--servers=1 --only=<name>` and its
+  row updated; that alone re-balances the shards.
+  Highlights: `app-flows` (whole app), `inplace-edit` (one document through
+  reading, typing, an agent's write and back — including a human typing while
+  an agent edits), `editor-v2` (the editor end to end: the engine, the source
+  pane, version history, every way out), `full-kit` (every component through
+  the served document: SSR, hydration, isolation, fonts, export), `script-slice`
+  (an author `<script>` runs in view, is inert in the editor, and can forge
+  nothing), `shell-seo` (a crawler is served the document itself, text and
+  unfurl tags included), `visibility` (the ACL + pretty URLs, incl. a private
+  artifact's sandboxed iframe carrying the session cookie). Gates that log in
+  need a mail sink; the booted servers share one per run, and a server of your
+  own must be pointed at its own — see each file's header.
 - **Image export needs a headless browser**: run `npx playwright install chromium`
   once per host. Renders happen on demand (lazy singleton, 60s idle shutdown)
   and persist in the object store keyed by artifact version, so one render

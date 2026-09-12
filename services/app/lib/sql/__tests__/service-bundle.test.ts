@@ -13,7 +13,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { rmSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { freePort } from '@/__tests__/net';
+import { freePort } from '@artifactbin/test-support/net';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 // Beside the repo's node_modules, because the bundle leaves the native packages

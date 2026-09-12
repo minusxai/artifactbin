@@ -29,17 +29,16 @@
  *
  *   node scripts/gate-reader-chrome.mjs [base]
  */
-import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
+import { createChecker } from './lib/assert.mjs';
 import { chromium } from 'playwright';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { connectAgent } from './lib/cli-connection.mjs';
+import { startMailSink } from './lib/mail-login.mjs';
+import { becomeAccountOwner } from './lib/start-doc.mjs';
 import { revealReaderChrome } from './lib/reveal-chrome.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
 const PHONE = { width: 390, height: 844 };
 const DESKTOP = { width: 1280, height: 800 };
-const failures = [];
-const check = (ok, label) => { console.log(`${ok ? '  ok ' : 'FAIL '} ${label}`); if (!ok) failures.push(label); };
+const check = createChecker('reader-chrome');
 const stamp = Date.now().toString(36);
 const EMAIL = `mxmx_test_readerchrome_${stamp}@example.com`;
 
@@ -51,35 +50,29 @@ const browser = await chromium.launch();
 // anonymous document deliberately has none.
 const ownerCtx = await browser.newContext({ viewport: DESKTOP });
 const owner = await ownerCtx.newPage();
-await loginViaEmail(owner, BASE, sink, EMAIL);
-const anon = await connectAgent(BASE);
-const claimed = await owner.evaluate(
-  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
-  anon.token,
-);
-check(claimed === 200, 'the owner claimed a token, so the document has an author');
+/*
+ * The byline is the AUTHOR's handle, so the documents have to be owned — and
+ * the account owns what IT publishes. The gate used to log in, approve a CLI
+ * connection and POST that bearer to /api/tokens/claim so the account adopted
+ * it; publishing through the page's own session (the door the product's UI
+ * uses) is the same ownership with no credential in the gate at all.
+ */
+const account = await becomeAccountOwner(owner, BASE, { sink, email: EMAIL });
 const handle = await owner.evaluate(async () => (await (await fetch('/api/page/account')).json())?.username ?? null);
-check(typeof handle === 'string' && handle.length > 0, `the owner has a handle (@${handle})`);
-
-const api = async (path, init = {}) => {
-  const res = await fetch(`${BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}`, ...(init.headers ?? {}) } });
-  if (!res.ok) throw new Error(`${path} → ${res.status} ${await res.text()}`);
-  return res.json();
-};
+check(typeof handle === 'string' && handle.length > 0, `the signed-in owner has a handle (@${handle})`);
 
 const LONG = '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">A long read</h1>'
   + Array.from({ length: 60 }, (_, i) => `<p className="mt-4 text-lg">Five screens of it, at least. Paragraph ${i + 1}.</p>`).join('')
   + '</div>';
-const long = await api('/api/artifacts', {
-  method: 'POST',
-  body: JSON.stringify({ title: 'Reader chrome gate', visibility: 'public', markup: LONG }),
-});
-const short = await api('/api/artifacts', {
-  method: 'POST',
-  body: JSON.stringify({ title: 'One paragraph', visibility: 'public', markup: '<div className="p-10"><p>One paragraph, and nothing to scroll.</p></div>' }),
+const long = await account.publish({ title: 'Reader chrome gate', visibility: 'public', markup: LONG });
+const short = await account.publish({
+  title: 'One paragraph', visibility: 'public',
+  markup: '<div className="p-10"><p>One paragraph, and nothing to scroll.</p></div>',
 });
 // The copy is what carries provenance; the source is PUBLIC, so it is named.
-const copy = await api(`/api/artifacts/${long.id}/fork`, { method: 'POST', body: JSON.stringify({ visibility: 'public' }) });
+const copy = await owner.evaluate(async (id) => (await (await fetch(`/api/my/artifacts/${id}/fork`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visibility: 'public' }),
+})).json()), long.id);
 check(!!copy.id && copy.id !== long.id, `a forked copy exists (${copy.id})`);
 
 /** A logged-out reader, with a clipboard and no platform share sheet. */
@@ -310,5 +303,4 @@ await ownerCtx.close();
 await browser.close();
 await sink.close?.();
 
-console.log(failures.length ? `\n${failures.length} FAILED` : '\nall reader-chrome checks passed');
-process.exit(failures.length ? 1 : 0);
+check.done();

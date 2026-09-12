@@ -14,7 +14,7 @@
  * Runs from the ~1 KB entry every document loads (anchor-entry), because a
  * prose document has tables too and ships no runtime. React-free.
  */
-export const SCROLLABLE_ATTR = 'data-mx-scrollable';
+const SCROLLABLE_ATTR = 'data-mx-scrollable';
 
 /** Mark now, and keep the marks honest on scroll and resize. Returns a disposer. */
 export function markScrollableTables(doc: Document, root: Document | HTMLElement = doc): () => void {

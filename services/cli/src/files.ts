@@ -19,7 +19,7 @@ export async function privateDirectory(path: string): Promise<void> {
   await chmod(path, 0o700);
 }
 
-export async function syncDirectory(path: string): Promise<void> {
+async function syncDirectory(path: string): Promise<void> {
   // Windows does not expose directory fsync through Node.
   if (process.platform === 'win32') return;
   const handle = await open(path, 'r');

@@ -12,6 +12,7 @@ COPY services/browser/package.json ./services/browser/package.json
 COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 COPY services/cli/package.json ./services/cli/package.json
+COPY services/test-support/package.json ./services/test-support/package.json
 COPY services/app/scripts/copy-assets.mjs ./services/app/scripts/copy-assets.mjs
 COPY services/cli/scripts/prepare-pty.mjs ./services/cli/scripts/prepare-pty.mjs
 # THE INSTALL LAYER IS KEYED ON MANIFESTS ONLY — `npm ci` reads the root files
@@ -43,6 +44,7 @@ COPY services/browser/package.json ./services/browser/package.json
 COPY services/events/package.json ./services/events/package.json
 COPY services/proxy/package.json ./services/proxy/package.json
 COPY services/cli/package.json ./services/cli/package.json
+COPY services/test-support/package.json ./services/test-support/package.json
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --legacy-peer-deps --ignore-scripts -w services/app --cache /root/.npm \
     && test ! -e node_modules/@duckdb \
     && test ! -e node_modules/playwright \

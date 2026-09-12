@@ -31,7 +31,7 @@ describe('notebook execution boundary', () => {
     ['SELECT * FROM two', 'later'], ['SELECT * FROM one', 'earlier'],
     ['SELECT * FROM missing', 'relation is not in the catalog'],
     ['DELETE FROM sales.orders RETURNING *', 'only read statements'],
-    ['SELECT pg_sleep(1)', 'function is not allowed'],
+    ['SELECT pg_sleep(1)', 'function pg_sleep is not allowed'],
     ['SELECT * FROM pg_catalog.pg_class', 'system schemas'],
     ['SELECT * FROM information_schema.tables', 'system schemas'],
     ['SELECT total::regclass FROM sales.orders', 'cast type'],

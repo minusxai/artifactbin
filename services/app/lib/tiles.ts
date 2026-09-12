@@ -16,8 +16,8 @@
  */
 
 /** The Carto basemap styles the app ships (light theme / dark theme). */
-export const TILE_STYLES = ['light_all', 'dark_all'] as const;
-export type TileStyle = (typeof TILE_STYLES)[number];
+const TILE_STYLES = ['light_all', 'dark_all'] as const;
+type TileStyle = (typeof TILE_STYLES)[number];
 
 /**
  * Carto's CDN, bare host — the `a.`–`d.` shards exist only for pre-HTTP/2

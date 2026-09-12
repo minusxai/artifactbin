@@ -251,10 +251,10 @@ function drawsChart(nodes: JsxNode[]): boolean {
  * lib/story/__tests__/history-prelude.test.ts), and hydration does not route.
  */
 /*
- * SPIKE S2 (F2 — the reader's `<Value>` selections in the URL, risk R5).
+ * THE ONE WINDOW IN THE FREEZE — the reader's `<Value>` selections in the URL.
  *
- * The freeze above is exactly what a reader-facing URL needs, and F2 needs the
- * URL to change anyway: someone who picks "west" must be able to copy the
+ * The freeze above is exactly what a reader-facing URL needs, and reader
+ * controls need the URL to change anyway: someone who picks "west" must be able to copy the
  * address bar and hand another person the document they are looking at. So the
  * prelude keeps every door shut and opens ONE WINDOW, `window.__mxValues`.
  *
@@ -587,7 +587,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
      * ORDER with every module script before it, so on a chart document this
      * one waited for the whole runtime entry to download AND evaluate before
      * the reader's bar would answer a single scroll — measured at ~9.3 s
-     * against ~2.0 s for the chrome appearing (scripts/measure-bar.mjs).
+     * against ~2.0 s for the chrome appearing.
      * Nothing here depends on the runtime or on anything the runtime does, so
      * there is no order to keep; it needs only its own document, and it is
      * emitted after the island for that.

@@ -204,7 +204,8 @@ describe('CLI discovery',()=>{
   expect(text.split('\n')[0]).toMatch(/^artifactbin: .*afbin CLI\.$/);
   expect(text).toContain('curl -fsSL http://localhost:3000/chat/install.sh | sh');expect(text).toContain('http://localhost:3000/a/<id>');
   expect(text).not.toContain('afbin setup');
-  expect(text).toContain('afbin help');expect(text).toContain('/chat/install.sh | sh');expect(text).not.toMatch(/releases\/download|npm install|MCP/);
-  expect(text).not.toContain('/docs/');expect(Buffer.byteLength(text)).toBeLessThan(2048);
+  expect(text).toContain('afbin help');expect(text).toContain('/chat/install.sh | sh');expect(text).not.toMatch(/releases\/download|npm install/);
+  // MCP and /docs/ on this text are retired-surfaces.test.ts's row for the one-pager.
+  expect(Buffer.byteLength(text)).toBeLessThan(2048);
  });
 });

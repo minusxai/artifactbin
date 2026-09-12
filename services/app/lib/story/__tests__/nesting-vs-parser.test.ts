@@ -22,8 +22,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { parseJsx, serializeJsx } from '@/lib/jsx';
+import { serializeJsx } from '@/lib/jsx';
 import { fixHtmlNesting } from '@/lib/story/nesting';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const BLOCKS = ['div','ul','ol','table','figure','blockquote','section','article','aside','header','footer','main','nav','h1','h2','h3','h4','h5','h6','pre','hr','dl','details','summary','address','fieldset','p','li','dd','dt'];
 const WRAPPERS = ['span','a','em','strong','small','label','code','sub','sup','mark','q','cite','ins','del','b','i','u','abbr','time','data','output','meter','progress','video','audio','picture','canvas'];
@@ -68,8 +69,7 @@ function parserClosesParagraph(inner: string): boolean {
 }
 
 const rewrites = (inner: string): boolean => {
-  const parsed = parseJsx(`<p className="k">text ${inner}</p>`);
-  if (!parsed.ok) throw new Error(`${inner}: ${parsed.error}`);
+  const parsed = parseJsxOrThrow(`<p className="k">text ${inner}</p>`);
   return !serializeJsx(fixHtmlNesting(parsed.nodes)).startsWith('<p ');
 };
 

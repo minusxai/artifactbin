@@ -1,7 +1,8 @@
 /**
- * Claude Code — `claude -p --bare`. Bare mode skips CLAUDE.md, hooks, plugins
- * and MCP discovery, and needs an API key (no keychain): exactly the hermetic,
- * metered run an eval wants. The final `result` line carries turns, usage and
+ * Claude Code — `claude -p`, deliberately NOT `--bare`: bare mode cannot load installed skills, and
+ * the skills are the product surface under test. Isolation is the per-run `CLAUDE_CONFIG_DIR`, the
+ * empty strict MCP config and a cwd outside any repository (see the harness test). Claude Code's own
+ * bundled skills (`dataviz`) therefore load too — an agent reading them is the harness its users hold. The final `result` line carries turns, usage and
  * a cost figure — the latter is an estimate at Anthropic LIST prices, so it is
  * recorded but never used (see `price.ts`). An API error arrives as
  * `is_error: true` with `subtype: "success"`, so `is_error` is the verdict.

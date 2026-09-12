@@ -46,7 +46,11 @@ const resolveThrows = (spec) => `try { require.resolve(${JSON.stringify(spec)}) 
  *  the link is the honest probe (and what the Dockerfile itself asserts).
  *  `import()` because the `node -e` payload strings live in THIS ESM file —
  *  the esm-globals guard scans sources, comments included. */
-const carriedOk = (dir) => `import('node:fs').then((fs) => process.exit(fs.existsSync(${JSON.stringify(dir)}) ? 0 : 1), () => process.exit(1))`;
+const carriedOk = (dir) => {
+  // The path travels base64-encoded so the payload never interpolates a string into code.
+  const encoded = Buffer.from(dir, 'utf8').toString('base64');
+  return `import('node:fs').then((fs) => process.exit(fs.existsSync(Buffer.from('${encoded}', 'base64').toString('utf8')) ? 0 : 1), () => process.exit(1))`;
+};
 
 const SQL_PROBE = {
   path: '/run',

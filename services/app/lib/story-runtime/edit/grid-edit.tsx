@@ -30,7 +30,7 @@ import { STORY_GRID_EDIT_CSS } from '@/lib/story-ui/grid-css';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import type { StoryLayoutRect } from '../contract';
 
-export interface GridEditProps {
+interface GridEditProps {
   props: Record<string, unknown>;
   /** Report the rects a drag or resize produced. Several at once: compaction moves siblings. */
   onLayout: (rects: StoryLayoutRect[]) => void;

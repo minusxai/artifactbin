@@ -159,8 +159,16 @@ describe('the rules, each seen to fire on a literal tree', () => {
 
 describe('the real tree (skills/) obeys every rule', () => {
   const tree = skillTree();
-  it('keeps every authored reference within its reading budget',()=>{
-    for(const file of tree.files.filter(file=>file.ref))expect(Buffer.byteLength(render(file)),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
+  /**
+   * THE byte-cap sweep. It used to be asserted in seven places — the brief, the auth rule, the
+   * folder guidance, the publish-first rule, the quick sheet, the measured-fixes template docs and
+   * here — each over one file, one of them with 8192 hard-coded instead of the constant. One walk
+   * over the rendered tree covers every one of them, and covers a file added tomorrow too.
+   */
+  it('keeps every rendered file — the brief and every reference — within its reading budget',()=>{
+    for(const file of tree.files)expect(Buffer.byteLength(render(file)),file.path).toBeLessThanOrEqual(SKILL_FILE_MAX_BYTES);
+    expect(tree.files.length).toBeGreaterThan(10);
+    expect(tree.files.some(file=>!file.ref),'the brief itself must be in the sweep').toBe(true);
   });
   it('is ONE skill — the brief over its references, nothing else preloaded', () => {
     expect(tree.dirs.map((d) => d.name)).toEqual(['artifactbin']);

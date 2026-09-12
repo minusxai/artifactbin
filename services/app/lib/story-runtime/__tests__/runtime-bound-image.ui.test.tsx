@@ -18,12 +18,13 @@ import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { StoryRuntimeApp } from '../StoryRuntimeApp';
 import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlHash } from '@/lib/story/asset-url';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const CAT = 'https://cdn.example.com/cat.png';
 const DOG = 'https://cdn.example.com/dog.png';
@@ -40,8 +41,7 @@ const HELMET =
 const state = (values: Record<string, string | null>): DataflowState => ({ values, tables: {}, errors: {} });
 
 function build(body: string, values: Record<string, string | null>) {
-  const parsed = parseJsx(HELMET + body);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(HELMET + body);
   const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
   const dataflow: StoryIslandDataflow = { flow: { values: content.values, queries: content.queries }, state: state(values) };
   return { nodes, dataflow };
@@ -135,8 +135,7 @@ describe('a DataTable image column', () => {
     '<Helmet><Value name="rows" type="table" value={[{"name":"cat","logo":"https://cdn.example.com/cat.png"}]} /></Helmet>';
 
   const table = (columns: string) => {
-    const parsed = parseJsx(`${TABLE_HELMET}<DataTable data="$rows" columns={${columns}} />`);
-    if (!parsed.ok) throw new Error(parsed.error);
+    const parsed = parseJsxOrThrow(`${TABLE_HELMET}<DataTable data="$rows" columns={${columns}} />`);
     const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
     const dataflow: StoryIslandDataflow = {
       flow: { values: content.values, queries: content.queries },

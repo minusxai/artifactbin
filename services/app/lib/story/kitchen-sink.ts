@@ -10,7 +10,7 @@
  * the dataset/recipe/image refs first and splices their real ids in.
  */
 
-export interface KitchenSinkRefs {
+interface KitchenSinkRefs {
   /** A dataset artifact id (columns: month, region, revenue). */
   dataset: string;
   /** A viz recipe artifact id (slots: x, y, series). */

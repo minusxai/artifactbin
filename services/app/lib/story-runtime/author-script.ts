@@ -29,7 +29,7 @@ export function createAuthorScriptSession(store: DataflowStore, doc: Document = 
 }
 
 /** Own one sandbox + port. Disposing revokes its capability and removes its frame. */
-export interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay; resolveArtifactId?:string}
+interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay; resolveArtifactId?:string}
 export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document, visible?: AuthorScriptMount): () => void {
   const frame = doc.createElement('iframe');
   frame.title = visible?.title ?? AUTHOR_SCRIPT_FRAME_TITLE;

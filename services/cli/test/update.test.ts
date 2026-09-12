@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import {gzipSync} from 'node:zlib';
 import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,stat} from 'node:fs/promises';
@@ -7,6 +7,7 @@ import {join} from 'node:path';
 import {updateCli} from '../src/update';
 import {digest} from '../src/files';
 import {skillTargets} from '../src/skill-install';
+import {cliHarness} from './harness';
 const skill=Buffer.from(JSON.stringify({version:'9.0.0',protocol:1,files:{'SKILL.md':'---\nname: artifactbin\ndescription: Publish.\n---\nNew skill'}}));
 const binary=Buffer.from('new binary');
 const manifest={version:'9.0.0',protocol:1,platform:'darwin',arch:'arm64',binary:{file:'afbin-darwin-arm64',sha256:digest(binary)},skills:{file:'afbin-skills.json',sha256:digest(skill)}};
@@ -103,4 +104,18 @@ test('gzip updates verify both transport and executable, and recover using decod
   await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],verifyExecutable:async p=>{assert.deepEqual(await readFile(p),binary);},fetch:fetcher});
   assert.equal(downloads,1);assert.deepEqual(await readFile(exe),binary);
  }finally{await rm(home,{recursive:true,force:true});}
+});
+
+describe('update --dry-run', () => {
+  const harness=(prefix:string)=>cliHarness(prefix,{flags:[],token:null,account:null});
+
+  test('update --dry-run resolves the compatible release and reports binary and skill changes without installing',async()=>{
+   const h=await harness('afbin-seed-update-dry-');
+   try{
+    const code=await h.invoke(['update','--dry-run','--harness','pi','--json','--server','https://example.com'],({path})=>Response.json(path.includes('release')?{version:'9.9.9',protocol:1,assets:{}}:{error:'not_found'},{status:path.includes('release')?200:404}));
+    assert.equal(code,0,h.out.join(''));
+    const result=h.last();assert.equal(result.dry_run,true);assert.ok(result.binary);assert.ok(Array.isArray(result.skills));
+    assert.deepEqual((await readdir(h.root)).filter(name=>name!=='.artifactbin'),[],'dry-run writes nothing to the home directory');
+   }finally{await h.cleanup();}
+  });
 });

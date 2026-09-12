@@ -23,7 +23,7 @@ import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 
-export interface RefUse {
+interface RefUse {
   id: string;
   kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
   /** Datasets are only ever reached as `ref_<id>` tables inside a <Query>'s or <Mutation>'s SQL. */
@@ -38,7 +38,7 @@ export interface RefUse {
 }
 
 /** A dataset's write ACL (lib/artifacts DatasetAccess, mirrored here so this module stays DB-free). */
-export type RefAccess = 'read' | 'readwrite';
+type RefAccess = 'read' | 'readwrite';
 
 export interface ResolvedRef {
   catalog?:import("@/lib/datasets/types").DatasetCatalog;
@@ -353,7 +353,7 @@ export function validateRecipeUse(
       if (!col) {
         out.push(`recipe ${recipeLabel} slot "${slot.name}" binds "${c}" — not a dataset column (columns: ${columns.map((x) => x.name).join(', ')})`);
       } else if (!slot.accepts.includes(colKind(col.type))) {
-        out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)}`);
+        out.push(`recipe ${recipeLabel} slot "${slot.name}" accepts ${slot.accepts.join('|')} but "${c}" is ${colKind(col.type)} — change the query so "${c}" is ${slot.accepts.join(' or ')} (a cast such as cast("${c}" as text), or an aggregate), or bind another column`);
       }
     }
   }

@@ -1,7 +1,6 @@
 /** The app chrome around every page: a compact top bar and page controls. */
 import type { ReactNode } from 'react';
 import { Outlet } from 'react-router';
-import AdoptLegacyToken from '@/components/AdoptLegacyToken';
 import { MixpanelIdentify } from '@/components/MixpanelClient';
 import PageChrome from '@/components/PageChrome';
 import { useSession } from './session';
@@ -16,11 +15,10 @@ export function ShellFrame({ children, hideBreadcrumb = false, pending = false }
   const chrome = <PageChrome hideBreadcrumb={hideBreadcrumb} authed={!!session?.user} anon={session?.kind === 'anon'} />;
   // A provisional frame is presentation only. Its controls cannot act for a
   // destination that has not mounted, and its short lifetime must not start
-  // credential migration or account side effects.
+  // account side effects.
   if (pending) return <div data-mx-page-pending><div inert>{chrome}</div>{children}</div>;
   return (
     <>
-      <AdoptLegacyToken />
       {session?.user && <MixpanelIdentify userId={session.user.id} email={session.user.email} />}
       {chrome}
       {children}

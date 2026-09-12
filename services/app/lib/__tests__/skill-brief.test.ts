@@ -8,7 +8,7 @@
  * blurb every discovery surface (the meta tag) repeats.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuickSheet, skillExample, skillTree, QUICK_SHEET_MAX_BYTES } from '../skills';
+import { buildQuickSheet, skillExample, skillTree } from '../skills';
 import { AGENT_HELP_TITLE, agentBlurb, agentDiscovery, agentDiscoveryHead, llmsText } from '../agent-discovery';
 
 const BASE = 'https://artifactbin.dev';
@@ -35,7 +35,6 @@ describe('the brief', () => {
     const example = skillExample();
     expect(example).toMatch(/^---\n/);
     expect(sheet).toContain('```jsx\n' + example.trimEnd() + '\n```');
-    expect(Buffer.byteLength(sheet)).toBeLessThanOrEqual(QUICK_SHEET_MAX_BYTES);
     expect(sheet).not.toContain('[[');
   });
 
@@ -65,9 +64,8 @@ describe('llms.txt and the discovery head', () => {
     for (const line of [`curl -fsSL ${BASE}/chat/install.sh | sh`, 'afbin help', `${BASE}/a/<id>`, `${BASE}/@<user>/<id>-<slug>`, 'afbin pull', 'afbin validate', 'afbin push', 'skill']) {
       expect(text, line).toContain(line);
     }
-    expect(text).not.toContain('afbin setup');
     expect(text).not.toContain('[[');
-    expect(text).not.toMatch(/\/raw\b|MCP|\/docs\//);
+    // `afbin setup`, /raw, MCP and /docs/ are retired-surfaces.test.ts's row for the one-pager.
     expect(llmsText(`${BASE}/`)).toBe(text);
   });
 

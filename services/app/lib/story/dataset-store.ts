@@ -13,7 +13,7 @@
 import { objectKey, objectStore } from '@/lib/object-store';
 
 /** Where a dataset's rows are, if not inline. */
-export interface DatasetLocation {
+interface DatasetLocation {
   /** JSON to store in `artifacts.content` — empty when the rows went to the store. */
   content: string;
   /** Object key, or null when the rows are inline. */

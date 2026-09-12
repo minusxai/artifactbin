@@ -47,7 +47,7 @@ export interface EditRecord {
   span: TouchedSpan;
 }
 
-export type DeriveResult =
+type DeriveResult =
   | { ok: true; splice: Splice }
   | { ok: false; reason: 'no_match' | 'multiple_matches' | 'identical' };
 
@@ -242,7 +242,7 @@ export function applySplice(text: string, splice: Splice): string {
   return text.slice(0, splice.start) + splice.inserted + text.slice(splice.start + splice.removed.length);
 }
 
-export type ShiftResult =
+type ShiftResult =
   | { ok: true; splice: Splice; span: TouchedSpan }
   | { ok: false; conflictWith: EditRecord };
 

@@ -18,12 +18,13 @@ email carries a role — `can view` (reads it when private), `can comment` (also
 opens, answers and resolves comment threads on it, but never edits) or `can
 edit` (also edits it in place, through the API, reverts and reads history —
 never deletes, shares or moves it). A public document can have editors; a
-collaborator's own agent tokens edit too, once claimed by their account.
+collaborator's own agent edits too, through the CLI connection their account
+holds.
 
-Artifacts published by an **account-owned** token are born `private` — except
-images and datasets, born `unlisted`, since they are assets other documents
-reference at read time; ones published by an **anonymous** token are born
-`public` (there is no account to anchor an ACL to). Agents can pass
+Artifacts published through an **account-owned** connection are born `private`
+— except images and datasets, born `unlisted`, since they are assets other
+documents reference at read time; ones published through an **anonymous**
+connection are born `public` (there is no account to anchor an ACL to). Agents can pass
 `"visibility": "public"` on create or PUT.
 
 Artifacts are served at `/a/<id>`; documents you own also get a pretty URL,
@@ -35,8 +36,8 @@ the link you copy is the document you were looking at — and an agent can hand
 you one already narrowed to what you asked about.
 
 **Fork.** Anyone signed in can take a copy of any document they can read, from
-the reader controls on the page — or, for an agent holding a bearer token,
-`POST /api/artifacts/<id>/fork`. Content and settings travel, history, comments
+the reader controls on the page — or, for an agent, `afbin fork <ref>`
+(`POST /api/artifacts/<id>/fork`). Content and settings travel, history, comments
 and shares do not, and the original is never touched. The copy's footer says where it came from — naming and linking the
 source only when that source is `public`, since `unlisted` exists to be listed
 nowhere.

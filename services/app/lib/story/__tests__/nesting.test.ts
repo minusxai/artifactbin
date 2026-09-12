@@ -10,13 +10,13 @@
  * own output would make every write diff against a different base.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx, serializeJsx, type JsxNode } from '@/lib/jsx';
+import { serializeJsx, type JsxNode } from '@/lib/jsx';
 import { fixHtmlNesting } from '@/lib/story/nesting';
 import { canonicalizeMarkup } from '@/lib/story/jsx-tier';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const fix = (src: string): string => {
-  const parsed = parseJsx(src);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(src);
   return serializeJsx(fixHtmlNesting(parsed.nodes));
 };
 
@@ -160,15 +160,13 @@ describe('the invariants other code rests on', () => {
   it('changes no node\'s position — every AST path survives', () => {
     const src = '<div><p className="a"><div>x</div><span>y</span></p><Question data="$q" />'
       + '<section><p><ul><li>1</li><li>2</li></ul></p></section></div>';
-    const parsed = parseJsx(src);
-    if (!parsed.ok) throw new Error(parsed.error);
+    const parsed = parseJsxOrThrow(src);
     expect(paths(fixHtmlNesting(parsed.nodes))).toEqual(paths(parsed.nodes));
   });
 
   it('changes nothing but tag names', () => {
     const src = '<div><p className="a"><div>x</div></p></div>';
-    const parsed = parseJsx(src);
-    if (!parsed.ok) throw new Error(parsed.error);
+    const parsed = parseJsxOrThrow(src);
     const strip = (nodes: JsxNode[]): unknown =>
       nodes.map((n) => (n.type === 'element'
         ? { attrs: n.attributes.map((a) => a.name), selfClosing: n.selfClosing, children: strip(n.children) }

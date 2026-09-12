@@ -1,22 +1,20 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { parseJsx } from '@/lib/jsx';
 import { InlineStoryRuntime, type InlineStoryController } from '../InlineStoryRuntime';
 import { STORY_DOCUMENT_MESSAGE, STORY_EDIT_MODE_MESSAGE, STORY_COMMIT_MESSAGE, STORY_SELECT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryIslandData } from '../contract';
 import { StrictMode } from 'react';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 afterEach(cleanup);
 const data = (label: string): StoryIslandData => {
-  const parsed = parseJsx(`<h1 id="heading" aria-label="Artifact heading">${label}</h1>`);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(`<h1 id="heading" aria-label="Artifact heading">${label}</h1>`);
   return { nodes: parsed.nodes, colorMode: 'light', refData: {}, chrome: false };
 };
 const transport = { run: vi.fn(async () => ({ tables: {}, errors: {} })), page: vi.fn(async () => ({ rows: [], columns: [] })) };
 
 describe('inline artifact runtime lifetime', () => {
   it('wires outline navigation and overflowing tables only inside its owned root',async()=>{
-    const parsed=parseJsx('<article><h2>One</h2><h2>Two</h2><h2>Three</h2><table><tbody><tr><td>Wide</td></tr></tbody></table></article>');
-    if(!parsed.ok)throw Error(parsed.error);
+    const parsed=parseJsxOrThrow('<article><h2>One</h2><h2>Two</h2><h2>Three</h2><table><tbody><tr><td>Wide</td></tr></tbody></table></article>');
     vi.spyOn(HTMLTableElement.prototype,'scrollWidth','get').mockReturnValue(1000);
     vi.spyOn(HTMLTableElement.prototype,'clientWidth','get').mockReturnValue(100);
     const view=render(<><table aria-label="Outside" /><InlineStoryRuntime data={{...data(''),nodes:parsed.nodes,chrome:true,template:'editorial'}} onController={()=>{}} /></>);

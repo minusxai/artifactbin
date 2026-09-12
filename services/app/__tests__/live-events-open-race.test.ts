@@ -44,34 +44,13 @@ import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 
 import { resetLiveSubscriptions } from '@/lib/story/live';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { readFrames } from '@/__tests__/sse';
 
 useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
 
 /** Read SSE `data:` frames until `count` arrive or the budget runs out. */
-async function readFrames(body: ReadableStream<Uint8Array>, count: number, budgetMs = 2500): Promise<Record<string, unknown>[]> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const frames: Record<string, unknown>[] = [];
-  let buffer = '';
-  const deadline = Date.now() + budgetMs;
-  while (frames.length < count && Date.now() < deadline) {
-    const chunk = await Promise.race([
-      reader.read(),
-      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), Math.max(0, deadline - Date.now()))),
-    ]);
-    if (chunk.done || !chunk.value) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-    for (const line of buffer.split('\n\n')) {
-      const m = /^data: (.*)$/m.exec(line);
-      if (m) { try { frames.push(JSON.parse(m[1])); } catch { /* keepalive */ } }
-    }
-    buffer = '';
-  }
-  void reader.cancel().catch(() => {});
-  return frames;
-}
 
 beforeEach(async () => {
   await resetLiveSubscriptions();

@@ -9,7 +9,7 @@
  * "Loading…" forever, in development and on the deployment alike. It had never
  * worked. Nothing in the unit suite could see it either: the editor's UI test
  * mocks `@monaco-editor/react`, so the loader never runs there — which is why
- * the guard for this lives in scripts/gate-editor-flow.mjs, where a real
+ * the guard for this lives in scripts/gate-editor-v2.mjs (§4), where a real
  * browser really loads it.
  *
  * `loader.config({ monaco })` hands the library the instance we bundled, and it
@@ -68,7 +68,7 @@ loader.config({ monaco });
  * speed against the real editor: "typed in code mode" reached the SERVER as
  * "typemode"; the same words at 150ms a key arrived whole. No hand test finds
  * that, and no jsdom test can (Monaco does not run there), so
- * scripts/gate-editor-flow.mjs types with no delay and compares exactly.
+ * scripts/gate-editor-v2.mjs §4 types with no delay and compares exactly.
  *
  * Guarding on "is `value` what I last emitted?" is the obvious fix and is the
  * SAME BUG one step along: two keystrokes before a render make the effect's

@@ -178,7 +178,7 @@ export function writeUrlValues(search: string, flow: Dataflow, values: Record<st
 }
 
 /** A link's selection, as the two different things a caller needs it to be. */
-export interface UrlSelection {
+interface UrlSelection {
   /**
    * The `$` params to put on the document's own URL (no leading `?`), in
    * DECLARATION order — exactly what `writeUrlValues` would write, so what the

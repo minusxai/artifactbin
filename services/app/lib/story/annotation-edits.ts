@@ -3,7 +3,7 @@ import { nodeIndex } from './node-ids';
 import { canonicalText, parseAnnotationRange } from './annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { AnnotationOperation } from '@/lib/editor-v2/annotation-map';
-export interface AnnotationRelation {
+interface AnnotationRelation {
   anchor: string;
   range: string | null;
 }

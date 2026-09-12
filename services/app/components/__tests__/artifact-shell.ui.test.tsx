@@ -10,8 +10,10 @@
  * what these tests pin: a stubbed fetch that throws on any call.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import ArtifactShell, { useArtifactOwner } from '../ArtifactShell';
+import { render, renderHook, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import ArtifactShell, { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '../ArtifactShell';
+import type { ArtifactRole } from '@/lib/share-roles';
 
 
 let calls: string[];
@@ -75,5 +77,26 @@ describe('useArtifactOwner', () => {
   it('is false under a reader', () => {
     render(<ArtifactShell role="viewer"><Probe /></ArtifactShell>);
     expect(screen.getByText('owner-no')).toBeInTheDocument();
+  });
+});
+
+/**
+ * THREE ROLES, TWO RIGHTS. `useCanEditArtifact` answers the owner and a named
+ * editor; `useCanAnnotateArtifact` answers those two AND a commenter. The
+ * first version of the shell derived "can edit" as "not a reader", which
+ * handed a commenter the edit button the moment the role existed.
+ */
+const under = (role: ArtifactRole) => ({ children }: { children: ReactNode }) => <ArtifactShell role={role}>{children}</ArtifactShell>;
+
+describe('role hooks', () => {
+  it.each([
+    ['owner', true, true],
+    ['editor', true, true],
+    ['commenter', false, true],
+    ['viewer', false, false],
+  ] as const)('%s: edit=%s annotate=%s', (role, edit, annotate) => {
+    const wrapper = under(role);
+    expect(renderHook(() => useCanEditArtifact(), { wrapper }).result.current).toBe(edit);
+    expect(renderHook(() => useCanAnnotateArtifact(), { wrapper }).result.current).toBe(annotate);
   });
 });

@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { freePort, withHttpServer } from './net';
+import { freePort, withHttpServer } from '@artifactbin/test-support/net';
 import { renderedSchema, renders } from './rendered-schema';
 
 const ROOT = path.resolve(import.meta.dirname, '../../..');
@@ -74,7 +74,7 @@ describe('the schema is rendered once per process', () => {
 
 describe('mint-ceiling stops just past the configured ceiling', () => {
   it('6. the loop bound comes from the policy file, not a magic multiplier', () => {
-    const text = fs.readFileSync(path.join(ROOT, 'services/app/__tests__/mint-ceiling.test.ts'), 'utf8');
+    const text = fs.readFileSync(path.join(ROOT, 'services/app/__tests__/no-app-side-door.test.ts'), 'utf8');
     expect(text).not.toMatch(/\*\s*4\s*\+\s*5/);
     expect(text).toMatch(/loadPolicyFile\(/);
   });

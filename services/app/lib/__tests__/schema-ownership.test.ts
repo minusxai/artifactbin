@@ -25,28 +25,6 @@ import { renderedSchema } from '@/__tests__/rendered-schema';
 /** The declared tables, keyed "<schema>.<table>" → the owning package. */
 const declared = (): Record<string, 'app' | 'proxy' | 'events'> => renderedSchema().tables;
 
-/** The seed test's literal (CORE TEST 9) — the declared set, one owner each. */
-const DECLARED_SET = [
-  'app.annotations', 'app.mutation_receipts',
-  'app.artifact_edits', 'app.artifact_creation_operations',
-  'app.artifact_node_aliases',
-  'app.artifact_shares',
-  'app.artifact_source_ids',
-  'app.artifact_versions',
-  'app.artifacts',
-  'app.analytics_events',
-  'app.codes', 'app.dataset_secrets', 'app.dataset_result_cache',
-  'app.dataset_policy_audit', 'app.dataset_usage',
-  'app.node_identity_migration_jobs',
-  'app.relations',
-  'app.tokens',
-  'app.users',
-  'app.web_assets',
-  'app.webfonts',
-  'auth.clients',
-  'auth.credentials',
-  'events.events',
-];
 
 describe('table ownership', () => {
   it('every declared table has exactly one owner and no table concept is duplicated across schemas', () => {
@@ -64,9 +42,9 @@ describe('table ownership', () => {
     expect(tables['app.codes']).toBe('app');
   });
 
-  it('the declared set is exactly the literal (re-adding a table means touching this test)', () => {
-    expect(Object.keys(declared()).sort()).toEqual([...DECLARED_SET].sort());
-  });
+  // DROPPED: 'the declared set is exactly the literal'. By its own case name, re-adding a table
+  // means touching this test — it asserted that the fixture list above matches itself, and failed
+  // for every schema change rather than for any wrong one. The ownership rules below are the test.
 
   it('rate_limit_hits is declared by NOBODY', () => {
     // The shared-counter backend died with the split's role model; the table

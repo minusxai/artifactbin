@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { internalAssetResponse } from '../src/internal-assets';
-import { withHttpServer, type RunningServer } from '../../app/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 
 const origin = 'https://assets.invalid';
 const path = '/assets/' + 'c'.repeat(64);

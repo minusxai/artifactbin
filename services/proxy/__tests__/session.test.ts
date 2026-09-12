@@ -1,17 +1,21 @@
+import {beforeEach,describe,expect,it,afterAll,beforeAll} from 'vitest';
+import {createHash} from 'node:crypto';
+import {ACTOR_HEADER,ANONYMOUS} from '@artifactbin/contracts';
+import {signActor,assemble,cookieName,encodeAgentSession,createTokenReader,inProcess} from '@artifactbin/utils';
+import {proxyParts,type ProxyOptions} from '../src/parts';
+import {mintTestToken,resetTestDb,testDb,testProxyOptions} from './helpers';
+import {getDb,resetDb} from '@/lib/db';
+import {createAppServer} from '@/server/app';
+
 /**
  * THE SESSION PART — who is asking, resolved once and attached to nothing
  * (the actor travels as `c.get('actor')` to the forwarder, which hands it to
- * the upstream — utils attachActor, never a part). The policies here are keyed
- * the way P4 finding F2 demands: on the CLIENT's IP behind a trusted hop, on
- * the hop's own IP behind an untrusted one.
+ * the upstream — utils attachActor, never a part).
+ *
+ * The rate-limit cases that used to sit at the bottom of this file moved to
+ * `rate-limits-parts.test.ts`: they were here because a composed app was
+ * already standing up, not because they were about who is asking.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
-import {createHash} from 'node:crypto';
-import { ACTOR_HEADER, ANONYMOUS } from '@artifactbin/contracts';
-import { signActor } from '@artifactbin/utils';
-import { assemble, cookieName, encodeAgentSession } from '@artifactbin/utils';
-import { proxyParts, type ProxyOptions } from '../src/parts';
-import { PAGE_HEADERS, mintTestToken, policyFile, resetTestDb, testDb, testProxyOptions } from './helpers';
 
 let seenActor: unknown = null;
 let seenHeaders: Headers | null = null;
@@ -34,7 +38,7 @@ describe('the session part', () => {
   });
   it('resolves a bearer to credential bearer with its ids, and a bad bearer to none', async () => {
     const app = await proxy();
-    const token = await mintTestToken({ id: 'tok_9', userId: 'usr_1', pg: testDb().pg() });
+    const token = await mintTestToken({ id: 'tok_9', userId: 'usr_1', query: testDb().query });
     await app.request('/api/artifacts', { headers: { authorization: `Bearer ${token}` } });
     expect(seenActor).toEqual({ credential: 'bearer', tokenId: 'tok_9', userId: 'usr_1' });
     await app.request('/api/artifacts', { headers: { authorization: 'Bearer mx_badbadbadbadbadbadbadbadbadbadbadbadbad01' } });
@@ -51,7 +55,7 @@ describe('the session part', () => {
   });
   it('authenticates the agent cookie as agent-cookie by its primary (last) id', async () => {
     const app = await proxy();
-    await mintTestToken({ id: 'tok_c', userId: null, pg: testDb().pg() });
+    await mintTestToken({ id: 'tok_c', userId: null, query: testDb().query });
     const sessionId='c'.repeat(43);
     await testDb().query("INSERT INTO auth.credentials(kind,credential_hash,subject_id,expires_at) VALUES ('agent-browser',$1,'tok_c',now()+interval '30 days')",[createHash('sha256').update(sessionId).digest('hex')]);
     await app.request('/api/artifacts', { headers: { cookie: `${cookieName(false)}=${await encodeAgentSession({ tokenIds: ['tok_x', 'tok_c'],sessionId }, 'test-cookie-secret-00000000000000000000')}` } });
@@ -72,36 +76,33 @@ describe('the session part', () => {
   });
 });
 
-describe('the start_doc policy (the rate limit; the browser check is the same part\'s other verdict)', () => {
-  it('refuses a stranger past MAX with the deny shape, and a holder continues on the SAME bucket', async () => {
-    const app = await proxy({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_2_burst_2.yml') } });
-    const post = (headers: Record<string, string> = {}) => app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, ...headers } });
-    expect((await post()).status).toBe(200);
-    expect((await post()).status).toBe(200);
-    const denied = await post();
-    expect(denied.status).toBe(429);
-    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'start_doc' });
-    const token = await mintTestToken({ id: 'tok_h', userId: null, pg: testDb().pg() });
-    const holder = { authorization: `Bearer ${token}` };
-    expect((await post(holder)).status).toBe(200);
-    expect((await post(holder)).status).toBe(200);
-    expect((await post(holder)).status).toBe(429);
-  });
-});
+describe('revocation reaches the reader at once', () => {
+  /** A revoke in the app reaches the proxy's reader at once in the full image: the composition root hands the app `reader.invalidate`. */
 
-describe('where the rate limits key (P4 finding F2)', () => {
-  const mintOnceEach = async (app: ReturnType<typeof assemble<any>>, ips: string[]) => {
-    const statuses: number[] = [];
-    for (const ip of ips) statuses.push((await app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, 'x-forwarded-for': ip } })).status);
-    return statuses;
-  };
-  it('keys on the CLIENT\'s IP behind a trusted hop', async () => {
-    const app = await proxy({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml'), RATE_LIMITER__TRUSTED_PROXY_HOPS: '1' } });
-    expect(await mintOnceEach(app, ['203.0.113.7', '198.51.100.9'])).toEqual([200, 200]);
-    expect((await app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, 'x-forwarded-for': '203.0.113.7' } })).status, 'same client again').toBe(429);
-  });
-  it('keys on the HOP\'s IP behind an untrusted one — a caller cannot pick a bucket by typing an address', async () => {
-    const app = await proxy({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') } });
-    expect(await mintOnceEach(app, ['203.0.113.7', '198.51.100.9'])).toEqual([200, 429]);
+  const ADMIN = 'admin-secret-for-tests';
+  process.env.ADMIN__SECRET = ADMIN;
+
+  describe('revocation through the composed proxy', () => {
+    let proxy: ReturnType<typeof assemble<any>>;
+    let mint: () => Promise<{ id: string; token: string }>;
+    beforeAll(async () => {
+      const db = { query: async <T = Record<string, unknown>>(sql: string, params?: unknown[]) => (await getDb()).query<T>(sql, params as never) };
+      const reader = createTokenReader({ db, ttlMs: 60_000 });
+      const app = createAppServer({ indexHtml: async () => '<div id="root">SPA</div>', onTokenRevoked: (id?: string) => reader.invalidate(id) } as never);
+      const base = await testProxyOptions();
+      proxy = assemble(proxyParts({ ...base, tokens: reader, upstream: inProcess(app) }));
+      // The mint is INTERNAL: the proxy refuses the prefix at the edge, so a
+      // credential is issued the way the device exchange issues one — straight
+      // at the app, never through the parts.
+      mint = async () => await (await app.request('/api/internal/tokens', { method: 'POST' })).json() as { id: string; token: string };
+    });
+    afterAll(() => resetDb());
+    it('mint through the app, resolve through the proxy, revoke through the app: the very next request is nobody', async () => {
+      const minted = await mint();
+      expect(minted.token).toMatch(/^mx_/);
+      expect((await proxy.request('/api/artifacts', { headers: { authorization: `Bearer ${minted.token}` } })).status).toBe(200);
+      expect((await proxy.request(`/api/tokens/${minted.id}`, { method: 'DELETE', headers: { authorization: `Bearer ${ADMIN}` } })).status).toBe(204);
+      expect((await proxy.request('/api/artifacts', { headers: { authorization: `Bearer ${minted.token}` } })).status).toBe(401);
+    });
   });
 });

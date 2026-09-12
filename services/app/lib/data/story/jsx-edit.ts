@@ -42,14 +42,14 @@ export { isEditableTextHost, resolveJsxNodeAtPath };
 /** The name this module's own write-back paths have always used. */
 const resolveByPath = resolveJsxNodeAtPath;
 
-export interface JsxDomEdit {
+interface JsxDomEdit {
   /** The edited host's `data-mx-ast` path (dot-separated indexes into the node tree). */
   astPath: string;
   /** The host's edited innerHTML (contenteditable output — rich inline HTML, possibly hostile). */
   innerHtml: string;
 }
 
-export interface ApplyDomEditsResult {
+interface ApplyDomEditsResult {
   /** The updated JSX source (unchanged when nothing could be applied). */
   source: string;
   /** Failures + sanitizer drops. Edits still apply; offending nodes/attrs are simply gone. */
@@ -58,7 +58,7 @@ export interface ApplyDomEditsResult {
 
 const AST_PATH_DOM_ATTR = 'data-mx-ast';
 
-export interface JsxFormatEdit {
+interface JsxFormatEdit {
   /** The target element's `data-mx-ast` path (dot-separated indexes into the node tree). */
   astPath: string;
   /** The element's full resolved class string; empty/whitespace removes the attribute. */

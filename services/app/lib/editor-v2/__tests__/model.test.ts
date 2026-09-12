@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EditorState, TextSelection } from 'prosemirror-state';
 import { splitBlock } from 'prosemirror-commands';
 import { validateJsx } from '@/lib/jsx/validate';
-import { parseJsx, serializeJsx } from '@/lib/jsx';
+import { serializeJsx } from '@/lib/jsx';
 import {
   editorDocument,
   sourceNodes,
@@ -12,10 +12,10 @@ import {
   toggleInline,
 } from '../model';
 import { clipboardAst } from '../clipboard';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 function state(source: string) {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(source);
   return EditorState.create({ doc: editorDocument(parsed.nodes) });
 }
 function source(s: EditorState) {
@@ -99,8 +99,7 @@ it('assigns stable unique identities before sending a split or pasted fragment',
 });
 
 it('rejects positioned dimensions on flow columns at the publish boundary', () => {
-  const parsed = parseJsx('<Grid mode="flow"><GridItem w={6} h={2} x={0}><p>text</p></GridItem></Grid>');
-  if (!parsed.ok) throw Error(parsed.error);
+  const parsed = parseJsxOrThrow('<Grid mode="flow"><GridItem w={6} h={2} x={0}><p>text</p></GridItem></Grid>');
   expect(validateJsx(parsed.nodes, { components: ['Grid', 'GridItem'] })).toEqual(
     expect.arrayContaining([
       expect.objectContaining({

@@ -19,7 +19,7 @@ import type { Harness } from './client-identity';
 import type { Credential } from '@artifactbin/contracts';
 import { isCookieCredential } from './viewer';
 
-export interface TokenContext {
+interface TokenContext {
   tokenId: string;
   /** Owner of the token, or null while it's anonymous (unclaimed). */
   userId: string | null;
@@ -88,7 +88,7 @@ function hourlyAttemptsExhausted(key: string, max: number, now: number): boolean
  * is the tail of what only a reader can compute, and a document that genuinely
  * needs hundreds of distinct images an hour is not the shape this exists for.
  */
-export const DOC_ASSET_IMPORTS_PER_HOUR = 30;
+const DOC_ASSET_IMPORTS_PER_HOUR = 30;
 let docAssetCap: number | null = null;
 /** Test hook, mirroring setAssetByteQuotaForTests — the ceiling is a constant. */
 export function setDocAssetImportCapForTests(cap: number | null): void { docAssetCap = cap; }
@@ -185,7 +185,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
 }
 
 /** Does this request intend to CHANGE something? (GET/HEAD/OPTIONS do not.) */
-export const isMutation = (request: Request): boolean =>
+const isMutation = (request: Request): boolean =>
   !['GET', 'HEAD', 'OPTIONS'].includes(request.method.toUpperCase());
 
 /**

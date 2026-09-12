@@ -1,5 +1,5 @@
 /** Shared publish/read boundary; Mermaid configuration is owned by the app. */
-export const MERMAID_MAX_SOURCE = 20_000;
+const MERMAID_MAX_SOURCE = 20_000;
 
 export function mermaidSourceError(code: unknown): string | null {
   if (typeof code !== 'string' || !code.trim()) return 'Mermaid requires a nonempty static code string.';

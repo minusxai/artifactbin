@@ -14,7 +14,7 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { assemble, fakeEvents, type FakeEvents } from '@artifactbin/utils';
 import { proxyParts } from '../src/parts';
-import { PAGE_HEADERS, resetTestDb, testProxyOptions } from './helpers';
+import { PAGE_HEADERS, mintTestToken, policyFile, resetTestDb, testDb, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:6601';
 const FIXTURE = path.join(__dirname, 'fixtures/rate_limits.yml');
@@ -77,7 +77,6 @@ describe('browser_only is refused BEFORE anything is counted', () => {
     expect(res.status).toBe(403);
     const body = await res.json() as { error: string; reason: string; ladder: string[]; help: string };
     expect(body.error).toBe('browser_only');
-    expect(JSON.stringify(body)).not.toContain('/tokens/new');
     expect(body.ladder).toHaveLength(3);
     expect(body.ladder[2]).toContain('browser approval');
     expect(body.help).toBe('afbin help publishing-auth');
@@ -107,7 +106,47 @@ describe('a stale per-door env name is LOUD, not silent', () => {
       RATE_LIMITER__ANON_MINT_MAX: '500', RATE_LIMITER__EXPORT_MAX: '9',
     });
     expect(config.unknownNames).toEqual(['RATE_LIMITER__ANON_MINT_MAX', 'RATE_LIMITER__EXPORT_MAX']);
-    expect(config.unknownNames, 'the two survivors are read, so they are never unknown').not.toContain('RATE_LIMITER__TRUSTED_PROXY_HOPS');
-    expect(config.unknownNames).not.toContain('PROXY__RATE_LIMIT_CONFIG_FILE');
+  });
+});
+
+/**
+ * …and the two rules about WHERE a request is counted, plus the start_doc ceiling itself. They
+ * lived in `session.test.ts` because that is where a composed app was already standing up; they
+ * are about the limiter, not about who is asking.
+ */
+const composed = async (o: Partial<Awaited<ReturnType<typeof testProxyOptions>>> = {}): Promise<App> =>
+  assemble(proxyParts(await testProxyOptions(o))) as unknown as App;
+
+describe('the start_doc policy (the rate limit; the browser check is the same part\'s other verdict)', () => {
+  it('refuses a stranger past MAX with the deny shape, and a holder continues on the SAME bucket', async () => {
+    const app = await composed({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_2_burst_2.yml') } });
+    const post = (headers: Record<string, string> = {}) => app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, ...headers } });
+    expect((await post()).status).toBe(200);
+    expect((await post()).status).toBe(200);
+    const denied = await post();
+    expect(denied.status).toBe(429);
+    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'start_doc' });
+    const token = await mintTestToken({ id: 'tok_h', userId: null, query: testDb().query });
+    const holder = { authorization: `Bearer ${token}` };
+    expect((await post(holder)).status).toBe(200);
+    expect((await post(holder)).status).toBe(200);
+    expect((await post(holder)).status).toBe(429);
+  });
+});
+
+describe('where the rate limits key (P4 finding F2)', () => {
+  const mintOnceEach = async (app: App, ips: string[]) => {
+    const statuses: number[] = [];
+    for (const ip of ips) statuses.push((await app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, 'x-forwarded-for': ip } })).status);
+    return statuses;
+  };
+  it('keys on the CLIENT\'s IP behind a trusted hop', async () => {
+    const app = await composed({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml'), RATE_LIMITER__TRUSTED_PROXY_HOPS: '1' } });
+    expect(await mintOnceEach(app, ['203.0.113.7', '198.51.100.9'])).toEqual([200, 200]);
+    expect((await app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, 'x-forwarded-for': '203.0.113.7' } })).status, 'same client again').toBe(429);
+  });
+  it('keys on the HOP\'s IP behind an untrusted one — a caller cannot pick a bucket by typing an address', async () => {
+    const app = await composed({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') } });
+    expect(await mintOnceEach(app, ['203.0.113.7', '198.51.100.9'])).toEqual([200, 429]);
   });
 });

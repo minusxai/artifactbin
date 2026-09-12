@@ -19,7 +19,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
-import { withHttpServer, type RunningServer } from '@/__tests__/net';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as getArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { GET as listArtifacts, POST as createArtifact } from '@/app/api/artifacts/route';

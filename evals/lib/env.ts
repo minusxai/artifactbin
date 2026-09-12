@@ -36,7 +36,7 @@ export interface CredentialEnv {
   EVAL_LOGIN_EMAIL?: string;
 }
 
-export const CREDENTIAL_ENV_KEYS = ['RESEND_EVAL_API_KEY', 'EVAL_LOGIN_EMAIL'] as const;
+const CREDENTIAL_ENV_KEYS = ['RESEND_EVAL_API_KEY', 'EVAL_LOGIN_EMAIL'] as const;
 
 /** The credential names out of a key map (`.env` under the process environment), and nothing else. */
 export function credentialEnv(keys: Record<string, string | undefined>): CredentialEnv {

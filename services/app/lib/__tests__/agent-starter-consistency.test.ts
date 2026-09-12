@@ -25,7 +25,7 @@ import { existingPaste } from '@/lib/agent-copy';
 import { agentDiscovery, llmsText } from '@/lib/agent-discovery';
 import { createArtifact } from '@/lib/artifacts';
 import { unauthorized } from '@/lib/http';
-import { buildQuickSheet } from '@/lib/skills';
+import { buildQuickSheet, renderTree, skillTree } from '@/lib/skills';
 import { createUser } from '@/lib/users';
 import { request, useAppHarness } from '@/__tests__/harness';
 
@@ -105,5 +105,42 @@ describe('every agent-facing starter says the same thing', () => {
     expect(started.split('\n')).toHaveLength(1);
     expect(handed.replace(/\/a\/[A-Za-z0-9]+/, '/a/<id>')).toBe(started.replace(/\/a\/[A-Za-z0-9]+/, '/a/<id>'));
     expect(started.replace(/\/a\/[A-Za-z0-9]+/, '/a/<id>')).toBe(existingPaste(BASE, '<id>'));
+  });
+});
+
+/**
+ * The BRIEF and the CONTRACT — the two surfaces the starter sends an agent to next. Four
+ * single-thought files used to assert one paragraph of this each (`m3-publish-first`,
+ * `brief-auth-rule`, `agent-contract`, `publishing-doc-tokens`); they are one rule about one pair
+ * of functions, so they are one describe. Their byte caps went to skill-tree.test.ts's single
+ * sweep, and their retired-vocabulary lines to case (c) above and to retired-surfaces.test.ts.
+ */
+describe('what the brief and the contract teach next', () => {
+  const brief = renderTree(skillTree(), 'https://artifactbin.dev').find(({ file }) => file.path === 'artifactbin/SKILL.md')!.text;
+
+  it('teaches automatic sign-in, browser approval and the private configuration location, without a setup step', () => {
+    expect(brief).not.toContain('afbin setup');
+    expect(brief).toMatch(/automatic|authenticates itself|signs you in/i);
+    expect(brief).toContain('~/.artifactbin/.env');
+    expect(brief).toContain('browser approval');
+    expect(brief).toContain('--yes');
+    expect(brief).toMatch(/never.*mint/i);
+  });
+
+  it('teaches reuse before new publication and preserves identity during recovery', () => {
+    const sheet = buildQuickSheet('https://example.test');
+    expect(sheet.indexOf('For a supplied artifact')).toBeLessThan(sheet.indexOf('For a new artifact'));
+    expect(sheet).toContain('Preserve its identity');
+    expect(sheet).toContain('retry push');
+    expect(sheet).toContain('references/markup.md');
+    expect(sheet).toContain('references/design.md');
+  });
+
+  it('spells local help, origin-scoped browser setup and the current private config directory', () => {
+    const contract = agentContract('https://example.test');
+    expect(contract).toContain('afbin auth --server https://example.test');
+    expect(contract).toContain('~/.artifactbin/.env');
+    expect(contract).toContain('--yes --json');
+    expect(contract).toContain('browser approval');
   });
 });

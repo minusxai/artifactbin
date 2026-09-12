@@ -16,7 +16,7 @@ import { refName, type TableResult } from '@/lib/story/dataflow';
 import type { NumberAgg } from '@/lib/story/number-aggregation';
 export type { NumberAgg } from '@/lib/story/number-aggregation';
 
-export interface InlineNumberProps {
+interface InlineNumberProps {
   /** `"$name"` — a table declared in the document. */
   data: unknown;
   col?: string;

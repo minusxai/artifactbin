@@ -17,7 +17,7 @@ export interface GridItemRect {
 }
 
 /** A layout edit destined for `applyLayoutEditsToJsx` — keyed by the item's AST path. */
-export interface GridLayoutEdit extends GridItemRect {
+interface GridLayoutEdit extends GridItemRect {
   astPath: string;
 }
 

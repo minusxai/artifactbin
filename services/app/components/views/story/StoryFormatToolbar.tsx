@@ -60,7 +60,7 @@ import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 import type { ComposableFormatEdit } from '@/lib/story/edit-compose';
 import { Tooltip } from '@/components/Tooltip';
 
-export interface StoryFormatToolbarProps {
+interface StoryFormatToolbarProps {
   selection: StoryEditSelection | null;
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;

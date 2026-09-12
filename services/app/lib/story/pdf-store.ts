@@ -21,7 +21,7 @@ import { objectKey, objectStore, type ByteRange } from '@/lib/object-store';
 export const PDF_CONTENT_TYPE = 'application/pdf';
 
 /** Where a PDF's bytes are, plus what to stamp into `meta`. */
-export interface PdfLocation {
+interface PdfLocation {
   objectKey: string;
   bytes: number;
 }

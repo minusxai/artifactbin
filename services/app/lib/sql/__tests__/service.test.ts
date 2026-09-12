@@ -13,7 +13,7 @@
 import { spawn } from 'node:child_process';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import path from 'node:path';
-import { freePort } from '@/__tests__/net';
+import { freePort } from '@artifactbin/test-support/net';
 
 const ROOT = path.resolve(import.meta.dirname, '../../../../..');
 

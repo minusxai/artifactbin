@@ -35,7 +35,7 @@ export const FOLD_LINES = 10;
 
 export const FOLD_STORAGE_KEY = 'mx_comments_folded';
 
-export const NO_FOLDS: Folds = { threads: [], comments: [] };
+const NO_FOLDS: Folds = { threads: [], comments: [] };
 
 /**
  * The store, if there is one. Reading the property itself can THROW (a private

@@ -14,7 +14,7 @@ import {isDeepStrictEqual} from 'node:util';
 
 /** `path` is workspace-relative; `declared` is the spelling the YAML file uses for it. */
 export interface ResourceSource {path:string;declared?:string;bytes:string;version?:number}
-export type ResourceReconciliation={ok:true;resource:ArtifactResourceFile}|{ok:false;fields:string[]};
+type ResourceReconciliation={ok:true;resource:ArtifactResourceFile}|{ok:false;fields:string[]};
 export function reconcileResource(base:ArtifactResourceFile,local:ArtifactResourceFile,remote:ArtifactResourceFile):ResourceReconciliation{
  if(base.type!==local.type||base.type!==remote.type)return {ok:false,fields:['type']};
  const result={...remote} as Record<string,unknown>,before=base as unknown as Record<string,unknown>,current=remote as unknown as Record<string,unknown>,fields:string[]=[];

@@ -17,6 +17,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { liveChannelCount, resetLiveSubscriptions } from '@/lib/story/live';
 import { mintToken } from '@/lib/tokens';
 import { useAppHarness, request } from '@/__tests__/harness';
+import { readEvents } from '@/__tests__/sse';
 
 useAppHarness();
 
@@ -28,36 +29,7 @@ const create = async (token: string, body: Record<string, unknown>) => {
 };
 const ROWS = [{ choice: 'ramen' }];
 
-interface SseEvent { event: string; data: Record<string, unknown> }
 /** Read SSE events (named or default) until `count` arrive or the budget runs out. */
-async function readEvents(body: ReadableStream<Uint8Array>, count: number, budgetMs = 3000): Promise<SseEvent[]> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
-  const out: SseEvent[] = [];
-  let buffer = '';
-  const deadline = Date.now() + budgetMs;
-  while (out.length < count && Date.now() < deadline) {
-    const chunk = await Promise.race([
-      reader.read(),
-      new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), deadline - Date.now())),
-    ]);
-    if (chunk.done || !chunk.value) break;
-    buffer += decoder.decode(chunk.value, { stream: true });
-    const blocks = buffer.split('\n\n');
-    buffer = blocks.pop() ?? '';
-    for (const block of blocks) {
-      let event = 'message';
-      let data = '';
-      for (const line of block.split('\n')) {
-        if (line.startsWith('event: ')) event = line.slice(7);
-        else if (line.startsWith('data: ')) data += line.slice(6);
-      }
-      if (data) out.push({ event, data: JSON.parse(data) });
-    }
-  }
-  void reader.cancel().catch(() => {});
-  return out;
-}
 
 beforeEach(async () => {
   await resetLiveSubscriptions();

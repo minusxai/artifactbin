@@ -1000,7 +1000,7 @@ function useSlideChrome(count: number) {
  * author script; tests inject one). Absent — SSR — one is created from the
  * island's dataflow.
  */
-export type StoryRuntimeAppProps = StoryIslandData & {
+type StoryRuntimeAppProps = StoryIslandData & {
   store?: DataflowStore;
   /**
    * EDIT MODE, when the owner has entered it (lib/story-runtime/edit/session).

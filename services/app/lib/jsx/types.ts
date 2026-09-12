@@ -50,7 +50,7 @@ export interface JsxText {
 }
 
 /** A `{…}` child: a static literal or an allowlisted reactive/row expression in a valid scope. */
-export interface JsxExpression {
+interface JsxExpression {
   type: 'expression';
   value: StaticValue;
   source: string;

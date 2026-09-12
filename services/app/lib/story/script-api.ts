@@ -1,4 +1,4 @@
-export interface ArtifactApiConfig {
+interface ArtifactApiConfig {
   resolveUrl: string | null;
   libraries: Record<string, string>;
 }

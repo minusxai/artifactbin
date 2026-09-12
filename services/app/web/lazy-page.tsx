@@ -23,7 +23,7 @@ function ReadyCommit({ children, ready }: { children: ReactNode; ready: boolean 
 }
 
 /** Route-code boundary. A failed download is retried only on an explicit gesture. */
-export type LazyPage<P extends object> = ComponentType<P> & { preload(): Promise<void> };
+type LazyPage<P extends object> = ComponentType<P> & { preload(): Promise<void> };
 export function lazyPage<P extends object>(load: () => Promise<{ default: ComponentType<P> }>, framed = false, awaitsData = false): LazyPage<P> {
   let pending: ReturnType<typeof load> | undefined;
   const module = () => pending ??= load();

@@ -16,7 +16,7 @@ import {
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import { localTableOverrides } from '@/lib/story/local-tables';
 import { SIGNALS_TABLE } from '@/lib/story/local-target';
-export interface DataflowEngine {run:SqlService['run'];queryRows:(table:{rows:Row[];columns:DatasetColumn[]},sql:string,params:Record<string,Scalar>,page?:QueryPage)=>Promise<TableResult>}
+interface DataflowEngine {run:SqlService['run'];queryRows:(table:{rows:Row[];columns:DatasetColumn[]},sql:string,params:Record<string,Scalar>,page?:QueryPage)=>Promise<TableResult>}
 
 /** Dataset rows by artifact id (the `ref_<id>` tables). */
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;

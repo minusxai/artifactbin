@@ -32,7 +32,7 @@ interface Tracking {server:string;account:string;files:Record<string,Entry>}
  * workspace holds both families, the artifact files that accompany them;
  * `restore`, `refresh` and `delete` are remote rows whose targets are ids.
  */
-export interface AccountPlan {kind:'resource'|'restore'|'refresh'|'delete';paths:string[];artifacts:string[];manifest:Tracking|null}
+interface AccountPlan {kind:'resource'|'restore'|'refresh'|'delete';paths:string[];artifacts:string[];manifest:Tracking|null}
 const yaml=(value:unknown)=>stringify(value,{lineWidth:0});
 const accountResource=(value:unknown):AccountResource=>(value as {type?:unknown})?.type==='session'?parseSessionResource(value):parseAccountResource(value);
 const parse=(bytes:Buffer)=>{try{return accountResource(parseLiteralYaml(bytes.toString()));}catch(error){throw new CliError('invalid_resource',error instanceof Error?error.message:String(error));}};

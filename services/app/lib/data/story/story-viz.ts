@@ -107,7 +107,7 @@ export function updateQuestionTitleInJsx(source: string, astPath: string, title:
 export const DYNAMIC_VIZ = { kind: 'dynamic' } as const;
 
 /** What the chart panel renders from: the `<Question>` at `astPath`, or null if there is none. */
-export interface QuestionChart {
+interface QuestionChart {
   viz: unknown;
   /** The declared table it is bound to (`data="$name"` → "name"), or null. */
   table: string | null;

@@ -1,145 +1,35 @@
 /**
- * The page half of annotations — the Google-Docs shape. AnnotationLayer holds
- * the data and the session; the frame only ever gets ids + BODY paths
- * (`mx:annotations`) and answers with pin clicks and — while the layer is on
- * — selections. Open threads float over the document at their anchor y; a
- * preview or annotated-node click opens that thread in the rail. There is no
- * annotate MODE any more: the layer and the editor coexist.
- * Resolved history sits collapsed below the open list; the on-page composer
- * carries the edit toolbar's breadcrumb so a comment can widen to an ancestor.
+ * THE RAIL AND THE PINS. Open threads float over the document at their anchor
+ * y; a pin or an annotated-node click opens that thread in the rail; resolved
+ * history sits collapsed below the open list. Replies, resolution, deletion,
+ * provenance marks and the phone's compact marker all live here.
+ * The composer is `annotation-composer.ui.test.tsx`; picking a block or
+ * drawing an area is `annotation-picking.ui.test.tsx`.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { act, render, screen, fireEvent, within,waitFor } from '@testing-library/react';
-import { TrustedUi } from '../TrustedUi';
-import AnnotationLayer from '../AnnotationLayer';
+import { act, render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { TrustedUi } from '@/components/TrustedUi';
 import {
-  STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_HOVER_MESSAGE, STORY_ANNOTATION_LAYOUT_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE,
-  STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, STORY_SELECTION_ACTION_MESSAGE,
+  STORY_ANNOTATIONS_MESSAGE,
+  STORY_ANNOTATION_HOVER_MESSAGE,
+  STORY_ANNOTATION_LAYOUT_MESSAGE,
+  STORY_ANNOTATION_PIN_MESSAGE,
 } from '@/lib/story-runtime/contract';
-import type { AnnotationWire } from '@/lib/annotations';
+import {
+  ANN,
+  GENERIC_AGENT,
+  MCP_AGENT,
+  NONCE,
+  fetchCalls,
+  flush,
+  fromFrame,
+  installAnnotationFetch,
+  layer,
+  makeFrame,
+} from '@/test/helpers/annotation-layer';
 
-const NONCE = 'n'.repeat(32);
-
-const ANN: AnnotationWire = {
-  id: 'ann_1',
-  status: 'open',
-  anchor: { key: 'a1a2b3', path: '1', spanStart: 10, spanEnd: 40 },
-  orphaned: false,
-  anchor_version: 2,
-  snippet: 'Revenue grew 40%',
-  quote: null,
-  range: null,
-  quote_found: null,
-  thread: [
-    { id: 'ann_1', body: 'is this right?', author: { kind: 'human', label: 'vivek', transport: 'browser' }, created_at: '2026-08-27T00:00:00Z' },
-    { id: 'ann_2', body: 'one more thought', author: { kind: 'human', label: 'vivek', transport: 'browser' }, created_at: '2026-08-27T01:00:00Z' },
-  ],
-  created_at: '2026-08-27T00:00:00Z',
-  resolved_at: null,
-};
-
-const RESOLVED: AnnotationWire = {
-  ...ANN,
-  id: 'ann_old',
-  status: 'resolved',
-  snippet: 'an older figure',
-  thread: [
-    { id: 'ann_old', body: 'please verify the older figure', author: { kind: 'human', label: null, transport: 'browser' }, created_at: '2026-08-26T00:00:00Z' },
-    { id: 'ann_reply', body: 'verified and corrected', author: { kind: 'agent', label: 'Codex', transport: 'mcp' }, created_at: '2026-08-26T01:00:00Z' },
-  ],
-  resolved_at: '2026-08-26T02:00:00Z',
-};
-
-const MCP_AGENT: AnnotationWire = {
-  ...ANN,
-  id: 'ann_mcp',
-  anchor: { key: 'mcp-key', path: '3', spanStart: 90, spanEnd: 120 },
-  thread: [
-    { id: 'ann_mcp', body: 'replied over MCP', author: { kind: 'agent', label: 'Claude Code', transport: 'mcp' }, created_at: '2026-08-29T00:00:00Z' },
-  ],
-};
-
-const GENERIC_AGENT: AnnotationWire = {
-  ...ANN,
-  id: 'ann_agent',
-  anchor: { key: 'agent-key', path: '2', spanStart: 50, spanEnd: 80 },
-  thread: [
-    { id: 'ann_agent', body: 'completed by an unidentified agent', author: { kind: 'agent', label: null, transport: 'http' }, created_at: '2026-08-28T00:00:00Z' },
-  ],
-};
-
-function makeFrame() {
-  const postMessage = vi.fn();
-  const contentWindow = { postMessage } as unknown as Window;
-  const frame = {
-    contentWindow,
-    getBoundingClientRect: () => ({ x: 0, y: 100, width: 800, height: 600, top: 100, left: 0, right: 800, bottom: 700 }),
-  } as unknown as HTMLIFrameElement;
-  return { frame, postMessage, contentWindow };
-}
-
-const fromFrame = (contentWindow: Window, data: Record<string, unknown>) =>
-  act(() => {
-    window.dispatchEvent(new MessageEvent('message', { data, source: contentWindow as unknown as MessageEventSource }));
-  });
-
-const fetchCalls: Array<{ url: string; init?: RequestInit }> = [];
-let refuseCreate = false;
-let resolvedVisible = true;
-
-beforeEach(() => {
-  fetchCalls.length = 0;
-  refuseCreate = false;
-  resolvedVisible = true;
-  vi.stubGlobal('fetch', (async (url: string, init?: RequestInit) => {
-    fetchCalls.push({ url: String(url), init });
-    const u = String(url);
-    if (u.includes('status=resolved')) {
-      return new Response(JSON.stringify({ annotations: resolvedVisible ? [RESOLVED] : [] }), { status: 200 });
-    }
-    if (u.endsWith('/annotations') && (!init || init.method === undefined || init.method === 'GET')) {
-      return new Response(JSON.stringify({ annotations: [ANN] }), { status: 200 });
-    }
-    if (init?.method === 'POST' && u.endsWith(`/annotations/${ANN.id}`)) {
-      const body = JSON.parse(String(init.body)) as { resolve?: boolean };
-      return new Response(JSON.stringify({ ...ANN, status: body.resolve ? 'resolved' : 'open' }), { status: 200 });
-    }
-    if (init?.method === 'POST' && u.endsWith(`/annotations/${RESOLVED.id}`)) {
-      const body = JSON.parse(String(init.body)) as { reopen?: boolean };
-      if (body.reopen) resolvedVisible = false;
-      return new Response(JSON.stringify({ ...RESOLVED, status: body.reopen ? 'open' : 'resolved', resolved_at: body.reopen ? null : RESOLVED.resolved_at }), { status: 200 });
-    }
-    if (init?.method === 'POST') {
-      if (refuseCreate) {
-        return new Response(JSON.stringify({ error: 'invalid_jsx', details: [{ message: 'Inline style attribute is not allowed' }] }), { status: 400 });
-      }
-      return new Response(JSON.stringify({ ...ANN, id: 'ann_new', thread: [{ ...ANN.thread[0], body: 'fresh note' }] }), { status: 201 });
-    }
-    return new Response('{}', { status: 200 });
-  }) as unknown as typeof fetch);
-});
-
+beforeEach(installAnnotationFetch);
 afterEach(() => vi.unstubAllGlobals());
-
-const flush = () => act(async () => { await Promise.resolve(); });
-
-const layer = (frame: HTMLIFrameElement, over: Partial<Parameters<typeof AnnotationLayer>[0]> = {}) => {
-  const initialSelection = over.initialSelection && !Object.prototype.hasOwnProperty.call(over.initialSelection, 'nodeId')
-    ? { ...over.initialSelection, nodeId: `node-${over.initialSelection.path.replaceAll('.', '-')}` }
-    : over.initialSelection;
-  return <AnnotationLayer
-    id="doc1"
-    frameRef={{ current: frame }}
-    sessionNonce={NONCE}
-    railOpen={false}
-    liveAnnotations={null}
-    showViewComments={false}
-    topOffset={100}
-    onRailOpenChange={() => {}}
-    {...over}
-    initialSelection={initialSelection}
-  />;
-};
 
 describe('AnnotationLayer', () => {
   it('shows distinct local times for a comment and reply on the same day', async () => {
@@ -157,6 +47,7 @@ describe('AnnotationLayer', () => {
     expect(first!.textContent).toMatch(/27 Aug.*\d+:\d{2}/);
     expect(first).toHaveAttribute('aria-label', expect.stringMatching(/2026/));
   });
+
   it('scrolls the newest reply in its own shadow-root rail',async()=>{
     const {frame,contentWindow}=makeFrame();
     const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);
@@ -167,6 +58,7 @@ describe('AnnotationLayer', () => {
     fromFrame(contentWindow,{type:STORY_ANNOTATION_PIN_MESSAGE,nonce:NONCE,id:ANN.id});
     await waitFor(()=>expect(scroll).toHaveBeenCalled());
   });
+
   it('subscribes when a lazy inline runtime becomes ready after the layer mounts',async()=>{
     const {frame}=makeFrame();
     const runtimeRef:{current:import('@/lib/story-runtime/InlineStoryRuntime').InlineStoryController|null}={current:null};
@@ -178,6 +70,7 @@ describe('AnnotationLayer', () => {
     await act(async()=>{ for(const listener of listeners)listener({type:STORY_ANNOTATION_LAYOUT_MESSAGE,nonce:NONCE,positions:[{id:ANN.id,rect:{x:20,y:150,width:100,height:30}}]}); });
     expect(screen.getByLabelText(/^Open annotation conversation by vivek/)).toBeInTheDocument();
   });
+
   it('keeps a shadow-root thread menu open for pointer gestures inside that menu',async()=>{
     const {frame}=makeFrame();
     const view=render(<TrustedUi overlay>{layer(frame,{railOpen:true})}</TrustedUi>);
@@ -190,6 +83,7 @@ describe('AnnotationLayer', () => {
     expect(button.isConnected).toBe(true);
     expect(shadow.querySelector('[aria-label="Annotation action menu"]')).not.toBeNull();
   });
+
   it('posts the pin set into the frame even in view mode (pins are owner view chrome)', async () => {
     const { frame, postMessage } = makeFrame();
     render(layer(frame));
@@ -333,235 +227,6 @@ describe('AnnotationLayer', () => {
     expect(screen.getByLabelText('Send reply')).toHaveClass('bg-accent', 'text-bg');
   });
 
-  /*
-   * ADDED (F3). The frame captures the exact words; the page is the only side
-   * that talks to the server, so a comment that does not FORWARD them stores a
-   * node and nothing else — which is what it did before.
-   */
-  it('forwards the selection quote and its anchor-relative range in the create POST', async () => {
-    const { frame } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
-        quote: 'grew 40% in Q3,',
-        range: { v: 1 as const, parts: [
-          { rel: '0', start: 8, end: 12, text: 'grew' },
-          { rel: '', start: 12, end: 23, text: ' 40% in Q3,' },
-        ] },
-      },
-    }));
-    await flush();
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'which quarter?' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toEqual({
-      path: '1', node_id: 'node-1', body: 'which quarter?',
-      quote: 'grew 40% in Q3,',
-      range: { v: 1, parts: [
-        { rel: '0', start: 8, end: 12, text: 'grew' },
-        { rel: '', start: 12, end: 23, text: ' 40% in Q3,' },
-      ] },
-    });
-  });
-
-  /*
-   * ADDED (F3). The frame re-reports the composing node's GEOMETRY on every
-   * scroll and re-render (`mx:selection`), and that report has no quote in it —
-   * the page is where the words live. Taking it at face value replaced the
-   * captured selection with a quote-less one before the comment was ever saved,
-   * which is how the words were lost between the drag and the POST.
-   */
-  it('keeps the captured words when the frame re-reports the SAME node', async () => {
-    const { frame, contentWindow } = makeFrame();
-    const quoted = {
-      kind: 'text' as const, path: '1', nodeId: 'node-1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
-      quote: 'grew 40% in Q3,',
-      range: { v: 1 as const, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] },
-    };
-    render(layer(frame, { railOpen: true, initialSelection: quoted }));
-    await flush();
-    await fromFrame(contentWindow, {
-      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
-      selection: { kind: 'text', path: '1', nodeId: 'node-1', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
-    });
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'still about those words' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toMatchObject({ quote: quoted.quote, range: quoted.range });
-  });
-
-  it('does not inherit a removed target identity into an id-less successor at the same path', async () => {
-    const { frame, contentWindow } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'text', path: '1', nodeId: 'old-node', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
-        quote: 'old words', range: { v: 1, parts: [{ rel: '', start: 0, end: 9, text: 'old words' }] },
-      },
-    }));
-    await flush();
-    await fromFrame(contentWindow, {
-      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
-      selection: { kind: 'text', path: '1', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
-    });
-    const composer = await screen.findByLabelText('Annotation comment');
-    fireEvent.change(composer, { target: { value: 'draft survives replacement' } });
-    const before = fetchCalls.length;
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    expect(fetchCalls.slice(before).filter((call) => call.init?.method === 'POST')).toHaveLength(0);
-    expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
-    expect(composer).toHaveValue('draft survives replacement');
-  });
-
-  it('drops the old quote and range when the same path reports a different durable node', async () => {
-    const { frame, contentWindow } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'text', path: '1', nodeId: 'old-node', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
-        quote: 'old words', range: { v: 1, parts: [{ rel: '', start: 0, end: 9, text: 'old words' }] },
-      },
-    }));
-    await flush();
-    await fromFrame(contentWindow, {
-      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
-      selection: { kind: 'text', path: '1', nodeId: 'new-node', tag: 'p', rect: { x: 5, y: 40, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
-    });
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'draft follows explicit target' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '1', node_id: 'new-node', body: 'draft follows explicit target' });
-  });
-
-  it('drops them when the composer is widened to a DIFFERENT node — they no longer describe it', async () => {
-    const { frame, contentWindow } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
-        quote: 'grew 40% in Q3,',
-        range: { v: 1 as const, parts: [{ rel: '', start: 12, end: 23, text: ' 40% in Q3,' }] },
-      },
-    }));
-    await flush();
-    await fromFrame(contentWindow, {
-      type: STORY_SELECTION_MESSAGE, nonce: NONCE,
-      selection: { kind: 'element', path: '0', nodeId: 'node-0', tag: 'section', rect: { x: 0, y: 0, width: 400, height: 90 }, className: '', style: '', ancestors: [] },
-    });
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'about the whole section' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '0', node_id: 'node-0', body: 'about the whole section' });
-  });
-
-  it('sends no quote for a selection that has none — a caret comment is still a comment', async () => {
-    const { frame } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: { kind: 'text' as const, path: '1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [] },
-    }));
-    await flush();
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'no words' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toEqual({ path: '1', node_id: 'node-1', body: 'no words' });
-  });
-
-  it('a handed-in selection opens an anchored page composer; save moves the comment to the rail', async () => {
-    const { frame, postMessage } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'element' as const, path: '2.1', tag: 'div', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
-        ancestors: [{ path: '2', tag: 'section', hint: 'max-w-2xl' }],
-      },
-    }));
-    await flush();
-
-    const composer = await screen.findByLabelText('Annotation comment');
-    const popover = screen.getByRole('dialog', { name: 'Annotation composer' });
-    expect(popover).toHaveClass('fixed');
-    // The frame is full-width under an open rail, so the composer is kept
-    // clear of the rail's 320px: 800 - 320 - 12 - 384 = 84, not the 217 the
-    // selection alone would ask for.
-    expect(popover.style.left).toBe('84px');
-    expect(Number.parseInt(popover.style.left, 10) + Number.parseInt(popover.style.width, 10)).toBeLessThanOrEqual(800 - 320);
-    expect(popover.style.top).toBe('158px'); // frame top + selection y + selection height + 12px
-    expect(within(screen.getByLabelText('Annotation sidebar')).queryByLabelText('Annotation comment')).toBeNull();
-    // The breadcrumb: the ancestor is clickable and asks the FRAME to re-select.
-    fireEvent.click(screen.getByLabelText('Select section'));
-    const selects = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_SELECT_MESSAGE);
-    expect(selects.at(-1)).toMatchObject({ path: '2' });
-
-    fireEvent.change(composer, { target: { value: 'fresh note' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((c) => c.url.endsWith('/api/my/artifacts/doc1/annotations') && c.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toMatchObject({ path: '2.1', node_id: 'node-2-1', body: 'fresh note' });
-    const clears = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_SELECT_MESSAGE);
-    expect(clears.at(-1)).toMatchObject({ path: null });
-    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
-    expect(screen.getAllByLabelText('Annotation thread').some((thread) => thread.textContent?.includes('fresh note'))).toBe(true);
-  });
-
-  it('submits the composer with command-enter and gives only Comment the filled treatment', async () => {
-    const { frame } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: { kind: 'text' as const, path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] },
-    }));
-    await flush();
-
-    const composer = await screen.findByLabelText('Annotation comment');
-    const cancel = screen.getByLabelText('Cancel annotation');
-    const comment = screen.getByLabelText('Save annotation');
-    expect(cancel).toHaveClass('bg-transparent');
-    expect(cancel).not.toHaveClass('border');
-    expect(comment).toHaveClass('border-accent', 'bg-accent', 'text-bg');
-
-    fireEvent.change(composer, { target: { value: 'from the keyboard' } });
-    fireEvent.keyDown(composer, { key: 'Enter', metaKey: true });
-    await flush();
-    const create = fetchCalls.find((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
-    expect(JSON.parse(String(create!.init!.body))).toMatchObject({ body: 'from the keyboard' });
-  });
-
-  it('opens the composer on a text selection handed in from view mode', async () => {
-    const { frame, postMessage } = makeFrame();
-    const initialSelection = {
-      kind: 'text' as const, path: '2.1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
-      ancestors: [{ path: '2', tag: 'section', hint: 'max-w-2xl' }],
-    };
-    render(layer(frame, { railOpen: true, initialSelection }));
-    expect(await screen.findByLabelText('Annotation comment')).toBeTruthy();
-    await flush();
-    const messages = postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
-    expect(messages.at(-1)).toMatchObject({ mode: 'on', selectedPath: '2.1' });
-  });
-
-  it('shows the anchor edit refusal instead of silently swallowing it', async () => {
-    refuseCreate = true;
-    const { frame } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: { kind: 'element' as const, path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] },
-    }));
-    await flush();
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'note' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    const alert = await screen.findByRole('alert');
-    expect(alert.textContent).toContain('invalid_jsx');
-    expect(alert.textContent).toContain('Inline style');
-    expect(screen.getByLabelText('Annotation comment')).toBeTruthy();
-  });
-
   it('lists resolved threads below a divider, collapsed until clicked; close shuts the rail', async () => {
     const { frame } = makeFrame();
     const onRailOpenChange = vi.fn();
@@ -684,27 +349,6 @@ describe('AnnotationLayer', () => {
     expect(posted.at(-1)).toMatchObject({ pins: [] });
   });
 
-  it('escape cancels the draft, like the cancel button', async () => {
-    const { frame, postMessage } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'text' as const, path: '2.1', tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
-        ancestors: [{ path: '2', tag: 'section', hint: '' }],
-      },
-    }));
-    await flush();
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'never mind' } });
-
-    fireEvent.keyDown(window, { key: 'Escape' });
-    await flush();
-    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
-    // …and it clears the document's composing outline, exactly as cancel does.
-    const selects = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_SELECT_MESSAGE);
-    expect(selects.at(-1)).toMatchObject({ path: null });
-    expect(fetchCalls.some((c) => c.init?.method === 'POST')).toBe(false);
-  });
-
   it('on a phone keeps only the compact marker, whose click opens the comments sheet', async () => {
     Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
     try {
@@ -743,48 +387,6 @@ describe('AnnotationLayer', () => {
     expect(posted.at(-1)).toMatchObject({ mode: 'on' });
   });
 
-  it('creates a relation directly without a source edit or head retry', async () => {
-    const { frame } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'element' as const, path: '2.1', tag: 'div', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
-        ancestors: [{ path: '2', tag: 'section', hint: '' }],
-      },
-    }));
-    await flush();
-    fireEvent.change(await screen.findByLabelText('Annotation comment'), { target: { value: 'mid-sentence note' } });
-
-    const before = fetchCalls.length;
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    await flush();
-
-    const created = fetchCalls.slice(before).find((c) => c.init?.method === 'POST');
-    expect(created).toBeTruthy();
-    expect(JSON.parse(String(created!.init!.body))).toMatchObject({ node_id: 'node-2-1', body: 'mid-sentence note' });
-    expect(String(created!.init!.body)).not.toContain('edit_id');
-  });
-
-  it('keeps an unsaved-node draft and asks the user to wait for ordinary autosave', async () => {
-    const { frame } = makeFrame();
-    render(layer(frame, {
-      railOpen: true,
-      initialSelection: {
-        kind: 'text', path: '2.1', nodeId: undefined, tag: 'p', rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '', ancestors: [],
-      },
-    }));
-    await flush();
-    const composer = await screen.findByLabelText('Annotation comment');
-    fireEvent.change(composer, { target: { value: 'keep this draft' } });
-    const before = fetchCalls.length;
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    expect(fetchCalls).toHaveLength(before);
-    expect(screen.getByRole('alert')).toHaveTextContent('Wait for this change to save');
-    expect(composer).toHaveValue('keep this draft');
-  });
-
   it('the live stream replaces the list wholesale', async () => {
     const { frame, postMessage } = makeFrame();
     const { rerender } = render(layer(frame));
@@ -794,306 +396,4 @@ describe('AnnotationLayer', () => {
     const posted = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_ANNOTATIONS_MESSAGE);
     expect(posted.at(-1)).toMatchObject({ pins: [] });
   });
-});
-
-/*
- * ADDED: PICKING A BLOCK FROM THE RAIL. A comment made by selecting words
- * cannot reach a chart, an image or a whole list. The rail's header offers a
- * pick tool: pressing it tells the frame (`picking` on the idempotent
- * `mx:annotations` message), a pill over the document says what to do next
- * and carries the way out, and the frame's answer — the same `mx:selection`
- * the breadcrumb widening uses — opens the composer on the picked block and
- * ends the pick. One-shot, never in the URL, never a mode the page is in.
- */
-describe('picking a block from the rail', () => {
-  const PICKED = {
-    kind: 'text' as const, path: '2.1', nodeId: 'node-2-1', tag: 'p',
-    rect: { x: 5, y: 6, width: 200, height: 40 }, className: '', style: '',
-    ancestors: [{ path: '2', tag: 'section', hint: 'max-w-2xl' }],
-  };
-  const annotationsMessages = (postMessage: ReturnType<typeof vi.fn>) =>
-    postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
-  const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
-
-  it('keeps the Select prompt below the app and editor bars when the document starts at zero', async () => {
-    const { frame } = makeFrame();
-    frame.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 } as DOMRect);
-    const view = render(layer(frame, { railOpen: true, topOffset: 44 }));
-    await flush();
-    expect(pill()).toHaveStyle({ top: '56px' });
-    view.rerender(layer(frame, { railOpen: true, topOffset: 88 }));
-    expect(pill()).toHaveStyle({ top: '100px' });
-  });
-
-  it('the context/selection action activates Select with the rail closed', async () => {
-    const { frame, postMessage, contentWindow } = makeFrame();
-    render(layer(frame, { railOpen: false }));
-    await flush();
-    await fromFrame(contentWindow, { type: STORY_SELECTION_ACTION_MESSAGE, nonce: NONCE, action: 'select', selection: PICKED });
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'select' });
-    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
-  });
-
-  it('the rail opens WITH a pick on; the tool is still there to turn it off and on again', async () => {
-    const { frame, postMessage } = makeFrame();
-    render(layer(frame, { railOpen: true }));
-    await flush();
-    // Opening the rail is opening the pick: the next click in the document is a comment.
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'select' });
-    expect(pill()).toHaveTextContent(/tap a block/i);
-    const tool = within(screen.getByLabelText('Annotation sidebar')).getByLabelText('Select');
-    expect(tool).toHaveAttribute('aria-pressed', 'true');
-
-    // The tool stays an explicit choice (other selection modes will sit beside it).
-    fireEvent.click(tool);
-    expect(tool).toHaveAttribute('aria-pressed', 'false');
-    expect(pill()).toBeNull();
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: null });
-    fireEvent.click(tool);
-    expect(tool).toHaveAttribute('aria-pressed', 'true');
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ mode: 'on', pick: 'select' });
-
-    fireEvent.click(screen.getByLabelText('Cancel picking'));
-    expect(pill()).toBeNull();
-    expect(tool).toHaveAttribute('aria-pressed', 'false');
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null });
-  });
-
-  it('the frame\'s pick opens the composer on that block and ends the pick; save goes to the picked block', async () => {
-    const { frame, postMessage, contentWindow } = makeFrame();
-    render(layer(frame, { railOpen: true }));
-    await flush();
-    expect(pill()).not.toBeNull(); // opened picking
-    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
-
-    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
-    expect(screen.getByLabelText('Select section')).toBeTruthy(); // the breadcrumb, so it can still widen
-    expect(pill()).toBeNull();
-    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'false');
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null, selectedPath: '2.1' });
-
-    fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'picked note' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
-    const body = JSON.parse(String(create!.init!.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ path: '2.1', node_id: 'node-2-1', body: 'picked note' });
-    expect(body).not.toHaveProperty('quote');
-  });
-
-  it('a null selection from the frame (escape in the document) just stands the pick down', async () => {
-    const { frame, postMessage, contentWindow } = makeFrame();
-    render(layer(frame, { railOpen: true }));
-    await flush();
-    expect(pill()).not.toBeNull(); // opened picking
-    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: null });
-    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
-    expect(pill()).toBeNull();
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null });
-  });
-
-  it('escape on the page cancels the pick too', async () => {
-    const { frame, postMessage } = makeFrame();
-    render(layer(frame, { railOpen: true }));
-    await flush();
-    expect(pill()).not.toBeNull(); // opened picking
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(pill()).toBeNull();
-    expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: null });
-  });
-
-  it('outside a pick, a frame selection with no composer open is the editor\'s caret and opens nothing', async () => {
-    const { frame, contentWindow } = makeFrame();
-    render(layer(frame, { railOpen: true }));
-    await flush();
-    fireEvent.click(screen.getByLabelText('Cancel picking'));
-    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED });
-    expect(screen.queryByRole('dialog', { name: 'Annotation composer' })).toBeNull();
-  });
-
-  it('on a phone, starting a pick puts the sheet away so the document can be tapped', async () => {
-    Object.defineProperty(window, 'innerWidth', { value: 390, configurable: true });
-    try {
-      const { frame, postMessage } = makeFrame();
-      const onRailOpenChange = vi.fn();
-      render(layer(frame, { railOpen: true, onRailOpenChange }));
-      await flush();
-      expect(pill()).toBeNull(); // a phone's sheet covers the document: no pick starts by itself
-      expect(onRailOpenChange).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByLabelText('Select'));
-      expect(onRailOpenChange).toHaveBeenCalledWith(false);
-      expect(pill()).not.toBeNull();
-      expect(annotationsMessages(postMessage).at(-1)).toMatchObject({ pick: 'select' });
-    } finally {
-      Object.defineProperty(window, 'innerWidth', { value: 1024, configurable: true });
-    }
-  });
-});
-
-/*
- * ADDED: OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is
- * about to leave one, so the document is ready for the click at once — the
- * tool in the header stays, as the explicit way back in and the place other
- * selection modes will sit beside it. Three openings are NOT that person:
- * a rail opened FOR A THREAD (a pin click came for an answer), the editor
- * (a pick takes the editor's clicks, so it is never started under it), and a
- * phone (the sheet covers the document, so a pick there is a tap on nothing).
- * Closing the rail ends the pick it opened; a composer arriving by another
- * route (the selection bubble, the editor toolbar) ends it too.
- */
-describe('opening the rail opens a pick', () => {
-  const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
-  const picks = (postMessage: ReturnType<typeof vi.fn>) =>
-    postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE).map((message) => message.pick);
-
-  it('starts when the rail opens, and ends when it closes', async () => {
-    const { frame, postMessage } = makeFrame();
-    const { rerender } = render(layer(frame, { railOpen: false }));
-    await flush();
-    expect(pill()).toBeNull();
-    expect(picks(postMessage).at(-1)).toBe(null);
-
-    rerender(layer(frame, { railOpen: true }));
-    await flush();
-    expect(pill()).not.toBeNull();
-    expect(picks(postMessage).at(-1)).toBe('select');
-
-    rerender(layer(frame, { railOpen: false }));
-    await flush();
-    expect(pill()).toBeNull();
-    expect(picks(postMessage).at(-1)).toBe(null);
-  });
-
-  it('does not start when the rail was opened for a thread', async () => {
-    const { frame, contentWindow } = makeFrame();
-    const onRailOpenChange = vi.fn();
-    const { rerender } = render(layer(frame, { railOpen: false, onRailOpenChange }));
-    await flush();
-    await fromFrame(contentWindow, { type: STORY_ANNOTATION_PIN_MESSAGE, nonce: NONCE, id: ANN.id, rect: { x: 0, y: 0, width: 10, height: 10 } });
-    expect(onRailOpenChange).toHaveBeenCalledWith(true);
-    rerender(layer(frame, { railOpen: true, onRailOpenChange }));
-    await flush();
-    expect(pill()).toBeNull();
-    expect(screen.getByLabelText('Select')).toHaveAttribute('aria-pressed', 'false');
-  });
-
-  it('never starts under the editor, and a pick already on ends when the editor opens', async () => {
-    const { frame } = makeFrame();
-    const { rerender } = render(layer(frame, { railOpen: true, pickOnOpen: false }));
-    await flush();
-    expect(pill()).toBeNull();
-    // …but the tool still works there, explicitly.
-    fireEvent.click(screen.getByLabelText('Select'));
-    expect(pill()).not.toBeNull();
-
-    rerender(layer(frame, { railOpen: true, pickOnOpen: true }));
-    await flush();
-    expect(pill()).not.toBeNull();
-    rerender(layer(frame, { railOpen: true, pickOnOpen: false }));
-    await flush();
-    expect(pill()).toBeNull();
-  });
-
-  it('a composer arriving by another route ends the pick', async () => {
-    const { frame } = makeFrame();
-    const { rerender } = render(layer(frame, { railOpen: true }));
-    await flush();
-    expect(pill()).not.toBeNull();
-    rerender(layer(frame, {
-      railOpen: true,
-      initialSelection: { kind: 'text' as const, path: '0', tag: 'p', rect: { x: 0, y: 0, width: 100, height: 20 }, className: '', style: '', ancestors: [] },
-    }));
-    await flush();
-    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
-    expect(pill()).toBeNull();
-  });
-});
-
-/*
- * ADDED: THE AREA TOOL. Beside the block tool in the rail header: `area` on
- * the wire, a pill that says to drag, and the frame's answer — a selection
- * carrying an area range and no quote — posted to the create door exactly as
- * a text range is. Same column, same field, tagged by kind.
- */
-describe('drawing an area from the rail', () => {
-  const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
-  const last = (postMessage: ReturnType<typeof vi.fn>) =>
-    postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE).at(-1);
-  const AREA = { v: 1 as const, kind: 'area' as const, box: { x: 0.2, y: 0.05, w: 0.5, h: 0.4 } };
-  const PICKED_AREA = {
-    kind: 'element' as const, path: '2', nodeId: 'node-2', tag: 'section', rect: { x: 5, y: 6, width: 400, height: 200 },
-    className: 'max-w-2xl', style: '', ancestors: [], range: AREA,
-  };
-
-  it('one Select tool toggles block and area selection together', async () => {
-    const { frame, postMessage } = makeFrame();
-    render(layer(frame, { railOpen: true }));
-    await flush();
-    const tool = screen.getByLabelText('Select');
-    expect(tool).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.queryByLabelText('Draw an area to comment on')).toBeNull();
-    expect(last(postMessage)).toMatchObject({ pick: 'select' });
-    expect(pill()).toHaveTextContent(/tap a block or drag an area/i);
-    fireEvent.click(tool);
-    expect(last(postMessage)).toMatchObject({ pick: null });
-    fireEvent.click(tool);
-    expect(last(postMessage)).toMatchObject({ pick: 'select' });
-  });
-
-  it('an area pick opens the composer on its anchor and saves the area as the range, with no quote', async () => {
-    const { frame, postMessage, contentWindow } = makeFrame();
-    render(layer(frame, { railOpen: true }));
-    await flush();
-    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: PICKED_AREA });
-    expect(screen.getByRole('dialog', { name: 'Annotation composer' })).toBeTruthy();
-    expect(last(postMessage)).toMatchObject({ pick: null, selectedPath: '2' });
-    // The frame re-reports the SAME node's geometry on scroll, without the range; the area must survive it.
-    await fromFrame(contentWindow, { type: STORY_SELECTION_MESSAGE, nonce: NONCE, selection: { ...PICKED_AREA, range: undefined, rect: { x: 5, y: 60, width: 400, height: 200 } } });
-    fireEvent.change(screen.getByLabelText('Annotation comment'), { target: { value: 'this whole region' } });
-    fireEvent.click(screen.getByLabelText('Save annotation'));
-    await flush();
-    const create = fetchCalls.find((call) => call.url.endsWith('/api/my/artifacts/doc1/annotations') && call.init?.method === 'POST');
-    const body = JSON.parse(String(create!.init!.body)) as Record<string, unknown>;
-    expect(body).toMatchObject({ path: '2', node_id: 'node-2', body: 'this whole region', range: AREA });
-    expect(body).not.toHaveProperty('quote');
-  });
-
-  it('hands an area thread\'s range to the frame with its pin', async () => {
-    const { frame, postMessage } = makeFrame();
-    render(layer(frame, { railOpen: false, liveAnnotations: [{ ...ANN, id: 'ann_area', range: AREA }] }));
-    await flush();
-    // The live list posts its pins the moment it lands (the seed fetch, resolving
-    // after it in this harness, then posts its own — the next live frame wins).
-    const pins = postMessage.mock.calls.map((call) => call[0])
-      .filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE)
-      .flatMap((message) => message.pins as Array<{ id: string; range: unknown }>);
-    expect(pins).toContainEqual(expect.objectContaining({ id: 'ann_area', range: AREA }));
-  });
-});
-
-/*
- * ADDED: THE RAIL SITS UNDER THE DOCUMENT'S BAR. The page says where the
- * bars end (`topOffset`) and how wide the frame's own scrollbar is
- * (`rightInset`), so the rail starts below the bar and stops short of the
- * scrollbar the frame keeps at the window's edge.
- */
-describe('the rail under the bar', () => {
-  it('starts at the offset the page gives it and leaves the frame\'s scrollbar visible', async () => {
-    const { frame } = makeFrame();
-    render(layer(frame, { railOpen: true, topOffset: 44, rightInset: 15 }));
-    await flush();
-    const rail = screen.getByLabelText('Annotation sidebar');
-    expect(rail.style.top).toBe('44px');
-    expect(rail.style.right).toBe('15px');
-  });
-});
-
-it('does not replay unchanged area state in response to a geometry-only echo', async () => {
-  const {frame,contentWindow,postMessage}=makeFrame();
-  const selected={kind:'element' as const,path:'1',nodeId:'node-1',tag:'section',rect:{x:5,y:6,width:200,height:40},className:'',style:'',ancestors:[],range:{v:1 as const,kind:'area' as const,box:{x:0.1,y:0.1,w:0.5,h:0.5}}};
-  render(layer(frame,{railOpen:true,initialSelection:selected}));await flush();
-  postMessage.mockClear();
-  const {range: _range,...geometry}=selected;
-  await fromFrame(contentWindow,{type:STORY_SELECTION_MESSAGE,nonce:NONCE,selection:geometry});await flush();
-  expect(postMessage.mock.calls.filter(([message])=>message.type===STORY_ANNOTATIONS_MESSAGE)).toHaveLength(0);
 });

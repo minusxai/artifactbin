@@ -11,13 +11,13 @@
  *
  *   usage: node scripts/gate-simpler-start.mjs [base]
  */
+import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
-const out = [];
-const ok = (c, l) => { const line = `${c ? '  ok ' : 'FAIL'} ${l}`; out.push(line); console.log(line); return c; };
+const check = createChecker('simpler-start');
 
 // ── 1. the human's leg: create from the home page, read the copied prompt ──
 const browser = await chromium.launch();
@@ -47,40 +47,40 @@ await page.waitForTimeout(1500);
 const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
 const id = started.id;
-ok(!!id, 'the create button makes a real document');
-ok(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
-ok(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
-ok(!(await startRes.allHeaders())['set-cookie'], 'and no agent cookie is set');
+check(!!id, 'the create button makes a real document');
+check(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
+check(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
+check(!(await startRes.allHeaders())['set-cookie'], 'and no agent cookie is set');
 // The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
-ok(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
-ok(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
-ok(!/\/start\?k=/.test(prompt), 'and carries no start link');
-ok(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
-ok(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
-ok(prompt.includes('/chat/install.sh'), 'and says how to get it when it is not installed');
+check(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
+check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
+check(!/\/start\?k=/.test(prompt), 'and carries no start link');
+check(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
+check(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
+check(prompt.includes('/chat/install.sh'), 'and says how to get it when it is not installed');
 if (!id) { console.log('cannot continue without the doc id'); process.exit(1); }
 
 // ── 2. the retired doors are GONE, not merely unadvertised ──────────────────
-ok((await fetch(`${B}/a/${id}/start?k=anything`)).status === 404, 'the start-link brief is gone (404)');
-ok((await fetch(`${B}/a/${id}/start`, { method: 'POST' })).status === 404, 'and so is its claim door');
-ok((await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })).status === 404,
+check((await fetch(`${B}/a/${id}/start?k=anything`)).status === 404, 'the start-link brief is gone (404)');
+check((await fetch(`${B}/a/${id}/start`, { method: 'POST' })).status === 404, 'and so is its claim door');
+check((await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })).status === 404,
   'and the public anonymous mint is not a route any more');
 
 // ── 3. the agent's leg: connect the way afbin does, then write ──────────────
 // The create button is the PAGE's door (browser_only), so a bare agent posting
 // it is refused and told to run afbin — while the CLI's own approval is the
 // one way it gets a credential at all.
-ok((await fetch(`${B}/api/start`, { method: 'POST' })).status === 403,
+check((await fetch(`${B}/api/start`, { method: 'POST' })).status === 403,
   'a client that is not the page is refused the create button');
 // The start door is the thing under test, so this gate cannot use the shared
 // start helper — it walks the same two steps by hand.
 const agent = await connectAgent(B);
-ok(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
+check(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
 const agentDoc = await (await fetch(`${B}/api/start`, {
   method: 'POST',
   headers: { origin: new URL(B).origin, 'sec-fetch-site': 'same-origin', authorization: `Bearer ${agent.token}` },
 })).json();
-ok(!!agentDoc.id, 'and the connected agent has a document it can write');
+check(!!agentDoc.id, 'and the connected agent has a document it can write');
 
 await page.goto(`${B}/a/${agentDoc.id}`, { waitUntil: 'load' });
 const put = await fetch(`${B}/api/artifacts/${agentDoc.id}`, {
@@ -92,7 +92,7 @@ const put = await fetch(`${B}/api/artifacts/${agentDoc.id}`, {
     theme: 'modernist',
   }),
 });
-ok(put.status === 200, `the connection edits what it created (PUT ${put.status})`);
+check(put.status === 200, `the connection edits what it created (PUT ${put.status})`);
 
 /**
  * Is this text on screen, wherever the document happens to be?
@@ -112,10 +112,8 @@ const seenInFrame = async (p, text) => {
   }
   return false;
 };
-ok(await seenInFrame(page, 'Landed by the agent'), "the watching human's page updated live");
+check(await seenInFrame(page, 'Landed by the agent'), "the watching human's page updated live");
 
 await browser.close();
 
-const failed = out.filter((l) => l.startsWith('FAIL')).length;
-console.log(failed ? `\n${failed} FAILED` : `\nall ${out.length} checks passed`);
-process.exit(failed ? 1 : 0);
+check.done();

@@ -1,32 +1,14 @@
 /**
  * HOW A LEG GETS ITS CREDENTIAL — a real account, logged in the way a person logs in.
  *
- * The product is CLI-only: afbin authenticates itself with an OAuth device pairing that a signed-in
- * person approves in a browser. The driver stands in for that person, so it needs the same two things
- * they have — a session and a token — and it gets them over plain HTTP, with no browser:
- *
- *   1. `POST /api/auth/email-otp/send-verification-otp {email, type:'sign-in'}` — Better Auth's own
- *      email-OTP plugin (`services/proxy/src/auth/human.ts`);
- *   2. the six-digit code out of the leg's MAILBOX, newest mail to the eval address sent after the
- *      request. Which mailbox is the only thing that varies: a deployment's mail goes to the eval's
- *      Resend inbound address (`GET /emails/receiving`), while a server this driver BOOTED writes its
- *      mail to a file instead of sending it (`lib/server devOutboxPath`, `services/proxy/src/mail.ts`) —
- *      so a local run needs no inbox and no key at all. One reader is swapped, nothing else;
- *   3. `POST /api/auth/sign-in/email-otp {email, otp}` → the session cookie, which is what approves the
- *      agent's pairing (`lib/auth.ts` before the turn, `lib/approver.ts` during it) and what shares the
- *      run's documents for scoring (`shareForScoring`);
- *   4. the OAuth grant an MCP client makes: dynamic registration, PKCE, the consent form fetched WITH
- *      the cookie and posted back verbatim (its `resource`/`scope` are checked exactly, so they are
- *      read off the form rather than guessed), the code taken off the 303's `Location` — no listener
- *      is ever opened — and exchanged at `/oauth/token`. That bearer is the DRIVER's: it seeds the
- *      document and reads the product back. It never reaches the agent, which authenticates itself.
- *
- * MEASURED against https://artifactbin.dev before this module was written (`scripts/spike-inbox-oauth.ts`):
- * the granted token is ACCOUNT-owned (a document it creates with no visibility is born `private`, and
- * `GET /api/artifacts` lists the account's other documents) AND it is accepted as a bearer on
- * `/api/artifacts`. Login mail took 3 s on one run and 50 s on another, hence the two-minute cap below.
- *
- * ONE login per leg: every task and every second attempt reuses what this returns.
+ * Why a leg logs in at all is in [docs/evals.md](../../docs/evals.md); this is the mechanism. Email
+ * OTP for the session cookie — the code comes from the eval's Resend inbox against a deployment and
+ * from the dev outbox file when this driver booted the server, and only that reader is swapped — then
+ * the OAuth grant an MCP client makes (dynamic registration, PKCE, the consent form fetched with the
+ * cookie and posted back verbatim, the code off the 303's `Location`, exchanged at `/oauth/token`).
+ * That bearer is the DRIVER's: it seeds documents and reads the product back, and never reaches the
+ * agent, which authenticates itself. ONE login per leg; every task and second attempt reuses it.
+ * Login mail has taken anywhere from seconds to most a minute, hence the two-minute cap below.
  */
 import type { Harness } from './contracts';
 import { createHash, randomBytes } from 'node:crypto';
@@ -36,7 +18,7 @@ import { type EvalMode } from './mode';
 import { slug } from './slug';
 
 /** Where a leg's token comes from. Both log in as a real account; only the MAILBOX differs. */
-export const CREDENTIAL_SOURCES = ['inbox-oauth', 'outbox-oauth'] as const;
+const CREDENTIAL_SOURCES = ['inbox-oauth', 'outbox-oauth'] as const;
 export type CredentialSource = (typeof CREDENTIAL_SOURCES)[number];
 
 /** `--credential` — an override for the source `credentialSourceFor` would have chosen. */
@@ -78,7 +60,7 @@ const REDIRECT_URI = 'http://127.0.0.1:9987/cb';
 const CLIENT_NAME = 'artifactbin eval driver';
 
 /** What the run can offer a mode besides the environment: the outbox of a server the driver booted. */
-export interface CredentialOptions {
+interface CredentialOptions {
   /** `lib/server devOutboxPath` for THIS run — set only when the driver booted the product itself. */
   localOutbox?: string;
 }
@@ -165,7 +147,7 @@ export function pickLoginMail(mails: InboundMail[], opts: { to: string; since: n
  * A line of the dev outbox, as `services/proxy/src/mail.ts devOutboxMailer` writes it: one JSON object
  * per line, the whole outgoing mail plus `createdAt` (`at` is accepted too, for a hand-written fixture).
  */
-export interface OutboxMail {
+interface OutboxMail {
   to?: string;
   text?: string;
   otp?: string;
@@ -211,7 +193,7 @@ export function callbackCode(location: string): string | null {
  * once. 0600: the run's transcript and the report are artifacts a CI job uploads.
  */
 
-export interface AcquireOptions {
+interface AcquireOptions {
   /** Where the product is, from the DRIVER's side. */
   base: string;
   env: CredentialEnv;
@@ -259,7 +241,7 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
 }
 
 /** What `shareForScoring` needs: the product, the session, and the documents to hand out links to. */
-export interface ShareForScoringOptions {
+interface ShareForScoringOptions {
   /** The address to knock on — the task's proxy, so the calls are the driver's and land where they belong. */
   base: string;
   /** The owner's session (`Credential.cookie`). The door takes no bearer. */
@@ -336,7 +318,7 @@ async function logIn(o: { base: string; origin: string; email: string; read: Cod
  * between a deployment (a Resend inbox) and a server this driver booted (a file), so it is the only
  * thing injected — the polling loop, the login and the whole OAuth grant stay one code path.
  */
-export type CodeReader = (since: number) => Promise<string | null>;
+type CodeReader = (since: number) => Promise<string | null>;
 
 /** The eval's own inbound mailbox, read with the EVAL's key — never the product's. */
 function resendCodeReader(o: { key: string; email: string; fetch: typeof globalThis.fetch }): CodeReader {

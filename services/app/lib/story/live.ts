@@ -105,7 +105,7 @@ export interface ArtifactLiveEvent {
 
 
 /** Payload of a wakeup: the artifact's new head pointer. */
-export type LiveHandler = (editId: string) => void;
+type LiveHandler = (editId: string) => void;
 
 interface ChannelSub {
   handlers: Set<LiveHandler>;

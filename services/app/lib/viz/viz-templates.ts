@@ -14,7 +14,7 @@ import type { VizResultColumn } from './types';
 import { GEO_ASSETS, GEO_BOUNDARY_DATASET, resolveGeoAsset } from './geo-assets';
 import { tileUrlTemplate } from '../tiles';
 
-export interface VizTemplateBinding {
+interface VizTemplateBinding {
   name: string;
   label: string;
   /** Column kinds this slot accepts (drives drop-zone hints; not enforced hard). */
@@ -47,11 +47,11 @@ const numExpr = (ref: string, formats: VizFormats, column: string): string => {
   return `${pre}${core}${suf}`;
 };
 
-export type VizTemplateEngine = 'vega-lite' | 'vega';
+type VizTemplateEngine = 'vega-lite' | 'vega';
 
-export type VizParams = Record<string, unknown> | null | undefined;
+type VizParams = Record<string, unknown> | null | undefined;
 
-export interface VizTemplate {
+interface VizTemplate {
   id: string;
   /** The icon-grid type this recipe implements. */
   vizType: 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'combo' | 'choropleth' | 'point_map';
@@ -1550,7 +1550,7 @@ export function getTemplate(recipeId: string): VizTemplate | null {
   return VIZ_TEMPLATES[recipeId] ?? null;
 }
 
-export type MaterializeResult =
+type MaterializeResult =
   | { ok: true; spec: Record<string, unknown>; engine: VizTemplateEngine; assets?: Record<string, string> }
   | { ok: false; error: string };
 

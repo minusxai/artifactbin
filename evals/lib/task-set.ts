@@ -23,8 +23,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { TaskSchema, type Task } from './contracts';
+import { parseShardSpec } from '../../scripts/lib/shard.mjs';
 
-export interface DiscoveredTask {
+interface DiscoveredTask {
   id: string;
   file: string;
   /** Named `<id>.eval.json`: part of the comparison matrix. */
@@ -49,25 +50,21 @@ export function discoverTasks(dir: string): DiscoveredTask[] {
     .sort((a, b) => a.task.order - b.task.order);
 }
 
-export interface TaskSelector {
+interface TaskSelector {
   /** `eval` = the comparison matrix (`*.eval.json`); `ci` = the product guards. Ignored when `ids` is given. */
   set?: 'eval' | 'ci';
   ids?: string[];
 }
 
-export interface Shard {
+interface Shard {
   /** 1-based. */
   index: number;
   total: number;
 }
 
-/** `i/n`, the shape CI matrices use. */
+/** `i/n`, the shape CI matrices use — the one parser, shared with the gate runner. */
 export function parseShard(spec: string): Shard {
-  const m = /^(\d+)\/(\d+)$/.exec(spec.trim());
-  if (!m) throw new Error(`shard must be written i/n (got "${spec}")`);
-  const shard = { index: Number(m[1]), total: Number(m[2]) };
-  if (shard.total < 1 || shard.index < 1 || shard.index > shard.total) throw new Error(`shard ${spec} is out of range`);
-  return shard;
+  return parseShardSpec(spec);
 }
 
 /**

@@ -22,13 +22,13 @@
 export const LINK_CLASSES = 'font-bold text-orange-600';
 
 /** A selection captured as character offsets over the host's text content (Range-stable). */
-export interface LinkTextSpan {
+interface LinkTextSpan {
   start: number;
   end: number;
 }
 
 /** What the toolbar's link popover opens with: the span plus any existing link's href. */
-export interface LinkDraftInfo {
+interface LinkDraftInfo {
   span: LinkTextSpan;
   /** Prefilled from an existing `<a>` when the span sits inside one; '' otherwise. */
   href: string;

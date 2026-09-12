@@ -9,7 +9,7 @@ export interface ServedDocument {
   html: string;
 }
 
-export interface ProductMetrics {
+interface ProductMetrics {
   published: boolean;
   hasTitle: boolean;
   title: string | null;

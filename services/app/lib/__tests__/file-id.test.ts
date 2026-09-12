@@ -26,10 +26,9 @@ describe('generateFileId', () => {
     expect(seen.size).toBeGreaterThan(50);
   });
 
-  it('does not repeat across a small sample', () => {
-    const ids = new Set(Array.from({ length: 1000 }, generateFileId));
-    expect(ids.size).toBe(1000);
-  });
+  // DROPPED: 'does not repeat across a small sample'. 1,000 draws from 62^6 collide about once in
+  // 114,000 runs — too rare to be a flake, and far too weak to catch a generator that lost its
+  // entropy. The alphabet-coverage case above is the one that would actually notice.
 });
 
 describe('ID_RE', () => {

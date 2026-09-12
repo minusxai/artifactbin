@@ -17,7 +17,7 @@ export type Harness =
   | 'script'
   | 'unknown';
 
-export interface ClientIdentity {
+interface ClientIdentity {
   /** Best guess at the harness. 'unknown' when nothing matched. */
   harness: Harness;
   /** The raw name we matched on, for logs — declaration or UA. */
@@ -85,7 +85,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? 
 export const ARTIFACTBIN_AGENT_HEADER = AGENT_HEADER;
 
 /** A supported explicit HTTP declaration, or null when the value is absent/unknown. */
-export function declaredAgentHarness(value: unknown): Harness | null {
+function declaredAgentHarness(value: unknown): Harness | null {
   const declared = str(value);
   if (!declared) return null;
   const slug = declaredAgentSlug(declared);

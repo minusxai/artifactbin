@@ -16,21 +16,3 @@ export interface VizResultColumn {
   kind: VizColumnKind;
 }
 
-export type VizIssueCode =
-  | 'E_ENVELOPE'         // envelope shape invalid (version/source/kind/grammar)
-  | 'E_RECIPE'           // unknown recipe id or missing bindings
-  | 'E_SCHEMA'           // spec fails the package-provided official grammar schema
-  | 'E_FIELD_NOT_FOUND'  // spec references a field not in the query result
-  | 'E_EXTERNAL_DATA'    // spec declares a data url / inline values (only the named dataset is allowed)
-  | 'E_DATASET_NAME'     // spec names a dataset other than the reserved one
-  | 'E_CSS'              // table css override uses @import / external url()
-  | 'W_COMPILE';         // vega-lite compiler warning (captured logger)
-
-export interface VizIssue {
-  severity: 'error' | 'warning';
-  code: VizIssueCode;
-  /** JSON-pointer-ish path into the envelope/spec, e.g. '/source/spec/layer/1/encoding/y/field'. */
-  path: string;
-  /** Actionable, agent-readable message (includes available fields for E_FIELD_NOT_FOUND). */
-  message: string;
-}

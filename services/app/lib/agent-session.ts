@@ -21,7 +21,8 @@
  * plaintext would only add a credential that outlives it. Ids also mean every
  * request re-reads the row, so revoking a token logs the browser out.
  */
-import { decodeAgentSession as decodeSigned, encodeAgentSession as encodeSigned } from '@artifactbin/utils';
+import { AGENT_COOKIE_MAX_AGE, cookieName, decodeAgentSession as decodeSigned, encodeAgentSession as encodeSigned, withToken, withoutToken } from '@artifactbin/utils';
+import type { AgentSession } from '@artifactbin/contracts';
 import { AUTH_SECRET, PUBLIC_BASE_URL } from '@/lib/config';
 import { createHash, randomBytes } from 'node:crypto';
 import { parseCookie } from '@/lib/http';
@@ -46,17 +47,17 @@ import { getDb } from '@/lib/db';
  * authentication retain distinct lifecycles.
  */
 const SECURE_COOKIE = PUBLIC_BASE_URL.startsWith('https://');
-export const AGENT_COOKIE = SECURE_COOKIE ? '__Host-mx-agent-session' : 'mx-agent-session';
+export const AGENT_COOKIE = cookieName(SECURE_COOKIE);
 
-/** Anonymous browser session lifetime: 30 days. */
-export const AGENT_COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
-
-
-/** What the cookie carries: the token ids this browser holds, oldest first. */
-export interface AgentSession {
-  tokenIds: string[];
-  sessionId?: string;
-}
+/**
+ * The cookie's shape, its lifetime and the two list operations are
+ * `@artifactbin/utils`' — the proxy WRITES this cookie and the app READS it,
+ * so a second implementation here is a seam that can silently disagree with
+ * itself. Re-exported rather than reimplemented: call sites keep naming the
+ * app module, and there is still exactly one of each.
+ */
+export { AGENT_COOKIE_MAX_AGE, withToken, withoutToken };
+export type { AgentSession };
 
 export function agentCookieOptions(): {
   httpOnly: true; sameSite: 'lax'; secure: boolean; path: string; maxAge: number;
@@ -122,24 +123,4 @@ export async function liveAgentSession(request: Request): Promise<AgentSession |
     const row = await (await getDb()).query(`SELECT 1 FROM ${schema}.credentials WHERE kind='agent-browser' AND credential_hash=$1 AND subject_id=$2 AND deleted_at IS NULL AND consumed_at IS NULL AND expires_at>now()`, [hash, primary]);
     return row.rows.length === 1 ? parsed : null;
   } catch { return null; }
-}
-
-/**
- * Add a token id to what a browser holds, newest LAST (it becomes primary).
- * Re-presenting a held token promotes it rather than duplicating: the token
- * you touched last authorizes your next write, which is what every call site
- * assumes.
- */
-export function withToken(session: AgentSession | null, tokenId: string): AgentSession {
-  const rest = (session?.tokenIds ?? []).filter((id) => id !== tokenId);
-  return { tokenIds: [...rest, tokenId].slice(-8) };
-}
-
-/**
- * The inverse of withToken (tok-p1, reject): drop ONE held id, preserving the order of the rest — the last
- * entry stays the primary. Returns null when nothing remains, which the caller turns into a cleared cookie.
- */
-export function withoutToken(session: AgentSession | null, tokenId: string): AgentSession | null {
-  const tokenIds = (session?.tokenIds ?? []).filter((id) => id !== tokenId);
-  return tokenIds.length ? { tokenIds } : null;
 }

@@ -16,8 +16,8 @@ export interface Access { base: string; id: string }
 /** The document the driver minted for this task (`lib/retry mintStartDocumentAs`). */
 export interface StartDocument { id: string }
 
-export interface AccessPlanInput { task: Task; base: string; start: StartDocument; credential: { token: string } }
-export interface AccessPlan { access: Access; seed: { id: string; token: string; markup: string } | null }
+interface AccessPlanInput { task: Task; base: string; start: StartDocument; credential: { token: string } }
+interface AccessPlan { access: Access; seed: { id: string; token: string; markup: string } | null }
 
 /**
  * The driver's pre-turn plan, decided in ONE place and performed by the caller: which document the
@@ -37,14 +37,14 @@ export function planAccess({ task, base, start, credential }: AccessPlanInput): 
  * install it (`not-installed` mode). `hardcore` strips all of that: only the brief, the vision note
  * when relevant, and the bare base.
  */
-export const PROMPT_LEVELS = ['hardcore', 'starter'] as const;
+const PROMPT_LEVELS = ['hardcore', 'starter'] as const;
 export type PromptLevel = (typeof PROMPT_LEVELS)[number];
 export const DEFAULT_PROMPT_LEVEL: PromptLevel = 'starter';
 export function parsePromptLevel(raw: string): PromptLevel {
   if (!(PROMPT_LEVELS as readonly string[]).includes(raw)) throw new Error(`unknown --prompt "${raw}" — known: ${PROMPT_LEVELS.join(', ')}`);
   return raw as PromptLevel;
 }
-export interface PromptOptions { vision?: boolean; promptLevel?: PromptLevel }
+interface PromptOptions { vision?: boolean; promptLevel?: PromptLevel }
 const VISION_LINE = 'You cannot view images. Check your work by reading the document markup.';
 
 /**
@@ -55,7 +55,9 @@ const VISION_LINE = 'You cannot view images. Check your work by reading the docu
 export function buildPrompt(task: Task, access: Access, opts: PromptOptions = {}): string {
   const level = opts.promptLevel ?? DEFAULT_PROMPT_LEVEL;
   const vision = opts.vision === false ? [VISION_LINE] : [];
-  // Hardcore gives ONLY the base — never the artifact id, the installer or afbin.
-  if (level === 'hardcore') return [task.brief, ...vision, `Use ${access.base}.`].join('\n\n');
+  // Hardcore gives the document link and nothing else — never the installer or the word afbin. A person
+  // pastes a link, not a base URL; the first hardcore run (34704712847) gave only the base, so no agent
+  // could edit the document it was scored against and used_start_document failed 16 of 16.
+  if (level === 'hardcore') return [task.brief, ...vision, `The document is at ${access.base.replace(/\/$/, '')}/a/${access.id}.`].join('\n\n');
   return [existingPaste(access.base, access.id), task.brief, ...vision].join('\n\n');
 }

@@ -26,9 +26,21 @@ describe('resendMailer', () => {
     expect(resolveDevOutboxPath('')).toBe(DEV_OUTBOX_DEFAULT_PATH);
     expect(resolveDevOutboxPath('   ')).toBe(DEV_OUTBOX_DEFAULT_PATH);
   });
-  it('selects the local outbox only for loopback origins', () => {
-    expect(mailerForRuntime({ publicBaseUrl: 'http://localhost:3030', from: 'x', devOutboxPath: join(tmpdir(), 'artifactbin-local-mail') })).toBeTruthy();
-    expect(() => mailerForRuntime({ publicBaseUrl: 'https://artifactbin.dev', from: 'x' })).not.toThrow();
+  it('selects the local outbox only for loopback origins — a hosted deployment never writes a code to disk', async () => {
+    // Both return a bare `{ send }`, so which one was chosen is only visible in what a send DOES.
+    // That is the point of the check: a hosted origin that got the outbox would write every login
+    // code to a file, which is an auth bypass, and `not.toThrow()` could not tell the difference.
+    const file = join(mkdtempSync(join(tmpdir(), 'artifactbin-mail-runtime-')), 'outbox.jsonl');
+    const message = { to: 'dev@example.com', kind: 'otp', subject: 'x', text: 'x' } as const;
+
+    const local = mailerForRuntime({ publicBaseUrl: 'http://localhost:3030', from: 'x', devOutboxPath: file });
+    await local.send({ ...message, otp: '424242' });
+    expect(JSON.parse(readFileSync(file, 'utf8').trim())).toMatchObject({ to: 'dev@example.com', otp: '424242' });
+
+    // The hosted origin gets Resend, which refuses without a key rather than writing anywhere.
+    const hosted = mailerForRuntime({ publicBaseUrl: 'https://artifactbin.dev', from: 'x', devOutboxPath: file });
+    await expect(hosted.send({ ...message, otp: '999999' })).rejects.toBeInstanceOf(MailNotConfigured);
+    expect(readFileSync(file, 'utf8')).not.toContain('999999');
   });
   it('refuses to send without a key, and reports a failed send with its status', async () => {
     await expect(resendMailer({ from: 'x' }).send({ to: 'a', kind: 'other', subject: 's', text: 't' })).rejects.toBeInstanceOf(MailNotConfigured);

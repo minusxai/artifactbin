@@ -22,7 +22,7 @@ export const SHOWCASE_ORIGIN = 'https://artifactbin.dev';
 /** The shape a reader is about to open. Sets expectations before the click. */
 export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'product plan' | 'eda';
 
-export interface ShowcaseDoc {
+interface ShowcaseDoc {
   /**
    * WHERE IT SITS IN THE WHEEL. Ordering by a key rather than by position in
    * the array means reordering is editing one number, not moving a block of

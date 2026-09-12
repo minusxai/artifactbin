@@ -13,8 +13,9 @@
  *  - A dev server is also ONE server, so the set runs one gate at a time: ~25 minutes rather than ~3.
  *
  * So the default is now the CI shape: boot the production bundle, one server per core. `--servers=N` still
- * wins (0 included, for a caller who wants the old "drive :3040" behaviour), and passing base URLs still
- * means DRIVE THOSE — which is the whole point of `npm run test:gates -- <base>`.
+ * wins, and passing base URLs still means DRIVE THOSE — which is the whole point of
+ * `npm run test:gates -- <base>`. `--servers=0` with no base URL now refuses rather than falling back to a
+ * dev server nobody asked for: a run with nothing to drive must be loud.
  *
  * The CAP is not about the machine's patience but about the gates': each server is a full app process with
  * its own PGLite and its own Chromium work landing on it, and past half a dozen the wall-clock stops falling
@@ -29,7 +30,7 @@ export const SERVER_CAP = 6;
 /**
  * `{ servers, source }` — how many to boot and why, so the runner can say so.
  *   `bases`   base URLs were given: boot nothing, drive those.
- *   `flag`    `--servers=N` was given: boot exactly N (0 = boot nothing and fall back to the default base).
+ *   `flag`    `--servers=N` was given: boot exactly N (0 boots nothing, so base URLs must supply the targets).
  *   `default` neither: one per core, capped at SERVER_CAP, never fewer than one.
  * Both a base URL and `--servers` is a refusal — the two say different things about where the gates run.
  */

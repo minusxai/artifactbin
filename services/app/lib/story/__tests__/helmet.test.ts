@@ -7,10 +7,10 @@ import { describe, expect, it } from 'vitest';
 import { parseJsx } from '@/lib/jsx';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import { hoistHelmet, splitHelmet, validateHelmet } from '@/lib/story/helmet';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const nodes = (source: string): JsxNode[] => {
-  const parsed = parseJsx(source);
-  if (!parsed.ok) throw new Error(`test source failed to parse: ${parsed.error}`);
+  const parsed = parseJsxOrThrow(source);
   return parsed.nodes;
 };
 

@@ -20,14 +20,14 @@
  */
 import { cloneElement, memo, type FocusEvent, type FormEvent, type ReactElement } from 'react';
 
-export interface EditableHostSession {
+interface EditableHostSession {
   isEditing(path: string): boolean;
   onFocus(path: string, el: HTMLElement): void;
   onInput(path: string): void;
   onBlur(path: string): void;
 }
 
-export interface EditableHostProps {
+interface EditableHostProps {
   path: string;
   session: EditableHostSession;
   /** Which document this render is of — see the comparator. */

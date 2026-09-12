@@ -41,14 +41,14 @@ const ExpandedInteractiveVegaChart = dynamic<VegaChartProps>(
   },
 );
 
-export interface EngagementDatum extends Record<string, unknown> {
+interface EngagementDatum extends Record<string, unknown> {
   day: string;
   series: 'views' | 'likes';
   value: number;
 }
 
 /** Compact without rounding up: 1,267 reads as 1.2k, while the title keeps 1,267. */
-export function compactMetric(value: number): string {
+function compactMetric(value: number): string {
   const compact = (amount: number, suffix: string) => {
     const truncated = Math.floor(amount * 10) / 10;
     return `${Number.isInteger(truncated) ? truncated.toFixed(0) : truncated.toFixed(1)}${suffix}`;
@@ -162,7 +162,7 @@ function useAppMode(): 'light' | 'dark' {
   return mode;
 }
 
-export interface DashboardProps {
+interface DashboardProps {
   rows: ShelfRow[];
   stats?: WorkspaceStats;
   viewsOverTime?: number[];
@@ -177,7 +177,7 @@ export interface DashboardProps {
  * reuses this component rather than beginning a separate dashboard design;
  * a future route can mount the same content without inheriting modal chrome.
  */
-export function DashboardContent({
+function DashboardContent({
   rows,
   stats,
   viewsOverTime = EMPTY_SERIES,

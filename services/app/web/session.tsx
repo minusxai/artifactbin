@@ -7,7 +7,7 @@ import { useRefreshable } from '@/lib/navigation';
 import { createPageDataStore, type PageDataStore } from '@/web/page-data-store';
 import { PAGE_DATA_CHANGED } from '@/web/page-data-events';
 
-export interface SessionState {
+interface SessionState {
   user: { id: string; email: string | null } | null;
   kind: 'account' | 'anon' | 'none';
   mixpanel: { token: string | null; host: string };

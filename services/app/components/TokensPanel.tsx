@@ -5,7 +5,7 @@ import { Ban } from 'lucide-react';
 import { usePageData } from '@/web/use-page-data';
 import { Button, MicroLabel, PANEL, TABLE_ROW } from '@/components/ui';
 
-export interface UserTokenView {
+interface UserTokenView {
   id: string;
   name: string | null;
   status: 'active' | 'expired' | 'revoked';

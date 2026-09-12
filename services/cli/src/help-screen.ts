@@ -3,7 +3,7 @@ import {CLI_VERSION} from './version';
 import {helpTopics,examples} from './teaching';
 import {createStyle,wrap,visibleWidth,type Style,type StyleOptions} from './style';
 /** Human help for a terminal, rendered from the same registry as the plain text, manual and skills. */
-export interface ScreenOptions extends StyleOptions {columns?:number}
+interface ScreenOptions extends StyleOptions {columns?:number}
 export const COMMAND_GROUPS:ReadonlyArray<readonly [string,readonly string[]]>=[
  ['Local files',['pull','push','fork','status','diff','validate']],
  ['Published resources',['list','log','export','query','delete','comment','open']],

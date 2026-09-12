@@ -10,12 +10,13 @@ export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'image'
 export const CI_MODULES = {
   contracts: [],
   utils: ['contracts'],
+  'test-support': [],
   sql: ['contracts', 'utils'],
-  browser: ['contracts', 'utils'],
+  browser: ['contracts', 'utils', 'test-support'],
   events: ['contracts', 'utils'],
-  proxy: ['contracts', 'utils'],
-  app: ['contracts', 'utils', 'sql', 'browser', 'events', 'proxy'],
-  cli: ['contracts', 'app', 'sql'],
+  proxy: ['contracts', 'utils', 'test-support'],
+  app: ['contracts', 'utils', 'sql', 'browser', 'events', 'proxy', 'test-support'],
+  cli: ['contracts', 'app', 'sql', 'test-support'],
   evals: ['app', 'cli'],
 };
 
@@ -29,7 +30,7 @@ export function planCi(paths, { full = false } = {}) {
       || /^docs\/[^\n]+\.md$/.test(path)) continue;
     const module = path.startsWith('evals/') ? 'evals' : /^services\/([^/]+)\//.exec(path)?.[1];
     if (!Object.hasOwn(CI_MODULES, module ?? '')
-      || module === 'contracts' || module === 'utils'
+      || module === 'contracts' || module === 'utils' || module === 'test-support'
       || path.endsWith('/package.json') || path.endsWith('/Dockerfile')
       || path === 'services/cli/scripts/prepare-pty.mjs') {
       full = true;

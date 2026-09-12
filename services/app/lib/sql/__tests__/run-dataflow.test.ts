@@ -3,14 +3,14 @@
  * the island carries. Ordering, overrides, partial re-runs, and failure shape.
  */
 import { describe, expect, it } from 'vitest';
-import { parseJsx, type JsxNode } from '@/lib/jsx';
+import { type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { runDataflow } from '@/lib/sql/run-dataflow';
 import type { Dataflow } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const flowOf = (helmetChildren: string): Dataflow => {
-  const parsed = parseJsx(`<Helmet>${helmetChildren}</Helmet>`);
-  if (!parsed.ok) throw new Error(parsed.error);
+  const parsed = parseJsxOrThrow(`<Helmet>${helmetChildren}</Helmet>`);
   const { content } = splitHelmet(parsed.nodes as JsxNode[]);
   return { values: content.values, queries: content.queries };
 };
