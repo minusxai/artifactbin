@@ -130,6 +130,16 @@ async function reconcileMixed(plan:PushPlan,client:HttpClient,workspace?:Workspa
  const delta=Object.fromEntries(Object.entries(metadataInput(result.document.metadata)).filter(([key,value])=>!isDeepStrictEqual(value,observed[key])));
  return {...plan,body:{...delta,...(plan.mode==='replace'?{markup:result.document.body,expectedVersion:head.version}:{}),expectedState:head.state}};
 }
+/** A dependency this workspace already published from identical bytes keeps its id; only placeholders are described to the server. */
+function reuseTracked(workspace:Workspace,plan:PushPlan):Array<{path:string;id:string}>{
+ const reused:Array<{path:string;id:string}>=[];
+ for(const dependency of plan.dependencies){
+  const tracked=workspace.tracking?.files[dependency.path];
+  if(tracked&&tracked.file===dependency.sha256&&plan.ids[dependency.path]===dependency.id){plan.ids[dependency.path]=tracked.id;reused.push({path:dependency.path,id:tracked.id});}
+ }
+ return reused;
+}
+const describePending=(plan:PushPlan)=>plan.dependencies.filter(d=>plan.ids[d.path]===d.id).map(d=>d.format==='dataset'?{id:plan.ids[d.path],input:d.input}:{id:plan.ids[d.path],sha256:d.sha256,size:d.size,filename:d.filename});
 export async function push(workspace:Workspace,paths:string[],client:HttpClient,options:PushOptions={}){
  if(options.dryRun){
   if(await readPendingRequest(workspace.home,workspace.root))throw new CliError('pending_recovery','Recover the pending request before dry-run.');
@@ -139,10 +149,11 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    plan=await observeConditions(plan,client,!!options.force);
    plan=await reconcileMixed(plan,client);
    const mode=plan.mode==='none'?'replace':plan.mode;
-   const input=plan.body;
-   const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(mode!=='create'?{mode}:{}),input,dependencies:plan.dependencies.map(d=>d.format==='dataset'?{id:plan.ids[d.path],input:d.input}:{id:plan.ids[d.path],sha256:d.sha256,size:d.size,filename:d.filename})});
+   const known=new Map(reuseTracked(workspace,plan).map(entry=>[entry.path,entry.id]));
+   const input=plan.dependencies.length&&plan.file.document?{...plan.body,...(plan.mode==='edit'?{source:substituteDependencies(plan.file.document.body,plan.dependencies,plan.ids)}:{markup:substituteDependencies(plan.file.document.body,plan.dependencies,plan.ids)})}:plan.body;
+   const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(mode!=='create'?{mode}:{}),input,dependencies:describePending(plan)});
    const reusable=new Map(((preflight.dependencies as PreflightDependencyResult[]|undefined)??[]).map(result=>[result.id,result.existing]));
-   results.push({path:plan.file.path,...preflight,...(plan.dependencies.length?{dependencies:plan.dependencies.map(d=>{const reused=reusable.get(plan.ids[d.path]);return{path:d.path,id:d.id,...(reused?{would_reuse:reused}:{would_upload:true})};})}:{})});
+   results.push({path:plan.file.path,...preflight,...(plan.dependencies.length?{dependencies:plan.dependencies.map(d=>{const reused=reusable.get(plan.ids[d.path]);const local=known.get(d.path);return{path:d.path,id:d.id,...(local?{would_reuse:local}:reused?{would_reuse:reused}:{would_upload:true})};})}:{})});
   }
   return{dry_run:true,operations:results};
  }
@@ -163,10 +174,14 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    }
    // One preflight per document decides, by hash, which assets the account already owns.
    if(plan.dependencies.length&&plan.mode!=='metadata'){
+    for(const entry of reuseTracked(workspace,plan))operations.push({path:entry.path,status:'reused',id:entry.id});
+    const source=substituteDependencies(plan.file.document!.body,plan.dependencies,plan.ids);
+    plan.body={...plan.body,...(plan.mode==='edit'?{source}:{markup:source})};
     plan=await reconcileMixed(plan,client,workspace);
-    const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(plan.mode!=='create'?{mode:plan.mode}:{}),input:plan.body,dependencies:plan.dependencies.map(d=>d.format==='dataset'?{id:plan.ids[d.path],input:d.input}:{id:plan.ids[d.path],sha256:d.sha256,size:d.size,filename:d.filename})});
+    const preflight=await client.request<Record<string,unknown>>('/artifacts/preflight','POST',{...(plan.id?{id:plan.id}:{}),...(plan.mode!=='create'?{mode:plan.mode}:{}),input:plan.body,dependencies:describePending(plan)});
     const reusable=new Map(((preflight.dependencies as PreflightDependencyResult[]|undefined)??[]).map(result=>[result.id,result.existing]));
     for(const dependency of plan.dependencies){
+     if(plan.ids[dependency.path]!==dependency.id)continue;
      const reused=reusable.get(plan.ids[dependency.path]);
      if(reused){plan.ids[dependency.path]=reused;operations.push({path:dependency.path,status:'reused',id:reused});continue;}
      await checkRetiredCreate(workspace.home,workspace.root,dependency.path);

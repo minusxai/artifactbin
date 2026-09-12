@@ -9,6 +9,7 @@ import {GET as read,PUT as replace,PATCH as metadata} from '@/app/api/artifacts/
 import {POST as edit} from '@/app/api/artifacts/[id]/edits/route';
 import {POST as preflight} from '@/app/api/artifacts/preflight/route';
 import {runCli} from '../../cli/src/dispatch';
+import {tracking} from '../../cli/test/tracking';
 import {saveConnection} from '../../cli/src/config';
 import {parseDocument,writeDocument} from '../../cli/src/document';
 useAppHarness();
@@ -57,11 +58,11 @@ it('bare push publishes changed composed dependencies under new identities befor
   await writeFile(join(root,'other.jsx'),await readFile(join(root,'doc.jsx')));
   await invoke(['push','doc.jsx','other.jsx']);
   expect(calls.filter(call=>call==='POST /api/artifacts')).toHaveLength(3);
-  const lock=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));const oldAsset=lock.files['sales.csv'].id;
+  const oldAsset=(await tracking(root,root)).files['sales.csv'].id;
   calls.length=0;await writeFile(join(root,'sales.csv'),'region,total\nEast,24\n');await invoke(['push']);
   expect(calls.some(call=>call===`PUT /api/artifacts/${oldAsset}`)).toBe(false);
   expect(calls.filter(call=>call==='POST /api/artifacts')).toHaveLength(1);
-  const next=JSON.parse(await readFile(join(root,'afbin.lock'),'utf8'));expect(next.files['sales.csv'].id).not.toBe(oldAsset);
+  expect((await tracking(root,root)).files['sales.csv'].id).not.toBe(oldAsset);
   expect(parseDocument(await readFile(join(root,'doc.jsx'),'utf8')).body).toContain('source="./sales.csv"');
   const old=await read(new Request(`http://localhost:3000/api/artifacts/${oldAsset}`,{headers:{Authorization:`Bearer ${token.token}`}}),{params:Promise.resolve({id:oldAsset})});expect((await old.json()).version).toBe(1);
   const titled=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));titled.metadata.title='Sales';await writeFile(join(root,'doc.jsx'),writeDocument(titled));

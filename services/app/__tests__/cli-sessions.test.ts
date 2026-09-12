@@ -9,6 +9,7 @@ import {remoteSessions} from '@/lib/remote/registry';
 import {GET as listRoute} from '@/app/api/sessions/route';
 import {GET as readRoute,DELETE as terminateRoute} from '@/app/api/sessions/[id]/route';
 import {runCli} from '../../cli/src/dispatch';
+import {readRecord} from '../../cli/test/tracking';
 import {saveConnection} from '../../cli/src/config';
 import {State} from '../../cli/src/state';
 
@@ -143,7 +144,7 @@ it('a terminate whose reply is lost completes on the repeated command instead of
   const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,fetch:lossy,stdout:s=>output.push(s),stderr:()=>{}});
   return {code,result:JSON.parse(output.join(''))};
  };
- const journal=join(root,'.artifactbin','pending-operation.json');
+ const journal=()=>readRecord<{path:string;body:unknown}>(root,root,'pending-operation','current');
  try{
   const user=await createUser({email:'mxmx_test_terminate_recovery@example.com'});
   const token=await mintToken('mxmx_test_terminate_recovery');await claimToken(user.id,token.token);
@@ -153,14 +154,14 @@ it('a terminate whose reply is lost completes on the repeated command instead of
   const interrupted=await invoke(['delete','--type','session',session.id]);
   expect(interrupted.code).not.toBe(0);
   expect(remoteSessions.list(user.id)).toEqual([]);
-  expect(await readFile(journal,'utf8')).toContain(session.id);
+  expect(JSON.stringify(await journal())).toContain(session.id);
 
   // The session is a tombstone now, so the terminate's own pre-read would answer
   // 410. Repeating the command has to finish the journalled operation instead.
   const recovered=await invoke(['delete','--type','session',session.id]);
   expect(recovered.code,JSON.stringify(recovered.result)).toBe(0);
   expect(recovered.result.operations).toEqual([{id:session.id,status:'terminated',operation:expect.any(String)}]);
-  await expect(readFile(journal,'utf8')).rejects.toThrow();
+  expect(await journal()).toBeNull();
   expect(calls.filter(call=>call.startsWith('DELETE'))).toHaveLength(2);
  }finally{await rm(root,{recursive:true,force:true});}
 });

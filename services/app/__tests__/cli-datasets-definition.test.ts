@@ -12,6 +12,7 @@ import {POST as secrets} from '@/app/api/my/secrets/route';
 import {resolveDatasetConnection} from '@/lib/datasets/secrets';
 import {DatasetError} from '@/lib/datasets/errors';
 import {runCli} from '../../cli/src/dispatch';
+import {readRecord} from '../../cli/test/tracking';
 import {saveConnection} from '../../cli/src/config';
 import {parseResourceFile} from '../../cli/src/resource-file';
 useAppHarness();
@@ -82,8 +83,8 @@ it('binds a connection password from the environment and writes only its secret 
   const secretId=written.match(/passwordSecretId="([^"]+)"/)?.[1];expect(secretId).toMatch(/^sec_[0-9a-f]{24}$/);
   for(const file of ['orders.jsx','orders.yaml'])expect(await readFile(join(root,file),'utf8')).not.toContain('hunter2');
   expect(output.join('')).not.toContain('hunter2');
-  const journal=await readFile(join(root,'.artifactbin','pending-request.json'),'utf8').catch(()=>'');
-  const operation=await readFile(join(root,'.artifactbin','pending-operation.json'),'utf8').catch(()=>'');
+  const journal=JSON.stringify(await readRecord(root,root,'pending-request','current')??'');
+  const operation=JSON.stringify(await readRecord(root,root,'pending-operation','current')??'');
   expect(journal+operation).not.toContain('hunter2');
 
   // The secret resolves for its creator against that exact target, and nothing else.

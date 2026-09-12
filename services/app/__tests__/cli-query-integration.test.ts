@@ -10,6 +10,7 @@ import {GET as content} from '@/app/api/artifacts/[id]/content/route';
 import {POST as mutate} from '@/app/api/artifacts/[id]/mutate/route';
 import {mintToken} from '@/lib/tokens';
 import {runCli} from '../../cli/src/dispatch';
+import {readRecord} from '../../cli/test/tracking';
 import {saveConnection} from '../../cli/src/config';
 import {parseResourceFile,writeResourceFile} from '../../cli/src/resource-file';
 useAppHarness();
@@ -93,7 +94,7 @@ it('a dry-run write validates against the real head and leaves every row where i
   expect(result.dry_run).toBe(true);expect(result.mutation).toBe('sql');expect(result.applied).toBe(false);
   expect(calls.every(call=>call.startsWith('GET '))).toBe(true);
   const state=await read(request(`/api/artifacts/${doc.id}`,{token:token.token}),context);expect((await state.json()).rows).toEqual([{n:1}]);
-  await expect(readFile(join(root,'.artifactbin','pending-operation.json'))).rejects.toThrow();
+  expect(await readRecord(root,root,'pending-operation','current')).toBeNull();
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

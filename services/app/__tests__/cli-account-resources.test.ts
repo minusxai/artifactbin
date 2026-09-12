@@ -12,6 +12,7 @@ import {GET,PATCH} from '@/app/api/account/profile/route';
 import {POST as createArtifactRoute} from '@/app/api/artifacts/route';
 import {GET as readArtifact,DELETE as removeArtifact} from '@/app/api/artifacts/[id]/route';
 import {runCli} from '../../cli/src/dispatch';
+import {tracking} from '../../cli/test/tracking';
 import {saveConnection} from '../../cli/src/config';
 useAppHarness();
 it('profile settings and personal relationship lists commit together and reject stale proposals',async()=>{
@@ -75,7 +76,7 @@ it('typed delete takes several targets, reports every identity the server remove
   for(const id of [folder.id,child.id,document.id])expect(await ownedArtifactState({tokenId:token.id,userId:null},id),id).toEqual({deleted:true});
   // Local bytes survive a remote deletion; only the tracking entry goes.
   expect(await readFile(join(root,'doc.jsx'))).toEqual(bytes);
-  expect(JSON.parse(await readFile(join(root,'afbin.lock'),'utf8')).files).toEqual({});
+  expect((await tracking(root,root)).files).toEqual({});
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
