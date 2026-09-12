@@ -153,3 +153,12 @@ describe('gatedChecks', () => {
     expect(verdictFor(checks, gatedChecks(GATED, { trafficObserved: false })).failed).toEqual(['has_title']);
   });
 });
+
+import { gatedChecks as gatedChecksForStart } from '../lib/score/verdict';
+describe('a hardcore prompt names no start document', () => {
+  it('used_start_document stops gating — the first hardcore run (34704712847) failed 16 of 16 document tasks on it', () => {
+    const gated = ['published', 'used_start_document', 'has_title'];
+    expect(gatedChecksForStart(gated, { trafficObserved: true, startUnnamed: true })).toEqual(['published', 'has_title']);
+    expect(gatedChecksForStart(gated, { trafficObserved: true })).toEqual(gated);
+  });
+});

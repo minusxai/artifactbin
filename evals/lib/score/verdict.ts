@@ -61,9 +61,19 @@ const NEEDS_A_DOCS_FETCH = new Set(['read_docs_before_write']);
  */
 const NEEDS_TOOL_TELEMETRY = new Set(['no_local_checkout_reads','used_cli']);
 
+/**
+ * `used_start_document` asks whether the agent edited the document it was GIVEN. The hardcore prompt
+ * gives no document — only the brief and the base URL (`lib/tasks.ts`) — so there is nothing to have
+ * used, and gating it failed all 16 document tasks of the first hardcore run (34704712847) on a
+ * question the agent was never asked. Not recorded there either: `null`, not a false.
+ */
+const NEEDS_A_NAMED_START = new Set(['used_start_document']);
+
 export interface GateOptions {
   trafficObserved: boolean;
   vocabularyInstalled?: boolean;
+  /** The prompt named no start document (hardcore), so `used_start_document` cannot be answered. */
+  startUnnamed?: boolean;
   /** The task asked for MCP and this harness has no client, so it ran over REST. */
   transportSubstituted?: boolean;
   /**
@@ -77,6 +87,7 @@ export interface GateOptions {
 export function gatedChecks(gated: string[], opts: GateOptions): string[] {
   let out = opts.trafficObserved ? gated : gated.filter((c) => !LEDGER_ONLY.has(c));
   if (opts.vocabularyInstalled) out = out.filter((c) => !NEEDS_A_DOCS_FETCH.has(c));
+  if (opts.startUnnamed) out = out.filter((c) => !NEEDS_A_NAMED_START.has(c));
   if (opts.toolTelemetryObserved === false) out = out.filter((c) => !NEEDS_TOOL_TELEMETRY.has(c));
   return out;
 }
