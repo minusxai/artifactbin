@@ -339,6 +339,11 @@ jobs:
       # The harness this job drives — one global npm package, no login.
       - run: npm i -g opencode-ai
       - run: npm run build -w services/cli
+      # The `not-installed` leg installs afbin the way a cold agent does — `curl …/chat/install.sh | sh`
+      # through the task proxy, which serves THIS checkout's release from services/cli/dist (evals/lib/proxy.ts).
+      # That needs the platform BINARY, not just the JS build: without it the installer 404s and the agent
+      # spends its whole turn budget hunting for one (main run 34691848703, both tasks capped at 41 turns).
+      - run: npm run build:binary -w services/cli
       - run: npm run build
       - run: |
           umask 077
