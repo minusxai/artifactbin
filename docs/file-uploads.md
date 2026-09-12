@@ -39,3 +39,11 @@ their normal read permissions.
 Bytes live in content-addressed object storage. Downloads stream with
 attachment disposition, a sandbox CSP and nosniff. The file page offers a
 download; it does not interpret uploaded content.
+
+Every image, PDF and file artifact records `meta.sha256`: the hash of the bytes
+the client uploaded, taken before any optimisation, so an image's hash is that
+of the file you sent and not of the stored WebP. Publication preflight uses it
+to answer whether you already own a live artifact published from those exact
+bytes, and the CLI then references that artifact instead of uploading the file
+again. The lookup never crosses accounts: another owner's identical bytes and
+artifacts merely shared with you are never returned.

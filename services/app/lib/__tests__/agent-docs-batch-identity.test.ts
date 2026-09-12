@@ -13,7 +13,9 @@ describe('local editing guidance',()=>{
   expect(doc('SKILL.md')).toContain('afbin push report.jsx');
   const text=doc('references/publishing.md');
   expect(text).toContain('YAML fence');
-  expect(text).toContain('afbin.lock');
+  // Local state is the CLI's own, never a file in the user's working directory.
+  expect(text).toContain('~/.artifactbin/state.sqlite');
+  expect(text).toContain('writes nothing into your working directory');
   expect(text).toContain('Push preserves edits made while the request was in flight');
   expect(text).toContain('frozen journal recovers the original result');
   expect(text).toContain('conditional replacement');

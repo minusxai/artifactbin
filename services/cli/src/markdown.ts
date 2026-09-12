@@ -1,11 +1,13 @@
 /** A one-time local onramp. JSX owns identity and editing after conversion. */
 import {Marked} from 'marked';
 import {extname,join,relative,resolve} from 'node:path';
+import {rmdir,stat} from 'node:fs/promises';
 import {CliError} from './commands';
+import {configDir} from './config';
 import {parseDocument,writeDocument} from './document';
-import {atomicWrite,digest,readOptional} from './files';
+import {digest,isMissing,readOptional} from './files';
 import {confinedPath,recoverFiles,stageFiles} from './journal';
-import {withLock} from './state';
+import {State,withLock} from './state';
 import type {Workspace} from './workspace';
 const text=(source:string,literal=false)=>source.replace(literal?/&/g:/&(?!(?:#\d+|#x[\da-f]+|[a-z][a-z\d]+);)/gi,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\{/g,'&#123;').replace(/\}/g,'&#125;');
 const attribute=(value:string)=>text(value,true).replace(/"/g,'&quot;');
@@ -31,14 +33,43 @@ export function convertMarkdown(source:string):string{
 }
 interface Conversion {source:string;target:string;before:string;bytes:Buffer}
 export interface MarkdownPlan {workspace:Workspace;paths:string[];conversions:Conversion[]}
-async function conversionRecord(root:string):Promise<Record<string,{target:string;sha256:string}>>{
- const bytes=await readOptional(join(root,'.artifactbin','conversions.json'));if(!bytes)return{};
- try{const record=JSON.parse(bytes.toString());if(!record||typeof record!=='object'||Array.isArray(record)||Object.values(record).some((x:any)=>!x||typeof x.target!=='string'||typeof x.sha256!=='string'))throw new Error();return record;}
- catch{throw new CliError('invalid_conversion_record','Cannot read the local Markdown conversion record.','Repair .artifactbin/conversions.json before importing Markdown.');}
+type ConversionEntry={target:string;sha256:string};
+/**
+ * What has already been converted in this workspace: one `conversion` record per
+ * Markdown path in the state store. A read never creates the store, so a
+ * workspace nothing was imported into simply has no records.
+ */
+async function conversionRecord(state:State|null,root:string):Promise<Record<string,ConversionEntry>>{
+ if(!state)return{};
+ const records:Record<string,ConversionEntry>={};
+ for(const record of state.list<ConversionEntry>(root,'conversion')){
+  const value=record.value;
+  if(!value||typeof value.target!=='string'||typeof value.sha256!=='string')throw new CliError('invalid_conversion_record','A Markdown conversion record in the state store is invalid.',`Repair or remove the conversion records in ${state.path} before importing Markdown.`);
+  records[record.key]=value;
+ }
+ return records;
+}
+async function openStore(home:string):Promise<State|null>{
+ try{await stat(join(configDir(home),'state.sqlite'));}
+ catch(error){if(isMissing(error))return null;throw error;}
+ return State.open(home);
+}
+/**
+ * `stageFiles` still journals through a directory inside the workspace; once the
+ * journal has been applied the empty directory goes too, so importing Markdown
+ * leaves the user's files and nothing else. This disappears with the file
+ * journal itself, when staged files become `staged-file` records.
+ */
+const STAGING_DIRECTORY='.artifactbin';
+async function clearStaging(root:string):Promise<void>{
+ try{await rmdir(join(root,STAGING_DIRECTORY));}
+ catch(error){const code=(error as NodeJS.ErrnoException).code;if(code!=='ENOENT'&&code!=='ENOTEMPTY')throw error;}
 }
 export async function prepareMarkdown(workspace:Workspace,paths:string[]):Promise<MarkdownPlan>{
  const conversions:Conversion[]=[],selected:string[]=[];const virtualFiles={...workspace.virtualFiles};
- const records=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await conversionRecord(workspace.root):{};
+ const state=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await openStore(workspace.home):null;
+ let records:Record<string,ConversionEntry>={};
+ try{records=await conversionRecord(state,workspace.root);}finally{state?.close();}
  for(const path of paths){
   if(!['.md','.markdown'].includes(extname(path).toLowerCase())){selected.push(path);continue;}
   const absolute=await confinedPath(workspace.root,resolve(workspace.cwd,path)),source=relative(workspace.root,absolute);
@@ -54,16 +85,20 @@ export async function prepareMarkdown(workspace:Workspace,paths:string[]):Promis
 }
 export async function commitMarkdown(plan:MarkdownPlan):Promise<void>{
  if(!plan.conversions.length)return;
- await withLock(plan.workspace.home,plan.workspace.root,async()=>{
-  const records=await conversionRecord(plan.workspace.root);
-  for(const item of plan.conversions){
-   const current=await readOptional(await confinedPath(plan.workspace.root,item.source));
-   if(!current||digest(current)!==item.before)throw new CliError('local_changed',`${item.source} changed during Markdown conversion; no JSX was written.`);
-   if(records[item.source]||await readOptional(await confinedPath(plan.workspace.root,item.target)))throw new CliError('conversion_target_exists',`Conversion destination ${item.target} already exists.`);
-  }
-  await stageFiles(plan.workspace.root,plan.conversions.map(item=>({path:item.target,before:null,data:item.bytes})));
-  for(const item of plan.conversions)records[item.source]={target:item.target,sha256:item.before};
-  await atomicWrite(join(plan.workspace.root,'.artifactbin','conversions.json'),JSON.stringify(records,null,2)+'\n');
-  await recoverFiles(plan.workspace.root);
+ const root=plan.workspace.root;
+ await withLock(plan.workspace.home,root,async()=>{
+  const state=await State.open(plan.workspace.home);
+  try{
+   const records=await conversionRecord(state,root);
+   for(const item of plan.conversions){
+    const current=await readOptional(await confinedPath(root,item.source));
+    if(!current||digest(current)!==item.before)throw new CliError('local_changed',`${item.source} changed during Markdown conversion; no JSX was written.`);
+    if(records[item.source]||await readOptional(await confinedPath(root,item.target)))throw new CliError('conversion_target_exists',`Conversion destination ${item.target} already exists.`);
+   }
+   await stageFiles(root,plan.conversions.map(item=>({path:item.target,before:null,data:item.bytes})));
+   state.transaction(()=>{for(const item of plan.conversions)state.put(root,'conversion',item.source,{target:item.target,sha256:item.before});});
+   await recoverFiles(root);
+   await clearStaging(root);
+  }finally{state.close();}
  });
 }

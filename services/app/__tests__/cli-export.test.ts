@@ -129,8 +129,10 @@ it('exports data formats offline, honours --force backups and --dry-run, and nev
   const forced=await run(['export','rows.csv','--format','json','--output','rows.json','--force'],offline);
   expect(forced.code,JSON.stringify(forced.result)).toBe(0);
   expect(JSON.parse(await readFile(join(root,'rows.json'),'utf8'))).toEqual([{region:'East',total:99}]);
+  // The replaced bytes are kept in the CLI's own state directory, named by an absolute path.
   const backup=forced.result.operations[0].backup as string;
-  expect(JSON.parse(await readFile(join(root,backup),'utf8'))).toHaveLength(2);
+  expect(backup.startsWith(join(root,'.artifactbin','backups','local'))).toBe(true);
+  expect(JSON.parse(await readFile(backup,'utf8'))).toHaveLength(2);
 
   // --dry-run reports the destination and the capability, renders nothing and writes nothing.
   const planned=await run(['export','rows.csv','--format','csv','--output','planned.csv','--dry-run'],offline);
