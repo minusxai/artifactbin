@@ -4,6 +4,8 @@ import { runDatasetCatalogMigrationBatch } from '@/lib/datasets/migrate';
 import {POST as create} from '@/app/api/artifacts/route';
 import {POST as query} from '@/app/a/[id]/query/route';
 import {mintToken} from '@/lib/tokens';
+import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
+import {POST as adminCatalogRoute} from '@/app/api/admin/dataset-catalog/route';
 
 const harness = useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
@@ -175,4 +177,41 @@ it('finishes a history-only migration under a non-markup head and reports exactl
  expect(report).toMatchObject({changed:1,versions:1,done:true,conflicts:[]});
  expect(report.plans[0].after.head).toEqual((await db.query("SELECT * FROM artifacts WHERE id='aaaaaa'")).rows[0]);
  expect(report.plans[0].after.history).toEqual((await db.query("SELECT * FROM artifact_versions WHERE artifact_id='aaaaaa' ORDER BY version")).rows);
+});
+
+describe('the stored dataset catalog', () => {
+  it('stores multiple named tables with a stable default schema and preserves their independent shapes',async()=>{
+   const t=await mintToken('owner');const c=await prepareCatalog({kind:'stored',defaultSchema:'sales',tables:[{schema:'sales',name:'orders',rows:[{id:1,total:12}]},{schema:'support',name:'tickets',rows:[{subject:'Hello'}]}]},{tokenId:t.id,userId:null});
+   expect(c).not.toBeInstanceOf(Response);if(c instanceof Response)return;
+   const catalog=catalogOf(c)!;expect(catalog.defaultSchema).toBe('sales');expect(catalog.tables).toHaveLength(2);
+   expect(catalog.tables[0].columns.map(c=>c.name)).toEqual(['id','total']);expect(catalog.tables[1].columns.map(c=>c.name)).toEqual(['subject']);
+   expect(catalog.tables.every(t=>!!t.objectKey)).toBe(true);
+  });
+  it('rejects duplicate table names and empty exposed catalogs',async()=>{
+   const t=await mintToken('owner');const actor={tokenId:t.id,userId:null};
+   expect((await prepareCatalog({kind:'stored',tables:[]},actor) as Response).status).toBe(400);
+   const table={schema:'public',name:'rows',rows:[{n:1}]};
+   expect((await prepareCatalog({kind:'stored',tables:[table,table]},actor) as Response).status).toBe(400);
+  });
+  it('normalizes a legacy single-table dataset to public.rows without guessing from table count',()=>{
+   expect(catalogOf({meta:{columns:[{name:'n',type:'number'}],objectKey:'legacy'}})).toMatchObject({kind:'stored',defaultSchema:'public',tables:[{schema:'public',name:'rows',objectKey:'legacy'}]});
+  });
+});
+
+describe('admin dataset catalog migration door', () => {
+  const adminEndpoint='/api/admin/dataset-catalog';
+
+  it('is absent without the operator credential',async()=>{
+    expect((await adminCatalogRoute(request(adminEndpoint,{method:'POST',json:{batchSize:1}}))).status).toBe(404);
+    expect((await adminCatalogRoute(request(adminEndpoint,{method:'POST',headers:{'x-shared-secret':'wrong'},json:{batchSize:1}}))).status).toBe(404);
+  });
+  it('rejects unbounded and executable input',async()=>{
+    for(const body of [{batchSize:1,dryRun:false},{batchSize:1,after:'bad cursor'},{batchSize:1,dryRun:false,expected:{aaaaaa:'bad'}},{batchSize:0},{batchSize:101},{batchSize:1.5},{batchSize:1,failBeforeCommit:true},{batchSize:1,dryRun:'false'},{batchSize:1,maxHistoricalVersionsPerArtifact:10001},null,[]]){
+      expect((await adminCatalogRoute(request(adminEndpoint,{method:'POST',headers:{'x-shared-secret':'test-secret'},json:body}))).status).toBe(400);
+    }
+  });
+  it('defaults to dry-run at the HTTP door too',async()=>{
+    const response=await adminCatalogRoute(request(adminEndpoint,{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:1}}));
+    expect(response.status).toBe(200);expect(await response.json()).toMatchObject({dryRun:true,done:true});
+  });
 });

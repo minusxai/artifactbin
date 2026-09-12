@@ -9,14 +9,18 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { storedMarkup } from '@/test/helpers/echo';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { useAppHarness, request } from '@/__tests__/harness';
-import { readFrames } from '@/__tests__/sse';
+import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { readFrames, sseStream } from '@/__tests__/sse';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
+import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
+import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
+import { STORY_ANNOTATIONS_EVENT } from '@/lib/story-runtime/contract';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintToken } from '@/lib/tokens';
 import { MAX_LIVE_CHANNELS, liveChannelCount, resetLiveSubscriptions, subscribeToArtifact } from '@/lib/story/live';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 
@@ -216,5 +220,75 @@ describe('subscription lifecycle', () => {
     expect(seen).toHaveLength(1);
     await offBad();
     await offGood();
+  });
+});
+
+/**
+ * ANNOTATIONS ARE LIVE FOR ANNOTATORS. The events stream serves readers too,
+ * and the named `annotations` frame is sent only on connections that can
+ * annotate (owner, editor or commenter; a third subscription beside
+ * the document and its datasets, on the annotations' own NOTIFY channel).
+ * An owner connection gets one at CONNECT (self-syncing stream: the first
+ * frame is current state) and one per change; an anonymous reader of the
+ * same public document NEVER sees the event name at all.
+ */
+describe('GET /a/<id>/events — the annotations frame', () => {
+  /** One persistent reader over the stream; `next(count)` may be called repeatedly. */
+
+  async function annotationSetup() {
+    const t = await mintToken('agent');
+    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>alpha</p><div>beta figure</div>' } }));
+    expect(res.status, await res.clone().text()).toBe(201);
+    const doc = (await res.json()) as { id: string; edit_id: string };
+    const cookie = await agentCookie([t.id]);
+    return { t, doc, cookie };
+  }
+
+  const annotate = (id: string, cookie: string, editId: string) =>
+    myCreateAnnotationRoute(
+      request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: editId, body: 'look here' } }),
+      params({ id }),
+    );
+
+  it('an owner connection gets current annotations at connect, and a fresh frame on create and on resolve', async () => {
+    const { t, doc, cookie } = await annotationSetup();
+    const first = (await (await annotate(doc.id, cookie, doc.edit_id)).json()) as { id: string };
+
+    const res = await eventsRoute(request(`/a/${doc.id}/events`, { cookie: cookie }), params({ id: doc.id }));
+    expect(res.status).toBe(200);
+    const reader = sseStream(res.body!);
+
+    // Frame 1 is the version ping (the stream is self-syncing); an annotations
+    // PING follows. The list itself is fetched — the stream carries nothing a
+    // blind relay would have to understand.
+    const opening = await reader.next(2);
+    const connectFrame = opening.find((e) => e.event === STORY_ANNOTATIONS_EVENT);
+    expect(connectFrame, JSON.stringify(opening.map((e) => e.event))).toBeTruthy();
+    expect(connectFrame!.data).toEqual({});
+    const list = async () => ((await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations?status=all`, { cookie: cookie }), params({ id: doc.id }))).json()) as { annotations: Array<{ id: string; status: string }> }).annotations;
+    expect((await list()).map((a) => a.id)).toEqual([first.id]);
+
+    await actOnAnnotationRoute(
+      request(`/api/artifacts/${doc.id}/annotations/${first.id}`, { method: 'POST', token: t.token, json: { resolve: true } }),
+      params({ id: doc.id, annId: first.id }),
+    );
+    const next = await reader.next(1);
+    expect(next[0].event).toBe(STORY_ANNOTATIONS_EVENT);
+    expect((await list()).filter((a) => a.status === 'open')).toEqual([]);
+    reader.close();
+  });
+
+  it('an anonymous reader of the same public document never sees the event', async () => {
+    const { doc, cookie } = await annotationSetup();
+    const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
+    expect(res.status).toBe(200);
+    const reader = sseStream(res.body!);
+
+    await annotate(doc.id, cookie, doc.edit_id);
+    // Give any (wrong) frame a moment to arrive; only the document frame may exist.
+    const seen = await reader.next(3, 1200);
+    expect(seen.some((e) => e.event === STORY_ANNOTATIONS_EVENT)).toBe(false);
+    expect(seen.length).toBeGreaterThan(0); // the stream itself is alive (opening document frame)
+    reader.close();
   });
 });
