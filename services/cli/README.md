@@ -163,7 +163,7 @@ Build on each target OS/architecture using Node 22. The build creates a [Node si
 
 The build downloads the small-ICU Node executable pinned in `runtime-lock.json`, verifies both
 compressed and executable SHA-256, and reuses a verified local copy. A cache miss downloads the
-same versioned release asset; ordinary builds never compile Node. `CLI__NODE` is an explicit
+same versioned release asset; ordinary builds never compile Node. `CLI__NODE` is an explicit raw-runtime
 build/test override. GitHub's dependency cache is only an acceleration layer, not the runtime's
 source of availability.
 

@@ -242,8 +242,9 @@ hashes. Ordinary CLI builds verify/download that dependency through `scripts/run
 use the same runtime for SEA generation. Missing or corrupt release bytes fail promptly, never
 trigger source compilation. The Actions cache is an optional accelerator and may be evicted. Linux uses a digest-pinned manylinux 2.28 toolchain with
 static C++ support and the official Node ET_EXEC layout;
-CI rejects other ELF layouts and runtime GLIBC requirements above 2.28. `services/cli/scripts/binary.mjs` strips the executable before
-final signing and emits raw and gzip assets, with separate transport/executable hashes. Raw assets
+CI rejects other ELF layouts and runtime GLIBC requirements above 2.28. Runtime preparation strips
+before injection; `services/cli/scripts/binary.mjs` strips only an explicit raw-runtime override,
+then signs and emits raw and gzip assets with separate transport/executable hashes. Raw assets
 remain for existing installers and self-updaters; new clients prefer gzip and verify decoded bytes
 before atomic replacement. Linux and Intel Mac injection use hash-pinned LIEF 0.17.6 Python wheels;
 the old postject writer corrupts large ELF symbol tables and Intel TLS (postject PR #108, Node issue

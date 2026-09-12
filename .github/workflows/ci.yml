@@ -709,8 +709,6 @@ jobs:
       - run: npm run build -w services/cli
       - name: Build compact standalone CLI
         run: npm run build:binary -w services/cli
-        env:
-          CLI__NODE: ${{ github.workspace }}/node_modules/.cache/cli-prebuilt-node/node
       - run: npm run test:binary -w services/cli
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
