@@ -82,7 +82,7 @@ describe('Shelf — grid and list views', () => {
     const root = render(<Shelf rows={rows} assets={false} scopeParentId={null} />);
     expect(screen.getByLabelText('Artifact grid')).toHaveTextContent('Doc root');
     expect(screen.queryByLabelText('Open Doc nested')).toBeNull();
-    expect(screen.getByLabelText('Open folder Root folder').parentElement).toHaveTextContent('3');
+    expect(screen.getByLabelText('Open folder Root folder').parentElement).toHaveTextContent('1 artifact');
     expect(screen.queryByLabelText('Open folder Nested folder')).toBeNull();
 
     root.rerender(<Shelf rows={rows} scopeParentId="root-folder" />);
@@ -90,6 +90,17 @@ describe('Shelf — grid and list views', () => {
     expect(screen.queryByLabelText('Open Doc root')).toBeNull();
     expect(screen.queryByLabelText('Open Doc grandchild')).toBeNull();
     expect(screen.getByLabelText('Open folder Nested folder')).toBeInTheDocument();
+  });
+
+  it('shows an empty folder cover when its only children are assets', () => {
+    render(<Shelf rows={[
+      doc('folder', 28, { format: 'folder', title: 'Sample assets' }),
+      doc('image', 27, { format: 'image', parent_id: 'folder' }),
+      doc('data', 27, { format: 'dataset', parent_id: 'folder' }),
+    ]} scopeParentId={null} />);
+    const cover = screen.getByLabelText('Preview of folder Sample assets');
+    expect(cover).toHaveTextContent('empty folder');
+    expect(cover.querySelectorAll('.folder-cover-paper')).toHaveLength(0);
   });
 
   it('starts as one uniform grid with no promoted hero', () => {
