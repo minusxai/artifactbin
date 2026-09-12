@@ -11,10 +11,10 @@ import { parseGenerationModels, parsePublicGenerationPools } from './generation/
  * is exactly ONE spelling of each setting. `env()` briefly accepted a legacy
  * flat name as a fallback, with a warning — two spellings for one setting is a
  * trap, and it sprang: a file carrying both, where the namespaced one silently
- * wins and the other reads as live. A retired name is not ignored either
- * (ignoring `AUTH_SECRET` would sign sessions with a per-boot secret and log
- * everyone out for no visible reason): `retiredEnvNamesInUse` finds them and
- * the runner warns, naming each replacement. Production hard-fails only when
+ * wins and the other reads as live. Both the fallback and the migration map
+ * that replaced it are gone: this project ships no deployment that predates
+ * the namespaced spelling, so an unnamespaced name is simply not a setting.
+ * Production hard-fails only when
  * AUTH__SECRET or APP__PUBLIC_BASE_URL is absent (see the composition root).
  * Two deliberate exceptions, because they are conventions every host and
  * pooler documents: `DATABASE_URL` and `S3_URL`. `NODE_ENV` is the runtime's.
@@ -44,57 +44,6 @@ export const GENERATION_MODELS = parseGenerationModels(env('GENERATION', 'MODELS
 });
 
 export const GENERATION_PUBLIC_POOLS = parsePublicGenerationPools(env('GENERATION', 'PUBLIC_POOLS'));
-
-/**
- * The flat names this project used to accept, and what replaced them. Kept as
- * DATA so a deployment that still carries one is told precisely what to
- * rename — the list is the whole migration, and it can be deleted outright
- * once no deployment predates it.
- */
-export const RETIRED_ENV_NAMES: Readonly<Record<string, string>> = {
-  ADMIN_SECRET: 'ADMIN__SECRET',
-  ARTIFACT_QUOTA_PER_TOKEN: 'QUOTA__ARTIFACTS_PER_TOKEN',
-  AUTH_SECRET: 'AUTH__SECRET',
-  // Namespaced→namespaced, unlike every other row: the browser seam stopped
-  // being a Playwright WEBSOCKET (`chromium.connect`, which needs playwright
-  // in this image to dial it) and became an HTTP service (services/browser),
-  // so the name says `SERVICE_URL` like the SQL one and the old value would
-  // not connect to anything.
-  BROWSER__WS_URL: 'BROWSER__SERVICE_URL',
-  EVENTS__DATABASE_URL: 'removed (the proxy has one forwarder; the app owns events)',
-  APP__INTERNAL_ORIGIN: 'removed (app and proxy compose in-process)',
-  CONTRACT__ACTOR_SECRET: 'removed (in-process composition carries the actor on the request)',
-  EXPORT_INTERNAL_ORIGIN: 'EXPORT__INTERNAL_ORIGIN',
-  INVITE__CODE: 'removed (the invite gate retired at GA)',
-  LOCAL_OBJECT_DIR: 'OBJECT_STORE__LOCAL_DIR',
-  LOGIN_EMAIL_FROM: 'EMAIL__FROM',
-  MAX_EXTERNAL_IMAGES_PER_PUBLISH: 'WEB_INGEST__MAX_IMAGES_PER_PUBLISH',
-  MAX_IMAGE_BYTES: 'IMAGES__MAX_BYTES',
-  MAX_QUERY_ROWS: 'SQL__MAX_QUERY_ROWS',
-  MAX_ROWS_LIMIT: 'SQL__MAX_ROWS',
-  MIXPANEL_HOST: 'MIXPANEL__HOST',
-  MIXPANEL_TOKEN: 'MIXPANEL__TOKEN',
-  MUTATION_MAX_PER_MINUTE: 'PROXY__RATE_LIMIT_CONFIG_FILE (a policy file, not a knob)',
-  PORT: 'APP__PORT',
-  PUBLIC_BASE_URL: 'APP__PUBLIC_BASE_URL',
-  QUERY_TIMEOUT_MS: 'SQL__QUERY_TIMEOUT_MS',
-  RESEND_API_KEY: 'EMAIL__RESEND_API_KEY',
-  RESEND_BASE_URL: 'removed (the Resend API endpoint is fixed)',
-  TRUSTED_PROXY_HOPS: 'RATE_LIMITER__TRUSTED_PROXY_HOPS',
-  WEB_INGEST_ALLOW_PRIVATE: 'WEB_INGEST__ALLOW_PRIVATE',
-  WEB_INGEST_MAX_PER_HOUR: 'WEB_INGEST__MAX_PER_HOUR',
-  WEB_INGEST_TIMEOUT_MS: 'WEB_INGEST__TIMEOUT_MS',
-  WAITLIST__WEBHOOK_URL: 'removed (the waitlist retired at GA)',
-};
-
-/** Which retired names this environment still carries, in the order they are listed. */
-export function retiredEnvNamesInUse(
-  environment: Record<string, string | undefined> = process.env,
-): Array<{ retired: string; replacement: string }> {
-  return Object.entries(RETIRED_ENV_NAMES)
-    .filter(([retired]) => environment[retired] !== undefined)
-    .map(([retired, replacement]) => ({ retired, replacement }));
-}
 
 /**
  * Names of OUR shape (`MODULE__NAME`) that nothing read — a typo, or a setting

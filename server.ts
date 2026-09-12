@@ -233,12 +233,7 @@ async function main(): Promise<void> {
    * each setting (lib/config `env`), so a name of our shape that nothing asked
    * for is either a typo or a setting from a version that no longer has it.
    */
-  const { retiredEnvNamesInUse, unknownEnvNames, envNamesRead } = await import('@/lib/config');
-  for (const { retired, replacement } of retiredEnvNamesInUse(env)) {
-    // Split mode verifies the proxy's header with this secret; in-process mode does not need it.
-    if (retired === 'CONTRACT__ACTOR_SECRET') continue;
-    console.warn(`[env] ${retired} is not read any more — it was renamed to ${replacement}`);
-  }
+  const { unknownEnvNames, envNamesRead } = await import('@/lib/config');
   // Split mode reads only the identity transport settings, not the proxy's full configuration.
   const known = new Set([...envNamesRead(), ...(!appOnly ? proxyEnvNamesRead() : [])]);
   known.add('CONTRACT__ACTOR_SECRET');
