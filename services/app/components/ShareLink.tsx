@@ -18,10 +18,11 @@ import { useConfirmation } from './ConfirmDialog';
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
 import { artifactEditPath } from '@/lib/urls';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTrustedPortalContainer } from '@/components/TrustedUi';
-import { Crop, Check, createLucideIcon, Link as LinkIcon, PenLine, X } from 'lucide-react';
+import { Check, createLucideIcon, Link as LinkIcon, PenLine, X } from 'lucide-react';
 import { VISIBILITY_ICON_NODES, sharingIconFor, type SharingVerdict } from '@/lib/visibility-icons';
 import { SelectMenu } from '@/components/SelectMenu';
 import { Tooltip } from '@/components/Tooltip';
@@ -70,6 +71,7 @@ export default function ShareLink({
   url,
   onClose,
   onSocialPreview,
+  version,
   onSharingChange,
 }: {
   className: string;
@@ -93,6 +95,8 @@ export default function ShareLink({
   onClose?: () => void;
   /** Editors may configure the card without managing access. */
   onSocialPreview?: () => void;
+  /** Saved document version, used to refresh its social thumbnail. */
+  version?: number;
   /** Keep a separately rendered toolbar verdict in sync with this dialog. */
   onSharingChange?: (verdict: SharingVerdict) => void;
 }) {
@@ -232,9 +236,11 @@ export default function ShareLink({
             {copied ? <Check size={11} /> : <LinkIcon size={11} />} {copied ? 'copied' : 'copy link'}
           </button>
           {onSocialPreview && (
-            <button type="button" aria-label="Edit social preview" onClick={() => { setOpen(false); onSocialPreview(); }} className="mb-4 flex w-full cursor-pointer items-center gap-2 rounded-[5px] border border-edge px-3 py-2.5 text-muted hover:border-edge-bright hover:text-fg">
-              <Crop size={14} /> social preview <span className="ml-auto text-[11px] text-faint">upload image or frame document</span>
-            </button>
+            <SocialThumbnail
+              key={`${artifactId}:${version}`}
+              src={artifactId ? `/a/${artifactId}/export?format=jpg&mode=card&v=${version ?? 0}&r=${CARD_RENDER_GENERATION}` : undefined}
+              onEdit={() => { setOpen(false); onSocialPreview(); }}
+            />
           )}
           {canManage && !state && !error && <p className="text-muted">loading…</p>}
           {error && <p className="text-red-400">{error}</p>}
@@ -459,5 +465,42 @@ function SharePanel({ onClose, children, title }: {
       </section>
     </div>,
     portal ?? document.body,
+  );
+}
+
+
+/** Shows the saved card; the existing editor owns uploading, cropping and saving. */
+function SocialThumbnail({ src, onEdit }: { src?: string; onEdit: () => void }) {
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(src ? 'loading' : 'error');
+  return (
+    <figure className="mx-auto mb-5 w-full max-w-xs">
+      <figcaption className="mb-2 text-center text-[11px] text-muted">Social preview</figcaption>
+      <div className="relative aspect-[40/21] w-full overflow-hidden rounded-md border border-edge bg-raised">
+        {status !== 'ready' && (
+          <div role="status" className="absolute inset-0 flex items-center justify-center text-[11px] text-muted">
+            {status === 'loading' ? 'Loading preview…' : 'Preview unavailable'}
+          </div>
+        )}
+        {src && status !== 'error' && (
+          <img
+            src={src}
+            alt="Current social preview"
+            onLoad={() => setStatus('ready')}
+            onError={() => setStatus('error')}
+            className={`h-full w-full object-contain transition-opacity duration-200 motion-reduce:transition-none ${status === 'ready' ? 'opacity-100' : 'opacity-0'}`}
+          />
+        )}
+        <Tooltip content="Edit thumbnail" positioning={{ placement: 'bottom-end' }}>
+          <button
+            type="button"
+            aria-label="Edit social preview"
+            onClick={onEdit}
+            className="absolute right-2 top-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-edge-bright bg-surface text-fg shadow-sm transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <PenLine size={15} />
+          </button>
+        </Tooltip>
+      </div>
+    </figure>
   );
 }
