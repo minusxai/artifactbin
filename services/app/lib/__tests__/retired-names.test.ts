@@ -107,7 +107,7 @@ const SCANS: Scan[] = [
     // appear is the route that serves it, the generated route table, and the contract.
     label: 'the internal mint address is named only where it is served',
     dirs: [APP],
-    pattern: new RegExp(INTERNAL_MINT_PATH.replace(/\//g, '\\/')),
+    pattern: new RegExp(INTERNAL_MINT_PATH.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')),
     allow: [`${APP}/server/routes.generated.ts`, `${APP}/app/api/internal/tokens/route.ts`],
     proof: { atLeast: 100, contains: `${APP}/app/api/internal/tokens/route.ts` },
   },
