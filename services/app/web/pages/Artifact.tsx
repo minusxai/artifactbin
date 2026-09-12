@@ -17,6 +17,7 @@ import { FolderPage } from './Folder';
 import { routePages } from '../route-pages';
 import { canEdit } from '@/lib/share-roles';
 import { NotFoundPage } from './NotFound';
+import { useArtifactView } from '../use-artifact-view';
 
 /**
  * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
@@ -56,6 +57,7 @@ function ArtifactDocument({ id }: { id: string }) {
   // Decode once at consumption, regardless of whether JSON came from SSR,
   // a cached navigation, or a network read. The cache keeps the compact shape.
   const page = useMemo(() => transport ? decodePage(transport) : null, [transport]);
+  useArtifactView(id, page?.surface?.format === 'markup' && !page.surface.captureKey && (!editingRoute || canEdit(page.role)));
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
     if (page && !page.surface?.captureKey && page.canonical + (editingRoute ? '/edit' : '') !== location.pathname) {
