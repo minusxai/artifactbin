@@ -114,13 +114,37 @@ const openDocumentControls = () => {
 };
 
 describe('the surface header buttons are owner chrome', () => {
-  it('a reader can share the public link but has no owner controls', () => {
+  it('a reader has no Share button or owner controls', () => {
     render(<ArtifactSurface {...surfaceProps({})} />);
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Share')).toHaveAttribute('data-mx-reader-action', 'share');
+    expect(screen.queryByLabelText('Share')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Copy agent instructions')).not.toBeInTheDocument();
     // Standalone raw rendering is not a reader navigation affordance.
     expect(screen.queryByLabelText('Open the raw artifact')).not.toBeInTheDocument();
+  });
+
+  it('opens sharing directly from the reader bar for the owner', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares: [] }))));
+    for (const role of ['owner'] as const) {
+      render(<ArtifactShell role={role}><ArtifactSurface {...surfaceProps({})} /></ArtifactShell>);
+      const share = document.querySelector<HTMLElement>('[data-mx-reader-rail] [data-mx-reader-action="share"]')!;
+      fireEvent.click(share);
+      expect(await screen.findByRole('dialog', { name: 'Sharing' })).toBeInTheDocument();
+      expect(await screen.findByLabelText('Make public')).toBeInTheDocument();
+      fireEvent.click(screen.getByLabelText('Close sharing'));
+      expect(screen.queryByRole('dialog', { name: 'Sharing' })).not.toBeInTheDocument();
+      cleanup();
+    }
+  });
+
+  it('keeps all actions directly in the bar and hides top-bar sharing from editors', () => {
+    render(<ArtifactShell role="editor"><ArtifactSurface {...surfaceProps({})} /></ArtifactShell>);
+    const rail = document.querySelector('[data-mx-reader-rail]')!;
+    expect(rail.querySelector('[data-mx-reader-action="share"]')).toBeNull();
+    expect(rail.querySelector('details')).toBeNull();
+    expect(rail.querySelector('[data-mx-reader-action="like"]')).not.toBeNull();
+    expect(rail.querySelector('[data-mx-reader-action="fork"]')).not.toBeNull();
+    expect(rail.querySelector('[data-mx-github-star]')).not.toBeNull();
   });
 
   it('the owner keeps edit and share (via the shell signal)', () => {

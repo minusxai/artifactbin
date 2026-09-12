@@ -4,7 +4,7 @@ import { InlineReaderChrome } from '../InlineReaderChrome';
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('shows copied-link feedback after clipboard sharing',async()=>{
  const writeText=vi.fn(async()=>{});vi.stubGlobal('navigator',{clipboard:{writeText}});
- const view=render(<InlineReaderChrome input={{artifactId:'story1',title:'Title',author:null}} onAction={vi.fn()} />);
+ const view=render(<InlineReaderChrome input={{artifactId:'story1',title:'Title',author:null,share:true}} onAction={vi.fn()} />);
  await act(async()=>fireEvent.click(screen.getByLabelText('Share')));
  expect(writeText).toHaveBeenCalledWith(window.location.href);
  expect(view.container.querySelector('[data-mx-reader-toast]')).not.toHaveAttribute('hidden');

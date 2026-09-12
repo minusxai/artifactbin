@@ -81,6 +81,8 @@ export interface ReaderReactions {
 export interface ReaderChromeInput {
   /** SPA controls are mounted separately in TrustedUi; raw documents retain their own panels. */
   panels?: boolean;
+  /** Only the owner gets the prominent sharing entry point. */
+  share?: boolean;
   /** Stamped on the root (`data-mx-artifact-id`) so the like/comment log can name the document. Omitted when null. */
   artifactId: string | null;
   /** The document's title, for the byline and the share sheet. Omitted when null. */
@@ -135,7 +137,7 @@ const ICON_CHEVRON = ICON('<path d="m9 18 6-6-6-6"/>', 14);
 const ICON_GITHUB = `<svg viewBox="${GITHUB_MARK_VIEWBOX}" preserveAspectRatio="xMidYMid meet" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="${GITHUB_MARK_PATH}"/></svg>`;
 const ICON_HEART = ICON('<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21.2l7.7-7.7 1.1-1.1a5.5 5.5 0 0 0 0-7.8z"/>');
 const ICON_COMMENT = ICON('<path d="M21 11.5a8.4 8.4 0 0 1-9 8.5 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 4 12a8.4 8.4 0 0 1 8.5-9 8.4 8.4 0 0 1 8.5 8.5z"/>');
-const ICON_SEND = ICON('<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>');
+const ICON_PEOPLE = ICON('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2h14Z"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>');
 const ICON_PENCIL = ICON('<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>');
 // `mx-rc-open`, like the sliders: the glyph a trigger swaps for the X while its panel is open.
 const ICON_PROFILE = '<svg class="mx-rc-open" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M6.2 19a6 6 0 0 1 11.6 0"/></svg>';
@@ -209,6 +211,8 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   const followAria = `${following ? 'Unfollow' : 'Follow'} @${escapeHtml(username ?? '')}`;
 
   const byline = `<div class="mx-reader-byline" data-mx-reader-byline${input.ownerBreadcrumb ? ' data-mx-owner-breadcrumb' : ''}>`
+    + '<a class="mx-reader-brand-crumb" href="/" target="_top">artifactbin</a>'
+    + (username ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
     + (username
       ? `<a class="mx-reader-author" href="/@${escapeHtml(username)}" target="_top"`
         + ` aria-label="View @${escapeHtml(username)}'s profile">@${escapeHtml(username)}</a>`
@@ -216,7 +220,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     // FOLLOW rides right beside the handle it follows, and only when there is
     // one: an anonymous document has nobody to follow. UI only for now — the
     // entry logs it with the author, the way like and comment log.
-    + (input.ownerBreadcrumb && username && title ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
+    + (title ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
     + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
     + (username && (!reactions || reactions.follow)
       ? `<button type="button" class="mx-reader-follow" data-mx-reader-action="follow" data-mx-author="${escapeHtml(username)}"`
@@ -252,9 +256,9 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
       reactions ? ` data-mx-href="${escapeHtml(reactions.comment.href)}"` : '',
       `<span class="mx-reader-count" data-mx-reader-count="comment">${reactions && reactions.comment.count > 0 ? reactions.comment.count : ''}</span>`,
     )
-    + action('share', 'Share', ICON_SEND)
     + (input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
+    + (input.share ? action('share', 'Share', ICON_PEOPLE, '', '<span class="mx-reader-share-text">Share</span>') : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
     + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
     + '</div>'

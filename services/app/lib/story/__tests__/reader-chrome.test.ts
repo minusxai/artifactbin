@@ -12,12 +12,18 @@ import { GitHubIcon } from '@/components/brand-icons';
 const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   renderReaderChrome({
     artifactId: 'ab12cd',
+    share: true,
     title: 'Quarterly review',
     author: { username: 'ada' },
     ...over,
   });
 
 describe('renderReaderChrome', () => {
+  it('starts every reader breadcrumb with the artifactbin home link', () => {
+    const html = chrome();
+    expect(html).toContain('<a class="mx-reader-brand-crumb" href="/" target="_top">artifactbin</a>');
+    expect(html.indexOf('mx-reader-brand-crumb')).toBeLessThan(html.indexOf('class="mx-reader-author"'));
+  });
   it('uses the same current official Invertocat geometry as the React button', () => {
     const react = renderToStaticMarkup(createElement(GitHubIcon));
     const reader = chrome().match(/<a href="https:\/\/github.com\/minusxai\/artifactbin"[^>]*><svg.*?Support artifactbin<\/a>/)?.[0] ?? '';
@@ -45,7 +51,7 @@ describe('renderReaderChrome', () => {
     expect(html.indexOf('data-mx-reader-logo')).toBeLessThan(html.indexOf('data-mx-reader-rail'));
   });
 
-  it('lays the rail out as like · comment · share · settings · profile, each labelled', () => {
+  it('keeps social actions, owner sharing and settings directly in the rail', () => {
     const html = chrome();
     const order = [
       'data-mx-reader-action="like" aria-label="Like"',
@@ -156,10 +162,10 @@ describe('renderReaderChrome', () => {
     expect(chrome()).not.toContain('data-mx-forked-from');
   });
 
-  it('offers Edit only to a writer, between share and settings', () => {
+  it('offers Edit only to a writer, before sharing and settings', () => {
     const html = chrome({ edit: true });
     expect(html).toContain('data-mx-reader-action="edit" aria-label="Edit" data-mx-tip="Edit"');
-    expect(html.indexOf('data-mx-reader-action="edit"')).toBeGreaterThan(html.indexOf('data-mx-reader-action="share"'));
+    expect(html.indexOf('data-mx-reader-action="edit"')).toBeLessThan(html.indexOf('data-mx-reader-action="share"'));
     expect(html.indexOf('data-mx-reader-action="edit"')).toBeLessThan(html.indexOf('data-mx-reader-trigger="controls"'));
     expect(chrome()).not.toContain('data-mx-reader-action="edit"');
   });

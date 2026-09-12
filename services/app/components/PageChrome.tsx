@@ -15,6 +15,7 @@ import { GitHubIcon } from '@/components/brand-icons';
 import { REPO_URL } from '@/lib/repo';
 import { Tooltip } from '@/components/Tooltip';
 import { forgetTokens } from '@/lib/browser-session';
+import { CHROME_IDENTITY } from '@/lib/chrome-identity';
 import { crumbsFor } from '@/lib/breadcrumb';
 import { usePathname } from '@/lib/navigation';
 
@@ -464,12 +465,12 @@ export function AppBar({
       {center && <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">{center}</div>}
       <a href="/" aria-label="Home" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] no-underline transition-colors hover:bg-raised">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-128.png" alt="" className="h-9 w-9" />
+        <img src="/logo-128.png" alt="" style={{ width: CHROME_IDENTITY.logoSize, height: CHROME_IDENTITY.logoSize }} />
       </a>
-      <a href="/" className="min-w-0 truncate font-mono text-xs font-semibold text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
+      <a href="/" className="min-w-0 truncate font-mono text-sm font-medium text-fg no-underline hover:text-accent sm:hidden">artifactbin</a>
       {/* Desktop breadcrumbs; phones keep the brand beside the logo. */}
-      <nav aria-label="Current page" className="hidden min-w-0 items-center gap-1.5 font-mono text-xs text-muted sm:flex">
-        <a href="/" className={`shrink-0 text-sm no-underline hover:text-accent ${trail.length === 0 ? 'font-semibold text-fg' : 'text-muted'}`}>artifactbin</a>
+      <nav aria-label="Current page" className="hidden min-w-0 items-center gap-2 font-mono text-fg sm:flex" style={{ fontSize: CHROME_IDENTITY.fontSize, fontWeight: CHROME_IDENTITY.fontWeight }}>
+        <a href="/" className="shrink-0 no-underline hover:text-accent">artifactbin</a>
         {trail.length === 0 && (
           <>
             <span aria-hidden="true" className="text-faint">·</span>
@@ -477,12 +478,12 @@ export function AppBar({
           </>
         )}
         {trail.map((crumb) => (
-          <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-1.5">
-            <ChevronRight size={12} className="shrink-0 text-faint" aria-hidden="true" />
+          <span key={`${crumb.href ?? ''}:${crumb.label}`} className="flex min-w-0 items-center gap-2">
+            <ChevronRight size={14} className="shrink-0 text-faint" aria-hidden="true" />
             {crumb.href ? (
-              <a href={crumb.href} className="shrink-0 text-muted no-underline hover:text-accent">{crumb.label}</a>
+              <a href={crumb.href} className="shrink-0 no-underline hover:text-accent">{crumb.label}</a>
             ) : (
-              <span className="min-w-0 truncate font-semibold text-fg">{crumb.label}</span>
+              <span className="min-w-0 truncate">{crumb.label}</span>
             )}
           </span>
         ))}
