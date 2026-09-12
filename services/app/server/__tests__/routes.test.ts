@@ -42,10 +42,9 @@ describe('handlers through Hono', () => {
   const app = new Hono();
   mountRoutes(app);
 
-  it('retires remote skills and MCP, refuses an unknown document uniformly, and creates then reads an artifact with a bearer', async () => {
-    expect((await app.request('/docs/artifactbin/references/publishing.md')).status).toBe(404);
-    expect((await app.request('/mcp',{method:'POST'})).status).toBe(404);
-    expect((await app.request('/docs')).status).toBe(404);
+  // The retired `/docs` and `/mcp` addresses are docs-human.test.ts's subject — it is
+  // their dedicated owner and answers them for browsers as well as machines.
+  it('refuses an unknown document uniformly, and creates then reads an artifact with a bearer', async () => {
     expect(await (await app.request('/llms.txt')).text()).toContain('afbin help');
     expect((await app.request('/a/nope00/raw')).status).toBe(404);
     const t = await mintToken('t');

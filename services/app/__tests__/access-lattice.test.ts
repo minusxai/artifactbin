@@ -108,13 +108,10 @@ describe('linkRoleOf — what the address alone grants', () => {
 });
 
 describe('effectiveRole — ownership, the share list and the link, composed by max', () => {
-  it('the owning account is owner under every visibility', async () => {
-    const owner = await account('mxmx_test_owner@example.com');
-    for (const v of ['private', 'unlisted', 'public'] as Visibility[]) {
-      const row = await docOf(owner, v);
-      expect(await effectiveRole(row, { userId: owner.user.id, tokenId: null })).toBe('owner');
-    }
-  });
+  // The owning ACCOUNT under every setting, and a share taken as the MAX of the link
+  // in both directions, are general-access.test.ts's cases: it drives the real
+  // `updateSharingFor` surface and sets an explicit link role rather than relying on
+  // the tier's default.
 
   it('a bare token owns what it created — an anonymous owner is still an owner', async () => {
     const token = await mintToken('anon');
@@ -143,24 +140,6 @@ describe('effectiveRole — ownership, the share list and the link, composed by 
     expect(await effectiveRole(await docOf(owner, 'unlisted'), asStranger)).toBe('viewer');
     expect(await effectiveRole(await docOf(owner, 'unlisted'), STRANGER)).toBe('viewer');
     expect(await effectiveRole(await docOf(owner, 'public'), STRANGER)).toBe('viewer');
-  });
-
-  it('a share RAISES what the link grants and never lowers it', async () => {
-    const owner = await account('mxmx_test_owner@example.com');
-    const guest = await account('mxmx_test_guest@example.com');
-
-    // A public document already grants `viewer` to everyone. An editor share on
-    // it must still reach `editor` — this is exactly what lets a public
-    // document have editors at all.
-    const open = await docOf(owner, 'public');
-    await shareWith(owner, open, guest.user.email!, 'editor');
-    expect(await effectiveRole(open, { userId: guest.user.id, tokenId: null })).toBe('editor');
-
-    // …and the reverse direction is a no-op, not a demotion: a `viewer` share
-    // on a public document leaves them exactly where the link already put them.
-    const alsoOpen = await docOf(owner, 'public');
-    await shareWith(owner, alsoOpen, guest.user.email!, 'viewer');
-    expect(await effectiveRole(alsoOpen, { userId: guest.user.id, tokenId: null })).toBe('viewer');
   });
 
   it('matches an UNRESOLVED invite by the session address, then by the account it stamped', async () => {

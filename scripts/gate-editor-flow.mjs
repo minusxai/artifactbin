@@ -3,7 +3,7 @@
  *
  *   node scripts/gate-editor-flow.mjs [base-url]
  *
- *   1. anonymous mint → publish a document with live embeds
+ *   1. tokenless start → publish a document with live embeds
  *   2. /a/<id> shows it → its Edit button switches to edit mode in place
  *   3. adopting the connection's credential unlocks the editor; embeds render inside it
  *   4. type into a heading → blur persists it automatically (the regression
@@ -20,7 +20,7 @@
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { expect } from 'playwright/test';
-import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import { becomeOwner } from './lib/start-doc.mjs';
 import { startMailSink, loginViaEmail, isSignedInAs } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 

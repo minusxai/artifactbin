@@ -21,7 +21,7 @@ import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';
-import RowMenu, { confirmDeleteArtifact } from '@/components/RowMenu';
+import RowMenu, { useDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
 import { ArtifactTable } from '@/components/ArtifactTable';
 import { Tooltip } from '@/components/Tooltip';
@@ -313,12 +313,14 @@ const nameOf = (row: ShelfRow) => row.title ?? row.id;
  * that pseudo-element instead of inside the anchor.
  */
 function Actions({ row, level, folders, childCount = 0, onDeleted, onRename }: { row: ShelfRow; level: ShelfActions; folders: PickerFolder[]; childCount?: number; onDeleted?: (id: string) => void; onRename?: () => void }) {
+  const { confirmDeleteArtifact, confirmation } = useDeleteArtifact();
   const [moving, setMoving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [parentId, setParentId] = useState(parentOfRow(row));
   if (level !== 'full') return null;
   return (
     <span className="relative z-10 inline-flex shrink-0 items-center gap-0.5">
+      {confirmation}
       {level === 'full' && (
         <>
           {/* A FOLDER HAS NO DOCUMENT TO EDIT, so it is offered no editor —

@@ -377,5 +377,11 @@ describe("a folder's PUT is a metadata edit", () => {
       expect(after.title, door).toBe('Quarterly');
       expect(rest(after as unknown as Record<string, unknown>), door).toEqual(rest(before as unknown as Record<string, unknown>));
     }
+    // …and the PATCH door is not folder-only: a DOCUMENT renames through it too.
+    // (From folder-page.test.ts, which asserted the folder half a second time.)
+    const doc = (await create(o.token, { markup: '<h1>x</h1>', title: 'Doc' })).body;
+    const renamed = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, { method: 'PATCH', json: { title: 'Doc renamed' }, cookie: o.cookie, origin: 'same' }), params(doc.id)));
+    expect(renamed.status, JSON.stringify(renamed.body)).toBe(200);
+    expect((await getArtifactById(doc.id))!.title).toBe('Doc renamed');
   });
 });

@@ -39,6 +39,7 @@ export default function WorkspaceLayout({
         <div className="lg:sticky lg:top-6">
           {loaded ? <><Dashboard
             rows={workspace.artifacts.map(row => ({ ...row, views: loaded.views?.[row.id] ?? ('views' in row ? row.views : 0) })) as never}
+            stats={loaded.stats}
             viewsOverTime={loaded.viewsOverTime}
             likes={loaded.likes}
             likesOverTime={loaded.likesOverTime}

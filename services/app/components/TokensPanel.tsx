@@ -1,7 +1,7 @@
 'use client';
 
+import { useConfirmation } from './ConfirmDialog';
 import { Ban } from 'lucide-react';
-import { useState } from 'react';
 import { usePageData } from '@/web/use-page-data';
 import { Button, MicroLabel, PANEL, TABLE_ROW } from '@/components/ui';
 
@@ -33,14 +33,15 @@ const statusDot = (status: UserTokenView['status']): string =>
 
 /** The user's machines: every token minted for/claimed by this account, with revoke. */
 export default function TokensPanel({ tokens: initial = [] }: { tokens?: UserTokenView[] }) {
+  const { confirmAction, confirmation } = useConfirmation();
   const { data } = usePageData<{ tokens: UserTokenView[] }>('/api/my/tokens');
   const tokens = data?.tokens ?? initial;
-  const [error, setError] = useState<string | null>(null);
 
   if (tokens.length === 0) return null;
 
   return (
     <section>
+      {confirmation}
       <div className={PANEL}>
         <table className="w-full table-fixed border-collapse text-left text-sm">
           <thead>
@@ -87,12 +88,11 @@ export default function TokensPanel({ tokens: initial = [] }: { tokens?: UserTok
                     <Button
                       variant="danger"
                       aria-label={`Revoke token ${t.name ?? t.id}`}
-                      onClick={async () => {
-                        if (!confirm(`Revoke "${t.name ?? t.id}"? Agents using it stop working immediately.`)) return;
+                      onClick={() => void confirmAction({ title: `Revoke “${t.name ?? t.id}”?`, description: 'Agents using this token will stop working immediately. This cannot be undone.', action: 'Revoke token', confirmLabel: 'Confirm revoke', danger: true }, async () => {
                         const res = await fetch(`/api/my/tokens/${t.id}`, { method: 'DELETE' });
                         if (res.ok) window.location.reload();
-                        else setError('Could not revoke that token.');
-                      }}
+                        else throw new Error('Could not revoke that token. Try again.');
+                      })}
                     >
                       <span className="flex items-center gap-1"><Ban size={11} /> revoke</span>
                     </Button>
@@ -103,7 +103,6 @@ export default function TokensPanel({ tokens: initial = [] }: { tokens?: UserTok
           </tbody>
         </table>
       </div>
-      {error && <p className="mt-2 text-xs text-danger">{error}</p>}
     </section>
   );
 }

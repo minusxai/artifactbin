@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { GET as assetsPage } from '@/app/api/page/assets/route';
 import { GET } from '@/app/api/page/home/route';
 import { createUser } from '@/lib/users';
 import { request, useAppHarness } from './harness';
@@ -68,4 +69,44 @@ it('deferred lifetime counts preserve distinct visitors, exclude trash and remai
   const full = await accountWorkspaceFor(user.id, user.email);
   expect(full.artifacts).toHaveLength(1);
   expect(full.artifacts[0]).toMatchObject({ id: 'cnt123', views: 3 });
+});
+
+// Old documents must survive a newer upload burst; counts cover the entire account.
+it('separates the 1000-document shelf, aggregate totals and paginated assets', async () => {
+  const db = await harness.db();
+  const user = await createUser({ email: 'mxmx_test_inventory@example.com' });
+  const other = await createUser({ email: 'mxmx_test_other_inventory@example.com' });
+  const token = await mintToken('inventory');
+  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, content, meta, version, updated_at)
+    SELECT 'doc' || n, $1, $2, 'markup', 'Document ' || n, '', '{}', 1, '2020-01-01'::timestamptz FROM generate_series(1, 1005) n`, [user.id, token.id]);
+  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, content, meta, version, updated_at)
+    SELECT 'asset' || lpad(n::text, 4, '0'), $1, $2, 'image', 'Image ' || n, '', '{}', 1, now() FROM generate_series(1, 205) n`, [user.id, token.id]);
+  await db.query(`INSERT INTO artifacts (id, user_id, token_id, format, title, content, meta, version)
+    VALUES ('foreign', $1, $2, 'image', 'Foreign', '', '{}', 1)`, [other.id, token.id]);
+  await db.query("UPDATE artifacts SET deleted_at = now() WHERE id IN ('doc1005', 'asset0205')");
+  await db.query("INSERT INTO analytics_events (artifact_id, event, visitor) VALUES ('doc1004', 'view', 'v'), ('doc1004', 'view', 'v'), ('doc1', 'view', 'v'), ('doc1005', 'view', 'v'), ('asset0001', 'view', 'v')");
+  const actor = { credential: 'session' as const, userId: user.id, email: user.email!, emailVerified: true };
+  const core = await (await GET(request('/api/page/home?part=core', { actor }))).json();
+  expect(core.artifacts).toHaveLength(1000);
+  expect(core.artifacts.every((a: { format: string }) => a.format === 'markup')).toBe(true);
+  expect(core).not.toHaveProperty('stats');
+  const insights = await (await GET(request('/api/page/home?part=insights', { actor }))).json();
+  expect(insights.stats).toEqual({ artifacts: 1004, assets: 204, views: 2 });
+  const first = await (await assetsPage(request('/api/page/assets', { actor }))).json();
+  const second = await (await assetsPage(request('/api/page/assets?page=1', { actor }))).json();
+  expect(first.assets).toHaveLength(50);
+  expect(first.total).toBe(204);
+  expect(first.page).toBe(0);
+  expect(second.assets).toHaveLength(50);
+  expect(new Set([...first.assets, ...second.assets].map(a => a.id)).size).toBe(100);
+  const search = await (await assetsPage(request('/api/page/assets?q=Image%20204', { actor }))).json();
+  expect(search.assets.map((a: { id: string }) => a.id)).toEqual(['asset0204']);
+  expect(search.total).toBe(1);
+  const filtered = await (await assetsPage(request('/api/page/assets?formats=dataset', { actor }))).json();
+  expect(filtered.total).toBe(0);
+  expect(filtered.assets).toEqual([]);
+  const last = await (await assetsPage(request('/api/page/assets?page=99999', { actor }))).json();
+  expect(last.page).toBe(4);
+  expect(last.assets).toHaveLength(4);
+  expect((await assetsPage(request('/api/page/assets?page=-1', { actor }))).status).toBe(400);
 });

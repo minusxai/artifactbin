@@ -19,9 +19,8 @@ import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';
 import { POST as createRoute } from '@/app/api/artifacts/route';
 import { GET as pageRoute } from '@/app/api/page/artifact/[id]/route';
-import { PUT as putMineRoute, PATCH as patchMineRoute } from '@/app/api/my/artifacts/[id]/route';
+import { PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putRoute } from '@/app/api/artifacts/[id]/route';
-import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
 import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
 import { getArtifactById, updateSharing } from '@/lib/artifacts';
@@ -56,19 +55,14 @@ async function world() {
   return { o, f, pub, priv, quiet, sub };
 }
 
+/*
+ * What a folder IS — born empty, renamed through PUT or PATCH as metadata with no
+ * version and no ledger row, refusing the edit protocol — is folders.test.ts's
+ * subject ("a folder is not a document" and "a folder's PUT is a metadata edit").
+ * What stays here is the part no other file asks: that the REPLACE door refuses
+ * content in both directions, and that the live frame is a 404 like raw.
+ */
 describe('a folder has no content', () => {
-  it('is created with an EMPTY source and an empty meta — no scaffold, no compiled sheet', async () => {
-    const o = await owner('nocontent');
-    const f = await create(o.token, { format: 'folder', title: 'Reports' });
-    const row = (await getArtifactById(f.id))!;
-    expect(row.format).toBe('folder');
-    expect(row.source).toBe('');
-    expect(row.content).toBe('');
-    expect(row.meta).toEqual({});
-    // The create echo must not hand back markup nobody sent.
-    expect(f.markup ?? '').toBe('');
-  });
-
   it('refuses content on a replace — a folder is a place, not a document (400 not_editable)', async () => {
     const o = await owner('nowrite');
     const f = await create(o.token, { format: 'folder', title: 'Reports' });
@@ -87,61 +81,6 @@ describe('a folder has no content', () => {
     const row = (await getArtifactById(f.id))!;
     expect(row.format).toBe('folder');
     expect(row.source).toBe('');
-  });
-
-  it('refuses the edit protocol on a folder too — the same code, from the same fact', async () => {
-    const o = await owner('noedit');
-    const f = await create(o.token, { format: 'folder', title: 'Reports' });
-    const row = (await getArtifactById(f.id))!;
-    const r = await j(await editRoute(request(`/api/artifacts/${f.id}/edits`, {
-      method: 'POST', token: o.token,
-      json: { edit_id: row.edit_id, old_string: '', new_string: '<p>x</p>' },
-    }), params(f.id)));
-    expect(r.status, JSON.stringify(r.body)).toBe(400);
-    expect(r.body.error).toBe('not_editable');
-  });
-
-  it('still takes the METADATA a folder has — title, visibility and placement — through PUT', async () => {
-    const o = await owner('meta');
-    const parent = await create(o.token, { format: 'folder', title: 'Parent' });
-    const f = await create(o.token, { format: 'folder', title: 'Reports' });
-    const r = await j(await putRoute(await observedRequest(`/api/artifacts/${f.id}`, {
-      method: 'PUT', token: o.token, json: { title: 'Renamed', visibility: 'unlisted', parent_id: parent.id },
-    }), params(f.id)));
-    expect(r.status, JSON.stringify(r.body)).toBe(200);
-    const row = (await getArtifactById(f.id))!;
-    expect(row.title).toBe('Renamed');
-    expect(row.visibility).toBe('unlisted');
-    expect(row.ancestor_ids).toEqual([parent.id]);
-    expect(row.format).toBe('folder');
-    // …AS METADATA, not as a replace. A folder has no content, so there is
-    // nothing to archive and nothing to diff: this door writes exactly what
-    // the PATCH below writes (lib/artifacts setMetadataFor), so the version
-    // stays where it was and no version row is filed. An agent still has one
-    // door for every write; what it buys on a folder is a rename, not a
-    // revision of an empty document.
-    expect(row.version).toBe(1);
-  });
-
-  it('renames from the browser through PATCH {title} — metadata-only, no version bump', async () => {
-    const o = await owner('rename');
-    const f = await create(o.token, { format: 'folder', title: 'Reports' });
-    const before = (await getArtifactById(f.id))!;
-    const r = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${f.id}`, {
-      method: 'PATCH', json: { title: 'Quarterly' }, cookie: o.cookie, origin: 'same',
-    }), params(f.id)));
-    expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(r.body.title).toBe('Quarterly');
-    const after = (await getArtifactById(f.id))!;
-    expect(after.title).toBe('Quarterly');
-    expect(after.version).toBe(before.version);
-    // A rename is a rename of a DOCUMENT too — the door is not folder-only.
-    const doc = await create(o.token, { markup: '<h1>x</h1>', title: 'Doc' });
-    const d = await j(await patchMineRoute(await observedRequest(`/api/my/artifacts/${doc.id}`, {
-      method: 'PATCH', json: { title: 'Doc renamed' }, cookie: o.cookie, origin: 'same',
-    }), params(doc.id)));
-    expect(d.status, JSON.stringify(d.body)).toBe(200);
-    expect((await getArtifactById(doc.id))!.title).toBe('Doc renamed');
   });
 
   /*

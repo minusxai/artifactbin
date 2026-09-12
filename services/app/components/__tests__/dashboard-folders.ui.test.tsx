@@ -8,14 +8,14 @@ const doc = { id: 'doc001', url: '/a/doc001', title: 'Board update', format: 'ma
 const folder = { ...doc, id: 'rep001', url: '/a/rep001', title: 'Reports', format: 'folder' };
 const posts: Array<{ url: string; body: any }> = [];
 const deletes: string[] = [];
-const asked: string[] = [];
+
 const patches: Array<{ url: string; body: any }> = [];
 beforeEach(() => {
   posts.length = 0;
   deletes.length = 0;
-  asked.length = 0;
+
   patches.length = 0;
-  vi.stubGlobal('confirm', vi.fn((message: string) => { asked.push(message); return true; }));
+
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'POST') { const body = JSON.parse(String(init.body)); posts.push({ url, body }); return new Response(JSON.stringify({ id: 'new001', format: 'folder', title: body.title, parent_id: body.parent_id ?? null, ancestor_ids: [] }), { status: 201 }); }
     if (init?.method === 'DELETE') { deletes.push(String(url)); return new Response('{}', { status: 200 }); }
@@ -44,8 +44,11 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     expect(del.disabled).toBe(false);
     expect(del.textContent).toContain('1 inside');
     fireEvent.click(del);
+    expect(deletes).toEqual([]);
+    const message = screen.getByRole('dialog').textContent;
+    fireEvent.click(screen.getByLabelText('Confirm delete'));
     await waitFor(() => expect(deletes).toEqual(['/api/my/artifacts/rep001']));
-    expect(asked[0]).toBe('Delete Reports and the 1 item inside it? They go to the trash, and you can restore them any time.');
+    expect(message).toContain('Delete Reports and the 1 item inside it? They go to the trash, and you can restore them any time.');
     // The tile leaves the strip, and so does what was under it — no reload.
     await waitFor(() => expect(screen.queryByLabelText('Open folder Reports')).toBeNull());
     expect(screen.getByLabelText('Open folder Empty')).toBeTruthy();
@@ -74,8 +77,11 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     const del = screen.getByLabelText('Delete Empty') as HTMLButtonElement;
     expect(del.disabled).toBe(false);
     fireEvent.click(del);
+    expect(deletes).toEqual([]);
+    const message = screen.getByRole('dialog').textContent;
+    fireEvent.click(screen.getByLabelText('Confirm delete'));
     await waitFor(() => expect(deletes).toEqual(['/api/my/artifacts/emp001']));
-    expect(asked[0]).not.toContain('inside it');
+    expect(message).not.toContain('inside it');
     /*
      * P4: the wording a person answers has to be TRUE. It said "the link dies
      * and history is erased", which was the whole story when a delete was one
@@ -83,7 +89,7 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
      * else is restorable. Pinned here because this is the only branch that
      * renders it — the folder branch above says its own sentence.
      */
-    expect(asked[0]).toBe('Delete "Empty"? The link stops working. It goes to the trash, where you can restore it any time.');
+    expect(message).toContain('Delete "Empty"? The link stops working. It goes to the trash, where you can restore it any time.');
   });
 
   /**

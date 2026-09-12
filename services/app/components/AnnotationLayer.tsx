@@ -31,6 +31,7 @@
  * reader's document is top-level with no parent window, so nothing here can
  * even reach them.
  */
+import { useConfirmation } from './ConfirmDialog';
 import { CommentTimestamp } from './CommentTimestamp';
 import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -812,6 +813,7 @@ export default function AnnotationLayer({
   const [previewing, setPreviewing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const { confirmAction, confirmation } = useConfirmation();
 
   const nonceRef = useRef(sessionNonce);
   nonceRef.current = sessionNonce;
@@ -1106,7 +1108,7 @@ export default function AnnotationLayer({
     setBusy(true);
     try {
       const res = await fetch(`/api/my/artifacts/${id}/annotations/${annId}`, { method: 'DELETE' });
-      if (!res.ok) return;
+      if (!res.ok) throw new Error('Could not delete this comment. Try again.');
       setAnnotations((prev) => prev.filter((a) => a.id !== annId));
       setResolvedList((prev) => (prev ? prev.filter((a) => a.id !== annId) : prev));
       setOpenId((cur) => (cur === annId ? null : cur));
@@ -1246,6 +1248,7 @@ export default function AnnotationLayer({
 
   return (
     <>
+      {confirmation}
       {/* The ambient surface: tiny open-thread identities over the document's
           right edge, at their anchors. Present in view mode AND while editing —
           removing the `!editing` gate here is the whole feature. */}
@@ -1424,7 +1427,7 @@ export default function AnnotationLayer({
             onReply={(body) => void act(a.id, { reply: body })}
             onResolve={() => void act(a.id, { resolve: true })}
             onReopen={() => {}}
-            onDelete={() => void remove(a.id)}
+            onDelete={() => void confirmAction({ title: 'Delete this comment?', description: 'This comment and its replies will be permanently deleted. This cannot be undone.', action: 'Delete comment', confirmLabel: 'Confirm delete comment', danger: true }, () => remove(a.id))}
             onToggleFold={() => toggle('threads', a.id)}
             onToggleComment={(commentId) => toggle('comments', commentId)}
           />
@@ -1460,7 +1463,7 @@ export default function AnnotationLayer({
             onReply={() => {}}
             onResolve={() => {}}
             onReopen={() => void act(a.id, { reopen: true })}
-            onDelete={() => void remove(a.id)}
+            onDelete={() => void confirmAction({ title: 'Delete this comment?', description: 'This comment and its replies will be permanently deleted. This cannot be undone.', action: 'Delete comment', confirmLabel: 'Confirm delete comment', danger: true }, () => remove(a.id))}
             onToggleFold={() => toggle('threads', a.id)}
             onToggleComment={(commentId) => toggle('comments', commentId)}
           />

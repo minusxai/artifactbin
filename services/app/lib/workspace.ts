@@ -7,30 +7,29 @@
  */
 import { decorateFeed, followFeed, forkCountByUser, likeSummaryByUser, ownerFeed, VIEW_SERIES_DAYS, viewSeriesByUser } from '@/lib/feed';
 import { count } from '@/lib/relations';
-import { LIVE_ARTIFACT_SQL, type ArtifactSummary } from '@/lib/artifacts';
+import { LIVE_ARTIFACT_SQL } from '@/lib/artifacts';
 import { getDb } from '@/lib/db';
 import type { SharedArtifactSummary } from '@/lib/users';
 import { renderSparklineSvg } from '@/lib/viz/sparkline';
+import { workspaceDocumentsFor, workspaceStatsFor } from '@/lib/workspace-inventory';
 
 const ACTIVITY_LIMIT = 20;
 
 // Workspace projections deliberately exclude source metadata and engagement.
 // Discovery keeps the same ownership/share/trash gates as the general listings.
-type WorkspaceOwnedItem = Pick<ArtifactSummary, 'id' | 'title' | 'format' | 'version' | 'ancestor_ids' | 'visibility' | 'updated_at'>;
 export type WorkspaceSharedItem = Pick<SharedArtifactSummary, 'id' | 'title' | 'description' | 'format' | 'version' | 'visibility' | 'updated_at' | 'owner_username' | 'role'>;
 
 export async function accountWorkspaceCoreFor(userId: string, email?: string | null) {
   const db = await getDb();
-  const [owned, shared] = await Promise.all([
-    db.query<WorkspaceOwnedItem>(`SELECT id, title, format, version, ancestor_ids, visibility, updated_at
-      FROM artifacts WHERE user_id = $1 AND ${LIVE_ARTIFACT_SQL} ORDER BY updated_at DESC LIMIT 200`, [userId]),
+  const [artifacts, shared] = await Promise.all([
+    workspaceDocumentsFor(userId),
     email ? db.query<WorkspaceSharedItem>(`SELECT a.id, a.title, a.description, a.format, a.version, a.visibility, a.updated_at, u.username AS owner_username, s.role
       FROM artifacts a JOIN artifact_shares s ON s.artifact_id = a.id LEFT JOIN users u ON u.id = a.user_id
       WHERE s.email = $1 AND a.user_id IS DISTINCT FROM $2::text AND a.${LIVE_ARTIFACT_SQL}
       ORDER BY a.updated_at DESC LIMIT 200`, [email.toLowerCase().trim(), userId]) : { rows: [] },
   ]);
   return {
-    artifacts: owned.rows.map((artifact) => ({
+    artifacts: artifacts.map((artifact) => ({
       ...artifact, url: `/a/${artifact.id}`, sparkline: null as string | null,
     })), shared: shared.rows,
   };
@@ -47,11 +46,11 @@ async function workspaceViewCounts(userId: string): Promise<Record<string, numbe
 
 /** No shelf query here: account-wide series already identify their documents. */
 export async function accountWorkspaceInsightsFor(userId: string) {
-  const [series, likes, mine, following, followers, forks, views] = await Promise.all([
+  const [series, likes, mine, following, followers, forks, views, stats] = await Promise.all([
     viewSeriesByUser(userId, VIEW_SERIES_DAYS, 'markup'), likeSummaryByUser(userId),
     ownerFeed(userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
     followFeed(userId, { limit: ACTIVITY_LIMIT }).then(decorateFeed),
-    count('follow', userId), forkCountByUser(userId), workspaceViewCounts(userId),
+    count('follow', userId), forkCountByUser(userId), workspaceViewCounts(userId), workspaceStatsFor(userId),
   ]);
 
   const sparklines: Record<string, string | undefined> = {};
@@ -65,6 +64,7 @@ export async function accountWorkspaceInsightsFor(userId: string) {
   }
 
   return {
+    stats,
     feed: { mine, following },
     sparklines,
     views,

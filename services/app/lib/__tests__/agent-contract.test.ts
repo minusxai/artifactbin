@@ -7,7 +7,8 @@ it('teaches local help, origin-scoped browser setup and the current private conf
  expect(contract).toContain('~/.artifactbin/.env');
  expect(contract).toContain('--yes --json');
  expect(contract).toContain('browser approval');
- expect(contract).not.toMatch(/MCP|plugin|~\/\.artifactbin\.env|\/docs\//);
+ // MCP and /docs/ are agent-starter-consistency.test.ts's ban, over every surface.
+ expect(contract).not.toMatch(/plugin|~\/\.artifactbin\.env/);
 });
 it('the document handoff names afbin and nothing else',()=>{
  const text=existingPaste('https://example.test','abc123');

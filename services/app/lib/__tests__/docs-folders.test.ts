@@ -6,7 +6,7 @@ describe('local folder guidance', () => {
   it('documents folder settings, restore and folder content restrictions in native teaching', () => {
     const versions = teaching.files['references/publishing-versions.md'];
     for (const term of ['folder YAML', 'push --restore', 'Do not push JSX to a folder']) expect(versions).toContain(term);
-    expect(Object.keys(teaching.files)).not.toContain('references/api.md');
+    // That the bundle has no `references/api.md` is docs.test.ts's assertion.
   });
   it('uses the same canonical reference and table grammar for folder children', () => {
     expect(data).toContain('source="ref:<folderId>"');

@@ -47,6 +47,7 @@ const accountRow = (id: string, format: 'markup' | 'folder' = 'markup', title = 
 };
 
 const accountWorkspace = (): AccountWorkspace => ({
+  stats: { artifacts: 3, assets: 0, views: 0 },
   artifacts: [
     accountRow('aaa111'),
     accountRow('bbb222'),

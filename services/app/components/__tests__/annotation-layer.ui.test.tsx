@@ -674,6 +674,8 @@ describe('AnnotationLayer', () => {
     const thread = screen.getByLabelText('Annotation thread');
     fireEvent.click(within(thread).getByLabelText('Annotation actions'));
     fireEvent.click(within(thread).getByLabelText('Delete annotation'));
+    expect(fetchCalls.some(c => c.init?.method === 'DELETE')).toBe(false);
+    fireEvent.click(screen.getByLabelText('Confirm delete comment'));
     await flush();
     const del = fetchCalls.find((c) => c.url.endsWith('/annotations/ann_1') && c.init?.method === 'DELETE');
     expect(del).toBeTruthy();

@@ -8,7 +8,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { gzipSync, createGzip } from 'node:zlib';
+import { createServer, request as httpRequest } from 'node:http';
 import { chromium } from 'playwright';
 import { connectAgent } from './lib/cli-connection.mjs';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
@@ -19,11 +20,26 @@ const scratch = mkdtempSync(path.join(tmpdir(), 'artifactbin-performance-'));
 const base = 'http://localhost:5480';
 const outbox = path.join(scratch, 'mail.jsonl');
 process.env.EMAIL__DEV_OUTBOX_PATH = outbox;
+// A minimal gzip gateway models production compression consistently for both
+// builds. HTTP/1.1, loopback storage and PGLite are explicit lab limitations.
+const gateway = createServer((request, response) => {
+  const upstream = httpRequest({ hostname: '127.0.0.1', port: 5481, path: request.url, method: request.method, headers: request.headers }, source => {
+    const headers = { ...source.headers };
+    const compress = /gzip/.test(request.headers['accept-encoding'] ?? '') && /javascript|json|text\//.test(headers['content-type'] ?? '') && !String(headers['content-type']).includes('event-stream') && !headers['content-encoding'] && source.statusCode !== 304 && request.method !== 'HEAD';
+    if (compress) { delete headers['content-length']; headers['content-encoding'] = 'gzip'; headers.vary = [headers.vary, 'Accept-Encoding'].filter(Boolean).join(', '); }
+    response.writeHead(source.statusCode, headers);
+    if (compress) source.pipe(createGzip()).pipe(response); else source.pipe(response);
+    response.on('close', () => source.destroy());
+  });
+  upstream.on('error', () => { if (!response.headersSent) response.writeHead(502); response.end(); });
+  request.pipe(upstream);
+});
+await new Promise(resolve => gateway.listen(5480, '0.0.0.0', resolve));
 const child = spawn(process.execPath, [path.join(root, 'dist/proxy-server.mjs')], {
   cwd: path.join(root, 'services/app'), stdio: ['ignore', 'ignore', 'inherit'],
   env: {
     PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'production',
-    AUTH__SECRET: randomBytes(32).toString('hex'), APP__PORT: '5480', APP__PUBLIC_BASE_URL: base,
+    AUTH__SECRET: randomBytes(32).toString('hex'), APP__PORT: '5481', APP__PUBLIC_BASE_URL: base,
     APP__ASSETS_ORIGIN: 'http://assets.localhost:5480', DATABASE_URL: 'pglite://memory',
     SQL__SERVICE_URL: '', BROWSER__SERVICE_URL: '', EVENTS__SERVICE_URL: '',
     EXPORT__INTERNAL_ORIGIN: base, OBJECT_STORE__LOCAL_DIR: path.join(scratch, 'objects'),
@@ -75,13 +91,23 @@ try {
   await ownerContext.close();
   const result = {
     revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-    conditions: { runtime: process.version, browser: browser.version(), database: 'in-process PGLite', store: 'local disk', viewport: '1440x1000', latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4, repetitions: 7, owned: 40, shared: 20, paragraphs: 35, analytics: 'real bundle; outbound telemetry blocked' },
+    conditions: { runtime: process.version, browser: browser.version(), gateway: 'HTTP/1.1 with gzip', database: 'in-process PGLite', store: 'local disk', viewport: '1440x1000', latencyMs: 80, downloadMbps: 10, uploadMbps: 5, cpuSlowdown: 4, repetitions: 7, owned: 40, shared: 20, paragraphs: 35, analytics: 'real bundle; outbound telemetry blocked' },
     core: {}, loads: [],
   };
   const core = await page.evaluate(async () => { const response = await fetch('/api/page/home?part=core'); return response.text(); });
   const parsed = JSON.parse(core);
   assert.equal(parsed.artifacts.length, 40); assert.equal(parsed.shared.length, 20);
   result.core = { decodedBytes: Buffer.byteLength(core), gzipBytes: gzipSync(core).length };
+  const assetPath = await page.evaluate(() => new URL(document.querySelector('script[type="module"][src]').src).pathname);
+  const cookie = (await context.cookies(base)).map(c => c.name + '=' + c.value).join('; ');
+  result.staticAsset = { path: assetPath, samplesMs: [] };
+  for (let i = 0; i < 15; i++) {
+    const start = performance.now();
+    const response = await fetch(base + assetPath, { headers: { cookie } });
+    assert.equal(response.status, 200);
+    await response.arrayBuffer();
+    result.staticAsset.samplesMs.push(performance.now() - start);
+  }
   await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 80, downloadThroughput: 10e6 / 8, uploadThroughput: 5e6 / 8 });
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   // Use a browser-side observer: runner round trips are not part of useful DOM
@@ -129,6 +155,8 @@ try {
   console.log(`Measured ${result.loads.length} loads for ${result.revision}; output ${output}`);
 } finally {
   await browser?.close();
+  gateway.closeAllConnections();
+  await new Promise(resolve => gateway.close(resolve));
   child.kill('SIGTERM');
   await new Promise(resolve => { if (child.exitCode !== null) resolve(); else child.once('exit', resolve); });
   rmSync(scratch, { recursive: true, force: true });

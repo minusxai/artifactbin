@@ -109,9 +109,8 @@ describe('a document asks for a Google font by Helmet metadata', () => {
     expect(res.headers.get('Content-Type')).toBe('font/woff2');
     expect(res.headers.get('Cache-Control')).toContain('immutable');
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
-
-    expect((await webfontRoute(request('/webfonts/deadbeef.woff2'), params({ file: 'deadbeef.woff2' }))).status).toBe(404);
-    expect((await webfontRoute(request('/webfonts/../etc/passwd'), params({ file: '../etc/passwd' }))).status).toBe(404);
+    // The miss — a filename of the wrong shape, a traversal, an object the backend
+    // reports gone in any of its vocabularies — is webfont-route.test.ts's subject.
   });
 
   it('resolves a family ONCE per deployment — the second document is a table hit', async () => {

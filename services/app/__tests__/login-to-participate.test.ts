@@ -189,7 +189,7 @@ describe('the reader may take a copy', () => {
     expect(html).not.toContain('callbackUrl');
   });
 
-  it('never appears on a capture — /export photographs that frame', async () => {
+  it('the fork anchor never appears on a capture either — /export photographs that frame', async () => {
     const owner = await account('mxmx_test_owner@example.com');
     expect(await serve((await docOf(owner, 'public')).id, '?chrome=0')).not.toContain(FORK);
   });

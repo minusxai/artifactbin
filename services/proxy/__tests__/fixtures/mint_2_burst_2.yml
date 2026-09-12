@@ -1,4 +1,4 @@
-# A TEST FIXTURE, not a shipped file: default_rate_limits.yml with the anonymous mint at 2/hour/ip, doubled for a holder, so a
+# A TEST FIXTURE, not a shipped file: default_rate_limits.yml with the start_doc door at 2/hour/ip, doubled for a holder, so a
 # refusal is a request or two away instead of never (the shipped default closes it outright).
 policies:
   # the START door: how many documents one address may create from the web page. Closed by default;

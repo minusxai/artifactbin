@@ -50,8 +50,8 @@
  * and the wall-clock when it ends, so a serial run is visible in any log.
  *
  * A BOOTED SERVER IS PRODUCTION-MODE, SO IT NEEDS THE DEV POLICY FILE. The
- * shipped default closes anonymous minting outright, and a full pass mints far
- * more than a handful of CLI connections from one IP — so every gate after the
+ * shipped default closes the start_doc door outright, and a full pass starts far
+ * more than a handful of documents from one IP — so every gate after the
  * ceiling would die on a 429 the START helper reports as `401 unauthorized` at
  * publish time, which reads like a broken build and is not one. `bootServer`
  * points each one at `services/proxy/dev_rate_limits.yml` (2000/hour). Driving

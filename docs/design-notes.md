@@ -182,7 +182,8 @@ Workspace core owns narrow SQL projections: no document metadata or engagement
 queries. Shared rows retain description and role for search/access display.
 Lifetime visitor counts move to insights as one grouped query with the existing
 visitor semantics; Home and folder dashboards join the resulting ID map. The
-existing 200-row bound and folder placement semantics are unchanged.
+current 1000-document shelf, 50-row asset pages and folder placement semantics
+remain owned by workspace-inventory; aggregate totals cover the entire account.
 
 ArtifactSurface admits DatasetCatalogView through a format-specific dynamic
 import. Editor warming is limited to markup viewers with edit permission and is

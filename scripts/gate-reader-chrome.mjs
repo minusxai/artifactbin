@@ -186,23 +186,9 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   await door('Like', 'like');
   await door('Comment', 'comment');
 
-  // 5. share reaches the clipboard, and the toast says so — on the PHONE. A
-  // desktop has an address bar; the product owner wants no share button there.
+  // Only the owner sees Share, on either viewport.
   await revealReaderChrome(page);
-  if (viewport === PHONE) {
-    await page.locator('[aria-label="Share"]').click();
-    // The clipboard write is a promise; the toast is what resolves it. WAIT for
-    // it — `isVisible()` samples, it does not wait, and this is a race by design.
-    const toastUp = await page.locator('[data-mx-reader-toast]').waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
-    check(toastUp, `${name}: the toast says the link was copied`);
-    const copied = await page.evaluate(() => navigator.clipboard.readText()).catch(() => null);
-    check(copied === page.url(), `${name}: the clipboard holds the document's own address (${copied})`);
-    await page.waitForTimeout(2200);
-    check(!(await page.locator('[data-mx-reader-toast]').isVisible()), `${name}: and the toast goes away by itself`);
-  } else {
-    check(!(await page.locator('[aria-label="Share"]').isVisible()), `${name}: there is no share button on a desktop`);
-    check(await page.locator('[aria-label="Like"]').isVisible(), `${name}: …while the rest of the rail is still there`);
-  }
+  check(await page.locator('[data-mx-reader-action="share"]').count() === 0, `${name}: a non-owner has no Share button`);
 
   // 8. Fork is a direct action; settings holds appearance and provenance.
   await revealReaderChrome(page);

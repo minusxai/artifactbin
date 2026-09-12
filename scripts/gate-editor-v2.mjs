@@ -151,8 +151,17 @@ try {
   await stored((s) => s.includes('**literal**') && !s.includes('<strong'), 'code paste stays literal');
   await undo((s) => !s.includes('**literal**'), 'code paste undo');
   await range('first', 2);
+  const blockedControls = await page.locator('[data-mx-node-chrome]').evaluate((root) =>
+    [...root.querySelectorAll('button')].flatMap((button) => {
+      const rect = button.getBoundingClientRect();
+      if (!rect.width || !rect.height) return [];
+      const hit = button.ownerDocument.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return hit && button.contains(hit) ? [] : [button.getAttribute('aria-label')];
+    }),
+  );
+  assert.deepEqual(blockedControls, [], 'every selection control receives clicks at its visible center');
   await page.getByRole('button', { name: 'Delete selected block', exact: true }).click();
-  await stored((s) => !s.includes('id="first"'), 'selected × deletes exactly its source block');
+  await stored((s) => !s.includes('id="first"'), 'selected trash control deletes exactly its source block');
   await undo((s) => s.includes('id="first"'), 'node deletion restores its identity');
   await range('first', 2);
   const handle = page.getByRole('button', { name: 'Resize block height', exact: true });
@@ -221,6 +230,10 @@ try {
   await range('second', 4, 'lp', 5);
   await page.waitForFunction(() => getSelection().toString().includes('Left '));
   assert.equal(await page.locator('[data-mx-node-chrome]').isVisible(), false, 'text selection has no container resize controls');
+  await page.locator('#second').hover();
+  assert.equal(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(245, 158, 11, 0.08)', 'hover uses the shared subtle amber tint');
+  assert.equal(await page.locator('#second').evaluate(el => getComputedStyle(el).outlineWidth), '1px', 'hover uses the shared thin outline');
+  await page.mouse.move(0, 0);
   assert.equal(await page.locator('#second').evaluate(el => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'block selection does not flood the text background');
   await page.keyboard.press('Escape');
   await range('first', 2);

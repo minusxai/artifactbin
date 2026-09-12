@@ -1,5 +1,7 @@
 'use client';
 
+import type { SharingVerdict } from '@/lib/visibility-icons';
+import type { Visibility } from '@/lib/artifacts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
 
@@ -29,9 +31,8 @@ import { useLocation, useNavigate } from 'react-router';
 import { InlineReaderChrome } from '@/components/InlineReaderChrome';
 import { useArtifactOwner, useCanAnnotateArtifact, useCanEditArtifact } from '@/components/ArtifactShell';
 import AnnotationLayer from '@/components/AnnotationLayer';
-import CopyAgentPrompt from '@/components/CopyAgentPrompt';
 import RefreshAssets from '@/components/RefreshAssets';
-import ForkArtifact, { ForkConfirm, ForkRefusal, useForkArtifact } from '@/components/ForkArtifact';
+import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent, withIntent } from '@/lib/intent';
@@ -82,6 +83,8 @@ export interface ArtifactSurfaceProps {
   /** Head pointer at render time — the baseline the live stream is compared against. */
   editId: string;
   format: ArtifactFormat;
+  visibility?: Visibility;
+  hasInvitedUsers?: boolean;
   title: string | null;
   /** pdf: how big the file is and how long, as the file view says it. */
   bytes?: number;
@@ -231,9 +234,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [railOpen, setRailOpen] = useState(false);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
-  const forkAction = useForkArtifact(id);
   /** Naming a new folder under THIS one — the shell's only folder-specific act. */
   const [namingFolder, setNamingFolder] = useState(false);
+  const [sharingOpen, setSharingOpen] = useState(false);
+  const [sharingVerdict, setSharingVerdict] = useState<(SharingVerdict & { id: string }) | null>(null);
+  const onSharingChange = useCallback((verdict: SharingVerdict) => setSharingVerdict({ id: props.id, ...verdict }), [props.id]);
   const [socialPreviewOpen, setSocialPreviewOpen] = useState(false);
   /** Desktop comments reserve a rail; on a phone the same surface is a sheet. */
   const phone = useIsPhoneViewport();
@@ -730,7 +735,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           </>
         )}
         {canEdit && !owner && (
-          <ShareLink artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
         {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the
             document because the document is sandboxed at an opaque origin and
@@ -754,7 +759,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
       {owner && (
         <section aria-label="Owner actions">
           <h2 className="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">owner</h2>
-          <CopyAgentPrompt id={id} variant="menu" />
           {/* Owner chrome: a refresh re-fetches
               bytes that every reader of every document naming those URLs is
               then served. Only for a markup document — it is the only format
@@ -770,7 +774,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               {copiedRef ? 'copied dataset reference' : shownCatalog ? `copy query · source="${id}"` : `copy ref:${id}`}
             </button>
           )}
-          <ShareLink artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
+          <ShareLink onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={canEdit && shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         </section>
       )}
     </div>
@@ -787,14 +791,15 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome pinned={editing} input={{artifactId:id, title:shownTitle, forkBusy:forkAction.busy, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing} input={{artifactId:id, share:owner, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
-          else if (action === 'fork') forkAction.fork();
+          else if (action === 'fork') setForkAsked(true);
           else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
           else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
         }} />
+        {sharingOpen && <ShareLink onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}
         {editing ? (
           /* EDIT MODE: the document's own bar stays, PINNED at the top, and the
              editor's toolbar sits under it. The panels drop below both. */
@@ -889,7 +894,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             onComment={canEdit ? commentOnSelection : undefined}
           />
         )}
-        {forkAction.refusal && <div className="fixed right-3 top-14 z-50 w-72"><ForkRefusal lines={forkAction.refusal} onDismiss={forkAction.dismiss} /></div>}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
         {namingFolder && canEdit && isFolder && (
           <NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} />
@@ -912,7 +916,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // or an image inside the app's own measure.
   return (
     <>
-      <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls" actions={<ForkArtifact id={id} variant="bar" />}>
+      <PageChrome authed={accountSession} anon={anonSession} title={shownTitle} label="Artifact controls" actions={<ForkArtifact id={id} title={shownTitle} variant="bar" />}>
         {documentControls}
       </PageChrome>
       <main className="mx-auto w-full max-w-5xl px-4 pt-6 pb-6">

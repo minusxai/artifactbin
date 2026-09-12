@@ -109,8 +109,10 @@ describe('<AgentLink>', () => {
   });
 });
 
-it('the landing offers CLI install without minting an empty document',()=>{
+// That the landing offers the "Copy the CLI install command" control is
+// get-started.ui.test.tsx's case. What only this file asks is whether rendering it
+// reaches the network at all.
+it('the landing mints no empty document',()=>{
  render(<GetStarted />);
- expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
  expect(fetch).not.toHaveBeenCalled();
 });

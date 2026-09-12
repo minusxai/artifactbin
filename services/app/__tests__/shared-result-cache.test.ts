@@ -21,6 +21,15 @@ it('an expired owner cannot publish after eviction and recreation (ABA)',async()
   const fresh=await cache.run('key',async()=>result(2),cacheRequest);old.resolve(result(1));
   expect(await pending).toEqual(fresh);
 });
+// The other way an entry goes stale under an owner: the ROW is gone, not merely its
+// lease. Moved here from result-cache.test.ts, which tested this module twice over.
+it('a lease token cannot be revived once its row is evicted and recreated',async()=>{
+  const db=await getDb(),cache=createDatasetResultCache(db),old=deferred<CatalogResult>(),started=deferred<void>();
+  const pending=cache.run('key',()=>{started.resolve();return old.promise;},cacheRequest);await started.promise;
+  await db.query('DELETE FROM dataset_result_cache WHERE cache_key=$1',['key']);
+  await cache.run('key',async()=>result(2),cacheRequest);old.resolve(result(1));await pending;
+  expect((await cache.run('key',async()=>result(3),cacheRequest)).rows).toEqual([{n:2}]);
+});
 it('bounds aggregate concurrent fills and outstanding leases',async()=>{
   const db=await getDb(),cache=createDatasetResultCache(db,{maxEntries:2,maxBytes:300}),release=deferred<void>(),started=deferred<void>();let starts=0;
   const work=Array.from({length:5},(_,i)=>cache.run(String(i),async()=>{if(++starts===5)started.resolve();await release.promise;return result(i);},cacheRequest));
@@ -54,4 +63,32 @@ it('cancels owner work without retaining or poisoning its lease',async()=>{
   const pending=cache.run('key',()=>{started.resolve();return release.promise;},{...cacheRequest,signal:controller.signal});await started.promise;
   controller.abort();await expect(pending).rejects.toMatchObject({name:'AbortError'});release.resolve(result(1));
   expect((await cache.run('key',async()=>result(2),cacheRequest)).rows).toEqual([{n:2}]);
+});
+
+/*
+ * Moved here from speedup-contracts.test.ts, whose other half is the parsed-artifact
+ * manifest: these three are about this cache and belong beside the rest of it.
+ */
+it('independent cache owners coalesce work and fresh owners reuse a completed database result',async()=>{
+  const db=await getDb(),a=createDatasetResultCache(db),b=createDatasetResultCache(db);
+  let calls=0;
+  const load=async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,40));return result(7);};
+  const outputs=await Promise.all([a.run('shared-seed',load,cacheRequest),b.run('shared-seed',load,cacheRequest)]);
+  expect(calls).toBe(1);expect(outputs[0]).toEqual(outputs[1]);
+  await createDatasetResultCache(db).run('shared-seed',load,cacheRequest);expect(calls).toBe(1);
+});
+it('authorization failures cannot hit an existing result or be swallowed as cache failures',async()=>{
+  const cache=createDatasetResultCache(await getDb());let allowed=true,calls=0;
+  const req={ttlSeconds:60,authorize:async()=>{if(!allowed)throw new Error('revoked');}};
+  const load=async()=>{calls++;return result(1);};
+  await cache.run('acl-seed',load,req);allowed=false;
+  await expect(cache.run('acl-seed',load,req)).rejects.toThrow('revoked');expect(calls).toBe(1);
+});
+it('zero TTL bypasses retention and a failed fill does not poison future work',async()=>{
+  const cache=createDatasetResultCache(await getDb());let calls=0;
+  const req={ttlSeconds:0,authorize:async()=>{}};
+  await cache.run('zero-seed',async()=>result(++calls),req);
+  await cache.run('zero-seed',async()=>result(++calls),req);expect(calls).toBe(2);
+  await expect(cache.run('error-seed',async()=>{throw new Error('upstream');},{...req,ttlSeconds:60})).rejects.toThrow('upstream');
+  expect((await cache.run('error-seed',async()=>result(9),{...req,ttlSeconds:60})).rows).toEqual([{n:9}]);
 });

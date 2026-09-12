@@ -15,6 +15,7 @@ import { claimTokenById, createUser } from '@/lib/users';
 import { createArtifact } from '@/lib/artifacts';
 import {
   DEFAULT_TOKEN_TTL_MS,
+  LIVE_TOKEN_SQL,
   TOUCH_INTERVAL_MS,
   ensureUserToken,
   listTokensByUser,
@@ -100,6 +101,24 @@ describe('status: derived, never stored twice', () => {
   });
   it('accepts Date values as the driver may hand them back', () => {
     expect(tokenStatus({ deleted_at: null, expires_at: new Date(now - 1) }, now)).toBe('expired');
+  });
+
+  /*
+   * From tokens-deleted-at.test.ts, whose status assertions this describe already
+   * made: the soft state is `deleted_at` — the verb stays revoke — and it is read
+   * by the live clause, by resolve, and by the table itself.
+   */
+  it('the live clause, resolve and the table all say deleted_at, never revoked_at', async () => {
+    expect(LIVE_TOKEN_SQL).toContain('deleted_at IS NULL');
+    expect(LIVE_TOKEN_SQL).not.toContain('revoked_at');
+    const t = await mintToken('t');
+    expect(await resolveToken(t.token)).not.toBeNull();
+    const db = await harness.db();
+    await db.query('UPDATE tokens SET deleted_at = now() WHERE id = $1', [t.id]);
+    expect(await resolveToken(t.token)).toBeNull();
+    const cols = (await db.query<{ column_name: string }>("SELECT column_name FROM information_schema.columns WHERE table_name = 'tokens'")).rows.map((r) => r.column_name);
+    expect(cols).toContain('deleted_at');
+    expect(cols).not.toContain('revoked_at');
   });
 });
 

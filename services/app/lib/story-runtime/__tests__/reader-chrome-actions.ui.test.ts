@@ -17,7 +17,7 @@ const set = (target: object, key: string, value: unknown) =>
 
 function mount(documentHeight = 4000) {
   document.body.innerHTML = '<div id="mx-story-root"><p>the document</p></div>'
-    + renderReaderChrome({ artifactId: 'ab12cd', title: 'Quarterly review', author: { username: 'ada' } });
+    + renderReaderChrome({ share: true, artifactId: 'ab12cd', title: 'Quarterly review', author: { username: 'ada' } });
   set(window, 'requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0; });
   set(window, 'innerHeight', 800);
   set(window, 'scrollY', 0);
