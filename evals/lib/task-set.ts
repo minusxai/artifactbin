@@ -23,6 +23,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { TaskSchema, type Task } from './contracts';
+import { parseShardSpec } from '../../scripts/lib/shard.mjs';
 
 export interface DiscoveredTask {
   id: string;
@@ -61,13 +62,9 @@ export interface Shard {
   total: number;
 }
 
-/** `i/n`, the shape CI matrices use. */
+/** `i/n`, the shape CI matrices use — the one parser, shared with the gate runner. */
 export function parseShard(spec: string): Shard {
-  const m = /^(\d+)\/(\d+)$/.exec(spec.trim());
-  if (!m) throw new Error(`shard must be written i/n (got "${spec}")`);
-  const shard = { index: Number(m[1]), total: Number(m[2]) };
-  if (shard.total < 1 || shard.index < 1 || shard.index > shard.total) throw new Error(`shard ${spec} is out of range`);
-  return shard;
+  return parseShardSpec(spec);
 }
 
 /**
