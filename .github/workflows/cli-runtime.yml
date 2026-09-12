@@ -90,9 +90,15 @@ jobs:
               test ! -L "downloads/$runner/$asset.$suffix"
               cp "downloads/$runner/$asset.$suffix" bundle/
             done
+            test -f "downloads/$runner/NODE-LICENSE"
+            test ! -L "downloads/$runner/NODE-LICENSE"
+            if [ -f bundle/NODE-LICENSE ]; then cmp bundle/NODE-LICENSE "downloads/$runner/NODE-LICENSE"; else cp "downloads/$runner/NODE-LICENSE" bundle/NODE-LICENSE; fi
             pin="bundle/$asset.pin.json"
             compressed=$(jq -r .gzipSha256 "$pin")
             decoded=$(jq -r .sha256 "$pin")
+            license=$(jq -r .licenseSha256 "$pin")
+            [[ "$license" =~ ^[a-f0-9]{64}$ ]]
+            test "$(sha256sum bundle/NODE-LICENSE | cut -d ' ' -f1)" = "$license"
             [[ "$compressed" =~ ^[a-f0-9]{64}$ && "$decoded" =~ ^[a-f0-9]{64}$ ]]
             test "$(sha256sum "bundle/$asset.gz" | cut -d ' ' -f1)" = "$compressed"
             gzip -dc "bundle/$asset.gz" > "bundle/$asset"

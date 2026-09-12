@@ -60,9 +60,9 @@ if(all.startsWith('release view')){if(process.env.SCENARIO==='existing')process.
 if(all.startsWith('run download')){
  const dir=args[args.indexOf('--dir')+1],runner=args[args.indexOf('--name')+1].replace('cli-node-','');
  const target={'macos-14':'darwin-arm64','macos-15-intel':'darwin-x64','ubuntu-24.04':'linux-x64','ubuntu-24.04-arm':'linux-arm64'}[runner];
- const bytes=Buffer.from('runtime fixture'),gzip=zlib.gzipSync(bytes),name='afbin-node-'+target;
- fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(dir+'/'+name+'.gz',gzip);
- fs.writeFileSync(dir+'/'+name+'.pin.json',JSON.stringify({size:bytes.length,sha256:digest(bytes),gzipSha256:process.env.SCENARIO==='corrupt'?'0'.repeat(64):digest(gzip)}));
+ const bytes=Buffer.from('runtime fixture'),gzip=zlib.gzipSync(bytes),name='afbin-node-'+target,license=Buffer.from('Node license fixture');
+ fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(dir+'/'+name+'.gz',gzip);fs.writeFileSync(dir+'/NODE-LICENSE',license);
+ fs.writeFileSync(dir+'/'+name+'.pin.json',JSON.stringify({size:bytes.length,sha256:digest(bytes),licenseSha256:digest(license),gzipSha256:process.env.SCENARIO==='corrupt'?'0'.repeat(64):digest(gzip)}));
 }else if(!all.startsWith('release create'))process.exit(2);
 `;
  await writeFile(join(root,'gh'),fakeGh,{mode:0o755});
@@ -73,5 +73,5 @@ if(all.startsWith('run download')){
  expect(planned.status,planned.stderr).toBe(0);
  const published=run(workflow.jobs.publish.steps[0].run);
  if(scenario==='corrupt'){expect(published.status).not.toBe(0);expect(await readFile(join(root,'calls'),'utf8')).not.toContain('release create');}
- else{expect(published.status,published.stderr).toBe(0);expect(await readdir(join(root,'bundle'))).toHaveLength(8);expect(await readFile(join(root,'calls'),'utf8')).toContain('release create cli-node-v22.22.3-r1');}
+ else{expect(published.status,published.stderr).toBe(0);expect(await readdir(join(root,'bundle'))).toHaveLength(9);expect(await readFile(join(root,'bundle/NODE-LICENSE'),'utf8')).toBe('Node license fixture');expect(await readFile(join(root,'calls'),'utf8')).toContain('release create cli-node-v22.22.3-r1');}
 }));
