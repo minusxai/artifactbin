@@ -98,9 +98,10 @@ browser singleton, in-memory caches, and rate limiters assume a single process.
 Before an upgrade, compare the deployment environment with `.env.example`.
 Production boot requires `AUTH__SECRET` and `APP__PUBLIC_BASE_URL`; identity
 needs permission to create and use its `AUTH__SCHEMA`; login email needs
-`EMAIL__RESEND_API_KEY`; and public listing and anonymous minting remain closed
-until `ARTIFACTS__ALLOW_PUBLIC` and a `PROXY__RATE_LIMIT_CONFIG_FILE` whose
-`anon_mint` is not 0 explicitly open them. Retired or misspelled names are
+`EMAIL__RESEND_API_KEY`; and public listing and the home page's create button
+remain closed until `ARTIFACTS__ALLOW_PUBLIC` and a
+`PROXY__RATE_LIMIT_CONFIG_FILE` whose `start_doc` is not 0 explicitly open
+them. Retired or misspelled names are
 reported at boot but are not read.
 
 ### Restored-authoring production cutover
@@ -139,9 +140,9 @@ to ignore. Expect another account login and client restart at that boundary.
 **The rate limits are a file.** Every number lives in a policy file, and
 `PROXY__RATE_LIMIT_CONFIG_FILE` says which one — it and
 `RATE_LIMITER__TRUSTED_PROXY_HOPS` are the only rate-limit env names there are.
-Three ship, differing only in the anonymous mint:
+Three ship, differing only in the create button's door:
 
-| file | `anon_mint` | for |
+| file | `start_doc` | for |
 |---|---|---|
 | `services/proxy/default_rate_limits.yml` | 0 (closed) | production, and what an unset env resolves to |
 | `services/proxy/selfhost_rate_limits.yml` | 10/hour/ip | a self-host install (`docker-compose.yml`, the lean stack) |
@@ -167,7 +168,7 @@ unknown key or a window that does not parse REFUSES THE BOOT with the offending
 line named — there is no silent fallback to built-in numbers. The boot log says
 which file it read (`rate limits ← /app/services/proxy/…`), and a leftover
 per-limit name from the retired door vocabulary is reported as
-`RATE_LIMITER__ANON_MINT_MAX is set but nothing reads it`.
+`RATE_LIMITER__EXPORT_MAX is set but nothing reads it`.
 
 The limiter is per PROCESS: two replicas each keep their own counters, so the
 effective ceiling is `max × replicas`. One web replica by design anyway.

@@ -1,15 +1,21 @@
 /**
- * POST /api/tokens/anonymous — the zero-setup mint an agent starts with.
+ * POST /api/internal/tokens — THE MINT, and the only one in the product.
+ *
+ * INTERNAL means internal: the prefix is refused at the edge (proxy parts
+ * `internalBoundary`, contracts `isInternalApiPath`), so no client can reach
+ * this. Its one caller is the proxy's own device-approval exchange (proxy
+ * routes/oauth `mintFor`), which calls the app over the upstream seam — a
+ * Request the parts never saw — after a human approved the connection in the
+ * browser. That approval IS the door; there is no public one.
+ *
+ * The grant rides the ACTOR the proxy attaches, exactly as on any other route:
+ * a session actor (the human logged in and approved) binds the token to that
+ * account, so what the agent publishes lands in their dashboard; no actor is
+ * the anonymous approval, which reaches only what it itself creates.
  *
  * NO rate limit here, on purpose (P2 §H: a door is enforced in exactly one
- * place): the ANON_MINT door is counted by the PROXY in front of this app,
- * before the request is forwarded — a second count in the same process would
- * halve the configured ceiling. The app serves the mint; the door is the
- * proxy's.
- *
- * A signed-in browser's mint is bound to its account from the start, so what
- * it publishes lands in its dashboard without a claim; anyone else gets an
- * anonymous token that reaches only what it itself creates, claimable later.
+ * place): the proxy counts the OAuth doors in front of the approval that
+ * reaches this.
  */
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';

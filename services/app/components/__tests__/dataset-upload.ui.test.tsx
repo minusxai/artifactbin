@@ -13,8 +13,6 @@ let posts: Array<{ url: string; body: Record<string, unknown>; auth?: string }> 
 let fetched: string[] = [];
 let reply: { ok: boolean; body: Record<string, unknown> };
 let previewRows: Record<string, unknown>[];
-/** Does this browser already hold a token (as its httpOnly cookie)? */
-let credentialed = false;
 
 beforeEach(() => {
   posts = [];
@@ -22,26 +20,8 @@ beforeEach(() => {
   reply = { ok: true, body: { id: 'abc123', url: 'http://x/a/abc123', title: 'sales', rowCount: 2, columns: [{ name: 'month', type: 'string' }, { name: 'revenue', type: 'number' }] } };
   previewRows = [{ month: '2026-01', revenue: 120 }, { month: '2026-02', revenue: null }];
   localStorage.clear();
-  credentialed = false;
   vi.stubGlobal('fetch', (async (url: string, init: RequestInit) => {
     fetched.push(String(url));
-    // The credential probe: an authorized read means this browser already
-    // holds a token (as its httpOnly cookie), so no mint is needed.
-    if (String(url) === '/api/my/artifacts' && (init?.method ?? 'GET') === 'GET') {
-      return new Response(JSON.stringify({ artifacts: [] }), { status: credentialed ? 200 : 401 });
-    }
-    // The mint the component falls back to when the browser has no credential.
-    if (String(url).includes('/api/tokens/anonymous')) {
-      posts.push({ url: String(url), body: {} });
-      return new Response(JSON.stringify({ token: 'mx_minted' }), { status: 201 });
-    }
-    // The exchange: the minted secret goes straight to the server and comes
-    // back as a cookie — the page keeps nothing.
-    if (String(url) === '/api/session/token') {
-      posts.push({ url: String(url), body: JSON.parse(String(init.body)) });
-      credentialed = true;
-      return new Response(JSON.stringify({ ok: true }), { status: 200 });
-    }
     // The preview fetch, which pulls a corner of the stored rows.
     if (String(url).includes('/raw')) {
       return new Response(JSON.stringify(previewRows), { status: 200 });
@@ -121,31 +101,22 @@ describe('errors', () => {
 });
 
 
-describe('authorization — the case that shipped broken', () => {
+describe('authorization — the account session, and nothing else', () => {
   /**
-   * The upload endpoint needs a credential. A fresh browser has none, and the
-   * component used to send no Authorization header at all, so the user saw a
-   * bare "unauthorized". The credential now lives in an httpOnly cookie, so
-   * what these pin is the SHAPE of getting one: probe, mint only if needed,
-   * exchange it for the cookie, and never put a secret in a header the page
-   * had to keep.
+   * This panel lives on the account page, which already requires a session, so
+   * the upload rides the session cookie. What it must NOT do is conjure a
+   * credential of its own: nothing in the product hands one out but the CLI's
+   * device approval, and a page that minted for itself would be a second door.
    */
-  it('mints a token when the browser has none, and exchanges it for the cookie', async () => {
+  it('uploads on the cookie alone — no credential is fetched, exchanged or held', async () => {
     render(<DatasetUpload />);
     chooseFile('a\n1');
     await waitFor(() => expect(posts.some((p) => p.url === '/api/my/artifacts')).toBe(true));
-    expect(posts[0].url).toContain('/api/tokens/anonymous');
-    expect(posts[1]).toMatchObject({ url: '/api/session/token', body: { token: 'mx_minted' } });
+    expect(posts.map((p) => p.url)).toEqual(['/api/my/artifacts']);
+    expect(fetched.some((u) => u.includes('/tokens'))).toBe(false);
+    expect(fetched.some((u) => u.includes('/api/session/token'))).toBe(false);
     // The upload rides the cookie — no bearer header, nothing for a script to steal.
     expect(posts.find((p) => p.url === '/api/my/artifacts')!.auth).toBeUndefined();
-  });
-
-  it('does not mint when the browser already holds a credential', async () => {
-    credentialed = true;
-    render(<DatasetUpload />);
-    chooseFile('a\n1');
-    await waitFor(() => expect(posts.some((p) => p.url === '/api/my/artifacts')).toBe(true));
-    expect(posts.some((p) => p.url.includes('/api/tokens/anonymous'))).toBe(false);
   });
 
   it('takes the same path on the sheet import', async () => {
@@ -153,7 +124,7 @@ describe('authorization — the case that shipped broken', () => {
     fireEvent.change(screen.getByLabelText('Google Sheet URL'), { target: { value: 'https://docs.google.com/spreadsheets/d/abc/edit' } });
     fireEvent.click(screen.getByLabelText('Import sheet'));
     await waitFor(() => expect(posts.some((p) => p.url === '/api/my/artifacts')).toBe(true));
-    expect(posts.some((p) => p.url === '/api/session/token')).toBe(true);
+    expect(fetched.some((u) => u.includes('/tokens'))).toBe(false);
   });
 });
 
@@ -173,17 +144,12 @@ describe('truncation is visible, never silent', () => {
   });
 });
 
-describe('a failed token mint explains itself', () => {
-  it('names rate limiting rather than showing a generic failure', async () => {
-    vi.stubGlobal('fetch', (async (url: string) => {
-      // No credential yet (the probe 401s), and the mint is rate limited.
-      if (String(url) === '/api/my/artifacts') return new Response('{}', { status: 401 });
-      if (String(url).includes('/api/tokens/anonymous')) return new Response('{}', { status: 429 });
-      return new Response('{}', { status: 201 });
-    }) as unknown as typeof fetch);
+describe('an unauthorized upload explains itself', () => {
+  it('shows what the server said rather than a silent failure', async () => {
+    vi.stubGlobal('fetch', (async () => new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })) as unknown as typeof fetch);
     render(<DatasetUpload />);
     chooseFile('a\n1');
-    expect(await screen.findByLabelText('Upload error')).toHaveTextContent(/Too many new sessions/);
+    expect(await screen.findByLabelText('Upload error')).toHaveTextContent(/unauthorized/);
   });
 });
 
@@ -229,7 +195,6 @@ describe('the preview table', () => {
 
   it('still shows the summary when the preview cannot be fetched', async () => {
     vi.stubGlobal('fetch', (async (url: string, _init: RequestInit) => {
-      if (String(url).includes('/api/tokens/anonymous')) return new Response(JSON.stringify({ token: 'mx_t' }), { status: 201 });
       if (String(url).includes('/raw')) return new Response('nope', { status: 500 });
       return new Response(JSON.stringify(reply.body), { status: 201 });
     }) as unknown as typeof fetch);

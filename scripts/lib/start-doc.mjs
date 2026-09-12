@@ -15,12 +15,23 @@
 import { connectAgent } from './cli-connection.mjs';
 
 /**
- * Create an artifact AS a fresh CLI connection, so the caller can write it.
- * Returns `{ id, token, editId, prompt }`.
+ * What Chromium sends on the create button's fetch (MEASURED on production):
+ * `/api/start` is `browser_only` in every policy file, because it is the WEB
+ * PAGE's button — an agent creates with `POST /api/artifacts`. A gate stands
+ * in for the page, so it sends what the page sends, written here once.
+ */
+export const pageHeaders = (base) => ({ origin: new URL(base).origin, 'sec-fetch-site': 'same-origin' });
+
+/**
+ * Create an artifact the way the page does, AS a fresh CLI connection, so the
+ * caller can also write it. Returns `{ id, token, editId, prompt }`.
  */
 export async function startDocument(base) {
   const { token } = await connectAgent(base);
-  const res = await fetch(`${base}/api/start`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`${base}/api/start`, {
+    method: 'POST',
+    headers: { ...pageHeaders(base), Authorization: `Bearer ${token}` },
+  });
   const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.id) {
     throw new Error(`cannot start a document (${res.status} ${JSON.stringify(body)}).`);

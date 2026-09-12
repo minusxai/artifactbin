@@ -28,6 +28,24 @@ export function isDocumentPath(pathname: string): boolean {
   return isCredentialOptionalPath(pathname);
 }
 
+/**
+ * THE INTERNAL SURFACE. Everything under this prefix is the app answering the
+ * PROXY, never a client: the proxy refuses the prefix outright (parts
+ * `internalBoundary`, which sits in front of `forward`), so the only way in is
+ * a call the proxy makes on its own upstream seam — a Request the parts never
+ * saw. One prefix rather than a list, so the boundary cannot drift from what
+ * is behind it.
+ *
+ * `INTERNAL_MINT_PATH` is the whole of that surface today: the token mint the
+ * CLI's device approval spends (proxy routes/oauth `mintFor`). Nothing else
+ * mints a credential, and nothing public does.
+ */
+export const INTERNAL_API_PREFIX = '/api/internal';
+export const INTERNAL_MINT_PATH = `${INTERNAL_API_PREFIX}/tokens`;
+export function isInternalApiPath(pathname: string): boolean {
+  return pathname === INTERNAL_API_PREFIX || pathname.startsWith(`${INTERNAL_API_PREFIX}/`);
+}
+
 /** The header the proxy owns besides the actor: it sets this from the socket, never trusts inbound. */
 export const FORWARDED_FOR = 'x-forwarded-for';
 /**

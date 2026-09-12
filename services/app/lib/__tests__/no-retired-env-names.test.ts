@@ -37,7 +37,7 @@ const forbiddenSettings = (file: string, line: string): string[] => {
 
 describe('the retired env names', () => {
   it('finds quoted JSON settings outside the app', () => {
-    expect(forbiddenSettings('evals/config.json', '{"ANON_MINT_MAX": 10}')).toEqual(['ANON_MINT_MAX']);
+    expect(forbiddenSettings('evals/config.json', '{"ADMIN_SECRET": "x"}')).toEqual(['ADMIN_SECRET']);
   });
   it('does not let an allowed setting mask a retired setting on the same line', () => {
     expect(forbiddenSettings('scripts/setup.mjs', "{ CONTRACT__ACTOR_SECRET: 'fixture', AUTH_SECRET: 'obsolete' }"))

@@ -42,7 +42,9 @@ describe('server.ts --app-only', () => {
 
   /** Publish the document each local-service assertion consumes, so shuffled tests remain independent. */
   async function publishDocument(): Promise<string> {
-    const minted = await fetchChecked(`${base}/api/tokens/anonymous`, { method: 'POST' });
+    // `--app-only` is the app WITHOUT the proxy, so the internal mint is the
+    // only door in this shape — exactly the call the proxy would make.
+    const minted = await fetchChecked(`${base}/api/internal/tokens`, { method: 'POST' });
     expect(minted.status).toBe(201);
     const { token } = await minted.json() as { token: string };
     const markup = '<Helmet><Value name="tiny" type="table" value={[{"a":1},{"a":2}]} />'

@@ -11,7 +11,7 @@ import { ACTOR_HEADER, ANONYMOUS } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
 import { assemble, cookieName, encodeAgentSession } from '@artifactbin/utils';
 import { proxyParts, type ProxyOptions } from '../src/parts';
-import { BROWSER_MINT_HEADERS, mintTestToken, policyFile, resetTestDb, testDb, testProxyOptions } from './helpers';
+import { PAGE_HEADERS, mintTestToken, policyFile, resetTestDb, testDb, testProxyOptions } from './helpers';
 
 let seenActor: unknown = null;
 let seenHeaders: Headers | null = null;
@@ -72,15 +72,15 @@ describe('the session part', () => {
   });
 });
 
-describe('the anon_mint policy (the rate limit; the browser check is the same part\'s other verdict)', () => {
+describe('the start_doc policy (the rate limit; the browser check is the same part\'s other verdict)', () => {
   it('refuses a stranger past MAX with the deny shape, and a holder continues on the SAME bucket', async () => {
     const app = await proxy({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_2_burst_2.yml') } });
-    const post = (headers: Record<string, string> = {}) => app.request('/api/tokens/anonymous', { method: 'POST', headers: { ...BROWSER_MINT_HEADERS, ...headers } });
+    const post = (headers: Record<string, string> = {}) => app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, ...headers } });
     expect((await post()).status).toBe(200);
     expect((await post()).status).toBe(200);
     const denied = await post();
     expect(denied.status).toBe(429);
-    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'anon_mint' });
+    expect(await denied.json()).toMatchObject({ error: 'rate_limited', door: 'start_doc' });
     const token = await mintTestToken({ id: 'tok_h', userId: null, pg: testDb().pg() });
     const holder = { authorization: `Bearer ${token}` };
     expect((await post(holder)).status).toBe(200);
@@ -92,13 +92,13 @@ describe('the anon_mint policy (the rate limit; the browser check is the same pa
 describe('where the rate limits key (P4 finding F2)', () => {
   const mintOnceEach = async (app: ReturnType<typeof assemble<any>>, ips: string[]) => {
     const statuses: number[] = [];
-    for (const ip of ips) statuses.push((await app.request('/api/tokens/anonymous', { method: 'POST', headers: { ...BROWSER_MINT_HEADERS, 'x-forwarded-for': ip } })).status);
+    for (const ip of ips) statuses.push((await app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, 'x-forwarded-for': ip } })).status);
     return statuses;
   };
   it('keys on the CLIENT\'s IP behind a trusted hop', async () => {
     const app = await proxy({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml'), RATE_LIMITER__TRUSTED_PROXY_HOPS: '1' } });
     expect(await mintOnceEach(app, ['203.0.113.7', '198.51.100.9'])).toEqual([200, 200]);
-    expect((await app.request('/api/tokens/anonymous', { method: 'POST', headers: { ...BROWSER_MINT_HEADERS, 'x-forwarded-for': '203.0.113.7' } })).status, 'same client again').toBe(429);
+    expect((await app.request('/api/start', { method: 'POST', headers: { ...PAGE_HEADERS, 'x-forwarded-for': '203.0.113.7' } })).status, 'same client again').toBe(429);
   });
   it('keys on the HOP\'s IP behind an untrusted one — a caller cannot pick a bucket by typing an address', async () => {
     const app = await proxy({ env: { PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') } });

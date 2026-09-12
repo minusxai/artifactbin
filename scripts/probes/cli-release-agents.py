@@ -1,7 +1,7 @@
 """Release-binary acceptance with real HTTP, fault injection, local skills and a TLS release fixture.
 Outputs and provider credentials stay outside the checkout. Run only with an authorized key.
 """
-import argparse,concurrent.futures,http.server,json,os,pathlib,re,shutil,signal,socket,subprocess,tempfile,threading,time,urllib.request,urllib.error
+import argparse,concurrent.futures,http.server,json,os,pathlib,re,shutil,signal,socket,subprocess,tempfile,threading,time,urllib.request,urllib.parse,urllib.error
 from cli_release_fixture import ReleaseFixture
 from cli_release_checks import anchored_comment
 p=argparse.ArgumentParser();p.add_argument('--base-url',required=True);p.add_argument('--env-file',required=True);p.add_argument('--previous-binary',required=True);p.add_argument('--repetitions',type=int,default=2);p.add_argument('--harness',choices=['pi','opencode','both'],default='both');p.add_argument('--seed-only',action='store_true');args=p.parse_args()
@@ -10,8 +10,15 @@ key=next(re.match(r'^\s*(?:export\s+)?FIREWORKS_API_KEY\s*=\s*(.*?)\s*$',line)[1
 MODELS={'pi':'accounts/fireworks/models/deepseek-v4-flash-0731','opencode':'accounts/fireworks/models/glm-5p3-flash'}
 release=ReleaseFixture(DEST,ROOT/'services/cli/dist')
 def api(path,token=None,data=None,method=None):
- req=urllib.request.Request(BASE+path,data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json',**({'Origin':BASE,'Sec-Fetch-Site':'same-origin'} if path=='/api/tokens/anonymous' else {}),**({'Authorization':'Bearer '+token} if token else {})},method=method)
+ req=urllib.request.Request(BASE+path,data=json.dumps(data).encode() if data is not None else None,headers={'Content-Type':'application/json',**({'Authorization':'Bearer '+token} if token else {})},method=method)
  with urllib.request.urlopen(req,timeout=30) as response:return json.load(response)
+def connect():
+ """A credential the only way there is one: the CLI's device approval, approved anonymously."""
+ pairing=api('/oauth/device',data={})
+ form=urllib.parse.urlencode({'user_code':pairing['user_code'],'decision':'anonymous'}).encode()
+ approve=urllib.request.Request(BASE+'/oauth/device/approve',data=form,headers={'Content-Type':'application/x-www-form-urlencoded','Origin':BASE},method='POST')
+ with urllib.request.urlopen(approve,timeout=30):pass
+ return api('/oauth/device/token',data={'device_code':pairing['device_code']})['access_token']
 class AppProxy:
  def __init__(self,token):
   fixture=self;self.calls=[];self.drop=True
@@ -38,7 +45,7 @@ class AppProxy:
   self.server=http.server.ThreadingHTTPServer(('127.0.0.1',0),Handler);self.url='http://127.0.0.1:'+str(self.server.server_address[1]);threading.Thread(target=self.server.serve_forever,daemon=True).start()
  def close(self):self.server.shutdown();self.server.server_close()
 def run(leg):
- harness,rep=leg;model=MODELS[harness];work=pathlib.Path(tempfile.mkdtemp(prefix=f'afbin-release-{harness}-{rep}-'));(work/'bin').mkdir();(work/'tmp').mkdir();(work/'home').mkdir();token=api('/api/tokens/anonymous',data={})['token'];proxy=AppProxy(token)
+ harness,rep=leg;model=MODELS[harness];work=pathlib.Path(tempfile.mkdtemp(prefix=f'afbin-release-{harness}-{rep}-'));(work/'bin').mkdir();(work/'tmp').mkdir();(work/'home').mkdir();token=connect();proxy=AppProxy(token)
  binary=work/'bin/afbin-real';shutil.copy2(args.previous_binary,binary);shutil.copy2(release.cert,work/'release-ca.pem')
  command=work/'bin/afbin';command.write_text('#!/bin/sh\nNODE_OPTIONS=--use-env-proxy HTTPS_PROXY='+release.url+' NO_PROXY=localhost,127.0.0.1 NODE_EXTRA_CA_CERTS="'+str(work/'release-ca.pem')+'" exec "'+str(binary)+'" "$@"\n');command.chmod(0o755)
  env={k:v for k,v in os.environ.items() if not any(x in k for x in ['TOKEN','API_KEY','SECRET'])};env.update(HOME=str(work/'home'),FIREWORKS_API_KEY=key,ARTIFACTBIN_URL=proxy.url,ARTIFACTBIN_TOKEN=token,PATH=str(work/'bin')+':'+os.environ['PATH'],PI_CODING_AGENT_DIR=str(work/'pi-state'),OPENCODE_CONFIG_DIR=str(work/'opencode-config'),TMPDIR=str(work/'tmp'),TMP=str(work/'tmp'),TEMP=str(work/'tmp'),PWD=str(work));env.pop('OLDPWD',None);env['PYTHONDONTWRITEBYTECODE']='1'

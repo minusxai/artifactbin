@@ -4,23 +4,28 @@ import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { getDb, resetDb } from '@/lib/db';
 import { createAppServer } from '@/server/app';
 import { proxyParts } from '../src/parts';
-import { BROWSER_MINT_HEADERS, testProxyOptions } from './helpers';
+import { testProxyOptions } from './helpers';
 
 const ADMIN = 'admin-secret-for-tests';
 process.env.ADMIN__SECRET = ADMIN;
 
 describe('revocation through the composed proxy', () => {
   let proxy: ReturnType<typeof assemble<any>>;
+  let mint: () => Promise<{ id: string; token: string }>;
   beforeAll(async () => {
     const db = { query: async <T = Record<string, unknown>>(sql: string, params?: unknown[]) => (await getDb()).query<T>(sql, params as never) };
     const reader = createTokenReader({ db, ttlMs: 60_000 });
     const app = createAppServer({ indexHtml: async () => '<div id="root">SPA</div>', onTokenRevoked: (id?: string) => reader.invalidate(id) } as never);
     const base = await testProxyOptions();
     proxy = assemble(proxyParts({ ...base, tokens: reader, upstream: inProcess(app) }));
+    // The mint is INTERNAL: the proxy refuses the prefix at the edge, so a
+    // credential is issued the way the device exchange issues one — straight
+    // at the app, never through the parts.
+    mint = async () => await (await app.request('/api/internal/tokens', { method: 'POST' })).json() as { id: string; token: string };
   });
   afterAll(() => resetDb());
   it('mint through the app, resolve through the proxy, revoke through the app: the very next request is nobody', async () => {
-    const minted = await (await proxy.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).json() as { id: string; token: string };
+    const minted = await mint();
     expect(minted.token).toMatch(/^mx_/);
     expect((await proxy.request('/api/artifacts', { headers: { authorization: `Bearer ${minted.token}` } })).status).toBe(200);
     expect((await proxy.request(`/api/tokens/${minted.id}`, { method: 'DELETE', headers: { authorization: `Bearer ${ADMIN}` } })).status).toBe(204);

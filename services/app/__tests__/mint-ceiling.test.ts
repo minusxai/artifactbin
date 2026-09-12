@@ -1,13 +1,14 @@
 /**
- * THE APP COUNTS NO MINT LIMIT (P2 §H).
+ * THE APP COUNTS NO DOOR OF ITS OWN (P2 §H).
  *
- * This file used to pin the app-side ANON_MINT valve: a credential RAISED the
+ * This file used to pin an app-side valve: a credential RAISED the
  * ceiling on the same per-IP bucket rather than removing it — a holder got
  * MAX×BURST, a stranger MAX, one shared bucket. That rule is still the
  * product's, and it is still pinned — where the limit lives now:
  * `services/utils/__tests__/rate-limits.test.ts` ("BURST raises the ceiling for
- * a holder on the SAME bucket") pins the engine, and the `anon_mint` routes for
- * `/api/start` and `/api/tokens/anonymous` are the proxy's own suite.
+ * a holder on the SAME bucket") pins the engine, and the `start_doc` route for
+ * `/api/start` (plus the internal mint's unreachability) is the proxy's own
+ * suite.
  *
  * What THIS file pins is the app half of the split: the handlers serve the
  * mint and never refuse on a budget of their own — because a second count in
@@ -17,7 +18,7 @@
 import { describe, expect, it } from 'vitest';
 import { loadPolicyFile, resolvePolicyFilePath } from '@artifactbin/proxy';
 import { POST as startRoute } from '@/app/api/start/route';
-import { POST as anonymousMint } from '@/app/api/tokens/anonymous/route';
+import { POST as internalMint } from '@/app/api/internal/tokens/route';
 import { mintToken } from '@/lib/tokens';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -27,11 +28,11 @@ useAppHarness();
  * Past BOTH the stranger cap and the holder ceiling (max×burst, burst ≥ 2), read from THE POLICY FILE this
  * suite points at — there is no ceiling anywhere else to read, and no multiplier to keep in step by hand.
  */
-const mintPolicy = loadPolicyFile(resolvePolicyFilePath(process.env)).policies.anon_mint!;
+const mintPolicy = loadPolicyFile(resolvePolicyFilePath(process.env)).policies.start_doc!;
 const PAST_EVERY_CAP = mintPolicy.max * mintPolicy.burst + 2;
 const IP = '203.0.113.42';
 /** The limiter reads the address the outermost trusted proxy saw — the LAST hop. */
-const mint = (extra: Record<string, string> = {}) => new Request('http://localhost:3000/api/tokens/anonymous', {
+const mint = (extra: Record<string, string> = {}) => new Request('http://localhost:3000/api/internal/tokens', {
   method: 'POST',
   headers: { 'x-forwarded-for': `client, ${IP}`, ...extra },
 });
@@ -40,10 +41,10 @@ const start = (token?: string) => startRoute(new Request('http://localhost:3000/
   headers: { 'x-forwarded-for': `client, ${IP}`, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
 }));
 
-describe('the app\'s mint handlers carry no door of their own', () => {
-  it('POST /api/tokens/anonymous serves a stranger past every cap — the proxy\'s anon_mint policy is the only count', async () => {
+describe('the app\'s create and mint handlers carry no door of their own', () => {
+  it('the internal mint serves the proxy past every cap — the app counts nothing', async () => {
     for (let i = 0; i < PAST_EVERY_CAP; i++) {
-      const res = await anonymousMint(mint());
+      const res = await internalMint(mint());
       expect(res.status, `mint ${i + 1} of ${PAST_EVERY_CAP}`).toBe(201);
     }
   });

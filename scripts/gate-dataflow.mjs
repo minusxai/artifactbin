@@ -114,7 +114,7 @@ const reach = await scriptRealm.evaluate(async ({ id, base }) => {
   const violations = [];
   const record = event => { if (event.effectiveDirective === 'connect-src') violations.push(event.blockedURI); };
   document.addEventListener('securitypolicyviolation', record);
-  const targets = [`${base}/a/${id}/query`, `${base}/api/tokens/anonymous`, 'https://untrusted.invalid/probe'];
+  const targets = [`${base}/a/${id}/query`, `${base}/api/artifacts`, 'https://untrusted.invalid/probe'];
   for (const target of targets) { try { navigator.sendBeacon(target, '{}'); } catch {} }
   const deadline = Date.now() + 2000;
   while (violations.length < targets.length && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 20));

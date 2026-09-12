@@ -17,7 +17,7 @@ import { proxyEnvelope, say } from '../src/events';
 import { sessionStoreOf } from '../src/index';
 import { proxyParts } from '../src/parts';
 import { createStandaloneProxy, runStandalone } from '../src/standalone';
-import { BROWSER_MINT_HEADERS, policyFile, RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
+import { PAGE_HEADERS, policyFile, RELAXED_POLICY_FILE, testProxyOptions } from './helpers';
 
 const BASE = 'http://localhost:6421';
 const sent: Array<{ to: string; otp?: string }> = [];
@@ -91,10 +91,10 @@ describe('the login moments', () => {
 describe('the rate limits', () => {
   it('a rate-limit denial says door.denied for either policy, the policy named, the anonymous subject null', async () => {
     const app = await proxy({ PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') });
-    expect((await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).not.toBe(429);
-    expect((await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).toBe(429);
+    expect((await app.request('/api/start', { method: 'POST', headers: PAGE_HEADERS })).status).not.toBe(429);
+    expect((await app.request('/api/start', { method: 'POST', headers: PAGE_HEADERS })).status).toBe(429);
     expect(fake.events).toHaveLength(1);
-    expect(fake.events[0]).toMatchObject({ source: 'proxy', verb: 'denied', object_kind: 'door', object_id: 'anon_mint', subject_kind: null, payload: { door: 'anon_mint' } });
+    expect(fake.events[0]).toMatchObject({ source: 'proxy', verb: 'denied', object_kind: 'door', object_id: 'start_doc', subject_kind: null, payload: { door: 'start_doc' } });
 
     fake.events.length = 0;
     for (let i = 0; i < 5; i += 1) await call(app, '/api/auth/email-otp/send-verification-otp', { email: 'busy@example.com', type: 'sign-in' });
@@ -120,8 +120,8 @@ describe('the composition', () => {
     // Relative path, as parts.test.ts does: the anon-mint door's browser check compares origins.
     const config = loadConfig({ ...REQUIRED, PROXY__RATE_LIMIT_CONFIG_FILE: policyFile('mint_1.yml') });
     const app = createStandaloneProxy(config, { upstream: async () => Response.json({ ok: true }), events: fake }) as unknown as App;
-    await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS });
-    expect((await app.request('/api/tokens/anonymous', { method: 'POST', headers: BROWSER_MINT_HEADERS })).status).toBe(429);
+    await app.request('/api/start', { method: 'POST', headers: PAGE_HEADERS });
+    expect((await app.request('/api/start', { method: 'POST', headers: PAGE_HEADERS })).status).toBe(429);
     expect(verbs()).toEqual(['door.denied']);
   });
   it('runStandalone closes the events client (the flush) on close', async () => {

@@ -45,7 +45,7 @@ const FIXTURES: Fixtures = {
     unfollowed: {},
   },
   token: { minted: { name: 'laptop' }, claimed: { name: 'laptop' }, revoked: { name: null } },
-  door: { denied: { door: 'ANON_MINT' } },
+  door: { denied: { door: 'start_doc' } },
   route: { failed: { status: 500, method: 'POST' } },
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -60,7 +60,7 @@ describe('envelope', () => {
     expect(eventName(e)).toBe('artifact.forked');
   });
   it('a null subject is two nulls, not a missing column', () => {
-    const e = envelope(null, 'denied', { kind: 'door', id: 'ANON_MINT' }, { door: 'ANON_MINT' });
+    const e = envelope(null, 'denied', { kind: 'door', id: 'start_doc' }, { door: 'start_doc' });
     expect(e.subject_kind).toBeNull();
     expect(e.subject_id).toBeNull();
   });

@@ -13,7 +13,7 @@
  */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
-import { connectAgent } from './lib/cli-connection.mjs';
+import { startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 const out = [];
@@ -67,18 +67,19 @@ ok((await fetch(`${B}/api/tokens/anonymous`, { method: 'POST' })).status === 404
   'and the public anonymous mint is not a route any more');
 
 // ── 3. the agent's leg: connect the way afbin does, then write ──────────────
-const agent = await connectAgent(B);
-ok(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
-const agentDoc = await (await fetch(`${B}/api/start`, {
-  method: 'POST',
-  headers: { Authorization: `Bearer ${agent.token}` },
-})).json();
-ok(!!agentDoc.id, 'the connected agent starts its own document');
+// The create button is the PAGE's door (browser_only), so a bare agent posting
+// it is refused and told to run afbin — while the CLI's own approval is the
+// one way it gets a credential at all.
+ok((await fetch(`${B}/api/start`, { method: 'POST' })).status === 403,
+  'a client that is not the page is refused the create button');
+const agentDoc = await startDocument(B);
+ok(/^mx_/.test(agentDoc.token ?? ''), 'the CLI device approval is the only way a credential exists');
+ok(!!agentDoc.id, 'and the connected agent has a document it can write');
 
 await page.goto(`${B}/a/${agentDoc.id}`, { waitUntil: 'load' });
 const put = await fetch(`${B}/api/artifacts/${agentDoc.id}`, {
   method: 'PUT',
-  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agent.token}` },
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agentDoc.token}` },
   body: JSON.stringify({
     title: 'gate doc',
     markup: '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Landed by the agent</h1></div>',
