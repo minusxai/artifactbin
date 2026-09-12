@@ -141,10 +141,22 @@ export class State {
 const locks = new Map<string, Promise<unknown>>();
 export interface LockOptions {waitMs?: number}
 /**
+ * How long a competing operation waits for the scope before it is refused as
+ * `workspace_busy`. Agents that run their tool calls in parallel (Pi, Claude Code)
+ * routinely issue `afbin pull` and `afbin push` in the same turn; with no wait the
+ * second one failed instantly in eval run 34694871143 even though the first finished
+ * a second later. Queueing is the right default: a stale lock cannot exist (the OS releases
+ * it when the holder exits), so only a hung holder should ever surface as busy.
+ */
+export const DEFAULT_LOCK_WAIT_MS = 60_000;
+/** After this long in the queue, one stderr line says why the command is silent. */
+const LOCK_WAIT_NOTICE_MS = 1_000;
+/**
  * Cross-process mutual exclusion for one scope (a workspace root or HOME_SCOPE).
  * A zero-byte SQLite file under `<config>/locks/` holds a `BEGIN EXCLUSIVE`
  * transaction for the duration of `run`; the OS releases it on any exit.
- * Re-entrant within a process for the same scope.
+ * Re-entrant within a process for the same scope. A busy scope is polled for
+ * `waitMs` (default `DEFAULT_LOCK_WAIT_MS`) before `workspace_busy` is thrown.
  */
 export async function withLock<T>(home: string, scope: string, run: () => Promise<T>, options: LockOptions = {}, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   const name = createHash('sha256').update(scope).digest('hex').slice(0, 16);
@@ -155,12 +167,15 @@ export async function withLock<T>(home: string, scope: string, run: () => Promis
   const db = new DatabaseSync(file);
   const held = (async () => {
     await chmod(file, 0o600);
-    const deadline = Date.now() + Math.max(0, options.waitMs ?? 0);
+    const started = Date.now();
+    const deadline = started + Math.max(0, options.waitMs ?? DEFAULT_LOCK_WAIT_MS);
+    let noticed = false;
     for (;;) {
       try { db.exec('BEGIN EXCLUSIVE'); break; }
       catch (error) {
         if ((error as {errcode?: number}).errcode !== 5) throw error;
         if (Date.now() >= deadline) throw new Error('workspace_busy: another afbin operation is using this directory. Retry when it finishes.');
+        if (!noticed && Date.now() - started >= LOCK_WAIT_NOTICE_MS) { noticed = true; process.stderr.write('Waiting for another afbin operation in this directory to finish…\n'); }
         await sleep(Math.min(100, deadline - Date.now()));
       }
     }

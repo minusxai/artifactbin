@@ -80,13 +80,28 @@ test('two processes see the same store and the busy timeout serialises their wri
   try { assert.equal(state.get<{code: string}>('/work', 'conflict', 'abc123')?.value.code, 'merge_conflict'); } finally { state.close(); }
 }));
 
+test('a competing process waits for a short holder by default — parallel agent tool calls serialise instead of failing', fixture(async home => {
+  const module = new URL('../src/state.ts', import.meta.url).href;
+  const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `import {withLock} from ${JSON.stringify(module)}; await withLock(${JSON.stringify(home)}, '/work', async()=>{process.stdout.write('locked'); await new Promise(r=>setTimeout(r,600));}); process.stdout.write('released');`], {stdio: ['ignore', 'pipe', 'pipe']});
+  try {
+    assert.equal(String((await once(child.stdout, 'data'))[0]), 'locked');
+    const started = Date.now();
+    assert.equal(await withLock(home, '/work', async () => 'entered after the holder finished'), 'entered after the holder finished');
+    assert.ok(Date.now() - started >= 300, 'the competitor actually waited for the holder rather than racing it');
+    assert.ok(Date.now() - started < 10_000, 'and did not wait anywhere near the full default');
+  } finally { child.kill('SIGKILL'); }
+}));
+
 test('a lock refuses a competing process, is re-entrant in-process, and the OS releases it after SIGKILL', fixture(async home => {
   const module = new URL('../src/state.ts', import.meta.url).href;
   const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `import {withLock} from ${JSON.stringify(module)}; await withLock(${JSON.stringify(home)}, '/work', async()=>{process.stdin.resume(); process.stdout.write('locked'); await new Promise(()=>{});});`], {stdio: ['pipe', 'pipe', 'pipe']});
   try {
     const outcome = await Promise.race([once(child.stdout, 'data').then(x => String(x[0])), once(child, 'exit').then(() => 'exited')]);
     assert.equal(outcome, 'locked');
-    await assert.rejects(withLock(home, '/work', async () => assert.fail('competing writer entered')), /workspace_busy/);
+    await assert.rejects(withLock(home, '/work', async () => assert.fail('competing writer entered'), {waitMs: 0}), /workspace_busy/);
+    const started = Date.now();
+    await assert.rejects(withLock(home, '/work', async () => assert.fail('competing writer entered'), {waitMs: 250}), /workspace_busy/);
+    assert.ok(Date.now() - started >= 200, 'a bounded wait polls the scope before refusing');
     assert.equal(await withLock(home, HOME_SCOPE, async () => 'other scope is independent'), 'other scope is independent');
     const exited = once(child, 'exit'); child.kill('SIGKILL'); await exited;
     assert.equal(await withLock(home, '/work', () => withLock(home, '/work', async () => 'nested')), 'nested');
