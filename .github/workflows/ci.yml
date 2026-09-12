@@ -484,10 +484,10 @@ jobs:
       # not two: the set ran 213s and ~170s of gate work in two shards on main run
       # 34697938970, and a third divides that work rather than the machine.
       #
-      # No `docker pull postgres:17-alpine` here: the only gate that wanted a
-      # Dockerised Postgres is postgres-datasets, which moves out of this set.
-      # The same coverage runs in the `node` job's `integration` project, which
-      # provisions the image on its own shard.
+      # postgres-datasets drives a real Dockerised Postgres; pulling the image
+      # before the run keeps that cost out of the gate's own timeout budget.
+      - name: pull the Postgres image the datasets gate needs
+        run: docker pull postgres:17-alpine
       - name: every gate, four servers
         run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/3
         env:

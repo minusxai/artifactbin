@@ -6,7 +6,7 @@
  * NOTHING — the previews come out with the slide's text and a hole where the
  * icon goes. That is not hypothetical; it is how the rail shipped once, and it
  * survived because the gate asserted `innerText` on the thumb, which an <svg>
- * is invisible to (scripts/gate-deck-chrome.mjs).
+ * is invisible to (scripts/gate-layout-shift.mjs, leg 7).
  *
  * So the assertion is on the drawn GLYPH, in the RAIL specifically, and it
  * lives in vitest rather than a browser gate because that is what CI runs.
