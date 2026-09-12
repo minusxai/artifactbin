@@ -15,8 +15,7 @@
  * Globals: `base` (the caller's origin — the ONLY runtime value; the CLI
  * bundle renders it once with the production base), `example` (the brief's
  * inlined document, read from `skills/artifactbin/example.jsx` for `SKILL.md` only), `themes`, `templates`,
- * `components`, `tags`, `refusedTags`, `maxContentBytes`, `claim` (the advice
- * relayed to a person about their anonymous token), and
+ * `components`, `tags`, `refusedTags`, `maxContentBytes`, and
  * — inside `themes/<n>.md` / `templates/<n>.md` — that file's own registry
  * entry as `theme` / `template`.
  */

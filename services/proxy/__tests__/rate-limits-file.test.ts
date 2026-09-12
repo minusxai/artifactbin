@@ -99,7 +99,7 @@ const PARITY: Array<[method: string, url: string, policy: string | null, max: nu
   ['GET', '/health', null, 0, 0, 0, '', false],
   ['GET', '/assets/app.js', null, 0, 0, 0, '', false],
   ['POST', '/api/tokens', null, 0, 0, 0, '', false],
-  ['GET', '/tokens/new', null, 0, 0, 0, '', false],
+  ['GET', '/account', null, 0, 0, 0, '', false],
   ['POST', '/api/artifacts/abc/versions', 'publish', 600, 60, 1, 'actor', false],
 ];
 

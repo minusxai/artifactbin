@@ -5,7 +5,7 @@
  *
  *   1. anonymous mint → publish a document with live embeds
  *   2. /a/<id> shows it → its Edit button switches to edit mode in place
- *   3. adopting the anonymous token unlocks the editor; embeds render inside it
+ *   3. adopting the connection's credential unlocks the editor; embeds render inside it
  *   4. type into a heading → blur persists it automatically (the regression
  *      this gate exists for: the engine commits text edits on BLUR, so a
  *      Save gated on a dirty flag stayed disabled and swallowed the click)

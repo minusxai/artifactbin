@@ -7,8 +7,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CopyAgentPrompt from '@/components/CopyAgentPrompt';
+import { existingPaste } from '@/lib/agent-copy';
 
-const MINTED = { prompt: 'Help me edit my artifact at http://localhost:3000/a/Ab3xK9. Use the afbin CLI to operate artifactbin, or (curl -fsSL http://localhost:3000/chat/install.sh | sh) if not installed. Run afbin help first.', url: 'http://localhost:3000/a/Ab3xK9' };
+// The server decides the wording (lib/agent-copy); this fixture answers with
+// the real thing rather than a second copy of it.
+const MINTED = { prompt: existingPaste('http://localhost:3000', 'Ab3xK9'), url: 'http://localhost:3000/a/Ab3xK9' };
 
 beforeEach(() => {
   localStorage.clear();
