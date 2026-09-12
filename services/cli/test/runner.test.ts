@@ -51,7 +51,7 @@ test("real PTY delivers a remote line and relays output and exit, acknowledging 
       signal: AbortSignal.timeout(10000),
     });
     assert.equal(code, 7);
-    assert.match(output, /received:from-comment/);
+    assert.match(output, /received:from-comment/, JSON.stringify({local,ack,exit,exchanges}));
     assert.match(local, /received:from-comment/);
     assert.equal(ack, 1);
     assert.equal(exit, 7);

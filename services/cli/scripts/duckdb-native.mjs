@@ -8,6 +8,11 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 const require=createRequire(import.meta.url);
 const sha256=bytes=>createHash('sha256').update(bytes).digest('hex');
+export function standaloneSqlSource(source){
+ const needle="duckdbModule ??= import('@duckdb/node-api')";
+ if(!source.includes(needle))throw new Error('SQL lazy import changed; review standalone composition.');
+ return source.replace(needle,"duckdbModule ??= require('afbin:sql-native').loadDuckDB()");
+}
 export async function duckdbNative(){
  const musl=process.platform==='linux'&&!process.report.getReport().header.glibcVersionRuntime;
  if(musl)throw new Error('Standalone releases currently require glibc on Linux.');
@@ -44,9 +49,8 @@ export async function duckdbNative(){
  return {asset,file,manifest,plugin:{name:'lazy-duckdb',setup(b){
   // Preserve the SQL service contract; redirect only its already-sanctioned lazy native import.
   b.onLoad({filter:/sql\/src\/engine\.ts$/},async({path})=>{
-   const source=await readFile(path,'utf8'),needle="import('@duckdb/node-api')";
-   if(!source.includes(needle))throw new Error('SQL lazy import changed; review standalone composition.');
-   return {contents:source.replace(needle,"require('afbin:sql-native').loadDuckDB()"),loader:'ts',resolveDir:dirname(path)};
+   const source=await readFile(path,'utf8');
+   return {contents:standaloneSqlSource(source),loader:'ts',resolveDir:dirname(path)};
   });
   b.onResolve({filter:/^afbin:sql-native$/},()=>({path:resolve('src/standalone-sql.ts')}));
  }}};
