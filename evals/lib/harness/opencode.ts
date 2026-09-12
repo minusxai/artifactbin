@@ -14,6 +14,11 @@ import { NO_TELEMETRY, parseJsonl } from './shared';
 
 export const opencode:HarnessAdapter={
   harness:'opencode',
+
+  /** `step_finish`, the same event `reduce` counts as `turns`: `opencode run --help` offers no cap. */
+  countsAsTurn(line: string): boolean {
+    return line.startsWith('{"type":"step_finish"');
+  },
   /** Nothing to drop: a `text` event carries a whole part, and it is the only source of the final message. */
   keepLine(): boolean {
     return true;

@@ -26,6 +26,11 @@ interface PiAssistant {
 export const pi: HarnessAdapter = {
   harness: 'pi',
 
+  /** `turn_end`, the same event `reduce` counts: `pi --help` offers no cap of its own. */
+  countsAsTurn(line: string): boolean {
+    return line.startsWith('{"type":"turn_end"');
+  },
+
   keepLine(line: string): boolean {
     return !line.startsWith('{"type":"message_update"');
   },

@@ -324,6 +324,17 @@ export interface HarnessAdapter {
   invocation(ctx: HarnessRunContext): HarnessInvocation;
   /** Pure: the captured stdout (the harness's event stream) → normalized result. */
   reduce(stdout: string): HarnessResult;
+  /**
+   * Pure: is this stdout LINE one step of the agent's loop?
+   *
+   * `maxTurns` is only a flag on `claude-code`; the other three CLIs offer nothing like it (checked
+   * against each `--help`), so a runaway there ran until the wall-clock timeout — fifteen minutes of
+   * paid tokens for a loop that was never going to finish. The driver counts these lines as they
+   * arrive and kills the process tree when the count passes the cap (`lib/spawn`), which makes the
+   * bound the DRIVER's rather than each CLI's. It counts the same events the adapter's `reduce`
+   * counts as `turns`, so the number in the report and the number the cap watches cannot disagree.
+   */
+  countsAsTurn(line: string): boolean;
   /** Pure: keep this stdout line? Omitted means keep everything. See `HarnessInvocation.keepLine`. */
   keepLine?(line: string): boolean;
 }

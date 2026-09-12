@@ -357,6 +357,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     timeoutMs: config.run.timeoutMs,
     stdoutPath: path.join(runDir, 'transcript.jsonl'),
     stderrPath: path.join(runDir, 'stderr.log'),
+    // EVERY harness is bounded by the driver, not by whichever CLI happens to have a flag for it
+    // (`lib/spawn TurnCap`). A run that goes past the cap is killed where it stands.
+    turnCap: { maxTurns: config.run.maxTurns, countsAsTurn: (line) => adapter.countsAsTurn(line) },
     // The harness's HOME is this run's home in every case — `~/.artifactbin.env` resolves there, and
     // nothing the CLI writes under $HOME lands in the runner's own. Under `--run-as` the workspace ROOT
     // goes with it: it is a 0700 mkdtemp directory the other user could not otherwise traverse.
@@ -368,6 +371,14 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   approver?.stop();
   const result = adapter.reduce(spawned.stdout);
   if (spawned.timedOut) { result.ok = false; result.error = `timed out after ${config.run.timeoutMs} ms`; }
+  // A RUNAWAY, named as one. The kill takes the harness's final result event with it, so the reducer
+  // reports whatever it can and the driver states what actually happened — including the turn count,
+  // which it has whether or not the harness lived long enough to report its own.
+  if (spawned.turnCapped) {
+    result.ok = false;
+    result.error = `turn_cap: killed after ${spawned.turns} turns (cap ${config.run.maxTurns})`;
+    result.turns = spawned.turns;
+  }
   fs.writeFileSync(path.join(runDir, 'result.json'), JSON.stringify({ ...result, exitCode: spawned.exitCode, timedOut: spawned.timedOut, truncated: spawned.truncated }, null, 2));
   log(`${leg.label}/${task.id}: ${result.ok ? 'harness ok' : `harness error: ${result.error}`} in ${Math.round(spawned.durationMs / 1000)}s, ${result.turns ?? '?'} turns`);
 
@@ -553,8 +564,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   rec.finalize(passed);
-  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})`} — doc ${targetId ?? 'none'}${targetId === start.id ? '' : ' (NOT the start document)'}`);
-  return passed;
+  // A failure the DRIVER had to stop — the turn cap or the wall clock — is structural: the same prompt
+  // loops the same way, so `--ci` must not spend a second paid run on it (`lib/second-attempt`).
+  const runaway = !passed && (spawned.turnCapped || spawned.timedOut);
+  log(`${leg.label}/${task.id}: ${passed ? 'PASS' : `FAIL (${failed.join(', ')})${runaway ? ' — RUNAWAY, not retried' : ''}`} — doc ${targetId ?? 'none'}${targetId === start.id ? '' : ' (NOT the start document)'}`);
+  return runaway ? 'runaway' : passed;
 }
 
 async function main(): Promise<void> {

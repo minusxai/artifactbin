@@ -40,6 +40,13 @@ const ASSISTANT_ITEMS = new Set(['agent_message', 'reasoning', 'command_executio
 export const codex: HarnessAdapter = {
   harness: 'codex',
 
+  /** The same items `reduce` counts as `turns`: `codex exec --help` offers no cap of its own. */
+  countsAsTurn(line: string): boolean {
+    if (!line.includes('"item.completed"')) return false;
+    const type = (parseJsonl(line)[0]?.item as { type?: string } | undefined)?.type;
+    return type !== undefined && ASSISTANT_ITEMS.has(type);
+  },
+
   async prepare(ctx: HarnessRunContext) {
     fs.mkdirSync(ctx.homeDir, { recursive: true });
     await new Promise<void>((resolve, reject) => {

@@ -28,6 +28,10 @@ export interface SpawnResult {
   stdout: string;
   exitCode: number | null;
   timedOut: boolean;
+  /** Steps of the agent's loop counted off the stream as it arrived (`TurnCap.countsAsTurn`). */
+  turns: number;
+  /** The count passed the cap and the driver killed the process tree — a runaway, not a slow run. */
+  turnCapped: boolean;
   durationMs: number;
   /** The stream outgrew `maxStdoutBytes`: the transcript holds the head, `stdout` the tail. */
   truncated: boolean;
@@ -41,6 +45,21 @@ export interface SpawnResult {
 
 /** Backstop for a harness with no line filter, or one that streams something unforeseen. */
 const DEFAULT_MAX_STDOUT_BYTES = 32 * 1024 * 1024;
+
+/**
+ * THE TURN CAP, ENFORCED BY THE DRIVER.
+ *
+ * `config.run.maxTurns` used to be a flag on one CLI: `claude-code` takes `--max-turns`, and
+ * `codex exec`, `pi` and `opencode run` offer nothing like it (checked against each `--help`), so a
+ * looping agent there ran until the wall-clock timeout. Counting the harness's own step events as they
+ * arrive costs nothing and bounds all four the same way; where a native flag exists it is still passed
+ * and stops the run first, leaving this as the backstop that fires only when the run went PAST the cap.
+ */
+export interface TurnCap {
+  maxTurns: number;
+  /** The adapter's own predicate over one stdout line (`HarnessAdapter.countsAsTurn`). */
+  countsAsTurn: (line: string) => boolean;
+}
 
 /**
  * ISOLATION — run the harness as somebody else.
@@ -217,7 +236,7 @@ function resolveOnPath(cmd: string, PATH: string | undefined): string {
   throw new Error(`--run-as: cannot find "${cmd}" on PATH`);
 }
 
-export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; checkoutRoots?: string[]; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
+export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string; baseEnv: Record<string, string | undefined>; timeoutMs: number; stdoutPath: string; stderrPath: string; maxStdoutBytes?: number; runAs?: string; homeDir?: string; workspaceRoot?: string; checkoutRoots?: string[]; turnCap?: TurnCap; exec?: (argv: string[]) => void }): Promise<SpawnResult> {
   const cap = opts.maxStdoutBytes ?? DEFAULT_MAX_STDOUT_BYTES;
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(opts.baseEnv)) if (v !== undefined && !inv.unsetEnv.includes(k)) env[k] = v;
@@ -286,8 +305,30 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
     let truncated = false;
     let pending = '';
     let firstUrlAtMs: number | null = null;
+    let turns = 0;
+    let turnCapped = false;
+    const killTree = () => {
+      try { process.kill(-child.pid!, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+    };
+    /**
+     * Count the harness's own step events, and stop the run when it goes past the cap. Counted on the
+     * RETAINED text, the same lines everything downstream is scored from, so a partial-message line an
+     * adapter filters away can never be mistaken for a turn.
+     */
+    const countTurns = (text: string) => {
+      const cap = opts.turnCap;
+      if (!cap || turnCapped || !text) return;
+      for (const line of text.split('\n')) if (line && cap.countsAsTurn(line)) turns += 1;
+      // Strictly past: a run that used exactly its allowance is finishing, and killing it there would
+      // throw away the result event the reducer needs. This fires only for a run that ignored the cap.
+      if (turns > cap.maxTurns) {
+        turnCapped = true;
+        killTree();
+      }
+    };
     const retain = (text: string) => {
       if (!text) return;
+      countTurns(text);
       // The moment the human could click something, taken HERE rather than scanned off the finished
       // transcript, because the timestamp is the point. It watches the RETAINED text — what everything
       // downstream is scored from — so a partial-message line the adapter filters away cannot start the
@@ -325,7 +366,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      try { process.kill(-child.pid!, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+      killTree();
     }, opts.timeoutMs);
 
     const exitCode = await new Promise<number | null>((resolve) => {
@@ -343,7 +384,7 @@ export async function runInvocation(inv: HarnessInvocation, opts: { cwd: string;
       stream.end(resolve);
     });
     await Promise.all([finish(out), finish(errOut)]);
-    return { stdout, exitCode, timedOut, durationMs: Date.now() - started, truncated, firstUrlAtMs };
+    return { stdout, exitCode, timedOut, turns, turnCapped, durationMs: Date.now() - started, truncated, firstUrlAtMs };
   } finally {
     // The last step of the contract, and it must not be able to lose the run: a reclaim that fails is
     // reported on the run's own stderr and the result stands.
