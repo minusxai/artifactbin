@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs, wrapCheckoutSandbox, checkoutIsolationRoots } from '../lib/spawn';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs, wrapCheckoutSandbox, checkoutIsolationRoots, agentEnvironment } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -580,3 +580,14 @@ describe('firstUrlAtMs — what it watches, and what it deliberately does not (m
     expect(r.firstUrlAtMs!).toBeLessThanOrEqual(r.durationMs);
   });
 })
+
+describe('agentEnvironment', () => {
+  it('hands the agent a clean shell, never the driver\'s secrets — pi found RESEND_EVAL_API_KEY and planned to read the login OTP with it (run 34709587428)', () => {
+    const env = agentEnvironment({
+      HOME: '/h', PATH: '/p', PWD: '/w', LANG: 'C.UTF-8', LC_ALL: 'C', TMPDIR: '/t', TERM: 'xterm', CI: 'true',
+      RESEND_EVAL_API_KEY: 're_x', EVAL_LOGIN_EMAIL: 'eval@x', FIREWORKS_API_KEY: 'k', ANTHROPIC_API_KEY: 'k', OPENAI_API_KEY: 'k',
+      GITHUB_TOKEN: 't', ACTIONS_RUNTIME_TOKEN: 't', ACTIONS_ID_TOKEN_REQUEST_URL: 'u', GITHUB_WORKFLOW: 'w', RUNNER_TEMP: '/r', npm_config_x: '1', DEPLOYMENT: 'https://x',
+    });
+    expect(Object.keys(env).sort()).toEqual(['CI', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'PWD', 'TERM', 'TMPDIR']);
+  });
+});
