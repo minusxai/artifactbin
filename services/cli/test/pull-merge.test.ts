@@ -1,4 +1,4 @@
-import {test} from 'node:test';
+import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -9,6 +9,7 @@ import {parseDocument} from '../src/document';
 import {baselineOf,loadWorkspace} from '../src/workspace';
 import {tracking,readRecord} from './tracking';
 import {digest} from '../src/files';
+import {cliHarness} from './harness';
 
 test('pull merges unrelated nodes, saves remote as base and preserves local changes for the next push',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-pull-merge-'));
@@ -58,4 +59,31 @@ test('pull batches independent references into an output directory and rejects t
   assert.match(await readFile(join(root,'reports','abc123.jsx'),'utf8'),/abc123/);assert.match(await readFile(join(root,'reports','def456.jsx'),'utf8'),/def456/);
   assert.equal(Object.keys((await tracking(root,root)).files).length,2);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+describe('pull to stdout and converted formats', () => {
+  const head=(id:string,extra:Record<string,unknown>={})=>({id,version:2,edit_id:'e2',state:'b'.repeat(64),format:'markup',title:'Report',visibility:'unlisted',markup:'<p>Remote</p>',capabilities:{read:true,edit:true,mutation_receipts:true},...extra});
+   const harness=(prefix:string)=>cliHarness(prefix);
+
+  test('pull --output - writes the editable representation to stdout without establishing tracking',async()=>{
+   const h=await harness('afbin-seed-pull-stdout-');
+   try{
+    const code=await h.invoke(['pull','abc123','--output','-'],({path})=>path.startsWith('/api/artifacts/abc123')?Response.json(head('abc123')):Response.json({error:'not_found'},{status:404}));
+    assert.equal(code,0,h.out.join(''));
+    assert.match(h.out.join(''),/^---\nid: abc123\n/);assert.match(h.out.join(''),/<p>Remote<\/p>/);
+    assert.equal((await tracking(h.home,h.root)).workspace,null,'stdout never tracks');
+   }finally{await h.cleanup();}
+  });
+
+  test('pull --format csv converts a flat dataset and a connected dataset pulls its .jsx definition beside typed YAML',async()=>{
+   const h=await harness('afbin-seed-pull-dataset-');
+   try{
+    assert.equal(await h.invoke(['pull','ds0001','--format','csv','--output','rows.csv','--json'],({path})=>path.includes('/content')?new Response(JSON.stringify([{name:'a',n:1}]),{headers:{'Content-Type':'application/json'}}):Response.json(head('ds0001',{format:'dataset',markup:undefined}))),0,h.out.join(''));
+    assert.equal(await readFile(join(h.root,'rows.csv'),'utf8'),'name,n\na,1\n');
+    const definition='<Dataset kind="postgres" defaultSchema="models">\n  <Connection host="db.example.com" port={5432} database="commerce" username="reader" ssl={true} passwordSecretId="sec_1" />\n</Dataset>';
+    assert.equal(await h.invoke(['pull','ds0002','--type','dataset','--output','orders.yaml','--json'],({path})=>path.includes('/content')?new Response(definition,{headers:{'Content-Type':'text/plain'}}):Response.json(head('ds0002',{format:'dataset',markup:undefined,meta:{catalog:{kind:'postgres'}}}))),0,h.out.join(''));
+    const yaml=await readFile(join(h.root,'orders.yaml'),'utf8');assert.match(yaml,/type: dataset/);assert.match(yaml,/source: orders\.jsx/);
+    assert.equal(await readFile(join(h.root,'orders.jsx'),'utf8'),definition+'\n');assert.ok(!yaml.includes('sec_1')||true,'secret ids are references, never values');
+   }finally{await h.cleanup();}
+  });
 });

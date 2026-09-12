@@ -1,10 +1,12 @@
-import { test } from "node:test";
+import {test,describe} from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
+import {runCli} from "../src/dispatch";
+import { mkdtemp, writeFile, readFile, mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { installedHarnesses, parseLaunchFlags } from "../src/launcher";
 import { parseCommand } from "../src/commands";
+import {cliHarness} from './harness';
 
 test("discovers executable harness files on PATH, without running them or listing directories", async () => {
   const dir = await mkdtemp(join(tmpdir(), "afbin-picker-"));
@@ -79,4 +81,39 @@ for (const entry of [["remote"], ["remote", "codex", "--yolo"]]) test(`real term
     await new Promise<void>(resolve => server.close(() => resolve()));
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+describe('attaching to a remote session', () => {
+  const harness=(prefix:string)=>cliHarness(prefix,{flags:['--json','--server','https://example.com']});
+
+  test('remote --session attaches to an existing session as a controller and never creates a replacement',async()=>{
+   const h=await harness('afbin-seed-remote-attach-');
+   try{
+    let created=0;
+    const code=await runCli(['remote','--session','rs_1','--no-browser','--server','https://example.com'],{cwd:h.root,home:h.root,env:{},interactive:false,stdout:s=>h.out.push(s),stderr:()=>{},fetch:async(input,init)=>{const request=new Request(input,init);const path=new URL(request.url).pathname;if(request.method==='POST'&&path==='/api/remote/sessions')created++;if(path==='/api/remote/sessions/rs_1')return Response.json({session:{id:'rs_1',name:'pi',harness:'pi',cwd:'/w',machine:'m',cols:80,rows:24,online:false,exitCode:0,controller:'local',createdAt:'2026-09-11T00:00:00Z'},generation:'g1',seq:0,frames:[],snapshot:''});return Response.json({error:'not_found'},{status:404});}});
+    assert.equal(code,0,h.out.join(''));assert.equal(created,0);
+   }finally{await h.cleanup();}
+  });
+});
+
+describe('remote sessions as a collection', () => {
+  const harness=(prefix:string)=>cliHarness(prefix,{flags:['--json','--server','https://example.com'],account:null});
+   const account=(response:Response)=>{response.headers.set('X-Artifactbin-Account','usr_seed');return response;};
+
+  test('sessions list as a collection, pull as read-only YAML and terminate through delete',async()=>{
+   const h=await harness('afbin-seed-sessions-');
+   try{
+    const session={id:'rs_1',name:'pi',harness:'pi',machine:'laptop',cwd:'/work',status:'online',cols:120,rows:40,controller:'local',created_at:'2026-09-11T00:00:00Z'};
+    assert.equal(await h.invoke(['list','--type','session'],()=>account(Response.json({sessions:[session]}))),0,h.out.join(''));
+    assert.equal(h.last().sessions[0].id,'rs_1');
+    assert.equal(await h.invoke(['pull','--type','session','rs_1','--output','pi.yaml'],({path})=>account(Response.json(path==='/api/remote/sessions'?{sessions:[session]}:{session,generation:1,seq:0,frames:[],snapshot:''}))),0,h.out.join(''));
+    const yaml=await readFile(join(h.root,'pi.yaml'),'utf8');assert.match(yaml,/type: session/);assert.match(yaml,/id: rs_1/);
+    await writeFile(join(h.root,'pi.yaml'),yaml.replace('name: pi','name: renamed'));
+    assert.notEqual(await h.invoke(['push','pi.yaml'],()=>{throw new Error('session YAML is read-only; no request may be sent');}),0);
+    assert.equal(h.last().error.code,'readonly_resource');
+    let deletes=0;
+    assert.equal(await h.invoke(['delete','--type','session','rs_1'],({method})=>{if(method==='DELETE')deletes++;return account(Response.json(method==='DELETE'?{ok:true}:{session}));}),0,h.out.join(''));
+    assert.equal(deletes,1);assert.equal(h.last().operations[0].status,'terminated');
+   }finally{await h.cleanup();}
+  });
 });
