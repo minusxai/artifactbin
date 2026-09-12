@@ -22,7 +22,10 @@ describe('README.md', () => {
   });
   it('carries the two one-liners, the hosted instance and the license', () => {
     expect(readme()).toContain('curl -fsSL https://artifactbin.dev/install.sh | bash');
-    expect(readme()).toMatch(/git clone https:\/\/github\.com\/minusxai\/artifactbin[\s\S]*npm install[\s\S]*npm run setup[\s\S]*npm run dev/);
+    // `npm ci`, not `npm install`: AGENTS.md makes the pinned install the one
+    // documented way in, and a populated tree can hide a broken lockfile.
+    expect(readme()).toMatch(/git clone https:\/\/github\.com\/minusxai\/artifactbin[\s\S]*npm ci[\s\S]*npm run setup[\s\S]*npm run dev/);
+    expect(readme()).not.toMatch(/^npm install$/m);
     expect(readme()).toContain('npm run setup -- --yes --port <port>');
     expect(readme()).toContain('curl -fsS http://localhost:3030/health');
     expect(readme()).toContain('https://artifactbin.dev');

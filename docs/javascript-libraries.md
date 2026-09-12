@@ -1,19 +1,35 @@
 # Hosted JavaScript libraries
 
-Artifacts use their existing Helmet script and ordinary HTML/canvas. The
-author API has two entry points:
+A library runs inside a managed `<Iframe>`: the platform packages the frame's
+markup, styles and scripts into an opaque sandboxed child, and the script tags
+it declares are resolved through the asset pipeline before anything mounts.
+The deployment serves its own pinned bundles at
+`<origin>/libraries/<name>-<version>/index.js`, so the URL an author writes
+belongs to the server they publish to, not to any one host.
 
-```js
-const THREE = await artifact.library('three');
-const url = await artifact.resolve('ref:Abc123');
-const model = await new THREE.GLTFLoader().loadAsync(url);
+```jsx
+<Iframe title="3D model" height={450}>
+  <canvas id="scene" width="800" height="450" />
+  <script id="three-bundle" type="module" src="https://your-server.example/libraries/three-0.185.1/index.js" />
+  <script>{`
+    const THREE = await import(document.getElementById('three-bundle').src);
+    const bytes = await (await fetch('ref:Abc123')).arrayBuffer();
+    const model = await new THREE.GLTFLoader().parseAsync(bytes, '');
+  `}</script>
+</Iframe>
 ```
 
-`library(name)` imports a platform-owned ES module, lazily and once per page.
-`resolve(ref)` checks anonymous read access and returns a document-scoped URL.
-The subsequent GET rechecks access. Private/deleted/missing assets are 404,
-even for an owner; document permissions never confer asset access. A loaded
-asset is not retroactively erased from a reader's memory.
+Declared URLs must be absolute; a bare path is refused. `fetch('ref:<id>')`
+inside the frame resolves a published file to a document-scoped, anonymously
+served copy. Public and unlisted assets resolve; private, deleted and missing
+ones are refused even for the owner, because a document's permissions never
+confer asset access. A loaded asset is not retroactively erased from a
+reader's memory.
+
+Resolving anything outside the frame's own bytes requires the deployment to
+configure `APP__ASSETS_ORIGIN` — a distinct cached-byte hostname. Without it
+the resolver refuses external assets outright rather than letting author code
+reach a CDN. See [serving and security](serving-and-security.md).
 
 ## Adding a library
 
@@ -34,9 +50,9 @@ asset is not retroactively erased from a reader's memory.
 
 The registry produces the author-facing URL map. Library code is absent from
 the app and story entry graphs. Static modules have CORS for opaque-origin
-documents; the sandbox and no-third-party policy remain in force. Asset fetches
-use a path-exact `/a/<document>/resolve` CSP allowance, plus blob/data for
-embedded buffers and textures. The resolver never accepts arbitrary URLs.
+documents; the sandbox and no-third-party policy remain in force. Asset
+fetches use a path-exact `/a/<document>/resolve` CSP allowance, plus blob/data
+for embedded buffers and textures. The resolver never accepts arbitrary URLs.
 
 The first entry is Three.js 0.185.1 with OrbitControls and GLTFLoader. It
 supports procedural scenes and self-contained GLBs, including embedded PNG
@@ -44,6 +60,23 @@ textures. External model dependencies and additional decoder workers are not
 included. Authors own rendering, resizing, animation and GPU cleanup. Export
 uses the existing bounded settling window; long asynchronous scene preparation
 may exceed that window; there is no new scene-readiness protocol in this version.
+
+## Legacy: the Helmet author-script API
+
+Documents written before managed frames load libraries from a `<Helmet>`
+author script through two helpers, which `lib/story/script-api.ts` still
+defines:
+
+```js
+const THREE = await artifact.library('three');
+const url = await artifact.resolve('ref:Abc123');
+```
+
+`library(name)` imports the same platform-owned ES module, lazily and once per
+page; `resolve(ref)` checks anonymous read access and returns a
+document-scoped URL, and the subsequent GET rechecks it. **Neither helper is
+exposed inside the isolated `<Iframe>` realm.** New documents use the frame
+above; existing ones keep working until they migrate to it.
 
 ## File transport
 

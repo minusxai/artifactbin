@@ -163,10 +163,14 @@ After a successful push build on main, `Release tested afbin CLI` automatically 
 those exact binaries with `SHA256SUMS`. It does not execute downloaded artifacts. Existing published
 versions are skipped; partial drafts can be recovered by rerunning the workflow.
 
-1. Run `npm run release:cli` from the repository root. This defaults to a patch bump
-   and updates the package, lockfile, and installer together.
-2. Commit and merge the release PR. Once main CI passes, the tag and release are created automatically.
-3. Verify the release workflow succeeds before deploying the app serving the corresponding installer.
+1. Run `npm run release:cli` from the repository root. It increments the patch version and
+   rewrites `services/cli/package.json`, `package-lock.json`, `services/app/public/chat/install.sh`
+   and the release pointer `services/app/public/chat/release.json` together; it refuses to run
+   when those four disagree.
+2. Run `npm run generate:teaching -w services/cli`. The bundled teaching carries the CLI
+   version, so it is stale until it is regenerated.
+3. Commit and merge the release PR. Once main CI passes, the tag and release are created automatically.
+4. Verify the release workflow succeeds before deploying the app serving the corresponding installer.
    For a rollback, deploy an installer pinned to a previous release; users can also pass `--version` explicitly.
 
 Unrelated merges do not create additional releases. Stale main CI completions are skipped in favor of
