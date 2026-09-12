@@ -23,7 +23,7 @@ import type { Task } from './contracts';
  */
 export type Outcome = boolean | null | 'runaway';
 
-export interface SecondAttemptPlan {
+interface SecondAttemptPlan {
   /** Indexes into the task list that get one more turn — empty when nothing should. */
   indexes: number[];
 }
@@ -97,7 +97,7 @@ export function keepFirstAttempt(outDir: string, taskId: string): void {
   }
 }
 
-export interface SecondAttemptRun {
+interface SecondAttemptRun {
   ci: boolean;
   enabled: boolean;
   outDir: string;

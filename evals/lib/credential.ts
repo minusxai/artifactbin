@@ -18,7 +18,7 @@ import { type EvalMode } from './mode';
 import { slug } from './slug';
 
 /** Where a leg's token comes from. Both log in as a real account; only the MAILBOX differs. */
-export const CREDENTIAL_SOURCES = ['inbox-oauth', 'outbox-oauth'] as const;
+const CREDENTIAL_SOURCES = ['inbox-oauth', 'outbox-oauth'] as const;
 export type CredentialSource = (typeof CREDENTIAL_SOURCES)[number];
 
 /** `--credential` — an override for the source `credentialSourceFor` would have chosen. */
@@ -60,7 +60,7 @@ const REDIRECT_URI = 'http://127.0.0.1:9987/cb';
 const CLIENT_NAME = 'artifactbin eval driver';
 
 /** What the run can offer a mode besides the environment: the outbox of a server the driver booted. */
-export interface CredentialOptions {
+interface CredentialOptions {
   /** `lib/server devOutboxPath` for THIS run — set only when the driver booted the product itself. */
   localOutbox?: string;
 }
@@ -147,7 +147,7 @@ export function pickLoginMail(mails: InboundMail[], opts: { to: string; since: n
  * A line of the dev outbox, as `services/proxy/src/mail.ts devOutboxMailer` writes it: one JSON object
  * per line, the whole outgoing mail plus `createdAt` (`at` is accepted too, for a hand-written fixture).
  */
-export interface OutboxMail {
+interface OutboxMail {
   to?: string;
   text?: string;
   otp?: string;
@@ -193,7 +193,7 @@ export function callbackCode(location: string): string | null {
  * once. 0600: the run's transcript and the report are artifacts a CI job uploads.
  */
 
-export interface AcquireOptions {
+interface AcquireOptions {
   /** Where the product is, from the DRIVER's side. */
   base: string;
   env: CredentialEnv;
@@ -241,7 +241,7 @@ export async function acquireCredential(source: CredentialSource, opts: AcquireO
 }
 
 /** What `shareForScoring` needs: the product, the session, and the documents to hand out links to. */
-export interface ShareForScoringOptions {
+interface ShareForScoringOptions {
   /** The address to knock on — the task's proxy, so the calls are the driver's and land where they belong. */
   base: string;
   /** The owner's session (`Credential.cookie`). The door takes no bearer. */
@@ -318,7 +318,7 @@ async function logIn(o: { base: string; origin: string; email: string; read: Cod
  * between a deployment (a Resend inbox) and a server this driver booted (a file), so it is the only
  * thing injected — the polling loop, the login and the whole OAuth grant stay one code path.
  */
-export type CodeReader = (since: number) => Promise<string | null>;
+type CodeReader = (since: number) => Promise<string | null>;
 
 /** The eval's own inbound mailbox, read with the EVAL's key — never the product's. */
 function resendCodeReader(o: { key: string; email: string; fetch: typeof globalThis.fetch }): CodeReader {

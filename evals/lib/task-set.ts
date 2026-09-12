@@ -25,7 +25,7 @@ import path from 'node:path';
 import { TaskSchema, type Task } from './contracts';
 import { parseShardSpec } from '../../scripts/lib/shard.mjs';
 
-export interface DiscoveredTask {
+interface DiscoveredTask {
   id: string;
   file: string;
   /** Named `<id>.eval.json`: part of the comparison matrix. */
@@ -50,13 +50,13 @@ export function discoverTasks(dir: string): DiscoveredTask[] {
     .sort((a, b) => a.task.order - b.task.order);
 }
 
-export interface TaskSelector {
+interface TaskSelector {
   /** `eval` = the comparison matrix (`*.eval.json`); `ci` = the product guards. Ignored when `ids` is given. */
   set?: 'eval' | 'ci';
   ids?: string[];
 }
 
-export interface Shard {
+interface Shard {
   /** 1-based. */
   index: number;
   total: number;

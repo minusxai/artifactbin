@@ -14,7 +14,7 @@ import { captureBookmark, type EditorSelectionChange } from './bookmark';
 import { clipboardAst, type ClipboardKind } from './clipboard';
 import { editorDocument, editorSchema, normalizeIdentities, pasteFragment, sourceNodes, toggleInline } from './model';
 
-export interface FlowEditorProps {
+interface FlowEditorProps {
   nodes: JsxNode[];
   /** Path of the first node in this sibling region. */
   path: string;

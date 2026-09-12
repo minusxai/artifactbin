@@ -61,7 +61,7 @@ const NEEDS_A_DOCS_FETCH = new Set(['read_docs_before_write']);
  */
 const NEEDS_TOOL_TELEMETRY = new Set(['no_local_checkout_reads','used_cli']);
 
-export interface GateOptions {
+interface GateOptions {
   trafficObserved: boolean;
   vocabularyInstalled?: boolean;
   /** The task asked for MCP and this harness has no client, so it ran over REST. */
@@ -81,7 +81,7 @@ export function gatedChecks(gated: string[], opts: GateOptions): string[] {
   return out;
 }
 
-export interface Verdict {
+interface Verdict {
   passed: boolean;
   failed: string[];
 }

@@ -22,7 +22,7 @@ import type { LookupFunction } from 'node:net';
 import { WEB_INGEST_ALLOW_PRIVATE, WEB_INGEST_TIMEOUT_MS } from '@/lib/config';
 import { isForbiddenIp, parseWebUrl, WebIngestError, type WebIngestPolicy } from './guard';
 
-export interface WebResource {
+interface WebResource {
   bytes: Buffer;
   /** The remote Content-Type header, media type only — advisory; callers SNIFF. */
   contentType: string;
@@ -30,7 +30,7 @@ export interface WebResource {
   finalUrl: string;
 }
 
-export interface FetchWebResourceOpts {
+interface FetchWebResourceOpts {
   /** Hard cap; the stream is destroyed the moment it is crossed. */
   maxBytes: number;
   /** Accept header, when the caller knows what it wants. */

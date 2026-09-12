@@ -27,7 +27,7 @@ import { format as d3format } from 'd3-format';
 import { refName, type TableResult } from '@/lib/story/dataflow';
 import { cn } from './cn';
 
-export interface ControlOption { value: string; label: string }
+interface ControlOption { value: string; label: string }
 
 const SELECT_POPUP_TOKENS = [
   '--background', '--foreground', '--popover', '--popover-foreground',
@@ -123,7 +123,7 @@ const CALENDAR = (
 
 // ── Select ──────────────────────────────────────────────────────────────────
 
-export interface SelectControlProps {
+interface SelectControlProps {
   /** Cell chrome keeps the accessible name without repeating the column heading. */
   appearance?: 'field' | 'cell';
   /** Actions shown separately from selectable values (for example, add a reference). */
@@ -416,7 +416,7 @@ export function SelectControl({ appearance = 'field', children, multiple = false
 
 // ── Slider ──────────────────────────────────────────────────────────────────
 
-export interface SliderControlProps {
+interface SliderControlProps {
   label?: string;
   className?: string;
   min: number;
@@ -461,7 +461,7 @@ export function SliderControl({ label, className, min, max, step, format, prefix
 
 // ── DatePicker ──────────────────────────────────────────────────────────────
 
-export interface DateControlProps {
+interface DateControlProps {
   label?: string;
   className?: string;
   min?: string;
@@ -611,7 +611,7 @@ export function DateControl({ label, className, min, max, value, nullable, disab
 
 // ── Segmented ───────────────────────────────────────────────────────────────
 
-export interface SegmentedControlProps {
+interface SegmentedControlProps {
   label?: string;
   placeholder?: string;
   className?: string;
@@ -658,7 +658,7 @@ export function SegmentedControl({ label, placeholder = 'All', className, option
 
 // ── Switch ──────────────────────────────────────────────────────────────────
 
-export interface SwitchControlProps {
+interface SwitchControlProps {
   label?: string;
   className?: string;
   checked: boolean;

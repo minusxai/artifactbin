@@ -43,13 +43,13 @@ import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
 import { githubStarMarkup } from '@/lib/github-star';
 
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
-export interface ReaderSignIn {
+interface ReaderSignIn {
   unlocks: 'commenter' | 'editor';
   callbackUrl: string;
 }
 
 /** The fork ASK: an anchor the shell performs, since an opaque document cannot POST. */
-export interface ReaderFork {
+interface ReaderFork {
   href: string;
 }
 

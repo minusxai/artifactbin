@@ -3,7 +3,7 @@ import {CliError} from './errors';
 import {httpStatus,type HttpClient} from './http';
 import {setTimeout as delay} from 'node:timers/promises';
 
-export interface AttachOptions {
+interface AttachOptions {
  /** The shared client: refresh, sign-in and refusal codes are its job, not this module's. */
  client:HttpClient;id:string;interactive:boolean;
  onSession?:(url:string)=>void;stdout?:(value:string)=>void;signal?:AbortSignal;

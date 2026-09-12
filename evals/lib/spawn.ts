@@ -24,7 +24,7 @@ import type { HarnessInvocation } from './contracts';
 import { artifactIdFromText } from './score/product';
 import { longestSecret, scrubSecrets } from './secrets';
 
-export interface SpawnResult {
+interface SpawnResult {
   stdout: string;
   exitCode: number | null;
   timedOut: boolean;
@@ -135,7 +135,7 @@ export function chownArgv(user: string, dirs: string[]): string[] {
 }
 
 /** The three ways a path takes part in the switch: the agent OWNS it, the driver keeps it and merely lets the agent walk THROUGH it, or the driver keeps it and merely lets the agent READ it. */
-export interface RunAsDirs {
+interface RunAsDirs {
   /** The agent's own directories — its cwd and its config home. Handed over with `chownArgv`. */
   chown: string[];
   /** Directories the DRIVER keeps and only makes traversable (`+x`), because it still writes inside them. */
@@ -145,7 +145,7 @@ export interface RunAsDirs {
 }
 
 /** The paths a harness's ENVIRONMENT tells it to open, and the directories it must walk to reach them. */
-export interface ReadablePlan {
+interface ReadablePlan {
   /** Absolute file paths named by the environment, deduped — `lib/mitm` points three variables at one bundle. */
   files: string[];
   /** Every ancestor directory of those files and of the run's cwd/home/root, excluding `/` — deduped, deepest last. */

@@ -10,10 +10,10 @@ import { commitNormalizedMarkup, publishMarkupForArtifact, type ArtifactRow } fr
 import type { Db, Queryable } from './db';
 import { stampNodeIds } from './story/node-ids';
 
-export const NODE_IDENTITY_MIGRATION = 'source-node-ids';
-export const NODE_IDENTITY_MIGRATION_VERSION = 1;
+const NODE_IDENTITY_MIGRATION = 'source-node-ids';
+const NODE_IDENTITY_MIGRATION_VERSION = 1;
 
-export interface NodeIdentityMigrationOptions {
+interface NodeIdentityMigrationOptions {
   /** Integer in [1, 100]. */
   batchSize: number;
   /** Per-artifact bound; exceeding it reports a conflict without partial work. */
@@ -25,12 +25,12 @@ export interface NodeIdentityMigrationOptions {
   failBeforeCommit?: () => void;
 }
 
-export interface NodeIdentityMigrationConflict {
+interface NodeIdentityMigrationConflict {
   artifactId: string;
   reason: 'ambiguous_legacy_key' | 'history_limit';
 }
 
-export interface NodeIdentityMigrationReport {
+interface NodeIdentityMigrationReport {
   name: typeof NODE_IDENTITY_MIGRATION;
   version: typeof NODE_IDENTITY_MIGRATION_VERSION;
   cursor: string | null;

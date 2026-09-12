@@ -36,7 +36,7 @@ export function DialogClose({children, ...props}: React.ButtonHTMLAttributes<HTM
   return <button {...props} type="button" disabled={props.disabled || !context || context.busy} onClick={() => context?.setOpen(false)}>{children}</button>;
 }
 
-export interface DialogContentProps extends React.DialogHTMLAttributes<HTMLDialogElement> {
+interface DialogContentProps extends React.DialogHTMLAttributes<HTMLDialogElement> {
   run?: unknown;
   onSubmitMutation?: () => Promise<unknown>;
   unavailable?: string | null;

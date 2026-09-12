@@ -3,7 +3,7 @@ import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { URL_ATTRS, URL_LIST_ATTRS } from '@/lib/jsx/url-attrs';
 import { parsePing, parseSrcset } from './managed-url-list';
 
-export interface ManagedIframeScript { type: 'classic' | 'module'; source?: string; src?: string }
+interface ManagedIframeScript { type: 'classic' | 'module'; source?: string; src?: string }
 export interface ManagedIframeContent { html: string; scripts: ManagedIframeScript[] }
 const LIMIT = 262144;
 const htmlTags = new Set([...STORY_HTML_TAGS].map(tag => tag.toLowerCase()));

@@ -13,7 +13,7 @@ import { anchorAt, scrollTargetFor, type AnchorCandidate, type ScrollAnchor } fr
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 
 /** Every element the document can be anchored to, in page coordinates. */
-export function documentCandidates(doc: Document): AnchorCandidate[] {
+function documentCandidates(doc: Document): AnchorCandidate[] {
   const scrollY = doc.defaultView?.scrollY ?? 0;
   const out: AnchorCandidate[] = [];
   for (const el of doc.querySelectorAll<HTMLElement>(`[${AST_PATH_ATTR}]`)) {

@@ -16,7 +16,7 @@ import { getDb,type Queryable } from '@/lib/db';
 import { emit } from '@/lib/events';
 
 /** What the subject of every relation is today: an account. */
-export const RELATION_SUBJECT_KIND = 'user' as const;
+const RELATION_SUBJECT_KIND = 'user' as const;
 
 /** One catalogue entry: the object kind this verb points at, and its two past tenses. */
 type RelationEvent = (typeof RELATION_EVENTS)[RelationVerb];

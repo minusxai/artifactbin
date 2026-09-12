@@ -21,7 +21,7 @@ import type { Dataflow } from '@/lib/story/dataflow';
 import { storyBodyFor } from '@/lib/story/body';
 import type { AssetLookup } from '@/lib/story/asset-url';
 
-export interface StoryUpdateParts {
+interface StoryUpdateParts {
   /** The body — what the runtime re-renders. The Helmet is never in it. */
   nodes: JsxNode[];
   /** The author's own `<Helmet>` `<style>`, or null when there is none. */

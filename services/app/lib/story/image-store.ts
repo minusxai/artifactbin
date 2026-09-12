@@ -14,7 +14,7 @@ import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';
 export const IMAGE_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'] as const;
 
 /** Where an image's bytes are, plus what to stamp into `meta`. */
-export interface ImageLocation {
+interface ImageLocation {
   objectKey: string;
   bytes: number;
 }
@@ -54,13 +54,13 @@ export async function storeImage(buffer: Buffer, contentType: string, store: Pic
 }
 
 /** The bytes and their type, ready to serve. */
-export interface StoredImage {
+interface StoredImage {
   body: Buffer;
   contentType: string;
 }
 
 /** Which stored copy of the image is wanted: the full one, or a width we stored. */
-export interface LoadImageOptions {
+interface LoadImageOptions {
   /**
    * The `w=` a `srcset` asked for. It NAMES A WIDTH WE STORED — never a resize
    * anyone may ask for — so the one value that selects the narrow copy is the

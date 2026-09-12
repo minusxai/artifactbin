@@ -230,7 +230,7 @@ export async function importWebAsset(url: string, by: WebAssetImporter, kind: We
  * decide who pays, and nothing that would make this module ask lib/artifacts a
  * question (which imports THIS module: the read ACL stays at the route).
  */
-export interface DocumentAssetTarget {
+interface DocumentAssetTarget {
   id: string;
   token_id: string | null;
   user_id: string | null;
@@ -375,14 +375,14 @@ export const assetWarningFor = (error: WebAssetRefused): AssetWarning =>
   ({ code: error.code, url: error.url, fix: FIXES[error.code] ?? error.message });
 
 /** What a refresh moved, what it left alone, and what it could not do. */
-export interface AssetRefreshResult {
+interface AssetRefreshResult {
   refreshed: string[];
   unchanged: string[];
   failed: AssetWarning[];
 }
 
 /** A URL's kind, read back from what we stored for it. */
-export const kindOfRow = (row: WebAssetRow): WebAssetKind =>
+const kindOfRow = (row: WebAssetRow): WebAssetKind =>
   (SCRIPT_TYPES.has(row.content_type) ? 'script' : row.content_type === 'application/octet-stream' ? 'binary' : row.content_type.startsWith('font/') ? 'font' : row.content_type === 'application/pdf' ? 'pdf' : 'image');
 
 /**

@@ -65,7 +65,7 @@ function page(title: string, body: string, status = 200, redirectUri = ''): Resp
   );
 }
 
-export interface OAuthRoutesOptions {
+interface OAuthRoutesOptions {
   oauth: OAuthStore;
   pairing: DevicePairing;
   upstream: Upstream;

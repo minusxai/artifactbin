@@ -1,5 +1,5 @@
 /** A hovered Vega facet cell, expressed in root data-rectangle coordinates. */
-export interface FacetCellHit {
+interface FacetCellHit {
   x1: number;
   y1: number;
   x2: number;

@@ -48,7 +48,7 @@ const VegaChart = dynamic(() => import('@/components/viz/VegaChart').then((m) =>
   loading: () => waiting('loading chart…'),
 });
 
-export interface QuestionEmbedProps {
+interface QuestionEmbedProps {
   /** `"$name"` — a table declared in the document (a <Query> or a table <Value>). */
   data: unknown;
   viz: Record<string, unknown> | undefined;

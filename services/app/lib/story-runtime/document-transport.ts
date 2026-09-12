@@ -15,7 +15,7 @@ import { createFetchTransport, type FetchLike } from './fetch-transport';
 import { createRelayTransport } from './relay-transport';
 import type { QueryTransport } from './store';
 
-export interface DocumentWindow {
+interface DocumentWindow {
   parent: unknown;
   self?: unknown;
   addEventListener: Window['addEventListener'];

@@ -4,7 +4,7 @@ import { VIZ_DATASET_MAIN } from '@/lib/viz/types';
 /** The dark-theme accent (globals.css --color-accent) — legible on both surfaces. */
 const ACCENT = '#3fe77b';
 
-export interface SparklineOptions {
+interface SparklineOptions {
   width?: number;
   height?: number;
 }

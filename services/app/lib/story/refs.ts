@@ -23,7 +23,7 @@ import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 
-export interface RefUse {
+interface RefUse {
   id: string;
   kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
   /** Datasets are only ever reached as `ref_<id>` tables inside a <Query>'s or <Mutation>'s SQL. */
@@ -38,7 +38,7 @@ export interface RefUse {
 }
 
 /** A dataset's write ACL (lib/artifacts DatasetAccess, mirrored here so this module stays DB-free). */
-export type RefAccess = 'read' | 'readwrite';
+type RefAccess = 'read' | 'readwrite';
 
 export interface ResolvedRef {
   catalog?:import("@/lib/datasets/types").DatasetCatalog;

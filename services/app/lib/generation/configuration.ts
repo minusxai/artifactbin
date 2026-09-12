@@ -60,7 +60,7 @@ export function parseGenerationModels(
 
 /** Operator permission is separate from the dataset owner's policy. Each pool
  * caps dispatches per UTC day and tokens per call; it is not a dollar estimate. */
-export interface PublicGenerationPool {models:string[];callsPerDay:number;maxTokens:number}
+interface PublicGenerationPool {models:string[];callsPerDay:number;maxTokens:number}
 export function parsePublicGenerationPools(source:string|undefined):Record<string,PublicGenerationPool>{
  if(!source?.trim())return {};
  const value:unknown=JSON.parse(source);

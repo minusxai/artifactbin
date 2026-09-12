@@ -16,14 +16,14 @@ const run=promisify(execFile);
 /** The selected server names the release it speaks; its bytes come from the project's own releases. */
 const releasePointer='/chat/release.json';
 const downloads='https://github.com/minusxai/artifactbin/releases/download';
-export type Installation={kind:'standalone';path:string};
+type Installation={kind:'standalone';path:string};
 interface ReleasePointer {version:string;protocol:number}
 interface ReleaseManifest {version:string;protocol:number;platform:string;arch:string;binary:{file:string;sha256:string};skills:{file:string;sha256:string}}
 interface SkillBundle {version:string;protocol:number;files:Record<string,string>}
 interface PendingUpdate {schema:1;installation:Installation;manifest:ReleaseManifest;skills:string;selected:SkillHarness[];before?:string;mode?:number;backup?:string}
 interface UpdateOptions {home:string;server:string;stallMs?:number;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
-export interface UpdatePreview {dry_run:true;server:string;release:ReleasePointer;binary:{installation:'standalone'|'unmanaged';path?:string;current:string;available:string;change:'update'|'current'|'unavailable';reason?:string;asset?:string};skills:SkillPlan[]}
-export interface UpdateResult {version:string;protocol:number;recovered:boolean;backup?:string;installations:SkillInstallation[];harnesses:SkillHarness[]}
+interface UpdatePreview {dry_run:true;server:string;release:ReleasePointer;binary:{installation:'standalone'|'unmanaged';path?:string;current:string;available:string;change:'update'|'current'|'unavailable';reason?:string;asset?:string};skills:SkillPlan[]}
+interface UpdateResult {version:string;protocol:number;recovered:boolean;backup?:string;installations:SkillInstallation[];harnesses:SkillHarness[]}
 const semver=(value:unknown):value is string=>typeof value==='string'&&/^\d+\.\d+\.\d+$/.test(value);
 function compare(a:string,b:string):number{const x=a.split('.').map(BigInt),y=b.split('.').map(BigInt);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i]?1:-1;return 0;}
 /** The pointer names a version and the protocol that server speaks; any other field is ignored. */
@@ -40,7 +40,7 @@ function verifySkills(bytes:Buffer,manifest:ReleaseManifest):SkillBundle{
  return bundle;
 }
 /** Downloads abort when no bytes arrive for `stallMs`, never on total duration: a slow link may take as long as it needs. */
-export const DOWNLOAD_STALL_MS=60_000;
+const DOWNLOAD_STALL_MS=60_000;
 async function download(url:string,fetcher:typeof fetch,maxBytes:number,stallMs=DOWNLOAD_STALL_MS):Promise<Buffer>{
  const control=new AbortController();let watchdog=setTimeout(()=>control.abort(),stallMs);
  const progressed=()=>{clearTimeout(watchdog);watchdog=setTimeout(()=>control.abort(),stallMs);};
@@ -62,7 +62,7 @@ async function downloadWith(url:string,fetcher:typeof fetch,maxBytes:number,sign
  return Buffer.concat(chunks);
 }
 /** Only the verified standalone executable is self-updating; nothing else is replaced in place. */
-export async function detectInstallation(executable=process.execPath,standalone=isSea()):Promise<Installation>{
+async function detectInstallation(executable=process.execPath,standalone=isSea()):Promise<Installation>{
  if(standalone)return{kind:'standalone',path:await realpath(executable)};
  throw new CliError('unmanaged_installation','This afbin was not installed as a verified standalone executable.','Install it with https://artifactbin.dev/chat/install.sh, then rerun afbin update.');
 }

@@ -63,7 +63,7 @@ export interface AnnotationAreaRange {
  * about a node, and this says which part of it, in whichever way the person
  * showed it.
  */
-export interface AnnotationTargetRange { v: 1; kind: 'target'; target: CommentTarget; range?: AnnotationTextRange | AnnotationAreaRange }
+interface AnnotationTargetRange { v: 1; kind: 'target'; target: CommentTarget; range?: AnnotationTextRange | AnnotationAreaRange }
 export type AnnotationRange = AnnotationTextRange | AnnotationAreaRange | AnnotationTargetRange;
 export const isTargetRange = (range: AnnotationRange | null | undefined): range is AnnotationTargetRange => !!range && range.kind === 'target';
 export const refinementRange = (range: AnnotationRange | null | undefined): AnnotationTextRange | AnnotationAreaRange | null => isTargetRange(range) ? range.range ?? null : range ?? null;
@@ -77,7 +77,7 @@ export interface AnnotationRect { x: number; y: number; width: number; height: n
 /** A drag shorter than this in BOTH directions is a click, not a drawn area. */
 export const ANNOTATION_AREA_MIN_PX = 6;
 /** Fractions are stored to this many decimals — a box is a hint, not a survey. */
-export const ANNOTATION_BOX_DECIMALS = 4;
+const ANNOTATION_BOX_DECIMALS = 4;
 
 /** Caller-supplied box → the stored shape, or null for anything outside the grammar. */
 export function parseAnnotationBox(value: unknown): AnnotationBox | null {
@@ -180,9 +180,9 @@ const intersects = (a: AnnotationRect, b: AnnotationRect): boolean =>
   a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 /** How much selected text a comment keeps. Longer selections are cut, never refused. */
-export const ANNOTATION_QUOTE_MAX = 2000;
+const ANNOTATION_QUOTE_MAX = 2000;
 /** A selection crossing more than this many text runs is not a quote, it is a document. */
-export const ANNOTATION_RANGE_MAX_PARTS = 64;
+const ANNOTATION_RANGE_MAX_PARTS = 64;
 const REL_MAX_LENGTH = 64;
 
 /**

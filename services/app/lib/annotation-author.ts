@@ -17,7 +17,7 @@ const AGENT_LABELS: Partial<Record<Harness, string>> = {
   zed: 'Zed',
 };
 
-export const agentLabelForHarness = (harness: Harness | null | undefined): string | null =>
+const agentLabelForHarness = (harness: Harness | null | undefined): string | null =>
   harness ? AGENT_LABELS[harness] ?? null : null;
 
 /** An explicit header/branded UA wins; remembered identity fills runtime-only UAs such as `node`. */

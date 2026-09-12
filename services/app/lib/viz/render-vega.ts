@@ -37,7 +37,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 // because this pipeline is where every view build consumes the plan.
 export { computeFacetLayoutPlan, type FacetLayoutPlan };
 
-export type ResolvedEnvelopeSpec =
+type ResolvedEnvelopeSpec =
   | { ok: true; spec: Record<string, unknown>; engine: 'vega-lite' | 'vega'; assets?: Record<string, string> }
   | { ok: false; error: string };
 
@@ -122,7 +122,7 @@ export function toVegaSpec(
   return { vegaSpec: compileVegaLite(resolved.spec, mode, options) };
 }
 
-export interface VegaViewOptions {
+interface VegaViewOptions {
   renderer: 'svg' | 'canvas' | 'none';
   /** DOM container (browser only). */
   container?: HTMLElement;
@@ -230,7 +230,7 @@ const LEGEND_AXIS_GUTTER_PX = 0; // y-axis labels + title the legend row can't u
 const LEGEND_PADDING_GUTTER_PX = 16; // axis-less charts (pie): view padding only
 const LEGEND_MAX_ROWS = 3; // beyond this the legend eats the chart — truncate instead
 
-export interface LegendWrapPlan {
+interface LegendWrapPlan {
   /** Grid column count baked onto the legend. */
   columns: number;
   /** Explicit entry list when truncated to LEGEND_MAX_ROWS (display order). */
@@ -454,7 +454,7 @@ function injectXLabelAngle(prepared: Record<string, unknown>, angle: number): vo
   x.axis = { ...axis, labelAngle: angle };
 }
 
-export interface CompileVegaLiteOptions {
+interface CompileVegaLiteOptions {
   /** Planned legend wrap (computeLegendPlan) — null/undefined = single row. */
   legendPlan?: LegendWrapPlan | null;
   /** Planned x label angle (computeXLabelAngle) — null/undefined = VL defaults. */

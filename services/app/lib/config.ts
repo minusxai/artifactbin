@@ -243,9 +243,6 @@ export const MAX_FILE_BYTES = Number(env('FILES', 'MAX_BYTES') ?? '50000000');
 
 export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 
-/** Sender for login codes. Must be a domain verified in Resend, or sends fail. */
-export const LOGIN_EMAIL_FROM = env('EMAIL', 'FROM') ?? 'artifactbin <login@example.com>';
-
 /**
  * The externally-visible origin, for absolute URLs built OUTSIDE a request
  * scope (the MCP tools' url echoes). HTTP routes derive it from the request.

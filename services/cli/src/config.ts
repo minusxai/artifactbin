@@ -14,7 +14,7 @@ export function configDir(home = homedir(), env: NodeJS.ProcessEnv = process.env
   return env.ARTIFACTBIN_HOME ? env.ARTIFACTBIN_HOME : join(home, ".artifactbin");
 }
 /** Credentials are kept per origin, so switching servers never re-prompts or overwrites another origin's token. */
-export function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
+function credentialPath(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): string {
   return join(configDir(home, env), "servers", `${digest(server).slice(0, 16)}.env`);
 }
 const CREDENTIAL_KEYS = /^\s*(?:export\s+)?(ARTIFACTBIN_URL|ARTIFACTBIN_TOKEN|ARTIFACTBIN_REFRESH_TOKEN|ARTIFACTBIN_CLIENT_ID|ARTIFACTBIN_EXPIRES_AT)\s*=\s*(.*?)\s*$/;

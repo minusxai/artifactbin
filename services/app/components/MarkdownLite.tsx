@@ -101,7 +101,7 @@ function renderBlock(node: MdNode, key: number): ReactNode {
 }
 
 /** The parsed body as elements — exported for anything holding nodes already. */
-export function renderMarkdownLite(nodes: MdNode[]): ReactNode {
+function renderMarkdownLite(nodes: MdNode[]): ReactNode {
   return nodes.map((node, i) => renderBlock(node, i));
 }
 

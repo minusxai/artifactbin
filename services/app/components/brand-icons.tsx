@@ -1,6 +1,6 @@
 /**
  * Brand marks for the get-started picker, in their PROPER colors, inlined
- * (from upstream Pi/OpenCode and lobehub's lobe-icons; GitHub's trademark
+ * (from lobehub's lobe-icons; GitHub's trademark
  * comes from its official brand toolkit, attributed in lib/github-mark)
  * so the strict no-external-request posture holds and, crucially, so the
  * monochrome marks inherit the theme: served through <img> they would resolve
@@ -22,16 +22,6 @@ const svgProps = ({ size = 16, className }: IconProps) =>
     'aria-hidden': true,
     className,
   }) as const;
-
-/** Anthropic's corporate "AI" mark. Monochrome by brand, so it follows the
- * surrounding theme ink while remaining distinct from Claude's starburst. */
-export function AnthropicIcon(props: IconProps) {
-  return (
-    <svg {...svgProps(props)} fill="currentColor" fillRule="evenodd">
-      <path d="M13.827 3.52h3.603L24 20h-3.603l-6.57-16.48zm-7.258 0h3.767L16.906 20h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm4.132 9.959L8.453 7.687 6.205 13.48H10.7z" />
-    </svg>
-  );
-}
 
 /** Claude Code's pixel glyph — Anthropic terracotta. */
 export function ClaudeCodeIcon(props: IconProps) {
@@ -79,31 +69,6 @@ export function CodexIcon(props: IconProps) {
           <stop offset="1" stopColor="#3941FF" />
         </linearGradient>
       </defs>
-    </svg>
-  );
-}
-
-/** Pi's pixel P+i mark. Monochrome by brand; the upstream SVG is white for
- * its dark site, so currentColor makes that same mark legible in both themes. */
-export function PiIcon(props: IconProps) {
-  return (
-    <svg {...svgProps(props)} viewBox="0 0 800 800" fill="currentColor" fillRule="evenodd">
-      <path d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z" />
-      <path d="M517.36 400H634.72V634.72H517.36Z" />
-    </svg>
-  );
-}
-
-/** OpenCode's square O. Its official light/dark assets only swap neutrals;
- * currentColor plus a quiet inset preserves that relationship theme-wide. */
-export function OpenCodeIcon(props: IconProps) {
-  return (
-    <svg {...svgProps(props)} viewBox="0 0 300 300" fill="none">
-      <path d="M210 240H90V120H210V240Z" fill="currentColor" opacity=".2" />
-      <path
-        d="M210 60H90V240H210V60ZM270 300H30V0H270V300Z"
-        fill="currentColor"
-      />
     </svg>
   );
 }

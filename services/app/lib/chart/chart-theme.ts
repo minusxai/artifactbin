@@ -15,7 +15,7 @@ export function getChartFontFamily(): string {
 }
 
 // Flat UI Colors from theme.ts + extended palette for many-series charts
-export const CHART_COLORS = {
+const CHART_COLORS = {
   primary: '#2980b9',      // Belize Hole (blue)
   danger: '#c0392b',       // Pomegranate (red)
   teal: '#16a085',         // Green Sea (teal)

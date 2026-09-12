@@ -42,7 +42,7 @@ import { fileGlyphName } from "@/lib/story-ui/file-glyphs"
 import { sparklineSvg } from "@/lib/viz/spark-markup"
 import type { Row } from "@/lib/story/dataflow"
 
-export interface FilesProps extends Omit<React.ComponentProps<"ul">, "children"> {
+interface FilesProps extends Omit<React.ComponentProps<"ul">, "children"> {
   /** The bound rows — a folder's children table (lib/folders CHILDREN_COLUMNS). */
   rows?: Row[]
   /** Density: `icons` is the compact grid a folder is scaffolded with; `tiles` is the shelf's card size. */

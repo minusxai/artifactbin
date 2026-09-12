@@ -30,7 +30,7 @@ export const helpTopics:Record<string,string>={
 };
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
 /** Topics and commands that share a prefix or a substring with a mistyped topic — `publish` → the publishing-* set — so the agent's next call is the right one instead of a guess. */
-export function closestTopics(topic:string):string[]{
+function closestTopics(topic:string):string[]{
  const wanted=topic.toLowerCase();
  if(!wanted)return [];
  const names=[...Object.keys(helpTopics),...commands.map(command=>command.name)];

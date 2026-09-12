@@ -17,7 +17,7 @@ import { canAnnotate, canEdit, canGovern, type ArtifactRole } from '@/lib/share-
 const RoleContext = createContext<ArtifactRole>('viewer');
 
 /** This viewer's role — the shell's one signal. Default `viewer`: a surface rendered outside the shell is a reading view. */
-export const useArtifactRole = () => useContext(RoleContext);
+const useArtifactRole = () => useContext(RoleContext);
 /*
  * The three capability questions, answered by the SAME lattice predicates the
  * server door uses (lib/share-roles). They were hand-written comparisons once,
@@ -32,7 +32,7 @@ export const useCanEditArtifact = () => canEdit(useArtifactRole());
 /** May annotate: the owner, an editor, or a commenter. */
 export const useCanAnnotateArtifact = () => canAnnotate(useArtifactRole());
 
-export interface ArtifactShellProps {
+interface ArtifactShellProps {
   /** This viewer's role on the artifact (decided by the page, server-side). */
   role: ArtifactRole;
   children: React.ReactNode;

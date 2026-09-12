@@ -37,7 +37,7 @@ import { MUTATION_TAG, QUERY_TAG, VALUE_TAG, carriesRef, parseMutationDecl, pars
 export const HELMET_TAG = 'Helmet';
 
 /** A `<meta name content>` pair — the only meta shape the grammar admits. */
-export interface HelmetMeta {
+interface HelmetMeta {
   name: string;
   content: string;
 }

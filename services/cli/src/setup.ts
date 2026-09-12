@@ -2,7 +2,7 @@ import {installSkills,selectSkills,harnessLabels,type SkillChoice,type SkillHarn
 import {type Style} from './style';
 
 /** Offline setup owns selection before any writes, including an explicitly empty selection. */
-export interface SetupOptions {
+interface SetupOptions {
  home:string;env?:NodeJS.ProcessEnv;interactive:boolean;yes?:boolean;requested?:string[];
  choose?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;
 }

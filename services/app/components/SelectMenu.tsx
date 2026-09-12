@@ -28,7 +28,7 @@ import * as PopoverPrimitive from '@radix-ui/react-popover';
 import { useState } from 'react';
 import { useTrustedPortalContainer } from './TrustedUi';
 
-export interface SelectMenuOption {
+interface SelectMenuOption {
   value: string;
   label: string;
   /** Dim annotation after the label — a column's type, a dataset's row count. */

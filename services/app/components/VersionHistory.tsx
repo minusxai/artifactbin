@@ -17,7 +17,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { timeAgo } from '@/components/ui';
 import type { ArtifactVersionSummary } from '@/lib/story/use-versions';
 
-export interface VersionHistoryProps {
+interface VersionHistoryProps {
   versions: ArtifactVersionSummary[];
   /** The live version — named at the top so "where am I" is never a guess. */
   currentVersion: number;

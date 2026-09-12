@@ -88,7 +88,7 @@ const VARIANT_MIN_SOURCE_WIDTH = 1536;
 /** Roughly the width of a fingernail — enough for colour and shape, nothing more. */
 const PLACEHOLDER_EDGE = 16;
 
-export interface OptimisedImage {
+interface OptimisedImage {
   /** The bytes to store and serve — the conversion, or the original when that was better. */
   buffer: Buffer;
   contentType: string;

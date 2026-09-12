@@ -146,7 +146,7 @@ export async function restoreArtifactFor(actor: TokenActor, id: string): Promise
 }
 
 /** One row of the owner's trash. */
-export interface TrashEntry {
+interface TrashEntry {
   id: string;
   title: string | null;
   format: string;

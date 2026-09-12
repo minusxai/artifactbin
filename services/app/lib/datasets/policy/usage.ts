@@ -6,7 +6,7 @@ import { GENERATION_PUBLIC_POOLS } from '@/lib/config';
 import { type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import { recheckMutation, type MutationDocument } from './index';
 
-export function generationGrant(
+function generationGrant(
   policy: DatasetPolicy,
   request: GenerationRequest,
   document?: MutationDocument,

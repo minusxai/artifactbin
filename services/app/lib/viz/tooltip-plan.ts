@@ -27,7 +27,7 @@ const { bin: vegaBin, quartiles: vegaQuartiles } = vegaExports as unknown as {
   quartiles: (values: number[]) => [number, number, number];
 };
 
-export interface TooltipSeriesRef {
+interface TooltipSeriesRef {
   /** Query-result column for a wide series (fold field / single measure). */
   field: string;
   /** Display label. */
@@ -36,14 +36,14 @@ export interface TooltipSeriesRef {
   colorKey: string;
 }
 
-export type TooltipSeries =
+type TooltipSeries =
   | { kind: 'wide'; series: TooltipSeriesRef[] }
   | { kind: 'long'; colorField: string; valueField: string }
   | { kind: 'bins'; valueField: string; maxbins: number }
   | { kind: 'stats'; valueField: string; label: string }
   | { kind: 'waterfall'; categoryField: string; valueField: string; valueLabel: string };
 
-export interface TooltipFacetRef {
+interface TooltipFacetRef {
   /** Query-result column that partitions rows into facet panels. */
   field: string;
   /** Display label for the facet dimension. */
@@ -265,7 +265,7 @@ export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | n
   return { xField, xTitle, xFormat, xTemporal: x.type === 'temporal', valueFormat, series };
 }
 
-export interface TooltipRow {
+interface TooltipRow {
   label: string;
   value: number;
   /** Key to resolve the swatch from the chart's color scale. */
@@ -459,7 +459,7 @@ export function buildTooltipData(rows: Array<Record<string, unknown>>, plan: Too
 const escapeHtml = (s: string): string =>
   s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] as string));
 
-export interface RenderTooltipOptions {
+interface RenderTooltipOptions {
   xTitle: string;
   /** Resolve a series' swatch color from its colorKey. */
   colorFor: (colorKey: string) => string;

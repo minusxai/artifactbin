@@ -129,7 +129,7 @@ export const TemplateChip = ({ template }: { template: string | null }) => {
   );
 };
 
-export interface ThemePickerProps {
+interface ThemePickerProps {
   /** The theme in force, or null for a document that has never been themed. */
   value: StoryThemeName | null;
   /**

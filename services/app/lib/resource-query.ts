@@ -13,7 +13,7 @@ import type {TableResult} from '@artifactbin/contracts';
 import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
 
 /** Query validation, pagination and authorization are independent of the transport. */
-export async function queryResource(actor:TokenActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Response>{
+async function queryResource(actor:TokenActor,id:string,body:Record<string,unknown>,signal?:AbortSignal,checkActor?:()=>Promise<void>):Promise<Response>{
  if(Object.keys(body).some(key=>!['sql','values','name','limit','cursor','refresh'].includes(key)))return json({error:'unknown_query_fields'},400);
  if(body.sql!==undefined&&(typeof body.sql!=='string'||!body.sql.trim())||body.name!==undefined&&(typeof body.name!=='string'||!body.name)||body.refresh!==undefined&&typeof body.refresh!=='boolean')return json({error:'invalid_query'},400);
  const parsed=parseQueryRequest({...(body.values===undefined?{}:{values:body.values})});if(parsed instanceof Response)return parsed;

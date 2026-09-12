@@ -7,9 +7,9 @@ import type { Mailer, OutgoingMail } from './auth/human';
 export class MailNotConfigured extends Error { constructor() { super('mail is not configured (EMAIL__RESEND_API_KEY)'); } }
 export class MailSendFailed extends Error { constructor(public readonly status: number, body: string) { super(`mail send failed: ${status} ${body.slice(0, 200)}`); } }
 
-export interface ResendOptions { apiKey?: string; from: string; fetch?: typeof fetch }
-export interface RuntimeMailerOptions extends ResendOptions { publicBaseUrl: string; devOutboxPath?: string }
-export interface DevOutboxOptions { path?: string; reset?: boolean; log?: (line: string) => void }
+interface ResendOptions { apiKey?: string; from: string; fetch?: typeof fetch }
+interface RuntimeMailerOptions extends ResendOptions { publicBaseUrl: string; devOutboxPath?: string }
+interface DevOutboxOptions { path?: string; reset?: boolean; log?: (line: string) => void }
 
 export const DEV_OUTBOX_RELATIVE_PATH = '.artifactbin/dev-mail.jsonl';
 export const DEV_OUTBOX_DEFAULT_PATH = resolve(tmpdir(), 'artifactbin-dev-mail.jsonl');

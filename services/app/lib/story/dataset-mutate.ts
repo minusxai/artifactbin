@@ -56,7 +56,7 @@ export function setDatasetRowCap(cap: number | null): void {
 }
 const datasetRowCap = (): number => rowCapOverride ?? MAX_QUERY_ROWS;
 
-export interface MutationRefused {
+interface MutationRefused {
   /**
    * `invalid_sql` = the statement itself; `dataset_full` = the row cap;
    * `contended` = too many concurrent writers to land inside the retry budget.
@@ -69,7 +69,7 @@ export interface MutationRefused {
   detail: string;
 }
 
-export interface MutationApplied {
+interface MutationApplied {
   row: ArtifactRow;
   /** Rows the statement changed (DuckDB's own count). */
   affected: number;

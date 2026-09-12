@@ -25,7 +25,7 @@ import { withIntent } from '@/lib/intent';
 import { useRouter } from '@/lib/navigation';
 
 /** What the last attempt produced: the refusal lines, or nothing. */
-export interface ForkState {
+interface ForkState {
   /** In flight — the surfaces disable themselves rather than firing twice. */
   busy: boolean;
   /** The door's own words, when it refused. Null while nothing is wrong. */
@@ -50,7 +50,7 @@ const loginBack = (): string =>
  * The request, its outcomes and the two navigations, as a hook so both
  * surfaces share one implementation.
  */
-export function useForkArtifact(id: string): ForkState {
+function useForkArtifact(id: string): ForkState {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string[] | null>(null);
@@ -114,7 +114,7 @@ export function useForkArtifact(id: string): ForkState {
 }
 
 /** The refusal, said where the act was asked for. */
-export function ForkRefusal({ lines, onDismiss }: { lines: string[]; onDismiss: () => void }) {
+function ForkRefusal({ lines, onDismiss }: { lines: string[]; onDismiss: () => void }) {
   return (
     <div aria-label="Fork refused" role="status" className="mt-1 rounded-[5px] border border-edge bg-raised px-2 py-2 font-mono text-[11px] text-muted">
       {lines.map((line) => <p key={line} className="whitespace-pre-wrap">{line}</p>)}

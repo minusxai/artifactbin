@@ -17,7 +17,7 @@ export interface SkillKit {
   skillDirs: string[];
 }
 
-export const HARNESS_TO_SKILL: Record<Harness, SkillHarness> = { 'claude-code': 'claude', codex: 'codex', pi: 'pi', opencode: 'opencode' };
+const HARNESS_TO_SKILL: Record<Harness, SkillHarness> = { 'claude-code': 'claude', codex: 'codex', pi: 'pi', opencode: 'opencode' };
 
 /** The environment each adapter hands its harness, which afbin is also given so eager init detects the same harness. */
 export function harnessEnv(harness: Harness, homeDir: string): Record<string, string> {

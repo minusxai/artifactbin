@@ -23,11 +23,11 @@ import { DRIVER_HEADER } from './proxy';
 import { cliPreinstalled, type EvalMode } from './mode';
 import type { LedgerEntry } from './contracts';
 
-export type PairingSource =
+type PairingSource =
   | { /** The recording proxy's ledger for this task: pairings the agent's CLI started. */ ledgerPath: string; homeDir?: undefined }
   | { /** The HOME of a driver-run `afbin auth`: its pending-pairing file. */ homeDir: string; ledgerPath?: undefined };
 
-export type ApproverOptions = PairingSource & {
+type ApproverOptions = PairingSource & {
   /** Where the agent talks to the product; approvals go through the same proxy so the ledger stays honest. */
   agentBase: string;
   /** The origin the product believes it is served from; the approval door checks `Origin` against it. */
@@ -38,7 +38,7 @@ export type ApproverOptions = PairingSource & {
   log?: (message: string) => void;
   intervalMs?: number;
 };
-export interface Approver {
+interface Approver {
   /** User codes approved so far, in order. */
   readonly approved: string[];
   stop(): void;

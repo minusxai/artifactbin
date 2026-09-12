@@ -23,7 +23,7 @@ export interface AuthOptions {
   log?: (message: string) => void;
   timeoutMs?: number;
 }
-export interface AuthResult { approvals: number; output: string }
+interface AuthResult { approvals: number; output: string }
 
 export async function runCliAuth(opts: AuthOptions): Promise<AuthResult> {
   const approver = startApprover({ homeDir: opts.homeDir, agentBase: opts.server, publicOrigin: opts.publicOrigin, cookie: opts.cookie, log: opts.log, intervalMs: 500 });

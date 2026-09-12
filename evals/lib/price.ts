@@ -16,10 +16,10 @@
  */
 import type { HarnessResult, Price, TokenUsage } from './contracts';
 
-export type CostSource = 'harness' | 'priced';
+type CostSource = 'harness' | 'priced';
 
 /** `usd: null` is UNKNOWN — a run with neither a figure nor rates must never read as free. */
-export interface TaskCost {
+interface TaskCost {
   usd: number | null;
   source: CostSource | null;
 }

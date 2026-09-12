@@ -30,7 +30,7 @@ import path from 'path';
 /** Written by scripts/build-story-runtime.mjs next to the bundle it describes. */
 const storyRuntimeManifest = (): string => path.join(process.cwd(), 'public/story/manifest.json');
 
-export interface StoryRuntimeManifest {
+interface StoryRuntimeManifest {
   /** Absolute path of the ES module entry, e.g. `/story/entry-4RXVQ2NA.js`. */
   entry: string;
   /**

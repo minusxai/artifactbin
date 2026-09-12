@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 import { pageDataChanged } from '@/web/page-data-events';
 
-export interface RowMenuItem {
+interface RowMenuItem {
   /** Reads as an aria-label, so it names the row: `Delete My doc`. */
   label: string;
   text: string;

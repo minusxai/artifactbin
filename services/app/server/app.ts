@@ -49,7 +49,7 @@ import { createReaderPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
 
 /** The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's base. */
-export function withAgentDiscovery(html: string, origin: string): string {
+function withAgentDiscovery(html: string, origin: string): string {
   return html.replace('</head>', () => `${agentDiscoveryHead(agentDiscovery(origin))}</head>`);
 }
 
@@ -122,7 +122,7 @@ const APP_SECURITY_HEADERS = {
 };
 const IMMUTABLE = 'public, max-age=31536000, immutable';
 
-export interface AppServerOptions {
+interface AppServerOptions {
   /** Split deployment only: verify the transport header and attach its actor. */
   actorSecret?: string;
   /** Composition hook keeping the proxy's token cache coherent after revoke. */

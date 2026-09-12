@@ -19,7 +19,7 @@ export async function artifactReference(workspace:Workspace,input:string,server:
  if(tracked&&tracked.id!==id)throw new CliError('identity_mismatch',`The fence identity for ${ref.path} differs from the tracked identity.`,'Resolve the identity before operating on the remote artifact.');
  return{id,version:ref.version,path:ref.path,notices:ref.notices};
 }
-export function pageQuery(flags:ParsedCommand['flags']):string{
+function pageQuery(flags:ParsedCommand['flags']):string{
  const params=new URLSearchParams();
  for(const key of ['limit','cursor'])if(typeof flags[key]==='string')params.set(key,flags[key] as string);
  return params.size?`?${params}`:'';
@@ -45,7 +45,7 @@ export async function readCommand(workspace:Workspace,parsed:ParsedCommand,clien
 }
 const RESOURCE_KINDS:Record<string,string>={markup:'artifact',folder:'folder',dataset:'dataset',image:'file',pdf:'file',file:'file'};
 /** A typed target is checked against what tracking already knows; nothing is fetched to decide it. */
-export function checkTrackedType(workspace:Workspace,path:string|undefined,requested:string):void{
+function checkTrackedType(workspace:Workspace,path:string|undefined,requested:string):void{
  const tracked=path?workspace.tracking?.files[path]:undefined;
  const kind=tracked?RESOURCE_KINDS[String(tracked.snapshot.format)]??'artifact':undefined;
  if(kind&&kind!==requested)throw new CliError('type_mismatch',`${path} tracks a ${kind}, not a ${requested}.`,'Omit --type, or select the kind this reference addresses.');

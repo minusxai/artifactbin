@@ -17,7 +17,7 @@ export function datasetRows(bytes:Buffer):Record<string,unknown>[]{
  return rows as Record<string,unknown>[];
 }
 
-export interface DefinitionConnection {target:{host:string;port:number;database:string;username:string;ssl:boolean};secretId?:string;span:{start:number;end:number}}
+interface DefinitionConnection {target:{host:string;port:number;database:string;username:string;ssl:boolean};secretId?:string;span:{start:number;end:number}}
 function definitionRoot(source:string):JsxElement{
  const parsed=parseJsx(source);
  if(!parsed.ok)throw new CliError('invalid_definition','The dataset definition is not valid JSX.','Run afbin validate on the definition file.');
@@ -26,7 +26,7 @@ function definitionRoot(source:string):JsxElement{
  return roots[0];
 }
 /** Read the inline connection without requiring its secret id, so a first push can still bind one. */
-export function datasetConnection(source:string):DefinitionConnection|undefined{
+function datasetConnection(source:string):DefinitionConnection|undefined{
  const root=definitionRoot(source);
  const element=root.children.find((node):node is JsxElement=>node.type==='element'&&node.tag==='Connection');
  if(!element)return undefined;
@@ -42,7 +42,7 @@ export function datasetConnection(source:string):DefinitionConnection|undefined{
  return {target:{host:text('host'),port,database:text('database'),username:text('username'),ssl},...(secret===undefined?{}:{secretId:secret}),span};
 }
 /** Reference the bound secret by id; the password itself never reaches this file. */
-export function withSecretId(source:string,connection:DefinitionConnection,secretId:string):string{
+function withSecretId(source:string,connection:DefinitionConnection,secretId:string):string{
  if(!/^[A-Za-z0-9_-]{1,128}$/.test(secretId))throw new CliError('invalid_response','The server returned an unusable secret id.');
  const attribute=`passwordSecretId="${secretId}"`;
  return source.slice(0,connection.span.start)+(connection.span.start===connection.span.end?' ':'')+attribute+source.slice(connection.span.end);

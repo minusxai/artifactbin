@@ -29,7 +29,7 @@ function openOverlay(root: HTMLElement, priority: number) {
 }
 
 /** CSS boundary for first-party UI. Author content must never be mounted inside it. */
-export interface TrustedUiProps {
+interface TrustedUiProps {
   children: ReactNode;
   /** Artifact chrome only: protects its paint order from author sibling overlays. */
   overlay?: boolean;

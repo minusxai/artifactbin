@@ -85,7 +85,7 @@ export interface ProxyOptions {
 }
 
 /** The context variables the parts share (Hono's `c.set`/`c.get`) — routes/oauth mounts on the same shape. */
-export type ProxyEnv = { Variables: { actor: Actor; limiter: RateLimiter } };
+type ProxyEnv = { Variables: { actor: Actor; limiter: RateLimiter } };
 export type ProxyApp = Hono<ProxyEnv>;
 
 /**

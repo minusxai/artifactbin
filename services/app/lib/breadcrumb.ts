@@ -27,7 +27,7 @@
  *    a document passes the name it actually has.
  */
 
-export interface Crumb {
+interface Crumb {
   /** What it says. */
   label: string;
   /** Where it goes. ABSENT means this is the page you are on. */

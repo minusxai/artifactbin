@@ -5,7 +5,7 @@
  * the reader (lib/feed) both name this shape and only one of them may touch
  * the database.
  */
-export type FeedSubjectKind = 'user' | 'token' | 'visitor';
+type FeedSubjectKind = 'user' | 'token' | 'visitor';
 
 export interface FeedItem {
   id: string;

@@ -53,7 +53,7 @@ export type { ShelfRow } from '@/lib/shelf';
  * Withholding is the DEFAULT. A capability that has to be asked for cannot be
  * granted by forgetting a prop.
  */
-export type ShelfActions = 'none' | 'share' | 'full';
+type ShelfActions = 'none' | 'share' | 'full';
 
 export interface ShelfProps {
   rows: ShelfRow[];

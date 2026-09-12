@@ -590,7 +590,7 @@ export const getArtifactById = cache(async (id: string): Promise<ArtifactRow | n
   return r.rows[0] ?? null;
 });
 
-export interface VersionSummary {
+interface VersionSummary {
   version: number;
   title: string | null;
   description: string | null;
@@ -850,7 +850,7 @@ async function listVersionsScoped(scope: Scope, id: string): Promise<VersionSumm
   return r.rows;
 }
 
-export interface VersionContent extends VersionSummary {
+interface VersionContent extends VersionSummary {
   content: string;
   source: string | null;
   meta: Record<string, unknown>;
@@ -883,7 +883,7 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
  * not exist. Ownership is already proved by this point, so naming the real
  * reason leaks nothing. `GET /versions` lists what can actually be restored.
  */
-export interface VersionNotArchived {
+interface VersionNotArchived {
   notArchived: true;
   refusal?: Response;
   conflictVersion?: number;
@@ -957,7 +957,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
  * the head. Distinct from `null` (unknown/foreign) — routes answer 409, not
  * 404, and report the head version so the caller can read → merge → replay.
  */
-export interface VersionConflict {
+interface VersionConflict {
   reason?: 'state_conflict' | 'doc_changed';
   currentState?: string;
   conflict: true;
@@ -1486,47 +1486,6 @@ async function setAccessScoped(scope: Scope, id: string, access: DatasetAccess):
   return r.rows[0] ?? null;
 }
 
-/**
- * FILE a row under a folder (or back at the root) — metadata only: no version
- * bump, no edit-log row, no content change, and `updated_at` untouched. A move
- * is not an edit of the document, and moving `updated_at` would silently
- * reorder every listing the row appears in.
- *
- * The row's own trail is set, and when the row is a FOLDER its whole subtree
- * follows in ONE prefix-swap statement inside the same transaction — that is
- * the entire reason placement is an array rather than a bare parent pointer.
- * Null = unknown or foreign, which is the uniform 404 at every door.
- *
- * The caller resolves `next` through lib/folders `resolveParent` FIRST: this
- * writes what it is given, and the owner, cycle and depth rules live in the one
- * module that knows the hierarchy.
- */
-async function setParentScoped(actor: TokenActor, scope: Scope, id: string, next: string[]): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  let moved: { from: string | null; to: string | null } | null = null;
-  const row = await db.transaction(async (tx) => {
-    const current = (
-      await tx.query<ArtifactRow>(`SELECT artifacts.*, ${SHARES_PROJECTION} FROM artifacts WHERE id = $1 AND ${scope.where('$2')}`, [id, scope.val])
-    ).rows[0];
-    if (!current) return null;
-    const updated = await tx.query<ArtifactRow>(
-      `UPDATE artifacts SET ancestor_ids = $3::text[] WHERE id = $1 AND ${scope.where('$2')} RETURNING *`,
-      [id, scope.val, next],
-    );
-    if (current.format === 'folder') {
-      const swap = ancestorsForMove(current, next);
-      await tx.query(swap.sql, swap.params);
-    }
-    moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
-    return updated.rows[0] ?? null;
-  });
-  // Post-transaction, like every other wakeup here: an unawaited query from
-  // inside the callback deadlocks PGLite's serialized op queue.
-  if (moved) await wakeParents(moved);
-  if (row) sayMoved(actor, row.id, moved);
-  return row;
-}
-
 // ── Sharing (the private tier's ACL surface) ─────────────────────────────────
 
 export interface SharingState {
@@ -1816,7 +1775,7 @@ export async function findOwnedAssetsFor(actor: TokenActor, declared: readonly D
 }
 
 /** Stable keyset pagination; creation timestamps never move when content is edited. */
-export interface ArtifactCollectionFilters {type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
+interface ArtifactCollectionFilters {type?:'artifact'|'folder'|'dataset'|'file';visibility?:'private'|'unlisted'|'public';relationship?:'all'|'owned'|'shared';search?:string;parent_id?:string}
 export async function listArtifactPageFor(actor: TokenActor, limit: number, cursor?: {created: string; id: string}, filters:ArtifactCollectionFilters={}): Promise<{rows: ArtifactSummary[]; next?: {created: string; id: string}}> {
   const owner=ownerPredicate(actor);const values:unknown[]=[owner.val,limit+1];
   const shared=actor.userId?SHARE_PREDICATE(['viewer','commenter','editor'],'$1'):'FALSE';
@@ -1882,37 +1841,6 @@ export function getVersionFor(actor: TokenActor, id: string, version: number): P
 
 export function revertArtifactFor(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
   return revertScoped(actor, id, version, opts);
-}
-
-/** File a row the actor OWNS under `next` (the resolved trail; `[]` is the root). */
-export function setParentFor(actor: TokenActor, id: string, next: string[]): Promise<ArtifactRow | null> {
-  return setParentScoped(actor, ownerScope(actor), id, next);
-}
-
-/**
- * RENAME A ROW THE ACTOR OWNS — metadata, so no version bump and no archive.
- *
- * A folder has no content, so a rename is the ONLY thing a person changes about
- * one, and routing it through the replace door would mean a version, an
- * archived copy and an edit-log row for a title. It is the same act on a
- * document, where the editor's Title field has always meant exactly this.
- *
- * The PARENT is woken, not the row: a rename changes what the folder ABOVE
- * lists, and an open listing re-reads on that ping. `updated_at` moves, which
- * is what keeps the shelf's ranking honest about the last time anything about
- * a row changed.
- */
-export async function setTitleFor(actor: TokenActor, id: string, title: string): Promise<ArtifactRow | null> {
-  const db = await getDb();
-  const scope = ownerScope(actor);
-  const r = await db.query<ArtifactRow>(
-    `UPDATE artifacts SET title = $3, updated_at = now()
-      WHERE id = $1 AND ${scope.where('$2')} AND ${LIVE_ARTIFACT_SQL} RETURNING *`,
-    [id, scope.val, title],
-  );
-  const row = r.rows[0] ?? null;
-  if (row) await notifyParent(parentOf(row));
-  return row;
 }
 
 /** What a METADATA write may change: policy ABOUT a row, never its content. */
@@ -2004,7 +1932,7 @@ function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
 
 
 /** Why a write may not happen. Each names the fix; none is an existence oracle. */
-export type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
+type WriteRefusal = 'not_a_dataset' | 'dataset_read_only';
 
 /** The dataset must allow writes AND the current actor must hold its editor role. */
 export async function canWriteDataset(dataset: ArtifactRow, actor: RoleActor, declared = false): Promise<WriteRefusal | null> {
@@ -2025,7 +1953,7 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
  * supplies is scalar VALUES; the SQL and the target come from the stored
  * source, so a caller can never write anything the author did not publish.
  */
-export type DocumentMutationOutcome =
+type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
   | { ok: true; local: LocalMutationResult }
   | { ok: false; reason: 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
@@ -2215,7 +2143,7 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
   } catch { return null; }
 }
 
-export interface DataflowRunOptions {
+interface DataflowRunOptions {
   /** Request-owned admission, rerun before cache hits, after waits and SQL. */
   authorize?: () => Promise<void>;
   signal?: AbortSignal;
@@ -2243,10 +2171,10 @@ export interface DataflowRunOptions {
  * while WHICH ROWS is the person reading it, and answering both with one
  * identity would hand a stranger the owner's private children.
  */
-export type DatasetResolver = (id: string) => Promise<RefTable | null>;
+type DatasetResolver = (id: string) => Promise<RefTable | null>;
 
 /** What a resolved ref contributes to the run: rows and their shape. */
-export type RefTable = { rows: Row[]; columns: DatasetColumn[]; catalog?:import('@/lib/datasets/types').DatasetCatalog };
+type RefTable = { rows: Row[]; columns: DatasetColumn[]; catalog?:import('@/lib/datasets/types').DatasetCatalog };
 
 /** A resolved ref row → its table, under the viewer whose run this is. */
 async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Promise<RefTable | null> {

@@ -20,7 +20,7 @@ import { numberFormatter } from './number-format';
 import type { DatasetColumn } from './dataset-shape';
 import type { Row } from './dataflow';
 
-export type SortDir = 'asc' | 'desc';
+type SortDir = 'asc' | 'desc';
 export interface SortSpec { col: string; dir: SortDir }
 
 export interface DataTableColumnSpec {
@@ -61,7 +61,7 @@ const ALIGNS = new Set(['left', 'right', 'center']);
 const SCALES = new Set(['sequential', 'diverging']);
 
 /** The default scroll-box ceiling in px, shared by the parser's fallback and the component's prop default. */
-export const DEFAULT_TABLE_HEIGHT = 420;
+const DEFAULT_TABLE_HEIGHT = 420;
 
 /**
  * Parse the authored `height` prop into a pixel CEILING.

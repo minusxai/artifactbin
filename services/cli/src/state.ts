@@ -35,7 +35,7 @@ export type StateKind =
   | 'retired-create'     // key: path         value: {id, path, server, key}
   | 'archive';           // key: <kind>/<id>  value: anything kept for forensics, never read by commands
 
-export interface StateRecord<T = unknown> {key: string; value: T; data: Buffer | null}
+interface StateRecord<T = unknown> {key: string; value: T; data: Buffer | null}
 
 let sqlite:typeof SQLite|undefined;
 /** Lazy builtin loading keeps read-only startup small. Node 22 emits this informational notice
@@ -139,7 +139,7 @@ export class State {
 }
 
 const locks = new Map<string, Promise<unknown>>();
-export interface LockOptions {waitMs?: number}
+interface LockOptions {waitMs?: number}
 /**
  * How long a competing operation waits for the scope before it is refused as
  * `workspace_busy`. Agents that run their tool calls in parallel (Pi, Claude Code)
@@ -148,7 +148,7 @@ export interface LockOptions {waitMs?: number}
  * a second later. Queueing is the right default: a stale lock cannot exist (the OS releases
  * it when the holder exits), so only a hung holder should ever surface as busy.
  */
-export const DEFAULT_LOCK_WAIT_MS = 60_000;
+const DEFAULT_LOCK_WAIT_MS = 60_000;
 /** After this long in the queue, one stderr line says why the command is silent. */
 const LOCK_WAIT_NOTICE_MS = 1_000;
 /**

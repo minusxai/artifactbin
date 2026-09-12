@@ -84,7 +84,7 @@ const INSPECTOR_LABEL = { chart: 'Chart inspector', number: 'Number inspector', 
  */
 const HELD_ASSETS = isWebUrl;
 
-export interface EditorArtifact {
+interface EditorArtifact {
   id: string;
   version: number;
   /** Head pointer this session bases its edits on. */

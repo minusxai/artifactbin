@@ -31,8 +31,8 @@ import { objectStore } from './object-store';
 import { urlSelection } from './story/url-values';
 import { SOCIAL_PREVIEW_OVERVIEW_GENERATION, clampImageCrop, savedSocialPreviewImageCrop, parseSocialPreviewCrop, socialPreviewCrop, socialPreviewImage, type SocialPreviewCrop } from './story/social-preview';
 
-export const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
-export type ExportFormat = keyof typeof EXPORT_MIME;
+const EXPORT_MIME = { png: 'image/png', jpg: 'image/jpeg' } as const;
+type ExportFormat = keyof typeof EXPORT_MIME;
 
 /**
  * What the shot covers. 'full' = the whole document, however tall — agents
@@ -40,10 +40,10 @@ export type ExportFormat = keyof typeof EXPORT_MIME;
  * frame; 'preview' = its bounded, editor-only framing overview. The output
  * size lives in lib/export-card.ts, importable without this module's graph.
  */
-export type ExportCapture = 'full' | 'card' | 'preview';
+type ExportCapture = 'full' | 'card' | 'preview';
 
 /** Rendered viewport width; height follows the content (full-page capture). */
-export const EXPORT_WIDTH = 1200;
+const EXPORT_WIDTH = 1200;
 const EXPORT_VIEWPORT_HEIGHT = 630; // og card ratio; fullPage grows past it as needed
 const RENDER_TIMEOUT_MS = 15_000;
 const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after mount
@@ -258,7 +258,7 @@ async function renderOnce(
  * render serve every og unfurl and profile thumbnail for that version.
  * `opts.pageUrl` is a thunk, minted per attempt — see RenderInput.
  */
-export function renderArtifactImage(
+function renderArtifactImage(
   artifact: Pick<ArtifactRow, 'id' | 'version'>,
   format: ExportFormat,
   // `pageUrl` is REQUIRED: every artifact is shot from its live page. The old

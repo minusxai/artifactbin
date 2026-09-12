@@ -72,7 +72,7 @@ async function physicalPath(path:string):Promise<string>{
 export function safeSkillPath(path:string):boolean{return !!path&&!isAbsolute(path)&&!path.includes('\\')&&path.split('/').every(x=>!!x&&x!=='.'&&x!=='..')&&path!=='.afbin-skill.json';}
 interface Manifest {version:string;source?:string;files:Record<string,string>}
 /** Managed copies record their provenance so status, update and the harness agree on who owns them. */
-export const SKILL_SOURCE='afbin-cli';
+const SKILL_SOURCE='afbin-cli';
 export interface SkillInstallation {path:string;harnesses:SkillHarness[];status:'installed'|'updated'|'unchanged';source:string;version:string;backup?:string;restart_required?:true}
 /** These harnesses read their skills folder once, at startup; pi and OpenCode read it per run. */
 const restartHarnesses:Partial<Record<SkillHarness,string>>={claude:'Claude Code',codex:'Codex'};
@@ -87,7 +87,7 @@ async function readManifest(path:string):Promise<Manifest|undefined>{
  const bytes=await readOptional(join(path,'.afbin-skill.json'));if(!bytes)return;
  try{const value=JSON.parse(bytes.toString());if(!value||typeof value.files!=='object')throw new Error();return value;}catch{return undefined;}
 }
-export interface SkillStatus {harness:SkillHarness;path:string;installed:boolean;current:boolean;version?:string;source?:string}
+interface SkillStatus {harness:SkillHarness;path:string;installed:boolean;current:boolean;version?:string;source?:string}
 /** Read-only view for `afbin status`: where each harness' skill lives and whether it matches this CLI. */
 export async function skillStatus(home:string,env?:NodeJS.ProcessEnv):Promise<SkillStatus[]>{
  const targets=skillTargets(home,env);const result:SkillStatus[]=[];

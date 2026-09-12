@@ -3,7 +3,7 @@ import type { AnnotationOperation } from './annotation-map';
 import { TextSelection, type EditorState } from 'prosemirror-state';
 import type { EditorView } from 'prosemirror-view';
 import type { JsxElement } from '@/lib/jsx';
-export interface TextEndpoint {
+interface TextEndpoint {
   id: string;
   offset: number;
 }

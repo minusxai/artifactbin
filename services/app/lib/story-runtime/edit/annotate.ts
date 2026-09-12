@@ -58,30 +58,30 @@ import {
 } from '@/lib/story/annotation-range';
 
 /** Marks every node carrying an open annotation, in every mode the layer is on for. */
-export const ANNOTATED_ATTR = 'data-mx-annotated';
+const ANNOTATED_ATTR = 'data-mx-annotated';
 /** Marks the node whose thread the page has open. Own attribute — the edit session clears its own. */
-export const ANNOTATION_OPEN_ATTR = 'data-mx-annotation-open';
+const ANNOTATION_OPEN_ATTR = 'data-mx-annotation-open';
 /** Marks the node under either the comment card or document pointer. */
-export const ANNOTATION_HOVER_ATTR = 'data-mx-annotation-hover';
+const ANNOTATION_HOVER_ATTR = 'data-mx-annotation-hover';
 /** Marks the node the owner is currently COMPOSING on (annotate mode's selection). */
-export const ANNOTATE_SELECTED_ATTR = 'data-mx-annotate-selected';
+const ANNOTATE_SELECTED_ATTR = 'data-mx-annotate-selected';
 /**
  * Marks a node whose comment's own WORDS are painted instead of the whole
  * node. The behaviour attributes above stay exactly as they were — a click on
  * the paragraph still opens the thread — this only takes the node's background
  * away, because the highlight underneath it is more precise.
  */
-export const ANNOTATION_RANGED_ATTR = 'data-mx-annotation-ranged';
+const ANNOTATION_RANGED_ATTR = 'data-mx-annotation-ranged';
 /** One CSS highlight per thread: `mx-annotation-<id>`, so a rule can name it. */
-export const ANNOTATION_HIGHLIGHT_PREFIX = 'mx-annotation-';
+const ANNOTATION_HIGHLIGHT_PREFIX = 'mx-annotation-';
 /** Marks the selectable node under the pointer WHILE PICKING (the rail's pick tool) — the edit-mode hover, for a comment. */
-export const ANNOTATE_PICK_HOVER_ATTR = 'data-mx-annotate-pick-hover';
+const ANNOTATE_PICK_HOVER_ATTR = 'data-mx-annotate-pick-hover';
 /** Stamped on the document element while a pick is on — its VALUE is the mode (`block` | `area`) — so a stylesheet can say "crosshair" everywhere. */
-export const ANNOTATE_PICKING_ATTR = 'data-mx-annotate-picking';
+const ANNOTATE_PICKING_ATTR = 'data-mx-annotate-picking';
 /** The rubber band while an area is being drawn, and the drawn area while its comment is being composed. */
-export const ANNOTATE_BAND_ATTR = 'data-mx-annotate-band';
+const ANNOTATE_BAND_ATTR = 'data-mx-annotate-band';
 /** One painted overlay per AREA thread, by thread id — the area's own box, where a text thread has its highlight. */
-export const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
+const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
 
 // Persistent annotation chrome is a tint, while the transient cross-surface
 // hover gets an outline so the relationship is unmistakable without shifting
@@ -92,7 +92,7 @@ export const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
 // the hover and the composing states, which are the ones a person is currently
 // pointing at. `cursor: pointer` is not part of the base rule for the same
 // reason: over an editable host the caret must still read as a caret.
-export const ANNOTATE_CSS = COMMENT_PRESENTATION.annotationCss;
+const ANNOTATE_CSS = COMMENT_PRESENTATION.annotationCss;
 
 /** What a thread's own words look like, by the state the page put it in. */
 const HIGHLIGHT_FILL = COMMENT_PRESENTATION.highlightFill;
@@ -161,7 +161,7 @@ export interface FrameAnnotateSession {
   dispose(): void;
 }
 
-export interface FrameAnnotateOptions {
+interface FrameAnnotateOptions {
   win: Window;
   channel: RuntimeChannel;
   root?: HTMLElement;

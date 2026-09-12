@@ -16,7 +16,7 @@ export function substituteRow<T>(value: T, row: Record<string, unknown>): T {
   return value.replace(ROW_TEMPLATE, (_all, field: string) => String(row[field] ?? '')) as T;
 }
 
-export function rowRefsIn(nodes: JsxNode[]): string[] {
+function rowRefsIn(nodes: JsxNode[]): string[] {
   const found: string[] = [];
   const add = (name: string) => { if (!found.includes(name)) found.push(name); };
   const visit = (node: JsxNode) => {
