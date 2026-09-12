@@ -154,10 +154,19 @@ try {
   writeFileSync(output, JSON.stringify(result, null, 2));
   console.log(`Measured ${result.loads.length} loads for ${result.revision}; output ${output}`);
 } finally {
+  console.log('Stopping benchmark app');
+  child.kill('SIGTERM');
+  const kill = setTimeout(() => child.kill('SIGKILL'), 5000);
+  await new Promise(resolve => { if (child.exitCode !== null || child.signalCode !== null) resolve(); else child.once('exit', resolve); });
+  clearTimeout(kill);
+  console.log('Closing benchmark browser');
   await browser?.close();
+  console.log('Closing benchmark gateway');
   gateway.closeAllConnections();
   await new Promise(resolve => gateway.close(resolve));
-  child.kill('SIGTERM');
-  await new Promise(resolve => { if (child.exitCode !== null) resolve(); else child.once('exit', resolve); });
   rmSync(scratch, { recursive: true, force: true });
 }
+
+// All samples are saved and child resources closed; imported SDK timers must
+// not keep this disposable CI CLI alive.
+process.exit(0);

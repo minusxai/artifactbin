@@ -18,6 +18,7 @@ import { performance } from 'node:perf_hooks';
 import { renderArtifactImage, exportStoreKey, resetExportRenderer } from './services/app/lib/export';
 import { objectStore } from './services/app/lib/object-store';
 import { setServices } from './services/app/lib/services';
+console.log('Starting export contention samples');
 const samples = [];
 for (let i = 0; i < 7; i++) {
   await resetExportRenderer();
@@ -36,9 +37,12 @@ for (let i = 0; i < 7; i++) {
   assert((await cold).ok);
 }
 writeFileSync(process.argv[2], JSON.stringify({ syntheticBrowserDelayMs: 1000, storage: 'local object store with its normal read cache', repetitions: 7, storedHitMs: samples }, null, 2));
+console.log('Saved seven export contention samples');
+// This disposable module harness has no server lifecycle to own imported timers.
+process.exit(0);
 `);
   execFileSync(path.join(root, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(root, 'services/app/tsconfig.json'), script, output], {
-    cwd: root, stdio: 'inherit', env: {
+    cwd: root, stdio: 'inherit', timeout: 30000, env: {
       PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'test',
       OBJECT_STORE__LOCAL_DIR: scratch, DATABASE_URL: 'pglite://memory',
       AUTH__SECRET: 'fixture-only-performance-secret',
