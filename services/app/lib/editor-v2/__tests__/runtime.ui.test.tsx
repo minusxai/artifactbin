@@ -160,7 +160,7 @@ it('keeps a dragged text range from selecting its common layout ancestor', () =>
 
 
 it('reports the actual source block for hover, click, and caret selection in formatted JSX', () => {
-  const parsed = parseJsx(`<section id="root">
+  const parsed = parseJsxOrThrow(`<section id="root">
     <p id="eyebrow">Notes</p>
     <h1 id="heading">Try making a copy</h1>
     <p id="body">Use <strong>Fork</strong> to copy.</p>
@@ -170,7 +170,6 @@ it('reports the actual source block for hover, click, and caret selection in for
     </blockquote>
     <ul id="list"><li id="item">An item</li></ul>
   </section>`);
-  if (!parsed.ok) throw Error(parsed.error);
   const post = vi.fn();
   const session = createFrameEditSession({
     win: window, requestRender: () => {},

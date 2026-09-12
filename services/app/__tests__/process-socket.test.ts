@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { freePort, withHttpServer } from './net';
+import { freePort, withHttpServer } from '@artifactbin/test-support/net';
 import { renderedSchema, renders } from './rendered-schema';
 
 const ROOT = path.resolve(import.meta.dirname, '../../..');

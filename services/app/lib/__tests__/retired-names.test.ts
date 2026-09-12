@@ -16,7 +16,19 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
 import { APP_ROOT, REPO_ROOT, codeOf, sourceFiles } from '@/test/helpers/source-files';
-import { RETIRED_ENV_NAMES } from '../config';
+
+/**
+ * The flat, un-namespaced settings this product retired. The map that once translated them at boot is gone
+ * (no backward compatibility), so the list lives here: a retired name must not be SET anywhere in the tree.
+ */
+const RETIRED_ENV_NAMES = [
+  'ADMIN_SECRET', 'ARTIFACT_QUOTA_PER_TOKEN', 'AUTH_SECRET', 'BROWSER__WS_URL', 'EVENTS__DATABASE_URL',
+  'APP__INTERNAL_ORIGIN', 'CONTRACT__ACTOR_SECRET', 'EXPORT_INTERNAL_ORIGIN', 'INVITE__CODE', 'LOCAL_OBJECT_DIR',
+  'LOGIN_EMAIL_FROM', 'MAX_EXTERNAL_IMAGES_PER_PUBLISH', 'MAX_IMAGE_BYTES', 'MAX_QUERY_ROWS', 'MAX_ROWS_LIMIT',
+  'MIXPANEL_HOST', 'MIXPANEL_TOKEN', 'MUTATION_MAX_PER_MINUTE', 'PORT', 'PUBLIC_BASE_URL', 'QUERY_TIMEOUT_MS',
+  'RESEND_API_KEY', 'RESEND_BASE_URL', 'TRUSTED_PROXY_HOPS', 'WEB_INGEST_ALLOW_PRIVATE', 'WEB_INGEST_MAX_PER_HOUR',
+  'WEB_INGEST_TIMEOUT_MS', 'WAITLIST__WEBHOOK_URL',
+];
 
 interface Scan {
   /** Why this name is dead, in one line. */
@@ -241,7 +253,7 @@ describe('the retired env names', () => {
       'services/proxy/__tests__/login-routes.test.ts', 'services/proxy/__tests__/open-access.test.ts',
     ].includes(file));
 
-  const names = Object.keys(RETIRED_ENV_NAMES).join('|');
+  const names = RETIRED_ENV_NAMES.join('|');
   const declaration = new RegExp(`\\b(const|let|var)\\s+(${names})\\b`);
   const forbiddenSettings = (file: string, line: string): string[] => {
     const setters = new RegExp(`(^|[\\s"'{,\\-])(${names})["']?\\s*(=|:)`, 'gm');
