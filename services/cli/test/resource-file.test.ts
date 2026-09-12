@@ -14,7 +14,7 @@ test('typed YAML normalizes fixed enums and preserves exact identity, paths and 
  assert.deepEqual(file.policy?.execution?.generation?.models,['DeepSeek-V4']);
 });
 
-test('native validate checks YAML and source bytes offline before setup, including source confinement',async()=>{
+test('native validate checks YAML and source bytes offline before authentication, including source confinement',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-resource-validation-'));
  const invoke=async()=>{const out:string[]=[];const code=await runCli(['validate','sales.yaml','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async()=>{assert.fail('local resource validation must not authenticate or fetch');}});return{code,result:JSON.parse(out.join(''))};};
  try{

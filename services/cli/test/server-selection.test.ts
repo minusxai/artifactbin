@@ -7,13 +7,13 @@ import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 
 for(const saved of [false,true])for(const explicit of [false,true]){
- test(`setup uses the selected origin without credentials (saved=${saved}, flag=${explicit})`,async()=>{
+ test(`auth uses the selected origin without credentials (saved=${saved}, flag=${explicit})`,async()=>{
   const home=await mkdtemp(join(tmpdir(),'afbin-origin-'));
   const selected=explicit?'http://localhost:7244':'http://localhost:7242';
   const calls:string[]=[];const output:string[]=[];
   try{
    if(saved)await saveConnection({server:'https://artifactbin.dev',token:'mx_saved'},home);
-   const code=await runCli(['setup','--no-browser','--yes','--json','--harness','none',...(explicit?['--server',selected]:[])],{
+   const code=await runCli(['auth','--no-browser','--json',...(explicit?['--server',selected]:[])],{
     home,cwd:home,env:{ARTIFACTBIN_URL:'http://localhost:7242'},interactive:false,stdout:s=>output.push(s),stderr:()=>{},
     fetch:async input=>{
      const url=new URL(String(input));calls.push(url.origin);

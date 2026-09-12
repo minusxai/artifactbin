@@ -5,13 +5,13 @@ import {parseCommand, commandHelp, commands} from '../src/commands';
 test('one flag vocabulary works before or after the command and aliases normalize',()=>{
  assert.deepEqual(parseCommand(['--json','push','a.jsx','-ny']),{command:'push',positionals:['a.jsx'],flags:{json:true,'dry-run':true,yes:true}});
  for(const retired of ['ls','rm','api'])assert.throws(()=>parseCommand([retired,'x']),/unknown_command|Unknown command/);
- assert.deepEqual(parseCommand(['setup','--harness','pi','--harness=opencode','-y']).flags,{harness:['pi','opencode'],yes:true});
+ assert.deepEqual(parseCommand(['update','--harness','pi','--harness=opencode','-y']).flags,{harness:['pi','opencode'],yes:true});
  assert.deepEqual(parseCommand(['remote','--name','Work','pi','--model','deepseek','-h']).positionals,['pi','--model','deepseek','-h']);
  assert.deepEqual(parseCommand(['push','--','-report.jsx']).positionals,['-report.jsx']);
 });
 test('refuses inapplicable flags and malformed requests before any auth or network',()=>{
- for(const args of [['status','--force'],['help','--dry-run'],['push','--fix'],['pull','--output','one','--output','two'],['list','--limit','0'],['list','--limit','no'],['api'],['comment','a','--state','resolved'],['comment','a','--body','x','--input','x'],['setup','--harness','none','--harness','pi'],['push','--froce'],['push','--json=false']]) assert.throws(()=>parseCommand(args),Error,args.join(' '));
- assert.equal(parseCommand([]).command,'setup');
+ for(const args of [['status','--force'],['help','--dry-run'],['push','--fix'],['pull','--output','one','--output','two'],['list','--limit','0'],['list','--limit','no'],['api'],['comment','a','--state','resolved'],['comment','a','--body','x','--input','x'],['update','--harness','none','--harness','pi'],['auth','--harness','pi'],['push','--froce'],['push','--json=false']]) assert.throws(()=>parseCommand(args),Error,args.join(' '));
+ assert.equal(parseCommand([]).command,'help');
 });
 test('each command documents its actual flags and supports local short help',()=>{
  for(const command of commands){
@@ -30,10 +30,10 @@ test('rejects flags that cannot affect the selected operation',()=>{
  ])assert.throws(()=>parseCommand(args),Error,args.join(' '));
 });
 test('fixed choices ignore ASCII case but commands, flags and user arguments retain exact spelling',()=>{
- assert.deepEqual(parseCommand(['setup','--harness','CoDeX','--harness','PI']).flags.harness,['codex','pi']);
- assert.throws(()=>parseCommand(['setup','--harness','NONE','--harness','pi']));
- assert.throws(()=>parseCommand(['setup','--harness','pi','--harness','PI']));
- assert.throws(()=>parseCommand(['SETUP']));
- assert.throws(()=>parseCommand(['setup','--HARNESS','pi']));
+ assert.deepEqual(parseCommand(['update','--harness','CoDeX','--harness','PI']).flags.harness,['codex','pi']);
+ assert.throws(()=>parseCommand(['update','--harness','NONE','--harness','pi']));
+ assert.throws(()=>parseCommand(['update','--harness','pi','--harness','PI']));
+ assert.throws(()=>parseCommand(['AUTH']));
+ assert.throws(()=>parseCommand(['update','--HARNESS','pi']));
  assert.deepEqual(parseCommand(['push','MiXeD.jsx']).positionals,['MiXeD.jsx']);
 });

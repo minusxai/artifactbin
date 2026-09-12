@@ -10,7 +10,7 @@ test('local commands and malformed invocations never load credentials, call the 
   await writeFile(join(root,'doc.jsx'),'<p>hello</p>');
   for(const args of [['-h'],['--version'],['push','-h'],['validate','doc.jsx'],['status'],['diff'],['status','--force']]){
    const output:string[]=[];const diagnostics:string[]=[];
-   const code=await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,stdout:x=>output.push(x),stderr:x=>diagnostics.push(x),fetch:async()=>assert.fail('network during local dispatch')});
+   const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:x=>output.push(x),stderr:x=>diagnostics.push(x),fetch:async()=>assert.fail('network during local dispatch')});
    assert.equal(code,args.includes('--force')?2:0);
    assert.equal(output.length,1);assert.doesNotThrow(()=>JSON.parse(output[0]));
   }
@@ -28,7 +28,7 @@ test('malformed remote references fail before authentication',async()=>{
    [['log','missing.jsx'],'invalid_reference'],
   ] as Array<[string[],string]>){
    const output:string[]=[];
-   await runCli([...args,'--json'],{cwd:root,home:root,interactive:false,stdout:x=>output.push(x),stderr:()=>{},fetch:async()=>assert.fail('network before local validation')});
+   await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:x=>output.push(x),stderr:()=>{},fetch:async()=>assert.fail('network before local validation')});
    assert.equal(JSON.parse(output.join('')).error.code,expected,args.join(' '));
   }
  }finally{await rm(root,{recursive:true,force:true});}

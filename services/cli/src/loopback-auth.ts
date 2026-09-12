@@ -29,11 +29,11 @@ export async function loopbackAuthenticate(origin:string,options:Options):Promis
  await new Promise<void>((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',()=>{listener.off('error',reject);resolve();});});
  const address=listener.address();if(!address||typeof address==='string')throw new Error('Loopback listener did not bind');
  redirectUri=`http://127.0.0.1:${address.port}/callback`;
- const timer=setTimeout(()=>refuse(new CliError('approval_expired','Browser approval timed out.','Run afbin setup again.')),Math.min(options.timeoutMs??300000,300000));
+ const timer=setTimeout(()=>refuse(new CliError('approval_expired','Browser approval timed out.','Run afbin auth again.')),Math.min(options.timeoutMs??300000,300000));
  const post=async(path:string,body:Record<string,unknown>)=>{
   const response=await(options.fetch??fetch)(`${server}${path}`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(error=>{throw transportFailure(server,error);});
   const data=await response.json().catch(()=>null);
-  if(!response.ok||!data||typeof data!=='object')throw new CliError('auth_failed',`Browser authentication failed (HTTP ${response.status}).`,'Run afbin setup again.');
+  if(!response.ok||!data||typeof data!=='object')throw new CliError('auth_failed',`Browser authentication failed (HTTP ${response.status}).`,'Run afbin auth again.');
   return data as Record<string,unknown>;
  };
  try{

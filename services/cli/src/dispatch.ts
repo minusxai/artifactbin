@@ -9,7 +9,7 @@ import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
-import {installSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
+import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness} from './skill-install';
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
 import {readFile} from 'node:fs/promises';
@@ -44,6 +44,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   let recoveredRequest:string|undefined;let markdownPlan:MarkdownPlan|undefined;let querySql:string|undefined;let secretBinding:Record<string,unknown>|undefined;
   const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':JSON.stringify(value,null,2)+'\n');};
   if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`afbin ${CLI_VERSION} (protocol ${CLI_PROTOCOL_VERSION})`);return 0;}
+  const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
+  // INIT is eager and local: every command first ensures the skill is installed for the detected/saved
+  // harnesses. It never authenticates or touches the network, and is a no-op once the skill is current.
+  await ensureInit({home,env:context.env,stderr});
   if(flags.help||command==='help'){
    const bundled=command==='help'?flags:{};
    const text=helpDocument(command==='help'?positionals[0]:command,typeof bundled.format==='string'?bundled.format:'text');
@@ -69,7 +73,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   let localValidation:Awaited<ReturnType<typeof validateFiles>>|undefined;
   if(command==='validate'&&!account){localValidation=await validateFiles(workspace,positionals,!!flags.fix);if(!flags.remote||!localValidation.valid){emit(localValidation);return localValidation.valid?0:2;}}
-  if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined));return 0;}
+  if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
    try{const result=await diffCommand(workspace,parsed,serverOrigin()??'https://artifactbin.dev',false,stdout);if(result)emit(result);return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
@@ -97,7 +101,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
   if(commentBody!==undefined&&(!commentBody.trim()||commentBody.length>100000))throw new CliError('invalid_comment','Comment text must contain 1–100000 characters.');
   const server=serverOrigin();
-  const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
   if(command==='update'){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    const updated=await updateCli({home,server:server??'https://artifactbin.dev',env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
@@ -106,27 +109,21 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    return 0;
   }
   let connection=await loadConnection(server,home,context.env);
-  const firstAuthentication=!connection;
   const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,noBrowser:!!flags['no-browser'],rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(message+'\n')});
-  if(command==='setup'&&flags['dry-run']){
-   const harnesses=await selectSkills({home,env:context.env,interactive:false,requested:flags.harness as string[]|undefined});
-   emit({dry_run:true,server:connection?.server??server??'https://artifactbin.dev',credentials:connection?'saved_not_verified':'missing',harnesses});return 0;
-  }
-  if(command==='setup'&&connection){
-   const probe=new HttpClient({connection,home,env:context.env,fetch:context.fetch});
-   try{await probe.request('/artifacts?limit=1');connection=probe.connection;}catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;connection=await authenticate();}
+  if(command==='auth'){
+   // AUTH is lazy and idempotent. A saved token is verified with one read and its account reported;
+   // no token or a rejected one runs the same browser approval the rest of the CLI uses on 401.
+   if(connection){
+    const probe=new HttpClient({connection,home,env:context.env,fetch:context.fetch});
+    try{await probe.request('/artifacts?limit=1');emit({authenticated:true,server:probe.connection.server,account:probe.account??'anonymous'});return 0;}
+    catch(error){if(!(error instanceof CliError)||error.code!=='auth_required')throw error;}
+   }
+   connection=await authenticate();
+   emit({authenticated:true,server:connection.server});return 0;
   }
   if(!connection){
-   if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin setup, or set ARTIFACTBIN_TOKEN for the selected server.');
+   if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
    connection=await authenticate();
-  }
-  if(command==='setup'||firstAuthentication){
-   const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   const installed=await installSkills(selected,{home,env:context.env});
-   const hints=restartHints(installed.installations);
-   if(command==='setup'){emit({authenticated:true,server:connection.server,...installed});for(const hint of hints)stderr(hint+'\n');return 0;}
-   for(const item of installed.installations)stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
-   for(const hint of hints)stderr(hint+'\n');
   }
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.lock?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
@@ -136,7 +133,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='query'){const result=await mixedQuery(workspace,parsed,querySql,client);await resultOutput(result.value,parsed,workspace.cwd,emit,stdout);return result.exitCode;}
   if(command==='validate'){const remote=await push(workspace,positionals,client,{dryRun:true});const valid=!!localValidation?.valid&&remote.operations.every(op=>!('error' in op));emit({...localValidation,valid,remote:remote.operations});return valid?0:2;}
   if(command==='delete'&&flags.type==='comment'){const result=await deleteComments(workspace,String(flags.in),positionals,client,{dryRun:!!flags['dry-run']});emit(result.value);return result.exitCode;}
-  if(command==='status'){emit(await remoteStatus(workspace,client));return 0;}
+  if(command==='status'){emit(await remoteStatus(workspace,client,home,context.env));return 0;}
   if(command==='diff'){const result=await diffCommand(workspace,parsed,client.connection.server,!!flags.remote,stdout,client);if(result)emit(result);return 0;}
   if(command==='comment'){const result=await batchCommand(positionals,ref=>commentCommand(workspace,{command,flags,positionals:[ref]},client,commentBody));emit(result.value);return result.exitCode;}
   if(command==='list'&&flags.type==='profile'){await resultOutput(await client.request('/account/profile'),parsed,workspace.cwd,emit,stdout);return 0;}
@@ -169,3 +166,17 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }
 }
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}
+/**
+ * Eager, offline skill installation for the detected or saved harnesses. Runs before every command,
+ * never prompts (selection is non-interactive here) and never authenticates. Idempotent: it installs
+ * only when the managed skill manifest is missing or stale, and stays silent otherwise.
+ */
+async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;stderr:(value:string)=>void}):Promise<void>{
+ const selected=await selectSkills({home:options.home,env:options.env,interactive:false});
+ if(!selected.length)return;
+ const plans=await planSkills(selected,{home:options.home,env:options.env});
+ if(plans.every(plan=>plan.status==='unchanged'))return;
+ const installed=await installSkills(selected,{home:options.home,env:options.env});
+ for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`Skill ${item.status}: ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
+ for(const hint of restartHints(installed.installations))options.stderr(hint+'\n');
+}

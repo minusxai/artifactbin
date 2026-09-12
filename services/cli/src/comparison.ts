@@ -9,11 +9,13 @@ import {atomicWrite,digest} from './files';
 import {recoverFiles,stageFiles} from './journal';
 import {withProcessLock} from './process-lock';
 import {inspectWorkspace,loadWorkspace,type LocalFile,type Workspace,type Snapshot} from './workspace';
+import {skillStatus} from './skill-install';
 import type {HttpClient} from './http';
 
 /** Observation never moves the accepted base or rewrites working files. */
-export async function remoteStatus(workspace:Workspace,client:HttpClient){
- if(!workspace.lock)return{remote:'current',files:[]};
+export async function remoteStatus(workspace:Workspace,client:HttpClient,home?:string,env?:NodeJS.ProcessEnv){
+ const skills=home!==undefined?{skills:await skillStatus(home,env)}:{};
+ if(!workspace.lock)return{remote:'current',files:[],...skills};
  return withProcessLock(workspace.root,async()=>{
   await recoverFiles(workspace.root);workspace=await loadWorkspace(workspace.cwd);
   const lock=structuredClone(workspace.lock!);const files=[];
@@ -25,7 +27,7 @@ export async function remoteStatus(workspace:Workspace,client:HttpClient){
    files.push({path:file.path,id:head.id,status:file.status,remote:head.state===base.state?'unchanged':'changed',base_version:base.version,version:head.version});
   }
   await stageFiles(workspace.root,[{path:'afbin.lock',before:digest(workspace.raw!),data:Buffer.from(JSON.stringify(lock,null,2)+'\n')}]);await recoverFiles(workspace.root);
-  return{remote:'current',server:lock.server,files};
+  return{remote:'current',server:lock.server,files,...skills};
  });
 }
 

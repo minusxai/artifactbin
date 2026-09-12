@@ -25,7 +25,7 @@ export function skillTargets(home:string,env:NodeJS.ProcessEnv=process.env):Reco
 async function settings(home:string,env:NodeJS.ProcessEnv={}):Promise<Settings|undefined>{
  const bytes=await readOptional(join(configDir(home,env),'settings.json'));if(!bytes)return;
  try{const value=JSON.parse(bytes.toString());if(!Array.isArray(value.harnesses)||value.harnesses.some((x:unknown)=>!skillHarnesses.includes(x as SkillHarness)))throw new Error();return value;}
- catch{throw new CliError('invalid_settings','Cannot read the saved harness selection.','Repair ~/.artifactbin/settings.json or move it aside, then run afbin setup.');}
+ catch{throw new CliError('invalid_settings','Cannot read the saved harness selection.','Repair ~/.artifactbin/settings.json or move it aside, then run afbin update.');}
 }
 export async function selectSkills(options:{home:string;env?:NodeJS.ProcessEnv;interactive:boolean;yes?:boolean;requested?:string[];detected?:string[];choose?:(choices:SkillChoice[])=>Promise<SkillHarness[]>}):Promise<SkillHarness[]>{
  if(options.requested){if(options.requested.some(x=>!([...skillHarnesses,'none'] as string[]).includes(x))||options.requested.includes('none')&&options.requested.length>1)throw new CliError('invalid_harness','Choose harness names or none.');return options.requested.filter(x=>x!=='none') as SkillHarness[];}
@@ -79,6 +79,18 @@ async function readManifest(path:string):Promise<Manifest|undefined>{
  const bytes=await readOptional(join(path,'.afbin-skill.json'));if(!bytes)return;
  try{const value=JSON.parse(bytes.toString());if(!value||typeof value.files!=='object')throw new Error();return value;}catch{return undefined;}
 }
+export interface SkillStatus {harness:SkillHarness;path:string;installed:boolean;current:boolean;version?:string;source?:string}
+/** Read-only view for `afbin status`: where each harness' skill lives and whether it matches this CLI. */
+export async function skillStatus(home:string,env?:NodeJS.ProcessEnv):Promise<SkillStatus[]>{
+ const targets=skillTargets(home,env);const result:SkillStatus[]=[];
+ for(const harness of skillHarnesses){
+  const path=targets[harness];const manifest=await readManifest(path);
+  const installed=manifest!==undefined||await readOptional(join(path,'SKILL.md'))!==null;
+  result.push({harness,path,installed,current:installed&&manifest?.version===CLI_VERSION,
+   ...(manifest?.version?{version:manifest.version}:{}),...(manifest?.source?{source:manifest.source}:{})});
+ }
+ return result;
+}
 /** Read-only projection of installSkills: what each selected destination would become. */
 export async function planSkills(selected:readonly SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;version?:string}):Promise<SkillPlan[]>{
  const targets=skillTargets(options.home,options.env);const version=options.version??CLI_VERSION;const plans:SkillPlan[]=[];
@@ -103,7 +115,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
   const installations:SkillInstallation[]=[];
   for(const [path,harnesses] of groups){
    const manifestBytes=await readOptional(join(path,'.afbin-skill.json'));let previous:Manifest|undefined;
-   if(manifestBytes){try{previous=JSON.parse(manifestBytes.toString());if(!previous||typeof previous.files!=='object'||Object.entries(previous.files).some(([key,value])=>!safeSkillPath(key)||typeof value!=='string'))throw new Error();}catch{throw new CliError('invalid_skill_manifest',`Invalid managed skill manifest at ${path}.`,'Move the manifest aside and rerun setup; the existing skill will be backed up.');}}
+   if(manifestBytes){try{previous=JSON.parse(manifestBytes.toString());if(!previous||typeof previous.files!=='object'||Object.entries(previous.files).some(([key,value])=>!safeSkillPath(key)||typeof value!=='string'))throw new Error();}catch{throw new CliError('invalid_skill_manifest',`Invalid managed skill manifest at ${path}.`,'Move the manifest aside and rerun the command; the existing skill will be backed up.');}}
    const allPaths=new Set([...Object.keys(previous?.files??{}),...Object.keys(files)]);let modified=false,changed=previous?.version!==version;let existed=false;
    try{const info=await lstat(path);if(!info.isDirectory())throw new CliError('invalid_skill_destination',`Skill destination is not a directory: ${path}`);existed=true;}catch(error){if(!isMissing(error))throw error;}
    for(const file of allPaths){

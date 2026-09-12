@@ -60,7 +60,7 @@ test('no-browser still waits without a TTY; approval is never implied by default
 test('local work and dry-run do not bootstrap auth or create credentials',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-no-bootstrap-'));
  try{
-  for(const args of [['status'],['help'],['setup','--dry-run']]){
+  for(const args of [['status'],['help'],['push','--dry-run']]){
    const code=await runCli([...args,'--json'],{home,cwd:home,env:{},interactive:false,stdout:()=>{},stderr:()=>{},auth:{open:async()=>assert.fail('unexpected browser')},fetch:async()=>assert.fail('unexpected network')});
    assert.equal(code,0,args.join(' '));
   }

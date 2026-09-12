@@ -46,7 +46,7 @@ export class HttpClient {
      if(normalizeServer(next.server)!==this.connection.server)throw new CliError('wrong_server','Browser authentication returned a different server origin.');
      this.connection=next;continue;
     }
-    throw new CliError('auth_required','auth_required: sign-in is required.','Run afbin setup, or set ARTIFACTBIN_TOKEN for the selected server.',{http_status:401});
+    throw new CliError('auth_required','auth_required: sign-in is required.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.',{http_status:401});
    }
    const account=response.headers.get('X-Artifactbin-Account');
    if(account){if(this.account&&this.account!==account)throw new CliError('account_mismatch','The server account differs from this workspace.','Use the workspace account credentials.');this.account=account;}
@@ -59,7 +59,7 @@ export class HttpClient {
    if(!data||typeof data!=='object')throw new CliError('invalid_response','The server returned an incomplete JSON response.','Keep pending recovery state before retrying a write.');
    return data;
   }
-  throw new CliError('auth_required','Run afbin setup to sign in again.',undefined,{http_status:401});
+  throw new CliError('auth_required','Run afbin auth to sign in again.',undefined,{http_status:401});
  }
  private async refresh():Promise<void>{
   // The lock dependency is loaded only for credential mutation, never local help or validation.
@@ -70,7 +70,7 @@ export class HttpClient {
    if(saved&&saved.token!==this.connection.token&&saved.refreshToken&&saved.clientId===this.connection.clientId){this.connection=saved;return;}
    const response=await(this.options.fetch??fetch)(`${this.connection.server}/oauth/token`,{method:'POST',redirect:'error',signal:AbortSignal.timeout(15000),headers:{'Content-Type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',client_id:this.connection.clientId,refresh_token:this.connection.refreshToken,resource:`${this.connection.server}${API_RESOURCE_PATH}`})});
    const data=await response.json().catch(()=>null);
-   if(!response.ok||typeof data?.access_token!=='string'||typeof data?.refresh_token!=='string'||!Number.isFinite(data?.expires_in)||data.expires_in<=0)throw new CliError('auth_required','auth_required: credentials could not be refreshed.','Run afbin setup again.');
+   if(!response.ok||typeof data?.access_token!=='string'||typeof data?.refresh_token!=='string'||!Number.isFinite(data?.expires_in)||data.expires_in<=0)throw new CliError('auth_required','auth_required: credentials could not be refreshed.','Run afbin auth again.');
    this.connection={...this.connection,token:data.access_token,refreshToken:data.refresh_token,expiresAt:Date.now()+data.expires_in*1000};
    await saveConnection(this.connection,home,{ARTIFACTBIN_HOME:this.options.env?.ARTIFACTBIN_HOME});
   });
