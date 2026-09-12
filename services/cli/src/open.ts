@@ -15,7 +15,7 @@ import type {Workspace} from './workspace';
  * The view URL is derivable from the identity a local file already carries, so opening a
  * tracked file costs no request and no credentials.
  */
-interface OpenOptions {server:string;noBrowser?:boolean;json?:boolean;launch?:(url:string)=>Promise<void>}
+interface OpenOptions {server:string;json?:boolean;launch?:(url:string)=>Promise<void>}
 const DRAFT_FIX='Publish it with afbin push, then open it; drafts are never uploaded for preview.';
 
 export async function openResources(workspace:Workspace,refs:string[],options:OpenOptions):Promise<{operations:Record<string,unknown>[]}>{
@@ -27,13 +27,13 @@ export async function openResources(workspace:Workspace,refs:string[],options:Op
   targets.push({ref:input,id:ref.kind==='id'?ref.id:await publishedIdentity(workspace,ref.path)});
  }
  // `--json` suppresses the launch; only the URL is the answer a caller wanted parsed.
- const launch=!options.noBrowser&&!options.json;
+ const launch=!options.json;
  const operations:Record<string,unknown>[]=[];
  for(const target of targets){
   const url=renderer.viewUrl(target.id);
   let opened=false;let failure:string|undefined;
   if(launch){
-   try{await (options.launch??(async()=>{throw new CliError('browser_unavailable','No browser launcher is available.','Use --no-browser and open the printed URL.');}))(url);opened=true;}
+   try{await (options.launch??(async()=>{throw new CliError('browser_unavailable','No browser launcher is available.','Open the printed URL.');}))(url);opened=true;}
    catch(error){failure=error instanceof Error?error.message:String(error);}
   }
   operations.push({ref:target.ref,id:target.id,url,browser:launch?opened?'launched':'unavailable':'suppressed',...(failure?{reason:failure}:{})});

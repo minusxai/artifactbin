@@ -2,7 +2,7 @@
 set -eu
 
 main() {
-  version=0.1.12
+  version=0.1.13
   install_dir="${HOME}/.local/bin"
   yes=0
   style
@@ -15,7 +15,7 @@ main() {
         shift 2;;
       --help|-h)
         cat <<'USAGE'
-Install afbin: sh install.sh [--version 0.1.12] [--dir PATH] [--yes]
+Install afbin: sh install.sh [--version 0.1.13] [--dir PATH] [--yes]
   --version X.Y.Z   install this release instead of the pinned one
   --dir PATH        install directory (default ~/.local/bin)
   --yes, -y         accept default skills without a checklist or sign-in

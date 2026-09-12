@@ -15,7 +15,6 @@ export const flags: Record<string,Flag> = {
  session:{value:'REF',description:'Attach to an existing authorized remote session instead of launching a command.'},
  output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
- 'no-browser':{description:'Print browser URLs without launching a browser; authentication still waits for approval.'},
  version:{description:'Show the installed CLI version.'},
  help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
  server:{value:'URL',description:'Use this HTTPS server origin.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; browser approval is still required.'},
@@ -44,7 +43,7 @@ export const FORMATS:Record<string,readonly string[]>={
  pull:['jsx','yaml','csv','json','original'],export:['png','jpg','html','csv','json','yaml','original'],
  list:['table','csv','json','yaml'],query:['table','csv','json','yaml'],help:['text','markdown','man'],
 };
-export const globalFlags=['help','version','json','server','yes','no-browser'];
+export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
  {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','dry-run','output','format'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
@@ -59,9 +58,9 @@ export const commands: Command[] = [
  {name:'list',usage:'[<ref> ...]',description:'List resources or summaries; default accessible artifacts, newest first.',min:0,max:Infinity,flags:['type','in','filter','limit','cursor','format','output'],examples:['afbin list --json','afbin list --type session','afbin list --type table --in orders.yaml']},
  {name:'delete',usage:'<ref> [<ref> ...]',description:'Soft-delete resources, revoke tokens, terminate sessions or delete comments; keep local files.',min:1,max:Infinity,flags:['type','in','dry-run','force'],examples:['afbin delete report.jsx --dry-run','afbin delete --type comment --in abc123 ann_123']},
  {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
- {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --no-browser.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --no-browser --json']},
+ {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --json.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --json']},
  {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help.',min:0,max:1,flags:['format','output'],examples:['afbin help example','afbin help markup','afbin help dashboard']},
- {name:'auth',usage:'',description:'Authenticate this machine in the browser; report the signed-in account, or anonymous.',min:0,max:0,flags:[],examples:['afbin auth','afbin auth --no-browser --json']},
+ {name:'auth',usage:'',description:'Authenticate this machine in the browser; report the signed-in account, or anonymous.',min:0,max:0,flags:[],examples:['afbin auth','afbin auth --json']},
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in.',min:0,max:0,flags:['harness'],examples:['afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session'],examples:['afbin remote pi','afbin remote --name Backend codex','afbin remote --session rs_123']},
