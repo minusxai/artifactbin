@@ -92,6 +92,7 @@ it('separates the 1000-document shelf, aggregate totals and paginated assets', a
   expect(core).not.toHaveProperty('stats');
   const insights = await (await GET(request('/api/page/home?part=insights', { actor }))).json();
   expect(insights.stats).toEqual({ artifacts: 1004, assets: 204, views: 2 });
+  expect(insights.views).not.toHaveProperty('asset0001');
   const first = await (await assetsPage(request('/api/page/assets', { actor }))).json();
   const second = await (await assetsPage(request('/api/page/assets?page=1', { actor }))).json();
   expect(first.assets).toHaveLength(50);

@@ -40,7 +40,7 @@ async function workspaceViewCounts(userId: string): Promise<Record<string, numbe
   const db = await getDb();
   const result = await db.query<{ id: string; views: number }>(`SELECT a.id, COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS views
     FROM artifacts a LEFT JOIN analytics_events e ON e.artifact_id = a.id AND e.event = 'view'
-    WHERE a.user_id = $1 AND a.${LIVE_ARTIFACT_SQL} GROUP BY a.id`, [userId]);
+    WHERE a.user_id = $1 AND a.${LIVE_ARTIFACT_SQL} AND a.format IN ('markup', 'folder') GROUP BY a.id`, [userId]);
   return Object.fromEntries(result.rows.map(row => [row.id, row.views]));
 }
 

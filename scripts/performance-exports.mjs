@@ -1,11 +1,9 @@
-/** CI-only module contention measurement. The browser delay is synthetic;
+/** Module contention measurement (fake browser, isolated local storage). The browser delay is synthetic;
  * storage and the export admission/cache implementation are real. */
-import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-assert.equal(process.env.CI, 'true');
 const root = path.resolve(process.argv[2]), output = path.resolve(process.argv[3]);
 const scratch = mkdtempSync(path.join(tmpdir(), 'artifactbin-export-performance-'));
 const script = path.join(root, '.performance-export.ts');
@@ -41,8 +39,8 @@ console.log('Saved seven export contention samples');
 // This disposable module harness has no server lifecycle to own imported timers.
 process.exit(0);
 `);
-  execFileSync(path.join(root, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(root, 'services/app/tsconfig.json'), script, output], {
-    cwd: root, stdio: 'inherit', timeout: 30000, env: {
+  execFileSync(path.join(root, 'node_modules/.bin/tsx'), ['--tsconfig', path.join(root, 'tsconfig.json'), script, output], {
+    cwd: path.join(root, 'services/app'), stdio: 'inherit', timeout: 30000, env: {
       PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'test',
       OBJECT_STORE__LOCAL_DIR: scratch, DATABASE_URL: 'pglite://memory',
       AUTH__SECRET: 'fixture-only-performance-secret',
