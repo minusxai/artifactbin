@@ -180,16 +180,14 @@ describe('write events', () => {
 
 describe('read events', () => {
   /*
-   * A view is counted where the document is SERVED (/a/<id>/raw), not where a
-   * page happens to render. A reader is rewritten straight to that route
-   * (proxy.ts) and never reaches the page at all, while an owner's shell
-   * fetches it once from inside the frame — so this is both the only place
-   * that sees every view and the only place that sees each one once.
+   * Explicit raw reads count here. Page-data/metadata reads alone do not:
+   * inline readers report their mounted document through the view endpoint,
+   * covered by artifact-views.test.ts and artifact-views.ui.test.tsx.
    */
   const serveDocument = (id: string, query = '') =>
     rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params({ id }));
 
-  it('serving the document logs one view; rendering the page or its metadata logs none', async () => {
+  it('an explicit raw read logs one view; fetching page data or metadata logs none', async () => {
     const t = await mintToken('anon');
     const doc = await create(t.token, { markup: '<p>x</p>' });
     await settle(); // let the create event land so counts below are stable

@@ -73,6 +73,12 @@ jobs:
             test -s "downloads/$runner/$binary"
             cp "downloads/$runner/$binary" "bundle/$binary"
             cp "downloads/$runner/$binary.manifest.json" "bundle/$binary.manifest.json"
+            for asset in "$binary.gz" "$binary.sizes.json" "afbin-sql-${mapping#*:}.gz" "afbin-sql-${mapping#*:}.manifest.json"; do
+              test -f "downloads/$runner/$asset"
+              test ! -L "downloads/$runner/$asset"
+              test -s "downloads/$runner/$asset"
+              cp "downloads/$runner/$asset" "bundle/$asset"
+            done
             for common in afbin-skills.json afbin.1; do
               if [ -f "bundle/$common" ]; then cmp "bundle/$common" "downloads/$runner/$common"; else cp "downloads/$runner/$common" "bundle/$common"; fi
             done

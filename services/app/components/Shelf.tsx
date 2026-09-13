@@ -19,7 +19,7 @@
  */
 import {writeBrowserArtifact} from '@/lib/browser-artifact-write';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Folder, FolderInput, FolderPlus, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
+import { Folder, FolderInput, FolderPlus, Inbox, LayoutGrid, List as ListIcon, Pencil, Search, Share2, Trash2 } from 'lucide-react';
 import ShareLink from '@/components/ShareLink';
 import RowMenu, { useDeleteArtifact } from '@/components/RowMenu';
 import { MoveMenu, type PickerFolder } from '@/components/FolderPicker';
@@ -157,7 +157,7 @@ function NewFolder({ parentId, onMade }: { parentId: string | null; onMade: (row
 }
 
 /** Folder covers show a small stack of readable documents inside a tabbed sleeve. */
-function FolderCover({ row, documents, count, controls, showVisibility }: { showVisibility: boolean; row: ShelfRow; documents: ShelfRow[]; count: number; controls: React.ReactNode }) {
+function FolderCover({ row, documents, controls, showVisibility }: { showVisibility: boolean; row: ShelfRow; documents: ShelfRow[]; controls: React.ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState<ShelfRow[]>([]);
   // Owner shelves already carry their children. Public profiles omit placement,
@@ -181,22 +181,23 @@ function FolderCover({ row, documents, count, controls, showVisibility }: { show
     .slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   const previews = contents.slice(0, FOLDER_PREVIEW_LIMIT);
   const remaining = contents.length - previews.length;
-  const papers = previews.length ? previews : [null, null];
+  const papers = previews;
   const paperCount = papers.length + (remaining > 0 ? 1 : 0);
   const paperStyle = (index: number) => ({ '--paper-position': index / Math.max(1, paperCount - 1) } as React.CSSProperties);
-  const itemCount = count || documents.length || loaded.length;
+  const itemCount = contents.length;
   return (
     <div ref={box} aria-label={`Preview of folder ${row.title ?? row.id}`} className="folder-cover">
       <a href={row.url} aria-label={`Open folder ${nameOf(row)}`} className="absolute inset-0 z-[2] rounded-md focus-visible:outline-2 focus-visible:outline-accent" />
       <div className="folder-cover-tab">
-        <span className="truncate font-mono text-[10px] tabular-nums">{itemCount > 0 ? `${itemCount} artifact${itemCount === 1 ? '' : 's'}` : 'artifacts'}</span>
+        <span className="truncate font-mono text-[10px] tabular-nums">{itemCount > 0 ? `${itemCount} artifact${itemCount === 1 ? '' : 's'}` : 'empty folder'}</span>
       </div>
       <div className="folder-cover-back" />
+      {itemCount === 0 && <div className="folder-cover-empty" aria-hidden="true"><Inbox size={28} strokeWidth={1.25} /></div>}
       {showVisibility && row.visibility && <span className="folder-cover-visibility absolute left-2 top-[27px] z-[3]"><VisibilityPill compact overlay visibility={row.visibility} name={nameOf(row)} /></span>}
       <div className="folder-cover-papers" style={{ '--paper-width': paperCount > 2 ? '48%' : '61%' } as React.CSSProperties}>
         {papers.map((item, i) => (
-          <div key={item?.id ?? i} aria-hidden="true" className="folder-cover-paper" style={paperStyle(i)}>
-            {item ? <img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} /> : <div className="folder-cover-lines" />}
+          <div key={item.id} aria-hidden="true" className="folder-cover-paper" style={paperStyle(i)}>
+            <img src={`/a/${item.id}/export?format=jpg&mode=card&v=${item.version}&r=${CARD_RENDER_GENERATION}`} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }} />
           </div>
         ))}
         {remaining > 0 && (
@@ -255,7 +256,7 @@ function FolderTile({ row, count, level, folders, onDeleted, documents, gallery,
   if (gallery) {
     return (
       <li className="reveal group relative rounded-md p-3 transition-colors hover:bg-raised/60">
-        <FolderCover row={shown} documents={documents} showVisibility={showVisibility} count={count} controls={<>
+        <FolderCover row={shown} documents={documents} showVisibility={showVisibility} controls={<>
           <Actions row={shown} level={level} folders={folders} childCount={count} onDeleted={onDeleted}
             onRename={() => { setDraft(title ?? ''); setRenaming(true); }} />
         </>} />

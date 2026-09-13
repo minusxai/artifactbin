@@ -9,8 +9,11 @@ import {
   STORY_EDIT_READY_MESSAGE,
   STORY_SELECTION_MESSAGE,
   STORY_SELECT_MESSAGE,
+  STORY_SPOTLIGHT_MESSAGE,
 } from '@/lib/story-runtime/contract';
 import {
+  type EditorArt,
+  art,
   editorElement,
   env,
   fromFrame,
@@ -153,4 +156,39 @@ describe('the chrome the selection drives', () => {
     expect((screen.getByLabelText('Diagram source') as HTMLTextAreaElement).value).toBe('flowchart TD; A-->B');
   });
 
+});
+
+/**
+ * The query behind an embed's data: an inspector for a chart or number bound
+ * to a <Query> shows that query's SQL, and its opener hands the rail to the
+ * notebook, landing on the cell with the embed spotlit in the document.
+ */
+describe('the bound query in an inspector', () => {
+  const QUERY_SOURCE =
+    '<Helmet><Query name="sales" source="ref:ds1234">{`select 1 as x`}</Query></Helmet>'
+    + '<div data-design="tw" className="p-4"><Question data="$sales" /></div>';
+
+  it('shows the bound query in the chart inspector and jumps to its cell in the notebook', async () => {
+    mount({ art: { ...art, markup: QUERY_SOURCE } as EditorArt });
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Question', path: '0.0' }) });
+    expect(screen.getByLabelText('Chart inspector')).toBeTruthy();
+    expect(screen.getByLabelText('Bound query SQL').textContent).toBe('select 1 as x');
+    fireEvent.click(screen.getByLabelText('Open $sales in queries'));
+    expect(screen.queryByLabelText('Chart inspector')).toBeNull();
+    expect(screen.getByLabelText('Queries')).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByLabelText('Query $sales SQL'));
+    expect(sentToFrame(STORY_SPOTLIGHT_MESSAGE).at(-1)).toMatchObject({ paths: ['0.0'] });
+  });
+
+  it('shows the bound query in the number inspector too', async () => {
+    const source = '<Helmet><Query name="sales">{`select 1 as x`}</Query></Helmet>'
+      + '<div data-design="tw" className="p-4"><Number data="$sales" col="x" /></div>';
+    mount({ art: { ...art, markup: source } as EditorArt });
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Number', path: '0.0' }) });
+    expect(screen.getByLabelText('Number inspector')).toBeTruthy();
+    expect(screen.getByLabelText('Bound query SQL').textContent).toBe('select 1 as x');
+    fireEvent.click(screen.getByLabelText('Open $sales in queries'));
+    expect(screen.queryByLabelText('Number inspector')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText('Query $sales SQL'));
+  });
 });

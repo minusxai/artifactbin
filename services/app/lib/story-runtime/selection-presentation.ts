@@ -7,5 +7,7 @@ const outline = (opacity: number) =>
 export const SELECTION_PRESENTATION = {
   selectedCss: outline(0.85),
   hoverCss: `${outline(0.9)} background: rgba(245, 158, 11, 0.08);`,
+  /** Pointed at from outside (the query notebook): dashed, so it never reads as the selection. */
+  spotlightCss: `outline: 2px dashed rgba(245, 158, 11, 0.9); outline-offset: ${offset}px; border-radius: 3px; background: rgba(245, 158, 11, 0.06);`,
   handleOutset: offset + width / 2,
 };

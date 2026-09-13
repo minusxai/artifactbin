@@ -45,6 +45,7 @@ import {
   STORY_APPLY_FORMAT_MESSAGE,
   STORY_APPLY_LINK_MESSAGE,
   STORY_SELECT_MESSAGE,
+  STORY_SPOTLIGHT_MESSAGE,
   STORY_COMMIT_MESSAGE,
   STORY_COMMITTED_MESSAGE,
   STORY_LAYOUT_EDIT_MESSAGE,
@@ -65,6 +66,8 @@ export const EDIT_SELECTED_ATTR = 'data-mx-selected';
 export const EDIT_EMBED_SELECTED_ATTR = 'data-mx-embed-selected';
 /** Marks the selectable node under the pointer while edit mode is live. */
 export const EDIT_HOVER_ATTR = 'data-mx-edit-hover';
+/** Marks nodes the page pointed at (STORY_SPOTLIGHT_MESSAGE) — outlined, never selected. */
+export const EDIT_SPOTLIGHT_ATTR = 'data-mx-edit-spotlight';
 
 /**
  * Selection chrome, injected on entering edit mode and removed on leaving.
@@ -77,6 +80,7 @@ const EDIT_MODE_CSS = [
   '[contenteditable="true"]:focus { outline: none; }',
   `[${EDIT_SELECTED_ATTR}][${EDIT_SELECTED_ATTR}], [${EDIT_EMBED_SELECTED_ATTR}][${EDIT_EMBED_SELECTED_ATTR}] { ${SELECTION_PRESENTATION.selectedCss} }`,
   `[${EDIT_HOVER_ATTR}][${EDIT_HOVER_ATTR}] { ${SELECTION_PRESENTATION.hoverCss} }`,
+  `[${EDIT_SPOTLIGHT_ATTR}][${EDIT_SPOTLIGHT_ATTR}] { ${SELECTION_PRESENTATION.spotlightCss} }`,
 ].join('\n');
 
 const EDIT_CSS_ATTR = 'data-mx-edit-css';
@@ -289,6 +293,20 @@ export function createFrameEditSession({
     hovered?.removeAttribute(EDIT_HOVER_ATTR);
     hovered = next;
     hovered?.setAttribute(EDIT_HOVER_ATTR, '');
+  };
+
+  /** The whole set each time (the message is idempotent); the first found scrolls into view. */
+  const setSpotlight = (paths: string[]) => {
+    for (const el of scope.querySelectorAll(`[${EDIT_SPOTLIGHT_ATTR}]`)) el.removeAttribute(EDIT_SPOTLIGHT_ATTR);
+    let first: Element | null = null;
+    for (const path of paths) {
+      const el = scope.querySelector(`[${AST_PATH_ATTR}="${CSS.escape(path)}"]`);
+      if (!el) continue;
+      el.setAttribute(EDIT_SPOTLIGHT_ATTR, '');
+      first ??= el;
+    }
+    // jsdom has no scrollIntoView; a browser scrolls the nearest edge in.
+    first?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
   };
 
   const onFocusIn = (event: FocusEvent) => {
@@ -758,6 +776,9 @@ export function createFrameEditSession({
           reportSelection(el ? describeWithQuote(el) : null);
           break;
         }
+        case STORY_SPOTLIGHT_MESSAGE:
+          setSpotlight(message.paths);
+          break;
         default:
           break;
       }
@@ -788,6 +809,7 @@ export function createFrameEditSession({
         el.removeAttribute(EDIT_EMBED_SELECTED_ATTR);
       }
       setHovered(null);
+      setSpotlight([]);
       style.remove();
       selectedPath = null;
     },

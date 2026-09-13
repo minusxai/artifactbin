@@ -13,7 +13,7 @@ const COLUMNS = [
   { name: 'revenue', type: 'number' as const },
 ];
 const TABLES = [
-  { name: 'sales', kind: 'query' as const, columns: COLUMNS },
+  { name: 'sales', kind: 'query' as const, columns: COLUMNS, sql: 'select region, revenue from "public"."rows"' },
   { name: 'costs', kind: 'query' as const, columns: [{ name: 'spend', type: 'number' as const }] },
 ];
 const BOUND = {
@@ -121,5 +121,21 @@ describe('a table the document does not declare', () => {
     panel({ binding: { ...BOUND, table: 'gone' } });
     expect(triggerText('Table')).toContain('$gone');
     expect(screen.getByLabelText('Missing table notice')).toBeTruthy();
+  });
+});
+
+/** The query behind the data — the chart inspector's block, shared. */
+describe('the bound query', () => {
+  it('shows the SQL of the query the number is bound to, and opens it in the notebook', () => {
+    const onOpenQuery = vi.fn<(name: string) => void>();
+    panel({ onOpenQuery });
+    expect(screen.getByLabelText('Bound query SQL').textContent).toBe('select region, revenue from "public"."rows"');
+    fireEvent.click(screen.getByLabelText('Open $sales in queries'));
+    expect(onOpenQuery).toHaveBeenCalledWith('sales');
+  });
+
+  it('shows nothing for a table Value', () => {
+    panel({ tables: [{ name: 'sales', kind: 'value' as const, columns: COLUMNS }] });
+    expect(screen.queryByLabelText('Bound query SQL')).toBeNull();
   });
 });
