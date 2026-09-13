@@ -181,7 +181,7 @@ export default function StoryFormatToolbar({
   );
 
   return (
-    <div aria-label="Typography toolbar" className="flex h-11 min-w-0 flex-1 items-center rounded-lg bg-raised">
+    <div aria-label="Typography toolbar" className="flex h-9 min-w-0 flex-1 items-center rounded-lg bg-raised">
       {/* Where this element sits, and a way up to its container. */}
       <div
         className="flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-r border-edge px-2"
@@ -192,11 +192,11 @@ export default function StoryFormatToolbar({
             type="button"
             aria-label="Document options"
             onClick={() => onSelect(null)}
-            className="shrink-0 rounded px-1.5 py-1 text-xs text-muted hover:bg-raised"
+            className="shrink-0 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-raised"
           >
             Document
           </button>
-          <span className="text-xs text-muted">{'>'}</span>
+          <span className="text-[11px] text-muted">{'>'}</span>
           {selection.ancestors.length > 0 && (
             <>
               {selection.ancestors.slice(-2).map((crumb) => (
@@ -207,33 +207,33 @@ export default function StoryFormatToolbar({
                       aria-label={`Select ${nodeName(crumb.tag)}`}
                       onMouseDown={keepFocus}
                       onClick={() => onSelect(crumb.path)}
-                      className="cursor-pointer rounded-[3px] px-1 text-xs text-muted hover:bg-raised hover:text-fg"
+                      className="cursor-pointer rounded-[3px] px-1 text-[11px] text-muted hover:bg-raised hover:text-fg"
                     >
                       {nodeName(crumb.tag)}
                     </button>
                   </Tooltip>
-                  <span className="text-xs text-muted">{'>'}</span>
+                  <span className="text-[11px] text-muted">{'>'}</span>
                 </Fragment>
               ))}
             </>
           )}
-          <span className="shrink-0 px-1 text-xs text-accent">{nodeName(selection.tag)}</span>
+          <span className="shrink-0 px-1 text-[11px] text-accent">{nodeName(selection.tag)}</span>
         </div>
       </div>
       <div
-        className="flex h-11 min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2"
+        className="flex h-9 min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2"
         aria-label="Primary formatting controls"
       >
         {historyControls}
         {historyControls && <span className="mx-1 h-4 w-px shrink-0 bg-edge" />}
         {onAutoHeight && selection.customHeight && (
           <>
-            <span className="text-xs text-muted">Height: custom</span>
+            <span className="text-[11px] text-muted">Height: custom</span>
             <button
               type="button"
               aria-label="Auto height"
               onClick={onAutoHeight}
-              className="rounded border border-edge px-1.5 py-1 text-xs"
+              className="rounded border border-edge px-1.5 py-1 text-[11px]"
             >
               Auto height
             </button>
@@ -424,7 +424,7 @@ export default function StoryFormatToolbar({
               aria-label="Comment on selection"
               onMouseDown={keepFocus}
               onClick={() => onComment(selection)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-[3px] px-1 py-0.5 text-xs text-muted hover:bg-raised hover:text-fg"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-[3px] px-1 py-0.5 text-[11px] text-muted hover:bg-raised hover:text-fg"
             >
               <MessageSquare size={11} />
               <span className="hidden sm:inline">Comment</span>

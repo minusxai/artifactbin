@@ -1,6 +1,7 @@
 /**
  * The contextual editing toolbar's height, RESERVED by the page rather than
- * measured. Two rows: document actions (44), formatting and selection context (44).
+ * measured. Document actions (44), formatting and selection context (36),
+ * then an 8px gap before the document.
  *
  * Its own module because the page needs the number in view mode too — and
  * importing it from the editor would pull the editor (Monaco, the panels, the

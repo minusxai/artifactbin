@@ -973,7 +973,7 @@ export default function InPlaceEditor({
       )}
       <header
         aria-label="Editor toolbar"
-        className="fixed left-0 z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px_44px] items-center gap-x-2 border-b border-edge bg-surface px-3"
+        className="fixed left-0 z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px_44px] items-center gap-x-2 bg-surface px-3"
         style={{ top: barTop, height: EDIT_BAR_H, right: rightInset }}
       >
         {/* Settings scroll independently; mode, history and Done stay visible.
@@ -1134,10 +1134,10 @@ export default function InPlaceEditor({
             <div className="flex flex-col">
               <div
                 aria-label="Primary formatting controls"
-                className="flex h-11 items-center gap-1 overflow-x-auto rounded-lg bg-raised px-2"
+                className="flex h-9 items-center gap-1 overflow-x-auto rounded-lg bg-raised px-2"
               >
                 {historyControls}
-                <span className="shrink-0 px-2 text-xs text-muted">
+                <span className="shrink-0 px-2 text-[11px] text-muted">
                   {mode === 'design' ? 'Select an element to format' : 'Editing source'}
                 </span>
                 {mode === 'design' && insertionControls}

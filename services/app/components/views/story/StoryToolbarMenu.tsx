@@ -30,7 +30,7 @@ export function StoryToolbarMenu({
           type="button"
           aria-label={name}
           onMouseDown={(event) => event.preventDefault()}
-          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-fg hover:bg-surface"
+          className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-[11px] text-fg hover:bg-surface"
         >
           {label}
           <ChevronDown size={12} />
