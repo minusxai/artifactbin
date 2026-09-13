@@ -99,6 +99,13 @@ export const APP_CSP = [
   // (lib/showcase). `'self'` admits them only when the app IS that origin, so
   // the landing page's pictures worked on the deployment and nowhere else.
   `img-src 'self' ${SHOWCASE_ORIGIN} data: blob:`, "font-src 'self' data:",
+  // `media-src` has no default of its own either, so without this line every
+  // <video> and <audio> on an app page is refused by `default-src 'none'`.
+  // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
+  // upload page previewing a file BEFORE it is sent (web/pages/FileUpload).
+  // Media only — `frame-src`, `connect-src` and `worker-src` stay `'self'`,
+  // because a blob: there is a document, a request or a script from a string.
+  "media-src 'self' blob:",
   "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
   // The source editor wires a Monaco worker (components/SourceEditor). It is

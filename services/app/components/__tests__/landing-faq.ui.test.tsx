@@ -12,8 +12,8 @@
  * later "improvement" to a JS accordion fails loudly: every answer is IN the
  * document while every disclosure is SHUT.
  */
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
 import Landing from '@/components/Landing';
 import LandingFaq from '@/components/LandingFaq';
 import LandingFooter from '@/components/LandingFooter';
@@ -80,18 +80,25 @@ describe('the FAQ on the landing page', () => {
 });
 
 /**
- * THE FOOTER'S CALL TO ACTION IS THE ACTION, not a scroll back to it. It was
+ * THE FOOTER'S CALL TO ACTION IS THE DOOR, not a scroll back to it. It was
  * `<a href="#top">create an artifact</a>` — a reader who got all the way to
  * the bottom, decided, and clicked, was sent back to the top of the page to
- * find the real button. Both surfaces now run the SAME AgentLink: one
- * implementation of "mint a document and copy the instruction", so the two
- * cannot drift into meaning different things.
+ * find the real button. It now opens the SAME create dialog the workspace's
+ * Create menu opens, and the mint-and-copy button lives inside that dialog:
+ * one implementation of "new artifact", wherever it is asked for.
  */
 describe('the landing footer', () => {
-  it('mints a document rather than scrolling back to the top', () => {
+  afterEach(cleanup);
+
+  it('opens the create dialog rather than scrolling back to the top', () => {
     const { container } = render(<LandingFooter column="" />);
-    expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
     expect(container.querySelector('a[href="#top"]')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'new artifact' }));
+
+    expect(screen.getByRole('dialog', { name: 'Create new artifact' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
   });
 
   it('keeps the demo link beside it', () => {

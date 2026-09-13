@@ -13,7 +13,7 @@
  *      owner's own page — before any script has run — and the children have to
  *      be in it. Asserted on the BYTES rather than on the DOM, because a DOM
  *      assertion passes just as well when the rows arrive a second later.
- *   2. Create → New folder opens a dialog that makes one INSIDE this folder:
+ *   2. Create → Folder opens a dialog that makes one INSIDE this folder:
  *      no navigation, and the tile arrives on its own.
  *   3. a document published BY AN AGENT appears in the open page with NO
  *      RELOAD — a folder follows its own channel on the events stream, so a
@@ -134,9 +134,9 @@ const headText = (await head()) ?? '';
 check(headText.includes('Field Notes'), `the page names the folder it is (${headText.trim().slice(0, 60)})`);
 check(/2 documents/.test(headText), `and counts what is on the shelf, as a sentence (${headText.trim().slice(0, 60)})`);
 
-// ── 2. New folder from the workspace creation menu ──────────────────────
+// ── 2. Folder from the workspace creation menu ──────────────────────
 await owner.getByRole('button', { name: 'Create', exact: true }).click();
-await owner.getByRole('menuitem', { name: 'New folder', exact: true }).click();
+await owner.getByRole('menuitem', { name: 'Folder', exact: true }).click();
 await owner.getByRole('dialog', { name: 'Create new folder' }).getByLabel('Folder name').fill('Archive');
 await Promise.all([
   owner.waitForResponse((r) => r.url().endsWith('/api/my/artifacts') && r.request().method() === 'POST' && r.status() === 201, { timeout: 15000 }),

@@ -16,8 +16,12 @@
  * words; the name of the thing is the terminal's own voice, and it keeps the
  * identity anchored where the display face cannot follow.
  */
-import AgentLink from '@/components/AgentLink';
+'use client';
+
+import { FilePlus2 } from 'lucide-react';
+import { useState } from 'react';
 import { GitHubIcon } from '@/components/brand-icons';
+import CreateDialog from '@/components/CreateDialog';
 import { LINK, PAGE_COLUMN } from '@/components/ui';
 import { REPO_URL } from '@/lib/repo';
 
@@ -39,6 +43,7 @@ const LINKS: readonly { label: string; href: string; external?: true }[] = [
 ];
 
 export default function LandingFooter({ column = PAGE_COLUMN }: { column?: string }) {
+  const [creating, setCreating] = useState(false);
   return (
     <footer className={`${column} mt-14 sm:mt-20`}>
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-edge py-4">
@@ -87,10 +92,19 @@ export default function LandingFooter({ column = PAGE_COLUMN }: { column?: strin
           >
             book a demo
           </a>
-          {/* THE SAME BUTTON AS THE TOP OF THE PAGE, not a link back to it: a
-            * reader who got this far and decided should not be sent to the top
-            * to find the real control. One AgentLink, two sizes. */}
-          <AgentLink frame={false} docsLink={false} size="inline" />
+          {/* THE SAME DOOR AS EVERYWHERE ELSE, not a link back to the top: a
+            * reader who got this far and decided should not be sent up the
+            * page to find the real control. It opens the one create dialog
+            * (CreateDialog), the same one the workspace's Create menu opens,
+            * with the same two steps inside. */}
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded-[4px] border border-accent bg-accent px-2.5 py-1.5 font-mono text-[11.5px] font-semibold text-bg transition-all hover:brightness-110"
+          >
+            new artifact
+            <FilePlus2 aria-hidden="true" size={13} />
+          </button>
         </div>
       </div>
 
@@ -123,6 +137,8 @@ export default function LandingFooter({ column = PAGE_COLUMN }: { column?: strin
           open source · Apache-2.0
         </span>
       </div>
+
+      {creating && <CreateDialog kind="artifact" parentId={null} onClose={() => setCreating(false)} onCreated={() => {}} />}
     </footer>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Brand marks for the get-started picker, in their PROPER colors, inlined
+ * Brand marks for the get-started card, in their PROPER colors, inlined
  * (from lobehub's lobe-icons; GitHub's trademark
  * comes from its official brand toolkit, attributed in lib/github-mark)
  * so the strict no-external-request posture holds and, crucially, so the
@@ -69,6 +69,28 @@ export function CodexIcon(props: IconProps) {
           <stop offset="1" stopColor="#3941FF" />
         </linearGradient>
       </defs>
+    </svg>
+  );
+}
+
+/** Pi's pixel P+i mark. Monochrome by brand; the upstream SVG is white for
+ * a dark ground, so it takes currentColor here and follows the theme. */
+export function PiIcon(props: IconProps) {
+  return (
+    <svg {...svgProps(props)} viewBox="0 0 800 800" fill="currentColor" fillRule="evenodd">
+      <path d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z" />
+      <path d="M517.36 400H634.72V634.72H517.36Z" />
+    </svg>
+  );
+}
+
+/** OpenCode's square O. Its official light/dark assets only swap neutrals,
+ * so one currentColor mark serves both themes. */
+export function OpenCodeIcon(props: IconProps) {
+  return (
+    <svg {...svgProps(props)} viewBox="0 0 300 300" fill="none">
+      <path d="M210 240H90V120H210V240Z" fill="currentColor" opacity=".2" />
+      <path d="M210 60H90V240H210V60ZM270 300H30V0H270V300Z" fill="currentColor" />
     </svg>
   );
 }

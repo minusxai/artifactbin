@@ -1,141 +1,43 @@
 'use client';
 
-import { useDialogKeyboard } from './use-dialog-keyboard';
-
+/**
+ * THE WORKSPACE'S ONE CREATION DOOR: a Create button whose menu lists what a
+ * workspace can hold, in the order a reader thinks of them — the documents
+ * (artifact, folder) first, then under an "assets" rule the material those
+ * documents are built from (file, dataset). Artifact and folder open the one
+ * create dialog; file and dataset each go to their own page, where the upload
+ * is previewed before and after it lands. A file picked from inside a folder
+ * carries the folder along, so it is created there like everything else here.
+ */
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { ChevronDown, Database, FilePlus2, FolderPlus, Plus, Trash2, X } from 'lucide-react';
-import GetStarted from '@/components/GetStarted';
-import { pageDataChanged } from '@/web/page-data-events';
+import { ChevronDown, Database, DatabasePlus, FilePlus2, FileUp, FolderPlus, Plus, Trash2, type LucideIcon } from 'lucide-react';
+import CreateDialog, { type CreateKind } from '@/components/CreateDialog';
 
-type CreateKind = 'artifact' | 'folder';
+const ITEM =
+  'group flex w-full cursor-pointer items-center gap-2.5 rounded-[4px] px-2.5 py-2 text-left font-mono text-[11.5px] text-fg no-underline transition-colors hover:bg-accent-soft hover:text-accent';
 
-function CreateDialog({
-  kind,
-  parentId,
-  onClose,
-  onCreated,
-}: {
-  kind: CreateKind;
-  parentId: string | null;
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  const panel = useRef<HTMLDivElement>(null);
-
-  useDialogKeyboard(panel, onClose, 'button:not([disabled]), input:not([disabled])');
-
-  const createFolder = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const title = name.trim();
-    if (!title || busy) return;
-    setBusy(true);
-    setError('');
-    const response = await fetch('/api/my/artifacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
-    }).catch(() => null);
-    setBusy(false);
-    if (!response?.ok) {
-      setError('Could not create the folder. Try again.');
-      return;
-    }
-    pageDataChanged();
-    onClose();
-    onCreated();
-  };
-
-  const artifact = kind === 'artifact';
-  return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-8">
-      <button
-        type="button"
-        aria-label="Close create dialog by clicking outside"
-        onClick={onClose}
-        className="absolute inset-0 cursor-default border-0 bg-black/45 p-0 backdrop-blur-[2px]"
-      />
-      <div
-        ref={panel}
-        role="dialog"
-        aria-modal="true"
-        aria-label={artifact ? 'Create new artifact' : 'Create new folder'}
-        className={`relative z-10 flex max-h-[calc(100svh-24px)] w-full flex-col overflow-hidden rounded-[9px] border border-edge-bright bg-surface shadow-2xl ${artifact ? 'max-w-3xl' : 'max-w-md'}`}
-      >
-        <header className="flex items-start gap-4 border-b border-edge px-4 py-4 sm:px-6">
-          <div className="min-w-0">
-            <h2 className="flex items-center gap-2 font-mono text-sm font-semibold text-fg">
-              {artifact ? <FilePlus2 aria-hidden="true" size={15} className="text-accent" /> : <FolderPlus aria-hidden="true" size={15} className="text-accent" />}
-              {artifact ? 'New artifact' : 'New folder'}
-            </h2>
-            <p className="mt-1 font-sans text-xs text-muted">
-              {artifact ? 'Connect an agent, then tell it what you want to make.' : 'Folders keep related artifacts and data files together.'}
-            </p>
-          </div>
-          <button
-            type="button"
-            aria-label="Close create dialog"
-            autoFocus={artifact}
-            onClick={onClose}
-            className="ml-auto inline-flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-[4px] text-muted transition-colors hover:bg-raised hover:text-fg"
-          >
-            <X size={15} />
-          </button>
-        </header>
-
-        {artifact ? (
-          <div className="overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
-            {parentId && (
-              <p className="mb-4 rounded-[5px] border border-edge bg-raised px-3 py-2 font-mono text-[10px] text-muted">
-                create inside this folder with <code className="text-fg">parent_id: &quot;{parentId}&quot;</code>
-              </p>
-            )}
-            <GetStarted heading={false} frame={false} />
-          </div>
-        ) : (
-          <form onSubmit={createFolder} className="px-4 py-5 sm:px-6">
-            <label htmlFor="workspace-folder-name" className="block font-mono text-[10px] tracking-[0.12em] text-muted uppercase">
-              Folder name
-            </label>
-            <input
-              id="workspace-folder-name"
-              autoFocus
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="e.g. Research"
-              className="mt-2 h-9 w-full rounded-[5px] border border-edge bg-bg px-3 font-mono text-xs text-fg placeholder:text-faint focus:border-accent focus:outline-none"
-            />
-            {error && <p role="alert" className="mt-2 font-mono text-[10px] text-danger">{error}</p>}
-            <div className="mt-5 flex justify-end gap-2 border-t border-edge pt-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="cursor-pointer rounded-[5px] border border-edge bg-transparent px-3 py-1.5 font-mono text-[11px] text-muted transition-colors hover:border-edge-bright hover:text-fg"
-              >
-                cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!name.trim() || busy}
-                className="inline-flex cursor-pointer items-center gap-1.5 rounded-[5px] border border-accent bg-accent px-3 py-1.5 font-mono text-[11px] text-bg transition-opacity disabled:cursor-default disabled:opacity-40"
-              >
-                <FolderPlus aria-hidden="true" size={13} />
-                {busy ? 'creating…' : 'create folder'}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>,
-    document.body,
+/** One row of the menu: a button, or a link when the door is another page. */
+function MenuItem({ icon: Icon, label, href, onClick }: { icon: LucideIcon; label: string; href?: string; onClick: () => void }) {
+  const body = (
+    <>
+      <Icon aria-hidden="true" size={14} strokeWidth={1.75} className="shrink-0 text-muted transition-colors group-hover:text-accent" />
+      {label}
+    </>
+  );
+  if (href) {
+    return (
+      <a href={href} role="menuitem" onClick={onClick} className={ITEM}>
+        {body}
+      </a>
+    );
+  }
+  return (
+    <button type="button" role="menuitem" onClick={onClick} className={ITEM}>
+      {body}
+    </button>
   );
 }
 
-/** The homepage's single creation door: choice first, details second. */
 export default function WorkspaceCreate({ onCreated, parentId = null }: { onCreated: () => void; parentId?: string | null }) {
   const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<CreateKind | null>(null);
@@ -180,34 +82,15 @@ export default function WorkspaceCreate({ onCreated, parentId = null }: { onCrea
 
         {open && (
           <div role="menu" aria-label="Create menu" className="absolute inset-x-0 top-[calc(100%+0.35rem)] z-40 overflow-hidden rounded-[6px] border border-edge-bright bg-surface p-1 shadow-xl">
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => choose('artifact')}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-[4px] px-2.5 py-2 text-left font-mono text-[11px] text-fg transition-colors hover:bg-accent-soft hover:text-accent"
-            >
-              <FilePlus2 aria-hidden="true" size={14} />
-              New artifact
-            </button>
-            <a
-              href="/datasets/new"
-              role="menuitem"
-              aria-label="Create dataset"
-              onClick={() => setOpen(false)}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-[4px] px-2.5 py-2 text-left font-mono text-[11px] text-fg no-underline transition-colors hover:bg-accent-soft hover:text-accent"
-            >
-              <Database aria-hidden="true" size={14} />
-              New dataset
-            </a>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => choose('folder')}
-              className="flex w-full cursor-pointer items-center gap-2 rounded-[4px] px-2.5 py-2 text-left font-mono text-[11px] text-fg transition-colors hover:bg-accent-soft hover:text-accent"
-            >
-              <FolderPlus aria-hidden="true" size={14} />
-              New folder
-            </button>
+            <MenuItem icon={FilePlus2} label="Artifact" onClick={() => choose('artifact')} />
+            <MenuItem icon={FolderPlus} label="Folder" onClick={() => choose('folder')} />
+            {/* The rule and its label are the section: what follows is not a
+              * document but the material one is built from. */}
+            <div className="mt-1 border-t border-edge pt-1">
+              <span className="block px-2.5 pt-1.5 pb-1 font-mono text-[9.5px] tracking-[0.14em] text-faint uppercase">assets</span>
+              <MenuItem icon={FileUp} label="File" href={parentId ? `/files/new?parent_id=${encodeURIComponent(parentId)}` : '/files/new'} onClick={() => setOpen(false)} />
+              <MenuItem icon={DatabasePlus} label="Dataset" href="/datasets/new" onClick={() => setOpen(false)} />
+            </div>
           </div>
         )}
       </div>

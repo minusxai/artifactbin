@@ -4,6 +4,7 @@ import { usePageData } from '@/web/use-page-data';
 import type { HomeCore, HomeInsights } from '@/web/home-resource';
 import { ActivityFeed } from '@/components/ActivityFeed';
 import ClaimBanner from '@/components/ClaimBanner';
+import { DatabasePlus } from 'lucide-react';
 import GetStarted from '@/components/GetStarted';
 import Landing from '@/components/Landing';
 import LoginForm from '@/components/LoginForm';
@@ -107,7 +108,7 @@ export function HomePage() {
         * its result while the page refreshes into the dashboard. */}
       <ClaimBanner />
       {state.error && <div role="alert">Could not refresh your workspace. <button aria-label="Retry workspace" onClick={load}>Try again</button></div>}
-      {empty && <div className="mb-4 flex justify-end"><a href="/datasets/new" aria-label="Create dataset" className="rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Create dataset</a></div>}
+      {empty && <div className="mb-4 flex justify-end"><a href="/datasets/new" aria-label="Create dataset" className="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent"><DatabasePlus aria-hidden="true" size={13} strokeWidth={1.75} />Create dataset</a></div>}
       {empty ? (
         /* Inspiration, not decoration: an empty library has no examples of its
          * own, so these are the real published documents from the landing —

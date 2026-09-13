@@ -56,6 +56,21 @@ describe('the app CSP', () => {
     expect(workerSrc).toBe("worker-src 'self'");
   });
 
+  /*
+   * MEDIA, AND ONLY MEDIA, MAY COME FROM A LOCAL BLOB. The upload page shows a
+   * video or audio file before it is sent, from an object URL over the picked
+   * bytes; a stored one plays back from /a/<id>/raw. Neither relaxes the
+   * document, request or script directives, which is what a blob: elsewhere
+   * would do.
+   */
+  it('admits the app’s own media and local previews, and nothing else from a blob', () => {
+    const directives = APP_CSP.split('; ');
+    expect(directives.find((d) => d.startsWith('media-src'))).toBe("media-src 'self' blob:");
+    for (const directive of ['frame-src', 'connect-src', 'worker-src', 'script-src']) {
+      expect(directives.find((d) => d.startsWith(directive))).not.toContain('blob:');
+    }
+  });
+
   it('allows only the known app and development bootstrap scripts inline', () => {
     expect(APP_INLINE_SCRIPT_HASHES.split(' ')).toHaveLength(2);
     expect(APP_CSP.split('; ').find((directive) => directive.startsWith('script-src'))).not.toContain("'unsafe-inline'");

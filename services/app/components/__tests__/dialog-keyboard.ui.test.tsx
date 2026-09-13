@@ -28,7 +28,7 @@ const openings = [
     open() {
       render(<WorkspaceCreate onCreated={() => {}} />);
       fireEvent.click(screen.getByLabelText('Create'));
-      fireEvent.click(screen.getByRole('menuitem', { name: 'New folder' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Folder' }));
       fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: 'Research' } });
     },
   },

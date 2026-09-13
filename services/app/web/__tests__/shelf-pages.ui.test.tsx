@@ -58,9 +58,9 @@ describe('the homepage workspace and profile column', () => {
     home = { signedIn: true, artifacts: [doc('a')], viewsOverTime: [], shared: [] };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     const create = await screen.findByLabelText('Create');
-    expect(screen.queryByLabelText('Create dataset')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Dataset' })).toBeNull();
     fireEvent.click(create);
-    expect(within(screen.getByRole('menu', { name: 'Create menu' })).getByRole('menuitem', { name: 'Create dataset' })).toHaveAttribute('href', '/datasets/new');
+    expect(within(screen.getByRole('menu', { name: 'Create menu' })).getByRole('menuitem', { name: 'Dataset' })).toHaveAttribute('href', '/datasets/new');
   });
 
   it('widens a populated home for the dashboard rail while keeping profiles focused', async () => {

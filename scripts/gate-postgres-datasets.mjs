@@ -79,6 +79,13 @@ try {
   await becomeOwner(owner, base, start.token);
   await loginViaEmail(owner, base, sink, `mxmx_test_postgres_${Date.now()}@example.com`);
   assert.equal((await ownerApi(owner, '/api/tokens/claim', 'POST', { token: start.token })).status, 200);
+  // Default schema, result cache and source markup live under the editor's
+  // collapsed "Advanced" disclosure (web/pages/DatasetEditor); a hidden
+  // control cannot be selected, so open it before reaching for them.
+  const openAdvanced = async (page) => {
+    const details = page.locator('details', { has: page.locator('summary', { hasText: 'Advanced' }) });
+    if (!(await details.evaluate((el) => el.open))) await details.locator('summary').click();
+  };
   await owner.goto(`${base}/datasets/new`, { waitUntil: 'load' });
   await owner.getByLabel('Dataset title', { exact: true }).fill('Postgres gate warehouse');
   await owner.getByLabel('PostgreSQL', { exact: true }).click();
@@ -98,6 +105,7 @@ try {
   await owner.getByLabel('Toggle table sales.orders', { exact: true }).click();
   for (const column of ['id', 'region', 'amount']) await owner.getByLabel(`Expose column sales.orders.${column}`, { exact: true }).check();
   assert.equal(await owner.getByLabel('Expose column sales.orders.customer_secret', { exact: true }).isChecked(), false);
+  await openAdvanced(owner);
   await owner.getByLabel('Default schema', { exact: true }).selectOption('sales');
   await owner.getByLabel('Expose table support.tickets', { exact: true }).check();
   await owner.getByLabel('Toggle table support.tickets', { exact: true }).click();
@@ -180,6 +188,7 @@ try {
   // Publish only the final model. The intermediate cell and physical tables stay internal.
   await owner.getByLabel('Expose schema sales', { exact: true }).uncheck();
   await owner.getByLabel('Expose schema support', { exact: true }).uncheck();
+  await openAdvanced(owner);
   await owner.getByLabel('Default schema', { exact: true }).selectOption('models');
   await owner.getByRole('button', { name: 'Data preview', exact: true }).click();
   await owner.getByLabel('SQL view', { exact: true }).click();
@@ -191,6 +200,7 @@ try {
   assert.ok(deniedDraft.error);
   assert.equal(await owner.getByLabel('Dataset SQL', { exact: true }).inputValue(), 'select * from sales.orders');
   await owner.getByRole('button', { name: 'Source & models', exact: true }).click();
+  await openAdvanced(owner);
   await owner.getByLabel('Edit dataset source', { exact: true }).click();
   const source = await owner.getByLabel('Dataset source', { exact: true }).inputValue();
   assert.match(source, /<Dataset/); assert.match(source, /raw_orders/); secretFree(source);

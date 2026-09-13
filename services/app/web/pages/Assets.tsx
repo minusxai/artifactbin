@@ -1,4 +1,4 @@
-import { Database } from 'lucide-react';
+import { Database, DatabasePlus, FileUp } from 'lucide-react';
 import { usePageData } from '../use-page-data';
 import { Navigate } from 'react-router';
 import type { PickerFolder } from '@/components/FolderPicker';
@@ -39,7 +39,16 @@ export function AssetsPage() {
         <Database aria-hidden="true" className="size-3 stroke-[1.8] text-accent" />
         <MicroLabel>assets</MicroLabel>
         <span className="font-mono text-[10px] text-faint">the material documents are built from</span>
-        <a href="/datasets/new" aria-label="Create dataset" className="ml-auto rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Create dataset</a>
+        <div className="ml-auto flex items-center gap-2">
+          <a href="/files/new" aria-label="Upload file" className="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">
+            <FileUp aria-hidden="true" size={13} strokeWidth={1.75} />
+            Upload file
+          </a>
+          <a href="/datasets/new" aria-label="Create dataset" className="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">
+            <DatabasePlus aria-hidden="true" size={13} strokeWidth={1.75} />
+            Create dataset
+          </a>
+        </div>
       </div>
 
       {failed && !data ? (
