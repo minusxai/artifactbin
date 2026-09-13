@@ -80,8 +80,7 @@ Run these from the repository root. Keep the list complete as root scripts come 
 
 ## Change checks
 
-- CLI releases require `npm run release:cli -- [patch|minor|major]`, then `npm run generate:teaching -w services/cli`
-  (or the `Update CLI Version` GitHub Action, which does both and opens the PR);
+- CLI releases require `npm run release:cli`, then `npm run generate:teaching -w services/cli`;
   without the bump the live installer serves the old binary. What each step rewrites is in
   [services/cli/README.md](services/cli/README.md). CI publishes on a version change after main
   passes; downstream deployments must advance their submodule pin to ship the release pointer.
