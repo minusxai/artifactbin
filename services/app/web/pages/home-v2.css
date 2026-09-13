@@ -726,22 +726,28 @@
   }
 }
 
-/* Keep the 1448 × 1086 canvas coordinate space intact. Only its viewport
- * trims the last 136 source pixels of floor; masks and pointer hits still
- * share the exact same scale. Reserve space for the board controls too. */
+/* The wide illustration and every interactive layer share one uncropped frame. */
+.workshop-scene-frame {
+  aspect-ratio: 1448 / 815;
+}
 @media (min-width: 801px) {
   .workshop-hero {
     width: 100%;
-    max-width: calc((100svh - 64px) * 1448 / 950);
-    margin-inline: auto;
+    max-width: none;
+    margin: 0;
   }
   .workshop-picture {
-    aspect-ratio: 1448 / 950;
-    overflow: hidden;
+    aspect-ratio: 1448 / 815;
   }
   .workshop-scene-controls {
+    position: absolute;
+    top: calc(56.2845cqw - 40px);
+    left: 0;
+    right: 0;
+    height: 40px;
     box-sizing: border-box;
-    height: 64px;
+    padding-block: 0;
+    background: #faf7f0dd;
   }
 }
 @media (max-width: 800px) {
@@ -749,4 +755,18 @@
     width: 100%;
     margin-left: 0;
   }
+}
+/* The wider outdoor landscape puts forest beneath the small setup notes. */
+.workshop-page[data-setting="outdoor"] .workshop-step-note {
+  width: fit-content;
+  padding: 0.25em 0.45em;
+  margin-left: -0.45em;
+  background: #f7f7edf0;
+  border-radius: 2px;
+}
+.workshop-page[data-setting="outdoor"] .workshop-nav nav {
+  text-shadow:
+    0 0 4px #fff,
+    0 0 8px #fff,
+    0 0 12px #fff;
 }

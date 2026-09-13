@@ -1,5 +1,5 @@
 /** Geometry and gesture decisions, independent of the renderer or browser. */
-export const SCENE = { width: 1448, height: 1086 };
+export const SCENE = { width: 1448, height: 815 };
 export interface Point {
   x: number;
   y: number;

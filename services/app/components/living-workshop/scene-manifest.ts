@@ -12,55 +12,55 @@ export interface WorkshopPaper extends PaperSlot {
 const PLACEMENTS = [
   {
     id: "YPLu0U",
-    x: 666,
-    y: 99,
-    width: 184,
-    height: 208,
+    x: 730,
+    y: 80,
+    width: 145,
+    height: 175,
     angle: -0.085,
     reveal: "Edit it with your own hands.",
   },
   {
     id: "5fN6kY",
-    x: 885,
-    y: 88,
-    width: 235,
-    height: 211,
+    x: 907,
+    y: 72,
+    width: 220,
+    height: 176,
     angle: 0.065,
     reveal: "Leave feedback where it belongs.",
   },
   {
     id: "OewuPR",
-    x: 1143,
-    y: 112,
-    width: 172,
-    height: 220,
+    x: 1157,
+    y: 90,
+    width: 167,
+    height: 175,
     angle: -0.09,
     reveal: "Explore the data behind the page.",
   },
   {
     id: "wxeC8G",
-    x: 652,
-    y: 326,
-    width: 191,
-    height: 201,
+    x: 720,
+    y: 270,
+    width: 163,
+    height: 173,
     angle: 0.075,
     reveal: "Make work worth sharing.",
   },
   {
     id: "yKcybb",
-    x: 913,
-    y: 319,
-    width: 218,
-    height: 215,
+    x: 930,
+    y: 276,
+    width: 205,
+    height: 175,
     angle: -0.06,
     reveal: "Bring your favorite agent.",
   },
   {
     id: "EN6QaQ",
-    x: 1159,
-    y: 361,
-    width: 164,
-    height: 174,
+    x: 1168,
+    y: 283,
+    width: 162,
+    height: 166,
     angle: 0.1,
     reveal: "Your work. Your own little corner.",
   },
@@ -79,7 +79,7 @@ export const WORKSHOP_PAPERS: WorkshopPaper[] = PLACEMENTS.flatMap((slot) => {
       ]
     : [];
 });
-export const WORKSHOP_IMAGE = "/landing/workshop/indoor-polished.webp";
+export const WORKSHOP_IMAGE = "/landing/workshop/indoor-wide.webp";
 
 export interface WorkshopSetting {
   image: string;
@@ -92,12 +92,12 @@ export const WORKSHOP_SETTINGS: Record<
 > = {
   indoor: {
     image: WORKSHOP_IMAGE,
-    mask: "/landing/workshop/indoor-mask.png",
+    mask: "/landing/workshop/wide-girl-mask.svg",
     name: "indoor",
   },
   outdoor: {
-    image: "/landing/workshop/outdoor-polished.webp",
-    mask: "/landing/workshop/outdoor-mask.png",
+    image: "/landing/workshop/outdoor-wide.webp",
+    mask: "/landing/workshop/wide-girl-mask.svg",
     name: "outdoor",
   },
 };

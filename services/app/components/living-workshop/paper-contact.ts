@@ -1,7 +1,7 @@
 import type { Cloth, Particle } from "./paper-physics";
 
 // One inclined floor, shared by every sheet. Positive z comes toward the viewer.
-export const PAPER_FLOOR = { y: 900, slope: 0.4, thickness: 2.5 };
+export const PAPER_FLOOR = { y: 725, slope: 0.4, thickness: 2.5 };
 export const floorClearance = (p: Pick<Particle, "y" | "z">) =>
   PAPER_FLOOR.y + PAPER_FLOOR.slope * p.z - p.y;
 export function contactFloor(p: Particle): boolean {

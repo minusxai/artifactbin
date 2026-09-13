@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1672 941" width="1672" height="941">
+  <!-- Temporary geometric silhouette for the matched wide scenes. Replace with
+       the user's detailed hair/hand mask when available. Red means foreground. -->
+  <rect width="1672" height="941" fill="black"/>
+  <path fill="red" d="M1003 264 Q1013 259 1022 270 L1036 304 Q1057 329 1066 348 Q1079 362 1076 397 L1074 456 L1082 497 L1074 509 Q1087 545 1085 579 L1076 766 L1063 779 Q1070 794 1055 802 L1030 802 L1015 793 L1017 779 L1001 778 Q982 803 948 799 L925 791 Q916 783 928 776 L946 769 L962 611 L965 558 L976 527 L973 508 Q957 506 954 491 L959 467 L960 439 Q963 417 976 409 L993 398 L989 383 Q972 376 978 357 Q974 335 990 323 Q1003 311 1020 316 L1033 312 L1020 298 L1003 292 Q999 286 1002 281 L998 274 Q996 269 1003 272 Z"/>
+</svg>

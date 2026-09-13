@@ -11,7 +11,14 @@ interface Robot {
   label: string;
   className: string;
   /** Top-left of the screen, its tilt, and whether it must be painted dark first. */
-  screen: { x: number; y: number; angle: number; scale: number; w: number; dark: boolean };
+  screen: {
+    x: number;
+    y: number;
+    angle: number;
+    scale: number;
+    w: number;
+    dark: boolean;
+  };
   Mark: (props: { size?: number }) => ReactElement;
   ink: string;
 }
@@ -19,21 +26,21 @@ const ROBOTS: Robot[] = [
   {
     label: "Claude Code robot",
     className: "workshop-agent-claude",
-    screen: { x: 590, y: 449, angle: -16, scale: 0.8, w: 24, dark: true },
+    screen: { x: 668, y: 371, angle: -16, scale: 0.8, w: 24, dark: false },
     Mark: ClaudeCodeIcon,
     ink: "#D97757",
   },
   {
     label: "Codex robot",
     className: "workshop-agent-codex",
-    screen: { x: 500, y: 645, angle: -2, scale: 0.87, w: 22, dark: true },
+    screen: { x: 568, y: 530, angle: -2, scale: 0.87, w: 22, dark: false },
     Mark: CodexIcon,
     ink: "#7A9DFF",
   },
   {
     label: "pi robot",
     className: "workshop-agent-pi",
-    screen: { x: 999, y: 712, angle: -13, scale: 0.8, w: 22, dark: false },
+    screen: { x: 1015, y: 591, angle: -13, scale: 0.8, w: 22, dark: false },
     Mark: PiIcon,
     ink: "#fff4d9",
   },
@@ -48,7 +55,9 @@ function Screen({ robot }: { robot: Robot }) {
       transform={`translate(${screen.x} ${screen.y}) rotate(${screen.angle}) scale(${screen.scale})`}
       color="#fff4d9"
     >
-      {screen.dark && <rect width={screen.w} height={SCREEN_H} rx="4" fill="#101815" />}
+      {screen.dark && (
+        <rect width={screen.w} height={SCREEN_H} rx="4" fill="#101815" />
+      )}
       <ellipse
         cx={screen.w / 2}
         cy={SCREEN_H / 2}
@@ -70,14 +79,18 @@ function Screen({ robot }: { robot: Robot }) {
   );
 }
 
-export default function AgentScreens({ inCanvas = false }: { inCanvas?: boolean }) {
+export default function AgentScreens({
+  inCanvas = false,
+}: {
+  inCanvas?: boolean;
+}) {
   return (
     <div className="workshop-agent-screens" data-canvas={inCanvas}>
       {ROBOTS.map((robot) => (
         <svg
           key={robot.className}
           className={`workshop-agent ${robot.className}`}
-          viewBox="0 0 1448 1086"
+          viewBox="0 0 1448 815"
           role="img"
           aria-label={robot.label}
         >

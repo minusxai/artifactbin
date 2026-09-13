@@ -11,10 +11,10 @@ describe("paper gestures in source-image coordinates", () => {
   it("registers a pointer to the same place after resizing and page offsets", () => {
     expect(
       scenePoint(
-        { x: 382, y: 321.5 },
-        { left: 20, top: 50, width: 724, height: 543 },
+        { x: 382, y: 253.75 },
+        { left: 20, top: 50, width: 724, height: 407.5 },
       ),
-    ).toEqual({ x: 724, y: 543 });
+    ).toEqual({ x: 724, y: 407.5 });
   });
   it("opens a short click, returns a small drag and detaches a deliberate pull", () => {
     const start = beginGesture("real-artifact", { x: 10, y: 10 });

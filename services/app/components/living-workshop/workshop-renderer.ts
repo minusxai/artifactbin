@@ -275,7 +275,20 @@ export function createWorkshopScene(
     g.setAttribute(
       "position",
       new Float32BufferAttribute(
-        [0, 0, z, 1448, 0, z, 0, 1086, z, 1448, 1086, z],
+        [
+          0,
+          0,
+          z,
+          SCENE.width,
+          0,
+          z,
+          0,
+          SCENE.height,
+          z,
+          SCENE.width,
+          SCENE.height,
+          z,
+        ],
         3,
       ),
     );
@@ -300,8 +313,8 @@ export function createWorkshopScene(
   // Screen marks join the depth-tested scene, so a foreground sheet can cover
   // them. The same inline SVGs remain the non-WebGL accessible fallback.
   const screenSurface = document.createElement("canvas");
-  screenSurface.width = 1448;
-  screenSurface.height = 1086;
+  screenSurface.width = SCENE.width;
+  screenSurface.height = SCENE.height;
   const screenContext = screenSurface.getContext("2d");
   if (screenContext) {
     const screenTexture = new CanvasTexture(screenSurface);
@@ -311,14 +324,14 @@ export function createWorkshopScene(
       ".workshop-agent",
     ) || []) {
       const copy = svg.cloneNode(true) as SVGSVGElement;
-      copy.setAttribute("width", "1448");
-      copy.setAttribute("height", "1086");
+      copy.setAttribute("width", String(SCENE.width));
+      copy.setAttribute("height", String(SCENE.height));
       copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
       const source = new Image();
       images.push(source);
       source.onload = () => {
         if (disposed) return;
-        screenContext.drawImage(source, 0, 0, 1448, 1086);
+        screenContext.drawImage(source, 0, 0, SCENE.width, SCENE.height);
         screenTexture.needsUpdate = true;
         schedule();
       };
@@ -332,11 +345,11 @@ export function createWorkshopScene(
   background.onload = () => {
     if (disposed) return;
     const base = document.createElement("canvas");
-    base.width = 1448;
-    base.height = 1086;
+    base.width = SCENE.width;
+    base.height = SCENE.height;
     const b = base.getContext("2d");
     if (!b) return;
-    b.drawImage(background, 0, 0, 1448, 1086);
+    b.drawImage(background, 0, 0, SCENE.width, SCENE.height);
     const bt = new CanvasTexture(base);
     bt.colorSpace = SRGBColorSpace;
     quad(bt, 0);
@@ -345,15 +358,15 @@ export function createWorkshopScene(
     mask.onload = () => {
       if (disposed) return;
       const front = document.createElement("canvas");
-      front.width = 1448;
-      front.height = 1086;
+      front.width = SCENE.width;
+      front.height = SCENE.height;
       const f = front.getContext("2d");
       if (!f) return;
-      f.drawImage(mask, 0, 0, 1448, 1086);
-      foregroundCoverage = f.getImageData(0, 0, 1448, 1086).data;
-      f.clearRect(0, 0, 1448, 1086);
-      f.drawImage(background, 0, 0, 1448, 1086);
-      const pixels = f.getImageData(0, 0, 1448, 1086);
+      f.drawImage(mask, 0, 0, SCENE.width, SCENE.height);
+      foregroundCoverage = f.getImageData(0, 0, SCENE.width, SCENE.height).data;
+      f.clearRect(0, 0, SCENE.width, SCENE.height);
+      f.drawImage(background, 0, 0, SCENE.width, SCENE.height);
+      const pixels = f.getImageData(0, 0, SCENE.width, SCENE.height);
       applyForegroundMask(pixels.data, foregroundCoverage);
       f.putImageData(pixels, 0, 0);
       const ft = new CanvasTexture(front);
@@ -367,8 +380,8 @@ export function createWorkshopScene(
   background.src = setting.image;
   // Pin heads are independent of the sheet, left in place when it falls.
   const pinSurface = document.createElement("canvas");
-  pinSurface.width = 1448;
-  pinSurface.height = 1086;
+  pinSurface.width = SCENE.width;
+  pinSurface.height = SCENE.height;
   const pins = pinSurface.getContext("2d");
   if (pins) {
     papers.forEach((p, i) => {
@@ -511,10 +524,12 @@ export function createWorkshopScene(
         s.cloth.pinned &&
         foregroundCoverage &&
         p.x >= 0 &&
-        p.x < 1448 &&
+        p.x < SCENE.width &&
         p.y >= 0 &&
-        p.y < 1086 &&
-        foregroundCoverage[(Math.floor(p.y) * 1448 + Math.floor(p.x)) * 4] > 127
+        p.y < SCENE.height &&
+        foregroundCoverage[
+          (Math.floor(p.y) * SCENE.width + Math.floor(p.x)) * 4
+        ] > 127
       )
         return false;
       const indices = s.mesh.geometry.getIndex()!.array;

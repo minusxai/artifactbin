@@ -1,4 +1,4 @@
-import { floorClearance, separatePapers } from "../paper-contact";
+import { floorClearance, separatePapers, PAPER_FLOOR } from "../paper-contact";
 import { expect, it } from "vitest";
 import {
   makeCloth,
@@ -117,7 +117,7 @@ it("keeps two resting sheets separated where their surfaces overlap", () => {
     c.points.forEach((p, i) => {
       p.x = 650 + (i % (c.columns + 1)) * 10;
       p.z = 80 + Math.floor(i / (c.columns + 1)) * 9;
-      p.y = 900 + 0.4 * p.z;
+      p.y = PAPER_FLOOR.y + PAPER_FLOOR.slope * p.z;
       p.px = p.x;
       p.py = p.y;
       p.pz = p.z;

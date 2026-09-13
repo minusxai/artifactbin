@@ -105,8 +105,8 @@ export default function HomeV2({
               alt="A sunlit artist’s workshop with green plants, a woman at a cork board, and small robot helpers."
               className="workshop-scene-fallback"
               fetchPriority="high"
-              width={1920}
-              height={1440}
+              width={1672}
+              height={941}
             />
             <AgentScreens inCanvas={sceneReady} />
             <canvas
