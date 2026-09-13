@@ -1,3 +1,4 @@
+import {renderConnectionPage} from '../../utils/src/connection-page';
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
 /** Loopback callback carries only a single-use PKCE code, never bearer credentials. */
 import {createServer} from 'node:http';
@@ -16,15 +17,16 @@ export async function loopbackAuthenticate(origin:string,options:Options):Promis
  void completed.catch(()=>{});
  let consumed=false;let redirectUri='';
  const listener=createServer((request,response)=>{
-  response.setHeader('Cache-Control','no-store');response.setHeader('Content-Type','text/plain; charset=utf-8');response.setHeader('Content-Security-Policy',"default-src 'none'; frame-ancestors 'none'");
+  response.setHeader('Cache-Control','no-store');response.setHeader('Content-Type','text/html; charset=utf-8');response.setHeader('Content-Security-Policy',"default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; form-action 'none'");
+  const page=(heading:string,body:string,status=200)=>{response.writeHead(status).end(renderConnectionPage(heading,`<h1>${heading}</h1><p>${body}</p>`));};
   const url=new URL(request.url??'/',redirectUri);
   const supplied=url.searchParams.get('state')??'';
-  if(request.method!=='GET'||request.headers.host!==new URL(redirectUri).host||url.pathname!=='/callback'||Buffer.byteLength(supplied)!==Buffer.byteLength(state)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(state))){response.writeHead(400).end('Invalid callback. Return to the approval page.');return;}
-  if(consumed){response.writeHead(409).end('This approval was already received.');return;}
-  if(url.searchParams.has('error')){consumed=true;response.end('Connection was not approved. You may close this tab.');refuse(new CliError('access_denied','Browser approval was denied.'));return;}
+  if(request.method!=='GET'||request.headers.host!==new URL(redirectUri).host||url.pathname!=='/callback'||Buffer.byteLength(supplied)!==Buffer.byteLength(state)||!timingSafeEqual(Buffer.from(supplied),Buffer.from(state))){page('Invalid callback','Return to the approval page.',400);return;}
+  if(consumed){page('Approval already received','This approval was already received. Return to your terminal.',409);return;}
+  if(url.searchParams.has('error')){consumed=true;page('Connection denied','No access was granted. You can close this page.');refuse(new CliError('access_denied','Browser approval was denied.'));return;}
   const code=url.searchParams.get('code');
-  if(!code||code.length>2048){response.writeHead(400).end('Missing authorization code.');return;}
-  consumed=true;response.end('Approval received. Return to your terminal.');accept(code);
+  if(!code||code.length>2048){page('Missing authorization code','Run afbin auth again to start a new approval.',400);return;}
+  consumed=true;page('Approval received','Return to your terminal to finish connecting. You can close this page.');accept(code);
  });
  await new Promise<void>((resolve,reject)=>{listener.once('error',reject);listener.listen(0,'127.0.0.1',()=>{listener.off('error',reject);resolve();});});
  const address=listener.address();if(!address||typeof address==='string')throw new Error('Loopback listener did not bind');
