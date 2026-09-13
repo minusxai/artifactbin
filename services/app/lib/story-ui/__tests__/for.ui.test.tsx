@@ -75,3 +75,14 @@ it.each(['keyBy=""','keyBy={12}','keyBy={$field}'])('rejects an explicitly malfo
  render(<>{renderStoryNodes(parsed.nodes,{components:{},values:{orders:[{name:'Alice'}]}})}</>);
  expect(screen.getByRole('alert').textContent).toContain('keyBy');
 });
+
+it('inside a table it repeats the rows with no wrapper element — a <div> in <tbody> is hoisted by the browser and hydration fails with React error 418 (eval run 34741910427, pi deck)', () => {
+  const parsed = parseJsxOrThrow('<table><tbody><For each={$rows} keyBy="id"><tr><td>{$_row.name}</td></tr></For></tbody></table>');
+  const view = render(<>{renderStoryNodes(parsed.nodes, {components:{}, tables:{rows:{rows:[{id:1,name:'a'},{id:2,name:'b'}]}}})}</>);
+  expect(view.container.querySelector('tbody > div')).toBeNull();
+  expect([...view.container.querySelectorAll('tbody > tr')].map(tr => tr.textContent)).toEqual(['a', 'b']);
+  const cells = parseJsxOrThrow('<table><tbody><tr><For each={$rows} keyBy="id"><td>{$_row.name}</td></For></tr></tbody></table>');
+  const row = render(<>{renderStoryNodes(cells.nodes, {components:{}, tables:{rows:{rows:[{id:1,name:'a'},{id:2,name:'b'}]}}})}</>);
+  expect(row.container.querySelector('tr > div')).toBeNull();
+  expect(row.container.querySelectorAll('tr > td').length).toBe(2);
+});

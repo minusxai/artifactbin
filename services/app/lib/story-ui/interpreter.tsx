@@ -218,10 +218,17 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
     const ids = templateIds(node.children);
     const wrapper = buildProps(node.attributes.filter(a=>a.name !== 'each' && a.name !== 'keyBy'),true,node.tag,path,undefined,options.values);
-    return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...source.map((row,index) => {
+    const instances = source.map((row,index) => {
       const key = keyField === undefined ? index : row[keyField] as string | number;
       return React.createElement(React.Fragment, {key:JSON.stringify([keyField === undefined ? 'index' : 'key',typeof key,key])}, ...node.children.map((child,i) => renderNode(child, {...options,row,repeatScope:{owner:ownerId,key,durable:keyField !== undefined,ids}}, `${path}.${i}`)));
-    }));
+    });
+    // Table rows and cells: no wrapper element. A `<div>` inside `<tbody>` or `<tr>` is not valid HTML;
+    // the browser hoists it out of the table while parsing the server-rendered page, so hydration
+    // sees a different DOM and fails with React error 418 (eval run 34741910427, pi deck). The
+    // instances still carry the owner attribute; only the wrapper's own id and classes have nowhere to go.
+    const tableParts = node.children.every(child => child.type === 'text' ? !child.value.trim() : child.type === 'element' && ['tr','td','th'].includes(child.tag));
+    if (tableParts) return React.createElement(React.Fragment, {key:options.keyFor?.(path) ?? path}, ...instances);
+    return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...instances);
   }
   if (options.repeatScope && node.attributes.some(a=>['run','value','checked','options'].includes(a.name) && a.value.static && refName(a.value.json))) return React.createElement('div', {role:'alert',key:path}, 'Bound controls inside For are not supported; use editable DataTable columns');
   if (options.repeatScope && ['DataTable', 'Iframe'].includes(node.tag)) return React.createElement('div', {role:'alert',key:path}, 'DataTable and Iframe must be outside For templates');
