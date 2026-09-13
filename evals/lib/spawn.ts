@@ -486,3 +486,14 @@ export function reclaimRunAsDirs(dirs: RunAsDirs, exec: (argv: string[]) => void
   // Numeric by default: the driver's user need not have a name the agent's view of the passwd file can resolve.
   exec(chownArgv(owner ?? `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`, dirs.chown));
 }
+
+/**
+ * A temp directory of the task's own. Five claude-code tasks ran in parallel on one runner and all
+ * wrote /tmp/gen.py; scrolly executed dashboard's generator, failed twice and diagnosed "/tmp is being
+ * clobbered by another process" (run 34740707220). Real users run one task; the eval must not share.
+ */
+export function taskTempEnvironment(homeDir: string): { TMPDIR: string; TMP: string; TEMP: string } {
+  const dir = path.join(homeDir, 'tmp');
+  fs.mkdirSync(dir, { recursive: true });
+  return { TMPDIR: dir, TMP: dir, TEMP: dir };
+}

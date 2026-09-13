@@ -178,7 +178,11 @@ function serialize(rows:Record<string,unknown>[],format:string):Buffer{
 async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOptions):Promise<(string|undefined)[]>{
  for(const target of targets)if(target.render&&target.path!==undefined)await unchangedHead(workspace,target.path);
  if(options.output==='-')return targets.map(()=>undefined);
- const outputPath=options.output?await confinedPath(workspace.root,resolve(workspace.cwd,options.output)):undefined;
+ const outputPath=options.output?await confinedPath(workspace.root,resolve(workspace.cwd,options.output)).catch(error=>{
+  // `--output /tmp/x.png` from a workspace elsewhere: an agent tried it in three tasks of run 34740707220 and got a generic failure.
+  if(error instanceof Error&&/outside the workspace/.test(error.message))throw new CliError('outside_workspace',`${options.output} is outside the workspace.`);
+  throw error;
+ }):undefined;
  const outputStat=outputPath?await stat(outputPath).catch(error=>{if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}):null;
  if(targets.length>1&&outputPath&&!outputStat?.isDirectory())throw new CliError('ambiguous_output','Several exports require an --output directory.','Export one resource at a time, or create the directory.');
  const directory=outputStat?.isDirectory()?relative(workspace.root,outputPath!):undefined;

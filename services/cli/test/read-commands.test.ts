@@ -46,6 +46,17 @@ describe('exporting and opening a published artifact', () => {
   const tracked=(id:string,markup:string)=>`---\nid: ${id}\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\ntitle: Report\nvisibility: unlisted\nshares:\n  - email: a@example.com\n    role: editor\n---\n${markup}\n`;
    const harness=(prefix:string)=>cliHarness(prefix,{account:null});
 
+  test('an export destination outside the workspace, and an image format on pull, are refused naming the fix (claude-code lost five calls to these in run 34740707220)',async()=>{
+   const h=await harness('afbin-export-refusals-');
+   try{
+    await writeFile(join(h.root,'rows.csv'),'name,n\na,1\n');
+    assert.notEqual(await h.invoke(['export','rows.csv','--format','json','--output','/tmp/afbin-outside-test.json','--json']),0);
+    assert.equal(h.last().error.code,'outside_workspace');assert.match(h.last().error.fix,/inside the workspace/);
+    assert.notEqual(await h.invoke(['pull','abc123','--format','png','--json']),0);
+    assert.equal(h.last().error.code,'invalid_choice');assert.match(h.last().error.fix,/afbin export abc123 --format png/);
+    assert.equal(h.network(),0);
+   }finally{await h.cleanup();}
+  });
   test('export converts local data offline and renders published heads through the server export route',async()=>{
    const h=await harness('afbin-seed-export-');
    try{
