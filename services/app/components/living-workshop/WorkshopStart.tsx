@@ -70,10 +70,6 @@ export default function WorkshopStart({ origin }: { origin: string }) {
                 </button>
               </Tooltip>
             </div>
-            <p className="workshop-step-note">
-              Checksum-verified, no Node needed. afbin signs you in through
-              your browser the first time it needs to.
-            </p>
           </div>
         </li>
         <li>
