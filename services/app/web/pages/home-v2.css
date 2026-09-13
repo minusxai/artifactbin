@@ -542,29 +542,12 @@
   z-index: 2;
   pointer-events: none;
 }
-/* Twice-size crops of the original painted CRT housings. */
+/* Only the dark screens are overlaid; the original heads remain in the scene. */
 .workshop-agent {
   position: absolute;
-  overflow: visible;
-  filter: drop-shadow(2px 4px 3px #30291930);
-}
-.workshop-agent-claude {
-  left: 35.5%;
-  top: 35.2%;
-  width: 10.2%;
-  height: 11.05%;
-}
-.workshop-agent-codex {
-  left: 29.7%;
-  top: 54.1%;
-  width: 9.25%;
-  height: 9.95%;
-}
-.workshop-agent-pi {
-  left: 64%;
-  top: 60.3%;
-  width: 9.67%;
-  height: 10.5%;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 @media (max-width: 800px) {
   .workshop-intro {
