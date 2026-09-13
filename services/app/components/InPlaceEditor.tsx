@@ -788,7 +788,7 @@ export default function InPlaceEditor({
           onClick={() => void applyHistory('undo')}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"
         >
-          <Undo2 size={16} />
+          <Undo2 size={14} />
         </button>
       </Tooltip>
       <Tooltip content="Redo (Ctrl/Cmd Shift Z)">
@@ -800,7 +800,7 @@ export default function InPlaceEditor({
           onClick={() => void applyHistory('redo')}
           className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"
         >
-          <Redo2 size={16} />
+          <Redo2 size={14} />
         </button>
       </Tooltip>
     </>

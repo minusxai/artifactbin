@@ -242,31 +242,31 @@ export default function StoryFormatToolbar({
         {plan.text && (
           <>
             <Chip label="Decrease font size" onClick={() => apply(stepSizeClass(cls, -1))}>
-              <AArrowDown size={16} />
+              <AArrowDown size={14} />
             </Chip>
             <Chip label="Increase font size" onClick={() => apply(stepSizeClass(cls, 1))}>
-              <AArrowUp size={16} />
+              <AArrowUp size={14} />
             </Chip>
             <Chip
               label="Toggle bold"
               on={selection.inline?.strong ?? currentChoice(cls, 'weight') === 'font-bold'}
               onClick={() => toggle('weight', 'font-bold')}
             >
-              <Bold size={16} />
+              <Bold size={14} />
             </Chip>
             <Chip
               label="Toggle italic"
               on={selection.inline?.em ?? currentChoice(cls, 'fontStyle') === 'italic'}
               onClick={() => toggle('fontStyle', 'italic')}
             >
-              <Italic size={16} />
+              <Italic size={14} />
             </Chip>
             <Chip
               label="Toggle underline"
               on={selection.inline?.u ?? currentChoice(cls, 'decoration') === 'underline'}
               onClick={() => toggle('decoration', 'underline')}
             >
-              <Underline size={16} />
+              <Underline size={14} />
             </Chip>
             <span className="mx-0.5 h-4 w-px bg-edge" />
           </>
@@ -292,7 +292,7 @@ export default function StoryFormatToolbar({
                       apply(applyTypographyChoice(cls, 'align', currentChoice(cls, 'align') === token ? null : token))
                     }
                   >
-                    <Icon size={16} />
+                    <Icon size={14} />
                   </Chip>
                 ))}
               </div>
@@ -304,7 +304,7 @@ export default function StoryFormatToolbar({
                 aria-label="Text color"
                 className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-[3px] text-fg hover:bg-raised"
               >
-                <Baseline size={16} />
+                <Baseline size={14} />
                 <input
                   type="color"
                   aria-label="Pick text color"
@@ -325,10 +325,10 @@ export default function StoryFormatToolbar({
             {linkDraft === null ? (
               <>
                 <Chip label="Insert link" onClick={() => setLinkDraft('')}>
-                  <Link2 size={16} />
+                  <Link2 size={14} />
                 </Chip>
                 <Chip label="Remove link" onClick={() => onApplyLink(selection.path, null)}>
-                  <Link2Off size={16} />
+                  <Link2Off size={14} />
                 </Chip>
               </>
             ) : (
@@ -372,43 +372,43 @@ export default function StoryFormatToolbar({
           <StoryToolbarMenu label="Spacing" name="More formatting controls" open={moreOpen} onOpenChange={setMoreOpen}>
             <div className="flex flex-wrap items-center gap-0.5" aria-label="Spacing controls">
               <Chip label="Decrease space above" onClick={() => apply(stepSpacingClass(cls, 'above', -1))}>
-                <ArrowUpToLine size={16} />
+                <ArrowUpToLine size={14} />
               </Chip>
               <span className="min-w-[26px] text-center font-mono text-[10px] text-muted">
                 {Number(currentSpacingStep(cls, 'above') ?? '0') * 4}px
               </span>
               <Chip label="Increase space above" onClick={() => apply(stepSpacingClass(cls, 'above', 1))}>
-                <ArrowUpFromLine size={16} />
+                <ArrowUpFromLine size={14} />
               </Chip>
               <span className="mx-0.5 h-4 w-px bg-edge" />
               <Chip label="Decrease space below" onClick={() => apply(stepSpacingClass(cls, 'below', -1))}>
-                <ArrowDownToLine size={16} />
+                <ArrowDownToLine size={14} />
               </Chip>
               <span className="min-w-[26px] text-center font-mono text-[10px] text-muted">
                 {Number(currentSpacingStep(cls, 'below') ?? '0') * 4}px
               </span>
               <Chip label="Increase space below" onClick={() => apply(stepSpacingClass(cls, 'below', 1))}>
-                <ArrowDownFromLine size={16} />
+                <ArrowDownFromLine size={14} />
               </Chip>
               <span className="mx-0.5 h-4 w-px bg-edge" />
               <Chip label="Decrease space left" onClick={() => apply(stepPaddingClass(cls, 'left', -1))}>
-                <ArrowLeftToLine size={16} />
+                <ArrowLeftToLine size={14} />
               </Chip>
               <span className="min-w-[26px] text-center font-mono text-[10px] text-muted">
                 {Number(currentPaddingStep(cls, 'left') ?? '0') * 4}px
               </span>
               <Chip label="Increase space left" onClick={() => apply(stepPaddingClass(cls, 'left', 1))}>
-                <ArrowLeftFromLine size={16} />
+                <ArrowLeftFromLine size={14} />
               </Chip>
               <span className="mx-0.5 h-4 w-px bg-edge" />
               <Chip label="Decrease space right" onClick={() => apply(stepPaddingClass(cls, 'right', -1))}>
-                <ArrowRightToLine size={16} />
+                <ArrowRightToLine size={14} />
               </Chip>
               <span className="min-w-[26px] text-center font-mono text-[10px] text-muted">
                 {Number(currentPaddingStep(cls, 'right') ?? '0') * 4}px
               </span>
               <Chip label="Increase space right" onClick={() => apply(stepPaddingClass(cls, 'right', 1))}>
-                <ArrowRightFromLine size={16} />
+                <ArrowRightFromLine size={14} />
               </Chip>
               <span className="mx-0.5 h-4 w-px bg-edge" />
             </div>
@@ -424,7 +424,7 @@ export default function StoryFormatToolbar({
               aria-label="Comment on selection"
               onMouseDown={keepFocus}
               onClick={() => onComment(selection)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-[3px] px-1 py-0.5 text-[11px] text-muted hover:bg-raised hover:text-fg"
+              className="inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2 font-mono text-[11px] font-normal leading-none text-fg hover:bg-surface"
             >
               <MessageSquare size={11} />
               <span className="hidden sm:inline">Comment</span>
