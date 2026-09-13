@@ -182,6 +182,44 @@ export default function StoryFormatToolbar({
 
   return (
     <div aria-label="Typography toolbar" className="flex h-11 min-w-0 flex-1 items-center rounded-lg bg-raised">
+      {/* Where this element sits, and a way up to its container. */}
+      <div
+        className="flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-r border-edge px-2"
+        aria-label="Selection breadcrumb"
+      >
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
+          <button
+            type="button"
+            aria-label="Document options"
+            onClick={() => onSelect(null)}
+            className="shrink-0 rounded px-1.5 py-1 text-xs text-muted hover:bg-raised"
+          >
+            Document
+          </button>
+          <span className="text-xs text-muted">{'>'}</span>
+          {selection.ancestors.length > 0 && (
+            <>
+              {selection.ancestors.slice(-2).map((crumb) => (
+                <Fragment key={crumb.path}>
+                  <Tooltip content={crumb.hint || crumb.tag}>
+                    <button
+                      type="button"
+                      aria-label={`Select ${nodeName(crumb.tag)}`}
+                      onMouseDown={keepFocus}
+                      onClick={() => onSelect(crumb.path)}
+                      className="cursor-pointer rounded-[3px] px-1 text-xs text-muted hover:bg-raised hover:text-fg"
+                    >
+                      {nodeName(crumb.tag)}
+                    </button>
+                  </Tooltip>
+                  <span className="text-xs text-muted">{'>'}</span>
+                </Fragment>
+              ))}
+            </>
+          )}
+          <span className="shrink-0 px-1 text-xs text-accent">{nodeName(selection.tag)}</span>
+        </div>
+      </div>
       <div
         className="flex h-11 min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2"
         aria-label="Primary formatting controls"
@@ -378,62 +416,24 @@ export default function StoryFormatToolbar({
         )}
         {insertionControls}
       </div>
-      {/* Where this element sits, and a way up to its container. */}
-      <div
-        className="flex h-8 max-w-[50%] shrink-0 items-center gap-1 border-l border-edge px-2"
-        aria-label="Selection breadcrumb"
-      >
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto whitespace-nowrap">
-          <button
-            type="button"
-            aria-label="Document options"
-            onClick={() => onSelect(null)}
-            className="shrink-0 rounded px-1.5 py-1 text-xs text-muted hover:bg-raised"
-          >
-            Document
-          </button>
-          <span className="text-xs text-muted">{'>'}</span>
-          {selection.ancestors.length > 0 && (
-            <>
-              {selection.ancestors.slice(-2).map((crumb) => (
-                <Fragment key={crumb.path}>
-                  <Tooltip content={crumb.hint || crumb.tag}>
-                    <button
-                      type="button"
-                      aria-label={`Select ${nodeName(crumb.tag)}`}
-                      onMouseDown={keepFocus}
-                      onClick={() => onSelect(crumb.path)}
-                      className="cursor-pointer rounded-[3px] px-1 text-xs text-muted hover:bg-raised hover:text-fg"
-                    >
-                      {nodeName(crumb.tag)}
-                    </button>
-                  </Tooltip>
-                  <span className="text-xs text-muted">{'>'}</span>
-                </Fragment>
-              ))}
-            </>
-          )}
-          <span className="shrink-0 px-1 text-xs text-accent">{nodeName(selection.tag)}</span>
-        </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {onComment && (
-            <Tooltip content="comment on this (⌘⌥M)">
-              <button
-                type="button"
-                aria-label="Comment on selection"
-                onMouseDown={keepFocus}
-                onClick={() => onComment(selection)}
-                className="inline-flex cursor-pointer items-center gap-1 rounded-[3px] px-1 py-0.5 text-xs text-muted hover:bg-raised hover:text-fg"
-              >
-                <MessageSquare size={11} />
-                <span className="hidden sm:inline">Comment</span>
-              </button>
-            </Tooltip>
-          )}
-          <Chip label="Delete element" onClick={onDelete}>
-            <Trash2 size={14} />
-          </Chip>
-        </div>
+      <div aria-label="Selection actions" className="ml-auto flex shrink-0 items-center gap-2 border-l border-edge px-2">
+        {onComment && (
+          <Tooltip content="comment on this (⌘⌥M)">
+            <button
+              type="button"
+              aria-label="Comment on selection"
+              onMouseDown={keepFocus}
+              onClick={() => onComment(selection)}
+              className="inline-flex cursor-pointer items-center gap-1 rounded-[3px] px-1 py-0.5 text-xs text-muted hover:bg-raised hover:text-fg"
+            >
+              <MessageSquare size={11} />
+              <span className="hidden sm:inline">Comment</span>
+            </button>
+          </Tooltip>
+        )}
+        <Chip label="Delete element" onClick={onDelete}>
+          <Trash2 size={14} />
+        </Chip>
       </div>
     </div>
   );

@@ -56,8 +56,8 @@ export async function checkWebImport(B, browser, WEB, ok) {
     const doc = await startDocument(B);
     await becomeOwner(page, B, doc.token);
     await page.goto(`${B}/a/${doc.id}#edit`, { waitUntil: 'load' });
-    await page.waitForSelector('[aria-label="Insert image"]', { timeout: 60000 });
-    await page.click('[aria-label="Insert image"]');
+    await page.waitForSelector('[aria-label="Insert"]', { timeout: 60000 });
+    await page.click('[aria-label="Insert"]');
     const urlField = await page.waitForSelector('[aria-label="Image URL"]', { timeout: 10000 }).catch(() => null);
     ok(!!urlField, 'the insert-image control offers a URL field');
     if (urlField) {

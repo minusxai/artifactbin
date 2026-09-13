@@ -46,9 +46,10 @@ describe('StoryFormatToolbar spacing row', () => {
     const toolbar = screen.getByLabelText('Typography toolbar');
     const breadcrumb = screen.getByLabelText('Selection breadcrumb');
     const primary = screen.getByLabelText('Primary formatting controls');
-    expect(toolbar.firstElementChild).toBe(primary);
-    expect(primary.nextElementSibling).toBe(breadcrumb);
-    expect(breadcrumb).toContainElement(screen.getByLabelText('Delete element'));
+    expect(toolbar.firstElementChild).toBe(breadcrumb);
+    expect(breadcrumb.nextElementSibling).toBe(primary);
+    expect(primary.nextElementSibling).toContainElement(screen.getByLabelText('Delete element'));
+    expect(breadcrumb).not.toContainElement(screen.getByLabelText('Delete element'));
     fireEvent.click(screen.getByLabelText('Alignment'));
     expect(screen.getByLabelText('Align left')).toHaveAttribute('data-slot', 'tooltip-trigger');
     expect(screen.getByLabelText('Align left')).not.toHaveAttribute('data-tip');
