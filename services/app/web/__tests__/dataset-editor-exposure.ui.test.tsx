@@ -96,6 +96,15 @@ describe('dataset editor — exposure and saving', () => {
     await waitFor(() => expect(savedDefinition()).toMatchObject({kind:'stored',defaultSchema:'main',tables:[{schema:'main',name:'rows',rows:[{id:1}]}]}));
   });
 
+  it('lists the JSON tables a reader will get, since there is nothing to whitelist', async () => {
+    editor();
+    expect(screen.getByLabelText('Exposed tables')).toHaveTextContent(/name a table in step 1/i);
+    click('Add JSON table'); change('Stored schema 1','main'); change('Stored table name 1','rows');
+    expect(screen.getByLabelText('Exposed tables')).toHaveTextContent('main.rows');
+    expect(screen.getByLabelText('Exposed tables')).toHaveTextContent('all columns');
+    expect(screen.queryByLabelText('Source exposure')).not.toBeInTheDocument();
+  });
+
   it('retains stored object data when changing refresh settings without new rows', async () => {
     state.loadedCatalog={kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'}],objectKey:'private/object'}]};
     editor(true); await waitFor(() => expect(screen.getByLabelText('Dataset title')).toHaveValue('Orders')); change('Refresh interval','30'); click('Save dataset');

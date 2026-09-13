@@ -1283,11 +1283,44 @@ export function DatasetEditorPage({
                     </Button>
                   </div>
                 </section>
-                {kind === "postgres" && (
+                {kind === "postgres" ? (
                   <DatasetWhitelist
                     sources={exposures}
                     onChange={changeExposures}
                   />
+                ) : (
+                  /* JSON tables have no picker: a pasted table is exposed
+                   * whole, and a model once its cell has run. The step still
+                   * exists so the reader sees what a reader of the dataset
+                   * will get, in the same place the PostgreSQL picker sits. */
+                  <section aria-label="Exposed tables" className={`${PANEL} overflow-hidden rounded-xl`}>
+                    <StepHeader n={3} title="Whitelist">
+                      JSON tables are exposed whole, and a model is exposed once its cell has run. Column-level whitelisting is for PostgreSQL sources.
+                    </StepHeader>
+                    <div className="p-4 sm:p-5">
+                      {exposedTables.length ? (
+                        <ul className="grid gap-2 sm:grid-cols-2">
+                          {exposedTables.map((table) => (
+                            <li
+                              key={`${table.schema}.${table.name}`}
+                              className="flex items-center justify-between gap-3 rounded border border-edge bg-raised/40 px-3 py-2 text-xs"
+                            >
+                              <span className="truncate font-mono text-fg">
+                                {table.schema}.{table.name}
+                              </span>
+                              <span className="shrink-0 text-muted">
+                                {table.columns?.length ? `${table.columns.length} columns` : "all columns"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-muted">
+                          Name a table in step 1, or run a model in step 2, and it appears here.
+                        </p>
+                      )}
+                    </div>
+                  </section>
                 )}
               </fieldset>
             </div>
