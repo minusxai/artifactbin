@@ -1,3 +1,4 @@
+import { applyForegroundMask } from "./foreground-mask";
 import {
   AmbientLight,
   BufferGeometry,
@@ -45,8 +46,6 @@ interface Sheet {
   indices: number[];
   lastTorn: number;
 }
-const WOMAN =
-  "M813 264 Q822 259 832 272 L849 293 868 324 Q877 337 885 366 L897 397 898 441 891 481 900 514 905 553 907 619 914 698 897 781 895 811 Q873 830 850 813 L841 794 825 806 Q791 833 749 813 L751 796 768 780 778 698 785 626 779 573 771 548 774 516 Q758 503 769 472 L774 418 783 394 Q769 379 780 345 L789 329 793 323 Q788 308 805 311 L819 319 834 310 832 302 820 292 Z";
 /** Imported only by the lazy workshop route, never by the existing home.
  * Same-origin textures are required by WebGL. Physics stays renderer-independent.
  */
@@ -78,8 +77,7 @@ export function createWorkshopScene(
   const light = new DirectionalLight(0xfff7e8, 1.15);
   light.position.set(-400, -700, 1000);
   scene.add(light);
-  const foreground = new Path2D(WOMAN),
-    hitContext = document.createElement("canvas").getContext("2d");
+  let foregroundCoverage: Uint8ClampedArray | null = null;
   let frame = 0,
     last = 0,
     accumulator = 0,
@@ -185,20 +183,46 @@ export function createWorkshopScene(
     const w = surface.width,
       h = surface.height;
     c.clearRect(0, 0, w, h);
+    // Slightly deckled stock, with the actual artifact printed across the page.
+    // Crop like a photographic print instead of floating a card in empty margins.
+    c.save();
+    c.beginPath();
+    for (let x = 0; x <= w; x += 4)
+      c.lineTo(x, 2 + Math.sin(x * 1.7 + index) * 1.2);
+    for (let y = 0; y <= h; y += 4)
+      c.lineTo(w - 2 + Math.sin(y * 1.3 + index), y);
+    for (let x = w; x >= 0; x -= 4)
+      c.lineTo(x, h - 2 + Math.sin(x * 0.9 + index) * 1.3);
+    for (let y = h; y >= 0; y -= 4) c.lineTo(2 + Math.sin(y * 1.1 + index), y);
+    c.closePath();
+    c.clip();
     c.fillStyle = index % 2 ? "#f7f0dc" : "#fffcf1";
     c.fillRect(0, 0, w, h);
     if (sheet.image.complete && sheet.image.naturalWidth) {
-      const margin = 12,
-        scale = (w - margin * 2) / sheet.image.naturalWidth,
-        dh = sheet.image.naturalHeight * scale;
-      c.drawImage(
-        sheet.image,
-        margin,
-        Math.max(12, (h - dh) / 2),
-        w - margin * 2,
-        dh,
+      const margin = 15;
+      const scale = Math.max(
+        (w - margin * 2) / sheet.image.naturalWidth,
+        (h - margin * 2) / sheet.image.naturalHeight,
       );
+      const dw = sheet.image.naturalWidth * scale,
+        dh = sheet.image.naturalHeight * scale;
+      c.save();
+      c.beginPath();
+      c.rect(margin, margin, w - margin * 2, h - margin * 2);
+      c.clip();
+      c.drawImage(sheet.image, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      c.restore();
     }
+    // Light fiber speckles and a warm edge tie the printed surface to the room.
+    for (let i = 0; i < 950; i++) {
+      c.fillStyle = i % 2 ? "#71563208" : "#ffffff24";
+      c.fillRect((i * 73.37 + index * 13) % w, (i * 127.13) % h, 0.7, 0.7);
+    }
+    const edge = c.createLinearGradient(0, 0, 9, 0);
+    edge.addColorStop(0, "#65503424");
+    edge.addColorStop(1, "#65503400");
+    c.fillStyle = edge;
+    c.fillRect(0, 0, 9, h);
     // A couple of notebook sheets, not six identical punched strips.
     if (index === 0 || index === 3) {
       c.globalCompositeOperation = "destination-out";
@@ -227,6 +251,7 @@ export function createWorkshopScene(
       c.closePath();
       c.fill();
     }
+    c.restore();
     sheet.texture.needsUpdate = true;
   }
   function quad(texture: CanvasTexture, z: number) {
@@ -269,16 +294,28 @@ export function createWorkshopScene(
     const bt = new CanvasTexture(base);
     bt.colorSpace = SRGBColorSpace;
     quad(bt, 0);
-    const front = document.createElement("canvas");
-    front.width = 1448;
-    front.height = 1086;
-    const f = front.getContext("2d");
-    if (!f) return;
-    f.clip(foreground);
-    f.drawImage(background, 0, 0, 1448, 1086);
-    const ft = new CanvasTexture(front);
-    ft.colorSpace = SRGBColorSpace;
-    quad(ft, 65);
+    const mask = new Image();
+    images.push(mask);
+    mask.onload = () => {
+      if (disposed) return;
+      const front = document.createElement("canvas");
+      front.width = 1448;
+      front.height = 1086;
+      const f = front.getContext("2d");
+      if (!f) return;
+      f.drawImage(mask, 0, 0, 1448, 1086);
+      foregroundCoverage = f.getImageData(0, 0, 1448, 1086).data;
+      f.clearRect(0, 0, 1448, 1086);
+      f.drawImage(background, 0, 0, 1448, 1086);
+      const pixels = f.getImageData(0, 0, 1448, 1086);
+      applyForegroundMask(pixels.data, foregroundCoverage);
+      f.putImageData(pixels, 0, 0);
+      const ft = new CanvasTexture(front);
+      ft.colorSpace = SRGBColorSpace;
+      quad(ft, 65);
+      schedule();
+    };
+    mask.src = setting.mask;
     schedule();
   };
   background.src = setting.image;
@@ -398,7 +435,15 @@ export function createWorkshopScene(
     const cross = (a: { x: number; y: number }, b: { x: number; y: number }) =>
       (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
     const sheet = ordered.find((s) => {
-      if (s.cloth.pinned && hitContext?.isPointInPath(foreground, p.x, p.y))
+      if (
+        s.cloth.pinned &&
+        foregroundCoverage &&
+        p.x >= 0 &&
+        p.x < 1448 &&
+        p.y >= 0 &&
+        p.y < 1086 &&
+        foregroundCoverage[(Math.floor(p.y) * 1448 + Math.floor(p.x)) * 4] > 127
+      )
         return false;
       const indices = s.mesh.geometry.getIndex()!.array;
       for (let i = 0; i < indices.length; i += 3) {

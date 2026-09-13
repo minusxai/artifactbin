@@ -38,7 +38,7 @@ it("copies the deployment-aware install command and reports a denied clipboard",
     .mockResolvedValueOnce(undefined)
     .mockRejectedValueOnce(new Error("denied"));
   mount();
-  fireEvent.click(screen.getByRole("button", { name: "Copy instructions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy install command" }));
   await waitFor(() =>
     expect(clipboard).toHaveBeenCalledWith(
       `curl -fsSL ${window.location.origin}/chat/install.sh | sh`,
@@ -47,7 +47,7 @@ it("copies the deployment-aware install command and reports a denied clipboard",
   expect(
     await screen.findByText("Copied — paste into your terminal"),
   ).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Copy instructions" }));
+  fireEvent.click(screen.getByRole("button", { name: "Copy install command" }));
   expect(
     await screen.findByText("Select and copy the command above."),
   ).toBeInTheDocument();
@@ -64,4 +64,22 @@ it("provides keyboard reveal and reset controls and disposes the scene on leavin
   expect(scene.reset).toHaveBeenCalled();
   view.unmount();
   expect(scene.dispose).toHaveBeenCalled();
+});
+
+it("copies an agent prompt from the green create action", async () => {
+  clipboard.mockResolvedValue(undefined);
+  mount();
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Copy instructions to create an artifact",
+    }),
+  );
+  await waitFor(() =>
+    expect(clipboard).toHaveBeenCalledWith(
+      expect.stringContaining("Create an artifact with artifactbin."),
+    ),
+  );
+  expect(
+    await screen.findByText("Paste the instructions into your agent."),
+  ).toBeInTheDocument();
 });

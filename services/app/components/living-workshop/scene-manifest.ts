@@ -83,12 +83,21 @@ export const WORKSHOP_IMAGE = "/landing/workshop/indoor.webp";
 
 export interface WorkshopSetting {
   image: string;
+  mask: string;
   name: "indoor" | "outdoor";
 }
 export const WORKSHOP_SETTINGS: Record<
   WorkshopSetting["name"],
   WorkshopSetting
 > = {
-  indoor: { image: WORKSHOP_IMAGE, name: "indoor" },
-  outdoor: { image: "/landing/workshop/outdoor.webp", name: "outdoor" },
+  indoor: {
+    image: WORKSHOP_IMAGE,
+    mask: "/landing/workshop/indoor-mask.png",
+    name: "indoor",
+  },
+  outdoor: {
+    image: "/landing/workshop/outdoor.webp",
+    mask: "/landing/workshop/outdoor-mask.png",
+    name: "outdoor",
+  },
 };

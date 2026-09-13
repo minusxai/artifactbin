@@ -32,6 +32,9 @@ export default function HomeV2({
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
     "idle",
   );
+  const [promptState, setPromptState] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
   const [origin, setOrigin] = useState("https://artifactbin.dev");
   const [feature, setFeature] = useState(1);
   const [sceneReady, setSceneReady] = useState(false);
@@ -62,6 +65,16 @@ export default function HomeV2({
       document.title = oldTitle;
     };
   }, [setting]);
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `Create an artifact with artifactbin. Use the installed afbin skill and CLI to build, validate, and publish it. If afbin is not installed, follow ${origin}/docs-human. Ask me what I want to make.`,
+      );
+      setPromptState("copied");
+    } catch {
+      setPromptState("error");
+    }
+  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(command);
@@ -106,13 +119,13 @@ export default function HomeV2({
               <code>{command}</code>
               <Tooltip
                 content={
-                  copyState === "copied" ? "Copied!" : "Copy instructions"
+                  copyState === "copied" ? "Copied!" : "Copy install command"
                 }
               >
                 <button
                   type="button"
                   onClick={() => void copy()}
-                  aria-label="Copy instructions"
+                  aria-label="Copy install command"
                 >
                   {copyState === "copied" ? (
                     <Check size={15} />
@@ -123,16 +136,36 @@ export default function HomeV2({
               </Tooltip>
             </div>
             <div className="workshop-install-actions">
+              <Tooltip content="Copy instructions for your agent">
+                <button
+                  type="button"
+                  aria-label="Copy instructions to create an artifact"
+                  onClick={() => void copyPrompt()}
+                >
+                  {promptState === "copied" ? (
+                    <Check size={15} />
+                  ) : (
+                    <Copy size={15} />
+                  )}
+                  {promptState === "copied"
+                    ? "Instructions copied"
+                    : "Create an artifact"}
+                </button>
+              </Tooltip>
               <a href="/docs-human">
                 How it works <ArrowUpRight size={13} />
               </a>
             </div>
             <p role="status" className="workshop-copy-status">
-              {copyState === "copied"
-                ? "Copied — paste into your terminal"
-                : copyState === "error"
-                  ? "Select and copy the command above."
-                  : "Works with Claude Code, Codex, pi, and your next favorite agent."}
+              {promptState === "copied"
+                ? "Paste the instructions into your agent."
+                : promptState === "error"
+                  ? "Could not copy. Try again."
+                  : copyState === "copied"
+                    ? "Copied — paste into your terminal"
+                    : copyState === "error"
+                      ? "Select and copy the command above."
+                      : "Works with Claude Code, Codex, pi, and your next favorite agent."}
             </p>
           </div>
         </div>
