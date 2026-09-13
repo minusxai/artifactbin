@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ChevronRight } from 'lucide-react';
+import StepHeader from '@/components/StepHeader';
 import type { DiscoveredTable } from '@/lib/datasets/types';
 
 export type SourceDraft = { discovery: DiscoveredTable; included: boolean; schema: string; name: string; columns: string[]; modelCellId?: string; stale?: boolean };
@@ -20,8 +21,8 @@ export function DatasetWhitelist({ sources, onChange, disabled = false }: { sour
   const toggle = (current: Set<string>, key: string) => { const next = new Set(current); if (!next.delete(key)) next.add(key); return next; };
   const disclosure = (label: string, open: boolean, onClick: () => void) => <button type="button" aria-label={label} aria-expanded={open} onClick={onClick} className="flex size-7 shrink-0 items-center justify-center rounded text-muted hover:bg-raised hover:text-fg focus-visible:outline-2 focus-visible:outline-accent"><ChevronRight size={14} className={open ? 'rotate-90' : ''} /></button>;
 
-  return <section aria-label="Source exposure" className="overflow-hidden rounded border border-edge bg-surface">
-    <header className="border-b border-edge px-4 py-3"><h2 className="text-sm font-medium text-fg">3. Whitelist</h2><p className="mt-1 text-xs text-muted">Select a schema, table, or individual columns to make them available.</p></header>
+  return <section aria-label="Source exposure" className="overflow-hidden rounded-xl border border-edge bg-surface">
+    <StepHeader n={3} title="Whitelist">Select a schema, table, or individual columns to make them available to readers.</StepHeader>
     <div className="p-2">
       {!sources.length && <p className="px-2 py-4 text-xs text-muted">Discover database tables or run a notebook cell to choose exposed columns.</p>}
       {schemas.map(schema => {

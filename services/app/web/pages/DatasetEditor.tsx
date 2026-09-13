@@ -1,4 +1,5 @@
 import AssetPageHeader from "@/components/AssetPageHeader";
+import StepHeader from "@/components/StepHeader";
 import PageChrome from "@/components/PageChrome";
 import ShareLink from "@/components/ShareLink";
 import { DatasetPolicies } from "@/components/DatasetPolicies";
@@ -460,6 +461,9 @@ export function DatasetEditorPage({
           columns: model.selected,
         });
     }
+    // Nobody has to open Advanced to make a dataset: an unchosen default
+    // schema is the first table's, exactly what the select shows as automatic.
+    const schema = defaultSchema || tables[0]?.schema || "public";
     if (validate) {
       if (!tables.length)
         throw new Error("Expose at least one table or model output.");
@@ -467,7 +471,7 @@ export function DatasetEditorPage({
         throw new Error("Every table needs a schema and name.");
       if (new Set(tables.map(sourceKey)).size !== tables.length)
         throw new Error("Table names must be unique within a schema.");
-      if (!defaultSchema || !tables.some((t) => t.schema === defaultSchema))
+      if (!tables.some((t) => t.schema === schema))
         throw new Error("Choose a default schema containing an exposed table.");
       if (!Number.isInteger(refreshSeconds) || refreshSeconds < 0)
         throw new Error(
@@ -479,7 +483,7 @@ export function DatasetEditorPage({
       ...(kind === "postgres"
         ? { connection: configured, notebook: notebook() }
         : {}),
-      defaultSchema,
+      defaultSchema: schema,
       refreshSeconds,
       tables,
     };
@@ -639,7 +643,11 @@ export function DatasetEditorPage({
   const exposedTableKey = JSON.stringify(exposedTables);
   // Requery for exposed column changes; notebook presentation and hidden drafts leave this catalog stable.
   const explorerCatalog = useMemo(
-    () => ({ kind, defaultSchema, refreshSeconds, tables: exposedTables }),
+    () => ({ kind, defaultSchema: defaultSchema || exposedTables[0]?.schema || "public", refreshSeconds, tables: exposedTables }),
+    // exposedTableKey stands in for exposedTables on purpose: the key changes
+    // only when the exposed tables do, so a collapse or an unexposed draft
+    // edit does not rerun the final SQL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [kind, defaultSchema, refreshSeconds, exposedTableKey],
   );
   // Use the latest draft at execution time; typing source/cell SQL does not itself execute final SQL.
@@ -779,40 +787,39 @@ export function DatasetEditorPage({
                     placeholder="Weekly sales"
                   />
                 </Field>
-                <div className="flex gap-2">
-                  <Button
-                    aria-label="Stored tables"
-                    aria-pressed={kind === "stored"}
-                    variant={kind === "stored" ? "solid" : "ghost"}
-                    disabled={Boolean(id)}
-                    onClick={() => setKind("stored")}
-                  >
-                    Stored tables
-                  </Button>
-                  <Button
-                    aria-label="PostgreSQL"
-                    aria-pressed={kind === "postgres"}
-                    variant={kind === "postgres" ? "solid" : "ghost"}
-                    disabled={Boolean(id)}
-                    onClick={() => setKind("postgres")}
-                  >
-                    PostgreSQL
-                  </Button>
-                </div>
-                {kind === "postgres" ? (
-                  <section
-                    aria-label="Dataset connection"
-                    className={`${PANEL} rounded-xl space-y-4 p-4 sm:p-5`}
-                  >
-                    <div>
-                      <h2 className="text-sm font-semibold text-fg">
-                        Connection
-                      </h2>
-                      <p className="mt-1 text-xs text-muted">
-                        Use a database account with read access. The password is
-                        stored securely and cannot be retrieved.
-                      </p>
-                    </div>
+                <section aria-label="Raw data" className={`${PANEL} overflow-hidden rounded-xl`}>
+                  <StepHeader n={1} title="Raw data">
+                    Where the rows come from: JSON rows pasted into named tables, or a PostgreSQL database read live.
+                  </StepHeader>
+                  <div role="tablist" aria-label="Raw data source" className="flex gap-5 border-b border-edge px-4 sm:px-5">
+                    {(
+                      [
+                        ["stored", "Dataset JSON"],
+                        ["postgres", "PostgreSQL"],
+                      ] as Array<[DatasetCatalog["kind"], string]>
+                    ).map(([key, label]) => (
+                      <button
+                        type="button"
+                        role="tab"
+                        key={key}
+                        aria-label={label}
+                        aria-selected={kind === key}
+                        disabled={Boolean(id)}
+                        onClick={() => setKind(key)}
+                        className={`-mb-px shrink-0 border-b-2 px-1 py-3 text-xs font-medium disabled:cursor-default ${kind === key ? "border-accent text-fg" : "border-transparent text-muted enabled:hover:text-fg disabled:opacity-50"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* One height for both tabs, so switching does not move the
+                    * steps below. What does not fit scrolls inside. */}
+                  <div className="h-[22rem] overflow-y-auto p-4 sm:p-5">
+                    {kind === "postgres" ? (
+                      <section aria-label="Dataset connection" className="space-y-4">
+                        <p className="text-xs text-muted">
+                          Use a database account with read access. The password is stored securely and cannot be retrieved.
+                        </p>
                     <div className="grid gap-4 sm:grid-cols-[1fr_7rem]">
                       <Field name="Host">
                         <Input
@@ -937,21 +944,21 @@ export function DatasetEditorPage({
                         {connectionFeedback.message}
                       </p>
                     )}
-                  </section>
-                ) : (
-                  <section
-                    aria-label="Stored tables editor"
-                    className={`${PANEL} rounded-xl space-y-4 p-4 sm:p-5`}
-                  >
-                    <div>
-                      <h2 className="text-sm font-semibold text-fg">
-                        Stored tables
-                      </h2>
-                      <p className="mt-1 text-xs text-muted">
-                        Add JSON rows to a named table. Existing rows are
-                        retained unless you replace them.
-                      </p>
-                    </div>
+                      </section>
+                    ) : (
+                      <section aria-label="Stored tables editor" className="space-y-4">
+                        <p className="text-xs text-muted">
+                          Add JSON rows to a named table. Step 2 can query it right away as schema.table; the rows are stored when you {id ? "save" : "create"} the dataset. Existing rows are retained unless you replace them.
+                        </p>
+                        {!stored.length && (
+                          <div className="rounded border border-dashed border-edge p-5 text-center">
+                            <Database size={20} className="mx-auto mb-2 text-faint" />
+                            <p className="text-sm text-muted">No tables yet.</p>
+                            <p className="mt-1 text-xs text-faint">
+                              Add a table, name it, and paste rows as a JSON array, for example [{"{"}&quot;id&quot;: 1{"}"}].
+                            </p>
+                          </div>
+                        )}
                     {stored.map((table, index) => (
                       <div
                         key={table.key}
@@ -1027,7 +1034,7 @@ export function DatasetEditorPage({
                       </div>
                     ))}
                     <Button
-                      aria-label="Add stored table"
+                      aria-label="Add JSON table"
                       variant="ghost"
                       onClick={() =>
                         setStored((items) => [
@@ -1042,24 +1049,21 @@ export function DatasetEditorPage({
                         ])
                       }
                     >
-                      Add stored table
+                      Add JSON table
                     </Button>
-                  </section>
-                )}
+                      </section>
+                    )}
+                  </div>
+                </section>
                 <section
                   aria-label="Data models notebook"
                   className={`${PANEL} rounded-xl overflow-hidden`}
                 >
-                  <header className="border-b border-edge p-4 sm:p-5">
-                    <h2 className="text-sm font-semibold text-fg">
-                      Data models notebook
-                    </h2>
-                    <p className="mt-1 text-xs leading-5 text-muted">
-                      {kind === "postgres"
-                        ? "Read raw tables using schema.table, for example public.orders. Later cells can reference an earlier cell by its name. Expose only the outputs readers need."
-                        : "Save SQL queries over your stored tables as named model tables."}
-                    </p>
-                  </header>
+                  <StepHeader n={2} title="Data models">
+                    {kind === "postgres"
+                      ? "Read raw tables using schema.table, for example public.orders. Later cells can reference an earlier cell by its name. Expose only the outputs readers need."
+                      : "Save SQL queries over your JSON tables as named model tables."}
+                  </StepHeader>
                   <div className="space-y-4 p-3 sm:p-4">
                     {!models.length && (
                       <div className="rounded border border-dashed border-edge p-5 text-center">
@@ -1285,39 +1289,6 @@ export function DatasetEditorPage({
                     onChange={changeExposures}
                   />
                 )}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field name="Default schema">
-                    <select
-                      aria-label="Default schema"
-                      disabled={Boolean(id)}
-                      className={control}
-                      value={defaultSchema}
-                      onChange={(e) => setDefaultSchema(e.target.value)}
-                    >
-                      <option value="">Choose explicitly</option>
-                      {[
-                        ...new Set([
-                          ...selectedSchemas,
-                          ...(defaultSchema ? [defaultSchema] : []),
-                        ]),
-                      ].map((schema) => (
-                        <option key={schema}>{schema}</option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field name="Refresh interval (seconds, 0 = manual)">
-                    <Input
-                      aria-label="Refresh interval"
-                      type="number"
-                      min={0}
-                      step={1}
-                      value={refreshSeconds}
-                      onChange={(e) =>
-                        setRefreshSeconds(Number(e.target.value))
-                      }
-                    />
-                  </Field>
-                </div>
               </fieldset>
             </div>
             <div
@@ -1344,8 +1315,50 @@ export function DatasetEditorPage({
               hidden={section !== "source"}
               className="mx-auto mt-6 max-w-4xl space-y-6"
             >
+              <details className={`group ${PANEL} overflow-hidden rounded-xl`}>
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 sm:px-5 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight size={14} className="text-muted transition-transform group-open:rotate-90" />
+                  <span className="text-sm font-semibold text-fg">Advanced</span>
+                  <span className="text-xs text-muted">default schema · result cache · source markup</span>
+                </summary>
+                <div className="space-y-5 border-t border-edge p-4 sm:p-5">
+                  <fieldset disabled={Boolean(busy) || sourceText !== null} className="grid gap-4 sm:grid-cols-2">
+                  <Field name="Default schema">
+                    <span className="text-[11px] leading-4 text-faint">Assumed when a table is named without a schema, in notebook SQL and in agent edits. Fixed once the dataset is created.</span>
+                    <select
+                      aria-label="Default schema"
+                      disabled={Boolean(id)}
+                      className={control}
+                      value={defaultSchema}
+                      onChange={(e) => setDefaultSchema(e.target.value)}
+                    >
+                      <option value="">Automatic ({selectedSchemas[0] ?? "public"})</option>
+                      {[
+                        ...new Set([
+                          ...selectedSchemas,
+                          ...(defaultSchema ? [defaultSchema] : []),
+                        ]),
+                      ].map((schema) => (
+                        <option key={schema}>{schema}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field name="Result cache (seconds)">
+                    <span className="text-[11px] leading-4 text-faint">PostgreSQL results are served from cache this long before being queried again; 0 queries the database on every read. Ignored for JSON tables.</span>
+                    <Input
+                      aria-label="Refresh interval"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={refreshSeconds}
+                      onChange={(e) =>
+                        setRefreshSeconds(Number(e.target.value))
+                      }
+                    />
+                  </Field>
+                  </fieldset>
               <section
-                className={`${PANEL} rounded-xl p-4`}
+                className="space-y-3"
                 aria-label="Dataset definition"
               >
                 {sourceText === null ? (
@@ -1426,6 +1439,8 @@ export function DatasetEditorPage({
                   </div>
                 )}
               </section>
+                </div>
+              </details>
               <div className="flex items-center gap-4">
                 <Button
                   aria-label="Save dataset"

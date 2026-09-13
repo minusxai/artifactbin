@@ -87,7 +87,12 @@ describe('dataset editor — exposure and saving', () => {
   });
 
   it('adds stored JSON rows in a named table', async () => {
-    editor(); click('Add stored table'); change('Stored schema 1','main'); change('Stored table name 1','rows'); change('Stored rows 1','[{"id":1}]'); change('Default schema','main'); click('Save dataset');
+    editor(); click('Add JSON table'); change('Stored schema 1','main'); change('Stored table name 1','rows'); change('Stored rows 1','[{"id":1}]'); change('Default schema','main'); click('Save dataset');
+    await waitFor(() => expect(savedDefinition()).toMatchObject({kind:'stored',defaultSchema:'main',tables:[{schema:'main',name:'rows',rows:[{id:1}]}]}));
+  });
+
+  it('saves a JSON dataset without a chosen default schema, taking the first table’s', async () => {
+    editor(); click('Add JSON table'); change('Stored schema 1','main'); change('Stored table name 1','rows'); change('Stored rows 1','[{"id":1}]'); click('Save dataset');
     await waitFor(() => expect(savedDefinition()).toMatchObject({kind:'stored',defaultSchema:'main',tables:[{schema:'main',name:'rows',rows:[{id:1}]}]}));
   });
 
