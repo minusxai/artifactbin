@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUpRight, RotateCcw } from "lucide-react";
+import { ArrowDown, ArrowUpRight } from "lucide-react";
 import { GitHubIcon } from "@/components/brand-icons";
 import AgentScreens from "@/components/living-workshop/AgentScreens";
 import WorkshopStart from "@/components/living-workshop/WorkshopStart";
@@ -115,22 +115,6 @@ export default function HomeV2({
               aria-hidden="true"
             />
           </div>
-        </div>
-        <div className="workshop-scene-controls">
-          <p>
-            {sceneReady
-              ? "Pick a page. Pull a corner. See what’s underneath."
-              : "Explore the real examples below."}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              scene.current?.reset();
-              setReveal(null);
-            }}
-          >
-            <RotateCcw size={13} /> Reset board
-          </button>
         </div>
         <div className="workshop-reveal" role="status" aria-live="polite">
           {reveal && (

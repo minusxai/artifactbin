@@ -263,27 +263,7 @@
 .workshop-canvas {
   touch-action: pan-y;
 }
-.workshop-scene-controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 20px;
-  padding: 17px 8%;
-  border-bottom: 1px solid #d8dcce;
-  background: #f8f5ed;
-  font-size: 12px;
-  color: #596951;
-}
-.workshop-scene-controls button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: 0;
-  font-size: 11px;
-  color: inherit;
-  white-space: nowrap;
-}
+
 .workshop-reveal:empty {
   display: none;
 }
@@ -556,14 +536,7 @@
     width: 185%;
     margin-left: -80%;
   }
-  .workshop-scene-controls {
-    padding: 16px 6%;
-    font-size: 11px;
-    align-items: flex-start;
-  }
-  .workshop-scene-controls p {
-    max-width: 200px;
-  }
+
   .workshop-examples {
     padding: 44px 6%;
   }
@@ -738,16 +711,6 @@
   }
   .workshop-picture {
     aspect-ratio: 1448 / 815;
-  }
-  .workshop-scene-controls {
-    position: absolute;
-    top: calc(56.2845cqw - 40px);
-    left: 0;
-    right: 0;
-    height: 40px;
-    box-sizing: border-box;
-    padding-block: 0;
-    background: #faf7f0dd;
   }
 }
 @media (max-width: 800px) {

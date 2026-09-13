@@ -52,7 +52,7 @@ it("copies the deployment-aware install command and reports a denied clipboard",
     await screen.findByText("Select and copy the command above."),
   ).toBeInTheDocument();
 });
-it("provides keyboard reveal and reset controls and disposes the scene on leaving", () => {
+it("provides keyboard reveal without a reset strip and disposes the scene on leaving", () => {
   const view = mount();
   fireEvent.click(
     screen.getByRole("button", {
@@ -60,8 +60,9 @@ it("provides keyboard reveal and reset controls and disposes the scene on leavin
     }),
   );
   expect(scene.detach).toHaveBeenCalledWith(WORKSHOP_PAPERS[0].id);
-  fireEvent.click(screen.getByRole("button", { name: "Reset board" }));
-  expect(scene.reset).toHaveBeenCalled();
+  expect(
+    screen.queryByRole("button", { name: "Reset board" }),
+  ).not.toBeInTheDocument();
   view.unmount();
   expect(scene.dispose).toHaveBeenCalled();
 });
