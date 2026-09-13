@@ -81,3 +81,24 @@ it("keeps the printed body nearly inextensible and tears only across the top sea
   ).toBeLessThan(1.12);
   expect(c.torn.size).toBeGreaterThan(0);
 });
+it("lifts one corner into a local fold while two pins stay attached", () => {
+  const c = makeCloth(650, 100, 180, 210, 0, 1),
+    last = c.points.length - 1;
+  for (let i = 0; i < 45; i++)
+    stepCloth(c, 1 / 60, { index: last, x: 800, y: 275, z: 90 });
+  expect(c.attachment).toBe("pins");
+  expect(c.points[0].x).toBe(650);
+  expect(c.points[c.columns].x).toBe(830);
+  expect(c.points[last].z).toBeGreaterThan(c.points[last - c.columns].z + 12);
+  expect(c.torn.size).toBe(0);
+  expect(c.pinned).toBe(true);
+});
+it("perforated sheets expose a progressive seam instead of random body tears", () => {
+  const c = makeCloth(650, 100, 180, 210, 0, 0);
+  for (let i = 0; i < 6; i++)
+    stepCloth(c, 1 / 60, { index: c.points.length - 1, x: 905, y: 370, z: 90 });
+  expect(c.attachment).toBe("perforated");
+  expect(c.tearProgress).toBeGreaterThan(0);
+  expect(c.tearProgress).toBeLessThan(1);
+  expect(c.pinned).toBe(true);
+});

@@ -137,6 +137,14 @@ export function createWorkshopScene(
         color: 0xfffcf5,
       }),
     );
+    // A lifted page exposes unprinted stock on its reverse, not mirrored text.
+    mesh.material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        "#include <map_fragment>",
+        "#include <map_fragment>\nif (!gl_FrontFacing) diffuseColor.rgb = vec3(0.96, 0.91, 0.80);",
+      );
+    };
+    mesh.material.customProgramCacheKey = () => "workshop-paper-back-v1";
     mesh.frustumCulled = false;
     const shadow = new Mesh(
       geo,
@@ -226,11 +234,15 @@ export function createWorkshopScene(
     // A couple of notebook sheets, not six identical punched strips.
     if (index === 0 || index === 3) {
       c.globalCompositeOperation = "destination-out";
+      c.fillStyle = "#000";
       for (let x = 18; x < w - 10; x += 24) {
         c.beginPath();
-        c.arc(x, 10, 3.1, 0, Math.PI * 2);
+        c.arc(x, 13, 5, 0, Math.PI * 2);
         c.fill();
       }
+      // Match the physical seam between the second and third vertex rows.
+      for (let x = 8; x < w - 8; x += 12)
+        c.fillRect(x, (2 * h) / sheet.cloth.rows - 1.2, 4, 2.4);
       c.globalCompositeOperation = "source-over";
     }
     if (index === 1 || index === 4) {
@@ -329,7 +341,7 @@ export function createWorkshopScene(
       pins.save();
       pins.translate(p.x, p.y);
       pins.rotate(p.angle);
-      const xs = i % 3 === 0 ? [10, p.width - 10] : [p.width * 0.53];
+      const xs = [4, p.width - 4];
       xs.forEach((x) => {
         pins.shadowColor = "#33261155";
         pins.shadowBlur = 3;
@@ -502,12 +514,16 @@ export function createWorkshopScene(
       canvas.releasePointerCapture(event.pointerId);
     if (s) {
       if (dragged) {
-        releaseCloth(s.cloth);
-        onReveal(s.paper);
+        if (s.cloth.attachment === "perforated" && s.cloth.tearProgress > 0.65)
+          releaseCloth(s.cloth);
+        if (!s.cloth.pinned) {
+          s.cloth.age = 0;
+          onReveal(s.paper);
+        }
       } else if (!cancelled) window.location.assign(s.paper.href);
     }
     canvas.style.cursor = "grab";
-    relaxUntil = performance.now() + 900;
+    relaxUntil = performance.now() + 1800;
     schedule();
   }
   function detach(id: string) {

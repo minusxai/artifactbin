@@ -1,4 +1,4 @@
-/** Stiff paper: developable cylindrical bending with a progressive top seam.
+/** Paper shell: constrained stretch, softer bending, and explicit attachments.
  * Rendering consumes positions; this module owns grabbing, tearing and falling.
  */
 export interface Particle {
@@ -18,6 +18,7 @@ export interface Bond {
   length: number;
   broken: boolean;
   tearable: boolean;
+  stiffness: number;
 }
 export interface Cloth {
   points: Particle[];
@@ -39,6 +40,8 @@ export interface Cloth {
   angle: number;
   offsetX: number;
   offsetY: number;
+  attachment: "perforated" | "pins";
+  pins: [boolean, boolean];
 }
 const COLS = 18,
   ROWS = 22;
@@ -81,7 +84,7 @@ export function makeCloth(
         homeZ: z,
       });
     }
-  const link = (a: number, b: number, tearable: boolean) => {
+  const link = (a: number, b: number, tearable: boolean, stiffness = 1) => {
     const p = points[a],
       q = points[b];
     bonds.push({
@@ -90,6 +93,7 @@ export function makeCloth(
       length: Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z),
       broken: false,
       tearable,
+      stiffness,
     });
   };
   for (let r = 0; r <= ROWS; r++)
@@ -99,8 +103,8 @@ export function makeCloth(
       if (r < ROWS) link(i, i + COLS + 1, true);
       if (r < ROWS && c < COLS) link(i, i + COLS + 2, false);
       if (r < ROWS && c > 0) link(i, i + COLS, false);
-      if (c < COLS - 1) link(i, i + 2, false);
-      if (r < ROWS - 1) link(i, i + 2 * (COLS + 1), false);
+      if (c < COLS - 1) link(i, i + 2, false, 0.24);
+      if (r < ROWS - 1) link(i, i + 2 * (COLS + 1), false, 0.24);
     }
   return {
     points,
@@ -122,6 +126,8 @@ export function makeCloth(
     angle,
     offsetX: 0,
     offsetY: 0,
+    attachment: seed === 0 || seed === 3 ? "perforated" : "pins",
+    pins: [true, true],
   };
 }
 function tearSeam(c: Cloth, progress: number) {
@@ -141,7 +147,8 @@ function tearSeam(c: Cloth, progress: number) {
   });
 }
 export function releaseCloth(c: Cloth) {
-  tearSeam(c, 1);
+  if (c.attachment === "perforated") tearSeam(c, 1);
+  c.pins = [false, false];
   if (!c.pinned) return;
   c.pinned = false;
   c.age = 0;
@@ -161,6 +168,7 @@ export function resetCloth(c: Cloth) {
   c.age = 0;
   c.torn.clear();
   c.tearProgress = 0;
+  c.pins = [true, true];
   c.offsetX = 0;
   c.offsetY = 0;
   for (const b of c.bonds) b.broken = false;
@@ -178,52 +186,31 @@ export function stepCloth(
   if (c.settled && !grab) return;
   const step = Math.min(dt, 1 / 30);
   if (!c.pinned) c.age += step;
+  const strip = c.attachment === "perforated" ? 2 * (c.columns + 1) : 0;
   if (grab) {
-    const origin = c.points[grab.index],
-      dx = grab.x - origin.homeX,
-      dy = grab.y - origin.homeY;
-    const pull = Math.hypot(dx, dy);
+    const origin = c.points[grab.index];
+    const pull = Math.hypot(grab.x - origin.homeX, grab.y - origin.homeY);
     if (c.tearProgress === 0)
       c.tearFromRight = grab.index % (c.columns + 1) > c.columns / 2;
-    if (c.pinned && pull > 28) {
-      tearSeam(c, Math.min(1, (pull - 28) / 95));
+    if (c.pinned && c.attachment === "perforated" && pull > 75) {
+      tearSeam(
+        c,
+        Math.min(1, c.tearProgress + step * Math.min(4, (pull - 65) / 45)),
+      );
       if (c.tearProgress >= 1) releaseCloth(c);
     }
-    // A cylinder bends the print without stretching its surface. The pinned
-    // margin stays on the board; only the short seam opens progressively.
-    const amount = Math.min(0.55, pull / 200),
-      radius = c.height / Math.max(0.001, amount);
-    const gripV =
-      (Math.floor(grab.index / (c.columns + 1)) / c.rows) * c.height;
-    const shiftV = Math.sin(gripV / radius) * radius - gripV;
-    c.offsetX = dx + Math.sin(c.angle) * shiftV;
-    c.offsetY = dy - Math.cos(c.angle) * shiftV;
-    const follow = c.pinned ? Math.min(0.65, c.tearProgress + 0.12) : 1;
-    c.points.forEach((p, i) => {
-      if (i < 2 * (c.columns + 1)) return;
-      const v = (Math.floor(i / (c.columns + 1)) / c.rows) * c.height;
-      const bend = Math.sin(v / radius) * radius - v;
-      p.x = p.homeX - Math.sin(c.angle) * bend + c.offsetX * follow;
-      p.y = p.homeY + Math.cos(c.angle) * bend + c.offsetY * follow;
-      p.z = p.homeZ + (1 - Math.cos(v / radius)) * radius + (c.pinned ? 0 : 70);
-      p.px = p.x;
-      p.py = p.y;
-      p.pz = p.z;
-    });
-    c.landingX = Math.max(
-      440,
-      Math.min(1260, c.points[0].homeX + c.width / 2 + c.offsetX),
-    );
-    return;
+    if (c.pinned && c.attachment === "pins" && pull > 210) {
+      c.pins[c.tearFromRight ? 1 : 0] = false;
+      if (pull > 320) releaseCloth(c);
+    }
   }
-  if (c.pinned) return;
   // A bounded landing plane projects the sheet onto the painted floor. Its
   // center inherits the release location, so pages never converge on a bin.
   if (!c.pinned && !grab && c.age > 1.45) {
     const ease = c.age > 3.6 ? 1 : Math.min(1, step * 5),
       angle = (c.seed % 2 ? -0.19 : 0.17) + c.seed * 0.055;
     c.points.forEach((p, i) => {
-      if (i < 2 * (c.columns + 1)) return;
+      if (i < strip) return;
       const u = ((i % (c.columns + 1)) / c.columns) * c.width - c.width / 2,
         v =
           (Math.floor(i / (c.columns + 1)) / c.rows) * c.height - c.height / 2;
@@ -248,16 +235,73 @@ export function stepCloth(
     if (c.age > 3.6) c.settled = true;
     return;
   }
-  // Falling paper keeps its shape, with a small, shared flutter. No independent
-  // vertices can turn the sheet into fabric or explode around the grab point.
+  // Integrate inertia, then solve the surface. The grab is compliant and its
+  // target is speed-limited, so pointer jumps cannot stretch or explode a sheet.
   c.points.forEach((p, i) => {
-    if (i < 2 * (c.columns + 1)) return;
-    const dy = (p.y - p.py) * 0.97 + 740 * step * step;
-    p.py = p.y;
+    const vx = (p.x - p.px) * 0.82,
+      vy = (p.y - p.py) * 0.82,
+      vz = (p.z - p.pz) * 0.78;
     p.px = p.x;
+    p.py = p.y;
     p.pz = p.z;
-    p.x += c.drift * step * 0.25;
-    p.y += dy;
-    p.z = 88 + Math.sin(c.age * 5 + c.seed) * 5;
+    p.x += vx + (c.pinned ? 0 : c.drift * step * 0.16);
+    p.y += vy + (c.pinned ? 180 : 740) * step * step;
+    p.z += vz;
+    if (!c.pinned && i >= strip) p.z += (85 - p.z) * step;
   });
+  const fixed = (i: number) =>
+    i < strip ||
+    (c.pinned && ((i === 0 && c.pins[0]) || (i === c.columns && c.pins[1])));
+  let target: { x: number; y: number; z: number } | undefined;
+  if (grab) {
+    const p = c.points[grab.index],
+      dx = grab.x - p.x,
+      dy = grab.y - p.y,
+      dz = grab.z - p.z;
+    const scale = Math.min(1, 14 / Math.max(0.01, Math.hypot(dx, dy, dz)));
+    target = { x: p.x + dx * scale, y: p.y + dy * scale, z: p.z + dz * scale };
+  }
+  for (let iteration = 0; iteration < 32; iteration++) {
+    if (grab && target && !fixed(grab.index)) {
+      const p = c.points[grab.index];
+      p.x += (target.x - p.x) * 0.16;
+      p.y += (target.y - p.y) * 0.16;
+      p.z += (target.z - p.z) * 0.16;
+    }
+    for (const b of c.bonds) {
+      if (b.broken) continue;
+      const a = c.points[b.a],
+        p = c.points[b.b],
+        dx = p.x - a.x,
+        dy = p.y - a.y,
+        dz = p.z - a.z;
+      const length = Math.hypot(dx, dy, dz) || 0.001;
+      const wa = fixed(b.a) ? 0 : 1,
+        wb = fixed(b.b) ? 0 : 1;
+      if (wa + wb === 0) continue;
+      const correction =
+        (((length - b.length) / length) * b.stiffness) / (wa + wb);
+      a.x += dx * correction * wa;
+      a.y += dy * correction * wa;
+      a.z += dz * correction * wa;
+      p.x -= dx * correction * wb;
+      p.y -= dy * correction * wb;
+      p.z -= dz * correction * wb;
+    }
+    c.points.forEach((p, i) => {
+      if (fixed(i)) {
+        p.x = p.homeX;
+        p.y = p.homeY;
+        p.z = p.homeZ;
+      } else if (c.pinned) p.z = Math.max(12, p.z);
+    });
+  }
+  if (!c.pinned && grab)
+    c.landingX = Math.max(
+      440,
+      Math.min(
+        1260,
+        c.points.reduce((sum, p) => sum + p.x, 0) / c.points.length,
+      ),
+    );
 }
