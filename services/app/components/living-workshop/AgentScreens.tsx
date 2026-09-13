@@ -1,9 +1,13 @@
 import { ClaudeCodeIcon, CodexIcon } from "@/components/brand-icons";
 
 /** Screen-only overlays in source-image coordinates. The painted heads stay untouched. */
-export default function AgentScreens() {
+export default function AgentScreens({
+  inCanvas = false,
+}: {
+  inCanvas?: boolean;
+}) {
   return (
-    <div className="workshop-agent-screens">
+    <div className="workshop-agent-screens" data-canvas={inCanvas}>
       <svg
         className="workshop-agent workshop-agent-claude"
         viewBox="0 0 1448 1086"

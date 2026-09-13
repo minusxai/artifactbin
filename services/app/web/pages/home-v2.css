@@ -587,3 +587,7 @@
     font-size: 10px;
   }
 }
+
+.workshop-agent-screens[data-canvas="true"] {
+  opacity: 0;
+}

@@ -179,7 +179,7 @@ export default function HomeV2({
               width={1920}
               height={1440}
             />
-            <AgentScreens />
+            <AgentScreens inCanvas={sceneReady} />
             <canvas
               ref={canvas}
               className="workshop-canvas"

@@ -1,3 +1,4 @@
+import { separatePapers, floorClearance, PAPER_FLOOR } from "./paper-contact";
 import { applyForegroundMask } from "./foreground-mask";
 import {
   AmbientLight,
@@ -24,6 +25,7 @@ import {
 } from "./paper-model";
 import {
   makeCloth,
+  liftPaper,
   releaseCloth,
   resetCloth,
   stepCloth,
@@ -87,6 +89,7 @@ export function createWorkshopScene(
     grabIndex = 0,
     activePointer: number | null = null,
     relaxUntil = 0;
+  const relaxing = new Set<string>();
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   const images: HTMLImageElement[] = [],
     extras: Array<Mesh<BufferGeometry, MeshBasicMaterial>> = [];
@@ -147,7 +150,7 @@ export function createWorkshopScene(
     mesh.material.customProgramCacheKey = () => "workshop-paper-back-v1";
     mesh.frustumCulled = false;
     const shadow = new Mesh(
-      geo,
+      geo.clone(),
       new MeshBasicMaterial({
         color: new Color("#3c301e"),
         transparent: true,
@@ -293,6 +296,36 @@ export function createWorkshopScene(
     scene.add(mesh);
     extras.push(mesh);
   }
+  // Screen marks join the depth-tested scene, so a foreground sheet can cover
+  // them. The same inline SVGs remain the non-WebGL accessible fallback.
+  const screenSurface = document.createElement("canvas");
+  screenSurface.width = 1448;
+  screenSurface.height = 1086;
+  const screenContext = screenSurface.getContext("2d");
+  if (screenContext) {
+    const screenTexture = new CanvasTexture(screenSurface);
+    screenTexture.colorSpace = SRGBColorSpace;
+    quad(screenTexture, 66);
+    for (const svg of canvas.parentElement?.querySelectorAll<SVGSVGElement>(
+      ".workshop-agent",
+    ) || []) {
+      const copy = svg.cloneNode(true) as SVGSVGElement;
+      copy.setAttribute("width", "1448");
+      copy.setAttribute("height", "1086");
+      copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      const source = new Image();
+      images.push(source);
+      source.onload = () => {
+        if (disposed) return;
+        screenContext.drawImage(source, 0, 0, 1448, 1086);
+        screenTexture.needsUpdate = true;
+        schedule();
+      };
+      source.src =
+        "data:image/svg+xml;charset=utf-8," +
+        encodeURIComponent(new XMLSerializer().serializeToString(copy));
+    }
+  }
   const background = new Image();
   images.push(background);
   background.onload = () => {
@@ -378,13 +411,31 @@ export function createWorkshopScene(
           kept.push(...t);
       }
       s.mesh.geometry.setIndex(kept);
+      s.shadow.geometry.setIndex(kept);
       s.lastTorn = s.cloth.torn.size;
     }
     s.mesh.geometry.computeVertexNormals();
     s.mesh.geometry.computeBoundingSphere();
     const lifted = !s.cloth.pinned;
-    s.shadow.position.set(lifted ? 9 : 4, lifted ? 11 : 7, -5);
-    s.shadow.material.opacity = lifted ? 0.09 : 0.13;
+    const shadowPos = s.shadow.geometry.getAttribute("position");
+    const strip =
+      s.cloth.attachment === "perforated" ? 2 * (s.cloth.columns + 1) : 0;
+    s.cloth.points.forEach((p, i) => {
+      if (!lifted || i < strip) shadowPos.setXYZ(i, p.x + 3, p.y + 4, p.z - 3);
+      else {
+        const h = Math.max(0, floorClearance(p)),
+          z = p.z + h * 0.06;
+        shadowPos.setXYZ(
+          i,
+          p.x + h * 0.08,
+          PAPER_FLOOR.y + PAPER_FLOOR.slope * z + 0.3,
+          z,
+        );
+      }
+    });
+    shadowPos.needsUpdate = true;
+    s.shadow.position.set(0, 0, 0);
+    s.shadow.material.opacity = lifted ? 0.075 : 0.13;
   }
   function draw(time: number) {
     frame = 0;
@@ -399,7 +450,7 @@ export function createWorkshopScene(
         if (
           held ||
           (!s.cloth.pinned && !s.cloth.settled) ||
-          time < relaxUntil
+          (time < relaxUntil && relaxing.has(s.paper.id))
         ) {
           const wasPinned = s.cloth.pinned;
           const grab = held
@@ -410,18 +461,24 @@ export function createWorkshopScene(
                 z: 98,
               }
             : undefined;
-          if (reduced.matches && !held && !s.cloth.pinned) s.cloth.age = 4;
+          if (reduced.matches && !held && !s.cloth.pinned) {
+            s.cloth.settled = true;
+            s.mesh.visible = false;
+            s.shadow.visible = false;
+            continue;
+          }
           stepCloth(s.cloth, 1 / 60, grab);
           if (wasPinned && !s.cloth.pinned) onReveal(s.paper);
-          updateMesh(s);
         }
       }
+      separatePapers(sheets.filter((s) => s.mesh.visible).map((s) => s.cloth));
       accumulator -= 1 / 60;
     }
     moving =
       sheets.some((s) => !s.cloth.pinned && !s.cloth.settled) ||
       !!gesture?.dragging ||
       time < relaxUntil;
+    for (const s of sheets) updateMesh(s);
     renderer.render(scene, camera);
     if (moving) schedule();
   }
@@ -441,9 +498,11 @@ export function createWorkshopScene(
     );
     // Orthographic picking uses the same deformed triangles as the renderer.
     // This also makes the interaction independent of texture transparency.
-    const ordered = [...sheets]
-      .sort((a, b) => Number(b.cloth.pinned) - Number(a.cloth.pinned))
-      .reverse();
+    const ordered = [...sheets].sort(
+      (a, b) =>
+        Number(a.cloth.pinned) - Number(b.cloth.pinned) ||
+        b.cloth.order - a.cloth.order,
+    );
     const cross = (a: { x: number; y: number }, b: { x: number; y: number }) =>
       (p.x - b.x) * (a.y - b.y) - (a.x - b.x) * (p.y - b.y);
     const sheet = ordered.find((s) => {
@@ -493,6 +552,14 @@ export function createWorkshopScene(
       }
     });
     sheet.cloth.settled = false;
+    if (!sheet.cloth.pinned) {
+      liftPaper(sheet.cloth);
+      for (const other of sheets)
+        if (!other.cloth.pinned) {
+          other.cloth.settled = false;
+          other.cloth.quietFrames = 0;
+        }
+    }
     canvas.setPointerCapture(event.pointerId);
     canvas.style.cursor = "grabbing";
   }
@@ -523,6 +590,7 @@ export function createWorkshopScene(
       } else if (!cancelled) window.location.assign(s.paper.href);
     }
     canvas.style.cursor = "grab";
+    if (s) relaxing.add(s.paper.id);
     relaxUntil = performance.now() + 1800;
     schedule();
   }
@@ -538,9 +606,13 @@ export function createWorkshopScene(
     if (activePointer !== null && canvas.hasPointerCapture(activePointer))
       canvas.releasePointerCapture(activePointer);
     activePointer = null;
+    relaxing.clear();
     for (const s of sheets) {
+      s.mesh.visible = true;
+      s.shadow.visible = true;
       resetCloth(s.cloth);
       s.mesh.geometry.setIndex(s.indices);
+      s.shadow.geometry.setIndex(s.indices);
       s.lastTorn = 0;
       updateMesh(s);
     }
@@ -596,6 +668,7 @@ export function createWorkshopScene(
       for (const s of sheets) {
         s.mesh.geometry.dispose();
         s.mesh.material.dispose();
+        s.shadow.geometry.dispose();
         s.shadow.material.dispose();
         s.texture.dispose();
       }

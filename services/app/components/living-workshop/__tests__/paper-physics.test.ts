@@ -1,3 +1,4 @@
+import { floorClearance, separatePapers } from "../paper-contact";
 import { expect, it } from "vitest";
 import {
   makeCloth,
@@ -5,15 +6,19 @@ import {
   resetCloth,
   stepCloth,
 } from "../paper-physics";
-it("lands immediately when reduced motion skips the falling animation", () => {
+it("does not switch to a target pose when an animation timer expires", () => {
   const c = makeCloth(650, 100, 180, 210, 0, 0);
   releaseCloth(c);
-  c.age = 4;
+  c.age = 1.46;
+  const before = c.points.map((p) => ({ ...p }));
   stepCloth(c, 1 / 60);
-  expect(c.settled).toBe(true);
   expect(
-    Math.min(...c.points.slice(2 * (c.columns + 1)).map((p) => p.y)),
-  ).toBeGreaterThan(800);
+    Math.max(
+      ...c.points.map((p, i) =>
+        Math.hypot(p.x - before[i].x, p.y - before[i].y, p.z - before[i].z),
+      ),
+    ),
+  ).toBeLessThan(5);
 });
 it("holds pinned paper and deforms locally at the grabbed point", () => {
   const c = makeCloth(650, 100, 180, 210, 0.08, 1),
@@ -101,4 +106,24 @@ it("perforated sheets expose a progressive seam instead of random body tears", (
   expect(c.tearProgress).toBeGreaterThan(0);
   expect(c.tearProgress).toBeLessThan(1);
   expect(c.pinned).toBe(true);
+});
+
+it("keeps two resting sheets separated where their surfaces overlap", () => {
+  const a = makeCloth(650, 100, 180, 210, 0, 1),
+    b = makeCloth(650, 100, 180, 210, 0, 2);
+  releaseCloth(a);
+  releaseCloth(b);
+  for (const c of [a, b])
+    c.points.forEach((p, i) => {
+      p.x = 650 + (i % (c.columns + 1)) * 10;
+      p.z = 80 + Math.floor(i / (c.columns + 1)) * 9;
+      p.y = 900 + 0.4 * p.z;
+      p.px = p.x;
+      p.py = p.y;
+      p.pz = p.z;
+    });
+  separatePapers([a, b]);
+  expect(Math.min(...b.points.map((p) => floorClearance(p)))).toBeGreaterThan(
+    1,
+  );
 });

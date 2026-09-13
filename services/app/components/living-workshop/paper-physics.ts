@@ -1,3 +1,4 @@
+import { contactFloor, floorClearance } from "./paper-contact";
 /** Paper shell: constrained stretch, softer bending, and explicit attachments.
  * Rendering consumes positions; this module owns grabbing, tearing and falling.
  */
@@ -29,22 +30,20 @@ export interface Cloth {
   torn: Set<number>;
   settled: boolean;
   age: number;
-  floor: number;
   drift: number;
-  landingX: number;
   width: number;
   height: number;
   seed: number;
   tearProgress: number;
   tearFromRight: boolean;
-  angle: number;
-  offsetX: number;
-  offsetY: number;
   attachment: "perforated" | "pins";
   pins: [boolean, boolean];
+  order: number;
+  quietFrames: number;
 }
-const COLS = 18,
-  ROWS = 22;
+let nextOrder = 0;
+const COLS = 14,
+  ROWS = 18;
 export function makeCloth(
   x: number,
   y: number,
@@ -115,19 +114,16 @@ export function makeCloth(
     torn: new Set(),
     settled: false,
     age: 0,
-    floor: 936 + ((seed * 29) % 116),
     drift: (seed % 2 ? 1 : -1) * (12 + seed * 4),
-    landingX: x + width / 2,
     width,
     height,
     seed,
     tearProgress: 0,
     tearFromRight: false,
-    angle,
-    offsetX: 0,
-    offsetY: 0,
     attachment: seed === 0 || seed === 3 ? "perforated" : "pins",
     pins: [true, true],
+    order: 0,
+    quietFrames: 0,
   };
 }
 function tearSeam(c: Cloth, progress: number) {
@@ -151,26 +147,28 @@ export function releaseCloth(c: Cloth) {
   c.pins = [false, false];
   if (!c.pinned) return;
   c.pinned = false;
+  c.order = ++nextOrder;
+  c.quietFrames = 0;
   c.age = 0;
   c.settled = false;
-  c.landingX = Math.max(
-    440,
-    Math.min(1260, c.points.reduce((s, p) => s + p.x, 0) / c.points.length),
-  );
   for (const p of c.points) {
     p.px = p.x - Math.max(-9, Math.min(9, p.x - p.px));
     p.py = p.y - Math.max(-8, Math.min(8, p.y - p.py));
   }
 }
+export function liftPaper(c: Cloth) {
+  c.order = ++nextOrder;
+  c.settled = false;
+  c.quietFrames = 0;
+}
 export function resetCloth(c: Cloth) {
   c.pinned = true;
+  c.quietFrames = 0;
   c.settled = false;
   c.age = 0;
   c.torn.clear();
   c.tearProgress = 0;
   c.pins = [true, true];
-  c.offsetX = 0;
-  c.offsetY = 0;
   for (const b of c.bonds) b.broken = false;
   for (const p of c.points) {
     p.x = p.px = p.homeX;
@@ -204,50 +202,26 @@ export function stepCloth(
       if (pull > 320) releaseCloth(c);
     }
   }
-  // A bounded landing plane projects the sheet onto the painted floor. Its
-  // center inherits the release location, so pages never converge on a bin.
-  if (!c.pinned && !grab && c.age > 1.45) {
-    const ease = c.age > 3.6 ? 1 : Math.min(1, step * 5),
-      angle = (c.seed % 2 ? -0.19 : 0.17) + c.seed * 0.055;
-    c.points.forEach((p, i) => {
-      if (i < strip) return;
-      const u = ((i % (c.columns + 1)) / c.columns) * c.width - c.width / 2,
-        v =
-          (Math.floor(i / (c.columns + 1)) / c.rows) * c.height - c.height / 2;
-      const tx = Math.max(
-        15,
-        Math.min(
-          1433,
-          c.landingX + c.drift + u * Math.cos(angle) - v * Math.sin(angle),
-        ),
-      );
-      const ty = Math.min(
-        1070,
-        c.floor - 44 + (u * Math.sin(angle) + v * Math.cos(angle)) * 0.35,
-      );
-      p.x += (tx - p.x) * ease;
-      p.y += (ty - p.y) * ease;
-      p.z += (90 + Math.sin(u * 0.027) * 2 - p.z) * ease;
-      p.px = p.x;
-      p.py = p.y;
-      p.pz = p.z;
-    });
-    if (c.age > 3.6) c.settled = true;
-    return;
-  }
   // Integrate inertia, then solve the surface. The grab is compliant and its
-  // target is speed-limited, so pointer jumps cannot stretch or explode a sheet.
+  // target tracks the pointer promptly; constraints resist surface stretching.
   c.points.forEach((p, i) => {
-    const vx = (p.x - p.px) * 0.82,
-      vy = (p.y - p.py) * 0.82,
-      vz = (p.z - p.pz) * 0.78;
+    const damping = c.pinned ? 0.9 : floorClearance(p) < 35 ? 0.86 : 0.992;
+    const vx = (p.x - p.px) * damping,
+      vy = (p.y - p.py) * damping,
+      vz = (p.z - p.pz) * damping;
     p.px = p.x;
     p.py = p.y;
     p.pz = p.z;
-    p.x += vx + (c.pinned ? 0 : c.drift * step * 0.16);
-    p.y += vy + (c.pinned ? 180 : 740) * step * step;
+    p.x += vx + (c.pinned || floorClearance(p) < 35 ? 0 : c.drift * step * 0.1);
+    p.y += vy + (c.pinned ? 180 : 1100) * step * step;
     p.z += vz;
-    if (!c.pinned && i >= strip) p.z += (85 - p.z) * step;
+    if (!c.pinned && i >= strip && floorClearance(p) > 8)
+      p.z +=
+        Math.sin(
+          c.age * 4 + ((i % (c.columns + 1)) / c.columns) * 1.5 + c.seed,
+        ) *
+        Math.abs(vy) *
+        0.012;
   });
   const fixed = (i: number) =>
     i < strip ||
@@ -258,15 +232,30 @@ export function stepCloth(
       dx = grab.x - p.x,
       dy = grab.y - p.y,
       dz = grab.z - p.z;
-    const scale = Math.min(1, 14 / Math.max(0.01, Math.hypot(dx, dy, dz)));
+    if (!c.pinned) {
+      // Carry the sheet's center promptly, leaving the local bend to constraints.
+      for (let i = strip; i < c.points.length; i++) {
+        const q = c.points[i];
+        q.x += dx * 0.55;
+        q.y += dy * 0.55;
+        q.z += dz * 0.55;
+        q.px += dx * 0.55;
+        q.py += dy * 0.55;
+        q.pz += dz * 0.55;
+      }
+    }
+    const scale = Math.min(
+      1,
+      (c.pinned ? 30 : 70) / Math.max(0.01, Math.hypot(dx, dy, dz)),
+    );
     target = { x: p.x + dx * scale, y: p.y + dy * scale, z: p.z + dz * scale };
   }
   for (let iteration = 0; iteration < 32; iteration++) {
     if (grab && target && !fixed(grab.index)) {
       const p = c.points[grab.index];
-      p.x += (target.x - p.x) * 0.16;
-      p.y += (target.y - p.y) * 0.16;
-      p.z += (target.z - p.z) * 0.16;
+      p.x += (target.x - p.x) * 0.25;
+      p.y += (target.y - p.y) * 0.25;
+      p.z += (target.z - p.z) * 0.25;
     }
     for (const b of c.bonds) {
       if (b.broken) continue;
@@ -275,7 +264,7 @@ export function stepCloth(
         dx = p.x - a.x,
         dy = p.y - a.y,
         dz = p.z - a.z;
-      const length = Math.hypot(dx, dy, dz) || 0.001;
+      const length = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
       const wa = fixed(b.a) ? 0 : 1,
         wb = fixed(b.b) ? 0 : 1;
       if (wa + wb === 0) continue;
@@ -293,15 +282,24 @@ export function stepCloth(
         p.x = p.homeX;
         p.y = p.homeY;
         p.z = p.homeZ;
-      } else if (c.pinned) p.z = Math.max(12, p.z);
+      } else {
+        if (c.pinned) p.z = Math.max(12, p.z);
+        else contactFloor(p);
+      }
     });
   }
-  if (!c.pinned && grab)
-    c.landingX = Math.max(
-      440,
-      Math.min(
-        1260,
-        c.points.reduce((sum, p) => sum + p.x, 0) / c.points.length,
-      ),
-    );
+  if (!c.pinned && !grab) {
+    let motion = 0,
+      contacts = 0;
+    for (let i = strip; i < c.points.length; i++) {
+      const p = c.points[i];
+      motion = Math.max(motion, Math.hypot(p.x - p.px, p.y - p.py, p.z - p.pz));
+      if (floorClearance(p) < 3) contacts++;
+    }
+    c.quietFrames =
+      motion < 0.35 && contacts > (c.points.length - strip) * 0.12
+        ? c.quietFrames + 1
+        : 0;
+    if (c.quietFrames > 30) c.settled = true;
+  }
 }
