@@ -25,7 +25,7 @@ import {validateFiles} from './validation';
 import {deleteComments} from './delete';
 import {diffCommand,remoteStatus} from './comparison';
 import {localStatus} from './local';
-import {helpDocument,writeHelp} from './teaching';
+import {helpDocument,writeHelp,helpBundle} from './teaching';
 import {withTeachingOrigin} from './teaching-origin';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
@@ -74,7 +74,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // Everything printed is addressed, by construction: the screens render the
    // command registry today, but a topic body reaching them must not print a
    // placeholder at a person.
-   const text=screen!==undefined?withTeachingOrigin(screen,declaredServer):helpDocument(topic,format,declaredServer);
+   const text=typeof bundled.for==='string'?helpBundle(bundled.for,declaredServer):screen!==undefined?withTeachingOrigin(screen,declaredServer):helpDocument(topic,format,declaredServer);
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    if(json){emit({help:text});return 0;}
    // The printed brief says its references are files beside SKILL.md; without the absolute path an agent
@@ -178,7 +178,13 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run'],type:flags.type as string|undefined}));return 0;}
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
-  if(command==='push'&&!account){emit({...await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;}
+  if(command==='push'&&!account){
+   const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']});
+   // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and
+   // grepped their own document for 5–13 calls (eval runs 34740707220–34741910427). Say it once, here.
+   const published=!flags['dry-run']&&result.operations.some(op=>'status' in op&&op.status==='published');
+   emit({...result,...(published?{next:PUBLISHED_NEXT}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
+  }
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');
    return attachRemote({client,id:flags.session,interactive,stdout,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
@@ -197,6 +203,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   return error instanceof CliError?error.exitCode:1;
  }
 }
+/** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
+export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again.';
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}
 /**
  * Eager, offline skill installation for the detected or saved harnesses. Runs before every command,

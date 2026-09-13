@@ -101,6 +101,9 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
 
 /** The message Vega-Lite's normaliser throws for a spec it cannot read, or null for one it can read. */
 export function vegaLiteStructureError(spec: Record<string, unknown>): string | null {
+  // The platform binds the query's rows to the chart; a spec that names or inlines its own data set
+  // normalises fine and then fails in the browser ("Unrecognized data set: table" — a local pi deck).
+  if ('data' in spec) return 'the spec carries a "data" key; the platform binds the query rows to the chart — remove it';
   try { normalize(structuredClone(spec) as unknown as TopLevelSpec); return null; }
   catch (error) { return error instanceof Error ? error.message : String(error); }
 }

@@ -16,6 +16,7 @@ export const flags: Record<string,Flag> = {
  session:{value:'REF',description:'Attach to an existing authorized remote session instead of launching a command.'},
  output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
+ for:{value:'TEMPLATE',description:'Print every reference a document of this template needs, in reading order, as one output.'},
  version:{description:'Show the installed CLI version.'},
  help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
  server:{value:'URL',description:'Use this HTTPS server origin.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; browser approval is still required.'},
@@ -60,7 +61,7 @@ export const commands: Command[] = [
  {name:'delete',usage:'<ref> [<ref> ...]',description:'Soft-delete resources, revoke tokens, terminate sessions or delete comments; keep local files.',min:1,max:Infinity,flags:['type','in','dry-run','force'],examples:['afbin delete report.jsx --dry-run','afbin delete --type comment --in abc123 ann_123']},
  {name:'comment',usage:'<ref> [<ref> ...]',description:'List threads, post an anchored comment, reply, resolve or reopen.',min:1,max:Infinity,flags:['body','input','thread','node','quote','state','filter','limit','cursor','dry-run'],examples:['afbin comment report.jsx','afbin comment report.jsx --node heading --body "Clarify this"','afbin comment report.jsx --thread ann_123 --body "Fixed" --state resolved']},
  {name:'open',usage:'<ref> [<ref> ...]',description:'Open the published view of a resource, or print its URL with --json.',min:1,max:Infinity,flags:[],examples:['afbin open report.jsx','afbin open abc123 --json']},
- {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help.',min:0,max:1,flags:['format','output'],examples:['afbin help example','afbin help markup','afbin help dashboard']},
+ {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help; --for <template> prints everything a document of that kind needs in one call.',min:0,max:1,flags:['format','output','for'],examples:['afbin help --for deck','afbin help markup','afbin help dashboard']},
  {name:'auth',usage:'',description:'Authenticate this machine in the browser; report the signed-in account, or anonymous.',min:0,max:0,flags:[],examples:['afbin auth','afbin auth --json']},
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in.',min:0,max:0,flags:['harness','service'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 

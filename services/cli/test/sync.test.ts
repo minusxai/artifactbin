@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {runCli} from '../src/dispatch';
+import {runCli,PUBLISHED_NEXT} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {parseDocument} from '../src/document';
 import {digest} from '../src/files';
@@ -414,4 +414,24 @@ describe('deleting many typed targets', () => {
     assert.equal(await readFile(join(h.root,'notes.txt'),'utf8'),'keep me\n');assert.equal(await readFile(join(h.root,'notes.yaml'),'utf8'),'type: file\nid: fil123\nsource: notes.txt\n');
    }finally{await h.cleanup();}
   });
+});
+
+test('a successful publish says the head is the pushed file, so the agent does not spend turns verifying it; a dry-run says nothing',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-published-next-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);await writeFile(join(root,'doc.jsx'),'<p>Hello</p>');
+  const output:string[]=[];
+  const fetch=async(input:unknown)=>{
+   if(String(input).endsWith('/preflight'))return Response.json({valid:true});
+   return Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Hello</p>'},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  };
+  assert.equal(await runCli(['push','doc.jsx','--dry-run','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
+  assert.equal(JSON.parse(output[0]).next,undefined);
+  output.length=0;
+  assert.equal(await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
+  const result=JSON.parse(output[0]);
+  assert.equal(result.operations[0].status,'published');
+  assert.equal(result.next,PUBLISHED_NEXT);
+  assert.match(result.next,/Do not pull, diff, export or grep/);
+ }finally{await rm(root,{recursive:true,force:true});}
 });

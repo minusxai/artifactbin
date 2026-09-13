@@ -35,7 +35,7 @@ export const helpTopics:Record<string,string>={
  // that read references/themes.md, which carries a one-line description per theme and says to pick
  // ONE, opened one. The reference is the better answer to the same question; same for templates.
  themes:`${referenceTopics['themes']}\n\nAvailable themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice.`,
- templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> to print a local starter.`,
+ templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> for everything that kind of document needs, its starter last.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
@@ -52,6 +52,22 @@ export function briefDocument(origin:string=DEFAULT_SERVER):string{return withTe
 const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help and validation stay offline. Local SQL may download its engine once; prepare it with afbin setup --service sql before disconnecting.\n\n`
  +commands.map(command=>`## ${command.name}\n\n\`\`\`text\n${commandHelp(command.name)}\`\`\`\n`).join('\n');
 /** One bundled documentation set: help, the manual and the installed skills render the same registry. */
+/**
+ * Every reference a document of one kind needs, in reading order, as ONE output. Agents read these
+ * files one `cat` per call — 9 to 14 calls per task in eval runs 34740707220–34741910427, each one
+ * growing a context that every later turn re-reads. One call, one growth. Kept under the 50 KB a
+ * shell tool shows an agent; sync-and-recovery is read on a refusal, not up front.
+ */
+export function helpBundle(template:string,origin:string=DEFAULT_SERVER):string{
+ if(!STORY_TEMPLATE_NAMES.includes(template as never))throw new CliError('invalid_choice',`Invalid template: ${template}.`,`Choose ${STORY_TEMPLATE_NAMES.join(', ')}.`);
+ const parts:Array<[string,string]>=[
+  ['design',helpTopics['design']!],['markup',helpTopics['markup']!],['markup-data',helpTopics['markup-data']!],['markup-data-authoring',helpTopics['markup-data-authoring']!],
+  [`templates-${template}`,helpTopics[`templates-${template}`]!],['themes',helpTopics['themes']!],
+  ['publishing-datasets',helpTopics['publishing-datasets']!],[`starter: ${template}`,helpTopics[template]!],
+ ];
+ const body=parts.map(([name,text])=>`\n# ${name}\n\n${text.trim()}\n`).join('');
+ return withTeachingOrigin(`Everything a ${template} needs, in reading order. Read it once; then write the whole document, publish, and improve the published version. On a refusal, run afbin help errors; for sync and recovery, afbin help publishing.\n${body}`,origin);
+}
 export function helpDocument(topic?:string,format='text',origin:string=DEFAULT_SERVER):string{
  return withTeachingOrigin(helpBody(topic,format,origin),origin);
 }
@@ -72,6 +88,10 @@ function helpBody(topic:string|undefined,format:string,origin:string):string{
   return manPage(topic);
  }
  if(!isCommand(topic)){
+  // A template NAME as the topic prints everything that kind of document needs, its starter last. It
+  // used to print the ten-line starter alone, and an agent that typed `afbin help dashboard` then read
+  // eleven to fourteen reference files one by one (local rounds after run 34740707220).
+  if(STORY_TEMPLATE_NAMES.includes(topic as never))return helpBundle(topic as string,origin);
   const text=helpTopics[topic as string];
   if(text===undefined){
    const near=closestTopics(topic as string);
