@@ -5,7 +5,7 @@ import { Shell } from './Shell';
 import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 
-const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
+const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
 
 function Analytics() {
   const { session } = useSession();
@@ -29,6 +29,7 @@ export function App() {
           <Route path="/account" element={<AccountPage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/datasets/new" element={<DatasetEditorPage />} />
+          <Route path="/files/new" element={<FileUploadPage />} />
           <Route path="/tokens" element={<Navigate to="/account" replace />} />
           <Route path="/trash" element={<TrashPage />} />
           {/* `/docs` and below are the agent surface, served by the server's

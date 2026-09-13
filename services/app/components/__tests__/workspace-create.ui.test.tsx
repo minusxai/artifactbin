@@ -22,10 +22,26 @@ describe('WorkspaceCreate', () => {
     expect(screen.getByLabelText('Trash').querySelector('svg')).toBeTruthy();
   });
 
+  it('lists artifact and folder first, then file and dataset under an assets rule', () => {
+    render(<WorkspaceCreate onCreated={() => {}} />);
+    fireEvent.click(screen.getByLabelText('Create'));
+    const items = screen.getAllByRole('menuitem').map((item) => item.textContent?.trim());
+    expect(items).toEqual(['Artifact', 'Folder', 'File', 'Dataset']);
+    expect(screen.getByRole('menuitem', { name: 'File' })).toHaveAttribute('href', '/files/new');
+    expect(screen.getByRole('menuitem', { name: 'Dataset' })).toHaveAttribute('href', '/datasets/new');
+    expect(screen.getByRole('menu', { name: 'Create menu' })).toHaveTextContent(/assets/i);
+  });
+
+  it('sends a file picked from inside a folder to the upload page with that folder', () => {
+    render(<WorkspaceCreate parentId="fold01" onCreated={() => {}} />);
+    fireEvent.click(screen.getByLabelText('Create'));
+    expect(screen.getByRole('menuitem', { name: 'File' })).toHaveAttribute('href', '/files/new?parent_id=fold01');
+  });
+
   it('opens Getting Started for a new artifact', () => {
     render(<WorkspaceCreate onCreated={() => {}} />);
     fireEvent.click(screen.getByLabelText('Create'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'New artifact' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Artifact' }));
 
     expect(screen.getByRole('dialog', { name: 'Create new artifact' })).toBeInTheDocument();
     expect(screen.getByLabelText('Get started')).toBeInTheDocument();
@@ -36,7 +52,7 @@ describe('WorkspaceCreate', () => {
     const onCreated = vi.fn();
     render(<WorkspaceCreate onCreated={onCreated} />);
     fireEvent.click(screen.getByLabelText('Create'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Folder' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Create new folder' });
     const submit = screen.getByRole('button', { name: 'create folder' }) as HTMLButtonElement;
@@ -55,7 +71,7 @@ describe('WorkspaceCreate', () => {
   it('creates a folder inside the current folder when the shared workspace is nested', async () => {
     render(<WorkspaceCreate parentId="fold01" onCreated={() => {}} />);
     fireEvent.click(screen.getByLabelText('Create'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'New folder' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Folder' }));
     fireEvent.change(screen.getByLabelText('Folder name'), { target: { value: 'Q4' } });
     fireEvent.click(screen.getByRole('button', { name: 'create folder' }));
 

@@ -39,7 +39,10 @@ export function AssetsPage() {
         <Database aria-hidden="true" className="size-3 stroke-[1.8] text-accent" />
         <MicroLabel>assets</MicroLabel>
         <span className="font-mono text-[10px] text-faint">the material documents are built from</span>
-        <a href="/datasets/new" aria-label="Create dataset" className="ml-auto rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Create dataset</a>
+        <div className="ml-auto flex items-center gap-2">
+          <a href="/files/new" aria-label="Upload file" className="rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Upload file</a>
+          <a href="/datasets/new" aria-label="Create dataset" className="rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent">Create dataset</a>
+        </div>
       </div>
 
       {failed && !data ? (
