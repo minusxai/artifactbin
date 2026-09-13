@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs, wrapCheckoutSandbox, checkoutIsolationRoots, agentEnvironment } from '../lib/spawn';
+import { chownArgv, handOverRunAsDirs, prepareRunAsDirs, readableForAgent, reclaimRunAsDirs, runInvocation, wrapRunAs, wrapCheckoutSandbox, checkoutIsolationRoots, agentEnvironment, taskTempEnvironment } from '../lib/spawn';
 
 let dir: string;
 const paths = () => ({ stdoutPath: path.join(dir, 'transcript.jsonl'), stderrPath: path.join(dir, 'stderr.log') });
@@ -589,5 +589,17 @@ describe('agentEnvironment', () => {
       GITHUB_TOKEN: 't', ACTIONS_RUNTIME_TOKEN: 't', ACTIONS_ID_TOKEN_REQUEST_URL: 'u', GITHUB_WORKFLOW: 'w', RUNNER_TEMP: '/r', npm_config_x: '1', DEPLOYMENT: 'https://x',
     });
     expect(Object.keys(env).sort()).toEqual(['CI', 'HOME', 'LANG', 'LC_ALL', 'PATH', 'PWD', 'TERM', 'TMPDIR']);
+  });
+});
+
+describe('taskTempEnvironment', () => {
+  it('gives each task its own temp directory — five parallel claude-code tasks shared /tmp and one ran another\'s generator (run 34740707220)', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'eval-tmp-'));
+    try {
+      const env = taskTempEnvironment(home);
+      const dir = path.join(home, 'tmp');
+      expect(env).toEqual({ TMPDIR: dir, TMP: dir, TEMP: dir });
+      expect(fs.statSync(dir).isDirectory()).toBe(true);
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
   });
 });

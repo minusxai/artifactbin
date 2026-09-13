@@ -108,7 +108,10 @@ export function parseCommand(argv:string[]):ParsedCommand {
  const f=result.flags;
  if(f.type!==undefined){const choices=COMMAND_TYPES[command.name];if(!choices)throw new CliError('unsupported_flag',`afbin ${command.name} does not accept --type.`,`Run afbin ${command.name} -h.`);f.type=enumArgument(f.type,choices,'type');}
  if(f.filter)collectionFilters(command.name,f.filter as string[]);
- if(f.format!==undefined){const choices=FORMATS[command.name];if(!choices)throw new CliError('unsupported_flag',`afbin ${command.name} does not accept --format.`,`Run afbin ${command.name} -h.`);f.format=enumArgument(f.format,choices,'format');}
+ if(f.format!==undefined){const choices=FORMATS[command.name];if(!choices)throw new CliError('unsupported_flag',`afbin ${command.name} does not accept --format.`,`Run afbin ${command.name} -h.`);
+  // An image or page format is export's, not pull's: name the command instead of only the list.
+  if(command.name==='pull'&&typeof f.format==='string'&&['png','jpg','html'].includes(f.format.toLowerCase()))throw new CliError('invalid_choice',`Invalid format: ${f.format}.`,`Choose ${choices.join(', ')}; rendered images and pages come from afbin export ${result.positionals[0]??'<ref>'} --format ${f.format.toLowerCase()}.`);
+  f.format=enumArgument(f.format,choices,'format');}
  if(f.page!==undefined&&(!/^\d+$/.test(String(f.page))||Number(f.page)<1))throw new CliError('invalid_page','--page must be a positive integer.');
  if(command.name==='push'){
   if(f.restore&&f.refresh)throw new CliError('invalid_arguments','--restore and --refresh are mutually exclusive.');
