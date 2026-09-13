@@ -149,6 +149,8 @@ describe('POST /api/start', () => {
 
     // Still an ordinary anchor: the agent's first edit targets this text (above).
     expect(markup).toContain('Waiting for your agent…');
+    // A fetcher that reduces the page to its text (no head tags, no comments) still learns the way on.
+    expect(markup).toContain('Agents: edit this document with the afbin CLI — read /llms.txt on this site, then afbin pull this page\'s URL.');
     // A holding state, not a bare heading in the top-left corner.
     expect(markup).toContain('items-center');
     expect(markup).toContain('justify-center');

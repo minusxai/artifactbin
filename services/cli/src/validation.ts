@@ -22,7 +22,15 @@ export async function validateFiles(workspace:Workspace,paths?:string[],fix=fals
     if(metadata.template&&!STORY_TEMPLATE_NAMES.includes(metadata.template as never))throw new CliError('unknown_template',`Unknown template ${metadata.template}.`,`Choose ${STORY_TEMPLATE_NAMES.join(', ')}.`);
     const dependencies=await planDependencies(body,file.path,workspace.root);
     const checked=validateMarkupStructure(substituteDependencies(body,dependencies));
-    diagnostics.push(...checked.errors.map(error=>({code:'invalid_markup',message:error.message,start:error.start,end:error.end})));
+    // The grammar sees the body; the author sees the file. A diagnostic that said "line 115" for a
+    // fault on file line 130 cost an agent 17 calls and 130 s to locate one brace (eval run
+    // 34714728585, pi deck), so lines and offsets are moved past the metadata fence here.
+    const source=file.bytes.toString();const fence=source.slice(0,source.length-body.length);
+    const fenceLines=(fence.match(/\n/g)??[]).length;
+    const relocate=(error:{message:string;start?:number;end?:number})=>({code:'invalid_markup',
+     message:fenceLines?error.message.replace(/\bline (\d+)\b/g,(_,n:string)=>`line ${Number(n)+fenceLines}`):error.message,
+     ...(typeof error.start==='number'?{start:error.start+fence.length}:{}),...(typeof error.end==='number'?{end:error.end+fence.length}:{})});
+    diagnostics.push(...checked.errors.map(relocate));
     if(fix&&!diagnostics.length){
      const formatted=formatMarkupSource(body);
      const original=file.bytes.toString();

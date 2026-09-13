@@ -28,6 +28,7 @@ test('local query pagination rejects a cursor after the input data changes',asyn
   const first=await invoke([]);assert.equal(first.code,0,JSON.stringify(first));assert.equal(first.result.results[0].rows.length,20);const cursor=first.result.results[0].next_cursor;assert.ok(cursor);
   const second=await invoke(['--cursor',cursor]);assert.equal(second.code,0);assert.deepEqual(second.result.results[0].rows,[{n:20}]);assert.equal(second.result.results[0].next_cursor,null);
   await writeFile(join(root,'rows.json'),'[{"n":42}]');const stale=await invoke(['--cursor',cursor]);assert.equal(stale.result.error.code,'invalid_cursor');
+  const inline=await invoke(['select count(*) as n from public.rows']);assert.equal(inline.code,2);assert.equal(inline.result.error.code,'sql_in_argument');assert.match(inline.result.error.fix,/--input/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
