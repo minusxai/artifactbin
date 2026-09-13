@@ -617,7 +617,9 @@ export function DatasetEditorPage({
       }),
     );
   };
-  const exposedTables = useMemo(
+  // Annotated, or the literal's element type collapses to the JSON shape and
+  // the model entries' columns become invisible to the whitelist listing.
+  const exposedTables = useMemo<{ schema: string; name: string; columns?: string[] }[]>(
     () => [
       ...(kind === "postgres"
         ? sources
