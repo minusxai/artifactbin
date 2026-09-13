@@ -284,6 +284,7 @@ await p.click('[aria-label="Increase font size"]'); await p.waitForTimeout(500);
 check((await cls()) !== c0, 'font-size step applies');
 await surface().locator('h1').first().evaluate(el=>{const range=document.createRange();range.selectNodeContents(el);const selection=getSelection();selection.removeAllRanges();selection.addRange(range);});
 await p.click('[aria-label="Toggle italic"]'); await p.waitForTimeout(500);
+await p.click('[aria-label="Alignment"]');
 await p.click('[aria-label="Align center"]'); await p.waitForTimeout(500);
 await p.getByRole('button',{name:'Document options',exact:true}).click();
 await p.fill('[aria-label="Title"]', 'Gate doc renamed');

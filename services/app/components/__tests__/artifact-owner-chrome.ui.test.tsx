@@ -234,7 +234,7 @@ describe('the surface header buttons are owner chrome', () => {
     expect(screen.queryByLabelText('Edit artifact')).not.toBeInTheDocument();
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
-    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 92 });
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 132 });
     expect(screen.getByLabelText('Exit edit mode')).toHaveClass('text-accent');
     expect(screen.getByLabelText('Exit edit mode').querySelector('.lucide-check')).toBeTruthy();
     expect(screen.getByLabelText('Exit edit mode')).toHaveTextContent('done');
@@ -409,12 +409,12 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Edit artifact'));
     await waitFor(() => expect(screen.getByLabelText('Exit edit mode')).toBeInTheDocument());
-    expect(viewport).toHaveStyle({paddingTop: '92px', paddingRight: '320px'});
-    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 92 });
+    expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '320px'});
+    expect(layerProps.at(-1)).toMatchObject({ railOpen: true, topOffset: 132 });
 
     openDocumentControls();
     fireEvent.click(screen.getByLabelText('Toggle comments'));
-    expect(viewport).toHaveStyle({paddingTop: '92px', paddingRight: '0px'});
+    expect(viewport).toHaveStyle({paddingTop: '132px', paddingRight: '0px'});
     expect(currentRuntime()).toBe(win);
   });
 
