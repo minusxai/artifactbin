@@ -185,7 +185,7 @@ export function createWorkshopScene(
     image.onerror = () => {
       if (!disposed) schedule();
     };
-    image.src = `/api/showcase/${paper.id}`;
+    image.src = setting.posterAtlas ?? `/api/showcase/${paper.id}`;
     return sheet;
   });
   function paintPoster(sheet: Sheet, index: number) {
@@ -222,7 +222,24 @@ export function createWorkshopScene(
       c.beginPath();
       c.rect(margin, margin, w - margin * 2, h - margin * 2);
       c.clip();
-      c.drawImage(sheet.image, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      if (setting.posterAtlas) {
+        // Review-only print atlas: retain each complete composition, including its type.
+        const cellWidth = sheet.image.naturalWidth / 3;
+        const cellHeight = sheet.image.naturalHeight / 2;
+        c.drawImage(
+          sheet.image,
+          (index % 3) * cellWidth,
+          Math.floor(index / 3) * cellHeight,
+          cellWidth,
+          cellHeight,
+          margin,
+          margin,
+          w - margin * 2,
+          h - margin * 2,
+        );
+      } else {
+        c.drawImage(sheet.image, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      }
       c.restore();
     }
     // Light fiber speckles and a warm edge tie the printed surface to the room.

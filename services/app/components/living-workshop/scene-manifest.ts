@@ -82,6 +82,8 @@ export const WORKSHOP_PAPERS: WorkshopPaper[] = PLACEMENTS.flatMap((slot) => {
 export const WORKSHOP_IMAGE = "/landing/workshop/indoor-wide.webp";
 
 export interface WorkshopSetting {
+  /** Optional six-cell, 3 × 2 artwork atlas for the visual review routes. */
+  posterAtlas?: string;
   image: string;
   mask: string;
   name: "indoor" | "outdoor";

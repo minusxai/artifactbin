@@ -44,7 +44,14 @@ export default function HomeV2({
           canvas.current,
           WORKSHOP_PAPERS,
           setReveal,
-          setting,
+          {
+            ...setting,
+            posterAtlas:
+              new URLSearchParams(window.location.search).get("posters") ===
+              "real"
+                ? undefined
+                : "/landing/workshop/monotone-posters.webp",
+          },
         );
         setSceneReady(!!scene.current);
       } catch {
