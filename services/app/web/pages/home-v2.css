@@ -59,7 +59,7 @@
   position: absolute;
   z-index: 2;
   top: 15%;
-  left: 9.5%;
+  left: 8%;
   width: 31%;
 }
 .workshop-intro h1 {
@@ -117,7 +117,7 @@
   padding: 0.85cqw 1.25cqw;
   border: 0;
   border-radius: 4px;
-  background: #24583f;
+  background: #008b50;
   color: #fffdf5;
   font-size: 0.93cqw;
   transition:
@@ -125,7 +125,7 @@
     transform 0.2s;
 }
 .workshop-install-actions button:hover {
-  background: #183f2c;
+  background: #007443;
   transform: translateY(-1px);
 }
 .workshop-install-actions a {
@@ -137,7 +137,7 @@
 .workshop-copy-status {
   font-size: 0.73cqw;
   line-height: 1.6;
-  color: #647160;
+  color: #34473b;
   min-height: 2.4em;
   margin-top: 0.85cqw;
   max-width: 26cqw;
@@ -497,7 +497,7 @@
 }
 /* Compact installation strip follows the existing app's code/copy treatment. */
 .workshop-intro {
-  top: 12.5%;
+  top: 10%;
 }
 .workshop-install {
   margin-top: 1.8cqw;
@@ -590,4 +590,29 @@
 
 .workshop-agent-screens[data-canvas="true"] {
   opacity: 0;
+}
+
+.workshop-create-label {
+  display: block;
+  margin-top: 1cqw;
+}
+.workshop-copy-status {
+  text-shadow: 0 1px 5px #ffffffdd;
+}
+
+.workshop-copy-status {
+  font-size: 0.82cqw;
+  max-width: 31cqw;
+  width: fit-content;
+  padding: 0.25em 0.4em;
+  margin-left: -0.4em;
+  background: #f7f7edf0;
+  border-radius: 2px;
+  text-shadow: none;
+}
+@media (max-width: 800px) {
+  .workshop-copy-status {
+    font-size: 12px;
+    max-width: 100%;
+  }
 }

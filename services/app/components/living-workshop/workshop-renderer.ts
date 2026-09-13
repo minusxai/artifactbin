@@ -25,6 +25,7 @@ import {
 } from "./paper-model";
 import {
   makeCloth,
+  isPerforatedPaper,
   liftPaper,
   releaseCloth,
   resetCloth,
@@ -235,7 +236,7 @@ export function createWorkshopScene(
     c.fillStyle = edge;
     c.fillRect(0, 0, 9, h);
     // A couple of notebook sheets, not six identical punched strips.
-    if (index === 0 || index === 3) {
+    if (isPerforatedPaper(index)) {
       c.globalCompositeOperation = "destination-out";
       c.fillStyle = "#000";
       for (let x = 18; x < w - 10; x += 24) {

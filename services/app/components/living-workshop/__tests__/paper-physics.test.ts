@@ -127,3 +127,12 @@ it("keeps two resting sheets separated where their surfaces overlap", () => {
     1,
   );
 });
+
+it("bottom-right paper tears at its punched header and retains the pinned strip", () => {
+  const c = makeCloth(1159, 361, 164, 174, 0.1, 5);
+  expect(c.attachment).toBe("perforated");
+  releaseCloth(c);
+  stepCloth(c, 1 / 60);
+  expect(c.points[0].x).toBe(c.points[0].homeX);
+  expect(c.torn.size).toBeGreaterThan(0);
+});

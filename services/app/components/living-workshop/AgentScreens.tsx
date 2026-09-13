@@ -15,7 +15,6 @@ export default function AgentScreens({
         aria-label="Claude Code robot"
       >
         <g transform="translate(590 449) rotate(-16) scale(.8)">
-          <rect width="24" height="30" rx="4" fill="#101815" />
           <svg x="1" y="3" width="22" height="24" viewBox="0 0 24 24">
             <ClaudeCodeIcon size={24} />
           </svg>
@@ -28,7 +27,6 @@ export default function AgentScreens({
         aria-label="Codex robot"
       >
         <g transform="translate(500 645) rotate(-2) scale(.87)">
-          <rect width="22" height="30" rx="4" fill="#101815" />
           <svg x="0" y="3" width="22" height="23" viewBox="0 0 24 24">
             <CodexIcon size={24} />
           </svg>
@@ -41,7 +39,6 @@ export default function AgentScreens({
         aria-label="pi robot"
       >
         <g transform="translate(999 712) rotate(-13) scale(.8)">
-          <rect width="23" height="30" rx="4" fill="#101815" />
           <svg
             x="2"
             y="4"

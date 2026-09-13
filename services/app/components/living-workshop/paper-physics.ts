@@ -120,7 +120,7 @@ export function makeCloth(
     seed,
     tearProgress: 0,
     tearFromRight: false,
-    attachment: seed === 0 || seed === 3 ? "perforated" : "pins",
+    attachment: isPerforatedPaper(seed) ? "perforated" : "pins",
     pins: [true, true],
     order: 0,
     quietFrames: 0,
@@ -303,3 +303,7 @@ export function stepCloth(
     if (c.quietFrames > 30) c.settled = true;
   }
 }
+
+/** Shared by paper geometry and its printed attachment treatment. */
+export const isPerforatedPaper = (seed: number) =>
+  seed === 0 || seed === 3 || seed === 5;

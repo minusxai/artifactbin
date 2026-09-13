@@ -79,7 +79,7 @@ export const WORKSHOP_PAPERS: WorkshopPaper[] = PLACEMENTS.flatMap((slot) => {
       ]
     : [];
 });
-export const WORKSHOP_IMAGE = "/landing/workshop/indoor-restored.webp";
+export const WORKSHOP_IMAGE = "/landing/workshop/indoor-polished.webp";
 
 export interface WorkshopSetting {
   image: string;
@@ -96,7 +96,7 @@ export const WORKSHOP_SETTINGS: Record<
     name: "indoor",
   },
   outdoor: {
-    image: "/landing/workshop/outdoor-restored.webp",
+    image: "/landing/workshop/outdoor-polished.webp",
     mask: "/landing/workshop/outdoor-mask.png",
     name: "outdoor",
   },

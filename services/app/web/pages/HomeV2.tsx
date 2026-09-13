@@ -114,7 +114,7 @@ export default function HomeV2({
             Make something.
           </h1>
           <div className="workshop-install" id="workshop-install">
-            <span className="workshop-label">Install artifactbin</span>
+            <span className="workshop-label">1. Install artifactbin</span>
             <div className="workshop-command">
               <code>{command}</code>
               <Tooltip
@@ -135,6 +135,9 @@ export default function HomeV2({
                 </button>
               </Tooltip>
             </div>
+            <span className="workshop-label workshop-create-label">
+              2. Create with your agent
+            </span>
             <div className="workshop-install-actions">
               <Tooltip content="Copy instructions for your agent">
                 <button
@@ -149,7 +152,7 @@ export default function HomeV2({
                   )}
                   {promptState === "copied"
                     ? "Instructions copied"
-                    : "Create an artifact"}
+                    : "Copy instructions"}
                 </button>
               </Tooltip>
               <a href="/docs-human">
