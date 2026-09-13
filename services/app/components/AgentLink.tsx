@@ -133,7 +133,7 @@ export default function AgentLink({
           } ${
             size === 'inline'
               ? 'gap-1.5 px-2.5 py-1.5 font-mono text-[11.5px]'
-              : 'mt-2 w-full gap-2 px-2.5 py-2 font-mono text-xs'
+              : 'w-full gap-2 px-3 py-2.5 font-mono text-[12.5px]'
           }`}
         >
           <span className={`flex min-w-0 items-center ${size === 'inline' ? 'gap-1.5' : 'gap-2'}`}>
@@ -175,7 +175,7 @@ export default function AgentLink({
           </a>
         )}
       </div>
-      {body}
+      <div className="mt-2">{body}</div>
     </div>
   );
 }
