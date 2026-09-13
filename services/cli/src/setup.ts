@@ -1,3 +1,6 @@
+import {createSql} from '@artifactbin/sql/local';
+import {isQueryFailure} from '@artifactbin/contracts';
+import {CliError} from './commands';
 import {installSkills,selectSkills,harnessLabels,type SkillChoice,type SkillHarness,type SkillInstallation} from './skill-install';
 import {type Style} from './style';
 
@@ -21,4 +24,12 @@ export function setupSummary(installations:readonly SkillInstallation[],home:str
  const restart=[...new Set(installations.filter(i=>i.restart_required).flatMap(i=>i.harnesses).filter(h=>h==='claude'||h==='codex'))].map(h=>harnessLabels[h]);
  if(restart.length)rows.push('',`  ${s.yellow(`Restart ${restart.join(' and ')} to load your new skills.`)}`);
  return rows.join('\n')+'\n';
+}
+
+/** Explicit prefetch prepares SQL for later offline queries; it never authenticates or sends local data. */
+export async function setupService(name:string){
+ if(name!=='sql')throw new CliError('unknown_service','Supported service: sql.','Run afbin setup --service sql.');
+ const result=(await createSql().run({tables:{},params:{},queries:[{name:'ready',sql:'select 1 as ready'}]})).ready;
+ if(!result||isQueryFailure(result))throw new CliError('service_unavailable',result?.error??'SQL service did not start.','Connect once and run afbin setup --service sql before using local queries offline.');
+ return {services:[{name:'sql',status:'ready',execution:'local'}]};
 }
