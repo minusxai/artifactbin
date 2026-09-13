@@ -76,7 +76,7 @@ Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.it
 
 ## Preview and freshness
 
-Create at `/datasets/new`; edit at `/a/<id>/edit` or a pretty artifact address plus `/edit`. Tabs separate Data actions, Data preview, and Source & models. Run notebook cells before exposing outputs; edits invalidate downstream previews. Run SQL executes only on request. Saved data supports pagination and refresh; draft previews show up to 50 rows.
+Create at `/datasets/new`; edit at `/a/<id>/edit` or a pretty artifact address plus `/edit`. Tabs separate Data actions, Source & models, and Data preview. Run notebook cells before exposing outputs; edits invalidate downstream previews. Run SQL executes only on request. Saved data supports pagination and refresh; draft previews show up to 50 rows.
 
 `POST /a/<id>/tables` takes `{sql,limit?,offset?,refresh?}` and returns `{rows,columns,truncated?,refreshedAt}` after dataset read authorization, and queries only final-whitelist tables and columns. It cannot query hidden notebook helpers or unexposed raw sources. `refresh:true` bypasses cached results. `refreshSeconds:0` disables caching; otherwise it is the cache lifetime. External database writes do not emit Artifactbin live events: use Refresh or rerun the document query. Database edits never create dataset definition versions.
 

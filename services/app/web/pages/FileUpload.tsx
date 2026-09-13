@@ -16,8 +16,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router';
 import { Box, Check, Copy, Download, File as FileIcon, FileArchive, FileSpreadsheet, FileUp } from 'lucide-react';
+import AssetPageHeader from '@/components/AssetPageHeader';
 import ModelPreview from '@/components/ModelPreview';
-import { LINK, MicroLabel, PANEL } from '@/components/ui';
+import { Button, Input, LINK } from '@/components/ui';
 import { formatFileSize } from '@/lib/file-display';
 import { useSearchParams } from '@/lib/navigation';
 import { FILE_EXTENSIONS, assetFormatOf, fileContentType } from '@/lib/story/file-types';
@@ -64,8 +65,9 @@ interface Picked {
   text: string | null;
 }
 
-const FIELD = 'h-9 rounded-[5px] border border-edge bg-bg px-3 font-mono text-xs text-fg placeholder:text-faint focus:border-accent focus:outline-none';
-const ACTION = 'inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-[4px] border px-2.5 font-mono text-[11px] no-underline transition-colors';
+/** The dataset workspace's own control shapes (ui.Button), so the two asset
+ * pages read as one: 4px radii, mono, one solid accent. */
+const ACTION = 'inline-flex cursor-pointer items-center gap-1.5 rounded-[4px] border px-3 py-1.5 font-mono text-xs no-underline transition-colors';
 
 export function FileUploadPage() {
   const { session } = useSession();
@@ -164,107 +166,106 @@ export function FileUploadPage() {
   };
 
   return (
-    <main className="mx-auto mt-8 max-w-4xl px-4 pb-24 sm:px-6">
-      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-        <FileUp aria-hidden="true" className="size-3 stroke-[1.8] text-accent" />
-        <MicroLabel>upload a file</MicroLabel>
-        <span className="font-mono text-[10px] text-faint">images, pdf, video, audio, text, fonts and glb models</span>
-        <a href="/assets" className={`ml-auto font-mono text-xs ${LINK}`}>all assets →</a>
-      </div>
+    <main className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
+      <AssetPageHeader
+        icon={FileUp}
+        eyebrow="Asset upload"
+        title="Upload a file"
+        link={{ href: '/assets', label: 'Back to assets', text: 'all assets' }}
+      />
 
-      <section aria-label="Upload a file" className={`${PANEL} p-4`}>
-        <input
-          ref={input}
-          type="file"
-          accept={ACCEPT}
-          aria-label="Choose a file"
-          className="hidden"
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (file) void pick(file);
-          }}
-        />
+      <div className="mx-auto max-w-4xl space-y-6">
+        <section aria-label="Upload a file" className="rounded-xl border border-edge bg-surface p-5">
+          <input
+            ref={input}
+            type="file"
+            accept={ACCEPT}
+            aria-label="Choose a file"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void pick(file);
+            }}
+          />
 
-        {!picked ? (
-          <button
-            type="button"
-            onClick={() => input.current?.click()}
-            onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            className={`flex h-48 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-[6px] border border-dashed font-mono text-xs transition-colors ${
-              dragging ? 'border-accent bg-accent-soft text-fg' : 'border-edge-bright bg-raised text-muted hover:border-accent hover:text-fg'
-            }`}
-          >
-            <FileUp aria-hidden="true" size={22} strokeWidth={1.6} className="text-accent" />
-            <span>drop a file here, or click to choose one</span>
-            <span className="text-[10px] text-faint">png · jpg · svg · pdf · mp4 · mp3 · csv · json · woff2 · glb · …</span>
-          </button>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs">
-              <span className="min-w-0 truncate text-fg">{picked.file.name}</span>
-              <span className="text-faint">{formatFileSize(picked.file.size)}</span>
-              {!result && (
-                <button type="button" onClick={() => input.current?.click()} className={`ml-auto cursor-pointer text-[11px] ${LINK}`}>
-                  choose another
-                </button>
-              )}
-            </div>
-
-            <div className="mt-3">
-              <Preview picked={picked} storedUrl={result ? `/a/${result.id}/raw` : null} />
-            </div>
-
-            {result ? (
-              <div aria-label="Uploaded file" className="mt-4 rounded-[4px] border border-edge bg-raised p-3">
-                <p className="flex items-center gap-1.5 font-mono text-xs text-fg">
-                  <Check aria-hidden="true" size={13} className="text-accent" />
-                  uploaded as <span className="text-muted">{title.trim() || picked.file.name}</span>
-                </p>
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  <a href={`/a/${result.id}`} aria-label="Open artifact" className={`${ACTION} border-accent bg-accent font-semibold text-bg hover:brightness-110`}>
-                    open artifact →
-                  </a>
-                  <button
-                    type="button"
-                    aria-label="Copy file reference"
-                    onClick={() => { void navigator.clipboard?.writeText(`ref:${result.id}`); setCopied(true); }}
-                    className={`${ACTION} border-edge-bright bg-surface text-accent hover:border-accent`}
-                  >
-                    ref:{result.id}
-                    {copied ? <Check aria-hidden="true" size={12} /> : <Copy aria-hidden="true" size={12} />}
+          {!picked ? (
+            <button
+              type="button"
+              onClick={() => input.current?.click()}
+              onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              className={`flex h-56 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed transition-colors ${
+                dragging ? 'border-accent bg-accent-soft' : 'border-edge-bright bg-raised/40 hover:border-accent'
+              }`}
+            >
+              <FileUp aria-hidden="true" size={24} strokeWidth={1.6} className="text-accent" />
+              <span className="text-sm text-fg">Drop a file here, or click to choose one</span>
+              <span className="text-xs text-muted">Images, pdf, video, audio, text, fonts and glb models</span>
+            </button>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="min-w-0 truncate font-medium text-fg">{picked.file.name}</span>
+                <span className="text-xs text-muted">{formatFileSize(picked.file.size)}</span>
+                {!result && (
+                  <button type="button" onClick={() => input.current?.click()} className={`ml-auto cursor-pointer font-mono text-xs ${LINK}`}>
+                    choose another
                   </button>
-                  <button type="button" onClick={reset} className={`${ACTION} border-transparent text-muted hover:text-fg`}>
-                    upload another
-                  </button>
-                </div>
+                )}
               </div>
-            ) : (
-              <div className="mt-4 flex flex-wrap items-end gap-2">
-                <div className="min-w-48 flex-1">
-                  <label htmlFor="file-upload-title" className="block font-mono text-[10px] tracking-[0.12em] text-muted uppercase">
+
+              <div className="mt-4">
+                <Preview picked={picked} storedUrl={result ? `/a/${result.id}/raw` : null} />
+              </div>
+
+              {result ? (
+                <div aria-label="Uploaded file" className="mt-5 rounded-lg border border-edge bg-raised/40 p-4">
+                  <p className="flex items-center gap-2 text-sm text-fg">
+                    <Check aria-hidden="true" size={15} className="text-accent" />
+                    Uploaded as <span className="font-medium">{title.trim() || picked.file.name}</span>
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a href={`/a/${result.id}`} aria-label="Open artifact" className={`${ACTION} border-accent bg-accent font-semibold text-bg hover:brightness-110`}>
+                      Open artifact →
+                    </a>
+                    <button
+                      type="button"
+                      aria-label="Copy file reference"
+                      onClick={() => { void navigator.clipboard?.writeText(`ref:${result.id}`); setCopied(true); }}
+                      className={`${ACTION} border-edge-bright bg-surface text-accent hover:border-accent`}
+                    >
+                      ref:{result.id}
+                      {copied ? <Check aria-hidden="true" size={12} /> : <Copy aria-hidden="true" size={12} />}
+                    </button>
+                    <Button variant="ghost" type="button" onClick={reset}>
+                      Upload another
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 flex flex-wrap items-end gap-3">
+                  <label className="grid min-w-48 flex-1 gap-1.5 text-xs text-muted">
                     Title
+                    <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={picked.file.name} />
                   </label>
-                  <input id="file-upload-title" value={title} onChange={(event) => setTitle(event.target.value)} className={`mt-1 w-full ${FIELD}`} />
+                  <Button type="button" onClick={() => void upload()} disabled={busy} className="inline-flex items-center gap-1.5 py-2">
+                    <FileUp aria-hidden="true" size={13} />
+                    {busy ? 'Uploading…' : 'Upload'}
+                  </Button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void upload()}
-                  disabled={busy}
-                  className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[5px] border border-accent bg-accent px-3 font-mono text-xs font-semibold text-bg transition-[filter] hover:brightness-110 disabled:cursor-default disabled:opacity-60"
-                >
-                  <FileUp aria-hidden="true" size={13} />
-                  {busy ? 'uploading…' : 'upload'}
-                </button>
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
 
-        {error && <p role="alert" className="mt-3 font-mono text-xs text-danger">{error}</p>}
-      </section>
+          {error && (
+            <p role="alert" className="mt-4 rounded border border-danger/30 bg-danger-soft p-3 text-sm text-danger">
+              {error}
+            </p>
+          )}
+        </section>
+      </div>
     </main>
   );
 }
@@ -274,20 +275,20 @@ function Preview({ picked, storedUrl }: { picked: Picked; storedUrl: string | nu
   switch (kind) {
     case 'image':
       // eslint-disable-next-line @next/next/no-img-element -- a local object URL; no optimizer.
-      return <img src={url} alt={file.name} className="max-h-[28rem] max-w-full rounded-[6px] border border-edge" />;
+      return <img src={url} alt={file.name} className="max-h-[28rem] max-w-full rounded-lg border border-edge" />;
     case 'pdf':
       return storedUrl ? (
-        <iframe src={storedUrl} title={file.name} className="h-[32rem] w-full rounded-[6px] border border-edge bg-surface" />
+        <iframe src={storedUrl} title={file.name} className="h-[32rem] w-full rounded-lg border border-edge bg-surface" />
       ) : (
         <DownloadCard file={file} url={url} note="previews once uploaded" />
       );
     case 'video':
-      return <video src={url} controls aria-label={file.name} className="max-h-[28rem] w-full rounded-[6px] border border-edge bg-black" />;
+      return <video src={url} controls aria-label={file.name} className="max-h-[28rem] w-full rounded-lg border border-edge bg-black" />;
     case 'audio':
       return <audio src={url} controls aria-label={file.name} className="w-full" />;
     case 'text':
       return (
-        <pre aria-label={`Preview of ${file.name}`} className="max-h-[28rem] overflow-auto rounded-[6px] border border-code-edge bg-code p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-fg">
+        <pre aria-label={`Preview of ${file.name}`} className="max-h-[28rem] overflow-auto rounded-lg border border-code-edge bg-code p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-fg">
           {text ?? ''}
           {text !== null && file.size > TEXT_PREVIEW_BYTES ? '\n…' : ''}
         </pre>
@@ -333,7 +334,7 @@ function FontPreview({ file, name }: { file: Blob; name: string }) {
     };
   }, [family, file]);
   return (
-    <div aria-label={`Font preview of ${name}`} className="rounded-[6px] border border-edge bg-surface p-5" style={state === 'ready' ? { fontFamily: `'${family}', sans-serif` } : undefined}>
+    <div aria-label={`Font preview of ${name}`} className="rounded-lg border border-edge bg-raised/40 p-6" style={state === 'ready' ? { fontFamily: `'${family}', sans-serif` } : undefined}>
       <p className="text-3xl leading-tight text-fg">The quick brown fox jumps over the lazy dog</p>
       <p className="mt-2 text-base text-muted">ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789</p>
       {state !== 'ready' && (
@@ -349,17 +350,17 @@ function DownloadCard({ file, url, note }: { file: File; url: string; note: stri
   const extension = extensionOf(file.name);
   const Icon = ['gltf', 'obj', 'fbx', 'stl'].includes(extension) ? Box : extension === 'xlsx' ? FileSpreadsheet : extension === 'zip' ? FileArchive : FileIcon;
   return (
-    <div aria-label={`File summary of ${file.name}`} className="flex items-center gap-4 rounded-[6px] border border-edge bg-surface p-4">
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[6px] bg-raised text-accent">
-        <Icon aria-hidden="true" size={24} strokeWidth={1.5} />
+    <div aria-label={`File summary of ${file.name}`} className="flex items-center gap-4 rounded-lg border border-edge bg-raised/40 p-5">
+      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-edge bg-surface text-accent">
+        <Icon aria-hidden="true" size={26} strokeWidth={1.5} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-mono text-xs text-fg">{file.name}</p>
-        <p className="font-mono text-[10px] text-muted">.{extension} · {formatFileSize(file.size)} · {note}</p>
+        <p className="truncate text-sm font-medium text-fg">{file.name}</p>
+        <p className="mt-0.5 text-xs text-muted">.{extension} · {formatFileSize(file.size)} · {note}</p>
       </div>
       <a href={url} download={file.name} aria-label={`Download ${file.name}`} className={`${ACTION} border-edge-bright text-fg hover:border-accent hover:text-accent`}>
-        <Download aria-hidden="true" size={12} />
-        download
+        <Download aria-hidden="true" size={13} />
+        Download
       </a>
     </div>
   );

@@ -89,7 +89,7 @@ export default function ModelPreview({ source, title }: { source: Blob | string;
       <canvas
         ref={canvasRef}
         aria-label={`3D preview of ${title}`}
-        className="h-96 w-full rounded-[6px] border border-edge bg-raised"
+        className="h-96 w-full rounded-lg border border-edge bg-raised/40"
       />
       {status !== 'ready' && (
         <p role="status" className="absolute inset-x-0 bottom-2 text-center font-mono text-[11px] text-muted">

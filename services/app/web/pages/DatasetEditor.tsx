@@ -1,3 +1,4 @@
+import AssetPageHeader from "@/components/AssetPageHeader";
 import PageChrome from "@/components/PageChrome";
 import ShareLink from "@/components/ShareLink";
 import { DatasetPolicies } from "@/components/DatasetPolicies";
@@ -14,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Database,
+  DatabasePlus,
   Plus,
   Play,
   Code2,
@@ -696,40 +698,28 @@ export function DatasetEditorPage({
         </PageChrome>
       )}
       <main className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
-        <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0">
-            <a
-              aria-label={id ? "View dataset" : "Back to assets"}
-              href={id ? `/a/${id}` : "/assets"}
-              className="text-xs text-muted hover:text-fg"
-            >
-              ← {id ? "Back to dataset" : "Assets"}
-            </a>
-            <div className="mt-4 flex items-center gap-3">
-              <span className="rounded-xl border border-edge bg-surface p-2.5 text-accent">
-                <Database size={22} />
-              </span>
-              <div className="min-w-0">
-                <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-muted">
-                  Dataset workspace
-                </p>
-                <h1 className="truncate text-2xl font-semibold tracking-tight text-fg">
-                  {id ? title || "Edit dataset" : "Create a dataset"}
-                </h1>
-              </div>
-            </div>
-          </div>
-          {id && !loading && !loadFailed && (
-            <div className="flex items-center gap-3">
-              <span className="rounded-full border border-edge px-2.5 py-1 text-xs text-muted">
-                {kind === "stored" ? "Stored data" : "PostgreSQL"}
-              </span>
-              {share(
-                "inline-flex items-center gap-2 rounded-lg border border-edge bg-surface px-4 py-2 text-sm hover:border-accent [&>span]:inline",
-              )}
-            </div>
-          )}
-        </header>
+        <AssetPageHeader
+          icon={id ? Database : DatabasePlus}
+          eyebrow="Dataset workspace"
+          title={id ? title || "Edit dataset" : "Create a dataset"}
+          link={
+            id
+              ? { href: `/a/${id}`, label: "View dataset", text: "view dataset" }
+              : { href: "/assets", label: "Back to assets", text: "all assets" }
+          }
+          actions={
+            id && !loading && !loadFailed ? (
+              <>
+                <span className="rounded-full border border-edge px-2.5 py-1 text-xs text-muted">
+                  {kind === "stored" ? "Stored data" : "PostgreSQL"}
+                </span>
+                {share(
+                  "inline-flex items-center gap-2 rounded-lg border border-edge bg-surface px-4 py-2 text-sm hover:border-accent [&>span]:inline",
+                )}
+              </>
+            ) : undefined
+          }
+        />
         {!loading && !loadFailed && (
           <nav
             aria-label="Dataset workspace"
@@ -740,8 +730,8 @@ export function DatasetEditorPage({
                 ...(id && kind === "stored"
                   ? [["actions", "Data actions"]]
                   : []),
-                ["data", "Data preview"],
                 ["source", "Source & models"],
+                ["data", "Data preview"],
               ] as Array<[typeof section, string]>
             ).map(([key, label]) => (
               <button

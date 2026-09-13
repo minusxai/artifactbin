@@ -55,7 +55,7 @@ describe('the file upload page', () => {
     expect(await screen.findByRole('img', { name: 'logo.png' })).toHaveAttribute('src', 'blob:preview');
     expect(screen.getByLabelText('Title')).toHaveValue('logo');
 
-    fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
     expect(await screen.findByLabelText('Open artifact')).toHaveAttribute('href', '/a/art_1');
     const body = sentBody();
     expect(String(body.image).startsWith('data:image/png;base64,')).toBe(true);
@@ -69,7 +69,7 @@ describe('the file upload page', () => {
     choose(new File([new Uint8Array([0x67, 0x6c, 0x54, 0x46])], 'chair.glb', { type: '' }));
 
     expect(await screen.findByLabelText('3D preview of chair.glb')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
     await screen.findByLabelText('Uploaded file');
     const body = sentBody();
     const file = body.file as { filename: string; contentType: string; base64: string };
@@ -86,7 +86,7 @@ describe('the file upload page', () => {
     expect(await screen.findByLabelText('File summary of deck.pdf')).toHaveTextContent(/previews once uploaded/);
     expect(screen.queryByTitle('deck.pdf')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
     await screen.findByLabelText('Uploaded file');
     expect(String(sentBody().pdf).startsWith('data:application/pdf;base64,')).toBe(true);
     expect(screen.getByTitle('deck.pdf')).toHaveAttribute('src', '/a/art_1/raw');
@@ -118,7 +118,7 @@ describe('the file upload page', () => {
     open();
     choose(new File([PNG], 'huge.png', { type: 'image/png' }));
     await screen.findByRole('img', { name: 'huge.png' });
-    fireEvent.click(screen.getByRole('button', { name: 'upload' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Upload' }));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/too large/));
     expect(screen.queryByLabelText('Uploaded file')).toBeNull();
   });
