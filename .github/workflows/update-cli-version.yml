@@ -1,0 +1,54 @@
+# The release bump, without a person doing it by hand: the same script `npm run release:cli`
+# runs locally (services/cli/README.md, "Publishing a CLI release"), then the teaching bundle is
+# regenerated (it carries the version), and the result is opened as a PR. Main CI publishes the
+# release once the PR is merged. The PR is opened with a PAT, not GITHUB_TOKEN, because a PR that
+# GITHUB_TOKEN creates starts no workflows and would sit with no checks.
+name: Update CLI Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to increment
+        required: true
+        type: choice
+        default: patch
+        options: [patch, minor, major]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Bump the version and open the release PR
+        env:
+          BUMP: ${{ inputs.bump }}
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm run release:cli -- "$BUMP"
+          npm run generate:teaching -w services/cli
+          version=$(jq -r .version services/cli/package.json)
+          branch="release/cli-$version"
+          git checkout -b "$branch"
+          git add services/cli/package.json package-lock.json services/app/public/chat/install.sh services/app/public/chat/release.json services/cli/src/generated/teaching.json
+          git commit -m "Release afbin CLI $version"
+          git push -u origin "$branch"
+          gh pr create --base main --head "$branch" --title "Release afbin CLI $version" --body ""

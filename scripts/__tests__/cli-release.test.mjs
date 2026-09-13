@@ -27,6 +27,52 @@ it('patch bump keeps package, lockfile, installer and release pointer synchroniz
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+for (const [level, next] of [['minor', '0.2.0'], ['major', '1.0.0'], ['patch', '0.1.10']]) {
+  it(`a ${level} bump moves every copy of the version to ${next}`, () => {
+    const dir = mkdtempSync(join(tmpdir(), `afbin-bump-${level}-`));
+    try {
+      mkdirSync(join(dir, 'services/cli'), { recursive: true });
+      mkdirSync(join(dir, 'services/app/public/chat'), { recursive: true });
+      writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+      writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ packages: { 'services/cli': { version: '0.1.9' } } }));
+      writeFileSync(join(dir, 'services/app/public/chat/install.sh'), '  version=0.1.9\n--version 0.1.9\n');
+      writeFileSync(join(dir, 'services/app/public/chat/release.json'), '{\n  "version": "0.1.9",\n  "protocol": 1\n}\n');
+      const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs'), level], { cwd: dir });
+      expect(run.status, run.stderr.toString()).toBe(0);
+      expect(run.stdout.toString()).toContain(`afbin 0.1.9 → ${next}`);
+      expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe(next);
+      expect(JSON.parse(readFileSync(join(dir, 'package-lock.json'))).packages['services/cli'].version).toBe(next);
+      expect(readFileSync(join(dir, 'services/app/public/chat/install.sh'), 'utf8')).toBe(`  version=${next}\n--version ${next}\n`);
+      expect(JSON.parse(readFileSync(join(dir, 'services/app/public/chat/release.json'))).version).toBe(next);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+it('an unknown bump level is refused before any file changes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'afbin-bump-level-'));
+  try {
+    mkdirSync(join(dir, 'services/cli'), { recursive: true });
+    writeFileSync(join(dir, 'services/cli/package.json'), '{"version": "0.1.9"}\n');
+    const run = spawnSync(process.execPath, [join(root, 'scripts/bump-cli-version.mjs'), 'huge'], { cwd: dir });
+    expect(run.status).not.toBe(0);
+    expect(run.stderr.toString()).toContain('patch, minor or major');
+    expect(JSON.parse(readFileSync(join(dir, 'services/cli/package.json'))).version).toBe('0.1.9');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('the Update CLI Version action offers patch, minor and major, defaults to patch, and opens the PR with a token that starts CI', () => {
+  const action = parse(readFileSync(join(root, '.github/workflows/update-cli-version.yml'), 'utf8'));
+  const bump = action.on.workflow_dispatch.inputs.bump;
+  expect(bump.type).toBe('choice');
+  expect(bump.options).toEqual(['patch', 'minor', 'major']);
+  expect(bump.default).toBe('patch');
+  const text = readFileSync(join(root, '.github/workflows/update-cli-version.yml'), 'utf8');
+  expect(text).toContain('npm run release:cli -- "$BUMP"');
+  expect(text).toContain('npm run generate:teaching -w services/cli');
+  expect(text).toContain('secrets.PAT');
+  expect(text).toContain('--body ""');
+});
+
 it('a drifted release pointer stops the bump instead of publishing a mismatched release', () => {
   const dir = mkdtempSync(join(tmpdir(), 'afbin-bump-drift-'));
   try {
