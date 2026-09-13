@@ -101,10 +101,6 @@ export default function WorkshopStart({ origin }: { origin: string }) {
                 How it works <ArrowUpRight size={13} />
               </a>
             </div>
-            <p className="workshop-step-note">
-              Ask for a document. Your agent builds it, checks it locally and
-              publishes with <code>afbin push</code>.
-            </p>
           </div>
         </li>
       </ol>
