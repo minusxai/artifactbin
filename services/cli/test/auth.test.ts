@@ -164,20 +164,48 @@ describe('browser device approval', () => {
 });
 
 describe('browser loopback approval', () => {
-  test('browser loopback checks state and PKCE before saving credentials',async()=>{
-   const home=await mkdtemp(join(tmpdir(),'afbin-loopback-'));let challenge='';let callback='';let exchanges=0;
+  function assertPage(response: Response, html: string, heading: string) {
+   assert.match(response.headers.get('content-type')??'',/text\/html/);
+   assert.equal(response.headers.get('cache-control'),'no-store');
+   assert.match(response.headers.get('content-security-policy')??'',/frame-ancestors 'none'/);
+   assert.match(html,/<div class="brand">artifactbin<\/div>/);
+   assert.ok(html.includes(`<h1>${heading}</h1>`));
+  }
+  test('denied approval renders the branded page without exchanging or saving credentials',async()=>{
+   const home=await mkdtemp(join(tmpdir(),'afbin-loopback-denied-'));let exchanges=0;let response!:Response;let html='';
    try{
-    const connection=await loopbackAuthenticate('https://example.com',{home,notify:()=>{},open:async raw=>{
-     const url=new URL(raw);challenge=url.searchParams.get('code_challenge')!;callback=url.searchParams.get('redirect_uri')!;
-     assert.equal(new URL(callback).hostname,'127.0.0.1');
-     const wrong=await fetch(callback+'?code=wrong&state=wrong');assert.equal(wrong.status,400);assert.equal(await loadConnection(undefined,home,{}),null);
-     const accepted=await fetch(callback+'?code=approved&state='+url.searchParams.get('state'));assert.equal(accepted.status,200);
+    await assert.rejects(loopbackAuthenticate('https://example.com',{home,timeoutMs:3000,open:async raw=>{
+     const url=new URL(raw);const callback=new URL(url.searchParams.get('redirect_uri')!);
+     callback.search=new URLSearchParams({error:'access_denied',state:url.searchParams.get('state')!}).toString();
+     response=await fetch(callback);html=await response.text();
+    },fetch:async input=>{
+     if(String(input).endsWith('/oauth/register'))return Response.json({client_id:'afbin_client'});
+     exchanges++;throw new Error('Unexpected token exchange');
+    }}),error=>error instanceof CliError&&error.code==='access_denied');
+    assert.equal(response.status,200);assertPage(response,html,'Connection denied');
+    assert.equal(exchanges,0);assert.equal(await loadConnection(undefined,home,{}),null);
+   }finally{await rm(home,{recursive:true,force:true});}
+  });
+  test('browser loopback checks state and PKCE before saving credentials',async()=>{
+   const home=await mkdtemp(join(tmpdir(),'afbin-loopback-'));let challenge='';let callback='';let exchanges=0;let state='';
+   const pages:Array<{response:Response;html:string}>=[];
+   try{
+    const connection=await loopbackAuthenticate('https://example.com',{home,timeoutMs:3000,notify:()=>{},open:async raw=>{
+     const url=new URL(raw);challenge=url.searchParams.get('code_challenge')!;callback=url.searchParams.get('redirect_uri')!;state=url.searchParams.get('state')!;
+     for(const query of ['?code=wrong&state=wrong','?state='+state,'?code=approved&state='+state,'?code=approved&state='+state]){
+      const response=await fetch(callback+query);pages.push({response,html:await response.text()});
+     }
     },fetch:async(input,init)=>{
      const body=JSON.parse(String(init?.body));
      if(String(input).endsWith('/oauth/register'))return Response.json({client_id:'afbin_client'},{status:201});
      exchanges++;assert.equal(body.code,'approved');assert.equal(body.redirect_uri,callback);assert.equal(createHash('sha256').update(body.code_verifier).digest('base64url'),challenge);assert.equal(body.resource,'https://example.com/api');
      return Response.json({access_token:'access',refresh_token:'refresh',expires_in:3600});
     }});
+    assert.equal(new URL(callback).hostname,'127.0.0.1');
+    assert.deepEqual(pages.map(p=>p.response.status),[400,400,200,409]);
+    for(const [i,heading] of ['Invalid callback','Missing authorization code','Approval received','Approval already received'].entries()){
+     assertPage(pages[i]!.response,pages[i]!.html,heading);assert.ok(!pages[i]!.html.includes(state));
+    }
     assert.equal(exchanges,1);assert.equal(connection.token,'access');assert.deepEqual(await loadConnection(undefined,home,{}),connection);
    }finally{await rm(home,{recursive:true,force:true});}
   });
