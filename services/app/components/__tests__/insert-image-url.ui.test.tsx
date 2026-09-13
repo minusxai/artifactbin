@@ -6,7 +6,7 @@
  * source. A refusal SHOWS — the door's whole point is naming what failed.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 
 const queue = vi.fn();
 const flushNow = vi.fn(async () => {});
@@ -52,6 +52,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   frameEl.remove();
   vi.restoreAllMocks();
   document.body.innerHTML = '';
@@ -69,12 +70,12 @@ const mount = () =>
 describe('insert image from a URL', () => {
   it('offers both ways in behind the one insert-image control', () => {
     mount();
-    const trigger = screen.getByLabelText('Insert image');
-    expect(trigger).toHaveClass('h-6', 'justify-center');
-    expect(trigger).toHaveAttribute('data-slot', 'tooltip-trigger');
-    expect(trigger).not.toHaveAttribute('data-tip');
+    const trigger = screen.getByRole('button', { name: 'Insert' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(trigger);
-    expect(screen.getByLabelText('Image URL')).toBeTruthy();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(fireEvent.mouseDown(screen.getByLabelText('Image URL'))).toBe(true);
+    expect(fireEvent.mouseDown(screen.getByLabelText('Import image from URL'))).toBe(false);
     expect(screen.getByLabelText('Import image from URL')).toBeTruthy();
     expect(screen.getByLabelText('Upload image file')).toBeTruthy(); // the file path survives
   });
@@ -82,7 +83,7 @@ describe('insert image from a URL', () => {
   it('imports the URL through the browser door and inserts the ref it became', async () => {
     const fetchSpy = stubFetch(new Response(JSON.stringify({ id: 'img999' }), { status: 201 }));
     mount();
-    fireEvent.click(screen.getByLabelText('Insert image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/logo.png' } });
     await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
 
@@ -106,7 +107,7 @@ describe('insert image from a URL', () => {
     });
     stubFetch(new Response(JSON.stringify({ id: 'img777', rawUrl: '/a/img777/raw?v=1' }), { status: 201 }));
     mount();
-    fireEvent.click(screen.getByLabelText('Insert image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/logo.png' } });
     await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
 
@@ -121,7 +122,7 @@ describe('insert image from a URL', () => {
       { status: 400 },
     ));
     mount();
-    fireEvent.click(screen.getByLabelText('Insert image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     fireEvent.change(screen.getByLabelText('Image URL'), { target: { value: 'https://example.com/gone.png' } });
     await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
 
@@ -132,7 +133,7 @@ describe('insert image from a URL', () => {
   it('does nothing with an empty field', async () => {
     const fetchSpy = stubFetch(new Response('{}', { status: 201 }));
     mount();
-    fireEvent.click(screen.getByLabelText('Insert image'));
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
     await act(async () => { fireEvent.click(screen.getByLabelText('Import image from URL')); });
     // The mount's own reads may fire; an IMPORT (a POST) must not.
     expect(fetchSpy.mock.calls.some(([, i]) => (i as RequestInit)?.method === 'POST')).toBe(false);

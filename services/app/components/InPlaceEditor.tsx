@@ -28,7 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { Check, Code, Database, History, Undo2, Redo2, Image as ImageIcon, Paintbrush } from 'lucide-react';
+import { Check, Code, Database, History, Undo2, Redo2, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
@@ -40,6 +40,7 @@ import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import MermaidEditorPanel from '@/components/views/story/MermaidEditorPanel';
 import QueryNotebookPanel from '@/components/views/story/QueryNotebookPanel';
+import { StoryToolbarMenu } from '@/components/views/story/StoryToolbarMenu';
 import StoryFormatToolbar from '@/components/views/story/StoryFormatToolbar';
 import MarkdownPasteDialog from '@/components/views/story/MarkdownPasteDialog';
 import { useLiveEdits, type EditorFlushRef } from '@/lib/story/use-live-edits';
@@ -776,6 +777,100 @@ export default function InPlaceEditor({
     [history],
   );
 
+  const historyControls = (
+    <>
+      <Tooltip content="Undo (Ctrl/Cmd Z)">
+        <button
+          type="button"
+          aria-label="Undo"
+          disabled={!sourceHistory.current.canUndo}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void applyHistory('undo')}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"
+        >
+          <Undo2 size={14} />
+        </button>
+      </Tooltip>
+      <Tooltip content="Redo (Ctrl/Cmd Shift Z)">
+        <button
+          type="button"
+          aria-label="Redo"
+          disabled={!sourceHistory.current.canRedo}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void applyHistory('redo')}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-fg disabled:opacity-30"
+        >
+          <Redo2 size={14} />
+        </button>
+      </Tooltip>
+    </>
+  );
+  const insertionControls = (
+    <>
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+        aria-label="Upload image file"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void insertImage(f);
+          e.target.value = '';
+        }}
+      />
+      <StoryToolbarMenu label="Insert" open={imageMenuOpen} onOpenChange={setImageMenuOpen}>
+        <div className="w-64 max-w-full">
+          <button
+            type="button"
+            aria-label="Paste Markdown"
+            onClick={() => {
+              setImageMenuOpen(false);
+              setMarkdownDraft('');
+            }}
+            className="mb-2 w-full rounded px-2 py-1.5 text-left text-xs hover:bg-raised"
+          >
+            Paste Markdown
+          </button>
+          <button
+            type="button"
+            aria-label="Upload image from file"
+            onClick={() => {
+              setImageMenuOpen(false);
+              imageInputRef.current?.click();
+            }}
+            className="w-full cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-left font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
+          >
+            upload a file…
+          </button>
+          <div className="mt-2 flex gap-1.5">
+            <input
+              aria-label="Image URL"
+              value={imageUrlDraft}
+              placeholder="or paste an image URL (https://…)"
+              onChange={(e) => setImageUrlDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void insertImageFromUrl();
+                }
+              }}
+              className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-1 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
+            />
+            <button
+              type="button"
+              aria-label="Import image from URL"
+              onClick={() => void insertImageFromUrl()}
+              className="cursor-pointer rounded-[4px] border border-edge px-2 py-1 font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
+            >
+              import
+            </button>
+          </div>
+        </div>
+      </StoryToolbarMenu>
+    </>
+  );
+
   return (
     <div className="contents" data-app-appearance={surfaceMode}>
       {markdownDraft !== null && (
@@ -878,171 +973,61 @@ export default function InPlaceEditor({
       )}
       <header
         aria-label="Editor toolbar"
-        className="fixed left-0 z-30 flex items-center gap-2 border-y border-edge bg-surface/95 px-3 backdrop-blur"
+        className="fixed left-0 z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px_44px] items-center gap-x-2 bg-surface px-3"
         style={{ top: barTop, height: EDIT_BAR_H, right: rightInset }}
       >
-        {/* The DOCUMENT's controls scroll; the ACTIONS never do. On a phone the
-            bar's natural width is ~434px against a 390px viewport, and it was
-            the actions that fell off the end — `done`, the way out of edit
-            mode, sat 17px on-screen. Hiding controls at that width would have
-            been the smaller change and the wrong one: the title, the theme and
-            the mode are what someone edits on a phone FOR. Guarded by the
-            editor leg of scripts/gate-mobile.mjs. */}
+        {/* Settings scroll independently; mode, history and Done stay visible.
+            The formatting row below owns its own overflow and portalled menus. */}
         <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-          {selection && mode === 'design' ? (
-            <StoryFormatToolbar
-              selection={selection}
-              onApply={edit.applyFormat}
-              onApplyLink={edit.applyLink}
-              onApplyInline={edit.applyInline}
-              onAutoHeight={() =>
-                commitStructural(editBlock(sourceRef.current, { kind: 'auto-height', path: selection.path }))
-              }
-              onPasteMarkdown={() => setMarkdownDraft('')}
-              onSelect={edit.select}
-              onDelete={deleteSelected}
-              onComment={onComment}
-            />
-          ) : (
-            <>
-              <input
-                aria-label="Title"
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  queue({ title: e.target.value });
-                }}
-                placeholder="untitled"
-                className="w-36 shrink-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48"
-              />
-              <ThemePicker
-                value={theme}
-                colorMode={colorMode}
-                onPick={(t) => {
-                  setTheme(t);
-                  queue({ theme: t });
-                  // The document carries its own design attributes; tell it directly
-                  // rather than making it wait for the save to come back around. With
-                  // no author pick the MODE follows the new theme's declared default.
-                  sendDocument(
-                    { frameRef, runtimeRef },
-                    {
-                      type: 'mx:document',
-                      nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
-                      theme: t,
-                      colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
-                    },
-                  );
-                }}
-              />
-              <TemplateChip template={art.template} />
-              {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
+          <input
+            aria-label="Title"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              queue({ title: e.target.value });
+            }}
+            placeholder="untitled"
+            className="w-36 shrink-0 rounded-[4px] border border-transparent bg-transparent px-1.5 py-1 font-mono text-xs font-semibold text-fg hover:border-edge focus:border-edge-bright focus:outline-none sm:w-48"
+          />
+          <ThemePicker
+            value={theme}
+            colorMode={colorMode}
+            onPick={(t) => {
+              setTheme(t);
+              queue({ theme: t });
+              // The document carries its own design attributes; tell it directly
+              // rather than making it wait for the save to come back around. With
+              // no author pick the MODE follows the new theme's declared default.
+              sendDocument(
+                { frameRef, runtimeRef },
+                {
+                  type: 'mx:document',
+                  nodes: storyUpdateParts(sourceRef.current, HELD_ASSETS)?.nodes ?? [],
+                  theme: t,
+                  colorMode: colorMode ?? storyThemeDefaultMode(t) ?? 'light',
+                },
+              );
+            }}
+          />
+          <TemplateChip template={art.template} />
+          {/* The AUTHOR'S DEFAULT mode, beside the theme it composes with. Every
             theme carries both palettes, so this is meaningful for every
             document; "theme default" stores an explicit null so the mode
             follows a later theme switch. Readers can still flip their own view. */}
-              <ModeChip
-                mode={colorMode}
-                themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
-                onPick={(next) => {
-                  setColorMode(next);
-                  const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
-                  colorModeRef.current = effective;
-                  queue({ colorMode: next });
-                  showInDocument(sourceRef.current, { colorMode: effective });
-                }}
-              />
-            </>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <Tooltip content="Undo (Ctrl/Cmd Z)">
-            <button
-              type="button"
-              aria-label="Undo"
-              disabled={!sourceHistory.current.canUndo}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => void applyHistory('undo')}
-              className="inline-flex h-6 w-6 items-center justify-center rounded text-fg disabled:opacity-30"
-            >
-              <Undo2 size={14} />
-            </button>
-          </Tooltip>
-          <Tooltip content="Redo (Ctrl/Cmd Shift Z)">
-            <button
-              type="button"
-              aria-label="Redo"
-              disabled={!sourceHistory.current.canRedo}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => void applyHistory('redo')}
-              className="inline-flex h-6 w-6 items-center justify-center rounded text-fg disabled:opacity-30"
-            >
-              <Redo2 size={14} />
-            </button>
-          </Tooltip>
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-            aria-label="Upload image file"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void insertImage(f);
-              e.target.value = '';
+          <ModeChip
+            mode={colorMode}
+            themeDefault={storyThemeDefaultMode(theme) ?? 'light'}
+            onPick={(next) => {
+              setColorMode(next);
+              const effective = next ?? storyThemeDefaultMode(theme) ?? 'light';
+              colorModeRef.current = effective;
+              queue({ colorMode: next });
+              showInDocument(sourceRef.current, { colorMode: effective });
             }}
           />
-          <div className="relative">
-            <Tooltip content="insert image">
-              <button
-                type="button"
-                aria-label="Insert image"
-                aria-expanded={imageMenuOpen}
-                onClick={() => setImageMenuOpen((v) => !v)}
-                className="inline-flex h-6 cursor-pointer items-center justify-center rounded-[4px] border border-edge px-2 text-muted hover:border-edge-bright hover:text-fg"
-              >
-                <ImageIcon size={12} />
-              </button>
-            </Tooltip>
-            {imageMenuOpen && (
-              <div className="absolute right-0 top-full z-40 mt-1 w-72 rounded-[5px] border border-edge bg-surface p-2 shadow-lg">
-                <button
-                  type="button"
-                  aria-label="Upload image from file"
-                  onClick={() => {
-                    setImageMenuOpen(false);
-                    imageInputRef.current?.click();
-                  }}
-                  className="w-full cursor-pointer rounded-[4px] border border-edge px-2 py-1 text-left font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
-                >
-                  upload a file…
-                </button>
-                <div className="mt-2 flex gap-1.5">
-                  <input
-                    aria-label="Image URL"
-                    value={imageUrlDraft}
-                    placeholder="or paste an image URL (https://…)"
-                    onChange={(e) => setImageUrlDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        void insertImageFromUrl();
-                      }
-                    }}
-                    className="min-w-0 flex-1 rounded-[4px] border border-edge bg-transparent px-1.5 py-1 font-mono text-[11px] text-fg focus:border-edge-bright focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    aria-label="Import image from URL"
-                    onClick={() => void insertImageFromUrl()}
-                    className="cursor-pointer rounded-[4px] border border-edge px-2 py-1 font-mono text-[11px] text-fg hover:border-edge-bright hover:bg-raised"
-                  >
-                    import
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+        </div>
+
+        <div aria-label="Document actions" className="flex shrink-0 items-center gap-2">
           <div
             className="flex h-6 items-center overflow-hidden rounded-[4px] border border-edge"
             role="group"
@@ -1091,10 +1076,12 @@ export default function InPlaceEditor({
               </button>
             </Tooltip>
           )}
+          <span role="status" className="hidden text-xs text-muted md:inline">
+            {live.status || (live.pending ? 'Saving…' : `v${live.version} · Saved`)}
+          </span>
           <Tooltip content="version history">
             <button
               type="button"
-              aria-live="polite"
               aria-label="Open version history"
               aria-expanded={historyOpen}
               onClick={() => setHistoryOpen((v) => !v)}
@@ -1105,9 +1092,6 @@ export default function InPlaceEditor({
               }`}
             >
               <History size={12} className="shrink-0" />
-              <span className="hidden sm:inline">
-                {live.status || (live.pending ? 'saving…' : `v${live.version} · saved`)}
-              </span>
             </button>
           </Tooltip>
           <Tooltip content="done editing">
@@ -1121,9 +1105,45 @@ export default function InPlaceEditor({
               className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[4px] border border-accent/40 bg-accent-soft px-2 font-mono text-[11px] text-accent hover:border-accent"
             >
               <Check size={13} />
-              <span className="hidden sm:inline">done</span>
+              <span className="hidden sm:inline">Done</span>
             </button>
           </Tooltip>
+        </div>
+        <div className="col-span-2 min-w-0 self-start">
+          {selection && mode === 'design' ? (
+            <StoryFormatToolbar
+              selection={selection}
+              onApply={edit.applyFormat}
+              onApplyLink={edit.applyLink}
+              onApplyInline={edit.applyInline}
+              onAutoHeight={() =>
+                commitStructural(
+                  editBlock(sourceRef.current, {
+                    kind: 'auto-height',
+                    path: selection.path,
+                  }),
+                )
+              }
+              historyControls={historyControls}
+              insertionControls={insertionControls}
+              onSelect={edit.select}
+              onDelete={deleteSelected}
+              onComment={onComment}
+            />
+          ) : (
+            <div className="flex flex-col">
+              <div
+                aria-label="Primary formatting controls"
+                className="flex h-9 items-center gap-1 overflow-x-auto rounded-lg bg-raised px-2"
+              >
+                {historyControls}
+                <span className="shrink-0 px-2 text-[11px] text-muted">
+                  {mode === 'design' ? 'Select an element to format' : 'Editing source'}
+                </span>
+                {mode === 'design' && insertionControls}
+              </div>
+            </div>
+          )}
         </div>
       </header>
 

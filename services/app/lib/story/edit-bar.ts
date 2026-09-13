@@ -1,12 +1,13 @@
 /**
  * The contextual editing toolbar's height, RESERVED by the page rather than
- * measured. It is the only bar in the product now.
+ * measured. Document actions (44), formatting and selection context (36),
+ * then an 8px gap before the document.
  *
  * Its own module because the page needs the number in view mode too — and
  * importing it from the editor would pull the editor (Monaco, the panels, the
  * whole chart inspector) into the graph of every reader who will never open it.
  */
-export const EDIT_BAR_H = 48;
+export const EDIT_BAR_H = 88;
 
 /** The page's own bar, drawn above the editor bar in edit mode (components/PageChrome AppBar). */
 export const APP_BAR_H = 44;

@@ -31,6 +31,43 @@ beforeEach(installEditorFrame);
 afterEach(teardownEditorFrame);
 
 describe('the chrome the selection drives', () => {
+  it('keeps document actions stable and formatting separate as selection changes', async () => {
+    mount();
+    expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '88px' });
+    const actions = screen.getByLabelText('Document actions');
+    expect(actions).toContainElement(screen.getByLabelText('Exit edit mode'));
+    expect(actions).toContainElement(screen.getByLabelText('Open version history'));
+    const title = screen.getByLabelText('Title');
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
+    expect(screen.getByLabelText('Title')).toBe(title);
+    const formatting = screen.getByLabelText('Primary formatting controls');
+    expect(formatting).toContainElement(screen.getByLabelText('Undo'));
+    expect(formatting).toContainElement(screen.getByLabelText('Toggle bold'));
+    expect(formatting).not.toContainElement(screen.getByLabelText('Delete element'));
+    expect(screen.getByLabelText('Selection breadcrumb').textContent).toContain('>Paragraph');
+    expect(screen.queryByRole('button', { name: 'Paste Markdown' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
+    expect(fireEvent.mouseDown(screen.getByLabelText('Image URL'))).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste Markdown' }));
+    expect(screen.getByLabelText('Markdown to insert')).toBeTruthy();
+  });
+
+  it('removes text tools and closes formatting menus when selecting an image or embed', async () => {
+    mount();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
+    fireEvent.click(screen.getByLabelText('More formatting controls'));
+    expect(screen.getByLabelText('Spacing controls')).toBeTruthy();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'element', tag: 'img', path: '0.3' }) });
+    expect(screen.queryByLabelText('Toggle bold')).toBeNull();
+    expect(screen.queryByLabelText('Insert link')).toBeNull();
+    expect(screen.queryByLabelText('Spacing controls')).toBeNull();
+    expect(screen.getByLabelText('More formatting controls')).toBeTruthy();
+    await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection({ kind: 'embed', tag: 'Question', path: '0.2' }) });
+    expect(screen.queryByLabelText('Alignment')).toBeNull();
+    expect(screen.queryByLabelText('More formatting controls')).toBeNull();
+    expect(screen.getByLabelText('Chart inspector')).toBeTruthy();
+  });
+
   it('restores a view-mode text selection after the edit runtime is ready', async () => {
     mount({ initialSelectionPath: '0.1' });
     env.posted.length = 0;

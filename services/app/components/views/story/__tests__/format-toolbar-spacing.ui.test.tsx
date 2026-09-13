@@ -13,9 +13,13 @@ import type { StoryEditSelection } from '@/lib/story-runtime/contract';
 
 function renderToolbar(className = '', rect = { x: 40, y: 300, width: 600, height: 80 }) {
   const selection: StoryEditSelection = {
-    kind: 'element', path: '0.1', tag: 'div',
+    kind: 'element',
+    path: '0.1',
+    tag: 'div',
     rect,
-    className, style: '', ancestors: [],
+    className,
+    style: '',
+    ancestors: [],
   };
   const onApply = vi.fn();
   render(
@@ -44,8 +48,14 @@ describe('StoryFormatToolbar spacing row', () => {
     const primary = screen.getByLabelText('Primary formatting controls');
     expect(toolbar.firstElementChild).toBe(breadcrumb);
     expect(breadcrumb.nextElementSibling).toBe(primary);
+    expect(primary.nextElementSibling).toContainElement(screen.getByLabelText('Delete element'));
+    expect(breadcrumb).not.toContainElement(screen.getByLabelText('Delete element'));
+    fireEvent.click(screen.getByLabelText('Alignment'));
     expect(screen.getByLabelText('Align left')).toHaveAttribute('data-slot', 'tooltip-trigger');
     expect(screen.getByLabelText('Align left')).not.toHaveAttribute('data-tip');
+    fireEvent.keyDown(screen.getByLabelText('Alignment options'), {
+      key: 'Escape',
+    });
     expect(screen.queryByLabelText('Decrease space above')).toBeNull();
     showMore();
     expect(screen.getByLabelText('Spacing controls')).toBeTruthy();
@@ -62,9 +72,8 @@ describe('StoryFormatToolbar spacing row', () => {
   it('shows the readouts (px for edges, the max-w tail or full for width)', () => {
     renderToolbar('mt-4 pl-2 max-w-prose');
     showMore();
-    const toolbar = screen.getByLabelText('Typography toolbar');
-    expect(toolbar.textContent).toContain('16px'); // mt-4
-    expect(toolbar.textContent).toContain('8px'); // pl-2
+    expect(screen.getByLabelText('Spacing controls').textContent).toContain('16px'); // mt-4
+    expect(screen.getByLabelText('Spacing controls').textContent).toContain('8px'); // pl-2
     expect(screen.queryByLabelText('Increase width')).toBeNull();
     expect(screen.queryByLabelText('Decrease width')).toBeNull();
   });
@@ -72,8 +81,8 @@ describe('StoryFormatToolbar spacing row', () => {
 
 describe('StoryFormatToolbar placement', () => {
   it('stays in its toolbar slot independently of selection geometry', () => {
-    renderToolbar('', {x:980,y:900,width:80,height:40});
-    const toolbar=screen.getByLabelText('Typography toolbar');
+    renderToolbar('', { x: 980, y: 900, width: 80, height: 40 });
+    const toolbar = screen.getByLabelText('Typography toolbar');
     expect(toolbar.style.top).toBe('');
     expect(toolbar.style.left).toBe('');
     expect(toolbar.classList.contains('fixed')).toBe(false);

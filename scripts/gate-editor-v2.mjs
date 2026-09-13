@@ -160,6 +160,7 @@ try {
   );
   await undo((s) => s.includes('alpha first paragraph'), 'HTML paste undoes in one step');
   await range('first', 0, 'first', 5);
+  await page.getByRole('button', { name: 'Insert', exact: true }).click();
   await page.getByRole('button', { name: 'Paste Markdown', exact: true }).click();
   await page.getByRole('textbox', { name: 'Markdown to insert' }).fill('**Markdown**\n\n- one\n  - nested');
   await page.getByRole('button', { name: 'Insert Markdown', exact: true }).click();
