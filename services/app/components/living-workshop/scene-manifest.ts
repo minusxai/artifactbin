@@ -79,7 +79,7 @@ export const WORKSHOP_PAPERS: WorkshopPaper[] = PLACEMENTS.flatMap((slot) => {
       ]
     : [];
 });
-export const WORKSHOP_IMAGE = "/landing/workshop/indoor-wide_2.webp";
+export const WORKSHOP_IMAGE = "/landing/workshop/indoor-wide_3.webp";
 
 export interface WorkshopSetting {
   /** Optional six-cell, 3 × 2 artwork atlas for the visual review routes. */
@@ -98,7 +98,7 @@ export const WORKSHOP_SETTINGS: Record<
     name: "indoor",
   },
   outdoor: {
-    image: "/landing/workshop/outdoor-wide_2.webp",
+    image: "/landing/workshop/outdoor-wide_3.webp",
     mask: "/landing/workshop/wide-girl-mask.svg",
     name: "outdoor",
   },
