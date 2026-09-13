@@ -5,7 +5,7 @@ import { Shell } from './Shell';
 import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 
-const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
+const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, HomeV2Page, HomeV3Page, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
 
 function Analytics() {
   const { session } = useSession();
@@ -18,6 +18,8 @@ export function App() {
       <Analytics />
       <NavigationPreloads>
       <Routes>
+        <Route path="/home_v2" element={<HomeV2Page />} />
+        <Route path="/home_v3" element={<HomeV3Page />} />
         <Route element={<Shell />}>
           <Route path="/" element={<HomePage />} />
           {/* Landing designs under review, side by side. Static paths, so

@@ -1,0 +1,600 @@
+.workshop-page {
+  --color-bg: #faf7f0;
+  --color-fg: #17261f;
+  --color-muted: #666e64;
+  --color-edge: #dcded0;
+  --color-accent: #245a43;
+  background: #faf7f0;
+  color: #17261f;
+  font-family: var(--font-sans), sans-serif;
+  overflow: hidden;
+}
+.workshop-page a {
+  color: inherit;
+  text-decoration: none;
+}
+.workshop-page button {
+  cursor: pointer;
+}
+.workshop-page :is(a, button, summary):focus-visible {
+  outline: 2px solid #245a43;
+  outline-offset: 5px;
+}
+.workshop-hero {
+  position: relative;
+  isolation: isolate;
+  container-type: inline-size;
+}
+.workshop-nav {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  left: 9%;
+  right: 8%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1.5cqw;
+}
+.workshop-wordmark {
+  font-family: Georgia, serif;
+  font-size: clamp(27px, 2.5cqw, 44px);
+  font-weight: bold;
+  letter-spacing: -0.045em;
+}
+.workshop-nav nav {
+  display: flex;
+  gap: 28px;
+  font-size: 13px;
+}
+.workshop-nav nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.workshop-nav a:hover {
+  color: #2c7251;
+}
+.workshop-intro {
+  position: absolute;
+  z-index: 2;
+  top: 15%;
+  left: 9.5%;
+  width: 31%;
+}
+.workshop-intro h1 {
+  font-family: Georgia, serif;
+  font-size: 4.35cqw;
+  font-weight: 400;
+  letter-spacing: -0.06em;
+  line-height: 1.03;
+  margin: 0;
+}
+.workshop-promise {
+  font-size: 1.22cqw;
+  line-height: 1.5;
+  margin-top: 1.7cqw;
+  color: #4f5e52;
+  max-width: 26cqw;
+}
+.workshop-install {
+  margin-top: 2.2cqw;
+  padding-top: 1.2cqw;
+  border-top: 1px solid #8c998d66;
+  max-width: 28cqw;
+}
+.workshop-label {
+  font:
+    10px/1.5 var(--font-mono),
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: #687465;
+}
+.workshop-install > .workshop-label {
+  font-size: 0.72cqw;
+}
+.workshop-install code {
+  display: block;
+  font:
+    0.89cqw/1.65 var(--font-mono),
+    monospace;
+  overflow-wrap: anywhere;
+  margin: 0.65cqw 0 1cqw;
+  max-width: 100%;
+  user-select: all;
+}
+.workshop-install-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25cqw;
+}
+.workshop-install-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0.85cqw 1.25cqw;
+  border: 0;
+  border-radius: 4px;
+  background: #24583f;
+  color: #fffdf5;
+  font-size: 0.93cqw;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.workshop-install-actions button:hover {
+  background: #183f2c;
+  transform: translateY(-1px);
+}
+.workshop-install-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.83cqw;
+}
+.workshop-copy-status {
+  font-size: 0.73cqw;
+  line-height: 1.6;
+  color: #647160;
+  min-height: 2.4em;
+  margin-top: 0.85cqw;
+  max-width: 26cqw;
+}
+.workshop-picture {
+  width: 100%;
+  overflow: hidden;
+}
+.workshop-scene-frame {
+  position: relative;
+  aspect-ratio: 4/3;
+  width: 100%;
+}
+.workshop-scene-fallback,
+.workshop-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.workshop-canvas {
+  touch-action: pan-y;
+}
+.workshop-scene-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  padding: 17px 8%;
+  border-bottom: 1px solid #d8dcce;
+  background: #f8f5ed;
+  font-size: 12px;
+  color: #596951;
+}
+.workshop-scene-controls button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  font-size: 11px;
+  color: inherit;
+  white-space: nowrap;
+}
+.workshop-reveal:empty {
+  display: none;
+}
+.workshop-reveal {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  align-items: center;
+  padding: 20px;
+  background: #e8eddf;
+  color: #244633;
+}
+.workshop-reveal span {
+  font:
+    23px Georgia,
+    serif;
+}
+.workshop-reveal a {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+}
+.workshop-examples {
+  padding: 60px 8% 65px;
+  scroll-margin-top: 30px;
+}
+.workshop-section-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 30px;
+}
+.workshop-section-heading h2 {
+  font:
+    clamp(25px, 2.6vw, 40px)/1.1 Georgia,
+    serif;
+  letter-spacing: -0.035em;
+}
+.workshop-section-heading p {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #6b7468;
+}
+.workshop-example-rail {
+  display: flex;
+  gap: 24px;
+  overflow-x: auto;
+  padding: 4px 3px 24px;
+  scroll-snap-type: x proximity;
+}
+.workshop-example {
+  flex: 0 0 230px;
+  scroll-snap-align: start;
+}
+.workshop-example-preview {
+  height: 154px;
+  overflow: hidden;
+  background: #ebe9df;
+  border: 1px solid #d6d8cc;
+  margin-bottom: 16px;
+  transition: transform 0.25s;
+}
+.workshop-example a:hover .workshop-example-preview {
+  transform: translateY(-4px);
+}
+.workshop-example img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.workshop-example h3 {
+  font:
+    18px/1.25 Georgia,
+    serif;
+  margin-top: 7px;
+}
+.workshop-example h3 svg {
+  display: inline;
+}
+.workshop-example button {
+  font-size: 11px;
+  color: #607459;
+  background: none;
+  border: 0;
+  padding: 12px 0;
+}
+.workshop-features {
+  background: #f7edd8;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 50px;
+  align-items: center;
+  padding: 50px 10%;
+}
+.workshop-feature-copy {
+  max-width: 450px;
+}
+.workshop-feature-copy h2 {
+  font:
+    clamp(40px, 5vw, 74px)/1.05 Georgia,
+    serif;
+  letter-spacing: -0.05em;
+  margin: 12px 0 25px;
+}
+.workshop-feature-tabs {
+  display: flex;
+  gap: 20px;
+  border-bottom: 1px solid #d8ceb6;
+  margin-bottom: 30px;
+}
+.workshop-feature-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 10px 0;
+  color: #776f5c;
+  font-size: 13px;
+}
+.workshop-feature-tabs button[aria-pressed="true"] {
+  color: #254c37;
+  border-color: #254c37;
+}
+.workshop-feature-copy h3 {
+  font:
+    24px Georgia,
+    serif;
+  margin-bottom: 14px;
+}
+.workshop-feature-copy p {
+  font-size: 15px;
+  line-height: 1.8;
+  color: #6b6a58;
+}
+.workshop-feature-copy > a {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 25px;
+  font-size: 13px;
+}
+.workshop-feature-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  animation: workshop-arrive 0.35s ease-out;
+}
+.workshop-faq {
+  max-width: 960px;
+  padding: 80px 35px;
+  margin: auto;
+}
+.workshop-footer {
+  margin: 0 8%;
+  padding: 32px 0 50px;
+  border-top: 1px solid #dadcce;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+.workshop-footer p {
+  font-size: 13px;
+  color: #6d756a;
+}
+.workshop-footer nav {
+  margin-left: auto;
+  display: flex;
+  gap: 20px;
+  font-size: 12px;
+}
+@keyframes workshop-arrive {
+  from {
+    opacity: 0.2;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (min-width: 1800px) {
+  .workshop-hero {
+    max-width: 2000px;
+    margin: auto;
+  }
+}
+@media (max-width: 800px) {
+  .workshop-nav {
+    position: relative;
+    left: auto;
+    right: auto;
+    padding: 22px 6% 0;
+  }
+  .workshop-nav nav {
+    gap: 18px;
+    font-size: 12px;
+  }
+  .workshop-wordmark {
+    font-size: 29px;
+  }
+  .workshop-intro {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: auto;
+    padding: 48px 8% 26px;
+  }
+  .workshop-intro h1 {
+    font-size: clamp(44px, 8vw, 67px);
+    max-width: 600px;
+  }
+  .workshop-promise {
+    font-size: 16px;
+    max-width: 340px;
+    margin-top: 22px;
+  }
+  .workshop-install {
+    max-width: 420px;
+    margin-top: 26px;
+    padding-top: 18px;
+  }
+  .workshop-install > .workshop-label {
+    font-size: 9px;
+  }
+  .workshop-install code {
+    font-size: 12px;
+    margin: 10px 0 16px;
+  }
+  .workshop-install-actions {
+    gap: 22px;
+  }
+  .workshop-install-actions button {
+    font-size: 13px;
+    padding: 13px 17px;
+  }
+  .workshop-install-actions a {
+    font-size: 12px;
+  }
+  .workshop-copy-status {
+    font-size: 11px;
+    max-width: 350px;
+    margin-top: 12px;
+  }
+  .workshop-scene-frame {
+    width: 185%;
+    margin-left: -80%;
+  }
+  .workshop-scene-controls {
+    padding: 16px 6%;
+    font-size: 11px;
+    align-items: flex-start;
+  }
+  .workshop-scene-controls p {
+    max-width: 200px;
+  }
+  .workshop-examples {
+    padding: 44px 6%;
+  }
+  .workshop-section-heading {
+    display: block;
+  }
+  .workshop-section-heading p {
+    margin-top: 14px;
+  }
+  .workshop-example {
+    flex-basis: 210px;
+  }
+  .workshop-features {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 45px 8%;
+  }
+  .workshop-feature-art {
+    max-width: 450px;
+    margin: auto;
+  }
+  .workshop-feature-tabs {
+    gap: 25px;
+  }
+  .workshop-faq {
+    padding: 50px 7%;
+  }
+  .workshop-footer {
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+  .workshop-footer p {
+    width: 100%;
+  }
+  .workshop-footer nav {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .workshop-reveal {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .workshop-reveal span {
+    font-size: 21px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workshop-page * {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+/* Compact installation strip follows the existing app's code/copy treatment. */
+.workshop-intro {
+  top: 12.5%;
+}
+.workshop-install {
+  margin-top: 1.8cqw;
+  border: 0;
+  padding-top: 0;
+}
+.workshop-command {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0.8cqw;
+  border: 1px solid #aeb8a666;
+  border-radius: 4px;
+  background: #f4f5eddd;
+  margin-top: 0.7cqw;
+}
+.workshop-command code {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.86cqw;
+}
+.workshop-command button {
+  flex: none;
+  background: transparent;
+  border: 0;
+  padding: 3px;
+  color: #52604c;
+}
+.workshop-command button:hover {
+  color: #1b442e;
+}
+.workshop-install-actions {
+  margin-top: 0.65cqw;
+}
+.workshop-copy-status {
+  margin-top: 0.7cqw;
+}
+.workshop-agent-screens {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.workshop-agent {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #171913;
+  border-radius: 2px;
+  padding: 1px;
+}
+.workshop-agent svg {
+  width: 100%;
+  height: 100%;
+}
+.workshop-agent-claude {
+  left: 40.73%;
+  top: 41.18%;
+  width: 1.43%;
+  height: 2.55%;
+  transform: rotate(-19deg) skewY(8deg);
+}
+.workshop-agent-codex {
+  left: 34.48%;
+  top: 59.12%;
+  width: 1.48%;
+  height: 2.45%;
+  transform: rotate(-2deg);
+}
+.workshop-agent-pi {
+  left: 68.1%;
+  top: 65.54%;
+  width: 1.4%;
+  height: 2.3%;
+  transform: rotate(-14deg) skewY(5deg);
+}
+@media (max-width: 800px) {
+  .workshop-intro {
+    top: auto;
+    padding-top: 35px;
+  }
+  .workshop-install {
+    margin-top: 24px;
+  }
+  .workshop-command {
+    margin-top: 10px;
+    padding: 11px;
+  }
+  .workshop-command code {
+    font-size: 11px;
+  }
+  .workshop-install-actions {
+    margin-top: 12px;
+  }
+  .workshop-copy-status {
+    margin-top: 12px;
+  }
+}

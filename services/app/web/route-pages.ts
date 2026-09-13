@@ -9,6 +9,8 @@ export const routePages = {
   DatasetEditorPage: lazyPage<{artifactId?: string; onSaved?: () => Promise<unknown>}>(() => import('./pages/DatasetEditor').then(m => ({ default: m.DatasetEditorPage }))),
   FileUploadPage: lazyPage<Record<string, never>>(() => import('./pages/FileUpload').then(m => ({ default: m.FileUploadPage }))),
   DocsPage: lazyPage<Record<string, never>>(() => import('./pages/Docs').then(m => ({ default: m.DocsPage }))),
+  HomeV3Page: lazyPage<Record<string, never>>(() => import('./pages/HomeV3')),
+  HomeV2Page: lazyPage<Record<string, never>>(() => import('./pages/HomeV2')),
   HomePage: lazyPage<Record<string, never>>(() => import('./pages/Home').then(m => ({ default: m.HomePage })), false, true),
   PrivacyPage: lazyPage<Record<string, never>>(() => import('./pages/Legal').then(m => ({ default: m.PrivacyPage }))),
   TermsPage: lazyPage<Record<string, never>>(() => import('./pages/Legal').then(m => ({ default: m.TermsPage }))),
