@@ -37,10 +37,20 @@
   padding-top: 1.5cqw;
 }
 .workshop-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6cqw;
   font-family: Georgia, serif;
   font-size: clamp(27px, 2.5cqw, 44px);
   font-weight: bold;
   letter-spacing: -0.045em;
+}
+.workshop-nav .workshop-wordmark img {
+  width: 2.15cqw;
+  height: 2.15cqw;
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 24%;
 }
 .workshop-nav nav {
   display: flex;
@@ -59,7 +69,7 @@
   position: absolute;
   z-index: 2;
   top: 15%;
-  left: 8%;
+  left: 9%;
   width: 31%;
 }
 .workshop-intro h1 {
@@ -71,17 +81,106 @@
   margin: 0;
 }
 .workshop-promise {
-  font-size: 1.22cqw;
+  font-family: Georgia, serif;
+  font-size: 1.28cqw;
+  line-height: 1.4;
+  margin: 0.9cqw 0 0;
+  color: #34433a;
+  max-width: 26cqw;
+}
+.workshop-promise em {
+  font-style: normal;
+  color: #0e9d4f;
+}
+/* Plain text and one button under a hairline, as the first cut had it. The
+ * deployed landing's claims come along as short notes, not as a panel. */
+.workshop-start {
+  margin-top: 1.3cqw;
+  padding-top: 1cqw;
+  border-top: 1px solid #8c998d66;
+  max-width: 28cqw;
+}
+.workshop-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.95cqw;
+}
+.workshop-step-note {
+  font-size: 0.76cqw;
   line-height: 1.5;
-  margin-top: 1.7cqw;
+  margin: 0.4cqw 0 0;
   color: #4f5e52;
   max-width: 26cqw;
 }
-.workshop-install {
-  margin-top: 2.2cqw;
-  padding-top: 1.2cqw;
-  border-top: 1px solid #8c998d66;
-  max-width: 31cqw;
+/* The last step lands where the painted plant reaches the column, so its
+ * note wears the same soft chip as the agent row. */
+.workshop-steps > li:last-child .workshop-step-note {
+  width: fit-content;
+  padding: 0.25em 0.45em;
+  margin-left: -0.45em;
+  background: #f7f7edf0;
+  border-radius: 2px;
+}
+.workshop-start .workshop-step-note code {
+  display: inline;
+  font-size: 0.72cqw;
+  line-height: inherit;
+  margin: 0;
+  color: #0b7a3e;
+}
+.workshop-agent-row {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45cqw 1.05cqw;
+  margin: 0.8cqw 0 0;
+  padding: 0.3em 0.45em;
+  margin-left: -0.45em;
+  width: fit-content;
+  background: #f7f7edf0;
+  border-radius: 2px;
+}
+.workshop-agent-row li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32cqw;
+  font:
+    0.7cqw/1 var(--font-mono),
+    monospace;
+  color: #5c675a;
+}
+.workshop-agent-row svg {
+  width: 0.9cqw;
+  height: 0.9cqw;
+}
+.workshop-tagline {
+  font:
+    0.72cqw/1 var(--font-mono),
+    monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #7b8579;
+  margin-right: auto;
+  padding-left: 0.9cqw;
+}
+/* The outdoor setting brings trees and mountains up under the small text, so
+ * everything below the headline carries a halo of the page cream. On the
+ * plaster wall it is invisible. */
+.workshop-intro
+  :is(
+    .workshop-promise,
+    .workshop-label,
+    .workshop-step-note,
+    .workshop-install-actions a,
+    .workshop-copy-status
+  ) {
+  text-shadow:
+    0 0 4px #f6f5ee,
+    0 0 9px #f6f5ee,
+    0 0 16px #f6f5ee,
+    0 0 26px #f6f5eecc;
 }
 .workshop-label {
   font:
@@ -91,11 +190,12 @@
   letter-spacing: 0.13em;
   color: #687465;
 }
-.workshop-install > .workshop-label {
+.workshop-steps .workshop-label {
   font-size: 0.72cqw;
-}
-.workshop-install code {
   display: block;
+  color: #566253;
+}
+.workshop-start code {
   font:
     0.89cqw/1.65 var(--font-mono),
     monospace;
@@ -117,7 +217,7 @@
   padding: 0.85cqw 1.25cqw;
   border: 0;
   border-radius: 4px;
-  background: #008b50;
+  background: #0e9d4f;
   color: #fffdf5;
   font-size: 0.93cqw;
   transition:
@@ -125,7 +225,7 @@
     transform 0.2s;
 }
 .workshop-install-actions button:hover {
-  background: #007443;
+  background: #0b8a45;
   transform: translateY(-1px);
 }
 .workshop-install-actions a {
@@ -135,12 +235,13 @@
   font-size: 0.83cqw;
 }
 .workshop-copy-status {
-  font-size: 0.73cqw;
-  line-height: 1.6;
+  font-size: 0.72cqw;
+  line-height: 1.5;
   color: #34473b;
-  min-height: 2.4em;
-  margin-top: 0.85cqw;
-  max-width: 26cqw;
+  margin-top: 0.7cqw;
+}
+.workshop-copy-status:empty {
+  display: none;
 }
 .workshop-picture {
   width: 100%;
@@ -403,17 +504,38 @@
     max-width: 340px;
     margin-top: 22px;
   }
-  .workshop-install {
-    max-width: 420px;
+  .workshop-start {
+    max-width: 430px;
     margin-top: 26px;
     padding-top: 18px;
   }
-  .workshop-install > .workshop-label {
+  .workshop-steps {
+    gap: 18px;
+  }
+  .workshop-steps .workshop-label {
     font-size: 9px;
   }
-  .workshop-install code {
+  .workshop-step-note {
     font-size: 12px;
-    margin: 10px 0 16px;
+    margin-top: 8px;
+  }
+  .workshop-step-note code {
+    font-size: 11px;
+  }
+  .workshop-agent-row {
+    margin-top: 14px;
+    gap: 7px 15px;
+  }
+  .workshop-agent-row li {
+    font-size: 10px;
+    gap: 5px;
+  }
+  .workshop-agent-row svg {
+    width: 12px;
+    height: 12px;
+  }
+  .workshop-start code {
+    font-size: 12px;
   }
   .workshop-install-actions {
     gap: 22px;
@@ -497,12 +619,7 @@
 }
 /* Compact installation strip follows the existing app's code/copy treatment. */
 .workshop-intro {
-  top: 10%;
-}
-.workshop-install {
-  margin-top: 1.8cqw;
-  border: 0;
-  padding-top: 0;
+  top: 9%;
 }
 .workshop-command {
   display: flex;
@@ -554,7 +671,7 @@
     top: auto;
     padding-top: 35px;
   }
-  .workshop-install {
+  .workshop-start {
     margin-top: 24px;
   }
   .workshop-command {
@@ -592,20 +709,13 @@
   opacity: 0;
 }
 
-.workshop-create-label {
-  display: block;
-  margin-top: 1cqw;
-}
-.workshop-copy-status {
-  text-shadow: 0 1px 5px #ffffffdd;
-}
 
 .workshop-copy-status {
-  font-size: 0.82cqw;
-  max-width: 31cqw;
+  font-size: 0.72cqw;
+  max-width: 22cqw;
   width: fit-content;
-  padding: 0.25em 0.4em;
-  margin-left: -0.4em;
+  padding: 0.25em 0.45em;
+  margin-left: -0.45em;
   background: #f7f7edf0;
   border-radius: 2px;
   text-shadow: none;

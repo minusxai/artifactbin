@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUpRight, Check, Copy, RotateCcw } from "lucide-react";
-import { Tooltip } from "@/components/Tooltip";
+import { ArrowDown, ArrowUpRight, RotateCcw } from "lucide-react";
+import { GitHubIcon } from "@/components/brand-icons";
 import AgentScreens from "@/components/living-workshop/AgentScreens";
+import WorkshopStart from "@/components/living-workshop/WorkshopStart";
 import LandingFaq from "@/components/LandingFaq";
 import { REASONS, artSrc } from "@/lib/landing-content";
 import { REPO_URL } from "@/lib/repo";
@@ -29,19 +30,10 @@ export default function HomeV2({
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<WorkshopScene | null>(null);
   const [reveal, setReveal] = useState<WorkshopPaper | null>(null);
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">(
-    "idle",
-  );
-  const [promptState, setPromptState] = useState<"idle" | "copied" | "error">(
-    "idle",
-  );
   const [origin, setOrigin] = useState("https://artifactbin.dev");
   const [feature, setFeature] = useState(1);
   const [sceneReady, setSceneReady] = useState(false);
   const reason = REASONS[feature];
-  // Same deployment-aware command as GetStarted; no document-specific agent
-  // endpoint or account credentials belong in logged-out onboarding.
-  const command = `curl -fsSL ${origin}/chat/install.sh | sh`;
   useEffect(() => {
     setOrigin(window.location.origin);
     const oldTitle = document.title;
@@ -65,24 +57,6 @@ export default function HomeV2({
       document.title = oldTitle;
     };
   }, [setting]);
-  const copyPrompt = async () => {
-    try {
-      await navigator.clipboard.writeText(
-        `Create an artifact with artifactbin. Use the installed afbin skill and CLI to build, validate, and publish it. If afbin is not installed, follow ${origin}/docs-human. Ask me what I want to make.`,
-      );
-      setPromptState("copied");
-    } catch {
-      setPromptState("error");
-    }
-  };
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopyState("copied");
-    } catch {
-      setCopyState("error");
-    }
-  };
   const revealPaper = (paper: WorkshopPaper) => {
     if (scene.current) scene.current.detach(paper.id);
     else setReveal(paper);
@@ -97,11 +71,16 @@ export default function HomeV2({
             className="workshop-wordmark"
             aria-label="artifactbin home"
           >
+            <img src="/logo-128.png" alt="" width={128} height={128} />
             artifactbin
           </a>
+          <span className="workshop-tagline">Google Docs for agents</span>
           <nav aria-label="Main navigation">
             <a href="#workshop-examples">Examples</a>
             <a href="/docs-human">Docs</a>
+            <a href={REPO_URL}>
+              <GitHubIcon size={13} /> Source
+            </a>
             <a href="/login">
               Sign in <ArrowUpRight size={13} />
             </a>
@@ -113,64 +92,11 @@ export default function HomeV2({
             <br />
             Make something.
           </h1>
-          <div className="workshop-install" id="workshop-install">
-            <span className="workshop-label">1. Install artifactbin</span>
-            <div className="workshop-command">
-              <code>{command}</code>
-              <Tooltip
-                content={
-                  copyState === "copied" ? "Copied!" : "Copy install command"
-                }
-              >
-                <button
-                  type="button"
-                  onClick={() => void copy()}
-                  aria-label="Copy install command"
-                >
-                  {copyState === "copied" ? (
-                    <Check size={15} />
-                  ) : (
-                    <Copy size={15} />
-                  )}
-                </button>
-              </Tooltip>
-            </div>
-            <span className="workshop-label workshop-create-label">
-              2. Create with your agent
-            </span>
-            <div className="workshop-install-actions">
-              <Tooltip content="Copy instructions for your agent">
-                <button
-                  type="button"
-                  aria-label="Copy instructions to create an artifact"
-                  onClick={() => void copyPrompt()}
-                >
-                  {promptState === "copied" ? (
-                    <Check size={15} />
-                  ) : (
-                    <Copy size={15} />
-                  )}
-                  {promptState === "copied"
-                    ? "Instructions copied"
-                    : "Copy instructions"}
-                </button>
-              </Tooltip>
-              <a href="/docs-human">
-                How it works <ArrowUpRight size={13} />
-              </a>
-            </div>
-            <p role="status" className="workshop-copy-status">
-              {promptState === "copied"
-                ? "Paste the instructions into your agent."
-                : promptState === "error"
-                  ? "Could not copy. Try again."
-                  : copyState === "copied"
-                    ? "Copied — paste into your terminal"
-                    : copyState === "error"
-                      ? "Select and copy the command above."
-                      : "Works with Claude Code, Codex, pi, and your next favorite agent."}
-            </p>
-          </div>
+          <p className="workshop-promise">
+            Your agents <em>publish</em> interactive HTML documents you can{" "}
+            <em>edit</em>, <em>annotate</em> and <em>share</em>.
+          </p>
+          <WorkshopStart origin={origin} />
         </div>
         <div className="workshop-picture">
           <div className="workshop-scene-frame">
