@@ -349,10 +349,18 @@ export async function finishSavedRequest(workspace:Workspace,server?:string):Pro
  * against them instead of probing: pi spent eight model calls learning that `month` was a string
  * (local hardcore report, 14 Sep). Inferred locally from the bytes it just pushed; never a server call.
  */
-/** The policy write the server refuses to combine with content: same command, same journal, one PATCH. */
+/**
+ * The policy write the server refuses to combine with content: same command, same journal, one PATCH.
+ *
+ * A content write echoes a CURATED wire with no policy fields, so the revision to compare and swap on
+ * cannot come from it. A create's is 0 by construction; for anything else the head is observed, which
+ * also says whether the grant is already in place and no write is owed at all.
+ */
 async function writeDatasetPolicy(workspace:Workspace,client:HttpClient,plan:PushPlan,snapshot:Snapshot):Promise<Snapshot>{
+ const observed=plan.mode==='create'?undefined:await client.request<Snapshot>(`/artifacts/${snapshot.id}`);
+ if(observed&&isDeepStrictEqual(observed.dataset_policy??null,plan.policy??null))return snapshot;
  const staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),
-  request:{path:`/artifacts/${snapshot.id}`,method:'PATCH',body:{policy:plan.policy,expectedPolicyRevision:Number(snapshot.policy_revision??0),expectedState:snapshot.state}},
+  request:{path:`/artifacts/${snapshot.id}`,method:'PATCH',body:{policy:plan.policy,expectedPolicyRevision:Number(observed?.policy_revision??snapshot.policy_revision??0),expectedState:typeof observed?.state==='string'?observed.state:snapshot.state}},
   file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:workspace.tracking?.files[plan.file.path]}});
  return recoverRequest(workspace,client,staged);
 }

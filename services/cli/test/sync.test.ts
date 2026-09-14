@@ -560,20 +560,29 @@ test('push --policy viewers-write publishes a dataset the link audience can writ
  const root=await mkdtemp(join(tmpdir(),'afbin-policy-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
  const calls:Array<{method:string;path:string;body:any}>=[];
  let head:any;
+ const curated=({dataset_policy:_policy,policy_revision:_revision,...rest}:any)=>rest;
  const request:typeof fetch=async(input,init)=>{
   const path=new URL(String(input)).pathname;const method=init?.method??'GET';
   const body=init?.body?JSON.parse(String(init.body)):{};
   calls.push({method,path,body});
   if(path==='/api/artifacts'&&method==='POST'){
    // The real create reply is a curated wire: it carries access, and NOT policy_revision.
-   head={id:'tasks01',version:1,edit_id:'e1',state:digest('tasks-1'),format:'dataset',access:body.access??'read'};
-   return Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+   head={id:'tasks01',version:1,edit_id:'e1',state:digest('tasks-1'),format:'dataset',access:body.access??'read',policy_revision:0,dataset_policy:null};
+   return Response.json(curated(head),{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
   }
   if(method==='PATCH'){
+   // The server's compare-and-swap: a stale revision writes nothing.
+   if(body.expectedPolicyRevision!==(head.policy_revision??0))return Response.json({error:'state_conflict',currentVersion:head.version,currentState:head.state},{status:409,headers:{'X-Artifactbin-Account':'usr_one'}});
    head={...head,version:head.version,edit_id:`e${(head.policy_revision??0)+2}`,state:digest(`tasks-${(head.policy_revision??0)+2}`),
     dataset_policy:body.policy??null,policy_revision:(head.policy_revision??0)+1};
    return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
   }
+  if(method==='PUT'){
+   head={...head,version:head.version+1,edit_id:`v${head.version+1}`,state:digest(`tasks-v${head.version+1}`),access:body.access??head.access};
+   // Like the server's: a content write echoes a curated wire with no policy fields at all.
+   return Response.json(curated(head),{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='GET')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
   throw new Error(`Unexpected ${method} ${path}`);
  };
  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
@@ -612,6 +621,18 @@ test('push --policy viewers-write publishes a dataset the link audience can writ
   assert.equal(off.body.policy,null);
   assert.equal(off.body.expectedPolicyRevision,1);
   assert.equal(closed.result.operations[0].policy,'none');
+
+  // New rows AND a grant in one command: the content write cannot carry a policy, and the revision
+  // it must swap on is the head's — never the one this workspace last happened to see.
+  head={...head,policy_revision:5,dataset_policy:null};
+  await writeFile(join(cwd,'tasks.csv'),'id,title,status\n1,Ship,doing\n2,Write,todo\n');
+  const both=await invoke(['push','tasks.csv','--policy','viewers-write']);
+  assert.equal(both.code,0,JSON.stringify(both.result));
+  const last=calls.slice(calls.indexOf(calls.filter(call=>call.method==='PUT').at(-1)!)).map(call=>call.method);
+  assert.deepEqual(last.filter(method=>method!=='GET'),['PUT','PATCH'],'content first, then the policy');
+  const grant=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.equal(grant.body.expectedPolicyRevision,5);
+  assert.equal(both.result.operations[0].policy,'viewers-write');
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
