@@ -12,6 +12,9 @@
  * a document, and — where the task seeds one to edit — say that a phrase
  * survived. `comment` is the first kind that needed a seam at all, because its
  * setup makes four HTTP calls of its own and its checks read a second endpoint.
+ * `tracker` is the first whose checks WRITE: it runs one of the document's own
+ * declared mutations and reads the dataset back, because whether a row action
+ * works is not a question any markup can answer.
  *
  * SETUP RUNS BEFORE THE `published` BASELINE IS READ, and that ordering is this
  * module's (`prepareTask`), not the driver's: a comment's anchor stamp is a
@@ -22,7 +25,7 @@
 import type { MetricKind, MetricValue, Task } from '../../contracts';
 import type { ServedDocument } from '../product';
 
-export const TASK_KINDS = ['publish', 'comment'] as const;
+export const TASK_KINDS = ['publish', 'comment', 'tracker'] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 
 /** What a kind's `setup` is given. Every call it makes is the DRIVER's, and none of it may reach the agent's ledger. */
@@ -51,6 +54,16 @@ export interface CheckContext {
   productUrl: string;
   /** The document the agent was GIVEN, which is not always the one it wrote (`scoredArtifactId`). */
   startId: string;
+  /**
+   * The document the run is SCORED on (`scoredArtifactId`) — the one `served`
+   * was read from, which is not always `startId`.
+   *
+   * Optional because the driver does not pass it yet (`main.ts` is another
+   * workstream's file): a kind that needs the scored id derives it from the
+   * served document — `tracker` reads the island's own `mutateUrl` — and uses
+   * this the moment the driver starts supplying it. See `.agent/REPORT.md`.
+   */
+  scoredId?: string | null;
   /** The DRIVER's own account token — never the agent's. */
   token: string;
   driverHeaders: Record<string, string>;
