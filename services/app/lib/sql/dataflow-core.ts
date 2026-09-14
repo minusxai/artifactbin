@@ -22,6 +22,8 @@ interface DataflowEngine {run:SqlService['run'];queryRows:(table:{rows:Row[];col
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
 
 export interface RunDataflowOptions {
+  /** Trusted caller identity, set only by the server composition. */
+  userId?:string|null;
   localTables?: Record<string, Row[]>;
   sourceQuery?: (query:Dataflow["queries"][number],values:Record<string,Scalar>,page?:QueryPage)=>Promise<import("@/lib/story/dataflow").TableResult>;
   /** Override the declared defaults (a reader's current selections). Unknown names are ignored. */
@@ -43,6 +45,8 @@ export interface RunDataflowOptions {
 export async function evaluateDataflow(engine:DataflowEngine,flow: Dataflow, datasets: DatasetTables, opts: RunDataflowOptions = {}): Promise<DataflowState> {
   const values = initialValues(flow);
   for (const [k, v] of Object.entries(opts.values ?? {})) if (k in values) values[k] = v;
+
+  const params={...values,_me:opts.userId??null};
 
   const tables: DataflowState['tables'] = {};
   const errors: DataflowState['errors'] = {};
@@ -68,12 +72,12 @@ export async function evaluateDataflow(engine:DataflowEngine,flow: Dataflow, dat
       const table = datasets[q.source!];
       if (!opts.sourceQuery && !table) throw new Error(`Source ref:${q.source} is unavailable`);
       const page = opts.page?.name === q.name ? opts.page : undefined;
-      const result = opts.sourceQuery ? await opts.sourceQuery(q, values, page) : await engine.queryRows(table, q.sql, values, page);
+      const result = opts.sourceQuery ? await opts.sourceQuery(q, params, page) : await engine.queryRows(table, q.sql, params, page);
       inputs[q.name]=result;tables[q.name]=result;
     }catch(error){errors[q.name]=error instanceof Error?error.message:'Dataset query failed';}
   }));
   const localQueries=queries.filter(q=>!q.source);
-  const out = localQueries.length ? await engine.run({ tables: inputs, queries:localQueries, params: values, limit: opts.limit, timeoutMs: opts.timeoutMs, page: opts.page }) : {};
+  const out = localQueries.length ? await engine.run({ tables: inputs, queries:localQueries, params, limit: opts.limit, timeoutMs: opts.timeoutMs, page: opts.page }) : {};
   for (const q of localQueries) {
     const o = out[q.name];
     if (!o) continue;

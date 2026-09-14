@@ -35,6 +35,7 @@ describe('the agent-smoke matrix', () => {
     expect(prepare).toContain('sudo -n -u eval-agent test -r "$GITHUB_WORKSPACE/package.json"');
     const launch = steps.find((step) => step.run?.includes('npm run eval'))?.run ?? '';
     expect(launch).toContain('--run-as=eval-agent');
+    expect(launch).toContain('node --import tsx evals/bounded.ts');
     expect(launch).toContain('--out="$RUNNER_TEMP/agent-smoke-metrics"');
     expect(launch).toContain('umask 077');
     expect(steps.some((step) => step.with?.path === '${{ runner.temp }}/agent-smoke-metrics/')).toBe(true);
@@ -47,9 +48,9 @@ describe('the agent-smoke matrix', () => {
    * being run at all — so a break in the agent's own auto-auth would have reached production green.
    */
   it('runs both CLI flows: staged-and-authenticated on every PR, and the agent doing it for itself nightly', () => {
-    const byMode = new Map(ROWS.map((r) => [r.mode, r]));
+    const byMode = new Map([...ROWS].reverse().map((r) => [r.mode, r]));
     expect([...byMode.keys()].sort()).toEqual(['installed', 'not-installed']);
-    expect((ci.jobs['agent-smoke'].strategy?.matrix?.include ?? []).map((r) => r.mode)).toEqual(['installed']);
+    expect((ci.jobs['agent-smoke'].strategy?.matrix?.include ?? []).map((r) => r.mode)).toEqual(['installed','installed']);
     expect(tasksOf(byMode.get('installed')!)).toEqual(expect.arrayContaining(['cli', 'data', 'edit', 'comment']));
     // Two tasks are enough for the flow that is being exercised; each one is a paid agent run.
     expect(tasksOf(byMode.get('not-installed')!)).toEqual(expect.arrayContaining(['cli', 'comment']));

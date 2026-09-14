@@ -12,6 +12,7 @@
  * must name a declared binding slot or param; unknown tokens are hard errors
  * naming the token.
  */
+import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import type {ContentObjects} from './prepared-objects';
 import { json } from '../http';
 import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
@@ -29,7 +30,6 @@ export type { ColumnType, DatasetColumn } from './dataset-shape';
 import { inferColumns } from './dataset-shape';
 import type { ColumnType, DatasetColumn } from './dataset-shape';
 
-const COLUMN_TYPES: ColumnType[] = ['string', 'number', 'boolean', 'date'];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}([T ].*)?$/;
 
@@ -39,6 +39,7 @@ function valueMatches(v: unknown, t: ColumnType): boolean {
     case 'number': return typeof v === 'number' && Number.isFinite(v);
     case 'boolean': return typeof v === 'boolean';
     case 'date': return typeof v === 'string' && DATE_RE.test(v);
+    case 'user':
     case 'string': return typeof v === 'string';
   }
 }
@@ -66,11 +67,8 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
     if (!Array.isArray(declaredRaw)) return json({ error: 'invalid_dataset', details: ['columns must be an array of {name, type}'] }, 400);
     const declared: DatasetColumn[] = [];
     for (const c of declaredRaw) {
-      const col = c as { name?: unknown; type?: unknown };
-      if (typeof col.name !== 'string' || !COLUMN_TYPES.includes(col.type as ColumnType)) {
-        return json({ error: 'invalid_dataset', details: [`bad column declaration ${JSON.stringify(c)} — types: ${COLUMN_TYPES.join('|')}`] }, 400);
-      }
-      declared.push({ name: col.name, type: col.type as ColumnType });
+      try { declared.push(parseDatasetColumn(c)); }
+      catch (error) { return json({error:'invalid_dataset',details:[error instanceof Error ? error.message : 'Invalid column']},400); }
     }
     // Declared wins; rows are validated against it. Inference fills undeclared columns.
     for (const [i, row] of flat.entries()) {

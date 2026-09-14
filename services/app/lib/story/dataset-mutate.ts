@@ -1,3 +1,5 @@
+import {validateUserWrites} from '@/lib/datasets/user-fields';
+import {DatasetError} from '@/lib/datasets/errors';
 import {artifactState} from '@/lib/artifact-state';
 import {completeMutationReceipt,type MutationReceipt} from '@/lib/mutation-receipt';
 import {generationAuthorization,throttlePublicMutation} from '@/lib/datasets/policy/usage';
@@ -38,7 +40,7 @@ import { isQueryFailure, runMutation, type MutationInput } from '@/lib/sql/engin
 import { LIVE_ARTIFACT_SQL, canWriteDataset, editorScope, type ArtifactRow, type RoleActor } from '@/lib/artifacts';
 import type { DatasetColumn } from './dataset-shape';
 import { loadDatasetRows, storeDatasetRows } from './dataset-store';
-import type { Scalar } from './dataflow';
+import {sqlParams,type Scalar} from './dataflow';
 import { newEditId } from './splice';
 import {createGenerationInvocation} from '@/lib/generation/executor';
 import {services} from '@/lib/services';
@@ -94,6 +96,7 @@ export async function mutateDataset(
   params: Record<string, Scalar> = {},
   guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean;document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
 ): Promise<MutationApplied | MutationRefused> {
+  if(sqlParams(sql).includes('_me')&&!actor.userId)return {reason:'policy_denied',detail:'$_me requires a logged-in user'};
   const db = await getDb();
   const table = 'dataset_rows';
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});
@@ -131,12 +134,13 @@ export async function mutateDataset(
     let policy:DatasetMutationPolicy|undefined;
     try{
       policy=await mutationPolicy(current,actor,selected??{schema:'public',name:'rows'},!!guard.document);
-      out = await generation.run({ policy, table: { name: table, rows, columns }, sql:executedSql, params, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
+      out = await generation.run({ policy, table: { name: table, rows, columns }, sql:executedSql, params:{...params,_me:actor.userId}, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
     }catch(error){return {reason:current.dataset_policy?'policy_denied':'invalid_sql',detail:error instanceof Error?error.message:'Model generation failed'};}
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
     }
 
+    if(columns.some(c=>c.type==='user')&&!Array.isArray(out.userWrites))return {reason:'policy_denied',detail:'The SQL service must support user-field validation'};
     // Store BEFORE the swap: a blob nobody points at is garbage, a pointer to
     // a blob that is not there is a dataset that reads as empty.
     const located = await storeDatasetRows(out.rows);
@@ -164,6 +168,7 @@ export async function mutateDataset(
     // are still the rows on disk, archive the previous state (coalesced, like
     // the edit protocol), and wake every document reading this dataset.
     const commit=async(tx:Queryable)=>{
+     await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
       const locked=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];
       if(!locked||artifactState(locked)!==guard.expectedState)return {rows:[] as ArtifactRow[]};
@@ -217,7 +222,9 @@ export async function mutateDataset(
      if(committed&&guard.receipt)await completeMutationReceipt(tx,guard.receipt,{status:200,body:{id:committed.id,version:committed.version,affected:out.affected,rowCount:out.rows.length}});
      return result;
     };
-    const updated=guard.receipt||guard.expectedState?await db.transaction(commit):await commit(db);
+    let updated;
+    try { updated=guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
+    catch(error) { if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message}; throw error; }
 
     const row = updated.rows[0];
     if (row) {

@@ -13,8 +13,11 @@ import type { GenerationRequest, GenerationResults } from './generation';
 
 export type Scalar = string | number | boolean | null;
 export type Row = Record<string, unknown>;
-export type ColumnType = 'string' | 'number' | 'boolean' | 'date';
-export interface DatasetColumn { name: string; type: ColumnType }
+export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'user';
+export interface UserConstraints { memberOf?: string[]; self?: boolean }
+export interface UserOption { value: string; label: string }
+export interface DatasetColumn { name: string; type: ColumnType; constraints?: UserConstraints }
+
 
 export interface TableResult {
   rows: Row[];
@@ -84,7 +87,12 @@ export interface MutationInput {
   timeoutMs?: number;
 }
 /** A write that ran: the table's new rows and how many rows the statement touched. */
-export interface MutationResult extends TableResult { affected: number; analysis?: MutationAnalysis }
+export interface MutationResult extends TableResult {
+  affected: number;
+  analysis?: MutationAnalysis;
+  /** Actual assigned user fields, after expressions/presets. App validates before commit. */
+  userWrites?: Row[];
+}
 export type MutationOutcome = MutationResult | QueryFailure;
 
 export interface DryRunInput {

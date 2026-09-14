@@ -113,6 +113,7 @@ export function collectRefUses(source: string): RefUse[] | null {
       const image = refId(attrValue(el, 'content'));
       if (image) uses.push({ id: image, kind: 'image' });
     }
+    if(tag==='Value') {const id=refId(attrValue(el,'source'));if(id)uses.push({id,kind:'dataset'});}
     const data = attrValue(el, 'data');
     const viz = attrValue(el, 'viz') as Record<string, unknown> | undefined;
     const recipeRef = viz ? refId(viz.recipe) : null;

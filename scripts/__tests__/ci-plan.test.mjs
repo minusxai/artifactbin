@@ -199,9 +199,10 @@ describe('CI job shape', () => {
     expect(jobs.gates.steps.indexOf(pulls[0])).toBeLessThan(jobs.gates.steps.indexOf(run));
   });
 
-  it('runs one paid smoke leg on a pull request and the cold-start leg on a schedule', () => {
+  it('runs installed smoke and the bounded user flow in parallel, with cold-start nightly', () => {
     const { jobs } = ci();
-    expect(jobs['agent-smoke'].strategy.matrix.include.map((row) => row.mode)).toEqual(['installed']);
+    expect(jobs['agent-smoke'].strategy.matrix.include.map((row) => row.mode)).toEqual(['installed','installed']);
+    expect(jobs['agent-smoke'].strategy.matrix.include.find(row=>row.name==='users').tasks).toBe('users');
     // Both legs stage the platform binary (the bundle cannot resolve DuckDB from a run home). Named
     // as the exact command, not as a substring anywhere in the job, so a comment cannot satisfy it.
     const binary = 'npm run build:binary -w services/cli';

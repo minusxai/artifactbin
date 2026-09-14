@@ -1,3 +1,4 @@
+import {COLUMN_SQL_TYPES} from './column-types';
 import type {
   DuckDBConnection,
   DuckDBPreparedStatement,
@@ -7,6 +8,7 @@ import type {
   MutationAnalysis,
   MutationInput,
   Scalar,
+  Row,
   InsertPermission,
   UpdatePermission,
   DeletePermission,
@@ -108,7 +110,7 @@ async function nativeJson(
     await conn.runAndReadAll(`SELECT ${fn}(${literal(sql)}) AS value`)
   ).getRowObjects();
   const value = JSON.parse(String(rows[0].value));
-  if (value.error) refuse('statement cannot be safely analyzed');
+  if (value.error) refuse(`statement cannot be safely analyzed: ${String(value.error_message??'unsupported statement').split('\n')[0]!.slice(0,240)}`);
   return value;
 }
 function visit(value: unknown, fn: (node: Node) => void) {
@@ -120,12 +122,6 @@ function visit(value: unknown, fn: (node: Node) => void) {
   fn(value as Node);
   for (const v of Object.values(value)) visit(v, fn);
 }
-const DUCK_TYPE: Record<string, string> = {
-  string: 'VARCHAR',
-  number: 'DOUBLE',
-  boolean: 'BOOLEAN',
-  date: 'DATE',
-};
 /**
  * THE STATEMENT AS THE PLANNER MUST SEE IT. `json_serialize_plan` plans TEXT,
  * and `$_row.id` cannot be planned unbound — DuckDB answers an internal error,
@@ -154,7 +150,7 @@ function plannedSql(input: MutationInput): string {
       text = `({${columns
         .map(
           (c) =>
-            `${literal(c.name)}: CAST(NULL AS ${DUCK_TYPE[c.type] ?? 'VARCHAR'})`,
+            `${literal(c.name)}: CAST(NULL AS ${COLUMN_SQL_TYPES[c.type]})`,
         )
         .join(',')}})`;
     } else {
@@ -317,7 +313,7 @@ export async function runPolicyMutation(
     statement: DuckDBPreparedStatement,
     params: Record<string, Scalar>,
   ) => Promise<void>,
-): Promise<{ affected: number; analysis: MutationAnalysis }> {
+): Promise<{ affected: number; analysis: MutationAnalysis; userWrites?: Row[] }> {
   const { operation, permission, names, evidence } = await analysis(
     conn,
     input,
@@ -513,6 +509,13 @@ export async function runPolicyMutation(
     if (Number((await s.runAndReadAll()).getRowObjects()[0].n))
       refuse('a resulting row failed its check');
   }
+  // Inspect candidate assignments, including same-value writes and policy presets.
+  // Unwritten historical identity fields are deliberately absent.
+  const written = new Set(operation === 'insert' ? names : [...evidence.columns, ...('set' in permission ? Object.keys(permission.set ?? {}) : [])]);
+  const userColumns = operation === 'delete' ? [] : input.table.columns.filter(c => c.type === 'user' && written.has(c.name));
+  const userWrites = userColumns.length
+    ? (await conn.runAndReadAll(`SELECT ${userColumns.map(c => quote(c.name)).join(',')} FROM ${temp}`)).getRowObjects()
+    : [];
   const affected = Number(
     (
       await conn.runAndReadAll(`SELECT count(*) AS n FROM ${temp}`)
@@ -530,5 +533,5 @@ export async function runPolicyMutation(
     await conn.run(
       `UPDATE ${quote(input.table.name)} AS target SET ${names.map((n) => `${quote(n)}=candidate.${quote(n)}`).join(',')} FROM ${temp} AS candidate WHERE target.rowid=candidate.__policy_rowid`,
     );
-  return { affected, analysis: evidence };
+  return { affected, analysis: evidence, userWrites };
 }

@@ -35,6 +35,7 @@ interface DataTableProps {
   commentOwner?: string
   /** Absent (the bare registry entry, with no adapter) renders the empty state. */
   rows?: Row[]
+  userLabels?: Record<string,string>
   columns?: DatasetColumn[]
   /** The authored `columns` prop, parsed (lib/story/data-table parseColumnSpecs). Absent = every column. */
   spec?: DataTableColumnSpec[] | null
@@ -87,7 +88,7 @@ const STATIC_ROWS = 50
 const ROW_H = 33
 
 export function DataTable({
-  rows = [], columns = [], spec = null, sort: initialSort = null, height, sticky = true,
+  rows = [], columns = [], userLabels = {}, spec = null, sort: initialSort = null, height, sticky = true,
   totalRows, truncated = false, loading = false, onSortChange, onLoadMore, resolveSrc, rowKey, commentOwner, templates = [], renderCell, className, ...props
 }: DataTableProps) {
   // A CEILING, not a reserved height: a three-row table hugs its rows and a
@@ -215,7 +216,7 @@ export function DataTable({
             {ordered.length === 0 ? (
               <tr style={virtual ? { display: 'block' } : undefined}><td colSpan={Math.max(1, resolved.length)} className="block px-3 py-6 text-center text-muted-foreground">no rows</td></tr>
             ) : visible.map(({ index, start }) => (
-              <DataRow
+              <DataRow userLabels={userLabels}
                 key={rowIdentity(ordered[index], rowKey, index)}
                 row={ordered[index]}
                 commentOwner={rowKey ? commentOwner : undefined}
@@ -248,7 +249,8 @@ export function DataTable({
   )
 }
 
-function DataRow({ commentOwner, commentRowKey, row, columns, style, measure, index, resolveSrc, templates, renderCell }: {
+function DataRow({ userLabels, commentOwner, commentRowKey, row, columns, style, measure, index, resolveSrc, templates, renderCell }: {
+  userLabels:Record<string,string>
   commentOwner?: string
   commentRowKey?: string | number
   row: Row
@@ -281,7 +283,7 @@ function DataRow({ commentOwner, commentRowKey, row, columns, style, measure, in
                 style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
               />
             )}
-            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? formatCell(value, c); })()}</span>
+            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? (c.type==='user'&&typeof value==='string'?userLabels[value]??value:formatCell(value, c)); })()}</span>
           </td>
         )
       })}

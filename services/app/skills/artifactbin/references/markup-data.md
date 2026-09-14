@@ -30,16 +30,11 @@ Published artifacts use `ref:<id>` in source, image and recipe attributes. SQL n
 
 Editable cells: [editing](markup-editing.md).
 
-<!--bundle:skip-->
-## Contents
 
-Declarations · Bindings: embeds · Bindings: controls.
-
-<!--/bundle:skip-->
 ## Declarations (Helmet only)
 
 - `<Value name type default />` — a scalar the reader can change.
-  `type`: `string | number | boolean | date` (default `string`); `default`
+  `type`: `string | number | boolean | date | user` (default `string`); `default`
   must match it (dates `YYYY-MM-DD`); no default = `null`, which is how
   "$region is null" in SQL means "all".<!--bundle:skip--> A scalar also travels in the LINK:
   the document accepts `?$region=EU` (empty = "all"), so you can hand your
@@ -144,3 +139,5 @@ First read [chart authoring](markup-data-authoring.md).
 
 
 [Keyed templates](markup-repeat.md).
+
+[User fields and automatic pickers](databases-users.md).

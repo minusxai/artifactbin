@@ -22,14 +22,26 @@
  * baseline read before it would make `published` true for a document the agent
  * never touched. A setup failure is named and does not spend an agent turn.
  */
+import type {Browser} from 'playwright';
+import type {Credential} from '../../credential';
 import type { MetricKind, MetricValue, Task } from '../../contracts';
 import type { ServedDocument } from '../product';
 
-export const TASK_KINDS = ['publish', 'comment', 'tracker'] as const;
+export const TASK_KINDS = ['publish', 'comment', 'tracker', 'users'] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
+
+/** Privileged fixture services, available only to scorers, never the agent workspace. */
+export interface TaskDriver {
+  browser: Browser;
+  credential: Credential;
+  productUrl: string;
+  createAccount(email:string):Promise<Credential>;
+}
+export interface TaskFixture { state:unknown; brief?:string }
 
 /** What a kind's `setup` is given. Every call it makes is the DRIVER's, and none of it may reach the agent's ledger. */
 export interface SetupContext {
+  driver?:TaskDriver;
   task: Task;
   /** The base the AGENT will be given — this task's own recording proxy. */
   base: string;
@@ -49,6 +61,8 @@ export interface SetupContext {
 
 /** What a kind's `checks` is given. Product truth only: the ledger's questions are the driver's. */
 export interface CheckContext {
+  driver?:TaskDriver;
+  fixture?:TaskFixture;
   task: Task;
   /** The product's OWN address — a scoring read must not land in the agent's ledger. */
   productUrl: string;
@@ -80,7 +94,7 @@ export interface TaskScorer {
   /** What this kind needs of a task's JSON, as a message naming what is missing. Runs at LOAD. */
   validate?(task: Task): string | null;
   /** Driver-side preparation, before the agent runs and before the baseline is read. */
-  setup(ctx: SetupContext): Promise<void>;
+  setup(ctx: SetupContext): Promise<void | TaskFixture>;
   /** Product-side checks, named. Gated only where the task lists them (`verdictFor`). */
   checks(ctx: CheckContext): Promise<Record<string, boolean | null>>;
 }
@@ -103,7 +117,7 @@ export class DriverFailure extends Error {
 }
 
 export type Prepared =
-  | { ok: true; baseline: ServedDocument | null }
+  | { ok: true; baseline: ServedDocument | null; fixture?:TaskFixture }
   | { ok: false; step: string; error: string };
 
 /**
@@ -119,13 +133,14 @@ export async function prepareTask(
   ctx: SetupContext,
   readBaseline: () => Promise<ServedDocument | null>,
 ): Promise<Prepared> {
+  let fixture:void|TaskFixture;
   try {
-    await scorer.setup(ctx);
+    fixture=await scorer.setup(ctx);
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
     return { ok: false, step: e instanceof DriverFailure ? e.step : 'setup', error };
   }
-  return { ok: true, baseline: await readBaseline() };
+  return { ok: true, baseline: await readBaseline(), ...(fixture?{fixture}:{}) };
 }
 
 export type Checked =

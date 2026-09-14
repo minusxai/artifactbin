@@ -1,3 +1,4 @@
+import {resolveUserValues} from './user-values';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
  * The document's DATA checks — everything about a markup document's data that
@@ -34,7 +35,7 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
   if (!parsed.ok) return { ok: true, refs: checked.refs };
   const split = splitHelmet(parsed.nodes);
   const flow: Dataflow = { values: split.content.values, queries: split.content.queries, mutations: split.content.mutations };
-  if (flow.queries.length === 0 && mutationsOf(flow).length === 0) return { ok: true, refs: checked.refs };
+  if (flow.queries.length === 0 && mutationsOf(flow).length === 0 && !flow.values.some(v=>v.kind==='scalar'&&v.source)) return { ok: true, refs: checked.refs };
 
   const dry = await dryRunDataflow(flow, load, split.body);
   if (dry.kind === 'sql') return { ok: false, error: 'invalid_sql', details: dry.details };
@@ -48,20 +49,21 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   | { kind: 'sql'; details: string[] }
   | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]> }
 > {
+  try {flow=await resolveUserValues(flow,load);}catch(error){return {kind:'sql',details:[error instanceof Error?error.message:'Invalid user binding']};}
   const tables: Record<string, { columns: DatasetColumn[] }> = {};
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
   const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
   if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};
   const mutations = mutationsOf(flow);
-  const paramNames = flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name);
+  const paramNames = [...flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name),'_me'];
   const order = queryOrder(flow) ?? [];
   const queries = order.map((n) => flow.queries.find((q) => q.name === n)!);
   const sourceErrors:string[]=[];
   for(const query of queries.filter(q=>q.source)){
     try{
       const ref=await load(query.source!);if(!ref?.query)throw new Error('Dataset source is unavailable');
-      const params=Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.default]));
-      tables[query.name]={columns:(await ref.query(query.sql,params,Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])))).columns};
+      const params={...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.default])),_me:null};
+      tables[query.name]={columns:(await ref.query(query.sql,params,{...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),_me:'user'})).columns};
     }catch(error){sourceErrors.push(`<Query name="${query.name}">: ${error instanceof Error?error.message:'Dataset query failed'}`);}
   }
   const dry = await dryRunQueries({ tables, queries:queries.filter(q=>!q.source), paramNames });
@@ -102,7 +104,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
         }catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
         prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
       }
-      if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
+      if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value','_me']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
     }
     details.push(...await policyRefusals(policed,[...paramNames,'_value']));
   }

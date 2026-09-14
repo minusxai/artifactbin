@@ -1,5 +1,4 @@
 import type {ContentObjects} from '@/lib/story/prepared-objects';
-import {z} from 'zod';
 import type {ArtifactRow,TokenActor} from '@/lib/artifacts';
 import type {StoredContent} from '@/lib/story/input';
 import {json} from '@/lib/http';
@@ -16,8 +15,7 @@ import {queryPostgres} from './postgres';
 import {connectionShape} from './input';
 import type {DatasetColumn} from '@/lib/story/dataset-shape';
 import {catalogInputShape} from './input';
-const identifier=z.string().min(1).max(63).refine(v=>!v.includes('\0'),'Identifier contains a null byte');
-const shape=z.object({kind:z.enum(['stored','postgres']),defaultSchema:identifier.default('public'),refreshSeconds:z.number().int().min(0).max(86400).default(60),tables:z.array(z.object({schema:identifier,name:identifier,source:z.object({schema:identifier,table:identifier}).strict().optional(),columns:z.array(identifier).min(1).optional(),sql:z.string().min(1).max(100000).optional(),rows:z.array(z.record(z.string(),z.unknown())).optional()}).strict()).min(1).max(200)}).strict();
+const shape=catalogInputShape;
 
 /** Transitional legacy normalization stays at this boundary until catalog migration is complete. */
 export function catalogOf(row:{meta:unknown}):DatasetCatalog|null {
@@ -42,7 +40,7 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    const old=previous?catalogOf(previous):null,defaultSchema=definition.defaultSchema??'public';
    if(old&&old.kind!==definition.kind)throw new DatasetError('Create a new dataset to change its source kind');
    if(old&&old.defaultSchema!==defaultSchema)throw new DatasetError('The default schema is fixed to preserve existing query bindings');
-   const tableNames=new Set<string>();for(const table of definition.tables){const tableKey=key(table);if(tableNames.has(tableKey))throw new DatasetError('Table names must be unique within a schema');tableNames.add(tableKey);if(!table.columns?.length||new Set(table.columns).size!==table.columns.length)throw new DatasetError('Every exposed table needs unique columns');const sources=Number(!!table.source)+Number(!!table.modelCellId)+Number(!!table.sql)+Number(!!table.rows);if(sources!==1)throw new DatasetError('Each table requires exactly one source');}
+   const tableNames=new Set<string>();for(const table of definition.tables){const tableKey=key(table);if(tableNames.has(tableKey))throw new DatasetError('Table names must be unique within a schema');tableNames.add(tableKey);if(!table.columns?.length||table.columns.some(c=>typeof c!=='string')||new Set(table.columns).size!==table.columns.length)throw new DatasetError('Every exposed table needs unique columns');const sources=Number(!!table.source)+Number(!!table.modelCellId)+Number(!!table.sql)+Number(!!table.rows);if(sources!==1)throw new DatasetError('Each table requires exactly one source');}
    if(!definition.tables.some(table=>table.schema===defaultSchema))throw new DatasetError('The default schema must exist in the catalog');
    const notebook=definition.notebook??{cells:[]};
    const config=await resolveDatasetConnection(connection,previous?undefined:actor,previous?.id);const discovered=await discoverPostgres(config);
@@ -55,7 +53,7 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    return {format:'dataset',source:canonical,content:'',derivedTitle:null,meta:{catalog,columns:[]}};
   }
   const parsed=shape.safeParse(authored);if(!parsed.success)throw new DatasetError(parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; '));
-  const data=parsed.data;const seen=new Set<string>();for(const t of data.tables){if(seen.has(key(t)))throw new DatasetError('Table names must be unique within a schema');seen.add(key(t));}
+  const data={...parsed.data,defaultSchema:parsed.data.defaultSchema??'public',refreshSeconds:parsed.data.refreshSeconds??60};const seen=new Set<string>();for(const t of data.tables){if(seen.has(key(t)))throw new DatasetError('Table names must be unique within a schema');seen.add(key(t));}
   if(!data.tables.some(t=>t.schema===data.defaultSchema))throw new DatasetError('The default schema must exist in the catalog');
   const old=previous?catalogOf(previous):null;
   if(old&&old.defaultSchema!==data.defaultSchema)throw new DatasetError('The default schema is fixed to preserve existing query bindings');
@@ -69,7 +67,8 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    if(t.source)throw new DatasetError('Stored tables do not have a remote source');
    const prior=old?.tables.find(p=>key(p)===key(t));
    if(!t.rows&&prior?.objectKey){tables.push({...prior});continue;}
-   const stored=await publishDataset({},t.rows,objects);if(stored instanceof Response)return stored;
+   const declared=t.columns?.filter(c=>typeof c!=='string')??prior?.columns.filter(c=>c.type==='user');
+   const stored=await publishDataset(declared?.length?{columns:declared}:{},t.rows,objects);if(stored instanceof Response)return stored;
    tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});
   }
   const catalog:DatasetCatalog={kind:data.kind,defaultSchema:data.defaultSchema,refreshSeconds:data.kind==='stored'?0:data.refreshSeconds,tables};

@@ -31,7 +31,7 @@ export interface CatalogInput {
   notebook?: DatasetNotebook;
   defaultSchema?: string;
   refreshSeconds?: number;
-  tables: Array<{ schema: string; name: string; source?: {schema:string;table:string}; columns?: string[]; sql?: string; rows?: Row[]; modelCellId?: string }>;
+  tables: Array<{ schema: string; name: string; source?: {schema:string;table:string}; columns?: Array<string|DatasetColumn>; sql?: string; rows?: Row[]; modelCellId?: string }>;
 }
 export interface PostgresConfig {
   host: string;

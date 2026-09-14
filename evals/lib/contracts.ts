@@ -129,6 +129,8 @@ export const TaskSchema = z.object({
   /** Story template this comparison brief targets, from the product registry. */
   template: z.enum(STORY_TEMPLATE_NAMES).optional(),
   brief: z.string().min(1),
+  /** Optional screenshot artifacts; functional browser checks still run. */
+  capture: z.boolean().optional(),
   /** Files staged into the agent's working directory before it runs (relative path → contents). */
   files: z.record(z.string(), z.string()).optional(),
   /**

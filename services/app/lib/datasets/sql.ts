@@ -198,7 +198,7 @@ function compileStatement(catalog: DatasetCatalog, input: string | Node, params:
   const bindingTypes = new Map<string, string>();
   // Schema-qualified names must be the catalog names, not SQL aliases:
   // pg_catalog.float8 is DOUBLE PRECISION; pg_catalog.bool is BOOLEAN.
-  const parameterCasts: Record<DatasetColumn['type'], string> = { string: 'text', number: 'float8', boolean: 'bool', date: 'date' };
+  const parameterCasts: Record<DatasetColumn['type'], string> = { string: 'text', number: 'float8', boolean: 'bool', date: 'date', user: 'text' };
   function read(text: string): Node {
     return readSql(text, name => {
       if (!Object.hasOwn(params, name)) fail(`undeclared parameter $${name}`);
@@ -208,7 +208,7 @@ function compileStatement(catalog: DatasetCatalog, input: string | Node, params:
         if (!Object.hasOwn(paramTypes, name)) fail(`missing parameter type for $${name}`);
         const kind = paramTypes[name];
         if (!Object.hasOwn(parameterCasts, kind)) fail('invalid parameter type');
-        const expectedKind = kind === 'date' ? 'string' : kind;
+        const expectedKind = kind === 'date' || kind === 'user' ? 'string' : kind;
         if (value !== null && typeof value !== expectedKind) fail(`parameter $${name} does not match its declared type`);
       }
       if (!bindings.has(name)) {
@@ -233,7 +233,7 @@ function compileStatement(catalog: DatasetCatalog, input: string | Node, params:
       const name = bindingTypes.get(String(node.name));
       // Construct trusted casts after parsing. Authored schema-qualified casts
       // still pass through dataType's rejection path; parameters are never SQL.
-      return name ? { type: 'cast', operand: node, to: { schema: 'pg_catalog', name } } : node;
+      return name ? { type: 'cast', operand: node, to: { ...(catalog.kind==='postgres'?{schema:'pg_catalog'}:{}), name } } : node;
     }
     if (node.type === 'with') {
       const local = new Set(scope);

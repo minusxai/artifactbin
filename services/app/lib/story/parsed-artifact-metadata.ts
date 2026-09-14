@@ -5,8 +5,9 @@ import { splitHelmet } from './helmet';
 import { queryDeps, scalarMatches, type Dataflow } from './dataflow';
 
 /** Bump when declaration parsing or dependency semantics change. */
-const PARSED_ARTIFACT_COMPILER_REVISION = 'dataflow-2';
-const columnType = z.enum(['string', 'number', 'boolean', 'date']);
+const PARSED_ARTIFACT_COMPILER_REVISION = 'dataflow-user-1';
+const columnType = z.enum(['string', 'number', 'boolean', 'date', 'user']);
+const constraints=z.object({memberOf:z.array(z.string()).optional(),self:z.boolean().optional()}).strict();
 const scalar = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
 const name = z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/).refine(v => !v.startsWith('ref_'));
 const span = { start: z.number().int().nonnegative(), end: z.number().int().nonnegative() };
@@ -14,8 +15,8 @@ const query = { ...span, name, sql: z.string(), params: z.array(z.string()), ref
 // Strict nested schemas intentionally admit declarations, never runtime state or ACL.
 const flowSchema: z.ZodType<Dataflow> = z.object({
   values: z.array(z.union([
-    z.object({ ...span, kind: z.literal('scalar'), name, type: columnType, default: scalar }).strict().refine(v => scalarMatches(v.default, v.type)),
-    z.object({ ...span, kind: z.literal('table'), name, rows: z.array(z.record(z.string(), scalar)), columns: z.array(z.object({ name: z.string(), type: columnType }).strict()) }).strict(),
+    z.object({ ...span, kind: z.literal('scalar'), name, type: columnType, source:z.string().optional(),column:z.string().optional(),constraints:constraints.optional(),default: scalar }).strict().refine(v => scalarMatches(v.default, v.type)),
+    z.object({ ...span, kind: z.literal('table'), name, rows: z.array(z.record(z.string(), scalar)), columns: z.array(z.object({ name: z.string(), type: columnType,constraints:constraints.optional() }).strict()) }).strict(),
   ])),
   queries: z.array(z.object(query).strict()),
   mutations: z.array(z.object({ ...query, scope: z.literal('local').optional(), target: z.string(), expectedAffected: z.number().int().nonnegative().optional() }).strict()).optional(),
@@ -48,7 +49,7 @@ export function compileParsedArtifactMetadata(source: string): ParsedArtifactMet
   const { content } = splitHelmet(parsed.nodes);
   // The parser accepts extra authored column properties; persist only the
   // actual DatasetColumn contract so valid metadata never reparses forever.
-  const values=content.values.map(value=>value.kind==='table'?{...value,columns:value.columns.map(({name,type})=>({name,type}))}:value);
+  const values=content.values.map(value=>value.kind==='table'?{...value,columns:value.columns.map(({name,type,constraints})=>({name,type,...(constraints?{constraints}:{})}))}:value);
   const flow: Dataflow = { values, queries: content.queries, ...(content.mutations.length ? { mutations: content.mutations } : {}) };
   return { schemaVersion: 1, compilerRevision: PARSED_ARTIFACT_COMPILER_REVISION, sourceHash: hash(source), flow, queryDependencies: dependencies(flow) };
 }

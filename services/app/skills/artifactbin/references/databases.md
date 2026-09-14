@@ -85,3 +85,5 @@ Create and update a dataset with `afbin push` ([datasets](publishing-datasets.md
 Use `source="ref:<id>"` to choose the dataset and its exposed table names in SQL. Flat uploads expose `public.rows`.
 
 Operators run `node scripts/dataset-catalog-migrate.mjs --url <origin>` with `ADMIN__SECRET` in the environment. Dry-run is the default; `--apply` performs it. Inspect the report first. The migration updates catalogs and query declarations in heads and retained versions without changing logical version numbers. Multiple-source queries get explicit upstream queries and retain local joins. Unverifiable SQL, history limits and concurrent edits refuse the affected artifact atomically. Reruns skip completed work. No deployment or production migration happens automatically.
+
+Stored `Table.columns` accepts `{name,type,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. Postgres whitelist columns remain strings.
