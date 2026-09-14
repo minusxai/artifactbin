@@ -90,6 +90,6 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
   assert.ok(rewritten.includes('"nominal"}}}}} />'),rewritten);
   // …and validate then answers what was verified, so no hand-rolled JSON check is needed.
   assert.deepEqual(result.files[0].diagnostics.filter((d:{severity?:string})=>d.severity!=='notice'),[]);
-  assert.deepEqual(result.verified,[{path:'doc.jsx',title:null,queries:['q'],charts:1,checks:['markup validated','1 query dry-run against the published dataset','1 chart checked against query columns','title and metadata accepted']}]);
+  assert.deepEqual(result.verified,[{path:'doc.jsx',title:'Braces',queries:['q'],charts:1,checks:['markup validated','1 query dry-run against the published dataset','1 chart checked against query columns','title and metadata accepted']}]);
  }finally{await rm(root,{recursive:true,force:true});}
 });

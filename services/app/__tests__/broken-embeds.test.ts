@@ -179,13 +179,14 @@ describe('a JSX syntax error points at the character', () => {
   // the commonest way a big data document breaks — the eval runs are full of it.)
   const bad = '<div className="p-8">\n  <p>fine</p>\n  <Question data="$q" viz={{"kind":"bar"} />\n</div>';
   // One `}` too MANY is repaired at the door (lib/jsx/repair) and echoed; a missing one stays the refusal above.
-  const extra = declared('<Question data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"revenue","type":"quantitative"}}}}}} />');
+  // Built inside the test: `declared` needs the dataset id the setup mints.
+  const extra = () => declared('<Question data="$rows" viz={{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"revenue","type":"quantitative"}}}}}} />');
 
   it('repairs a stray closing brace and says so, instead of refusing the document', async () => {
-    const { status, body } = await create({ markup: extra });
-    expect(status).toBe(201);
-    expect(body.repairs?.[0]?.code).toBe('unbalanced_braces');
-    expect(body.repairs[0].message).toMatch(/removed 1 closing brace/);
+    const { status, body } = await create({ markup: extra() });
+    expect(status, JSON.stringify(body)).toBe(201);
+    expect(body.source_repairs?.[0]?.code, JSON.stringify(body)).toBe('unbalanced_braces');
+    expect(body.source_repairs[0].message).toMatch(/removed 1 closing brace/);
   });
 
   it('carries a span and the offending source, in the caller\'s own coordinates', async () => {

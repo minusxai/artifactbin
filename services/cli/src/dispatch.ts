@@ -222,7 +222,9 @@ async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array
   if(!file.document||!file.bytes)continue;
   const {split}=validateMarkupStructure(file.document.body);if(!split)continue;
   let charts=0;const count=(nodes:JsxNode[])=>{for(const n of nodes){if(n.type!=='element')continue;if(n.tag==='Question')charts++;count(n.children);}};count(split.body);
-  const queries=split.content.queries.map(q=>q.name);
+  // Counted by TAG, not by parsed declaration: before push a query may still name a local CSV
+ // (`source="./rows.csv"`), which the declaration parser refuses until sync rewrites it to a ref.
+ const queries=(split.helmet?.children??[]).flatMap(n=>n.type==='element'&&n.tag==='Query'?[(v=>v?.static&&typeof v.json==='string'?v.json:'')(n.attributes.find(a=>a.name==='name')?.value)]:[]).filter(Boolean);
   out.push({path:file.path,title:split.content.title??file.document.metadata.title??null,queries,charts,
    checks:['markup validated',...(queries.length?[`${queries.length} quer${queries.length===1?'y':'ies'} dry-run against the published dataset`]:[]),...(charts?[`${charts} chart${charts===1?'':'s'} checked against query columns`]:[]),'title and metadata accepted']});
  }
