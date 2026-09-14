@@ -88,7 +88,10 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
           const output = await Promise.race([
-            current.worker.then(worker => worker.run(input.code)),
+            current.worker.then(worker => {
+              if (current.status !== 'idle') throw new Error('Session ended before worker startup');
+              return worker.run(input.code);
+            }),
             new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Script deadline exceeded')), SESSION_LIMITS.scriptMs); }),
           ]);
           if (current.status !== 'idle') return;
@@ -96,6 +99,7 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
           Object.assign(result, output, { status: output.error ? 'failed' : 'completed' });
           current.pages = output.pages;
         } catch (error) {
+          if (current.status !== 'idle') return;
           result.status = 'lost'; result.error = { code: 'SESSION_LOST', message: String((error as Error).message).slice(0, 500) };
           await close(current, 'lost');
         } finally { clearTimeout(timer); current.touched = Date.now(); }

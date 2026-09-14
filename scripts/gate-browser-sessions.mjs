@@ -1,7 +1,7 @@
 /** Live Linux worker gate: real CLI, real artifact runtime, and OS containment. CI only. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -29,6 +29,13 @@ const cli = async (args, code) => {
   try { result = JSON.parse(stdout); } catch { throw new Error(`Invalid CLI output: ${stderr.slice(-1000)}`); }
   return result;
 };
+const evidence = path.resolve('tmp/browser-session-evidence');
+await mkdir(evidence, {recursive:true});
+const saveImage = async (name, attachment) => {
+  const bytes = Buffer.from(attachment.base64, 'base64');
+  assert(bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])));
+  await writeFile(path.join(evidence, name+'.png'), bytes);
+};
 const ids = [];
 try {
   const markup = count => `<Helmet><Value name="count" type="number" default={${count}}/><Query name="result">{\`select $count as n\`}</Query></Helmet><h1>Session counter</h1><Number data="$result" col="n"/><Iframe title="Counter widget" height={120}><button id="add">Add one</button><p id="value">Waiting</p><script>{\`const stop=mx.subscribe(['count'],s=>document.getElementById('value').textContent=String(s.signals.count.value));document.getElementById('add').onclick=async()=>{const s=await mx.read(['count']);await mx.set({count:s.signals.count.value+1})};addEventListener('pagehide',stop);\`}</script></Iframe>`;
@@ -50,13 +57,14 @@ try {
   `);
   assert.equal(first.status, 'completed', JSON.stringify(first)); ids.push(first.session_id);
   assert.equal(first.pages.length, 2); assert.equal(first.attachments[0].mime, 'image/png');
+  await saveImage('counter', first.attachments[0]);
   assert.deepEqual(first.result.map(s => s.signals.count.value), [3,7]);
   const pageId = first.pages.find(page => page.artifact_id === artifacts[0]).page_id;
   const resumed = await cli(['script', first.session_id], `
     const page = pages[${JSON.stringify(pageId)}];
     const widget = page.frameLocator('iframe[title="Counter widget"]').frameLocator('iframe');
     await widget.getByRole('button',{name:'Add one'}).click();
-    await page.waitForFunction(() => window.mx.read(['count']).then(s => s.signals.count.value===4));
+    await widget.locator('#value').filter({hasText:/^4$/}).waitFor();
     return await page.evaluate(() => window.mx.read(['count']));
   `);
   assert.equal(resumed.status, 'completed', JSON.stringify(resumed)); assert.equal(resumed.result.signals.count.value,4);
@@ -82,7 +90,7 @@ try {
   assert.equal(refused.error.code,'SESSION_LOST');
   // Replay saved pi/Fireworks submissions against the shipped runtime. Only fixture IDs are rebound.
   const widgetSource = await readFile(new URL('./fixtures/mx-agent/widget.js',import.meta.url),'utf8');
-  const agentMarkup = '<Helmet><Value name="region" default="East"/><Value name="taskTitle" default="untouched"/><Value name="tasks" type="table" value={[{title:"Existing"}]}/><Query name="sales">{`select $region || \' sales\' as name, case when $region=\'West\' then 200 else 100 end as revenue`}</Query><Mutation name="addTask">{`insert into tasks (title) values ($taskTitle)`}</Mutation></Helmet><h1>Agent transfer fixture</h1><Iframe title="Agent widget" height={240}><select id="region" aria-label="Region"><option value="East">East</option><option value="West">West</option></select><table><tbody id="rows"/></table><input id="label" aria-label="Task title"/><button id="add">Add task</button><p id="error"/><script>{'+JSON.stringify(widgetSource)+'}</script></Iframe>';
+  const agentMarkup = '<Helmet><Value name="region" default="East"/><Value name="taskTitle" default="untouched"/><Value name="tasks" type="table" value={[{title:"Existing"}]}/><Query name="sales">{`select $region || \' total\' as name, case when $region=\'West\' then 200 else 100 end as revenue`}</Query><Mutation name="addTask">{`insert into tasks (title) values ($taskTitle)`}</Mutation></Helmet><h1>Agent transfer fixture</h1><Iframe title="Agent widget" height={240}><select id="region" aria-label="Region"><option value="East">East</option><option value="West">West</option></select><table><tbody id="rows"/></table><input id="label" aria-label="Task title"/><button id="add">Add task</button><p id="error"/><script>{'+JSON.stringify(widgetSource)+'}</script></Iframe>';
   const published = await fetch(`${base}/api/artifacts`, {method:'POST',headers,body:JSON.stringify({markup:agentMarkup})});
   const agentArtifact = await published.json(); assert(agentArtifact.id,JSON.stringify(agentArtifact));
   const openSource = (await readFile(new URL('./fixtures/mx-agent/open.js',import.meta.url),'utf8')).replace('/a/sales01','/a/'+agentArtifact.id);
@@ -99,13 +107,18 @@ try {
     const page = pages[${JSON.stringify(agentPageId)}];
     const frame = page.frameLocator('iframe[title="Agent widget"]').frameLocator('iframe');
     await frame.getByLabel('Region').selectOption('West');
-    await frame.getByText('West sales',{exact:true}).waitFor();
+    await frame.getByText('West total',{exact:true}).waitFor();
     await page.evaluate(()=>mx.set({region:'East'}));
-    await frame.getByText('East sales',{exact:true}).waitFor();
+    await frame.getByText('East total',{exact:true}).waitFor();
     if (await frame.getByLabel('Region').inputValue()!=='East') throw new Error('Parent selection did not synchronize');
     await frame.getByLabel('Task title').fill('Widget task');
     await frame.getByRole('button',{name:'Add task'}).click();
-    await page.waitForFunction(()=>mx.read(['tasks']).then(s=>s.signals.tasks.value.rows.some(row=>row.title==='Widget task')));
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { stop(); reject(new Error('Task did not appear')); }, 5000);
+      const stop = mx.subscribe(['tasks'], s => {
+        if (s.signals.tasks.value.rows.some(row => row.title === 'Widget task')) { clearTimeout(timer); stop(); resolve(null); }
+      });
+    }));
     if (await frame.getByRole('button',{name:'Add task'}).isDisabled()) throw new Error('Mutation did not restore button');
     await output.image(await page.screenshot());
     return await page.evaluate(()=>mx.read(['region','taskTitle','tasks']));
@@ -113,6 +126,7 @@ try {
   assert.equal(widget.status,'completed',JSON.stringify(widget));
   assert.equal(widget.result.signals.taskTitle.value,'untouched');
   assert.equal(widget.attachments.length,1);
+  await saveImage('pi-fireworks-widget', widget.attachments[0]);
   console.log('browser-sessions: multi-artifact, iframe/API parity, resume, image, errors, receipt recovery, ownership, filesystem/network containment, and hard deadline passed');
 } finally {
   for (const session_id of ids) await request({op:'close',session_id}).catch(() => {});

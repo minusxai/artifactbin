@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest';
-import { createBrowserSessions } from '../src/sessions';
+import { createBrowserSessions, type SessionWorker } from '../src/sessions';
 
 it('persists execution IDs before waiting, serializes scripts, and refuses cross-owner access and replay', async () => {
   const release: Array<() => void> = [];
@@ -24,5 +24,22 @@ it('persists execution IDs before waiting, serializes scripts, and refuses cross
     await sessions.request({ actor, op: 'close', session_id: 'one' });
     expect(close).toHaveBeenCalledOnce();
     expect((await sessions.request({ ...first, execution_id: 'third' })).error?.code).toBe('SESSION_LOST');
+  } finally { await sessions.close(); }
+});
+
+it('never starts a script after closing a session whose worker is still starting', async () => {
+  let admit!: (worker: SessionWorker) => void;
+  const run = vi.fn(async () => ({ result: 'too late', pages: [], attachments: [] }));
+  const close = vi.fn(async () => {});
+  const sessions = createBrowserSessions(() => new Promise(resolve => { admit = resolve; }));
+  const actor = { credential: 'bearer' as const, tokenId: 'owner' };
+  try {
+    await sessions.request({ actor, op: 'script', session_id: 'starting', execution_id: 'first', create: true, code: 'commit()' });
+    await vi.waitFor(async () => expect((await sessions.request({ actor, op: 'status', session_id: 'starting' })).status).toBe('running'));
+    const closing = sessions.request({ actor, op: 'close', session_id: 'starting' });
+    admit({ run, close });
+    await closing;
+    expect(run).not.toHaveBeenCalled();
+    expect((await sessions.request({ actor, op: 'status', session_id: 'starting', execution_id: 'first' })).status).toBe('closed');
   } finally { await sessions.close(); }
 });

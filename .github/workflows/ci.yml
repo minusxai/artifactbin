@@ -522,6 +522,12 @@ jobs:
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: browser-session-images-${{ matrix.shard }}
+          path: tmp/browser-session-evidence/*.png
+          if-no-files-found: ignore
 
   # THE IMAGE IS THE ARTIFACT THAT DEPLOYS, and nothing else here proves it
   # builds or runs. `npm run build` produces the bundle from the FULL
