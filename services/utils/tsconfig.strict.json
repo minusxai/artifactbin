@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    // Shared services must also compile in Node consumers without DOM globals.
+    "lib": ["esnext"],
+    "types": ["node"],
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     // `incremental` is inherited from the base config; its default buildinfo
