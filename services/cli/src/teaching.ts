@@ -66,7 +66,7 @@ export function helpBundle(template:string,origin:string=DEFAULT_SERVER):string{
   ['publishing-datasets',helpTopics['publishing-datasets']!],[`starter: ${template}`,helpTopics[template]!],
  ];
  const body=parts.map(([name,text])=>`\n# ${name}\n\n${text.trim()}\n`).join('');
- return withTeachingOrigin(`Everything a ${template} needs, in reading order. Read it once; then write the whole document, publish, and improve the published version. On a refusal, run afbin help errors; for sync and recovery, afbin help publishing.\n${body}`,origin);
+ return withTeachingOrigin(`Everything a ${template} needs, in reading order. Read it once; publish a first version early, then extend it in edits. On a refusal, run afbin help errors; for sync and recovery, afbin help publishing.\n${body}`,origin);
 }
 export function helpDocument(topic?:string,format='text',origin:string=DEFAULT_SERVER):string{
  return withTeachingOrigin(helpBody(topic,format,origin),origin);
