@@ -321,8 +321,34 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   const type = (Component ?? SVG_TAG_CASE[node.tag.toLowerCase()] ?? node.tag.toLowerCase()) as React.ElementType;
   // Void HTML elements must not receive children (React throws).
   const kids = children.length > 0 ? children : undefined;
-  const element = React.createElement(type, { ...props, key: options.keyFor?.(path) ?? path }, ...(kids ?? []));
+  // Decided here, never read from the author: a trigger that already holds a
+  // control must not draw a second one around it (wrapsControl below).
+  const trigger = isComponent && BUTTON_TRIGGERS.has(node.tag) ? { wrapsControl: wrapsControl(node) } : null;
+  const element = React.createElement(type, { ...props, ...trigger, key: options.keyFor?.(path) ?? path }, ...(kids ?? []));
   return options.decorateElement ? options.decorateElement(element, node, path) : element;
+}
+
+/**
+ * The story components that render a plain `<button>` around whatever the
+ * author put in them. The other triggers (Tabs/Accordion/Collapsible/Popover)
+ * carry `role`/`aria-expanded`/`aria-controls` on that button and are left
+ * alone: they are not interchangeable with a span.
+ */
+const BUTTON_TRIGGERS = new Set(['DialogTrigger', 'DialogClose']);
+
+/**
+ * The tags that draw something INTERACTIVE, which the HTML content model
+ * forbids inside a `<button>`: the browser closes the button early and promotes
+ * the inner control to its sibling, so the parsed page and React's tree
+ * disagree and hydration fails with error 418 (components/kit/dialog
+ * DialogTrigger; the same parse-time reshaping as a `<div>` in a `<tbody>`).
+ */
+const INTERACTIVE_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label', 'Button', 'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch']);
+
+/** Does this trigger already hold a control of its own — at any depth? */
+function wrapsControl(node: JsxElement): boolean {
+  return node.children.some((child) => child.type === 'element'
+    && (INTERACTIVE_TAGS.has(child.tag) || INTERACTIVE_TAGS.has(child.tag.toLowerCase()) || wrapsControl(child)));
 }
 
 /** The bound `src` on an `<img>`, or null when it carries no reference. */
