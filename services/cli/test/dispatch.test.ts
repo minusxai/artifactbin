@@ -209,3 +209,44 @@ test('a refusal that names files stops at three and counts the rest',async()=>{
   assert.match(err.join(''),/… and 1 more files?; run afbin validate for the rest\./,err.join(''));
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+/**
+ * THE CODE IS NAMED ONCE. `http.ts` builds a refusal's message as "<code>: <text>" so the message
+ * carries its own code wherever it is read, and the printer then prefixed the code again — every
+ * human refusal line read "invalid_sql: invalid_sql: …". The printer owns the human line, so it is
+ * the one place that fixes it: a message that already opens with its code is printed from after it.
+ * `--json` is untouched — its `message` is still exactly what the server's error produced.
+ */
+test('a refusal names its code once on the human line, whatever shape the message arrived in',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-code-once-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);
+  await writeFile(join(root,'doc.jsx'),'---\ntitle: Sales\n---\n<article><p>Hello</p></article>\n');
+  const run=async(payload:Record<string,unknown>,json=false)=>{
+   const out:string[]=[];const err:string[]=[];
+   const code=await runCli(['push','doc.jsx','--server','https://example.com',...(json?['--json']:[])],{cwd:root,home:root,env:{},interactive:false,color:false,
+    stdout:s=>out.push(s),stderr:s=>err.push(s),fetch:async()=>Response.json(payload,{status:400,headers:{'X-Artifactbin-Account':'usr_seed'}})});
+   return{code,text:err.join(''),json:out.join('')};
+  };
+  const refused=await run({error:'invalid_sql',message:'Dataset SQL: function strptime is not allowed'});
+  assert.equal(refused.text.trimEnd().split('\n')[0],'invalid_sql: Dataset SQL: function strptime is not allowed',refused.text);
+  assert.ok(!refused.text.includes('invalid_sql: invalid_sql'),refused.text);
+  // The envelope keeps the server's own message, code and all: only the printed line changed.
+  const enveloped=await run({error:'invalid_sql',message:'Dataset SQL: function strptime is not allowed'},true);
+  assert.equal(JSON.parse(enveloped.json).error.message,'invalid_sql: Dataset SQL: function strptime is not allowed');
+  // A details-only refusal: http.ts builds the message out of the details, still behind one code.
+  const bare=await run({error:'invalid_sql',details:['<Query name="q">: column "reveune" does not exist']});
+  assert.equal(bare.text.trimEnd().split('\n')[0],'invalid_sql: <Query name="q">: column "reveune" does not exist',bare.text);
+  // And a message that never carried its code is printed whole, with the code in front exactly once.
+  const plain=await run({error:'quota_exceeded',message:'Your account is over its byte quota.'});
+  assert.equal(plain.text.trimEnd().split('\n')[0],'quota_exceeded: Your account is over its byte quota.',plain.text);
+  // auth_required writes its own message the same way, and its details are `{http_status:401}` —
+  // a value for --json, never a line for a person.
+  const err:string[]=[];
+  const unauthorized=await runCli(['push','doc.jsx','--dry-run','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
+   stdout:()=>{},stderr:s=>err.push(s),fetch:async()=>new Response('{}',{status:401,headers:{'Content-Type':'application/json'}})});
+  assert.equal(unauthorized,2,err.join(''));
+  assert.equal(err.join('').trimEnd().split('\n')[0],'auth_required: sign-in is required.',err.join(''));
+  assert.ok(!err.join('').includes('http_status'),err.join(''));
+ }finally{await rm(root,{recursive:true,force:true});}
+});
