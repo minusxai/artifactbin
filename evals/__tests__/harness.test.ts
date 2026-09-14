@@ -327,3 +327,10 @@ describe('working directory', () => {
     expect(inv.argv).toEqual(expect.arrayContaining(['--dir', '/tmp/run/cwd']));
   });
 });
+
+it('passes the selected OpenCode reasoning variant without altering the task prompt',()=>{
+ const c=ctx({harness:'opencode',model:'fireworks-ai/accounts/fireworks/models/glm-5p3-flash',variant:'low'});
+ const argv=opencode.invocation(c).argv;
+ expect(argv.slice(argv.indexOf('--variant'),argv.indexOf('--variant')+2)).toEqual(['--variant','low']);
+ expect(argv.at(-1)).toBe(c.prompt);
+});

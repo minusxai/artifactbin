@@ -396,7 +396,8 @@ jobs:
             exit 1
           fi
       # The harness this job drives — one global npm package, no login.
-      - run: npm i -g opencode-ai
+      - run: npm i -g opencode-ai@1.18.31
+      - run: opencode --version
       # `installed` stages the PLATFORM BINARY when it exists (evals/lib/cli-kit.ts prefers it: the
       # .mjs bundle cannot resolve DuckDB from a run home, so the data task would fail on it). The
       # binary build is 11–14 s measured; the bundle is still built for the CLI's own tests.
@@ -406,7 +407,7 @@ jobs:
       - run: |
           umask 077
           if [ '${{ matrix.name }}' = users ]; then
-            eval_command=(node --import tsx evals/bounded.ts)
+            eval_command=(node --import tsx evals/bounded.ts --variant=low)
           else
             eval_command=(npm run eval --)
           fi
