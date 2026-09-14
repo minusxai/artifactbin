@@ -30,6 +30,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '../index';
 import { repairJsxSource } from '../repair';
+import { syntaxErrorDetail } from '../syntax-error';
 
 const escaped = '<article><Helmet><Query name="q">{\\`select 1\\`}</Query></Helmet><p>hi</p></article>';
 
@@ -121,5 +122,72 @@ describe('repairJsxSource — brace counts', () => {
   });
   it('leaves a document alone when the fault is something else', () => {
     expect(repairJsxSource('<article><p>unclosed</article>')).toBeNull();
+  });
+});
+
+/**
+ * THE SAME FAULT TWICE. The repair used to fix the first `viz={{{` (or the first stray `}`), re-parse
+ * ONCE, and refuse everything that still failed — so a document carrying TWO charts built the same
+ * wrong way was refused with `fixed:false` and cost three calls to recover (claude-code scrolly,
+ * production run 15). An agent that makes a mistake once makes it in every chart it writes, so the
+ * repair iterates: fix at the parse error, re-parse, again, bounded — and the message states the
+ * TOTAL, because "collapsed 1" against a document with two would teach the wrong lesson.
+ */
+describe('repairJsxSource — the same fault more than once', () => {
+  const twoTriples = [
+    '<article>',
+    '<Question data="$a" viz={{{"kind":"vega-lite","spec":{"mark":"line"}}}} />',
+    '<Question data="$b" viz={{{"kind":"vega-lite","spec":{"mark":"bar"}}}} />',
+    '</article>',
+  ].join('\n');
+  const twoStrays = [
+    '<article>',
+    '<Question data="$a" viz={{"kind":"line"}}} />',
+    '<Question data="$b" viz={{"kind":"bar"}}}} />',
+    '</article>',
+  ].join('\n');
+  const secondMissing = [
+    '<article>',
+    '<Question data="$a" viz={{"kind":"line"}}} />',
+    '<Question data="$b" viz={{"kind":"bar","spec":{"mark":"bar"}} />',
+    '</article>',
+  ].join('\n');
+
+  it('collapses every `{{{` opening, not the first, and counts them', () => {
+    const out = repairJsxSource(twoTriples);
+    expect(out, 'two occurrences of one fault are still one repairable document').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source.includes('{{{')).toBe(false);
+    expect(out!.repair.code).toBe('unbalanced_braces');
+    expect(out!.repair.message).toMatch(/collapsed 2 `viz=\{\{\{` openings/);
+  });
+
+  it('removes stray closing braces at every site and reports the total', () => {
+    const out = repairJsxSource(twoStrays);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/removed 3 closing braces/);
+    expect(out!.repair.removed).toBe(3);
+  });
+
+  it('reports a backtick repair and a brace repair together, never one silently', () => {
+    const both =
+      '<article><Helmet><Query name="q">{\\`select 1\\`}</Query></Helmet>' +
+      '<Question data="$q" viz={{{"kind":"line"}}} /></article>';
+    const out = repairJsxSource(both);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('{`select 1`}');
+    expect(out!.source).toContain('viz={{"kind":"line"}}');
+    expect(out!.repair.message).toMatch(/backslash/);
+    expect(out!.repair.message).toMatch(/viz=\{\{\{/);
+  });
+
+  it('still refuses when a later fault is a genuinely missing brace, and the hint names its line', () => {
+    expect(repairJsxSource(secondMissing), 'where a missing brace belongs is a guess, however many repairs preceded it').toBeNull();
+    const parsed = parseJsx(secondMissing);
+    expect(parsed.ok).toBe(false);
+    const detail = syntaxErrorDetail(secondMissing, parsed as Extract<typeof parsed, { ok: false }>);
+    expect(detail.message).toMatch(/`viz=\{` opened on line 3 is never closed — it needs 1 more `\}`/);
   });
 });
