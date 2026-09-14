@@ -279,3 +279,87 @@ describe('repairJsxSource — a JSON value where an expression belongs', () => {
     expect(detail.message).toMatch(/viz attribute is missing its object opening brace/);
   });
 });
+
+/**
+ * THE DOUBLE BRACE ON AN ARRAY — the object form applied to a value that is not an object.
+ * `columns={{[{"col":"team", …}]}}`, measured on the merged build (claude-code dashboard, live leg
+ * local23): the door answered "JSX syntax error at line 117, column 78: Unexpected token", no hint,
+ * no repair, and it took two calls to inspect and fix. `attr={{` followed by anything that is not an
+ * object — an array, a string, a number, true/false/null — is one brace too many on each side, and
+ * removing the inner pair is the only repair the shape allows.
+ */
+describe('repairJsxSource — a JSON array in the object form’s braces', () => {
+  const one = '<article><DataTable data="$q" columns={{[{"col":"team","title":"Team"}]}} /></article>';
+  const two = [
+    '<article>',
+    '<DataTable data="$a" columns={{[{"col":"team"}]}} />',
+    '<DataTable data="$b" columns={{[{"col":"region"}]}} />',
+    '</article>',
+  ].join('\n');
+  const mixed = [
+    '<article>',
+    '<DataTable data="$a" columns={{[{"col":"team"}]}} />',
+    '<Question data="$b" viz={{{"kind": "vega-lite", "spec": {"mark": "bar"}}}} />',
+    '</article>',
+  ].join('\n');
+
+  it('removes the extra brace pair and the result parses', () => {
+    const out = repairJsxSource(one);
+    expect(out, 'an array in double braces is one repair, not a guess').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('columns={[{"col":"team","title":"Team"}]}');
+    expect(out!.repair.code).toBe('unbalanced_braces');
+    expect(out!.repair.message).toMatch(/unwrapped 1 JSON array attribute value/);
+    expect(out!.repair.message).toMatch(/on line 1/);
+  });
+
+  it('unwraps every occurrence and counts them', () => {
+    const out = repairJsxSource(two);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/unwrapped 2 JSON array attribute values/);
+    expect(out!.repair.message).toContain('on line 2, line 3');
+    expect(out!.source).toContain('columns={[{"col":"team"}]}');
+    expect(out!.source).toContain('columns={[{"col":"region"}]}');
+  });
+
+  it('reports an unwrap and a collapsed `{{{` object in the same document, each by name', () => {
+    const out = repairJsxSource(mixed);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/unwrapped 1 JSON array attribute value/);
+    expect(out!.repair.message).toMatch(/collapsed 1 `viz=\{\{\{` opening/);
+    expect(out!.source).toContain('columns={[{"col":"team"}]}');
+    expect(out!.source).toContain('viz={{"kind": "vega-lite"');
+  });
+
+  /**
+   * The scanner reads text, so the same characters INSIDE a `<Query>`'s SQL match it — and that text
+   * is content, not markup. The position gate is what keeps the repair off it: the parser stopped at
+   * the stray `}` further on, so that is what gets repaired, and the SQL arrives exactly as written.
+   * Without the gate this document still parses after the edit, so the corruption would be silent.
+   */
+  it('never edits the same characters inside a template literal, and repairs the real fault instead', () => {
+    const inString = '<article><Helmet><Query name="q">{`select \'columns={{[1]}}\' as note from public.rows`}</Query></Helmet>' +
+      '<Question data="$q" viz={{"kind":"table"}}} /></article>';
+    const out = repairJsxSource(inString);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain("select 'columns={{[1]}}' as note");
+    expect(out!.repair.message).toMatch(/removed 1 closing brace/);
+    expect(out!.repair.message).not.toMatch(/unwrapped/);
+  });
+
+  /** The object form on an OBJECT is the correct spelling and must survive untouched. */
+  it('leaves a legal array attribute and a legal `{{…}}` object alone', () => {
+    const legal = '<article><Select value="$g" options={["a","b"]} />' +
+      '<Question data="$q" viz={{"kind": "vega-lite", "spec": {"mark": "line"}}} /><p>ok</p></article>';
+    expect(parseJsx(legal).ok, 'this fixture must already parse or it proves nothing').toBe(true);
+    expect(repairJsxSource(legal)).toBeNull();
+    const withFault = '<article><Select options={["a","b"]} /><DataTable columns={{[{"col":"team"}]}} /></article>';
+    const out = repairJsxSource(withFault);
+    expect(out).not.toBeNull();
+    expect(out!.source).toContain('options={["a","b"]}');
+    expect(out!.source).toContain('columns={[{"col":"team"}]}');
+  });
+});

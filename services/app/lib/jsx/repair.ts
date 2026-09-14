@@ -36,7 +36,7 @@
  * one-character-at-a-time loop makes the document worse and then gives up.
  */
 import { parseJsx } from './parse';
-import { extraClosing, tripleOpen } from './syntax-error';
+import { balancedClose, balancedString, doubleWrapped, extraClosing, tripleOpen } from './syntax-error';
 
 /** What was changed on the way in, for the reply to carry. */
 export interface SourceRepair {
@@ -55,19 +55,7 @@ export interface SourceRepair {
 const MAX_PASSES = 25;
 
 /** What one repaired document accumulated, in the words the reply will carry. */
-interface BraceCount { collapsed: string[]; strays: Array<{ attr: string; line: number }>; wrapped: Array<{ attr: string; line: number }>; removed: number }
-
-/** Where the expression that opens at `open` closes, counting braces and skipping strings. */
-function balancedClose(source: string, open: number): number {
-  let depth = 0, quote: string | null = null;
-  for (let i = open; i < source.length; i++) {
-    const ch = source[i];
-    if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = null; continue; }
-    if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
-    if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) return i; }
-  }
-  return -1;
-}
+interface BraceCount { collapsed: string[]; strays: Array<{ attr: string; line: number }>; wrapped: Array<{ attr: string; line: number }>; unwrapped: Array<{ attr: string; line: number }>; removed: number }
 
 /**
  * An attribute holding a JSON VALUE where JSX needs an expression: `viz={"kind": …}` or
@@ -99,16 +87,6 @@ function jsonAttribute(source: string, pos: number): { attr: string; index: numb
     return { attr: m[1]!, index: m.index!, open, close, line: source.slice(0, open).split('\n').length };
   }
   return null;
-}
-
-/** Where the string opening at `at` ends, or -1 when it never closes. */
-function balancedString(source: string, at: number): number {
-  const quote = source[at];
-  for (let i = at + 1; i < source.length; i++) {
-    if (source[i] === '\\') { i++; continue; }
-    if (source[i] === quote) return i;
-  }
-  return -1;
 }
 
 /** Where in the source the stray-`}` site that `extraClosing` named begins. */
@@ -147,9 +125,20 @@ function repairBraces(source: string, count: BraceCount): string {
     const extra = extraClosing(out);
     const extraAt = extra ? siteIndex(out, extra) : -1;
     const json = jsonAttribute(out, pos);
+    // The MIRROR of the wrap: the object form on a value that is not an object. Same position gate —
+    // `viz={{"kind": …}}` is the correct spelling and a legal `{{…}}` must never be unwrapped, so the
+    // candidate is the attribute the parser stopped inside, not every attribute of that shape.
+    const doubled = doubleWrapped(out);
+    const doubledAt = doubled && pos >= doubled.open && pos <= doubled.close ? doubled.open : -1;
     // The earliest fault first, so the parser's position moves forward with each pass. A `{{{`
     // usually leaves a stray `}` behind at the same site; `<=` repairs the opening before the tail.
-    const earliest = Math.min(...[triple?.index, extraAt >= 0 ? extraAt : undefined, json?.index].filter((at): at is number => typeof at === 'number'));
+    const earliest = Math.min(...[triple?.index, extraAt >= 0 ? extraAt : undefined, json?.index, doubledAt >= 0 ? doubledAt : undefined].filter((at): at is number => typeof at === 'number'));
+    if (doubled && doubledAt === earliest) {
+      // Delete the inner `{` and its matching `}`: `attr={{[…]}}` becomes `attr={[…]}`.
+      out = `${out.slice(0, doubled.inner)}${out.slice(doubled.inner + 1, doubled.close)}${out.slice(doubled.close + 1)}`;
+      count.unwrapped.push({ attr: doubled.attr, line: doubled.line });
+      continue;
+    }
     if (json && json.index === earliest) {
       // The one repair the shape allows: one more brace pair around the whole balanced value.
       out = `${out.slice(0, json.open)}{${out.slice(json.open, json.close + 1)}}${out.slice(json.close + 1)}`;
@@ -186,6 +175,11 @@ function braceNotes(count: BraceCount): string[] {
   if (count.wrapped.length) {
     const lines = count.wrapped.map((site) => `line ${site.line}`);
     notes.push(`wrapped ${count.wrapped.length} JSON attribute value${count.wrapped.length === 1 ? '' : 's'} on ${lines.join(', ')} (\`${names(count.wrapped.map((site) => site.attr))}={…}\` → \`${names(count.wrapped.map((site) => site.attr))}={{…}}\`)`);
+  }
+  if (count.unwrapped.length) {
+    const lines = count.unwrapped.map((site) => `line ${site.line}`);
+    const attrs = names(count.unwrapped.map((site) => site.attr));
+    notes.push(`unwrapped ${count.unwrapped.length} JSON array attribute value${count.unwrapped.length === 1 ? '' : 's'} on ${lines.join(', ')} (\`${attrs}={{[…]}}\` → \`${attrs}={[…]}\`)`);
   }
   if (count.collapsed.length) notes.push(`collapsed ${count.collapsed.length} \`${names(count.collapsed)}={{{\` opening${count.collapsed.length === 1 ? '' : 's'}`);
   if (count.strays.length) {
@@ -238,7 +232,7 @@ export function repairJsxSource(source: string): { source: string; repair: Sourc
   // escaped the backticks of a <Query> is the same document whose charts were wrapped twice. Whatever
   // is repaired is REPORTED — one shape is never fixed silently under the other's name.
   if (!parseJsx(out).ok) {
-    const count: BraceCount = { collapsed: [], strays: [], wrapped: [], removed: 0 };
+    const count: BraceCount = { collapsed: [], strays: [], wrapped: [], unwrapped: [], removed: 0 };
     const braced = repairBraces(out, count);
     const braceNotesText = braceNotes(count);
     if (braceNotesText.length) {
