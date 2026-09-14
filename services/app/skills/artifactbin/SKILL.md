@@ -15,14 +15,14 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - Few turns: `afbin help <template>` (ONE call prints every reference you need, not the files one by one), then publish a FIRST version in your first few calls — title, layout, first real section — and extend it with further edits and pushes; a person is waiting on a blank page. Push runs `afbin validate` itself and publishes a referenced CSV with it: no separate validate, dry-run or dataset step; a refusal names the fix. A successful push IS the verification: the head is your file. Skip pulling, diffing, exporting, screenshotting or grepping it afterwards; extending is not re-checking.
 - Native markup first: the components in the references cover text, data, charts, tables, controls and motion; use `<Iframe>` only for an isolated DOM script or canvas nothing native covers, never for layout or content.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Creating another artifact is a deliberate fork: copy the file and remove those five fields.
-- Publishing is the check, whether or not you can view images. If you must look, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time.
+- Publishing is the check, whether or not you can view images; no other skill, palette tool or image tooling is needed — the theme carries the palette. If you must look, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write you retry push to recover its result.
 
 `afbin -h`, `afbin <command> -h` and `afbin help <topic>` work offline and print the same references that sit in `references/` beside this file; bare `afbin help` prints this file's absolute location, so never search the filesystem for them.
 
 ## Example
 
-Before writing a document, read design, markup, then the chosen template and theme (below); a template's frame keeps content from sitting flush to the viewport edge. `afbin help example` prints this file; `afbin help <template>` (dashboard, deck, editorial, plan, scrolly) prints every reference that kind of document needs, its starter last.
+Before writing a document, read design, markup, then the chosen template and theme (below); a template's frame keeps content from sitting flush to the viewport edge. `afbin help example` prints this file; `afbin help <template>` (dashboard, deck, editorial, plan, scrolly) prints every reference that kind of document needs, in one call.
 
 ```jsx
 [[ example ]]

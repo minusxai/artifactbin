@@ -6,7 +6,7 @@ import {commands,commandHelp} from '../src/commands';
 import {diagnosticsHelp} from '../src/diagnostics';
 import {manPage} from '../src/man';
 import {skillExample,skillFileWithFrontmatter,skillTree} from '../../app/lib/skills';
-import {renderSkill} from '../../app/lib/skills/render';
+import {renderSkill,condenseForBundle,stripBundleMarkers} from '../../app/lib/skills/render';
 import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 import {TEACHING_BASE} from '../src/teaching-origin';
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -20,13 +20,28 @@ const brief=skillTree().get('artifactbin/SKILL.md');
 if(!brief)throw new Error('skills/artifactbin/SKILL.md is missing');
 // The brief keeps its frontmatter: the harness preloads the name and description, then loads the body on trigger.
 const files:Record<string,string>={'SKILL.md':skillFileWithFrontmatter(brief,renderSkill(brief,{base:BASE}))};
+/**
+ * The SECOND length of a reference that carries `<!--bundle:skip-->` spans: what `afbin help
+ * <template>` concatenates, without the rationale a single-file read can afford. Only files that
+ * actually mark something appear here, so the bundle carries no duplicate of an unmarked file.
+ */
+const condensed:Record<string,string>={};
 for(const file of skillTree().files){
  if(!file.ref||file.file.startsWith('publishing'))continue;
- files[`references/${file.file}`]=renderSkill(file,{base:BASE});
+ const path=`references/${file.file}`;
+ files[path]=renderSkill(file,{base:BASE});
+ const short=renderSkill(file,{base:BASE,bundle:true});
+ if(short!==files[path])condensed[path]=short;
 }
 files['references/errors.md']=diagnosticsHelp();
 files['references/commands.md']=commands.map(command=>'## '+command.name+'\n\n```text\n'+commandHelp(command.name)+'```\n').join('\n');
-const guide=(title:string,body:string,names:string[])=>'# '+title+'\n\n'+body+'\n\n'+names.map(name=>'```text\n'+commandHelp(name)+'```\n').join('\n');
+/**
+ * A guide is its domain rules plus the usage screens of the commands that carry them. The screens are
+ * marked bundle-skippable: `afbin help <template>` concatenates eight references, and `afbin push -h`
+ * already prints the screen on demand — 2.3 KB of flags is the first thing that should leave a bundle
+ * an agent has to read whole. `afbin help publishing-datasets` still prints them.
+ */
+const guide=(title:string,body:string,names:string[])=>'# '+title+'\n\n'+body+'\n\n<!--bundle:skip-->\n'+names.map(name=>'```text\n'+commandHelp(name)+'```\n').join('\n')+'<!--/bundle:skip-->\n';
 files['references/markdown.md']='# One-time Markdown import\n\nRun `afbin push report.md` to convert and publish `report.jsx`. The Markdown file stays untouched; edit and push JSX thereafter. A second Markdown push is refused, even if the generated JSX was deleted. An existing JSX destination is never overwritten.\n\n`afbin validate report.md` checks the conversion locally. `afbin push report.md --dry-run` preflights the virtual JSX without writing conversion records, files or remote objects.\n\nSupported: headings, paragraphs, emphasis, lists, block quotes, tables, links, images, fenced/inline code and horizontal rules. Raw HTML/JSX and task checkboxes are refused. Author interactive components directly in JSX. Relative images are published through the same dependency pipeline as JSX.\n';
 files['references/publishing.md']=guide('Files, sync and recovery','A .jsx file has a YAML fence and static JSX body. The fence is authoritative; afbin records the accepted server state privately in ~/.artifactbin/state.sqlite and writes nothing into your working directory, so there is nothing to commit or ignore. Omitted push paths select tracked files only. Missing tracked files are skipped. Relative dependencies publish before their document under new IDs; an explicit standalone file push updates that file conditionally.\n\nA CLI reference is <url|id|path>[@version]; an existing complete filename wins over an id. Published references inside markup use ref:<id>. Relative dependency paths stay local while authoring and become canonical refs on publication.\n\nRun afbin validate report.jsx before publishing; validate --fix applies mechanical fixes. status and diff use saved state; add --remote only to refresh a comparison. An unchanged push makes no request. push --dry-run performs authoritative server validation without publishing or saving state.\n\nSuccessful writes return canonical source and identity in the same response. Push preserves edits made while the request was in flight. Retry an uncertain write with push: its frozen journal recovers the original result. A refused conflict leaves your proposal untouched and supplies a diff. pull --force overwrites local changes, so preserve a wanted proposal first; it keeps the replaced bytes under ~/.artifactbin/backups/local and reports that absolute path, archives a pending conditional proposal before replacing the working file, and cannot cancel an uncertain create. push --force observes and conditionally replaces the remote head; it never fixes markup. Deleted create results remain retired.\n\nTo adapt a document you can read, run afbin fork <ref>: it writes a private local draft without identity or invitations and records forked_from; push creates the copy. A historical pull keeps the current head conditions separately; pushing it performs a conditional replacement.', ['pull','push','validate','status','diff']);
 files['references/publishing-auth.md']=guide('Authentication and local installation','Install or repair the CLI with the verified installer: `curl -fsSL '+TEACHING_BASE+'/chat/install.sh | sh`, or download `/chat/install.sh` from the server you use and run it with `sh`. It verifies the published SHA-256 checksum and leaves an existing installation untouched when verification fails; `/install.sh` is the separate self-hosted server installer. `afbin update` replaces that executable and the selected skills with recoverable copies of both. A skill installed or updated for a harness that reads its skills at startup (Claude Code, Codex) is marked `restart_required` and named on stderr: restart that harness to load it. `afbin update --dry-run` resolves the release and reports the same changes without installing anything.\n\nafbin authenticates itself the first time a command needs the server: it opens browser approval (log in, or continue anonymously), waits, and resumes the command — nothing to paste, no token you or the agent handle. Run afbin auth to establish or check credentials deliberately; it is idempotent. Credentials live in ~/.artifactbin/.env (0600), inside ~/.artifactbin (0700). Environment credentials override saved credentials and remain origin-scoped. Local help, validation, status and diff never sign in or create state.\n\nAgents never invoke auth in the normal path; a server command signs in on demand and resumes once approved. On an unattended approval timeout the command returns a structured error carrying the approval URL and expiry to relay to a person. Denial and expiry never create credentials. Updates are explicit; normal commands do not poll for releases.\n\nCredentials are kept per server origin under ~/.artifactbin (one file per origin), so `--server`, a tracked workspace or an exported ARTIFACTBIN_URL selects the matching credential without re-approval; the first origin you set up is the default. Set ARTIFACTBIN_HOME to use a different private state directory, for example one per environment; exported variables reach every afbin your agent runs.', ['auth','update']);
@@ -39,8 +54,14 @@ files['references/publishing.md']+='\n## Identity and authored scripts\n\nEvery 
 files['references/publishing-annotations.md']+='\nComments are sidecar relations to the node\'s persistent BODY `id`; reading or writing a comment does not rewrite source or flush the editor. Legacy data-annotation-anchor attributes are preservation-only: preserve an existing value with its element; never author, change or reuse one. New comments do not add it.\n\n"snippet" is the current node text. "quote" is the selected text; quote_found says whether it is still present. Comment Markdown supports links and emphasis: `![alt](url)` is not an image, but a literal exclamation mark plus a link. A comment cannot embed a picture. A deleted thread is not erased; there is no undo for it here.\n\nBearer requests retain their account attribution.\n';
 files['references/publishing-versions.md']+='\n## Trash, folders and visibility\n\nDelete is a trash: artifacts are restorable with no deadline using push --restore <id>. Deleted content still counts against your quota. Actual erasure is an administrative act on the database, outside this API. A restore can land a row deeper than the 6-level cap. An unlisted artifact is excluded from public listings, a folder page included; owners can still see their own artifacts.\n\nA folder has no content: its page is an app listing. Only title, visibility and folder are editable, through folder YAML. Do not push JSX to a folder.\n';
 files['references/publishing-datasets.md']+='\nAn imported URL is NOT an artifact and never appears in `afbin list`. Imported bytes count against your ACCOUNT\'s byte quota; a URL is charged once, to whoever first named the URL. Your external URL stays in the document while the server serves its stored copy.\n';
+// The guides written here take the same markers as a reference file does; `renderSkill` never saw them.
+for(const [path,text] of Object.entries(files)){
+ if(!text.includes('bundle:skip'))continue;
+ condensed[path]=condenseForBundle(text);
+ files[path]=stripBundleMarkers(text);
+}
 const version=JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version;
-const contents=JSON.stringify({version,protocol:CLI_PROTOCOL_VERSION,files,example,man:manPage()},null,2)+'\n';
+const contents=JSON.stringify({version,protocol:CLI_PROTOCOL_VERSION,files,condensed,example,man:manPage()},null,2)+'\n';
 const target=join(root,'src/generated/teaching.json');
 if(process.argv.includes('--check')){if(readFileSync(target,'utf8')!==contents)throw new Error('Bundled teaching is stale; run npm run generate:teaching -w services/cli.');}
 else{mkdirSync(dirname(target),{recursive:true});writeFileSync(target,contents);}

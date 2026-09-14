@@ -219,9 +219,48 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }catch(error){
   const failure=error instanceof ApprovalRequired?{code:error.code,message:error.message,verification_url:error.verificationUrl,user_code:error.userCode,expires_at:new Date(error.expiresAt).toISOString()}:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{}),...(error.details?{details:error.details}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)};
   if(json)stdout(JSON.stringify({error:failure})+'\n');
-  stderr(`${style.red(style.bold(failure.code))}: ${failure.message}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
+  const diagnosed=refusalDetails(failure.message,'details'in failure?failure.details:undefined);
+  stderr(`${style.red(style.bold(failure.code))}: ${failure.message}${diagnosed.length?`\n${diagnosed.join('\n')}`:''}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
  }
+}
+/** How many failing files a refusal names before it stops; the rest are one counted line. */
+const MAX_REFUSAL_FILES=3;
+/**
+ * THE DIAGNOSIS THE REFUSAL ALREADY CARRIES, as human lines.
+ *
+ * Every CliError may hold `details`, and `--json` has always printed them; the human text printed
+ * the message and the fix and nothing else. So a refused push read
+ *
+ *     validation_failed: Local validation failed.
+ *     Run afbin validate and correct the reported errors.
+ *
+ * and the agent's next call was `afbin validate` — a whole turn to READ a message it had already
+ * been handed (claude-code scrolly, production run 15, calls 16–17). Two shapes reach here and both
+ * are already in hand: a local validation's per-file diagnostics, and the `details` strings a server
+ * refusal carries (a bad column, a refused SQL function).
+ *
+ * Printed ONCE: `http.ts` builds the message out of those same strings when the server sends no
+ * message of its own, so a line the message already contains is dropped rather than repeated. Only
+ * the two known shapes are read — `{http_status:401}` on auth_required is a detail for `--json`,
+ * not a line for a person — and a repair NOTICE is not a failure, so it is not the file's diagnostic.
+ */
+function refusalDetails(message:string,details:unknown):string[]{
+ if(!details||typeof details!=='object')return [];
+ const lines:string[]=[];
+ const files=(details as {files?:unknown}).files;
+ if(Array.isArray(files)){
+  const failed=files.filter((file):file is {path:string;diagnostics:Array<{message?:unknown;severity?:unknown}>}=>
+   !!file&&typeof file==='object'&&(file as {valid?:unknown}).valid===false&&typeof (file as {path?:unknown}).path==='string'&&Array.isArray((file as {diagnostics?:unknown}).diagnostics));
+  for(const file of failed.slice(0,MAX_REFUSAL_FILES)){
+   const first=file.diagnostics.find(diagnostic=>!!diagnostic&&typeof diagnostic.message==='string'&&diagnostic.severity!=='notice');
+   if(first)lines.push(`${file.path}: ${first.message as string}`);
+  }
+  if(failed.length>MAX_REFUSAL_FILES)lines.push(`… and ${failed.length-MAX_REFUSAL_FILES} more files; run afbin validate for the rest.`);
+ }
+ const strings=(details as {details?:unknown}).details;
+ if(Array.isArray(strings))lines.push(...strings.filter((detail):detail is string=>typeof detail==='string'));
+ return lines.filter(line=>!message.includes(line));
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
 export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';

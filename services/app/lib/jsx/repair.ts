@@ -48,25 +48,60 @@ export interface SourceRepair {
 }
 
 /**
+ * How many repair passes one document gets. Every pass deletes at least one character and the loop
+ * also stops the moment the parser stops moving forward, so this is a belt on a source that already
+ * shrinks — it bounds what a pathological document can cost, nothing more.
+ */
+const MAX_PASSES = 25;
+
+/** What one repaired document accumulated, in the words the reply will carry. */
+interface BraceCount { collapsed: string[]; strays: Array<{ attr: string; line: number }>; removed: number }
+
+/** Where in the source the stray-`}` site that `extraClosing` named begins. */
+function siteIndex(source: string, extra: { attr: string; line: number }): number {
+  const m = [...source.matchAll(/([A-Za-z_][\w-]*)=\{/g)].find((x) => x[1] === extra.attr && source.slice(0, x.index! + x[0].length - 1).split('\n').length === extra.line);
+  return m ? m.index! : -1;
+}
+
+/**
  * THE BRACE COUNT, the second fault worth repairing: 15 tasks and 82 model calls in eval runs
  * 34740707220–34741910427 went to a `viz={{…}}` with one `}` too many or too few, or a `{{{`
  * opening from wrapping an already-wrapped object. The two unambiguous shapes are repaired — stray
  * `}`s after a closed expression, and `{{{` — found by the same scanners that name them in the
- * refusal, applied in order (a `{{{` usually leaves a stray `}` behind) and kept only if the result
- * parses. A missing brace is named, never guessed (see below).
+ * refusal, and kept only if the result parses. A missing brace is named, never guessed (see below).
+ *
+ * ITERATED, because an agent that builds one chart wrongly builds every chart in that document the
+ * same way. Repairing only the first occurrence and re-parsing once refused a scrolly carrying TWO
+ * `viz={{{` with `fixed:false`, and recovering it took three more calls (claude-code, production
+ * run 15). So: fix the EARLIEST remaining fault, re-parse, repeat while the parser's own position
+ * advances. Both shapes are counted, and the reply states the totals — "collapsed 1" against a
+ * document with two would teach the wrong lesson.
  */
-function repairBraces(source: string): { source: string; repair: SourceRepair } | null {
-  let out = source; const notes: string[] = []; let removed = 0;
-  const triple = tripleOpen(out);
-  if (triple) {
-    out = out.slice(0, triple.index!) + `${triple[1]}={{` + out.slice(triple.index! + triple[0].length);
-    notes.push(`collapsed \`${triple[1]}={{{\` to \`${triple[1]}={{\``);
-  }
-  const extra = extraClosing(out);
-  if (extra) {
+function repairBraces(source: string, count: BraceCount): string {
+  let out = source;
+  let lastPos = -1;
+  for (let pass = 0; pass < MAX_PASSES; pass++) {
+    const parsed = parseJsx(out);
+    if (parsed.ok) break;
+    // Forward progress is the convergence test: a repair that leaves the parser stuck where it
+    // already was is not converging on this document, and guessing further is exactly what the
+    // missing-brace rule forbids.
+    const pos = typeof parsed.pos === 'number' ? parsed.pos : -1;
+    if (pass > 0 && pos <= lastPos) break;
+    lastPos = pos;
+    const triple = tripleOpen(out);
+    const extra = extraClosing(out);
+    const extraAt = extra ? siteIndex(out, extra) : -1;
+    // The earliest fault first, so the parser's position moves forward with each pass. A `{{{`
+    // usually leaves a stray `}` behind at the same site; `<=` repairs the opening before the tail.
+    if (triple && (!extra || extraAt < 0 || triple.index! <= extraAt)) {
+      out = out.slice(0, triple.index!) + `${triple[1]}={{` + out.slice(triple.index! + triple[0].length);
+      count.collapsed.push(triple[1]!);
+      continue;
+    }
+    if (!extra || extraAt < 0) break;
     // Delete the stray `}`s that follow the balanced close of the expression.
-    const m = [...out.matchAll(/([A-Za-z_][\w-]*)=\{/g)].find((x) => x[1] === extra.attr && out.slice(0, x.index! + x[0].length - 1).split('\n').length === extra.line)!;
-    let depth = 0, quote: string | null = null, i = m.index! + m[0].length - 1;
+    let depth = 0, quote: string | null = null, i = extraAt + out.slice(extraAt).indexOf('{');
     for (; i < out.length; i++) {
       const ch = out[i];
       if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = null; continue; }
@@ -75,20 +110,26 @@ function repairBraces(source: string): { source: string; repair: SourceRepair } 
     }
     let j = i + 1, dropped = 0;
     while (j < out.length && dropped < extra.extra) { if (out[j] === '}') { out = out.slice(0, j) + out.slice(j + 1); dropped++; } else if (/\s/.test(out[j])) j++; else break; }
-    removed += dropped;
-    notes.push(`removed ${dropped} closing brace${dropped === 1 ? '' : 's'} after \`${extra.attr}={\` on line ${extra.line}`);
+    if (!dropped) break;
+    count.removed += dropped;
+    count.strays.push({ attr: extra.attr, line: extra.line });
   }
-  // A MISSING brace is not repaired: where it belongs is a guess (an inner object or the outer one),
-  // and a wrong guess parses. It stays a named refusal — "never closed, needs N more `}`".
-  if (!notes.length || out === source || !parseJsx(out).ok) return null;
-  return {
-    source: out,
-    repair: {
-      code: 'unbalanced_braces',
-      message: `${notes.join('; ')}. Build the viz object as JSON and serialize it inside ONE JSX expression (viz={{…}}) instead of counting braces by hand.`,
-      removed,
-    },
-  };
+  return out;
+}
+
+/** One line per shape, with the TOTAL each shape accounted for across the whole document. */
+function braceNotes(count: BraceCount): string[] {
+  const notes: string[] = [];
+  const names = (values: string[]) => [...new Set(values)].join('`/`');
+  if (count.collapsed.length) notes.push(`collapsed ${count.collapsed.length} \`${names(count.collapsed)}={{{\` opening${count.collapsed.length === 1 ? '' : 's'}`);
+  if (count.strays.length) {
+    // Every site says "line N" in full, never "lines 2, 3": the CLI moves a body line onto its FILE
+    // line by rewriting `\bline (\d+)\b` past the YAML fence (cli/src/validation.ts), and a plural
+    // "lines" matches none of it — the notice would name lines that are wrong by the fence's height.
+    const lines = count.strays.map((site) => `line ${site.line}`);
+    notes.push(`removed ${count.removed} closing brace${count.removed === 1 ? '' : 's'} after \`${names(count.strays.map((site) => site.attr))}={\` on ${lines.join(', ')}`);
+  }
+  return notes;
 }
 
 /**
@@ -98,37 +139,54 @@ function repairBraces(source: string): { source: string; repair: SourceRepair } 
  * caller's original error is the right answer.
  */
 export function repairJsxSource(source: string): { source: string; repair: SourceRepair } | null {
-  // A free bail for every document that does not carry the sequence at all,
-  // so an ordinary publish never pays for a second parse. It is only a
-  // short-circuit: the DECISION below is still the parser's, at its own
-  // position, because these two characters are legal inside a template literal.
-  if (!source.includes('\\`')) {
-    // Not the backtick shape; a brace fault is the other one worth a repair.
-    if (parseJsx(source).ok) return null;
-    return repairBraces(source);
-  }
   const parsed = parseJsx(source);
   if (parsed.ok) return null;
+
+  let out = source;
+  const notes: string[] = [];
+  const advice: string[] = [];
+  let removed = 0;
+  let code: SourceRepair['code'] | undefined;
 
   // THE SIGNATURE, asked of the parser rather than of the text: it stopped at a
   // backtick, and that backtick is backslash-escaped. Anywhere a template
   // literal may legally hold `\``, the document parses and we are never called.
+  // The `includes` is a free bail for every document without the sequence, so an
+  // ordinary publish never pays for the scan.
   const pos = parsed.pos;
-  if (typeof pos !== 'number' || source[pos] !== '`' || source[pos - 1] !== '\\') return null;
+  if (source.includes('\\`') && typeof pos === 'number' && source[pos] === '`' && source[pos - 1] === '\\') {
+    const repaired = out.replaceAll('\\`', '`');
+    const dropped = out.length - repaired.length;
+    if (dropped > 0) {
+      out = repaired; removed += dropped; code = 'escaped_backtick';
+      notes.push(`removed ${dropped} backslash${dropped === 1 ? '' : 'es'} escaping a backtick`);
+      advice.push(
+        'A backtick inside a JSX expression must not be written as \\` — send {`select …`}, not ' +
+        '{\\`select …\\`}. A shell heredoc or a JSON string builder adds that escape; send the document ' +
+        'as a file or let the JSON encoder do the quoting.',
+      );
+    }
+  }
 
-  const repaired = source.replaceAll('\\`', '`');
-  const removed = source.length - repaired.length;
-  if (removed === 0 || !parseJsx(repaired).ok) return null;
+  // A brace fault is the other shape worth a repair, and a document can carry BOTH: a heredoc that
+  // escaped the backticks of a <Query> is the same document whose charts were wrapped twice. Whatever
+  // is repaired is REPORTED — one shape is never fixed silently under the other's name.
+  if (!parseJsx(out).ok) {
+    const count: BraceCount = { collapsed: [], strays: [], removed: 0 };
+    const braced = repairBraces(out, count);
+    const braceNotesText = braceNotes(count);
+    if (braceNotesText.length) {
+      out = braced; removed += count.removed; code ??= 'unbalanced_braces';
+      notes.push(...braceNotesText);
+      advice.push('Build the viz object as JSON and serialize it inside ONE JSX expression (viz={{…}}) instead of counting braces by hand.');
+    }
+  }
 
-  return {
-    source: repaired,
-    repair: {
-      code: 'escaped_backtick',
-      message:
-        `removed ${removed} backslash${removed === 1 ? '' : 'es'} escaping a backtick: a backtick inside a JSX ` +
-        'expression must not be written as \\` — send {`select …`}, not {\\`select …\\`}. A shell heredoc or a ' +
-        'JSON string builder adds that escape; send the document as a file or let the JSON encoder do the quoting.',
-      removed,
-    },
-  };
+  // A MISSING brace is not repaired: where it belongs is a guess (an inner object or the outer one),
+  // and a wrong guess parses. It stays a named refusal — "never closed, needs N more `}`" — and so
+  // does everything else the repairs did not make parse: the caller's original error is the answer,
+  // against the ORIGINAL source, so its line numbers still point at the author's file.
+  if (!code || out === source || !parseJsx(out).ok) return null;
+
+  return { source: out, repair: { code, message: `${notes.join('; ')}. ${advice.join(' ')}`, removed } };
 }

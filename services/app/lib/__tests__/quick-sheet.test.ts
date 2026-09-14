@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {buildQuickSheet,renderDoc,skillExample} from '../skills';
+import {buildQuickSheet,renderDoc,skillExample,stripBundleMarkers,condenseForBundle} from '../skills';
 import teaching from '../../../cli/src/generated/teaching.json';
 const sheet=buildQuickSheet('https://artifactbin.dev');
 describe('the installed short skill',()=>{
@@ -63,6 +63,11 @@ describe('the installed short skill',()=>{
   for(const topic of ['markup-data','publishing-annotations','publishing-auth','publishing','errors','commands'])expect(sheet).toContain(`references/${topic}.md`);
   for(const term of ['afbin comment','afbin log','afbin delete','--json','On refusal'])expect(sheet).toContain(term);
   expect(sheet).toContain('whether or not you can view images');expect(sheet).toContain('every slide, in one image');
+  // Nothing ELSE is needed to make it look right. The checking bullet is where an agent decides what
+  // more to reach for, so it says there is nothing more: a theme carries the palette, so a design
+  // skill, a palette tool or image tooling is a turn spent on something the document already has.
+  expect(sheet).toContain('no other skill, palette tool or image tooling is needed');
+  expect(sheet).toContain('the theme carries the palette');
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });
@@ -74,6 +79,28 @@ describe('the installed short skill',()=>{
   expect(sheet).toContain('public.rows');
   expect(sheet).toContain('$sales');
   for(const dead of ['<Param','data="ref:','ref_<id>','"markdown"','"html"'])expect(sheet).not.toContain(dead);
+ });
+ /**
+  * ONE SOURCE, TWO LENGTHS. A reference marks the prose its bundled copy can do without; the full
+  * rendering must come out exactly as if the markers were never written, or `/docs`, the installed
+  * `references/` files and `afbin help <topic>` would quietly lose text meant only for the bundle.
+  */
+ it('drops a marked span from the bundled copy and no byte from the full one',()=>{
+  const marked='## Rule\n\nKeep this.\n<!--bundle:skip-->\nMeasured on run 15: drop this.\n<!--/bundle:skip-->\nAnd this<!--bundle:skip--> (not this)<!--/bundle:skip-->.\n';
+  expect(stripBundleMarkers(marked)).toBe('## Rule\n\nKeep this.\nMeasured on run 15: drop this.\nAnd this (not this).\n');
+  expect(condenseForBundle(marked)).toBe('## Rule\n\nKeep this.\nAnd this.\n');
+  expect(stripBundleMarkers('nothing marked')).toBe('nothing marked');
+ });
+ it('ships no marker in any reference, and every condensed copy is shorter than the file it came from',()=>{
+  const files=teaching.files as Record<string,string>;
+  const condensed=(teaching as {condensed:Record<string,string>}).condensed;
+  for(const [path,text] of Object.entries(files))expect(text,path).not.toContain('bundle:skip');
+  expect(Object.keys(condensed).length,'the bundled references are marked').toBeGreaterThan(0);
+  for(const [path,text] of Object.entries(condensed)){
+   expect(files[path],path).toBeDefined();
+   expect(Buffer.byteLength(text),path).toBeLessThan(Buffer.byteLength(files[path]!));
+   expect(text,path).not.toContain('bundle:skip');
+  }
  });
  it('the bundle carries the brief with its frontmatter and the example as a help topic',()=>{
   expect(teaching.files['SKILL.md']).toMatch(/^---\nname: artifactbin\ndescription: "Required for every artifactbin task/);

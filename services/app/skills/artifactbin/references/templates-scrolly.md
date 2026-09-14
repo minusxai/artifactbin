@@ -72,9 +72,9 @@ THE FUN KIT (compose 4-6 per story; pace them, never all on one screen):
 - Console topbar: it scrolls away; fixed and sticky are banned.
 - Two-tone headline: THE one word of the claim in the accent — hero on
   `animate-fade-up`, chapter headlines on `reveal-up`.
-- Ticker band: a full-bleed accent strip of repeating key stats that SCROLLS — the
+- Ticker band: a full-bleed accent strip of repeating key stats that SCROLLS<!--bundle:skip--> — the
   skeleton's two identical spans are what makes the -50% marquee loop seamless, and
-  `[animation-duration:20s]` tunes the speed. A section seam, once or twice.
+  `[animation-duration:20s]` tunes the speed. A section seam, once or twice.<!--/bundle:skip-->
 - Scroll reveals: `reveal-up` on the chart slab, staggered stat cards
   (`[transition-delay:120ms]`, `240ms`) — one per chapter. Captures and reduced-motion
   viewers see the page finished.
@@ -91,8 +91,10 @@ THE FUN KIT (compose 4-6 per story; pace them, never all on one screen):
   WHAT IT SHOWS` left, accent annotation right.
 - Dashed stat cards: `border-dashed` cards, a giant accent single-value embed with arrow
   notation for change ("3,253 → 129", a suffix in the embed's columnFormats, still live). Stagger a row.
+<!--bundle:skip-->
 - Chip row of key facts under the hero; a blueprint-grid texture (`bg-[size:48px_48px]`
   over a `linear-gradient`) on quiet sections; an accent drop cap per chapter.
+<!--/bundle:skip-->
 
 STRUCTURE: three to five chapters instead of one, dashed stat cards beside
 the chart slab (`@3xl:grid-cols-[3fr_2fr]`). The TWIST chapter breaks the pattern —
@@ -107,9 +109,11 @@ headline; the twist is the one sanctioned break.
 BALANCE: split a chapter only when both columns carry comparable height — prose one side,
 evidence the other. If one cell would hold just a label or a lone stat, stack it above.
 
+<!--bundle:skip-->
 Do
 - Alternate dark/light grounds between chapters.
 - Direct-label the thing being followed; captions do jokes AND work.
+<!--/bundle:skip-->
 Don't
 - Fake sticky scenes; walls of prose; two conceits; a payoff without its number.
 

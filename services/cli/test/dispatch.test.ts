@@ -113,3 +113,99 @@ test('a directory tracked against one server refuses another by name, before any
   assert.ok(!hosts.includes('two.example'),`no request reached the other server: ${hosts}`);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+/**
+ * THE REFUSAL CARRIES ITS OWN DIAGNOSIS. Without --json a refused push printed exactly
+ * "validation_failed: Local validation failed." and its fix line, so the agent's next call was
+ * `afbin validate` purely to READ the message it had already been handed (claude-code scrolly,
+ * production run 15, calls 16–17). The printer holds the details in both shapes — the per-file
+ * diagnostics of a local validation and the `details` strings of a server refusal — so it prints
+ * them, once, between the message and the fix.
+ */
+test('a refused push prints the diagnostics it already carries, so reading them costs no second call',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-refusal-details-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);
+  await writeFile(join(root,'doc.jsx'),'---\ntitle: Braces\n---\n<article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line"}} /></article>\n');
+  const out:string[]=[];const err:string[]=[];
+  const code=await runCli(['push','doc.jsx','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
+   stdout:s=>out.push(s),stderr:s=>err.push(s),fetch:async()=>assert.fail('a local validation failure must never reach the network')});
+  assert.equal(code,2,err.join(''));
+  const text=err.join('');
+  const lines=text.trimEnd().split('\n');
+  assert.equal(lines[0],'validation_failed: Local validation failed.');
+  assert.match(lines[1]!,/^doc\.jsx: JSX syntax error/,text);
+  assert.match(lines[1]!,/never closed/,'the diagnostic itself, not a restatement of the code');
+  assert.equal(lines[lines.length-1],'Run afbin validate and correct the reported errors.','the fix stays last');
+  assert.equal(text.split('never closed').length-1,1,'printed exactly once');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('a server refusal prints its details once — and never twice when the message is already built from them',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-server-details-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);
+  await writeFile(join(root,'doc.jsx'),'---\ntitle: Sales\n---\n<article><p>Hello</p></article>\n');
+  const details=['<Query name="monthly">: Dataset SQL: function strptime is not allowed'];
+  const run=async(payload:Record<string,unknown>)=>{
+   const err:string[]=[];
+   const code=await runCli(['push','doc.jsx','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
+    stdout:()=>{},stderr:s=>err.push(s),fetch:async()=>Response.json({error:'invalid_sql',...payload},{status:400,headers:{'X-Artifactbin-Account':'usr_seed'}})});
+   return{code,text:err.join('')};
+  };
+  const named=await run({message:'The document was refused.',details});
+  assert.equal(named.code,1,named.text);
+  assert.ok(named.text.includes('invalid_sql: The document was refused.'),named.text);
+  assert.equal(named.text.split(details[0]!).length-1,1,`the detail is printed once: ${named.text}`);
+  assert.ok(named.text.indexOf(details[0]!)>named.text.indexOf('The document was refused.'),'after the message');
+  const bare=await run({details});
+  assert.ok(bare.text.includes(details[0]!),bare.text);
+  assert.equal(bare.text.split(details[0]!).length-1,1,`a details-only refusal folds them into the message and must not repeat them: ${bare.text}`);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * TWO SITES, AND BOTH LINE NUMBERS STILL BELONG TO THE FILE. The repair now names every site it
+ * fixed, and the CLI moves each one past the YAML fence by rewriting `line N` — a notice that said
+ * "lines 4, 5" would name body lines and send the author two lines up, which is the fault the fence
+ * shift exists to prevent (eval run 34714728585: 17 calls and 130 s to locate one brace).
+ */
+test('a repair at two sites reports both by FILE line, past the metadata fence',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-brace-lines-'));
+ try{
+  const fence='---\ntitle: Braces\n---\n';
+  await writeFile(join(root,'doc.jsx'),fence+[
+   '<Helmet><Value name="a" type="table" value={[{"x":1}]} /><Value name="b" type="table" value={[{"x":1}]} /></Helmet><article>',
+   '<Question data="$a" viz={{"kind":"table"}}} />',
+   '<Question data="$b" viz={{"kind":"table"}}}} />',
+   '</article>',
+  ].join('\n')+'\n');
+  const output:string[]=[];
+  const code=await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
+  assert.equal(code,0,output.join(''));
+  const notice=JSON.parse(output.join('')).files[0].diagnostics.find((d:{code:string})=>d.code==='unbalanced_braces');
+  assert.ok(notice,output.join(''));
+  assert.match(notice.message,/removed 3 closing braces/,'the total, not the first site');
+  // Body lines 2 and 3 sit on file lines 5 and 6 under a three-line fence.
+  assert.match(notice.message,/on line 5, line 6/,notice.message);
+  const rewritten=await readFile(join(root,'doc.jsx'),'utf8');
+  assert.ok(rewritten.startsWith(fence),'the fence is kept');
+  assert.equal(rewritten.split('viz={{"kind":"table"}} />').length-1,2,rewritten);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/** The refusal names at most three failing files; the rest are one counted line, not a wall. */
+test('a refusal that names files stops at three and counts the rest',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-refusal-cap-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);
+  for(const name of ['a','b','c','d'])await writeFile(join(root,`${name}.jsx`),`<article><Question data="$q" viz={{"kind":"line"} /></article>\n`);
+  const err:string[]=[];
+  const code=await runCli(['push','a.jsx','b.jsx','c.jsx','d.jsx','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
+   stdout:()=>{},stderr:s=>err.push(s),fetch:async()=>assert.fail('a local validation failure must never reach the network')});
+  assert.equal(code,2,err.join(''));
+  const named=['a.jsx','b.jsx','c.jsx','d.jsx'].filter(name=>err.join('').includes(`${name}: JSX syntax error`));
+  assert.equal(named.length,3,`three files named, not ${named.length}: ${err.join('')}`);
+  assert.match(err.join(''),/… and 1 more files?; run afbin validate for the rest\./,err.join(''));
+ }finally{await rm(root,{recursive:true,force:true});}
+});

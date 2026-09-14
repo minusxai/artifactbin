@@ -76,11 +76,13 @@ command bar is ONE compact band (~100px); air comes from tile padding, not page 
 
 CONTROLS ARE MANDATORY: declare at least one shared `<Value>` in `<Helmet>`, bind it to a
 visible control in the command bar, and make EVERY query that can respond to it do so.
+<!--bundle:skip-->
 Kit controls write their bound Value on change — the skeleton's three, plus `<DatePicker label="Since" value="$since" />` and `<Switch label="Compare"
 checked="$flag" />`. `Select`'s `options` is a table (column 1 value, column 2 label) or
 an inline array, and a null-default Value gets the "all" choice automatically;
 `Segmented` beats Select when the options fit one row; `Slider` carries a live formatted
 readout. Native `<select>`/`<input>` bind too; the kit controls are the default here.
+<!--/bundle:skip-->
 
 THE LOOK (compose 3-4):
 - The accent lives in exactly two places: the controls' active states and the hero
@@ -105,9 +107,11 @@ TILE DISCIPLINE:
   mode; hand-rolled flex/grid forfeits that); order GridItems top-left → bottom-right —
   on phones the grid stacks in SOURCE order.
 
+<!--bundle:skip-->
 Do
 - Trend cards for the KPI band and the anchor gauge; the same quiet casing on every tile;
   reading-order GridItems.
+<!--/bundle:skip-->
 Don't
 - Bold or display-face headlines; prose between tiles; shadows or gradients on tiles; a
   bare number where its trend exists; zero controls; a query that ignores the controls

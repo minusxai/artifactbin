@@ -79,8 +79,8 @@ when its rows want the whole measure.
 PAGE BREAKS (spend them generously; every new idea gets a fresh page): a numbered section
 opens with the SAME folio line every time, verbatim — generous air above
 (`mt-24 @2xl:mt-32`), the skeleton's running-header rule (`Doc title` / `§ 02`), then
-`mt-14` before the headline. Break hygiene: a figure and its caption never separate, and a
-heading never sits at the foot of a page — move the break, not the caption.
+`mt-14` before the headline.<!--bundle:skip--> Break hygiene: a figure and its caption never separate, and a
+heading never sits at the foot of a page — move the break, not the caption.<!--/bundle:skip-->
 
 FIGURES (aim for one per section). Every figure is a `<figure>` with a FIG-numbered
 `<figcaption>`, numbered continuously across the document. Four kinds:
@@ -88,10 +88,12 @@ FIGURES (aim for one per section). Every figure is a `<figure>` with a FIG-numbe
   over a `<Query name="q" source="ref:abc123">{`select … from public.rows`}</Query>` declared in
   `<Helmet>` — Vega for every chart; quiet grays, ONE accented series, direct labels over
   legends. Evidence 380-440px; a lone number 170-220px.
+<!--bundle:skip-->
 - Diagram: an inline `<svg>` drawn in `currentColor` strokes at hairline weights. Local
   `url(#id)` refs only.
 - Image: `<img src="ref:<imageId>" />`, or an `https://` URL — a remote image is IMPORTED
   at publish (fetched once, stored) and rewritten to `ref:<id>` for you.
+<!--/bundle:skip-->
 - Table: a plain `<table className="text-sm">` in the column, with its FIG caption, but
   never widened (see THE COLUMN).
 Caption grammar (the skeleton's classes): `FIG. 02` — one sentence stating what the
@@ -110,9 +112,11 @@ Minimal, concretely: the color budget is foreground + muted + hairlines; the acc
 appears only INSIDE figures. Tables are compact hairline sets (uppercase tracked `<th>`,
 `tabular-nums`, row rules).
 
+<!--bundle:skip-->
 Do
 - Sections and figures numbered continuously ("§ 3", "FIG. 04"); a figure in nearly every
   section, with a caption that states the finding.
+<!--/bundle:skip-->
 Don't
 - Side rails, asymmetric splits, full-bleed bands, KPI strips, boxed takeaway widgets,
   inverted grounds, alternating backgrounds, cards, shadows, rounded boxes — webpage
