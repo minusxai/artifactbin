@@ -116,7 +116,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       onOpenChange={(open) => { if (open) begin(); }} onChange={(next) => change(selectValue(next))}
       onCommit={commit} onCancel={cancel}
       draftValue={session ? session.draft === null ? null : String(session.draft) : undefined}
-      onDraftChange={(next) => change(next)} multiple={props.multiple === true} allowCreate={props.allowCreate === true}
+      onDraftChange={(next) => change(next)} multiple={valueType!=='user'&&props.multiple === true} allowCreate={valueType!=='user'&&props.allowCreate === true}
       valueFormat={props.valueFormat === 'json' ? 'json' : undefined} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
       rest={{ ...shellRest(rest), 'aria-busy': busy || undefined, 'aria-description': unavailable ?? undefined }}
     >{children}</SelectControl>{error}</MutationCellHint>;
@@ -421,12 +421,13 @@ function SelectAdapter(props: Record<string, unknown>) {
   const { state } = useContext(RuntimeEmbedContext);
   const bind = useScalarControl(refName(props.value));
   const optsName = refName(props.options);
+  const userControl=Object.hasOwn(state.userOptions??{},refName(props.value)??'');
   const options = state.userOptions?.[refName(props.value)??''] ?? normalizeControlOptions(props.options, optsName ? state.tables[optsName] : undefined);
   return (
     <SelectControl
       label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}
       options={options} value={bind.current} nullable={bind.nullable}
-      multiple={props.multiple === true} allowCreate={props.allowCreate === true} valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
+      multiple={!userControl&&props.multiple === true} allowCreate={!userControl&&props.allowCreate === true} valueFormat={props.valueFormat === 'json' ? 'json' : undefined}
       onChange={bind.write} rest={shellRest(props)}
     >{props.children as ReactNode}</SelectControl>
   );

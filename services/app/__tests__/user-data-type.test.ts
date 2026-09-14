@@ -4,7 +4,8 @@ import {POST as createRoute} from '@/app/api/artifacts/route';
 import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
-import {getArtifactById,dataflowForRow,setMetadataFor} from '@/lib/artifacts';
+import {getDb} from '@/lib/db';
+import {getArtifactById,dataflowForRow,setMetadataFor,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/dataset-store';
 import {mintToken} from '@/lib/tokens';
 import {claimToken, createUser} from '@/lib/users';
@@ -59,8 +60,26 @@ describe('native user fields',()=>{
   expect(flow?.state.tables.tasks.columns).toContainEqual({name:'text_only',type:'string'});
   expect(flow?.state.userOptions?.['tasks.assigned'].map(o=>o.value).sort()).toEqual([a.user.id,b.user.id].sort());
   expect(flow?.state.userOptions?.person).toHaveLength(2);
+  const replacement=await replaceRoute(await observedRequest(`/api/artifacts/${dataset.id}`,{method:'PUT',token:a.token,json:{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]}}}),ctx(dataset.id));
+  expect(replacement.status,await replacement.clone().text()).toBe(200);
+  expect((await getArtifactById(dataset.id))!.source).toContain(`ref:${report.id}`);
+  expect((await getArtifactById(dataset.id))!.source).not.toContain('current');
   await create(a.token,{markup});
   expect(((await getArtifactById(dataset.id))!.meta.columns as typeof column)[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
+ });
+ it.each(['normalized','atomic'])('binds current when %s markup edits first attach a dataset',async(kind)=>{
+  const a=await account('owner');
+  const dataset=await create(a.token,{dataset:[{id:1,assignee:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}}]});
+  const report=await create(a.token,{markup:'<h1>Project</h1>'});
+  const current=(await getArtifactById(report.id))!;
+  const prepared=await publishMarkupForArtifact(current,`<Helmet><Query name="tasks" source="ref:${dataset.id}">{\`select * from public.rows\`}</Query></Helmet><DataTable data="$tasks" />`);
+  if(prepared instanceof Response)throw new Error(await prepared.text());
+  if(kind==='normalized')await (await getDb()).transaction(tx=>commitNormalizedMarkup(tx,null,current,prepared));
+  else {
+   const result=await applyEditFor({tokenId:a.tokenId,userId:a.user.id},report.id,{baseEditId:current.edit_id,change:{newSource:prepared.source}});
+   expect(result).toMatchObject({applied:true});
+  }
+  expect((await getArtifactById(dataset.id))!.meta.columns).toContainEqual({name:'assignee',type:'user',constraints:{memberOf:[`ref:${report.id}`]}});
  });
  it('keeps historical self values but rejects explicit unchanged assignments by another writer',async()=>{
   const a=await account('owner'), b=await account('editor');

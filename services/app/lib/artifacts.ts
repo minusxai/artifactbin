@@ -2,7 +2,7 @@ import {isQueryFailure} from '@artifactbin/contracts';
 import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
-import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope} from '@/lib/datasets/user-fields';
+import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -360,7 +360,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
   const catalog=dataset?catalogOf(dataset):null;
   if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
   if(document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id)throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
-  const columns=(cs:DatasetColumn[])=>cs.map(c=>c.constraints?.memberOf?.includes('current')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${document.id}`:ref))]}}:c);
+  const columns=(cs:DatasetColumn[])=>resolveUserColumnScope(cs,document.id);
   const bound={...catalog,tables:catalog.tables.map(t=>({...t,columns:columns(t.columns)}))};
   let source=dataset.source;
   if(source?.trimStart().startsWith('<Dataset')) {
@@ -837,6 +837,7 @@ export async function commitNormalizedMarkup(
     UPDATE annotations a SET anchor_key=x.source_id FROM added x
     WHERE a.artifact_id=$1 AND a.anchor_key=x.legacy_key`,
     [current.id, JSON.stringify(normalized.aliases ?? []),updated.version]);
+  await bindCurrentUserScopes(tx,updated);
   await logWholeDocumentWrite(tx, current, updated);
   return updated;
 }
@@ -1417,7 +1418,7 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
       ? annotationEffects(headSource, storedText, operations, annotationRows, storedReceipts)
       : { updates: [], receipts: [] };
     const freshEditId = newEditId();
-    const updated = await db.query<ArtifactRow>(
+    const commit = (queryable:Queryable) => queryable.query<ArtifactRow>(
       `WITH updated AS (
          UPDATE artifacts SET content = $3, source = $4, meta = $5, version = version + 1,
                 edit_id = $6, title = $21, actor_user_id = $22, actor_token_id = $23, updated_at = now()
@@ -1487,6 +1488,14 @@ export async function applyEditScoped(actor: TokenActor, id: string, input: Edit
         JSON.stringify(sideEffects.receipts),head.sharing_revision??0,
       ],
     );
+    const previousRefs=new Set(((head.meta.refs??[]) as Array<{id:string}>).map(ref=>ref.id));
+    const attachesReference=((published.meta.refs??[]) as Array<{id:string}>).some(ref=>!previousRefs.has(ref.id));
+    // First attachment changes the dataset schema in the same transaction as the document CAS.
+    const updated=attachesReference?await db.transaction(async tx=>{
+      const result=await commit(tx);
+      if(result.rows[0])await bindCurrentUserScopes(tx,result.rows[0]);
+      return result;
+    }):await commit(db);
     if (updated.rows[0]) {
       void trackEvent('edit', updated.rows[0].id, { userId: updated.rows[0].user_id });
       return { applied: true, row: {...updated.rows[0],shares:head.shares}, ...(published.warnings?.length ? { warnings: published.warnings } : {}) };

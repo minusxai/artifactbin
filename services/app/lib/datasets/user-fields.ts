@@ -1,3 +1,4 @@
+import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
 import type {DatasetColumn, Queryable, Row, UserOption} from '@artifactbin/contracts';
 import {DatasetError} from './errors';
 
@@ -21,6 +22,7 @@ export async function validateUserWrites(db:Queryable, columns:DatasetColumn[], 
   if(column.constraints?.self && (!userId || values.some(value=>value!==userId)))throw new DatasetError(`User field ${column.name} must be the logged-in user`,403);
   const valid=new Set((await db.query<{id:string}>('SELECT id FROM users WHERE id=ANY($1::text[])',[values])).rows.map(row=>row.id));
   if(values.some(value=>!valid.has(value as string)))throw new DatasetError(`User field ${column.name} contains an unknown user`,403);
+  if(column.constraints?.memberOf?.includes('current'))throw new DatasetError(`User field ${column.name} must remain unset until its report is attached`,403);
   if(column.constraints?.memberOf) {
    const allowed=new Set(await memberIds(db,column.constraints.memberOf,true));
    if(values.some(value=>!allowed.has(value as string)))throw new DatasetError(`User field ${column.name} requires membership in one of its documents`,403);
@@ -52,11 +54,21 @@ export async function userLabels(db:Queryable,ids:string[]):Promise<Record<strin
  return Object.fromEntries(rows.map(u=>[u.id,u.name||u.username||u.id]));
 }
 
+/** Resolve shorthand consistently in both the executable catalog and authored source. */
+export function resolveUserColumnScope(columns:DatasetColumn[],scope:string):DatasetColumn[] {
+ return columns.map(c=>c.constraints?.memberOf?.includes('current')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${scope}`:ref))]}}:c);
+}
+
 /** A schema round-trip must not turn a frozen current scope back into a wildcard. */
-export function retainUserScope<T extends {meta:Record<string,unknown>}>(input:T,previous:{meta:Record<string,unknown>}):T {
+export function retainUserScope<T extends {meta:Record<string,unknown>;source?:string|null}>(input:T,previous:{meta:Record<string,unknown>}):T {
  const scope=previous.meta.userScopeDocument;
  if(typeof scope!=='string')return input;
- const resolve=(columns:DatasetColumn[])=>columns.map(c=>c.constraints?.memberOf?.includes('current')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${scope}`:ref))]}}:c);
+ const resolve=(columns:DatasetColumn[])=>resolveUserColumnScope(columns,scope);
  const catalog=input.meta.catalog as {tables:Array<{columns:DatasetColumn[]}>}|undefined;
- return {...input,meta:{...input.meta,userScopeDocument:scope,...(Array.isArray(input.meta.columns)?{columns:resolve(input.meta.columns as DatasetColumn[])}:{}),...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>({...t,columns:resolve(t.columns)}))}}:{})}};
+ let source=input.source;
+ if(catalog&&source?.trimStart().startsWith('<Dataset')) {
+  const definition=parseDatasetDefinition(source);
+  source=serializeDatasetDefinition({...definition,tables:definition.tables.map(t=>({...t,columns:t.columns?.map(c=>typeof c==='string'?c:resolve([c])[0]!)}))});
+ }
+ return {...input,...(source!==undefined?{source}:{}),meta:{...input.meta,userScopeDocument:scope,...(Array.isArray(input.meta.columns)?{columns:resolve(input.meta.columns as DatasetColumn[])}:{}),...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>({...t,columns:resolve(t.columns)}))}}:{})}};
 }
