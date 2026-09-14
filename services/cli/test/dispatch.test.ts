@@ -113,3 +113,53 @@ test('a directory tracked against one server refuses another by name, before any
   assert.ok(!hosts.includes('two.example'),`no request reached the other server: ${hosts}`);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+/**
+ * THE REFUSAL CARRIES ITS OWN DIAGNOSIS. Without --json a refused push printed exactly
+ * "validation_failed: Local validation failed." and its fix line, so the agent's next call was
+ * `afbin validate` purely to READ the message it had already been handed (claude-code scrolly,
+ * production run 15, calls 16–17). The printer holds the details in both shapes — the per-file
+ * diagnostics of a local validation and the `details` strings of a server refusal — so it prints
+ * them, once, between the message and the fix.
+ */
+test('a refused push prints the diagnostics it already carries, so reading them costs no second call',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-refusal-details-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);
+  await writeFile(join(root,'doc.jsx'),'---\ntitle: Braces\n---\n<article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line"}} /></article>\n');
+  const out:string[]=[];const err:string[]=[];
+  const code=await runCli(['push','doc.jsx','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
+   stdout:s=>out.push(s),stderr:s=>err.push(s),fetch:async()=>assert.fail('a local validation failure must never reach the network')});
+  assert.equal(code,2,err.join(''));
+  const text=err.join('');
+  const lines=text.trimEnd().split('\n');
+  assert.equal(lines[0],'validation_failed: Local validation failed.');
+  assert.match(lines[1]!,/^doc\.jsx: JSX syntax error/,text);
+  assert.match(lines[1]!,/never closed/,'the diagnostic itself, not a restatement of the code');
+  assert.equal(lines[lines.length-1],'Run afbin validate and correct the reported errors.','the fix stays last');
+  assert.equal(text.split('never closed').length-1,1,'printed exactly once');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('a server refusal prints its details once — and never twice when the message is already built from them',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-server-details-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);
+  await writeFile(join(root,'doc.jsx'),'---\ntitle: Sales\n---\n<article><p>Hello</p></article>\n');
+  const details=['<Query name="monthly">: Dataset SQL: function strptime is not allowed'];
+  const run=async(payload:Record<string,unknown>)=>{
+   const err:string[]=[];
+   const code=await runCli(['push','doc.jsx','--server','https://example.com'],{cwd:root,home:root,env:{},interactive:false,color:false,
+    stdout:()=>{},stderr:s=>err.push(s),fetch:async()=>Response.json({error:'invalid_sql',...payload},{status:400,headers:{'X-Artifactbin-Account':'usr_seed'}})});
+   return{code,text:err.join('')};
+  };
+  const named=await run({message:'The document was refused.',details});
+  assert.equal(named.code,1,named.text);
+  assert.ok(named.text.includes('invalid_sql: The document was refused.'),named.text);
+  assert.equal(named.text.split(details[0]!).length-1,1,`the detail is printed once: ${named.text}`);
+  assert.ok(named.text.indexOf(details[0]!)>named.text.indexOf('The document was refused.'),'after the message');
+  const bare=await run({details});
+  assert.ok(bare.text.includes(details[0]!),bare.text);
+  assert.equal(bare.text.split(details[0]!).length-1,1,`a details-only refusal folds them into the message and must not repeat them: ${bare.text}`);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
