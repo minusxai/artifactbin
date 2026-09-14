@@ -34,7 +34,6 @@ const description = await page.evaluate(() => window.mx.describe());
 // Signal values belong to mx. Assigning window.count does not set a signal.
 await page.evaluate(() => window.mx.set({count: 2}));
 const snapshot = await page.evaluate(() => window.mx.read(['count'], {wait:true}));
-await output.image(await page.screenshot());
 return {description, snapshot};
 ```
 
@@ -46,6 +45,11 @@ For a session containing one page, standard Playwright also gives
 `const [page] = context.pages()`. Call `sessions script SESSION_ID`, not `new`,
 to resume it. Values inside your own `return` do not name pages or sessions;
 the outer response supplies those IDs.
+Capture images only when needed, using `await output.image(await page.screenshot())`.
+Image attachments can make JSON responses large. Redirect `--json > result.json`
+and read the IDs/results from that file instead of printing base64 into the agent's
+text context. A truncated tool display is not a failed execution; recover the saved
+response or use `sessions status`, without resubmitting `new`.
 The JavaScript heap and DOM remain live between calls; script variables do not.
 Independent operations may use `await Promise.all([...])`; scripts in one session
 run sequentially. Playwright functions passed to `page.evaluate()` run in the page:

@@ -24,6 +24,11 @@ export const widgetShell = '<select id="region" aria-label="Region"><option>Nort
 export function fixtureMarkup(code = '', includeWidget = true) {
   return '<Helmet><Value name="region" default="North"/><Value name="taskTitle" default="untouched"/><Value name="tasks" type="table" value={[{title:"Existing"}]}/><Query name="sales">{`select $region || \' total\' as name, case when $region=\'Broken\' then cast($region as integer) when $region=\'South\' then 230 else 110 end as revenue`}</Query><Mutation name="addTask">{`insert into tasks (title) values ($taskTitle)`}</Mutation></Helmet><h1>Live mx trial</h1><Select label="Host region" value="$region" options={["North","South","Broken"]}/>'+(includeWidget?'<Iframe title="Trial widget" height={260}>'+widgetShell+'<script>{'+JSON.stringify(code)+'}</script></Iframe>':'');
 }
+function observedRegion(sample) {
+  if (!sample || typeof sample !== 'object') return sample;
+  const signal = sample.signals?.region ?? sample.region ?? sample;
+  return signal && typeof signal === 'object' ? signal.value : signal;
+}
 /** Grade observed state, not the agent's self-report. */
 export function sessionVerdict(kind, e) {
   const rows = e.pages.flatMap(p => p.signals.tasks.value.rows);
@@ -44,7 +49,7 @@ export function sessionVerdict(kind, e) {
     capture: resumed && regions[0] === 'South' && e.executions.some(x => x.attachments?.some(a => a.mime === 'image/png')),
     duplicate: resumed && e.pages.length === 2 && artifactIds.size === 1 && JSON.stringify(regions) === '["North","South"]',
     mutate: e.pages.length === 1 && rows.filter(r => r.title === 'Held-out task').length === 1 && results.includes('committed'),
-    subscribe: e.pages.length === 1 && e.pages[0].observed?.some(value => (value && typeof value === 'object' ? value.value : value) === 'South') && e.subscriptionStopped,
+    subscribe: e.pages.length === 1 && e.pages[0].observed?.some(value => observedRegion(value) === 'South') && e.subscriptionStopped,
     invalid: e.pages.length === 1 && regions[0] === 'North' && results.includes('NOT_WRITABLE'),
     failure: resumed && e.pages.length === 1 && regions[0] === 'North' && e.statusRead && e.executions.some(x => x.status === 'failed' && x.error?.message === 'deliberate'),
   };

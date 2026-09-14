@@ -113,4 +113,8 @@ it('accepts recorded signal values without requiring one serialization shape', (
   const evidence={pages:[page],executions:[],sourceChanged:false,subscriptionStopped:true};
   expect(sessionVerdict('subscribe',evidence).passed).toBe(true);
   expect(sessionVerdict('subscribe',{...evidence,subscriptionStopped:false}).passed).toBe(false);
+  for (const observed of [['South'],[{region:'South'}],[{region:{value:'South'}}],[{signals:{region:{value:'South'}}}]]) {
+    expect(sessionVerdict('subscribe',{...evidence,pages:[{...page,observed}]}).passed).toBe(true);
+  }
+  expect(sessionVerdict('subscribe',{...evidence,pages:[{...page,observed:[{unrelated:'South'}]}]}).passed).toBe(false);
 });
