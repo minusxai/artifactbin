@@ -408,7 +408,7 @@ export async function replaceArtifactWithBody(
    */
   if (current.format === 'folder') {
     if (CONTENT_FIELDS.some((f) => body[f] !== undefined)) {
-      return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Send title, visibility or parent_id instead'] }, 400);
+      return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Only title, visibility and folder are editable, in the folder YAML you push'] }, 400);
     }
   }
   const prepared: PreparedContent | Response = current.format === 'folder'
