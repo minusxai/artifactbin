@@ -84,8 +84,9 @@ export default function WorkshopComments() {
   return (
     <>
     {region && <div className="workshop-comment-highlight" data-comment-highlight={region} aria-hidden="true" />}
-    <aside ref={rail} className="workshop-comments" aria-label="Sample artifact comments">
+    <aside ref={rail} className="workshop-comments" aria-label="Sample artifact comments" tabIndex={-1}>
       {samples.map((sample, index) => {
+        if (resolved[index]) return null;
         const open = active === index;
         const firstAgent = sample.messages.find((message) => message.agent)?.agent;
         const AgentIcon = firstAgent ? agentIcons[firstAgent] : MessageSquare;
@@ -99,17 +100,16 @@ export default function WorkshopComments() {
             <button
               ref={(element) => { pins.current[index] = element; }}
               className="workshop-comment-pin"
-              aria-label={`${resolved[index] ? "Reopen" : "Open"} sample comment by ${sample.author}`}
+              aria-label={`Open sample comment by ${sample.author}`}
               aria-expanded={open}
               aria-controls={`workshop-thread-${index}`}
               onClick={() => {
                 setActive(open ? null : index);
-                setResolved((values) => values.map((value, i) => i === index ? false : value));
               }}
               type="button"
             >
               <span className="workshop-comment-avatar">{sample.author[0]}</span>
-              <span className="workshop-comment-count">{resolved[index] ? <Check size={12} /> : 1 + replyCount}</span>
+              <span className="workshop-comment-count">{1 + replyCount}</span>
               <span className="workshop-comment-preview" aria-hidden="true">
                 <strong>{sample.author}</strong><span>{sample.body}</span>
                 <small><AgentIcon size={13} /> {replyCount} {replyCount === 1 ? "reply" : "replies"} <span>open →</span></small>
@@ -123,7 +123,10 @@ export default function WorkshopComments() {
                   <div>
                     <Tooltip content="Resolve conversation"><button type="button" aria-label="Resolve sample conversation" onClick={() => {
                       setResolved((values) => values.map((value, i) => i === index ? true : value));
-                      close(index);
+                      setActive(null);
+                      setHovered(null);
+                      setFocused(null);
+                      rail.current?.focus({ preventScroll: true });
                     }}><Check size={16} /></button></Tooltip>
                     <Tooltip content="Close conversation"><button type="button" aria-label="Close sample conversation" onClick={() => close(index)}><X size={16} /></button></Tooltip>
                   </div>

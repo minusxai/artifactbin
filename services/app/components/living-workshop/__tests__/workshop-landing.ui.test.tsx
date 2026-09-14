@@ -105,7 +105,7 @@ it("copies an agent prompt from the green create action", async () => {
 });
 
 it("lets visitors open, reply to, and resolve a sample comment locally", () => {
-  mount();
+  const view = mount();
   fireEvent.click(screen.getByRole("button", { name: "Open sample comment by Maya" }));
   expect(screen.getByText("Demo conversation · replies stay on this page")).toBeInTheDocument();
   const reply = screen.getByRole("textbox", { name: "Reply to Maya" });
@@ -118,9 +118,12 @@ it("lets visitors open, reply to, and resolve a sample comment locally", () => {
   expect(screen.getByText("Love this direction.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Resolve sample conversation" }));
   expect(screen.queryByRole("textbox", { name: "Reply to Maya" })).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Reopen sample comment by Maya" })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Reopen sample comment by Maya" }));
-  expect(screen.getByText("Love this direction.")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /sample comment by Maya/ })).not.toBeInTheDocument();
+  expect(view.container.querySelector("[data-comment-highlight]")).toBeNull();
+  expect(screen.getByRole("button", { name: "Open sample comment by Leo" })).toBeInTheDocument();
+  view.unmount();
+  mount();
+  expect(screen.getByRole("button", { name: "Open sample comment by Maya" })).toBeInTheDocument();
 });
 
 it("keeps the sample conversations together in a single comments rail", () => {

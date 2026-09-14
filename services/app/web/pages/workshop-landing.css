@@ -106,7 +106,7 @@
 }
 .workshop-comment-highlight[data-comment-highlight="poster"] { left: 50%; top: 9%; width: 11%; height: 23%; transform: rotate(-4.87deg); }
 .workshop-comment-highlight[data-comment-highlight="bots"] { left: 35%; top: 39%; width: 41%; height: 53%; }
-.workshop-comment-highlight[data-comment-highlight="poster-middle"] { left: 62.4%; top: 8.5%; width: 15.8%; height: 22.5%; transform: rotate(3.72deg); }
+.workshop-comment-highlight[data-comment-highlight="poster-middle"] { left: 61.1%; top: 8.5%; width: 20.1%; height: 22.5%; transform: rotate(3.72deg); }
 .workshop-comment-highlight[data-comment-highlight="poster-right"] { left: 79.5%; top: 10.5%; width: 12%; height: 23%; transform: rotate(-5.16deg); }
 .workshop-comment-highlight[data-comment-highlight="artifact-box"] { left: 73%; top: 65%; width: 24%; height: 29%; }
 .workshop-comment-highlight[data-comment-highlight="books"] { left: 20.5%; top: 73%; width: 9%; height: 14%; }

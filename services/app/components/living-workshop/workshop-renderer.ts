@@ -244,16 +244,16 @@ export function createWorkshopScene(
       } else {
         c.drawImage(sheet.image, (w - dw) / 2, (h - dh) / 2, dw, dh);
       }
-      // Recolor saturated ink blue while retaining neutral text and paper.
-      // Fade the effect in with saturation to avoid hard edges around type.
+      // Blend blue ink with luminance, never the original hue: pale chart fills
+      // and antialiased edges must turn blue too, while true grays stay neutral.
       // This runs only when painting a texture, never in the animation loop.
       const print = c.getImageData(margin, margin, w - margin * 2, h - margin * 2);
-      const ink = [17, 42, 92], cobalt = [35, 83, 166], stock = [255, 252, 241];
+      const ink = [17, 42, 92], cobalt = [35, 83, 166], stock = [255, 255, 255];
       for (let pixel = 0; pixel < print.data.length; pixel += 4) {
         const red = print.data[pixel]!, green = print.data[pixel + 1]!, blue = print.data[pixel + 2]!;
         const maximum = Math.max(red, green, blue);
         const saturation = maximum ? (maximum - Math.min(red, green, blue)) / maximum : 0;
-        const strength = Math.min(1, Math.max(0, (saturation - 0.15) / 0.25));
+        const strength = Math.min(1, saturation / 0.4);
         if (!strength) continue;
         const light = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255;
         const from = light < 0.45 ? ink : cobalt;
@@ -261,8 +261,8 @@ export function createWorkshopScene(
         const mix = light < 0.45 ? light / 0.45 : (light - 0.45) / 0.55;
         for (let channel = 0; channel < 3; channel++) {
           const tinted = from[channel]! + (to[channel]! - from[channel]!) * mix;
-          const original = print.data[pixel + channel]!;
-          print.data[pixel + channel] = original + (tinted - original) * strength;
+          const neutral = light * 255;
+          print.data[pixel + channel] = neutral + (tinted - neutral) * strength;
         }
       }
       c.putImageData(print, margin, margin);
