@@ -122,8 +122,15 @@ export const declaresMutation = (island: TrackerIsland): boolean => datasetMutat
 
 // ---------------------------------------------------------------- the probe's pure halves
 
-/** A value that reads as "this task is finished". */
-const DONE_RE = /^(done|complete|completed|finished|closed|resolved|shipped|true|1)$/i;
+/**
+ * A value that reads as "this task is finished".
+ *
+ * `true` is in and `1` is deliberately NOT: a document may model completion as a
+ * boolean column, but a bare 1 is as likely to be a counter — and this regex also
+ * decides whether a changed cell COUNTS as a completion, where a miscount is a
+ * gated check answering the wrong thing.
+ */
+const DONE_RE = /^(done|complete|completed|finished|closed|resolved|shipped|true)$/i;
 /** A mutation NAME (or SQL) that means "mark it done". */
 const COMPLETES_RE = /complete|done|finish|close|resolve|mark/i;
 /** The bound row snapshot and the edited cell, which are not ordinary `$name` parameters. */

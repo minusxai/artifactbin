@@ -172,7 +172,7 @@ describe('the three checks read off the published document', () => {
 
 describe('mutation_works — the driver runs the write itself', () => {
   it('binds a row, posts the document\'s own mutate door, and sees the status change', async () => {
-    const after: Row[] = [{ ...ROWS[0] }, { ...ROWS[1], status: 'done' }];
+    const after: Row[] = [{ ...ROWS[0], status: 'done' }, { ...ROWS[1] }];
     const { calls, spy } = fakeWire({
       before: ROWS,
       after,
@@ -191,14 +191,42 @@ describe('mutation_works — the driver runs the write itself', () => {
     expect(body.mutation).toBe('complete');
     // A `$_row` mutation is sent WITH the row it was declared over, and that row is
     // one of the query result rows the island carries — `rowSchemas` compares it field by field.
-    expect(body.row).toEqual(ROWS[1]);
+    expect(body.row).toEqual(ROWS[0]);
     expect(String((write?.init?.headers as Record<string, string>).authorization)).toContain('mx_driver');
     // …and the body is a shape the PRODUCT's own door parser accepts, asked of that
     // parser rather than of this test's belief about it (`lib/story/mutation-request`).
-    expect(parseMutationRequest(body)).toEqual({ mutation: 'complete', values: {}, row: ROWS[1] });
-    // The dataset is re-read after the write, and the probe says what it saw.
-    expect(calls.filter((c) => c.url.includes('/api/artifacts/'))).toHaveLength(2);
-    expect(String(rows.find(([m]) => m === 'mutation_probe')?.[1])).toMatch(/complete.*todo.*done/i);
+    expect(parseMutationRequest(body)).toEqual({ mutation: 'complete', values: {}, row: ROWS[0] });
+    // The dataset is re-read after the write, and the probe says what it saw. The
+    // ADDRESS is pinned, not just the count: `decl.target` has to be the bare artifact
+    // id — a `ref:`/`ref_` spelling would 404 on every live run, and a 404 is a
+    // DriverFailure, so `mutation_works` would go quietly unanswered forever.
+    const reads = calls.filter((c) => c.url.includes('/api/artifacts/'));
+    expect(reads).toHaveLength(2);
+    expect(reads[0].url).toBe(`http://product.test/api/artifacts/${DATASET}`);
+    expect(String(rows.find(([m]) => m === 'mutation_probe')?.[1])).toMatch(/complete.*doing.*done/i);
+  });
+
+  /**
+   * Completing a task that is already done changes nothing, and a probe that
+   * picked one would report a working tracker as broken — so an unfinished row
+   * goes first whatever order the document rendered them in.
+   */
+  it('offers an unfinished row before an already-completed one', async () => {
+    const rendered: Row[] = [
+      { id: 7, title: 'Audit seat licences', owner: 'Ines', status: 'done' },
+      { id: 8, title: 'Publish incident postmortem', owner: 'Tom', status: 'todo' },
+    ];
+    const { calls, spy } = fakeWire({
+      before: rendered,
+      after: [rendered[0], { ...rendered[1], status: 'done' }],
+      mutate: jsonRes({ ok: true, dataset: DATASET, affected: 1, rowCount: 2 }),
+    });
+    const out = await tracker().checks(checkCtx({
+      served: { status: 200, html: island(TRACKER_MARKUP, { state: state(rendered) }) },
+    }));
+    spy.mockRestore();
+    expect(out.mutation_works).toBe(true);
+    expect(JSON.parse(String(calls.find((c) => c.url.endsWith('/mutate'))?.init?.body)).row).toEqual(rendered[1]);
   });
 
   it('is false — with the refusal in the probe row — when the door refuses the write', async () => {
@@ -267,6 +295,9 @@ describe('the pure halves the probe is built from', () => {
   it('picks the completing mutation over the inserting one, and never a local one', () => {
     const flow = islandOf(island(TRACKER_MARKUP, { state: state() }))?.dataflow?.flow;
     expect(completionMutation(flow?.mutations ?? [])?.name).toBe('complete');
+    // The dataset the probe reads back is the declaration's `target`, and the product's
+    // own parser puts the BARE artifact id there — not `ref:<id>`, not the `ref_<id>` table.
+    expect(completionMutation(flow?.mutations ?? [])?.target).toBe(DATASET);
     expect(completionMutation([])).toBeNull();
   });
 
