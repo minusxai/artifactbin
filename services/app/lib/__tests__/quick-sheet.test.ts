@@ -31,6 +31,11 @@ describe('the installed short skill',()=>{
   for(const topic of ['markup-data','publishing-annotations','publishing-auth','publishing','errors','commands'])expect(sheet).toContain(`references/${topic}.md`);
   for(const term of ['afbin comment','afbin log','afbin delete','--json','On refusal'])expect(sheet).toContain(term);
   expect(sheet).toContain('whether or not you can view images');expect(sheet).toContain('every slide, in one image');
+  // Nothing ELSE is needed to make it look right. The checking bullet is where an agent decides what
+  // more to reach for, so it says there is nothing more: a theme carries the palette, so a design
+  // skill, a palette tool or image tooling is a turn spent on something the document already has.
+  expect(sheet).toContain('no other skill, palette tool or image tooling is needed');
+  expect(sheet).toContain('the theme carries the palette');
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });
