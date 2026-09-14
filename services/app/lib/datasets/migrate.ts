@@ -8,7 +8,6 @@ import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/co
 import { removedSqlReferenceTokens } from '@/lib/story/sql-reference-tokens';
 import { newEditId } from '@/lib/story/splice';
 import { finalizeArtifactMetadata } from '@/lib/story/parsed-artifact-metadata';
-import { queryDeps } from '@/lib/story/dataflow';
 
 interface MigrationDiagnostic { artifactId?: string; version?: number; reason: string }
 interface SourceMigration { source: string; changed: boolean; diagnostics: MigrationDiagnostic[] }
@@ -104,8 +103,10 @@ export function migrateMarkupSource(source: string,options:MarkupMigrationOption
     const ids = allIds;
     if (!ids.length) continue;
     if (el.tag === 'Mutation' && ids.length !== 1) { diagnostics.push({ reason: `Mutation ${attr(el, 'name') ?? '?'} has ${ids.length} legacy sources` }); continue; }
-    const localDeps = el.tag === 'Query' ? queryDeps(expression.value.json, names).filter((name)=>name!==attr(el,'name')) : [];
-    const direct = ids.length === 1 && (el.tag === 'Mutation' || localDeps.length === 0);
+    // Legacy reads executed in the document engine. Moving their computation
+    // into the catalog compiler changes the dialect, even for a single source.
+    // Only mutations move directly to the authorized dataset write boundary.
+    const direct = el.tag === 'Mutation';
     if (!direct) for (const id of ids) if (!upstream.has(id)) upstreamName(id);
     const rewritten = rewriteSql(rawSql, upstream, direct).sql;
     edits.push({ start: expression.start + first + 1, end: expression.start + last, text: rewritten });

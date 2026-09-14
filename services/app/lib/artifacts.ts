@@ -2337,6 +2337,18 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
   flow=await resolveUserValues(flow,async id=>datasets[id]);
   const usedSources = new Map<string, string>();
   const state = await runDataflow(flow, datasets, {userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
+    sourceInput:async id=>{
+      // sourceQuery authorizes first and records this same snapshot for the
+      // final access check. Only a physical stored public.rows table qualifies;
+      // remote catalogs and model SQL retain their query execution boundary.
+      const table=datasets[id] as RefTable | undefined;
+      if(!table)return undefined;
+      if(!table.catalog)return table;
+      if(table.catalog.kind!=='stored')return undefined;
+      const stored=table.catalog.tables.find(t=>t.schema==='public'&&t.name==='rows');
+      if(!stored?.objectKey||stored.sql||stored.source||stored.modelCellId)return undefined;
+      return {rows:await loadDatasetRows({content:'',meta:{objectKey:stored.objectKey}}),columns:stored.columns};
+    },
     sourceQuery:async(q,values,page)=>{
       const table = datasets[q.source!] as RefTable | undefined;
       if (!table) throw new Error(`Source ref:${q.source} is unavailable`);
