@@ -77,8 +77,11 @@ try {
   };
   browser=await chromium.launch();
   const gradeWidget=async(kind,code)=>{
-    const id=await publish(code), context=await browser.newContext({extraHTTPHeaders:{Authorization:`Bearer ${credential.token}`}}), page=await context.newPage();
+    const id=await publish(code), context=await browser.newContext();
+    await context.addCookies(credential.cookie.split(';').map(pair=>{const at=pair.indexOf('=');return {name:pair.slice(0,at).trim(),value:pair.slice(at+1).trim(),url:base,httpOnly:true,sameSite:'Lax'};}));
+    const page=await context.newPage();
     page.setDefaultTimeout(4000);
+    const failedRequests=[];page.on('response',response=>{if(response.status()>=400)failedRequests.push({url:response.url().split('?')[0],method:response.request().method(),status:response.status()});});
     const pageErrors=[];page.on('pageerror',error=>pageErrors.push(String(error.message)));page.on('console',message=>{if(message.type()==='error')pageErrors.push(message.text());});
     const checks=[];const check=async(name,fn)=>{try{await fn();checks.push({name,pass:true});}catch(error){checks.push({name,pass:false,error:String(error.message).slice(0,300)});}};
     try {
@@ -113,7 +116,7 @@ try {
       await check('no unintended scalar writes',async()=>{assert((await read()).signals.taskTitle.value==='untouched','Mutation overwrote its argument signal');});
       await check('no unintended row writes',async()=>{assert((await read()).signals.tasks.value.rows.length<=(['table','mutate'].includes(kind)?2:1),'Unexpected row write');});
       return {passed:checks.every(c=>c.pass),noUnintendedWrites:checks.filter(c=>c.name.startsWith('no unintended')).every(c=>c.pass),checks,
-        ...(!checks.every(c=>c.pass)?{diagnostics:{pageErrors,state:await read(),html:await frame.locator('#rows').innerHTML(),error:await frame.locator('#error').innerText()}}:{})};
+        ...(!checks.every(c=>c.pass)?{diagnostics:{pageErrors,failedRequests,state:await read(),html:await frame.locator('#rows').innerHTML(),error:await frame.locator('#error').innerText()}}:{})};
     }finally{await context.close();}
   };
   // Grader probes precede paid runs: an empty submission must fail its requested behavior.
