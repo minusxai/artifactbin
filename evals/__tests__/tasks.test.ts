@@ -49,5 +49,7 @@ it('hardcore gives the brief and the document link — no starter text, no afbin
 
 it('tells text-only models to inspect markup, at both prompt levels',()=>{
  expect(buildPrompt(task,ACCESS,{vision:false})).toContain('cannot view images');
+ expect(buildPrompt(task,ACCESS,{vision:false})).not.toMatch(/Check your work|reading the document markup/);
+ expect(buildPrompt(task,ACCESS,{vision:false})).toContain('A successful afbin push is the check');
  expect(buildPrompt(task,ACCESS,{promptLevel:'hardcore',vision:false})).toContain('cannot view images');
 });

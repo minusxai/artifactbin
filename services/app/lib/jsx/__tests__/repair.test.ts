@@ -94,8 +94,8 @@ describe('repairJsxSource', () => {
  * calls across runs 34740707220–34741910427, one `}` at a time. Three shapes, all provable: stray
  * `}`s after an expression that already closed (pi's report, run 34741910427: 13 opens, 15 closes),
  * a `{{{` opening from wrapping an already-wrapped object (pi's second attempt at the same line),
- * and an expression that never closes (the case the hint already named). Each repair is kept only
- * if the result parses.
+ * and — NOT repaired — an expression that never closes, because where the brace belongs is a guess.
+ * Each repair is kept only if the result parses.
  */
 describe('repairJsxSource — brace counts', () => {
   const extra = '<article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>';
@@ -116,11 +116,8 @@ describe('repairJsxSource — brace counts', () => {
     expect(out!.source).toContain('viz={{"kind"');
     expect(out!.repair.message).toMatch(/viz=\{\{\{/);
   });
-  it('adds the missing closing braces to an expression that never closed', () => {
-    const out = repairJsxSource(missing);
-    expect(out).not.toBeNull();
-    expect(parseJsx(out!.source).ok).toBe(true);
-    expect(out!.repair.message).toMatch(/1 closing brace/);
+  it('does NOT guess where a missing brace belongs — that stays a named refusal', () => {
+    expect(repairJsxSource(missing)).toBeNull();
   });
   it('leaves a document alone when the fault is something else', () => {
     expect(repairJsxSource('<article><p>unclosed</article>')).toBeNull();

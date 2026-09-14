@@ -36,7 +36,7 @@
  * one-character-at-a-time loop makes the document worse and then gives up.
  */
 import { parseJsx } from './parse';
-import { extraClosing, tripleOpen, unclosedExpression } from './syntax-error';
+import { extraClosing, tripleOpen } from './syntax-error';
 
 /** What was changed on the way in, for the reply to carry. */
 export interface SourceRepair {
@@ -45,19 +45,18 @@ export interface SourceRepair {
   message: string;
   /** How many characters were dropped (backslashes, or stray closing braces). */
   removed: number;
-  /** How many closing braces were added. */
-  added?: number;
 }
 
 /**
  * THE BRACE COUNT, the second fault worth repairing: 15 tasks and 82 model calls in eval runs
  * 34740707220–34741910427 went to a `viz={{…}}` with one `}` too many or too few, or a `{{{`
- * opening from wrapping an already-wrapped object. Three shapes, each found by the same scanners
- * that name them in the refusal, applied in order — a `{{{` usually leaves a stray `}` behind —
- * and kept only if the result parses. Nothing else is touched.
+ * opening from wrapping an already-wrapped object. The two unambiguous shapes are repaired — stray
+ * `}`s after a closed expression, and `{{{` — found by the same scanners that name them in the
+ * refusal, applied in order (a `{{{` usually leaves a stray `}` behind) and kept only if the result
+ * parses. A missing brace is named, never guessed (see below).
  */
 function repairBraces(source: string): { source: string; repair: SourceRepair } | null {
-  let out = source; const notes: string[] = []; let removed = 0; let added = 0;
+  let out = source; const notes: string[] = []; let removed = 0;
   const triple = tripleOpen(out);
   if (triple) {
     out = out.slice(0, triple.index!) + `${triple[1]}={{` + out.slice(triple.index! + triple[0].length);
@@ -79,24 +78,15 @@ function repairBraces(source: string): { source: string; repair: SourceRepair } 
     removed += dropped;
     notes.push(`removed ${dropped} closing brace${dropped === 1 ? '' : 's'} after \`${extra.attr}={\` on line ${extra.line}`);
   }
-  const unclosed = unclosedExpression(out);
-  if (unclosed) {
-    // The expression swallowed the rest of the element; the missing braces belong before its close.
-    const m = [...out.matchAll(/([A-Za-z_][\w-]*)=\{/g)].find((x) => x[1] === unclosed.attr && out.slice(0, x.index! + x[0].length - 1).split('\n').length === unclosed.line)!;
-    const end = out.indexOf('/>', m.index!);
-    if (end < 0) return null;
-    const before = out.slice(0, end).replace(/\s+$/, '');
-    out = before + '}'.repeat(unclosed.missing) + ' ' + out.slice(end);
-    added += unclosed.missing;
-    notes.push(`added ${unclosed.missing} closing brace${unclosed.missing === 1 ? '' : 's'} to close \`${unclosed.attr}={\` opened on line ${unclosed.line}`);
-  }
+  // A MISSING brace is not repaired: where it belongs is a guess (an inner object or the outer one),
+  // and a wrong guess parses. It stays a named refusal — "never closed, needs N more `}`".
   if (!notes.length || out === source || !parseJsx(out).ok) return null;
   return {
     source: out,
     repair: {
       code: 'unbalanced_braces',
       message: `${notes.join('; ')}. Build the viz object as JSON and serialize it inside ONE JSX expression (viz={{…}}) instead of counting braces by hand.`,
-      removed, ...(added ? { added } : {}),
+      removed,
     },
   };
 }

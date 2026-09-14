@@ -102,7 +102,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    }
   }
   let localValidation:Awaited<ReturnType<typeof validateFiles>>|undefined;
-  if(command==='validate'&&!account){localValidation=await validateFiles(workspace,positionals,!!flags.fix);if(!flags.remote||!localValidation.valid){emit(localValidation);return localValidation.valid?0:2;}}
+  if(command==='validate'&&!account){localValidation=await validateFiles(workspace,positionals,!!flags.fix);if(!flags.remote||!localValidation.valid){
+   // One validate answers what an agent otherwise checks by hand: pi spent ten calls slicing its own viz
+   // JSON out of the file with Python before pushing (local deck, 14 Sep).
+   const verified=localValidation.valid?await verifiedSummary(workspace,positionals):undefined;
+   emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
    try{const result=await diffCommand(workspace,parsed,serverOrigin()??'https://artifactbin.dev',false,stdout,undefined,style);if(result)emit(result);return 0;}

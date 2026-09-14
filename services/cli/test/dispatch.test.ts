@@ -61,14 +61,12 @@ test('validate numbers a fenced document\'s diagnostics by FILE line and offset,
   await writeFile(join(root,'doc.jsx'),fence+body);
   const output:string[]=[];
   const code=await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
-  // The missing brace is REPAIRED now (lib/jsx/repair); the notice still counts lines from the top of the
-  // file. ($q is undeclared on purpose, so the document is still refused — by a different, located check.)
-  assert.equal(code,2,output.join(''));
+  assert.equal(code,2);
   const [file]=JSON.parse(output.join('')).files;const [diag]=file.diagnostics;
-  assert.equal(file.fixed,true,JSON.stringify(file));
-  assert.equal(diag.code,'unbalanced_braces');
-  assert.match(diag.message,/added 1 closing brace to close `viz=\{` opened on line 7/,diag.message);
+  assert.equal(diag.code,'invalid_markup');
+  assert.match(diag.message,/`viz=\{` opened on line 7 is never closed/,diag.message);
   assert.doesNotMatch(diag.message,/line 3\b/,diag.message);
+  assert.ok(diag.start>=fence.length,`start ${diag.start} is inside the fence`);
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
@@ -90,5 +88,8 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
   const rewritten=await readFile(join(root,'doc.jsx'),'utf8');
   assert.ok(rewritten.startsWith(fence),'the fence is kept');
   assert.ok(rewritten.includes('"nominal"}}}}} />'),rewritten);
+  // …and validate then answers what was verified, so no hand-rolled JSON check is needed.
+  assert.deepEqual(result.files[0].diagnostics.filter((d:{severity?:string})=>d.severity!=='notice'),[]);
+  assert.deepEqual(result.verified,[{path:'doc.jsx',title:null,queries:['q'],charts:1,checks:['markup validated','1 query dry-run against the published dataset','1 chart checked against query columns','title and metadata accepted']}]);
  }finally{await rm(root,{recursive:true,force:true});}
 });
