@@ -28,10 +28,12 @@ describe('the installed short skill',()=>{
   expect(fewTurns).toBeDefined();
   // Countable, not exhortative: a number of calls and a named payload for the first push.
   // The SEQUENCE lives in the workflow bullet — the first one an agent reads — not in a later aside.
-  const workflow=bullet('- For a supplied artifact:');
-  expect(workflow).toContain('then `afbin push report.jsx` straight back with the title and the section headings');
-  expect(workflow).toContain('that first push is a page the person can open');
-  expect(workflow).toContain('then `afbin help <template>`, then fill the sections with further pushes');
+  const workflow=bullet('- IMPORTANT — a person is watching the page');
+  expect(workflow).toContain('then IMMEDIATELY `afbin push report.jsx` with the title and the section headings filled in');
+  expect(workflow).toContain('within your first three calls');
+  expect(workflow).toContain('Never make them wait for one big write');
+  expect(workflow).toContain('instead of a blank page');
+  expect(workflow).toContain('Only then `afbin help <template>`, and fill the sections with further pushes');
   expect(workflow).not.toContain('edit the file');
   expect(fewTurns).toMatch(/is not re-checking/);
   // Vague encouragement is the failure mode this replaced; it must not come back.
@@ -46,7 +48,7 @@ describe('the installed short skill',()=>{
   for(const text of ['text, data, charts, tables, controls and motion','<Iframe>','isolated DOM script or canvas','never for layout or content'])expect(native).toContain(text);
   // The bundle the CLI ships carries the same two bullets: a copy edit without
   // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
-  expect(teaching.files['SKILL.md']).toContain('straight back with the title and the section headings');
+  expect(teaching.files['SKILL.md']).toContain('IMMEDIATELY `afbin push report.jsx` with the title and the section headings filled in');
   expect(teaching.files['SKILL.md']).toContain('- Native markup first');
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });

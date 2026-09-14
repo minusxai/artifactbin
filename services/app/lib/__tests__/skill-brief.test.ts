@@ -80,7 +80,8 @@ describe('llms.txt and the discovery head', () => {
     const then = llmsText(BASE).split('\n').find((line) => line.startsWith('Then:'))!;
     expect(then).toBeDefined();
     expect(then).toContain('afbin pull <artifact url> --output report.jsx');
-    expect(then).toContain('afbin push report.jsx straight back with the title and the section headings');
+    expect(then).toContain('IMMEDIATELY afbin push report.jsx with the title and section headings');
+    expect(then).toContain('never make them wait for one big write');
     expect(then).toContain('fill the sections with further pushes');
     expect(then).toContain('afbin push report.jsx');
     // A validate standing as its own step in the sequence — `afbin validate report.jsx;` — is the offence.

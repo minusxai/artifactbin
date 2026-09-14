@@ -87,7 +87,7 @@ export function helpBundle(template:string,origin:string=DEFAULT_SERVER):string{
   ['publishing-datasets',bundled('publishing-datasets')],
  ];
  const body=parts.map(([name,text])=>`\n# ${name}\n\n${text.trim()}\n`).join('');
- return withTeachingOrigin(`Everything a ${template} needs, in reading order. Your first push — the title and the section headings — should already be live; read this once, then fill the sections with further pushes. On a refusal, afbin help errors; for sync, afbin help publishing.\n${body}`,origin);
+ return withTeachingOrigin(`Everything a ${template} needs, in reading order. IMPORTANT: a person is watching the page — your first push (title and section headings) must already be live; if not, push NOW, then read this once and fill the sections with further pushes.\n${body}`,origin);
 }
 export function helpDocument(topic?:string,format='text',origin:string=DEFAULT_SERVER):string{
  return withTeachingOrigin(helpBody(topic,format,origin),origin);

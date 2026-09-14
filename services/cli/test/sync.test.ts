@@ -463,7 +463,7 @@ test('pulling a starter names the next call — pick the kind, afbin help <templ
   await saveConnection({server:'https://example.com',token:'mx_test'},home);
   const a=await invoke(['pull','st4rt0','--output','report.jsx']);assert.equal(a.code,0,JSON.stringify(a));
   assert.match(a.result.operations[0].next,/afbin help <template> \(dashboard, deck, editorial, plan, scrolly\)/);
-  assert.match(a.result.operations[0].next,/^A starter: push it straight back with the title and the section headings/,'the hint orders the first push FIRST, before any reading');
+  assert.match(a.result.operations[0].next,/^IMPORTANT: a person is watching this page\. Push it straight back NOW with the title and the section headings/,'the hint orders the first push FIRST, with the reason');
   assert.match(a.result.operations[0].next,/then afbin help <template>/,'the reading comes after that push');
   assert.match(a.result.operations[0].next,/fill the sections with further pushes/,'and what the later pushes are for');
   assert.doesNotMatch(a.result.operations[0].next,/write the whole file/,'the contradicting instruction is gone');
