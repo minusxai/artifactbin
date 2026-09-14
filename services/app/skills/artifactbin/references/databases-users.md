@@ -6,7 +6,9 @@ description: Native user fields, membership constraints, current identity and me
 ## User fields
 
 `user` is a nullable account ID, displayed by name in DataTable. Declare identity
-columns in a stored dataset. To publish typed columns, use these two files.
+columns in a stored dataset. This complete example covers publishing, filtering,
+editable titles, assignment and completion. Adapt the two dataset files and the
+report below, then push them in order.
 
 Save this resource as `people.yaml`:
 
@@ -61,6 +63,11 @@ field must remain null. Reusing the dataset in another report never rebinds it.
 Use `"ref:<reportId>"` when the report already exists. Membership follows the
 fixed report's current share list. The picker only lists scopes its viewer can
 read.
+
+Every `Column col` must name a query result column, including a button-only
+column. Keep `select *, '' as action` below: `select *` alone omits `action` and
+publish will reject `<Column col="action">`. The alias is a display column in
+the query result; it needs no stored dataset field.
 
 ```jsx
 <Helmet>

@@ -489,6 +489,8 @@ test('user authoring help includes the actual typed-resource publish path',()=>{
  const users=helpDocument('users');
  assert.match(users,/source: people\.jsx/);
  assert.match(users,/afbin push people\.yaml/);
+ assert.match(users,/Every `Column col` must name a query result column/);
+ assert.match(users,/select \*, '' as action from public\.rows/);
  assert.match(users,/where \$person is null or assigned_to=\$person/);
  assert.match(helpDocument('dataset'),/publishing|Datasets/i);
  assert.match(localSkillFiles['references/markup-editing.md'],/databases-users\.md/);
