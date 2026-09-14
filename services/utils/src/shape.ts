@@ -28,3 +28,22 @@ export function inferColumns(rows: Array<Record<string, unknown>>): DatasetColum
   }
   return order.map((name) => ({ name, type: types.get(name) ?? 'string' }));
 }
+
+/** One schema parser for imports, catalog definitions and author declarations. */
+export function parseDatasetColumn(raw: unknown): DatasetColumn {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Column must be {name, type, constraints?}');
+  const c = raw as Record<string, unknown>;
+  if (typeof c.name !== 'string' || !c.name || c.name.includes('\0') || !['string','number','boolean','date','user'].includes(String(c.type))) throw new Error('Invalid column name or type');
+  if (Object.keys(c).some(k => !['name','type','constraints'].includes(k))) throw new Error('Unknown column attribute');
+  const column: DatasetColumn = {name:c.name, type:c.type as ColumnType};
+  if (c.constraints !== undefined) {
+    if (c.type !== 'user' || !c.constraints || typeof c.constraints !== 'object' || Array.isArray(c.constraints)) throw new Error('User constraints must be an object');
+    const constraints = c.constraints as Record<string,unknown>;
+    if (Object.keys(constraints).some(k => !['memberOf','self'].includes(k))) throw new Error('Unknown user constraint');
+    if (constraints.self !== undefined && typeof constraints.self !== 'boolean') throw new Error('self must be boolean');
+    const scopes = constraints.memberOf;
+    if (scopes !== undefined && (!Array.isArray(scopes) || !scopes.length || scopes.some(s => typeof s !== 'string' || (s !== 'current' && !/^ref:[A-Za-z0-9]{6,12}$/.test(s))) || new Set(scopes).size !== scopes.length)) throw new Error('memberOf must be a nonempty array of unique document references or current');
+    column.constraints = {...(scopes !== undefined ? {memberOf:[...(scopes as string[])]} : {}), ...(constraints.self !== undefined ? {self:constraints.self as boolean} : {})};
+  }
+  return column;
+}

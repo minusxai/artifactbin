@@ -1,3 +1,6 @@
+import type {DataflowState} from '@/lib/story/dataflow';
+import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
+import {validateUserContent,userOptions,userLabels} from '@/lib/datasets/user-fields';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -346,6 +349,29 @@ export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
   return (r.rows[0]?.n ?? 0) >= cap;
 }
 
+/** First owning report attachment freezes unresolved memberOf scopes atomically. */
+async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<void> {
+ if(document.format!=='markup')return;
+ const refs=(document.meta.refs as Array<{id:string}>|undefined)??[];
+ for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
+  const dataset=(await tx.query<ArtifactRow>("SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
+  const catalog=dataset?catalogOf(dataset):null;
+  if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
+  if(document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id)throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
+  const columns=(cs:DatasetColumn[])=>cs.map(c=>c.constraints?.memberOf?.includes('current')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${document.id}`:ref))]}}:c);
+  const bound={...catalog,tables:catalog.tables.map(t=>({...t,columns:columns(t.columns)}))};
+  let source=dataset.source;
+  if(source?.trimStart().startsWith('<Dataset')) {
+   const definition=parseDatasetDefinition(source);
+   source=serializeDatasetDefinition({...definition,tables:definition.tables.map(t=>({...t,columns:t.columns?.map(c=>typeof c==='string'?c:columns([c])[0]!)}))});
+  }
+  await archiveVersion(tx,dataset);
+  const meta={...dataset.meta,catalog:bound,columns:columns((dataset.meta.columns??[]) as DatasetColumn[])};
+  const updated=(await tx.query<ArtifactRow>('UPDATE artifacts SET meta=$2,source=$3,version=version+1,edit_id=$4,updated_at=now() WHERE id=$1 RETURNING *',[dataset.id,JSON.stringify(meta),source,newEditId()])).rows[0];
+  await logWholeDocumentWrite(tx,dataset,updated);
+ }
+}
+
 export async function createArtifact(
   tokenId: string,
   userId: string | null,
@@ -381,6 +407,7 @@ export async function createArtifact(
     try {
       const r = await db.transaction(async tx=>{
         if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
+        await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
         const catalog=catalogOf(input);
         if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
         const created = await tx.query<ArtifactRow>(
@@ -431,6 +458,7 @@ export async function createArtifact(
         ],
         );
         Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
+        await bindCurrentUserScopes(tx,created.rows[0]);
         if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
         return created;
       });
@@ -917,6 +945,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
+    try {await validateUserContent(tx,target,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));}catch(error){if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:"dataset_error",details:[error.message]},error.status)};throw error;}
     const targetCatalog=catalogOf(target);
     if(targetCatalog?.kind==='postgres'&&targetCatalog.connection){
       try{await resolveDatasetConnection(targetCatalog.connection,undefined,current.id,tx);}
@@ -996,6 +1025,7 @@ async function replaceScoped(
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
+    await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
     const replacementCatalog=catalogOf(input);
     if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
 
@@ -1055,6 +1085,7 @@ async function replaceScoped(
     }
     if(opts.shares!==undefined)Object.assign(updated.rows[0],await writeShares(tx,id,opts.shares));
     else updated.rows[0].shares=(await tx.query<ShareEntry>('SELECT email,role FROM artifact_shares WHERE artifact_id=$1 ORDER BY email',[id])).rows;
+    await bindCurrentUserScopes(tx,updated.rows[0]);
     await logWholeDocumentWrite(tx, current, updated.rows[0],true);
     const movedAnnotations=new Set<string>();
     for(const change of effects.updates){
@@ -1993,6 +2024,7 @@ export async function runDocumentMutation(
   const bound = initialValues(flow);
   for (const [k, v] of Object.entries(values)) if (k in bound) bound[k] = v;
 
+  bound._me=actor.userId;
   let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
   if (mutationUsesRow(decl.sql)) {
     if (!row) return { ok: false, reason: 'invalid_row', detail: 'this row mutation requires its original row snapshot' };
@@ -2002,7 +2034,7 @@ export async function runDocumentMutation(
     if (!columns || Object.keys(row).length !== columns.length || columns.some((c) => {
       if (!Object.hasOwn(row, c.name)) return true;
       const value = row[c.name];
-      return value !== null && (c.type === 'date' ? typeof value !== 'string' : typeof value !== c.type);
+      return value !== null && (c.type === 'date' || c.type === 'user' ? typeof value !== 'string' : typeof value !== c.type);
     })) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
     if (mutationUsesValue(decl.sql)) {
       if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
@@ -2106,6 +2138,30 @@ export async function dataflowForRow(
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
+  if(result) {
+    const db=await getDb(), options:NonNullable<DataflowState['userOptions']>={}, ids=new Set<string>();
+    const viewer=opts.viewer??null;
+    const permitted=async(column:DatasetColumn)=>{
+      const refs=column.constraints?.memberOf;
+      if(!refs)return column;
+      const allowed:string[]=[];
+      for(const ref of refs) {
+        const id=ref==='current'?row.id:ref.slice(4), scope=await getArtifactById(id);
+        if(scope&&(scope.token_id===viewer?.tokenId||await canReadArtifact(scope,viewer?.userId?{userId:viewer.userId,email:viewer.email??null}:null)))allowed.push(`ref:${id}`);
+      }
+      return {...column,constraints:{...column.constraints,memberOf:allowed}};
+    };
+    for(const [name,table] of Object.entries(result.state.tables))for(const column of table.columns.filter(c=>c.type==='user')) {
+      options[`${name}.${column.name}`]=await userOptions(db,await permitted(column),viewer?.userId??null);
+      for(const item of table.rows)if(typeof item[column.name]==='string')ids.add(item[column.name] as string);
+    }
+    for(const value of result.flow.values)if(value.kind==='scalar'&&value.type==='user') {
+      options[value.name]=await userOptions(db,await permitted({name:value.name,type:'user',constraints:value.constraints}),viewer?.userId??null);
+      if(typeof result.state.values[value.name]==='string')ids.add(result.state.values[value.name] as string);
+    }
+    result.state.userOptions=options;
+    result.state.userLabels=await userLabels(db,[...ids]);
+  }
   if (result?.flow.mutations?.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, opts.viewer ?? null);
   return result;
 }
@@ -2250,8 +2306,15 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
     const table = await resolve(id);
     if (table) datasets[id] = table;
   }
+  flow={...flow,values:flow.values.map(value=>{
+    if(value.kind!=='scalar'||!value.source)return value;
+    const source=datasets[value.source] as RefTable|undefined;
+    const column=(source?.catalog?.tables.find(t=>t.schema==='public'&&t.name==='rows')?.columns??source?.columns)?.find(c=>c.name===value.column);
+    if(!column||column.type!=='user')throw new DatasetError(`Value ${value.name} must bind an available user column`);
+    return {...value,type:column.type,constraints:column.constraints};
+  })};
   const usedSources = new Map<string, string>();
-  const state = await runDataflow(flow, datasets, { values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
+  const state = await runDataflow(flow, datasets, {userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceQuery:async(q,values,page)=>{
       const table = datasets[q.source!] as RefTable | undefined;
       if (!table) throw new Error(`Source ref:${q.source} is unavailable`);
@@ -2261,7 +2324,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
         return queryRows(table, q.sql, values, page);
       }
       usedSources.set(q.source!, JSON.stringify(catalog));
-      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),authorize:async()=>{
+      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:{...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),_me:'user'},authorize:async()=>{
         await opts.authorize?.();
         const current=await resolve(q.source!);
         if(!current || JSON.stringify((current as RefTable).catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);

@@ -1,3 +1,4 @@
+import {userColumnLineage} from './user-column-lineage';
 /**
  * The SQL engine — the ONLY file that imports DuckDB.
  *
@@ -105,7 +106,7 @@ function jsonValue(v: unknown, type: ColumnType): unknown {
 }
 
 /** Our column type → the DuckDB type a registered table's column is created with. */
-const DUCK_TYPE: Record<ColumnType, string> = { string: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE' };
+const DUCK_TYPE: Record<ColumnType, string> = { string: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', user: 'VARCHAR' };
 
 const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 
@@ -281,6 +282,7 @@ export async function runQueries(input: RunInput, caps: SqlCaps): Promise<Record
   try {
     for (const [name, t] of Object.entries(input.tables)) await registerTable(conn, name, t);
 
+    const shapes = {...input.tables};
     for (const query of input.queries) {
       const page = input.page && input.page.name === query.name ? input.page : null;
       out[query.name] = page
@@ -288,6 +290,8 @@ export async function runQueries(input: RunInput, caps: SqlCaps): Promise<Record
         : await runOne(conn, query, input.params, limit, timeoutMs, caps);
       const result = out[query.name];
       if (isQueryFailure(result)) continue;
+      result.columns = await userColumnLineage(conn,query.sql,shapes,result.columns);
+      shapes[query.name] = result;
       // The result becomes a table, so the next query can read it by name.
       try {
         await registerTable(conn, query.name, { rows: result.rows, columns: result.columns });
@@ -410,8 +414,16 @@ export async function runMutation(input: MutationInput, caps: SqlCaps): Promise<
     // but the bound belongs where the resource is taken, so no future caller
     // can reach this line around it (and CodeQL can see it here).
     timer = setTimeout(() => { timedOut = true; conn.interrupt(); }, Math.min(timeoutMs, caps.timeoutMs));
-    const applied = input.policy
-      ? await runPolicyMutation(conn,input,(statement,params)=>bindMutationParams(conn,statement,params,input.row))
+    const hasUsers = input.table.columns.some(c => c.type === 'user');
+    const checkedInput = hasUsers && !input.policy ? {...input, policy: {
+      role:'writer', session:{}, operations:['insert','update','delete'] as const,
+      table:{table:{schema:'public',name:input.table.name},
+        insert_permissions:[{role:'writer',permission:{columns:'*' as const,check:{}}}],
+        update_permissions:[{role:'writer',permission:{columns:'*' as const,filter:{}}}],
+        delete_permissions:[{role:'writer',permission:{filter:{}}}]}
+    }} : input;
+    const applied = input.policy || hasUsers
+      ? await runPolicyMutation(conn,checkedInput as MutationInput,(statement,params)=>bindMutationParams(conn,statement,params,input.row))
       : {affected:(await guarded.prepared.run()).rowsChanged};
     const {affected}=applied;
     if (input.expectedAffected !== undefined && affected !== input.expectedAffected) {
@@ -435,7 +447,7 @@ export async function runMutation(input: MutationInput, caps: SqlCaps): Promise<
       for (const c of columns) o[c.name] = jsonValue(row[c.name], c.type);
       return o;
     });
-    return { rows, columns, ...applied };
+    return { rows, columns: input.table.columns, ...applied };
   } catch (e) {
     if (timedOut) return { error: `the mutation ran too long and was stopped (limit ${timeoutMs}ms)`, timedOut: true };
     if(e instanceof DatasetPolicyDenied)return {error:e.message,code:'policy_denied'};
@@ -514,8 +526,8 @@ export async function dryRunQueries(input: DryRunInput): Promise<DryRunResult> {
         // Register the (empty) result so a later query may read this one.
         const { DuckDBTypeId } = await duckdb();
         const cols = reader.columnNames().map((name, i) => ({ name, type: columnType(DuckDBTypeId, reader.columnTypeId(i)) }));
-        columns[query.name] = cols;
-        await registerTable(conn, query.name, { rows: [], columns: cols });
+        columns[query.name] = await userColumnLineage(conn,query.sql,{...input.tables,...Object.fromEntries(Object.entries(columns).map(([name,columns])=>[name,{columns}]))},cols);
+        await registerTable(conn, query.name, { rows: [], columns: columns[query.name] });
       } catch (e) {
         errors.push({ name: query.name, error: message(e) });
       }

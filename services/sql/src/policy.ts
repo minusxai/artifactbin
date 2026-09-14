@@ -7,6 +7,7 @@ import type {
   MutationAnalysis,
   MutationInput,
   Scalar,
+  Row,
   InsertPermission,
   UpdatePermission,
   DeletePermission,
@@ -258,7 +259,7 @@ export async function runPolicyMutation(
     statement: DuckDBPreparedStatement,
     params: Record<string, Scalar>,
   ) => Promise<void>,
-): Promise<{ affected: number; analysis: MutationAnalysis }> {
+): Promise<{ affected: number; analysis: MutationAnalysis; userWrites?: Row[] }> {
   const { operation, permission, names, evidence } = await analysis(
     conn,
     input,
@@ -434,6 +435,13 @@ export async function runPolicyMutation(
     if (Number((await s.runAndReadAll()).getRowObjects()[0].n))
       refuse('a resulting row failed its check');
   }
+  // Inspect candidate assignments, including same-value writes and policy presets.
+  // Unwritten historical identity fields are deliberately absent.
+  const written = new Set(operation === 'insert' ? names : [...evidence.columns, ...('set' in permission ? Object.keys(permission.set ?? {}) : [])]);
+  const userColumns = operation === 'delete' ? [] : input.table.columns.filter(c => c.type === 'user' && written.has(c.name));
+  const userWrites = userColumns.length
+    ? (await conn.runAndReadAll(`SELECT ${userColumns.map(c => quote(c.name)).join(',')} FROM ${temp}`)).getRowObjects()
+    : [];
   const affected = Number(
     (
       await conn.runAndReadAll(`SELECT count(*) AS n FROM ${temp}`)
@@ -451,5 +459,5 @@ export async function runPolicyMutation(
     await conn.run(
       `UPDATE ${quote(input.table.name)} AS target SET ${names.map((n) => `${quote(n)}=candidate.${quote(n)}`).join(',')} FROM ${temp} AS candidate WHERE target.rowid=candidate.__policy_rowid`,
     );
-  return { affected, analysis: evidence };
+  return { affected, analysis: evidence, userWrites };
 }

@@ -413,7 +413,7 @@ export async function replaceArtifactWithBody(
   }
   const prepared: PreparedContent | Response = current.format === 'folder'
     ? {content: { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }, objects: []}
-    : await prepareContentInput({theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
+    : await prepareContentInput({...(current.format==='dataset'?{columns:current.meta.columns}:{}),theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
       prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
       normalizeMarkup,
       loadRef: options.loadRef ?? refLoaderForActor(owner),
@@ -494,7 +494,8 @@ export async function replaceArtifactWithBody(
   if (current.format === 'folder' && expected.expectedVersion !== undefined && current.version !== expected.expectedVersion) {
     return json({ error: 'version_conflict', currentVersion: current.version }, 409);
   }
-  const row = current.format === 'folder'
+  let row;
+  try { row = current.format === 'folder'
     ? await setMetadataFor(actor, id, {
       ...(shares!==undefined?{shares}:{}),
       ...(body.title===null || typeof body.title === 'string' ? { title: body.title } : {}),
@@ -502,6 +503,7 @@ export async function replaceArtifactWithBody(
       ...(placement ? { ancestor_ids: placement.ancestor_ids } : {}),
     }, expected)
     : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares});
+  } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 

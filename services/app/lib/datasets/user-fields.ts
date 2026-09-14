@@ -1,0 +1,53 @@
+import type {DatasetColumn, Queryable, Row, UserOption} from '@artifactbin/contracts';
+import {DatasetError} from './errors';
+
+/** Membership is explicit sharing plus ownership, never public-link readership. */
+async function memberIds(db:Queryable, refs:string[],lock=false):Promise<string[]> {
+ const ids=refs.filter(ref=>ref!=='current').map(ref=>ref.slice(4));
+ if(!ids.length)return [];
+ if(lock)await db.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[ids]);
+ const result=await db.query<{id:string}>(`SELECT DISTINCT u.id FROM users u JOIN artifacts a ON
+   (a.user_id=u.id OR EXISTS (SELECT 1 FROM artifact_shares s WHERE s.artifact_id=a.id AND (s.user_id=u.id OR (s.user_id IS NULL AND s.email=u.email))))
+   WHERE a.id=ANY($1::text[]) AND a.deleted_at IS NULL`,[ids]);
+ return result.rows.map(row=>row.id);
+}
+
+/** Check actual assigned fields at the transaction boundary. Null is an unset user. */
+export async function validateUserWrites(db:Queryable, columns:DatasetColumn[], rows:Row[], userId:string|null):Promise<void> {
+ for(const column of columns.filter(c=>c.type==='user')) {
+  const values=[...new Set(rows.filter(row=>Object.hasOwn(row,column.name)).map(row=>row[column.name]).filter(value=>value!=null))];
+  if(!values.length)continue;
+  if(values.some(value=>typeof value!=='string'))throw new DatasetError(`User field ${column.name} requires a user ID`,403);
+  if(column.constraints?.self && (!userId || values.some(value=>value!==userId)))throw new DatasetError(`User field ${column.name} must be the logged-in user`,403);
+  const valid=new Set((await db.query<{id:string}>('SELECT id FROM users WHERE id=ANY($1::text[])',[values])).rows.map(row=>row.id));
+  if(values.some(value=>!valid.has(value as string)))throw new DatasetError(`User field ${column.name} contains an unknown user`,403);
+  if(column.constraints?.memberOf) {
+   const allowed=new Set(await memberIds(db,column.constraints.memberOf,true));
+   if(values.some(value=>!allowed.has(value as string)))throw new DatasetError(`User field ${column.name} requires membership in one of its documents`,403);
+  }
+ }
+}
+
+/** No unrestricted user directory. Only constrained members or the authenticated user. */
+export async function userOptions(db:Queryable,column:DatasetColumn,userId:string|null):Promise<UserOption[]> {
+ const c=column.constraints;
+ let ids=c?.memberOf?await memberIds(db,c.memberOf):[];
+ if(c?.self)ids=userId&&(!c.memberOf||ids.includes(userId))?[userId]:[];
+ if(!ids.length)return [];
+ const result=await db.query<{id:string;name:string|null;username:string|null}>('SELECT id,name,username FROM users WHERE id=ANY($1::text[]) ORDER BY COALESCE(name,username,id),id',[ids]);
+ return result.rows.map(user=>({value:user.id,label:user.name||user.username||user.id}));
+}
+
+/** Whole-table import/replace uses the same constraints as SQL assignments. */
+export async function validateUserContent(db:Queryable, input:{meta:Record<string,unknown>}, userId:string|null, load:(key:string)=>Promise<Row[]>):Promise<void> {
+ const catalog=input.meta.catalog as {tables:Array<{columns:DatasetColumn[];objectKey?:string}>}|undefined;
+ for(const table of catalog?.tables??[]) {
+  if(table.objectKey&&table.columns.some(c=>c.type==='user'))await validateUserWrites(db,table.columns,await load(table.objectKey),userId);
+ }
+}
+
+export async function userLabels(db:Queryable,ids:string[]):Promise<Record<string,string>> {
+ if(!ids.length)return {};
+ const rows=(await db.query<{id:string;name:string|null;username:string|null}>('SELECT id,name,username FROM users WHERE id=ANY($1::text[])',[ids])).rows;
+ return Object.fromEntries(rows.map(u=>[u.id,u.name||u.username||u.id]));
+}

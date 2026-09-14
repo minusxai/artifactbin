@@ -32,6 +32,7 @@
  *    `meta.refs` (dependents, ownership checks) keeps working.
  */
 import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } from '@/lib/jsx';
+import {parseDatasetColumn} from '@artifactbin/utils/shape';
 import { inferColumns, type ColumnType, type DatasetColumn } from './dataset-shape';
 import { localWriteTarget, SIGNALS_TABLE } from './local-target';
 import { reactiveNames, type ReactiveExpression } from '@/lib/jsx/reactive';
@@ -54,7 +55,7 @@ export const MUTATION_TAG = 'Mutation';
 
 /** `<Value type>`: the four dataset column types, plus an inline table. */
 type ValueType = ColumnType | 'table';
-const VALUE_TYPES: readonly ValueType[] = ['string', 'number', 'boolean', 'date', 'table'];
+const VALUE_TYPES: readonly ValueType[] = ['string', 'number', 'boolean', 'date', 'user', 'table'];
 
 /** What a scalar Value holds at runtime (and what a SQL `$param` binds to). */
 export type Scalar = string | number | boolean | null;
@@ -67,6 +68,9 @@ export interface ScalarValueDecl extends Span {
   kind: 'scalar';
   name: string;
   type: ColumnType;
+  source?: string;
+  column?: string;
+  constraints?: import("@artifactbin/contracts").UserConstraints;
   /** Initial value; `null` when the author gave no `default`. */
   default: Scalar;
 }
@@ -141,6 +145,8 @@ export interface TableResult {
 export interface DataflowState {
   /** Per-viewer mutation availability: null permits, a message explains refusal. Missing means not yet checked. */
   mutationAccess?: Record<string, string | null>;
+  userOptions?: Record<string, import('@artifactbin/contracts').UserOption[]>;
+  userLabels?: Record<string,string>;
   values: Record<string, Scalar>;
   tables: Record<string, TableResult>;
   /** Queries that did not run, by name → the engine's message (shown in place of the embed). */
@@ -362,11 +368,12 @@ export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
     case 'number': return typeof v === 'number' && Number.isFinite(v);
     case 'boolean': return typeof v === 'boolean';
     case 'date': return typeof v === 'string' && DATE_RE.test(v);
+    case 'user':
     case 'string': return typeof v === 'string';
   }
 };
 
-const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns']);
+const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'source', 'column', 'constraints']);
 
 /**
  * `<Value name type default? value? columns? />` → a declaration, or the
@@ -387,7 +394,12 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   if (!name) return { ok: false, errors };
 
   const typeAttr = staticAttr(el, 'type');
-  const type = (typeAttr?.json ?? 'string') as ValueType;
+  const sourceAttr=staticAttr(el,'source'), columnAttr=staticAttr(el,'column'), constraintsAttr=staticAttr(el,'constraints');
+  const type = (typeAttr?.json ?? (sourceAttr ? 'user' : 'string')) as ValueType;
+  if(sourceAttr && (typeof sourceAttr.json!=='string' || !/^ref:[A-Za-z0-9]{6,12}$/.test(sourceAttr.json) || typeof columnAttr?.json!=='string' || !columnAttr.json || typeAttr || constraintsAttr))return {ok:false,errors:[err('A bound Value takes source="ref:<dataset>" and column="<field>"; type and constraints are inherited',el,tag,'source')]};
+  if(columnAttr&&!sourceAttr)return {ok:false,errors:[err('Value column requires source',el,tag,'column')]};
+  let constraints:import('@artifactbin/contracts').UserConstraints|undefined;
+  if(constraintsAttr) { try { constraints=parseDatasetColumn({name,type,constraints:constraintsAttr.json}).constraints; } catch(error) {return {ok:false,errors:[err(error instanceof Error?error.message:'Invalid constraints',el,tag,'constraints')]};} }
   if (!VALUE_TYPES.includes(type)) {
     return { ok: false, errors: [err(`<Value name="${name}"> type must be one of ${VALUE_TYPES.join(' | ')}, got ${JSON.stringify(typeAttr?.json)}`, typeAttr?.attr ?? el, tag, 'type')] };
   }
@@ -433,7 +445,7 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
     errors.push(err(`<Value name="${name}" type="${type}"> default ${JSON.stringify(dflt)} is not a ${type}${type === 'date' ? ' (use YYYY-MM-DD)' : ''}`, def.attr, tag, 'default'));
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, decl: { kind: 'scalar', name, type, default: dflt, start: el.start, end: el.end } };
+  return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), default: dflt, start: el.start, end: el.end } };
 }
 
 /**
@@ -670,7 +682,7 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
 
   const checkParams = (decl: { name: string; params: string[] } & Span, tag: string) => {
     for (const p of decl.params) {
-      if (tag === MUTATION_TAG && (p === '_row' || p === '_value')) continue;
+      if (p === '_me' || (tag === MUTATION_TAG && (p === '_row' || p === '_value'))) continue;
       const kind = kinds.get(p);
       if (!kind) errors.push(err(`<${tag} name="${decl.name}"> binds $${p}, which is not a declared <Value>${hint}`, decl, tag));
       else if (kind === 'table') errors.push(err(`<${tag} name="${decl.name}"> binds $${p}, but "${p}" is a table — read a table by its bare name (… from ${p} …); $params bind scalar <Value>s`, decl, tag));
@@ -728,7 +740,7 @@ export function selectedQueries(flow: Dataflow, selection: { only?: Iterable<str
 
 /** Every dataset id any query reads, deduped — what `meta.refs` needs. */
 export function datasetRefsInDataflow(flow: Dataflow): string[] {
-  return dedupe(flow.queries.flatMap((q) => q.refs));
+  return dedupe([...flow.queries.flatMap(q=>q.refs),...flow.values.flatMap(v=>v.kind==='scalar'&&v.source?[v.source]:[])]);
 }
 
 /** The initial `values` map: every scalar at its declared default. */

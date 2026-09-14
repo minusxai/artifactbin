@@ -46,7 +46,7 @@ export interface QueryTransport {
    * with the resulting tables + errors for those queries. A rejection is
    * reported as an error on every requested query — never thrown into UI.
    */
-  run(values: Record<string, Scalar>, only: string[], localTables?: Record<string, Row[]>): Promise<Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess'>>;
+  run(values: Record<string, Scalar>, only: string[], localTables?: Record<string, Row[]>): Promise<Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 'userOptions' | 'userLabels'>>;
   /** Read a window of one query with these values; resolves with that query's rows for the window. */
   page(values: Record<string, Scalar>, name: string, page: TablePage, localTables?: Record<string, Row[]>): Promise<TableResult>;
   /**
@@ -169,6 +169,7 @@ export function createDataflowStore(
     tables: { ...initialTables(flow), ...(input.state?.tables ?? {}) },
     errors: { ...(input.state?.errors ?? {}) },
     mutationAccess: input.state?.mutationAccess ?? {},
+    userOptions:input.state?.userOptions??{},userLabels:input.state?.userLabels??{},
   };
   let localRevision = 0;
   let generation = 0;
@@ -241,7 +242,7 @@ export function createDataflowStore(
         Object.assign(tables, result.tables);
         Object.assign(tables, localOverrides);
         Object.assign(errors, result.errors);
-        commit({ ...state, tables, errors, mutationAccess: result.mutationAccess ?? {} });
+        commit({ ...state, tables, errors, mutationAccess: result.mutationAccess ?? {},userOptions:result.userOptions??{},userLabels:result.userLabels??{} });
       },
       (e: unknown) => {
         if (seq !== runSeq) return;
@@ -344,6 +345,7 @@ export function createDataflowStore(
       ? { values, tables: { ...initialTables(flow), ...keepRows(next.state.tables ?? {}) }, errors: keepRows(next.state.errors ?? {}) }
       : { values, tables: { ...keepRows(state.tables), ...initialTables(flow) }, errors: keepRows(state.errors) };
     state.mutationAccess = next.state?.mutationAccess ?? {};
+    state.userOptions=next.state?.userOptions??{};state.userLabels=next.state?.userLabels??{};
     Object.assign(state.tables, localOverrides);
     // The server ran these queries with the DEFAULTS. Where the reader's own
     // value disagrees, its dependents describe a document nobody is looking at.

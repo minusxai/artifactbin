@@ -173,7 +173,7 @@ export function DatasetEditorPage({
         const shape =
           metadata?.tables.find(
             (d) => d.schema === t.schema && d.name === t.name,
-          )?.columns ?? namesToColumns(t.columns);
+          )?.columns ?? namesToColumns(t.columns?.map(c=>typeof c==='string'?c:c.name));
         return {
           discovery: discovery ?? {
             schema: t.source!.schema,
@@ -183,7 +183,7 @@ export function DatasetEditorPage({
           included: true,
           schema: t.schema,
           name: t.name,
-          columns: t.columns ?? shape.map((c) => c.name),
+          columns: t.columns?.map(c=>typeof c==='string'?c:c.name) ?? shape.map((c) => c.name),
         };
       });
     setSources([
@@ -235,7 +235,7 @@ export function DatasetEditorPage({
         cell,
         schema: table?.schema ?? "models",
         columns,
-        selected: table?.columns ?? [],
+        selected: table?.columns?.map(c=>typeof c==='string'?c:c.name) ?? [],
         stale,
         collapsed: previous?.collapsed ?? false,
         legacy: false,
@@ -250,9 +250,9 @@ export function DatasetEditorPage({
         columns:
           metadata?.tables.find(
             (d) => d.schema === t.schema && d.name === t.name,
-          )?.columns ?? namesToColumns(t.columns),
+          )?.columns ?? namesToColumns(t.columns?.map(c=>typeof c==='string'?c:c.name)),
         selected:
-          t.columns ??
+          t.columns?.map(c=>typeof c==='string'?c:c.name) ??
           metadata?.tables
             .find((d) => d.schema === t.schema && d.name === t.name)
             ?.columns.map((c) => c.name) ??

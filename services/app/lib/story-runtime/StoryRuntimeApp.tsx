@@ -108,7 +108,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
   if (tag === 'Select') {
     const optsName = refName(props.options);
-    const options = normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined)
+    const options = (valueType==='user' ? ctx.state.userOptions?.[`${tableName}.${valueField}`]??[] : normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined))
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
     return <MutationCellHint reason={unavailable}><SelectControl
       appearance="cell" label={label} placeholder={str(props.placeholder) ?? 'None'} className={str(props.className)} options={options}
@@ -421,7 +421,7 @@ function SelectAdapter(props: Record<string, unknown>) {
   const { state } = useContext(RuntimeEmbedContext);
   const bind = useScalarControl(refName(props.value));
   const optsName = refName(props.options);
-  const options = normalizeControlOptions(props.options, optsName ? state.tables[optsName] : undefined);
+  const options = state.userOptions?.[refName(props.value)??''] ?? normalizeControlOptions(props.options, optsName ? state.tables[optsName] : undefined);
   return (
     <SelectControl
       label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}
@@ -694,6 +694,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
         commentOwner={typeof props.id === 'string' ? props.id : undefined}
         rows={shown}
         columns={table.columns}
+        userLabels={ctx.state.userLabels}
         spec={spec}
         rowKey={typeof props.rowKey === 'string' ? props.rowKey : undefined}
         templates={templates}
