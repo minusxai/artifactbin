@@ -48,6 +48,7 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
  assert.equal(before.rows.length,2,'two seeded tasks');
  assert.ok(before.rows.every(r=>r[schema.assignee]==null&&r[schema.completed]==null),'unassigned and incomplete initial rows');
  checks.native_user_schema=true;
+ ctx.checkpoint?.('native_user_schema');
  // Sharing is a human action. The fixture grants dataset access; the agent must author the field constraints.
  const share=await api(fixture.owner,`/api/my/artifacts/${datasetId}/sharing`,{shares:[{email:fixture.member.email,role:'editor'}]});
  assert.equal(share.status,200,'member dataset edit access');
@@ -77,10 +78,12 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
   const assignment=await write(owner,()=>owner.getByRole('option',{name:fixture.member.label,exact:true}).click());
   assert.equal((await read()).rows.filter(r=>r[schema.assignee]===fixture.member.id).length,1,'assignment persists as ID');
   checks.user_picker_works=true;
+ ctx.checkpoint?.('user_picker_works');
   await owner.getByRole('button',{name:'Assignee filter',exact:true}).click();
   await owner.getByRole('option',{name:fixture.member.label,exact:true}).click();
   await owner.waitForFunction(()=>document.querySelectorAll('button[aria-label="Assign task"]').length===1);
   checks.user_filter_works=true;
+ ctx.checkpoint?.('user_filter_works');
   await open(member);
   await member.route(`**/a/${id}/mutate`,route=>{
    const body=route.request().postDataJSON();
@@ -94,6 +97,7 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
   await open(member);
   await member.getByRole('cell',{name:fixture.member.label,exact:true}).last().waitFor();
   checks.user_completion_works=true;
+ ctx.checkpoint?.('user_completion_works');
   const snapshot=JSON.stringify((await read()).rows);
   const sql=async(who:Credential,statement:string)=>{
    const res=await fetch(`${ctx.productUrl}/api/artifacts/${datasetId}/mutate`,{method:'POST',headers:{authorization:`Bearer ${who.token}`,'content-type':'application/json'},body:JSON.stringify({sql:statement})});
@@ -105,6 +109,7 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
   assert.equal(JSON.stringify((await read()).rows),snapshot,'rejected writes are atomic');
   assert.ok((await read()).rows.every(r=>r[schema.completed]!==fixture.owner.id),'forged client actor never stored');
   checks.user_constraints_enforced=true;
+ ctx.checkpoint?.('user_constraints_enforced');
   await open(owner);
   await write(owner,()=>owner.getByRole('button',{name:'Complete task',exact:true}).last().click());
   completed=(await read()).rows;
@@ -117,6 +122,7 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
   assert.ok(after.some(r=>Object.values(r).includes('Launch docs updated')),'unrelated edit persisted');
   assert.deepEqual(after.map(r=>r[schema.completed]),completed.map(r=>r[schema.completed]),'historical completing identity unchanged');
   checks.user_history_preserved=true;
+ ctx.checkpoint?.('user_history_preserved');
   ctx.record('user_flow_probe',`Two-account assignment, search, filter, completion, forged writes and historical identity verified; assignment mutation ${assignment.mutation}.`,'text');
  } finally {await Promise.all(contexts.map(c=>c.close()));}
 }

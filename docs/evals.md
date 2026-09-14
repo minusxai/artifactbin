@@ -91,7 +91,20 @@ searchable picker, filter, persistent identity labels, completion by the second
 account, rejected outsider/forged writes, trusted actor binding, and preserved
 historical identity on an unrelated edit.
 
-`evals/bounded.ts` runs this one eval with `--no-retry` and a 120-second deadline.
+`evals/bounded.ts` runs this one eval with `--no-retry`, `--no-baseline` and a
+120-second deadline. The optional baseline is a separate model call measuring
+fixed-context token cost; it is still on for ordinary comparison evals. Skipping
+it removes no task setup, authentication or functional assertion.
+The workflow pins OpenCode 1.18.31 and logs its version. It explicitly selects OpenCode's `--variant=low` for this short task:
+GLM-5.3-Flash otherwise defaults to maximum reasoning, which produced thousands
+of thinking tokens before simple documentation reads. The model and natural-language
+brief remain the same. The eval CLI rejects variants for unsupported harnesses.
+See [OpenCode variants](https://opencode.ai/docs/cli/#run) and the
+[model's reasoning defaults](https://huggingface.co/zai-org/GLM-5.3-Flash).
+
+Phase logs immediately report setup, agent execution, browser inspection and each
+completed user check with elapsed times. A timeout is still a failure, including
+when the agent published correctly but verification did not finish.
 The clock includes eval startup, account/CLI setup, agent work and scoring;
 standard CI checkout/install/build prerequisites are outside it. Expiry kills
 the eval's process tree, including detached harness children, and exits 124.

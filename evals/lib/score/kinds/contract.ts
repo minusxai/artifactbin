@@ -61,6 +61,8 @@ export interface SetupContext {
 
 /** What a kind's `checks` is given. Product truth only: the ledger's questions are the driver's. */
 export interface CheckContext {
+  /** Emit a completed check immediately, even if a later deadline prevents final metrics. */
+  checkpoint?: (name:string)=>void;
   driver?:TaskDriver;
   fixture?:TaskFixture;
   task: Task;

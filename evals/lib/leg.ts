@@ -17,6 +17,8 @@ export interface Leg {
   harness: Harness;
   /** In the harness's own notation. */
   model: string;
+  /** Explicit OpenCode provider variant; never silently applied to other harnesses. */
+  variant?: string;
   /** NAME of the environment variable holding the key — never the key. */
   envVar: string;
   apiKey: string;
@@ -44,6 +46,7 @@ export function legFromArgs(args: Args, env: Record<string, string | undefined>)
   if (!args.model) throw new Error('--model is required — the model id in the harness\'s own notation');
   if (!args.envVar) throw new Error('--api-key-env is required — the NAME of the variable holding the provider key');
 
+  if(args.variant && args.harness !== 'opencode') throw new Error('--variant is supported only by OpenCode');
   const apiKey = env[args.envVar];
   if (!apiKey) throw new Error(`${args.envVar} is not set — put it in .env locally, or in the workflow secrets`);
 
@@ -60,6 +63,7 @@ export function legFromArgs(args: Args, env: Record<string, string | undefined>)
   return {
     harness: args.harness as Harness,
     model: args.model,
+    ...(args.variant ? {variant:args.variant} : {}),
     envVar: args.envVar,
     apiKey,
     label: args.label ?? args.harness,
