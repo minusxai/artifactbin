@@ -122,11 +122,35 @@ const bodyOf = (html: string) => /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1]
  *      (`carriesIsland` in `lib/story/document.ts` — hydrating or commenting documents);
  *   3. the literal tag, case-sensitive and word-bounded as asked, for any response that does
  *      carry source. `<IframeGallery>` and a lowercase browser `<iframe>` are not this.
+ *
+ * Every one of those three is a string a DATASET's own rows can contain, so ask this only of a
+ * served document (`isServedDocument` below).
  */
 const IFRAME_SIGNALS: RegExp[] = [/data-mx-managed-frame/, /"tag"\s*:\s*"Iframe"/, /<Iframe\b/];
 
 export function usesIframe(html: string): boolean {
   return IFRAME_SIGNALS.some((re) => re.test(html));
+}
+
+/**
+ * IS THERE A DOCUMENT HERE TO INSPECT AT ALL?
+ *
+ * `/a/<id>/raw` serves the artifact's own bytes, and only the markup tier is a document: a
+ * DATASET comes back as its rows in JSON (`services/app/app/a/[id]/raw/route.ts`, `case
+ * 'dataset'`), an image as bytes. The first live leg scored a pi tracker run (`local21`) on the
+ * dataset it had created, because the document was never written at all — and since every
+ * `<Iframe>` signal above is a string a dataset's rows can carry, the run recorded
+ * `no_iframe: false`: an accusation about a document that does not exist.
+ *
+ * `lib/story/document.ts` stamps `data-mx-story-root` on the body of every document it builds and
+ * wraps the content in `<div id="mx-story-root">`, chrome or no chrome. Either marker means the
+ * scorer is holding a served document. Neither means there is nothing to answer about — which is
+ * null, not a verdict.
+ */
+const SERVED_DOCUMENT: RegExp[] = [/<body[^>]*\sdata-mx-story-root/i, /<div[^>]*\bid="mx-story-root"/i];
+
+export function isServedDocument(html: string): boolean {
+  return SERVED_DOCUMENT.some((re) => re.test(html));
 }
 
 /**
@@ -155,7 +179,9 @@ export function productMetrics(input: { served: ServedDocument; baseline: Served
     published,
     hasTitle: ok && title !== null && !PLACEHOLDER_TITLES.has(title.toLowerCase()),
     title: title && title.length ? title : null,
-    // Nothing published is nothing to read: null, which the report renders "—", never a clean bill.
-    noIframe: published ? !usesIframe(input.served.html) : null,
+    // Nothing to read is nothing to judge: null, which the report renders "—", never a clean bill
+    // and never an accusation. A run scored on its dataset (the document was never written) has
+    // no document markup at all, and `false` there names an escape hatch nobody reached for.
+    noIframe: published && isServedDocument(input.served.html) ? !usesIframe(input.served.html) : null,
   };
 }
