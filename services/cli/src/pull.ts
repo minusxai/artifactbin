@@ -153,9 +153,11 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    if(!client.account)throw new CliError('unsupported_server','The server did not return account identity.');
    // Backups live under the private state directory; the absolute path is reported so it can be found again.
    const backup=wantsBackup?await localBackup(workspace.home,path,before!):undefined;
-   // A starter (untitled, no template yet) names the agent's next call at the moment it decides what to read.
+   // A starter (untitled, no template yet) names the agent's next call at the moment it decides what to read
+   // AND how to work, so it orders the same progressive flow the brief does: a first push at once, then pushes
+   // that fill the sections. Its previous "write the whole file" ending was the instruction agents followed.
    const starter=snapshot.format==='markup'&&!snapshot.template&&(!snapshot.title||snapshot.title==='Untitled');
-   operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:'pulled',...(starter?{next:'A starter: pick its kind, then afbin help <template> (dashboard, deck, editorial, plan, scrolly) prints everything it needs in one call; write the whole file and afbin push it.'}:{})});
+   operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:'pulled',...(starter?{next:'A starter: pick its kind, then afbin help <template> (dashboard, deck, editorial, plan, scrolly) prints everything it needs in one call; push a FIRST version at once — the title and the section headings, one line each — then fill the sections in further pushes.'}:{})});
    if(target.previousPath)untracked.push(target.previousPath);
    tracked[path]={source,id:head.id,url:typeof head.url==='string'?head.url:`${client.connection.server}/a/${head.id}`,file:digest(acceptedBytes??bytes),snapshot:head,...(previous?.paths?{paths:previous.paths}:{}),...(selected?{selected,versions:{...previous?.versions,[String(selected.version)]:selected}}:previous?.versions?{versions:previous.versions}:{})};
    files.push({path,before:before?digest(before):null,data:bytes});

@@ -448,7 +448,11 @@ test('a successful publish says the head is the pushed file, so the agent does n
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('pulling a starter names the next call — pick the kind, afbin help <template>, write, push',async()=>{
+// The starter hint is read at the ONE moment the agent decides how to work, so it must say what the
+// brief says: a first push at once carrying the title and the section headings, then pushes that fill
+// them. It used to end "write the whole file and afbin push it" — the opposite instruction, and the
+// one the agent acted on (local21: first markup write at 156–366 s, one version per task).
+test('pulling a starter names the next call — pick the kind, afbin help <template>, push a first version, then fill it',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-pull-starter-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
  const starter={id:'st4rt0',version:1,edit_id:'e1',state:digest('s1'),markup:'<div><h1>Untitled</h1><p>Waiting for your agent…</p></div>',format:'markup',title:'Untitled',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
  const titled={...starter,id:'t1tled',title:'Q3 sales review',template:'dashboard'};
@@ -458,6 +462,10 @@ test('pulling a starter names the next call — pick the kind, afbin help <templ
   await saveConnection({server:'https://example.com',token:'mx_test'},home);
   const a=await invoke(['pull','st4rt0','--output','report.jsx']);assert.equal(a.code,0,JSON.stringify(a));
   assert.match(a.result.operations[0].next,/afbin help <template> \(dashboard, deck, editorial, plan, scrolly\)/);
+  assert.match(a.result.operations[0].next,/push a FIRST version at once/,'the hint orders the first push, not a whole file');
+  assert.match(a.result.operations[0].next,/title and the section headings, one line each/,'it names what that first push carries');
+  assert.match(a.result.operations[0].next,/fill the sections in further pushes/,'and what the later pushes are for');
+  assert.doesNotMatch(a.result.operations[0].next,/write the whole file/,'the contradicting instruction is gone');
   const b=await invoke(['pull','t1tled','--output','sales.jsx']);assert.equal(b.code,0,JSON.stringify(b));
   assert.equal(b.result.operations[0].next,undefined,'a document with a title and a template is not a starter');
  }finally{await rm(root,{recursive:true,force:true});}
