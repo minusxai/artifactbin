@@ -55,6 +55,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "./mermaid-render",
   "./outline",
   "./preview-identity",
+  "./row-actions",
   "./slides",
   "./store",
   ".dark,",

@@ -25,6 +25,28 @@ try {
   const bPage = await browser.newPage({ viewport: { width: 1500, height: 900 } });
   for (const page of [aPage, bPage]) page.on('pageerror', error => errors.push(error.message));
   await Promise.all([becomeOwner(aPage,base,fixture.token),becomeOwner(bPage,base,fixture.token)]);
+  // Exercise both row-action surfaces through the real publish/mutate/query doors.
+  {
+    const dataset = await fixture.api('/api/artifacts', {title:'Row action gate data', dataset:[{id:1,status:'backlog'},{id:2,status:'backlog'}], access:'readwrite', visibility:'unlisted'});
+    const doc = await fixture.api('/api/artifacts', {title:'Row action gate', visibility:'unlisted', markup:
+      `<Helmet><Query name="tasks" source="ref:${dataset.id}">{\`select * from public.rows order by id\`}</Query>
+      <Mutation name="complete" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set status='done' where id=$_row.id\`}</Mutation></Helmet>
+      <For each={$tasks} keyBy="id"><p aria-label="Repeated status {$_row.id}">{$_row.status}</p><Button run="$complete" aria-label="Repeat complete {$_row.id}">Complete</Button></For>
+      <DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="status"><Button run="$complete" aria-label="Table complete {$_row.id}">Complete</Button></Column></DataTable>`});
+    await aPage.goto(`${base}/a/${doc.id}`);
+    const page = await artifactDocument(aPage);
+    for (const [label,id] of [['Repeat complete 1',1],['Table complete 2',2]]) {
+      const response = aPage.waitForResponse(r=>r.url().endsWith(`/a/${doc.id}/mutate`) && r.request().method()==='POST');
+      await page.getByRole('button',{name:label,exact:true}).click();
+      const result = await response;
+      assert.equal(result.status(),200,await result.text());
+      assert.equal(result.request().postDataJSON().row.id,id);
+      await page.getByLabel(`Repeated status ${id}`,{exact:true}).filter({hasText:'done'}).waitFor();
+    }
+    const persisted = await fixture.api(`/api/artifacts/${dataset.id}`,undefined,'GET');
+    assert.deepEqual(persisted.rows.map(row=>row.status),['done','done']);
+    check('For and DataTable row buttons persist the clicked row and refresh the reader');
+  }
   await Promise.all([aPage.goto(fixture.url), bPage.goto(fixture.url)]);
   await Promise.all([aPage.locator('[data-mx-inline-story]').waitFor(),bPage.locator('[data-mx-inline-story]').waitFor()]);
   const a = await artifactDocument(aPage);

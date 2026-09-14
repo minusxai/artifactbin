@@ -46,7 +46,7 @@ import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { dryRunDataflow } from '@/lib/story/data-checks';
-import { mutationUsesRow } from '@/lib/story/row-scope';
+import { mutationUsesRow, mutationUsesValue } from '@/lib/story/row-scope';
 import {generationUnavailable} from '@/lib/datasets/policy/usage';
 import { compileStoredMutation } from '@/lib/datasets/stored-mutation';
 import { canUseDataPolicy, mutationPolicy } from '@/lib/datasets/policy';
@@ -1995,7 +1995,7 @@ export async function runDocumentMutation(
 
   let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
   if (mutationUsesRow(decl.sql)) {
-    if (!row) return { ok: false, reason: 'invalid_row', detail: 'this cell mutation requires its original row snapshot' };
+    if (!row) return { ok: false, reason: 'invalid_row', detail: 'this row mutation requires its original row snapshot' };
     const checked = await dryRunDataflow(flow, refLoaderForActor(writer), body);
     if (checked.kind === 'sql') return { ok: false, reason: 'invalid_row', detail: checked.details.join('; ') };
     const columns = checked.rowSchemas[name];
@@ -2004,8 +2004,12 @@ export async function runDocumentMutation(
       const value = row[c.name];
       return value !== null && (c.type === 'date' ? typeof value !== 'string' : typeof value !== c.type);
     })) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
-    if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
-    bound._value = values._value;
+    if (mutationUsesValue(decl.sql)) {
+      if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
+      bound._value = values._value;
+    } else if (Object.hasOwn(values, '_value')) {
+      return { ok: false, reason: 'invalid_row', detail: 'this row action does not accept _value' };
+    }
     rowBinding = { columns, values: row };
   } else if (row !== undefined || Object.hasOwn(values, '_value')) {
     return { ok: false, reason: 'invalid_row', detail: 'this mutation does not accept a row or _value' };

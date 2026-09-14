@@ -74,13 +74,13 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
   templates such as `label="Status {$_row.id}"` inside a Column. One member
   level only; extract nested JSON with SQL. `_`-prefixed declaration names
   are reserved. `$_value` is the committed scalar in mutation SQL.
-- Supported `run` editors: `<Select>`, native `<input>` with `type="text"` or `type="number"`,
-  `<textarea>` and `<select>`. Other controls/input types are rejected.
-- A row mutation is invoked only by a control's `run` inside a Column;
-  that `run` must name a row mutation. Its `$_row` is the immutable original
-  row snapshot from when editing began, not the latest refreshed row.
-  Publish checks referenced fields and their types against the bound
-  query's result schema. Reusing a mutation requires compatible row schemas.
+- `run` editors: `<Select>`, `<input type="text">`, `<input type="number">`,
+  `<textarea>`, `<select>`. Other editor types are rejected.
+- `<Button run="$complete">` captures `$_row` on click without `$_value`.
+  See [row actions](markup-repeat.md) for examples and pending/error behavior.
+- Row mutations run inside a Column or keyed For. Cell editors capture the row
+  when editing begins. Publish validates row fields/types against the query
+  result; mutations reused across tables require compatible schemas.
 - Editable tables require `rowKey`, naming a query result column of unique,
   non-null strings or numbers. Numeric `1` and string `"1"` have different
   identities. Preserve source identity in your SQL across sorting, filtering

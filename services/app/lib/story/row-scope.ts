@@ -71,15 +71,17 @@ export function sqlCode(sql: string): string {
 export function rowFieldsInSql(sql: string): string[] {
   return [...new Set([...sqlCode(sql).matchAll(/(?<![\w$])\$_row\.([A-Za-z_]\w*)/g)].map((m) => m[1]))];
 }
+export const mutationUsesValue = (sql: string): boolean => /(?<![\w$])\$_value\b/.test(sqlCode(sql));
 export const mutationUsesRow = (sql: string): boolean => /(?<![\w$])\$_(?:row|value)\b/.test(sqlCode(sql));
 
 /** Each editable invocation belongs to a declared table; no SQL authorization is inferred. */
 export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, import('@artifactbin/contracts').DatasetColumn[]>) {
   const errors: string[] = [];
   const mutationTables: Record<string, string[]> = {};
+  const actionMutations = new Set<string>();
   const attr = (n: Extract<JsxNode, {type:'element'}>, name: string): unknown => { const a = n.attributes.find((a) => a.name === name); return a?.value.static ? a.value.json : undefined; };
   const ref = (v: unknown) => typeof v === 'string' ? /^\$([A-Za-z_]\w*)$/.exec(v)?.[1] : undefined;
-  type Scope = { table: string; key: unknown };
+  type Scope = { table: string; key: unknown; repeat?: boolean };
   const visit = (node: JsxNode, scope?: Scope, inColumn = false, parent?: string) => {
     if (node.type !== 'element') {
       if (!inColumn && rowRefsIn([node]).length) errors.push('$_row references belong inside a DataTable Column or For');
@@ -92,7 +94,7 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
       const each = node.attributes.find(a => a.name === 'each')?.value;
       const expression = each && !each.static ? each.reactive : undefined;
       const table = expression?.kind === 'signal' ? expression.name : undefined;
-      scope = table ? {table,key:attr(node,'keyBy')} : undefined;
+      scope = table ? {table,key:attr(node,'keyBy'),repeat:true} : undefined;
       inColumn = !!scope;
       const key = scope?.key;
       if (columns && table && typeof key === 'string' && !columns[table]?.some(c=>c.name===key)) errors.push(`keyBy "${key}" is absent from $${table}`);
@@ -123,15 +125,19 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
     const run = ref(attr(node, 'run'));
     if (run && inColumn && scope) {
       const inputType = attr(node, 'type');
-      if (!['Select', 'input', 'textarea', 'select'].includes(node.tag) || (node.tag === 'input' && inputType !== undefined && inputType !== 'text' && inputType !== 'number')) {
-        errors.push('Column run= supports Select, input type="text" or "number", textarea, and native select');
+      if (node.tag === 'Button') {
+        actionMutations.add(run);
+        if (['value', 'checked', 'options'].some(name => attr(node, name) !== undefined)) errors.push('Row action buttons do not accept editor bindings');
       }
-      if (typeof scope.key !== 'string' || !scope.key) errors.push('editable DataTable requires rowKey=');
+      if (!(scope.repeat ? ['Button'] : ['Button', 'Select', 'input', 'textarea', 'select']).includes(node.tag) || (node.tag === 'input' && inputType !== undefined && inputType !== 'text' && inputType !== 'number')) {
+        errors.push('Row run= supports Button and DataTable editors: Select, input type="text" or "number", textarea, and native select');
+      }
+      if (typeof scope.key !== 'string' || !scope.key) errors.push(scope.repeat ? 'For actions require keyBy=' : 'editable DataTable requires rowKey=');
       else if (columns && !columns[scope.table]?.some((c) => c.name === scope.key)) errors.push(`rowKey "${scope.key}" is absent from $${scope.table}`);
       if (!(mutationTables[run] ??= []).includes(scope.table)) mutationTables[run].push(scope.table);
     }
     for (const child of node.children) visit(child, scope, inColumn, node.tag);
   };
   nodes.forEach((n) => visit(n));
-  return { errors, mutationTables };
+  return { errors, mutationTables, actionMutations };
 }

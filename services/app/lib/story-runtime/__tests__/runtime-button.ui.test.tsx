@@ -11,8 +11,8 @@
  * a refusal is SHOWN rather than swallowed — a button that silently does
  * nothing is the failure the whole publish-time validation exists to avoid.
  */
-import { describe, expect, it } from 'vitest';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { type JsxNode } from '@/lib/jsx';
 import { renderStoryNodes } from '@/lib/story-ui/interpreter';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
@@ -128,4 +128,65 @@ describe('mx.mutate — the author script\'s handle on a write', () => {
 
   // A rejection carrying the server's message is store-mutate.test.ts's case: mx.mutate
   // is a pass-through, and that test also pins the busy flag and the capability refresh.
+});
+
+
+describe.each(['For', 'DataTable'])('%s row actions', (kind) => {
+  function setup() {
+    const button = '<Button run="$complete" aria-label="Complete {$_row.id}">Complete</Button>';
+    const body = kind === 'For' ? '<For id="tasks" each={$tasks} keyBy="id">'+button+'</For>'
+      : '<DataTable id="tasks" data="$tasks" rowKey="id"><Column col="id">'+button+'</Column></DataTable>';
+    const {content, body:nodes} = splitHelmet(parseJsxOrThrow('<Helmet><Query name="tasks" source="ref:abc123">{`select * from public.rows`}</Query><Mutation name="complete" source="ref:abc123">{`update public.rows set done=true where id=$_row.id`}</Mutation></Helmet>'+body).nodes);
+    const state: DataflowState = {values:{}, tables:{tasks:{columns:[{name:'id',type:'number'}],rows:[{id:1},{id:2}]}},errors:{},mutationAccess:{complete:null}};
+    const dataflow = {flow:{values:content.values, queries:content.queries, mutations:content.mutations},state};
+    const mutate = vi.fn().mockResolvedValue({dataset:'abc123'});
+    const transport: QueryTransport = {mutate,run:async()=>({tables:state.tables,errors:{},mutationAccess:{complete:null}}),page:vi.fn()};
+    const store = createDataflowStore(dataflow,{transport,debounceMs:0});
+    const view = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome />);
+    return {...view,store,mutate,dataflow,nodes};
+  }
+  it('captures the clicked row, prevents duplicate clicks, and leaves other rows enabled through reorder', async()=>{
+    const v=setup(); let settle!: (value:{dataset:string})=>void;
+    v.mutate.mockImplementation(()=>new Promise(resolve=>{settle=resolve;}));
+    fireEvent.click(v.getByRole('button',{name:'Complete 1'}));
+    fireEvent.click(v.getByRole('button',{name:'Complete 1'}));
+    expect(v.mutate).toHaveBeenCalledTimes(1);
+    expect(v.mutate).toHaveBeenCalledWith({},'complete',{id:1});
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,tables:{tasks:{...v.dataflow.state.tables.tasks,rows:[{id:2},{id:1}]}}}}));
+    expect((v.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement).disabled).toBe(true);
+    expect((v.getByRole('button',{name:'Complete 2'}) as HTMLButtonElement).disabled).toBe(false);
+    await act(async()=>settle({dataset:'abc123'}));
+    await waitFor(()=>expect((v.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement).disabled).toBe(false));
+  });
+  it('retains pending state while a row disappears and returns', async()=>{
+    const v=setup(); let settle!:(value:{dataset:string})=>void;
+    v.mutate.mockImplementation(()=>new Promise(resolve=>{settle=resolve;}));
+    fireEvent.click(v.getByRole('button',{name:'Complete 1'}));
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,tables:{tasks:{...v.dataflow.state.tables.tasks,rows:[{id:2}]}}}}));
+    expect(v.queryByRole('button',{name:'Complete 1'})).toBeNull();
+    await act(async()=>v.store.replaceFlow(v.dataflow));
+    expect((v.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(v.getByRole('button',{name:'Complete 1'}));
+    expect(v.mutate).toHaveBeenCalledTimes(1);
+    await act(async()=>settle({dataset:'abc123'}));
+  });
+  it('renders a disabled static face without leaking the binding',()=>{
+    const v=setup();v.unmount();
+    const view=render(<StoryRuntimeApp nodes={v.nodes} refData={{}} dataflow={v.dataflow} store={v.store} colorMode="light" chrome={false}/>);
+    const button=view.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('run')).toBeNull();
+    fireEvent.click(button);expect(v.mutate).not.toHaveBeenCalled();
+  });
+  it('shows failures, retries with the current row, and respects revoked access', async()=>{
+    const v=setup(); v.mutate.mockRejectedValueOnce(new Error('Write failed'));
+    fireEvent.click(v.getByRole('button',{name:'Complete 2'}));
+    expect((await v.findByRole('alert')).textContent).toContain('Write failed');
+    fireEvent.click(v.getByRole('button',{name:'Complete 2'}));
+    await waitFor(()=>expect(v.queryByRole('alert')).toBeNull());
+    await act(async()=>v.store.replaceFlow({...v.dataflow,state:{...v.dataflow.state,mutationAccess:{complete:'Access revoked'}}}));
+    fireEvent.click(v.getByRole('button',{name:'Complete 1'}));
+    expect(v.mutate).toHaveBeenCalledTimes(2);
+    expect((v.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

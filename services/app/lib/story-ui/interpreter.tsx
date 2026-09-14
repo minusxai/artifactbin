@@ -29,6 +29,14 @@ import type { JsxAttribute } from '@/lib/jsx';
 import { substituteRow, parseRowRef } from '@/lib/story/row-scope';
 import type { ColumnTemplate } from '@/components/kit/data-table';
 
+/** A keyed row action captures row values at invocation, without a cell draft. */
+export interface RowActionProps {
+  props: Record<string, unknown>;
+  row: Record<string, unknown>;
+  identity: string;
+  children?: React.ReactNode;
+}
+
 export interface CellControlProps {
   tag: string;
   component?: React.ComponentType<Record<string, unknown>>;
@@ -116,6 +124,7 @@ export interface StoryInterpreterOptions {
   keyFor?: (path: string) => string;
   row?: Record<string, unknown>;
   cellScope?: { table: string; key: unknown; column: string; tableName?: string };
+  rowAction?: React.ComponentType<RowActionProps>;
   cellControl?: React.ComponentType<CellControlProps>;
 }
 
@@ -230,7 +239,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     if (tableParts) return React.createElement(React.Fragment, {key:options.keyFor?.(path) ?? path}, ...instances);
     return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...instances);
   }
-  if (options.repeatScope && node.attributes.some(a=>['run','value','checked','options'].includes(a.name) && a.value.static && refName(a.value.json))) return React.createElement('div', {role:'alert',key:path}, 'Bound controls inside For are not supported; use editable DataTable columns');
+  if (options.repeatScope && node.attributes.some(a=>(['value','checked','options'].includes(a.name) || (a.name === 'run' && node.tag !== 'Button')) && a.value.static && refName(a.value.json))) return React.createElement('div', {role:'alert',key:path}, 'Bound controls inside For are not supported; use editable DataTable columns');
   if (options.repeatScope && ['DataTable', 'Iframe'].includes(node.tag)) return React.createElement('div', {role:'alert',key:path}, 'DataTable and Iframe must be outside For templates');
   const isComponent = node.isComponent;
   const Component = isComponent ? options.components[node.tag] : null;
@@ -260,6 +269,17 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   }
 
   const run = node.attributes.find((a) => a.name === 'run');
+  if (options.row && node.tag === 'Button' && run?.value.static && refName(run.value.json)) {
+    if (node.attributes.some(a => ['value', 'checked', 'options'].includes(a.name))) return React.createElement('span', {role:'alert',key:path}, 'Row action buttons do not accept editor bindings');
+    const key = options.repeatScope?.key ?? options.cellScope?.key;
+    if ((options.repeatScope && !options.repeatScope.durable) || !validRowKey(key)) return React.createElement('span', {role:'alert',key:path}, 'Row actions require a stable row key');
+    const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
+    const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+    const identity = JSON.stringify([options.repeatScope?.owner ?? options.cellScope?.table, typeof key, key, options.keyFor?.(path) ?? path, run.value.json]);
+    if (!options.rowAction) return React.createElement(Component ?? 'button', {...props, ...(Component ? {} : {run:undefined}), disabled:true, key:path}, ...children);
+    const element = React.createElement(options.rowAction, {key:identity, props, row:options.row, identity}, ...children);
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
   if (options.row && options.cellControl && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
     const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
     const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));

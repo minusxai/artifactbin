@@ -9,7 +9,7 @@ import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
  * dataset. ONE function, so the publish door (jsx-tier) and the refresh path
  * (a dataset changed → which dependents broke?) cannot drift apart.
  */
-import { analyzeRowScopes, mutationUsesRow } from './row-scope';
+import { analyzeRowScopes, mutationUsesRow, mutationUsesValue } from './row-scope';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dryRunMutations, dryRunQueries } from '@/lib/sql/engine';
 import { mutationsOf, queryOrder, refName, type Dataflow } from './dataflow';
@@ -70,13 +70,14 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   const rowSchemas: Record<string, DatasetColumn[]> = {};
   for (const name of Object.keys(scoped.mutationTables)) {
     const mutation = mutations.find((m) => m.name === name);
-    if (mutation && !mutationUsesRow(mutation.sql)) details.push(`Column run="$${name}" requires a row mutation using $_row or $_value`);
+    if (mutation && !mutationUsesRow(mutation.sql)) details.push(`Row run="$${name}" requires a row mutation using $_row or $_value`);
   }
   for (const mutation of mutations) {
+    if (scoped.actionMutations.has(mutation.name) && mutationUsesValue(mutation.sql)) details.push(`row action "${mutation.name}" cannot use $_value; use $_row fields or declared Values`);
     if (!mutationUsesRow(mutation.sql)) continue;
     const names = scoped.mutationTables[mutation.name] ?? [];
     const shapes = names.map((n) => columns[n]).filter((c): c is DatasetColumn[] => !!c);
-    if (!shapes.length) details.push(`row mutation "${mutation.name}" must be invoked inside a DataTable Column`);
+    if (!shapes.length) details.push(`row mutation "${mutation.name}" must be invoked inside a DataTable Column or keyed For`);
     else if (shapes.some((s) => JSON.stringify(s) !== JSON.stringify(shapes[0]))) details.push(`row mutation "${mutation.name}" has incompatible table scopes`);
     else rowSchemas[mutation.name] = shapes[0];
   }

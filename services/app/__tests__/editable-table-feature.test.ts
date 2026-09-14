@@ -13,6 +13,21 @@ const create = async (token:string, body:Record<string,unknown>) => {
 };
 const markup=(ds:string)=>`<Helmet><Query name="tasks" source="ref:${ds}">{\`select * from public.rows\`}</Query><Mutation name="set_status" expectedAffected={1} source="ref:${ds}">{\`update public.rows set status=$_value where id=$_row.id and status is not distinct from $_row.status\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="status"><Select value="$_row.status" options={["backlog","active","done"]} run="$set_status"/></Column></DataTable>`;
 describe('editable DataTable feature',()=>{
+  it.each(['For','DataTable'])('persists %s row actions and rejects malformed snapshots and editor-only values',async(kind)=>{
+    const t=await mintToken('row-actions');
+    const ds=await create(t.token,{dataset:[{id:1,status:'backlog'},{id:2,status:'backlog'}],access:'readwrite'});
+    const action='<Button run="$complete">Complete</Button>';
+    const body=kind==='For' ? `<For each={$tasks} keyBy="id">${action}</For>` : `<DataTable data="$tasks" rowKey="id"><Column col="id">${action}</Column></DataTable>`;
+    const source=`<Helmet><Query name="tasks" source="ref:${ds.id}">{\`select * from public.rows\`}</Query><Mutation name="complete" source="ref:${ds.id}" expectedAffected={1}>{\`update public.rows set status='done' where id=$_row.id\`}</Mutation></Helmet>${body}`;
+    const doc=await create(t.token,{markup:source});
+    const update=(row:unknown)=>mutateDoc(request(`/a/${doc.id}/mutate`,{method:'POST',token:t.token,json:{mutation:'complete',values:{},row}}),{params:Promise.resolve({id:doc.id})});
+    for(const row of [undefined,{id:'2',status:'backlog'},{id:2,status:'backlog',admin:true}]) expect((await update(row)).status).toBe(400);
+    const saved=await update({id:2,status:'backlog'});
+    expect(saved.status,await saved.clone().text()).toBe(200);
+    expect(await loadDatasetRows((await getArtifactById(ds.id))!)).toEqual([{id:1,status:'backlog'},{id:2,status:'done'}]);
+    const bad=await createArtifact(request('/api/artifacts',{method:'POST',token:t.token,json:{markup:source.replace("status='done'",'status=$_value')}}));
+    expect(bad.status,await bad.clone().text()).toBe(400);
+  });
   it('publishes, updates one cell, and rejects a stale edit without bumping dataset version',async()=>{
     const t=await mintToken('editable');
     const ds=await create(t.token,{dataset:[{id:1,status:'backlog'},{id:2,status:'backlog'}],access:'readwrite'});
