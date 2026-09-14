@@ -1,3 +1,4 @@
+import {POST as documentMutation} from '@/app/a/[id]/mutate/route';
 import {describe, expect, it} from 'vitest';
 import {POST as createRoute} from '@/app/api/artifacts/route';
 import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
@@ -48,7 +49,7 @@ describe('native user fields',()=>{
  it('freezes current on first report attachment and supplies typed member choices',async()=>{
   const a=await account('owner'), b=await account('member');
   const dataset=await create(a.token,{dataset:{kind:'stored',tables:[{schema:'public',name:'rows',columns:[{name:'id',type:'number'},{name:'assignee',type:'user',constraints:{memberOf:['current']}}],rows:[{id:1,assignee:null}]}]},access:'readwrite'});
-  const markup=`<Helmet><Value name="person" source="ref:${dataset.id}" column="assignee" /><Query name="tasks" source="ref:${dataset.id}">{\`select id,assignee as assigned,upper(assignee) as text_only from public.rows order by id\`}</Query></Helmet><Select value="$person" label="Person" /><DataTable data="$tasks" />`;
+  const markup=`<Helmet><Value name="person" source="ref:${dataset.id}" column="assignee" /><Query name="tasks" source="ref:${dataset.id}">{\`select id,assignee as assigned,upper(assignee) as text_only from public.rows where $person is null or assignee=$person order by id\`}</Query></Helmet><Select value="$person" label="Person" /><DataTable data="$tasks" />`;
   const report=await create(a.token,{markup,shares:[{email:b.user.email,role:'viewer'}]});
   const column=(await getArtifactById(dataset.id))!.meta.columns as Array<{constraints?:{memberOf:string[]}}>;
   expect(column[1].constraints?.memberOf).toEqual([`ref:${report.id}`]);
@@ -78,6 +79,19 @@ describe('native user fields',()=>{
   expect((await mutate(a.token,dataset.id,`update public.rows set who='${b.user.id}'`)).status).toBe(200);
   await setMetadataFor({tokenId:a.tokenId,userId:a.user.id},two.id,{shares:[]});
   expect((await mutate(a.token,dataset.id,`update public.rows set who='${b.user.id}'`)).status).toBe(403);
+ });
+ it('executes a row button as its caller and rejects an anonymous $_me',async()=>{
+  const a=await account('owner'), b=await account('editor');
+  const dataset=await create(a.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite',shares:[{email:b.user.email,role:'editor'}]});
+  const markup=`<Helmet><Query name="tasks" source="ref:${dataset.id}">{\`select *, '' as action from public.rows\`}</Query><Mutation name="done" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set who=$_me where id=$_row.id\`}</Mutation></Helmet><DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="who"/><Column col="action"><Button run="$done">Complete</Button></Column></DataTable>`;
+  const report=await create(a.token,{markup,shares:[{email:b.user.email,role:'editor'}]});
+  const response=await documentMutation(request(`/a/${report.id}/mutate`,{method:'POST',token:b.token,json:{mutation:'done',values:{_me:a.user.id},row:{id:1,who:null,action:''}}}),ctx(report.id));
+  expect(response.status,await response.clone().text()).toBe(200);
+  expect((await loadDatasetRows((await getArtifactById(dataset.id))!))[0].who).toBe(b.user.id);
+  const anonymous=await mintToken('anonymous');
+  const own=await create(anonymous.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite'});
+  const denied=await mutate(anonymous.token,own.id,'update public.rows set who=$_me');
+  expect(denied.status).toBe(403);
  });
  it('refuses invalid constraint syntax instead of dropping it',async()=>{
   const a=await account('owner');

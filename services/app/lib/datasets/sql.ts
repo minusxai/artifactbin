@@ -233,7 +233,7 @@ function compileStatement(catalog: DatasetCatalog, input: string | Node, params:
       const name = bindingTypes.get(String(node.name));
       // Construct trusted casts after parsing. Authored schema-qualified casts
       // still pass through dataType's rejection path; parameters are never SQL.
-      return name ? { type: 'cast', operand: node, to: { schema: 'pg_catalog', name } } : node;
+      return name ? { type: 'cast', operand: node, to: { ...(catalog.kind==='postgres'?{schema:'pg_catalog'}:{}), name } } : node;
     }
     if (node.type === 'with') {
       const local = new Set(scope);

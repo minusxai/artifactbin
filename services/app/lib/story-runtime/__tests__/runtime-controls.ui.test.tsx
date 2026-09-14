@@ -278,3 +278,20 @@ describe('<Dialog> bound to the store', () => {
     expect(view.queryByText('Editing')).toBeNull();
   });
 });
+
+describe('native user controls',()=>{
+ it('uses server-scoped choices and renders user labels without authored options',()=>{
+  const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /></Helmet><Select label="Assignee" value="$person" /><DataTable data="$tasks" />').nodes);
+  const flow={values:content.values,queries:[]};
+  const state:DataflowState={values:{person:null},errors:{},tables:{tasks:{columns:[{name:'assigned_to',type:'user'}],rows:[{assigned_to:'usr_ada'}]}},userOptions:{person:[{value:'usr_ada',label:'Ada'},{value:'usr_grace',label:'Grace'}]},userLabels:{usr_ada:'Ada'}};
+  const dataflow={flow,state};
+  const store=createDataflowStore(dataflow,{transport:{run:vi.fn().mockResolvedValue({tables:{},errors:{}}),page:vi.fn()},debounceMs:0});
+  const view=render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome={false}/>);
+  expect(view.container.textContent).toContain('Ada');
+  expect(view.container.textContent).not.toContain('usr_ada');
+  fireEvent.click(view.getByLabelText('Assignee'));
+  fireEvent.click(view.getByRole('option',{name:'Grace'}));
+  expect(store.getValue('person')).toBe('usr_grace');
+  store.dispose();
+ });
+});

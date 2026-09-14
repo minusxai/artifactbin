@@ -67,7 +67,7 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    if(t.source)throw new DatasetError('Stored tables do not have a remote source');
    const prior=old?.tables.find(p=>key(p)===key(t));
    if(!t.rows&&prior?.objectKey){tables.push({...prior});continue;}
-   const declared=t.columns?.filter(c=>typeof c!=='string');
+   const declared=t.columns?.filter(c=>typeof c!=='string')??prior?.columns.filter(c=>c.type==='user');
    const stored=await publishDataset(declared?.length?{columns:declared}:{},t.rows,objects);if(stored instanceof Response)return stored;
    tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});
   }

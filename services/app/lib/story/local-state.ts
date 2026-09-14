@@ -40,7 +40,7 @@ export async function runLocalStateMutation(
     return [v.name, value];
   }));
   const columns = signals
-    ? scalars.map(v => ({name: v.name, type: v.type}))
+    ? scalars.map(v => ({name: v.name, type: v.type,...(v.constraints?{constraints:v.constraints}:{})}))
     : declaration!.kind === 'table' ? declaration!.columns : [];
   if (!columns.length) throw new Error('Local table needs declared columns');
   const current = Object.hasOwn(snapshot.tables, target.name) ? snapshot.tables[target.name] : undefined;

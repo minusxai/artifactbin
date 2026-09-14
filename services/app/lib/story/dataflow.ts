@@ -431,7 +431,8 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
       const okShape = Array.isArray(declared) && declared.every((c) => c && typeof c === 'object' && !Array.isArray(c)
         && typeof (c as { name?: unknown }).name === 'string' && (VALUE_TYPES as readonly string[]).includes((c as { type?: string }).type ?? '') && (c as { type?: string }).type !== 'table');
       if (!okShape) return { ok: false, errors: [err(`<Value name="${name}"> columns must be [{name, type: string|number|boolean|date}]`, cols.attr, tag, 'columns')] };
-      const declaredCols = declared as unknown as DatasetColumn[];
+      let declaredCols:DatasetColumn[];
+      try {declaredCols=(declared as unknown[]).map(parseDatasetColumn);}catch(error){return {ok:false,errors:[err(error instanceof Error?error.message:'Invalid columns',el,tag,'columns')]};}
       const names = new Set(declaredCols.map((c) => c.name));
       columns = [...declaredCols, ...columns.filter((c) => !names.has(c.name))];
     }

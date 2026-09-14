@@ -962,6 +962,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "uppercase",
   "url",
   "use",
+  "user",
   "value",
   "var(--border,",
   "var(--chart-1)",

@@ -47,6 +47,35 @@ try {
     assert.deepEqual(persisted.rows.map(row=>row.status),['done','done']);
     check('For and DataTable row buttons persist the clicked row and refresh the reader');
   }
+  // Native user metadata drives the existing cell picker and audit identity.
+  {
+    const dataset=await fixture.api('/api/artifacts',{title:'Native users gate',dataset:[{id:1,assignee:null,completed_by:null}],columns:[{name:'assignee',type:'user',constraints:{memberOf:['current']}},{name:'completed_by',type:'user',constraints:{self:true}}],access:'readwrite',visibility:'unlisted'});
+    const doc=await fixture.api('/api/artifacts',{title:'User field project',visibility:'unlisted',markup:
+      `<Helmet><Value name="person" source="ref:${dataset.id}" column="assignee" />
+      <Query name="tasks" source="ref:${dataset.id}">{\`select *, '' as action from public.rows where $person is null or assignee=$person\`}</Query>
+      <Mutation name="assign" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set assignee=$_value where id=$_row.id\`}</Mutation>
+      <Mutation name="complete" source="ref:${dataset.id}" expectedAffected={1}>{\`update public.rows set completed_by=$_me where id=$_row.id\`}</Mutation></Helmet>
+      <Select label="Team filter" value="$person" />
+      <DataTable data="$tasks" rowKey="id"><Column col="id"/><Column col="assignee"><Select label="Assign member" value="$_row.assignee" run="$assign"/></Column><Column col="completed_by"/><Column col="action"><Button run="$complete">Finish user task</Button></Column></DataTable>`});
+    await aPage.goto(`${base}/a/${doc.id}`);
+    const page=await artifactDocument(aPage);
+    await page.getByRole('button',{name:'Assign member',exact:true}).click();
+    const option=page.getByRole('option').last();
+    const label=(await option.textContent()).trim();
+    assert.ok(label&&!label.startsWith('usr_'),'member picker displays a name');
+    let response=aPage.waitForResponse(r=>r.url().endsWith(`/a/${doc.id}/mutate`)&&r.request().method()==='POST');
+    await option.click();
+    assert.equal((await response).status(),200);
+    await page.getByRole('button',{name:'Assign member',exact:true}).filter({hasText:label}).waitFor();
+    response=aPage.waitForResponse(r=>r.url().endsWith(`/a/${doc.id}/mutate`)&&r.request().method()==='POST');
+    await page.getByRole('button',{name:'Finish user task',exact:true}).click();
+    assert.equal((await response).status(),200);
+    await page.getByRole('cell',{name:label,exact:true}).last().waitFor();
+    const persisted=await fixture.api(`/api/artifacts/${dataset.id}`,undefined,'GET');
+    assert.match(persisted.rows[0].assignee,/^usr_/);
+    assert.equal(persisted.rows[0].completed_by,persisted.rows[0].assignee);
+    check('native user picker and row button persist IDs and display member names');
+  }
   await Promise.all([aPage.goto(fixture.url), bPage.goto(fixture.url)]);
   await Promise.all([aPage.locator('[data-mx-inline-story]').waitFor(),bPage.locator('[data-mx-inline-story]').waitFor()]);
   const a = await artifactDocument(aPage);

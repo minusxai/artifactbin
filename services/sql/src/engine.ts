@@ -1,3 +1,4 @@
+import {COLUMN_SQL_TYPES} from './column-types';
 import {userColumnLineage} from './user-column-lineage';
 /**
  * The SQL engine — the ONLY file that imports DuckDB.
@@ -106,7 +107,7 @@ function jsonValue(v: unknown, type: ColumnType): unknown {
 }
 
 /** Our column type → the DuckDB type a registered table's column is created with. */
-const DUCK_TYPE: Record<ColumnType, string> = { string: 'VARCHAR', number: 'DOUBLE', boolean: 'BOOLEAN', date: 'DATE', user: 'VARCHAR' };
+
 
 const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 
@@ -137,10 +138,10 @@ async function registerTable(
   input: { rows: Row[]; columns: DatasetColumn[] },
 ): Promise<void> {
   const columns = input.columns.length ? input.columns : inferColumns(input.rows);
-  const ddl = columns.map((c) => `${quoteIdent(c.name)} ${DUCK_TYPE[c.type]}`).join(', ');
+  const ddl = columns.map((c) => `${quoteIdent(c.name)} ${COLUMN_SQL_TYPES[c.type]}`).join(', ');
   await conn.run(`CREATE TABLE ${quoteIdent(name)} (${ddl || '"_empty" VARCHAR'})`);
   if (input.rows.length === 0) return;
-  const struct = `[{${columns.map((c) => `${JSON.stringify(c.name)}:${JSON.stringify(DUCK_TYPE[c.type])}`).join(',')}}]`;
+  const struct = `[{${columns.map((c) => `${JSON.stringify(c.name)}:${JSON.stringify(COLUMN_SQL_TYPES[c.type])}`).join(',')}}]`;
   const select = columns.map((c) => `r.${quoteIdent(c.name)}`).join(', ');
   await conn.run(
     `INSERT INTO ${quoteIdent(name)} SELECT ${select} FROM (SELECT unnest(from_json($rows, '${struct}')) r)`,

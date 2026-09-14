@@ -27,7 +27,7 @@ export async function executeCatalog(catalog:DatasetCatalog,sql:string,params:Re
   result=await queryPostgres(config,sorted(compiled.sql),compiled.values,{limit,offset});
  }else{
   const local={...catalog,tables:catalog.tables.map((t,i)=>t.sql?t:{...t,source:{schema:'main',table:`dataset_table_${i}`}})};
-  const compiled=compileDatasetSql(local,sql,params);
+  const compiled=compileDatasetSql(local,sql,params,opts.paramTypes);
   const values=Object.fromEntries(compiled.values.map((v,i)=>[String(i+1),v]));
   const out=await runQueries({tables:await storedTables(catalog,opts.objects),queries:[{name:'result',sql:compiled.sql}],params:values,limit,page:{name:'result',limit,offset,...(opts.sort?{sort:opts.sort}:{})}});
   const table=out.result;if(!table||isQueryFailure(table))throw new DatasetError(table?.error??'Query failed');

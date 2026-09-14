@@ -413,7 +413,7 @@ export async function replaceArtifactWithBody(
   }
   const prepared: PreparedContent | Response = current.format === 'folder'
     ? {content: { format: 'folder', content: '', source: '', meta: {}, derivedTitle: null }, objects: []}
-    : await prepareContentInput({...(current.format==='dataset'?{columns:current.meta.columns}:{}),theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
+    : await prepareContentInput({...(current.format==='dataset'?{columns:((current.meta.columns??[]) as import('@artifactbin/contracts').DatasetColumn[]).filter(c=>c.type==='user')}:{}),theme:current.meta.theme,template:current.meta.template,colorMode:current.meta.colorMode,...body}, {
       prepareDataset: (input,objects) => prepareCatalog(input,actor,current,objects),
       normalizeMarkup,
       loadRef: options.loadRef ?? refLoaderForActor(owner),

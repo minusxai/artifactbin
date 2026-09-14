@@ -223,7 +223,7 @@ export async function mutateDataset(
      return result;
     };
     let updated;
-    try { updated=await db.transaction(commit); }
+    try { updated=guard.receipt||guard.expectedState||columns.some(c=>c.type==='user')?await db.transaction(commit):await commit(db); }
     catch(error) { if(error instanceof DatasetError)return {reason:'policy_denied',detail:error.message}; throw error; }
 
     const row = updated.rows[0];

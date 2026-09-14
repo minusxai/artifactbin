@@ -1,3 +1,4 @@
+import {COLUMN_SQL_TYPES} from './column-types';
 import type {
   DuckDBConnection,
   DuckDBPreparedStatement,
@@ -109,7 +110,7 @@ async function nativeJson(
     await conn.runAndReadAll(`SELECT ${fn}(${literal(sql)}) AS value`)
   ).getRowObjects();
   const value = JSON.parse(String(rows[0].value));
-  if (value.error) refuse('statement cannot be safely analyzed');
+  if (value.error) refuse(`statement cannot be safely analyzed: ${String(value.error_message??'unsupported statement').split('\n')[0]!.slice(0,240)}`);
   return value;
 }
 function visit(value: unknown, fn: (node: Node) => void) {
@@ -123,7 +124,17 @@ function visit(value: unknown, fn: (node: Node) => void) {
 }
 async function analysis(conn: DuckDBConnection, input: MutationInput) {
   const p = input.policy!;
-  const plan = await nativeJson(conn, 'json_serialize_plan', input.sql);
+  // DuckDB cannot serialize a bound STRUCT parameter. Analyze a typed NULL
+  // placeholder only; candidate evaluation below still binds the real snapshot.
+  let analysisSql=input.sql;
+  if(input.row) {
+    const tokens=lex(input.sql), rowType=`STRUCT(${input.row.columns.map(c=>`${quote(c.name)} ${COLUMN_SQL_TYPES[c.type]}`).join(',')})`;
+    for(let i=tokens.length-2;i>=0;i--) {
+      const token=tokens[i]!,next=tokens[i+1]!;
+      if(token.text==='$'&&next.word&&next.text==='_row'&&token.end===next.start)analysisSql=analysisSql.slice(0,token.start)+`CAST(NULL AS ${rowType})`+analysisSql.slice(next.end);
+    }
+  }
+  const plan = await nativeJson(conn, 'json_serialize_plan', analysisSql);
   if (!Array.isArray(plan.plans) || plan.plans.length !== 1)
     refuse('expected one analyzed write');
   const root = plan.plans[0];

@@ -1,6 +1,8 @@
+import {isQueryFailure} from '@artifactbin/contracts';
+import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
-import {validateUserContent,userOptions,userLabels} from '@/lib/datasets/user-fields';
+import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope} from '@/lib/datasets/user-fields';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -366,7 +368,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
    source=serializeDatasetDefinition({...definition,tables:definition.tables.map(t=>({...t,columns:t.columns?.map(c=>typeof c==='string'?c:columns([c])[0]!)}))});
   }
   await archiveVersion(tx,dataset);
-  const meta={...dataset.meta,catalog:bound,columns:columns((dataset.meta.columns??[]) as DatasetColumn[])};
+  const meta={...dataset.meta,userScopeDocument:document.id,catalog:bound,columns:columns((dataset.meta.columns??[]) as DatasetColumn[])};
   const updated=(await tx.query<ArtifactRow>('UPDATE artifacts SET meta=$2,source=$3,version=version+1,edit_id=$4,updated_at=now() WHERE id=$1 RETURNING *',[dataset.id,JSON.stringify(meta),source,newEditId()])).rows[0];
   await logWholeDocumentWrite(tx,dataset,updated);
  }
@@ -931,7 +933,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     return null;
   };
   const refusal = condition(initial); if (refusal) return {notArchived:true,refusal};
-  const target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
+  let target = (await db.query<ArtifactRow>('SELECT title,description,format,content,source,meta FROM artifact_versions WHERE artifact_id=$1 AND version=$2',[id,version])).rows[0];
   if (!target) return {notArchived:true};
   const prepared = target.format === 'markup' ? await publishMarkupForArtifact(initial,target.source??'',target.meta) : null;
   if (prepared instanceof Response) return {notArchived:true,refusal:prepared};
@@ -945,6 +947,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
+    target=retainUserScope(target,current);
     try {await validateUserContent(tx,target,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));}catch(error){if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:"dataset_error",details:[error.message]},error.status)};throw error;}
     const targetCatalog=catalogOf(target);
     if(targetCatalog?.kind==='postgres'&&targetCatalog.connection){
@@ -1025,6 +1028,7 @@ async function replaceScoped(
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
+    input=retainUserScope(input,current);
     await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
     const replacementCatalog=catalogOf(input);
     if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
@@ -2020,7 +2024,8 @@ export async function runDocumentMutation(
   // Declared defaults ⊕ what the caller sent, restricted to declared scalars:
   // the same rule a query run follows, so a value the document never declared
   // cannot reach the statement.
-  const flow: Dataflow = { values: content.values, queries: content.queries, mutations: content.mutations };
+  let flow: Dataflow = { values: content.values, queries: content.queries, mutations: content.mutations };
+  try {flow=await resolveUserValues(flow,refLoaderForActor(writer));}catch(error){return {ok:false,reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid user binding'};}
   const bound = initialValues(flow);
   for (const [k, v] of Object.entries(values)) if (k in bound) bound[k] = v;
 
@@ -2049,7 +2054,13 @@ export async function runDocumentMutation(
   if (decl.scope === 'local') {
     try {
       const tables = localTableOverrides(flow, localTables);
-      const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate: runMutation}, rowBinding);
+      if(decl.params.includes('_me')&&!actor.userId)return {ok:false,reason:'policy_denied',detail:'$_me requires a logged-in user'};
+      const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate:async input=>{
+        const columns=input.table.columns.map(c=>c.constraints?.memberOf?{...c,constraints:{...c.constraints,memberOf:c.constraints.memberOf.map(ref=>ref==='current'?`ref:${doc.id}`:ref)}}:c);
+        const out=await runMutation({...input,table:{...input.table,columns},params:{...input.params,_me:actor.userId}});
+        if(!isQueryFailure(out))await validateUserWrites(await getDb(),columns,out.userWrites??[],actor.userId);
+        return out;
+      }}, rowBinding);
       return {ok: true, local};
     } catch (error) {
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
@@ -2138,7 +2149,7 @@ export async function dataflowForRow(
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
-  if(result) {
+  if(result&&(result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
     const db=await getDb(), options:NonNullable<DataflowState['userOptions']>={}, ids=new Set<string>();
     const viewer=opts.viewer??null;
     const permitted=async(column:DatasetColumn)=>{
@@ -2306,13 +2317,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
     const table = await resolve(id);
     if (table) datasets[id] = table;
   }
-  flow={...flow,values:flow.values.map(value=>{
-    if(value.kind!=='scalar'||!value.source)return value;
-    const source=datasets[value.source] as RefTable|undefined;
-    const column=(source?.catalog?.tables.find(t=>t.schema==='public'&&t.name==='rows')?.columns??source?.columns)?.find(c=>c.name===value.column);
-    if(!column||column.type!=='user')throw new DatasetError(`Value ${value.name} must bind an available user column`);
-    return {...value,type:column.type,constraints:column.constraints};
-  })};
+  flow=await resolveUserValues(flow,async id=>datasets[id]);
   const usedSources = new Map<string, string>();
   const state = await runDataflow(flow, datasets, {userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceQuery:async(q,values,page)=>{

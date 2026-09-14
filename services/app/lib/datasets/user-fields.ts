@@ -51,3 +51,12 @@ export async function userLabels(db:Queryable,ids:string[]):Promise<Record<strin
  const rows=(await db.query<{id:string;name:string|null;username:string|null}>('SELECT id,name,username FROM users WHERE id=ANY($1::text[])',[ids])).rows;
  return Object.fromEntries(rows.map(u=>[u.id,u.name||u.username||u.id]));
 }
+
+/** A schema round-trip must not turn a frozen current scope back into a wildcard. */
+export function retainUserScope<T extends {meta:Record<string,unknown>}>(input:T,previous:{meta:Record<string,unknown>}):T {
+ const scope=previous.meta.userScopeDocument;
+ if(typeof scope!=='string')return input;
+ const resolve=(columns:DatasetColumn[])=>columns.map(c=>c.constraints?.memberOf?.includes('current')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${scope}`:ref))]}}:c);
+ const catalog=input.meta.catalog as {tables:Array<{columns:DatasetColumn[]}>}|undefined;
+ return {...input,meta:{...input.meta,userScopeDocument:scope,...(Array.isArray(input.meta.columns)?{columns:resolve(input.meta.columns as DatasetColumn[])}:{}),...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>({...t,columns:resolve(t.columns)}))}}:{})}};
+}

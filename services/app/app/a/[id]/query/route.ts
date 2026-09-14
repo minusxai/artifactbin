@@ -109,5 +109,5 @@ async function answer(artifact: ArtifactRow, parsed: QueryRequest, viewer: RoleA
     if (error instanceof DatasetError) return json({error:'not_found'},404,{...extra,'Cache-Control':'no-store'});
     throw error;
   }
-  return json({userOptions:flow?.state.userOptions??{},userLabels:flow?.state.userLabels??{}, tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'});
+  return json({...(flow?.state.userOptions?{userOptions:flow.state.userOptions,userLabels:flow.state.userLabels}:{}), tables: flow?.state.tables ?? {}, errors: flow?.state.errors ?? {}, ...(flow?.flow.mutations?.length ? {mutationAccess:flow.state.mutationAccess ?? {}} : {}) }, 200, {...extra,'Cache-Control':'no-store',[REVALIDATE_ACTOR_HEADER]:'1'});
 }

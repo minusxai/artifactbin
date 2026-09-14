@@ -1,3 +1,4 @@
+import {resolveUserValues} from './user-values';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
  * The document's DATA checks — everything about a markup document's data that
@@ -32,7 +33,7 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
   if (!parsed.ok) return { ok: true, refs: checked.refs };
   const split = splitHelmet(parsed.nodes);
   const flow: Dataflow = { values: split.content.values, queries: split.content.queries, mutations: split.content.mutations };
-  if (flow.queries.length === 0 && mutationsOf(flow).length === 0) return { ok: true, refs: checked.refs };
+  if (flow.queries.length === 0 && mutationsOf(flow).length === 0 && !flow.values.some(v=>v.kind==='scalar'&&v.source)) return { ok: true, refs: checked.refs };
 
   const dry = await dryRunDataflow(flow, load, split.body);
   if (dry.kind === 'sql') return { ok: false, error: 'invalid_sql', details: dry.details };
@@ -46,6 +47,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   | { kind: 'sql'; details: string[] }
   | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]> }
 > {
+  try {flow=await resolveUserValues(flow,load);}catch(error){return {kind:'sql',details:[error instanceof Error?error.message:'Invalid user binding']};}
   const tables: Record<string, { columns: DatasetColumn[] }> = {};
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
   const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
