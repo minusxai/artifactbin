@@ -22,15 +22,17 @@ describe('the installed short skill',()=>{
   * BULLET, not the page, so a stray sentence elsewhere cannot satisfy them, and on the shipped
   * `teaching.json` too — the generated bundle is the copy the CLI actually hands an agent.
   */
- it('counts the first push — three calls, title and headings — then fills sections, and native markup before Iframe',()=>{
+ it('orders the first push straight after the pull, in the workflow bullet, and native markup before Iframe',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
   const fewTurns=bullet('- Few turns');
   expect(fewTurns).toBeDefined();
   // Countable, not exhortative: a number of calls and a named payload for the first push.
-  expect(fewTurns).toContain('push a FIRST version within three calls of the pull');
-  expect(fewTurns).toMatch(/title and section headings, one line each/);
-  expect(fewTurns).toMatch(/fill the sections in later pushes/);
-  expect(fewTurns).toContain('waiting on a blank page');
+  // The SEQUENCE lives in the workflow bullet — the first one an agent reads — not in a later aside.
+  const workflow=bullet('- For a supplied artifact:');
+  expect(workflow).toContain('then `afbin push report.jsx` straight back with the title and the section headings');
+  expect(workflow).toContain('that first push is a page the person can open');
+  expect(workflow).toContain('then `afbin help <template>`, then fill the sections with further pushes');
+  expect(workflow).not.toContain('edit the file');
   expect(fewTurns).toMatch(/is not re-checking/);
   // Vague encouragement is the failure mode this replaced; it must not come back.
   for(const vague of ['first few calls','early','as soon as you can'])expect(fewTurns,vague).not.toContain(vague);
@@ -44,7 +46,7 @@ describe('the installed short skill',()=>{
   for(const text of ['text, data, charts, tables, controls and motion','<Iframe>','isolated DOM script or canvas','never for layout or content'])expect(native).toContain(text);
   // The bundle the CLI ships carries the same two bullets: a copy edit without
   // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
-  expect(teaching.files['SKILL.md']).toContain('push a FIRST version within three calls of the pull');
+  expect(teaching.files['SKILL.md']).toContain('straight back with the title and the section headings');
   expect(teaching.files['SKILL.md']).toContain('- Native markup first');
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });
