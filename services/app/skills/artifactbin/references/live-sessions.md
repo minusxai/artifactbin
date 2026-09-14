@@ -45,6 +45,8 @@ For a session containing one page, standard Playwright also gives
 `const [page] = context.pages()`. Call `sessions script SESSION_ID`, not `new`,
 to resume it. Values inside your own `return` do not name pages or sessions;
 the outer response supplies those IDs.
+Page IDs distinguish duplicate artifact URLs without changing application data.
+Do not write unrelated signals as page labels or bookkeeping; use those IDs.
 Capture images only when needed, using `await output.image(await page.screenshot())`.
 Image attachments can make JSON responses large. Redirect `--json > result.json`
 and read the IDs/results from that file instead of printing base64 into the agent's
@@ -71,6 +73,8 @@ returns a synchronous stop function; snapshots contain only the requested names.
 Subscribe to all signals needed by one renderer together. Wait for `window.mx`
 after navigation before calling it. On a script error, resume the existing page
 IDs; opening another page loses continuity.
+Write a separate recovery script that uses those pages. Do not rerun the original
+page-creation or mutation script just to inspect its result.
 
 Catch API errors inside the page to return their structured fields: Playwright
 does not preserve custom Error properties across its evaluation boundary.
