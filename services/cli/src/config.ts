@@ -1,3 +1,4 @@
+import {validVersion} from './version-order';
 import { readFile } from "node:fs/promises";
 import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
@@ -131,4 +132,10 @@ export function servicePackageUrl(releaseUrl:string,env:NodeJS.ProcessEnv=proces
  const base=new URL(env.CLI__SERVICE_BASE_URL),origin=normalizeServer(base.origin);
  if(base.username||base.password||base.search||base.hash)throw new Error('Use a service base URL without credentials, query or fragment.');
  return `${origin}${base.pathname.replace(/\/+$/,'')}/${path}`;
+}
+
+/** Automatic checks are opt-out; a version pin disables background changes entirely. */
+export function autoUpdatePolicy(env:NodeJS.ProcessEnv=process.env):{enabled:boolean;pin?:string} {
+ const pin=env.CLI__VERSION_PIN;
+ return {enabled:!['0','false','off'].includes((env.CLI__AUTO_UPDATE??'').toLowerCase())&&!pin,...(pin?{pin:validVersion(pin)?pin:'invalid'}:{})};
 }

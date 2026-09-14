@@ -1,3 +1,4 @@
+import {compareVersions,validVersion} from './version-order';
 import {configDir} from './config';
 /** Local integration boundary: selection never writes; installation owns managed files only. */
 import {cp,lstat,mkdir,realpath,rm} from 'node:fs/promises';
@@ -115,7 +116,7 @@ export async function planSkills(selected:readonly SkillHarness[],options:{home:
  }
  return plans;
 }
-export async function installSkills(selected:SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;files?:Readonly<Record<string,string>>;origin?:string;version?:string;alreadyLocked?:boolean}):Promise<{installations:SkillInstallation[];harnesses:SkillHarness[]}>{
+export async function installSkills(selected:SkillHarness[],options:{home:string;env?:NodeJS.ProcessEnv;files?:Readonly<Record<string,string>>;origin?:string;version?:string;alreadyLocked?:boolean;preserveSelection?:boolean}):Promise<{installations:SkillInstallation[];harnesses:SkillHarness[]}>{
  // Whichever bundle this is — the compiled one or a downloaded release — it
  // ships addressed to nobody; the skill an agent reads must name the server
  // THIS afbin uses, or the agent is taught to publish somewhere else.
@@ -131,6 +132,10 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
   for(const [path,harnesses] of groups){
    const manifestBytes=await readOptional(join(path,'.afbin-skill.json'));let previous:Manifest|undefined;
    if(manifestBytes){try{previous=JSON.parse(manifestBytes.toString());if(!previous||typeof previous.files!=='object'||Object.entries(previous.files).some(([key,value])=>!safeSkillPath(key)||typeof value!=='string'))throw new Error();}catch{throw new CliError('invalid_skill_manifest',`Invalid managed skill manifest at ${path}.`,'Move the manifest aside and rerun the command; the existing skill will be backed up.');}}
+   // Recheck under the install lock: an older running process must not undo a newer install.
+   if(previous && validVersion(previous.version) && validVersion(version) && compareVersions(previous.version,version)>0){
+    installations.push({path,harnesses,status:'unchanged',source:previous.source??SKILL_SOURCE,version:previous.version});continue;
+   }
    const allPaths=new Set([...Object.keys(previous?.files??{}),...Object.keys(files)]);let modified=false,changed=previous?.version!==version;let existed=false;
    try{const info=await lstat(path);if(!info.isDirectory())throw new CliError('invalid_skill_destination',`Skill destination is not a directory: ${path}`);existed=true;}catch(error){if(!isMissing(error))throw error;}
    for(const file of allPaths){
@@ -155,8 +160,8 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
    installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{}),...(harnesses.some(name=>name in restartHarnesses)?{restart_required:true as const}:{})});
   }
   // Preserve other settings when adding the selected integrations.
-  await atomicWrite(join(configDir(options.home,options.env),'settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');
+  if(!options.preserveSelection)await atomicWrite(join(configDir(options.home,options.env),'settings.json'),JSON.stringify({...saved,harnesses:[...new Set(selected)]},null,2)+'\n');
   return {installations,harnesses:[...new Set(selected)]};
  };
- return options.alreadyLocked?install():withLock(options.home,HOME_SCOPE,install);
+ return options.alreadyLocked?install():withLock(options.home,HOME_SCOPE,install,{},options.env);
 }

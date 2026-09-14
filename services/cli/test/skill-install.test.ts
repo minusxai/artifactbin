@@ -78,3 +78,12 @@ test('a harness that discovers skills at startup is told to restart; one that di
   assert.deepEqual(restartHints(again.installations),[]);
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('an older invocation cannot downgrade newer installed skill files',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-skill-monotonic-'));
+ try {
+  await installSkills(['pi'],{home,env:{},files:{'SKILL.md':'new'},version:'2.0.0'});
+  await installSkills(['pi'],{home,env:{},files:{'SKILL.md':'old'},version:'1.0.0'});
+  assert.equal(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),'new');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
