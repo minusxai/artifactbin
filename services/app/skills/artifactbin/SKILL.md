@@ -22,7 +22,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 ## Example
 
-Before writing a document, read design, markup, then the chosen template and theme (below); a template's frame keeps content from sitting flush to the viewport edge. `afbin help example` prints this file; `afbin help <template>` (dashboard, deck, editorial, plan, scrolly) prints every reference that kind of document needs, in one call.
+Before writing a document, read design, markup, then the chosen template and theme (below); a template's frame keeps content from sitting flush to the viewport edge. `afbin help example` prints this file; `afbin help <template>` (dashboard, deck, editorial, plan, scrolly) prints every reference that kind of document needs, together.
 
 ```jsx
 [[ example ]]
@@ -30,7 +30,7 @@ Before writing a document, read design, markup, then the chosen template and the
 
 ## Read next
 
-Read only what the task needs, in this order for a new document:
+Read what the task needs:
 
 - [design](references/design.md) — for any document a person will judge by eye.
 - [markup](references/markup.md) — the component allowlist, Helmet, images, layout; then [data and controls](references/markup-data.md) for queries, Values, charts and KPI tiles.
@@ -41,5 +41,5 @@ Read only what the task needs, in this order for a new document:
 - [datasets and media](references/publishing-datasets.md), [database catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history and deletion](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
 - [authentication](references/publishing-auth.md) — how automatic sign-in works, `--harness`, credentials per server.
-- [live sessions](references/live-sessions.md) — operate live artifact instances with Playwright and the shared `mx` API; capture their current image.
+- [live sessions](references/live-sessions.md) — Playwright, `mx`, screenshots.
 - [commands](references/commands.md) — every command and flag; [Markdown import](references/markdown.md) for a one-time `.md` push.

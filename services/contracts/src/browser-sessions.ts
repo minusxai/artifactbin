@@ -1,6 +1,9 @@
 import type { Actor } from './actor';
 import type { MxError } from './mx';
 
+/** Forces revalidation of the captured session credential on every app request. */
+export const BROWSER_SESSION_HEADER = 'x-mx-browser-session';
+
 export interface BrowserSessionPage { page_id: string; url: string; artifact_id?: string }
 export interface BrowserSessionAttachment { mime: 'image/png' | 'image/jpeg'; base64: string }
 export interface BrowserSessionResult {

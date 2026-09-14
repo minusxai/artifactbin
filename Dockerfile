@@ -75,6 +75,7 @@ COPY services/test-support/package.json ./services/test-support/package.json
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --omit=dev --ignore-scripts --cache /root/.npm \
     && node -e "const {DuckDBInstance}=require('@duckdb/node-api'); DuckDBInstance.create(':memory:').then(()=>console.log('duckdb ok')).catch((e)=>{console.error(e);process.exit(1)})" \
     && node node_modules/playwright/cli.js install --with-deps chromium \
+    && apt-get install -y --no-install-recommends bubblewrap \
     && rm -rf /var/lib/apt/lists/*
 COPY services ./services
 
