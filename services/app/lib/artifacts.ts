@@ -23,6 +23,7 @@ import { ALLOW_PUBLIC_VISIBILITY, ARTIFACT_QUOTA_PER_TOKEN } from './config';
 import { assetByteQuotaExceeded } from './asset-quota';
 import { getDb, type Queryable } from './db';
 import type {DatasetPolicy} from '@artifactbin/contracts';
+import {parseDatasetPolicy} from '@artifactbin/utils';
 import {validateDatasetPolicyForRow} from './datasets/policy/validation';
 import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
@@ -1914,13 +1915,20 @@ export function refLoaderForActor(actor: TokenActor): RefLoader {
   return actor.userId ? refLoaderForUser(actor.userId) : refLoaderFor(actor.tokenId);
 }
 
+/** A stored policy the publish door can analyze against, or nothing at all:
+ * an unreadable policy is the write door's refusal to make, not a publish's. */
+function parsedDatasetPolicy(row: ArtifactRow): DatasetPolicy | undefined {
+  if (!row.dataset_policy) return undefined;
+  try { return parseDatasetPolicy(row.dataset_policy); } catch { return undefined; }
+}
+
 function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
   const meta = row.meta as { columns?: DatasetColumn[] };
   return {
     id: row.id,
     format: row.format,
     owned,
-    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalogOf(row)??undefined, query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => executeCatalog(catalogOf(row)!,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes}) } : {}),
+    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalogOf(row)??undefined, datasetPolicy:parsedDatasetPolicy(row), query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => executeCatalog(catalogOf(row)!,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes}) } : {}),
     // A folder's shape is FIXED and computed, never stored — the publish door
     // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
     ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS, query: (sql: string, params: Record<string, Scalar>) => queryRows({columns: CHILDREN_COLUMNS, rows: []}, sql, params) } : {}),

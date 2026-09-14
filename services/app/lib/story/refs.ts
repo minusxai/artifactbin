@@ -51,6 +51,12 @@ export interface ResolvedRef {
   /** dataset: its write ACL. */
   access?: RefAccess;
   /**
+   * dataset: the DATA POLICY its audience writes under, when it has one. The
+   * publish door analyzes every declared `<Mutation>` against it, so a button
+   * the policy denies is refused here and not at every viewer's click.
+   */
+  datasetPolicy?: import('@artifactbin/contracts').DatasetPolicy;
+  /**
    * Resolved through the caller's OWN scope (their token or account), not the
    * link-readable fallback. A write is admitted only when this is true.
    */

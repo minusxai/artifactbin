@@ -156,6 +156,135 @@ describe.each<[string, SqlService]>([
       }),
     ).toMatchObject({ affected: 1, rows: [{ Body: 'kept' }] });
   });
+  /*
+   * A ROW ACTION under a policy. The plan is what the policy is read from, and
+   * a statement carrying `$_row.id` cannot be planned unbound — so the analysis
+   * binds the same typed placeholders execution binds, or every row button on a
+   * viewers-write dataset is "cannot be safely analyzed" for its viewers.
+   */
+  const open: DatasetMutationPolicy = {
+    role: 'viewer',
+    session: { 'x-hasura-role': 'viewer' },
+    operations: ['insert', 'update', 'delete'],
+    table: {
+      table: { schema: 'public', name: 'rows' },
+      insert_permissions: [
+        { role: 'viewer', permission: { columns: '*', check: {} } },
+      ],
+      update_permissions: [
+        { role: 'viewer', permission: { columns: '*', filter: {}, check: {} } },
+      ],
+      delete_permissions: [{ role: 'viewer', permission: { filter: {} } }],
+    },
+  };
+  const row = {
+    columns: table.columns,
+    values: { id: 1, body: 'one', status: 'open' },
+  };
+  const runRow = (
+    sql: string,
+    p = open,
+    params: Record<string, string> = {},
+  ) => svc.mutate({ table, sql, params, row, policy: p });
+  it('analyzes a row action bound to the $_row struct', async () => {
+    expect(
+      await runRow("update rows set status='done' where id=$_row.id"),
+    ).toMatchObject({
+      affected: 1,
+      rows: [{ id: 1, body: 'one', status: 'done' }, table.rows[1]],
+    });
+  });
+  it('keeps the policy filter and the column check over a $_row statement', async () => {
+    const columns: DatasetMutationPolicy = {
+      ...open,
+      table: {
+        ...open.table,
+        update_permissions: [
+          {
+            role: 'viewer',
+            permission: { columns: ['body'], filter: {}, check: {} },
+          },
+        ],
+      },
+    };
+    expect(
+      await runRow("update rows set status='done' where id=$_row.id", columns),
+    ).toHaveProperty('error');
+    const filtered: DatasetMutationPolicy = {
+      ...open,
+      table: {
+        ...open.table,
+        update_permissions: [
+          {
+            role: 'viewer',
+            permission: {
+              columns: '*',
+              filter: { status: { _eq: 'closed' } },
+              check: {},
+            },
+          },
+        ],
+      },
+    };
+    // The row the viewer clicked is `open`; this filter admits only closed rows.
+    expect(
+      await runRow("update rows set status='done' where id=$_row.id", filtered),
+    ).toMatchObject({ affected: 0, rows: table.rows });
+  });
+  it('binds scalar parameters for analysis too, and still checks insert columns', async () => {
+    expect(
+      await runRow('insert into rows (id,body) values (3,$title)', open, {
+        title: 'three',
+      }),
+    ).toMatchObject({
+      affected: 1,
+      rows: [...table.rows, { id: 3, body: 'three', status: null }],
+    });
+    const narrow: DatasetMutationPolicy = {
+      ...open,
+      table: {
+        ...open.table,
+        insert_permissions: [
+          { role: 'viewer', permission: { columns: ['id', 'body'], check: {} } },
+        ],
+      },
+    };
+    expect(
+      await runRow(
+        'insert into rows (id,body,status) values (3,$title,$title)',
+        narrow,
+        { title: 'three' },
+      ),
+    ).toHaveProperty('error');
+  });
+  it('keeps denying functions whose only arguments are parameters', async () => {
+    // A call over placeholders is a constant expression, and DuckDB folds it
+    // out of the plan it serializes — the parsed statement is the net.
+    const denied = { ...open, execution: { functions: { deny: ['lower'] } } };
+    expect(
+      await runRow(
+        'update rows set body=lower($_row.body) where id=$_row.id',
+        denied,
+      ),
+    ).toHaveProperty('error');
+    // Generation is refused over a row action too (here by the planner: an
+    // ungranted `llm` is not a function this instance can bind at all).
+    expect(
+      await runRow('update rows set body=llm($_row.body) where id=$_row.id'),
+    ).toHaveProperty('error');
+  });
+  it('analyzes an insert whose source is a SELECT of bound parameters', async () => {
+    expect(
+      await runRow('insert into rows (id,body) select 3, $title', open, {
+        title: 'three',
+      }),
+    ).toMatchObject({ affected: 1 });
+  });
+  it('still refuses a statement that genuinely cannot be planned', async () => {
+    expect(
+      await runRow('update rows set status=$_row.nosuch where id=$_row.id'),
+    ).toMatchObject({ error: expect.stringContaining('cannot be safely analyzed') });
+  });
   it('rejects opaque or unsupported write forms', async () => {
     for (const sql of [
       "insert into rows values (3,'x','x') on conflict do nothing",

@@ -120,9 +120,68 @@ function visit(value: unknown, fn: (node: Node) => void) {
   fn(value as Node);
   for (const v of Object.values(value)) visit(v, fn);
 }
+const DUCK_TYPE: Record<string, string> = {
+  string: 'VARCHAR',
+  number: 'DOUBLE',
+  boolean: 'BOOLEAN',
+  date: 'DATE',
+};
+/**
+ * THE STATEMENT AS THE PLANNER MUST SEE IT. `json_serialize_plan` plans TEXT,
+ * and `$_row.id` cannot be planned unbound — DuckDB answers an internal error,
+ * and the analysis below then refuses a row action that executes perfectly:
+ * every row button on a viewers-write dataset, for every viewer.
+ *
+ * So the planning COPY carries what execution binds — the `$_row` struct as a
+ * typed struct literal of the dataset's own columns, each scalar as a typed
+ * placeholder. TYPES ONLY: no caller value ever becomes SQL text, and this
+ * copy is planned, never run. Parameter references come from the lexer, so a
+ * `$` inside a string or a comment is left alone.
+ */
+function plannedSql(input: MutationInput): string {
+  const edits: Array<{ start: number; end: number; text: string }> = [];
+  const tokens = lex(input.sql);
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const dollar = tokens[i],
+      next = tokens[i + 1];
+    if (dollar.text !== '$' || !next.word || next.start !== dollar.end) continue;
+    const name = input.sql.slice(next.start, next.end);
+    let text: string;
+    if (name === '_row') {
+      const columns = input.row?.columns ?? [];
+      // Nothing to type it with: leave it, and let the planner refuse as before.
+      if (!columns.length) continue;
+      text = `({${columns
+        .map(
+          (c) =>
+            `${literal(c.name)}: CAST(NULL AS ${DUCK_TYPE[c.type] ?? 'VARCHAR'})`,
+        )
+        .join(',')}})`;
+    } else {
+      const value = input.params[name];
+      const type =
+        typeof value === 'number'
+          ? 'DOUBLE'
+          : typeof value === 'boolean'
+            ? 'BOOLEAN'
+            : typeof value === 'string'
+              ? 'VARCHAR'
+              : null;
+      // An absent or null binding stays untyped, exactly as the parameter
+      // itself would be resolved: the surrounding column decides.
+      text = type ? `CAST(NULL AS ${type})` : 'NULL';
+    }
+    edits.push({ start: dollar.start, end: next.end, text });
+    i++;
+  }
+  let sql = input.sql;
+  for (const edit of edits.reverse())
+    sql = sql.slice(0, edit.start) + edit.text + sql.slice(edit.end);
+  return sql;
+}
 async function analysis(conn: DuckDBConnection, input: MutationInput) {
   const p = input.policy!;
-  const plan = await nativeJson(conn, 'json_serialize_plan', input.sql);
+  const plan = await nativeJson(conn, 'json_serialize_plan', plannedSql(input));
   if (!Array.isArray(plan.plans) || plan.plans.length !== 1)
     refuse('expected one analyzed write');
   const root = plan.plans[0];
@@ -383,6 +442,11 @@ export async function runPolicyMutation(
         !f.allow.some((n) => [name, qualified].includes(n.toLowerCase())))
     )
       refuse(`function ${name} is not permitted`);
+    // Also HERE, not only in the bound plan: a call whose arguments are all
+    // parameters is a constant expression once they are typed placeholders,
+    // and DuckDB folds such a call out of the plan it serializes.
+    if (name === 'llm' && !p.execution?.generation)
+      refuse('generation requires a separate grant');
     if (!evidence.functions.includes(name)) evidence.functions.push(name);
   });
   const filter = compilePolicyPredicate(
