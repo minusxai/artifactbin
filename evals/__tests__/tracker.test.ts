@@ -13,7 +13,7 @@ import {
   scorerFor,
   type CheckContext,
 } from '../lib/score/kinds';
-import { completionMutation, islandOf, rowMarkedDone } from '../lib/score/kinds/tracker';
+import { completionMutation, islandOf, noIframe, rowMarkedDone, rowTableFor } from '../lib/score/kinds/tracker';
 
 /**
  * THE `tracker` KIND — the first eval task that grades the product's
@@ -135,6 +135,10 @@ describe('the three checks read off the published document', () => {
     const out = await tracker().checks(checkCtx());
     spy.mockRestore();
     expect(out).toMatchObject({ uses_row_template: true, declares_mutation: true });
+    // `no_iframe` is a COMMON check now (lib/score/product.ts `usesIframe`); the kind
+    // keeps the predicate for its own use but does not answer the check twice.
+    expect(out).not.toHaveProperty('no_iframe');
+    expect(noIframe(islandOf(checkCtx().served.html)!)).toBe(true);
   });
 
   it('sees a keyed For as a row template too', async () => {
@@ -157,6 +161,7 @@ describe('the three checks read off the published document', () => {
 <For each={$tasks}><p>{$_row.status}</p></For>`;
     const out = await tracker().checks(checkCtx({ served: { status: 200, html: island(markup, { state: state() }) } }));
     expect(out).toMatchObject({ uses_row_template: false, declares_mutation: false, mutation_works: false });
+    expect(noIframe(islandOf(island(markup, { state: state() }))!)).toBe(false);
   });
 
   it('answers false for a document that carries no story island at all', async () => {
@@ -291,6 +296,117 @@ describe('mutation_works — the driver runs the write itself', () => {
   });
 });
 
+/**
+ * THE LIVE LEG THAT FORCED THIS (opencode, `tracker`,
+ * runs/tracker in local22): the document published and declared `mark_done`,
+ * the probe bound `row {"status":"doing"}` — a row of the COUNTS query, which
+ * selects one column — and the door answered
+ * `400 invalid_row: row fields and scalar types must match the declared table result`.
+ *
+ * A `$_row` snapshot is compared field by field against the result columns of
+ * the query the TEMPLATE repeats (`runDocumentMutation` → `rowSchemas[name]`),
+ * so the only row that can ever be valid is one of that query's own rows. The
+ * probe therefore finds the button that runs the mutation, walks up to the
+ * keyed template hosting it, and binds a row of THAT query.
+ */
+describe('the row comes from the query feeding the button\'s own template', () => {
+  const TWO_QUERY_MARKUP = `<Helmet>
+<title>Team tracker, week 38</title>
+<Query name="counts" source="ref:${DATASET}">{\`select status, count(*) as tasks from public.rows group by 1\`}</Query>
+<Query name="rows_q" source="ref:${DATASET}">{\`select id, title, owner, status from public.rows order by id\`}</Query>
+<Mutation name="mark_done" source="ref:${DATASET}">{\`update public.rows set status = 'done' where id = $_row.id\`}</Mutation>
+</Helmet>
+<Question data="$counts" viz={{"kind":"table"}} />
+<DataTable data="$rows_q" rowKey="id">
+<Column col="title" />
+<Column col="status"><Button run="$mark_done">Done</Button></Column>
+</DataTable>`;
+
+  /** Both tables, the counts one FIRST — the order that produced the live failure. */
+  const twoTableState = (): DataflowState => ({
+    values: {},
+    errors: {},
+    tables: {
+      counts: {
+        rows: [{ status: 'todo', tasks: 9 }, { status: 'doing', tasks: 3 }],
+        columns: [{ name: 'status', type: 'string' }, { name: 'tasks', type: 'number' }],
+      },
+      rows_q: {
+        rows: ROWS,
+        columns: [{ name: 'id', type: 'number' }, { name: 'title', type: 'string' }, { name: 'owner', type: 'string' }, { name: 'status', type: 'string' }],
+      },
+    },
+  });
+
+  /** The door as the product answers it: a row that is not the template query's shape is refused. */
+  const schemaStrictWire = (after: Row[]) => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let reads = 0;
+    const spy = vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, ...(init ? { init } : {}) });
+      if (url.endsWith('/mutate')) {
+        const row = JSON.parse(String(init?.body)).row as Row | undefined;
+        const shaped = row !== undefined && ['id', 'title', 'owner', 'status'].every((c) => Object.hasOwn(row, c)) && Object.keys(row).length === 4;
+        return shaped
+          ? jsonRes({ ok: true, dataset: DATASET, affected: 1, rowCount: 2 })
+          : jsonRes({ error: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' }, 400);
+      }
+      reads += 1;
+      return jsonRes({ id: DATASET, format: 'dataset', access: 'readwrite', rows: reads === 1 ? ROWS : after });
+    }) as typeof fetch);
+    return { calls, spy };
+  };
+
+  it('binds the template\'s query, not the counts query, on the FIRST attempt', async () => {
+    const { calls, spy } = schemaStrictWire([{ ...ROWS[0], status: 'done' }, { ...ROWS[1] }]);
+    const rows: Array<[string, unknown]> = [];
+    const out = await tracker().checks(checkCtx({
+      served: { status: 200, html: island(TWO_QUERY_MARKUP, { state: twoTableState() }) },
+      record: (m, v) => rows.push([m, v]),
+    }));
+    spy.mockRestore();
+
+    const writes = calls.filter((c) => c.url.endsWith('/mutate'));
+    // ONE attempt: the right row is chosen, not found by trying the wrong ones first.
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0].init?.body)).row).toEqual(ROWS[0]);
+    expect(out.mutation_works).toBe(true);
+    // …and the probe names the query it bound, so a reader can see where the row came from.
+    expect(String(rows.find(([m]) => m === 'mutation_probe')?.[1])).toContain('rows_q');
+  });
+
+  it('finds the hosting template for a For and for a DataTable, and nothing outside one', () => {
+    const dataTable = islandOf(island(TWO_QUERY_MARKUP, { state: twoTableState() }))!;
+    expect(rowTableFor(dataTable, 'mark_done')).toEqual({ table: 'rows_q', key: 'id' });
+    const forMarkup = TWO_QUERY_MARKUP.replace(
+      /<DataTable[\s\S]*?<\/DataTable>/,
+      '<For each={$rows_q} keyBy="id"><p>{$_row.title}</p><Button run="$mark_done">Done</Button></For>',
+    );
+    expect(rowTableFor(islandOf(island(forMarkup, { state: twoTableState() }))!, 'mark_done')).toEqual({ table: 'rows_q', key: 'id' });
+    // A button that runs a mutation the document does not repeat over has no row to capture.
+    const looseMarkup = TWO_QUERY_MARKUP.replace(/<DataTable[\s\S]*?<\/DataTable>/, '<Button run="$mark_done">Done</Button>');
+    expect(rowTableFor(islandOf(island(looseMarkup, { state: twoTableState() }))!, 'mark_done')).toBeNull();
+  });
+
+  it('writes nothing, and says why, when the row action sits in no keyed template', async () => {
+    const unkeyed = TWO_QUERY_MARKUP.replace(
+      /<DataTable[\s\S]*?<\/DataTable>/,
+      '<For each={$rows_q}><p>{$_row.title}</p><Button run="$mark_done">Done</Button></For>',
+    );
+    const { calls, spy } = schemaStrictWire(ROWS);
+    const rows: Array<[string, unknown]> = [];
+    const out = await tracker().checks(checkCtx({
+      served: { status: 200, html: island(unkeyed, { state: twoTableState() }) },
+      record: (m, v) => rows.push([m, v]),
+    }));
+    spy.mockRestore();
+    expect(out).toMatchObject({ uses_row_template: false, mutation_works: false });
+    expect(calls.filter((c) => c.url.endsWith('/mutate'))).toHaveLength(0);
+    expect(String(rows.find(([m]) => m === 'mutation_probe')?.[1])).toMatch(/keyed|template/i);
+  });
+});
+
 describe('the pure halves the probe is built from', () => {
   it('picks the completing mutation over the inserting one, and never a local one', () => {
     const flow = islandOf(island(TRACKER_MARKUP, { state: state() }))?.dataflow?.flow;
@@ -325,7 +441,7 @@ describe('the tracker task on disk', () => {
     expect(task.checks).toEqual(expect.arrayContaining([
       'published', 'used_cli', 'used_start_document', 'dataset_created', 'query_ran', 'has_title',
       'no_console_errors', 'no_failed_responses', 'no_local_checkout_reads',
-      'uses_row_template', 'declares_mutation', 'mutation_works',
+      'uses_row_template', 'declares_mutation', 'mutation_works', 'no_iframe',  // the last is a common check
     ]));
   });
 

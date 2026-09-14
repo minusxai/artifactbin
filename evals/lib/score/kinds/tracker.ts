@@ -231,10 +231,70 @@ function columnFor(param: string, row: Row): Scalar | undefined {
   return value !== undefined && scalar(value) ? value : undefined;
 }
 
-/** Rows the document actually RENDERED, which is where a `$_row` snapshot has to come from. */
-export function renderedRows(island: TrackerIsland): Row[] {
-  const tables = island.dataflow?.state?.tables ?? {};
-  return Object.values(tables).flatMap((table) => table.rows ?? []);
+/** The rows ONE declared table produced, as the document rendered them. */
+export const renderedRows = (island: TrackerIsland, table: string): Row[] =>
+  island.dataflow?.state?.tables?.[table]?.rows ?? [];
+
+/** A whole-attribute reference, `$name` — the product's own grammar (`lib/story/dataflow` REF_NAME_RE). */
+const refName = (value: unknown): string | null =>
+  (typeof value === 'string' ? /^\$([A-Za-z_]\w*)$/.exec(value)?.[1] : undefined) ?? null;
+
+/**
+ * The table an attribute names, whether it was written as a static string
+ * (`data="$tasks"`) or as an expression (`each={$tasks}`) — the two spellings
+ * `lib/story/row-scope.ts` reads for `DataTable data=` and `For each=`.
+ */
+function tableAttr(el: JsxElement, name: string): string | null {
+  const value = el.attributes.find((a) => a.name === name)?.value;
+  if (!value) return null;
+  if (value.static) return refName(value.json);
+  return value.reactive?.kind === 'signal' ? value.reactive.name : null;
+}
+
+/** The query a row template repeats, and the column that keys it. */
+export interface RowScope {
+  table: string;
+  key: string;
+}
+
+/**
+ * WHICH QUERY'S ROW THE BUTTON CAPTURES — the fix a live leg forced.
+ *
+ * A `$_row` snapshot is checked field by field against the RESULT COLUMNS of the
+ * query the template repeats (`runDocumentMutation` → `rowSchemas[name]`), so a
+ * row from any other table is refused. An opencode run (local22, `tracker`) was
+ * scored `mutation_works: false` on a working tracker because the probe bound
+ * `{"status":"doing"}` — a row of the document's COUNTS query — and the door
+ * answered `400 invalid_row: row fields and scalar types must match the declared
+ * table result`.
+ *
+ * So: find the control that RUNS this mutation, and answer the keyed template it
+ * sits inside. A scope needs both halves — an unkeyed `<For>` cannot host a row
+ * action at all (`row-scope.ts`: "For actions require keyBy=") — so an unkeyed
+ * repeat clears the scope rather than passing a keyless one down.
+ */
+export function rowTableFor(island: TrackerIsland, mutation: string): RowScope | null {
+  const scopeOf = (el: JsxElement, inherited: RowScope | null): RowScope | null => {
+    const spelt = el.tag === 'For' ? { table: tableAttr(el, 'each'), key: staticAttr(el, 'keyBy') }
+      : el.tag === 'DataTable' ? { table: tableAttr(el, 'data'), key: staticAttr(el, 'rowKey') }
+      : null;
+    if (!spelt) return inherited;
+    return spelt.table && typeof spelt.key === 'string' && spelt.key ? { table: spelt.table, key: spelt.key } : null;
+  };
+  const visit = (nodes: JsxNode[], inherited: RowScope | null): RowScope | null => {
+    for (const node of nodes) {
+      if (node.type !== 'element') continue;
+      const scope = scopeOf(node, inherited);
+      if (refName(staticAttr(node, 'run')) === mutation) {
+        if (scope) return scope;
+        continue; // a control outside a keyed template captures no row; keep looking for one inside
+      }
+      const found = visit(node.children, scope);
+      if (found) return found;
+    }
+    return null;
+  };
+  return visit(island.nodes, null);
 }
 
 /**
@@ -265,13 +325,29 @@ export async function probeMutation(ctx: CheckContext, island: TrackerIsland): P
   const decl = completionMutation(declared);
   if (!decl) return { ok: false, note: `no UPDATE among the declared mutations (${declared.map((m) => m.name).join(', ')}) — nothing marks a task done` };
 
+  // A row action's snapshot has to come from the query its own template repeats, so
+  // the scope is resolved BEFORE anything is read or written: a button that sits in no
+  // keyed template can never write, and there is nothing to ask the product about.
+  const scope = isRowMutation(decl.sql) ? rowTableFor(island, decl.name) : null;
+  if (isRowMutation(decl.sql) && !scope) {
+    return {
+      ok: false,
+      note: `"${decl.name}" captures $_row, but no control running it sits inside a keyed <For keyBy>/<DataTable rowKey> — there is no row for it to capture`,
+    };
+  }
+
   // `scoredId` is the artifact the run is scored on; the island's own write door is
   // the answer whenever the driver was not told (see REPORT.md, contract request).
   const docId = documentIdOf(island) ?? ctx.scoredId ?? ctx.startId;
   const before = await readDatasetRows(ctx, decl.target);
-  const attempts = attemptsFor(decl, island, before);
+  const attempts = attemptsFor(decl, island, before, scope);
   if (!attempts.length) {
-    return { ok: false, note: `"${decl.name}" takes ${decl.params.join(', ')}, and nothing in the document's own rows binds them` };
+    return {
+      ok: false,
+      note: scope
+        ? `"${decl.name}" repeats $${scope.table}, which rendered no rows to capture`
+        : `"${decl.name}" takes ${decl.params.join(', ')}, and nothing in the document's own rows binds them`,
+    };
   }
 
   const tried: string[] = [];
@@ -281,7 +357,7 @@ export async function probeMutation(ctx: CheckContext, island: TrackerIsland): P
       values: attempt.values,
       ...(attempt.row ? { row: attempt.row } : {}),
     });
-    tried.push(`${decl.name}(${JSON.stringify(attempt.values)}${attempt.row ? `, row ${JSON.stringify(attempt.row)}` : ''}) → ${sent.status}${sent.error ? ` ${sent.error}` : ''}`);
+    tried.push(`${decl.name}(${JSON.stringify(attempt.values)}${attempt.row ? `, row of $${scope?.table ?? '?'} ${JSON.stringify(attempt.row)}` : ''}) → ${sent.status}${sent.error ? ` ${sent.error}` : ''}`);
     if (sent.status === 200) {
       const after = await readDatasetRows(ctx, decl.target);
       const changed = rowMarkedDone(before, after);
@@ -305,15 +381,15 @@ interface Attempt {
 /**
  * What to send, in the order worth trying.
  *
- * A `$_row` mutation is bound from the rows the DOCUMENT rendered (the island's
- * query results), because `runDocumentMutation` compares the snapshot field by
- * field against the declared table's result columns — a dataset row, which
- * carries the dataset's columns instead, would be refused as `invalid_row`.
+ * A `$_row` mutation is bound from the rows of the query its own TEMPLATE
+ * repeats (`scope`), because `runDocumentMutation` compares the snapshot field by
+ * field against THAT query's result columns — a dataset row, or a row of the
+ * document's counts query, is refused as `invalid_row` (see `rowTableFor`).
  * Unfinished rows come first: completing an already-done row changes nothing
  * and would read as a tracker that does not work.
  */
-function attemptsFor(decl: MutationDecl, island: TrackerIsland, dataset: readonly Row[]): Attempt[] {
-  const rows = isRowMutation(decl.sql) ? renderedRows(island) : [...dataset];
+function attemptsFor(decl: MutationDecl, island: TrackerIsland, dataset: readonly Row[], scope: RowScope | null): Attempt[] {
+  const rows = scope ? renderedRows(island, scope.table) : [...dataset];
   const ordered = [...rows].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
   const out: Attempt[] = [];
   for (const row of ordered) {
