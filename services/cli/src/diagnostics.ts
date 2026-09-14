@@ -14,7 +14,7 @@ export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
  outside_workspace:{meaning:'The destination is outside the workspace afbin runs in.',fix:'Write inside the workspace, e.g. --output shot.png, and move the file afterwards if it must live elsewhere.'},
  sql_in_argument:{meaning:'A query argument was SQL; arguments name the datasets or documents to query.',fix:'Put the SQL in a file and run afbin query <ref> --input query.sql, or pipe it: afbin query <ref> --input - < query.sql.'},
  image_fetch_failed:{meaning:'The server could not fetch an external image URL named by the document.',fix:'Check the URL is public and reachable, or upload the image as a file.'},
- dataset_read_only:{meaning:'The dataset does not accept row mutations: Postgres datasets are read-only and stored datasets need access: readwrite.',fix:'Set access: readwrite in the dataset YAML for stored datasets; Postgres datasets cannot be written.'},
+ dataset_read_only:{meaning:'The dataset does not accept row mutations: Postgres datasets are read-only and stored datasets need access: readwrite.',fix:'Publish a stored dataset with afbin push <file> --type dataset --access readwrite; Postgres datasets cannot be written.'},
  renderer_unavailable:{meaning:'Rendering photographs a published head, and this target is not one.',fix:'Push the draft, or export csv, json, yaml or original.'},
  unsupported_version_export:{meaning:'A historical version has no rendering; only the current head is photographed.',fix:'Export csv, json, yaml or original for a historical version.'},
  unpublished_draft:{meaning:'The viewer shows published documents; there is no local draft preview and drafts are never uploaded.',fix:'Publish it with afbin push, then open it.'},

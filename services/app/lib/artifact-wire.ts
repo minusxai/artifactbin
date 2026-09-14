@@ -801,7 +801,7 @@ export async function respondToMutate(
   if (refusal) {
     return json({
       error: 'dataset_read_only',
-      details: [`${id} is read-only — set access: readwrite (PUT here, or PATCH /api/my/artifacts/${id})`],
+      details: [`${id} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${id})`],
     }, 403);
   }
 

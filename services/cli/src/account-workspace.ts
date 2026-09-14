@@ -173,7 +173,7 @@ export async function localAccountCommand(workspace:Workspace,parsed:ParsedComma
   return {remote:'last_observed',diffs:[...artifacts,...files.filter(file=>file.status!=='unchanged').map(file=>({path:file.path,diff:createTwoFilesPatch(`base/${file.path}`,`local/${file.path}`,file.entry?yaml(file.entry.resource):'',file.bytes?.toString()??'')}))]};
  }
  if(parsed.command==='push'&&!await pendingRecovery(workspace)&&files.every(file=>file.status==='unchanged')){
-  const artifacts=await finishLocalPush(workspace,plan.artifacts,!!parsed.flags.force);
+  const artifacts=await finishLocalPush(workspace,plan.artifacts,{force:!!parsed.flags.force,access:parsed.flags.access as 'read'|'readwrite'|undefined});
   if(artifacts)return {operations:[...artifacts.operations,...files.map(file=>({path:file.path,status:'unchanged'}))]};
  }
 }
@@ -319,7 +319,7 @@ export async function remoteAccountCommand(workspace:Workspace,parsed:ParsedComm
   operations.push({path:file.path,id:result.id,status:'pushed',operation:result.operation});
  }
  if(plan.artifacts.length){
-  const result=await push(workspace,plan.artifacts,client,{force:!!parsed.flags.force,dryRun:!!parsed.flags['dry-run']});
+  const result=await push(workspace,plan.artifacts,client,{force:!!parsed.flags.force,dryRun:!!parsed.flags['dry-run'],access:parsed.flags.access as 'read'|'readwrite'|undefined});
   operations.unshift(...result.operations);
  }
  return {value:{...(parsed.flags['dry-run']?{dry_run:true}:{}),operations}};

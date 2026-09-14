@@ -439,3 +439,14 @@ test('afbin help --for <template> prints every reference a document of that kind
   const err=JSON.parse(out.join('')).error;assert.equal(err.code,'invalid_choice');for(const t of ["dashboard","deck","editorial","plan","scrolly"])assert.ok(err.fix.includes(t),err.fix);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+/**
+ * The dataset a document WRITES to is the one thing the datasets topic never said how to make:
+ * `access: readwrite` was only reachable through a resource YAML file no reference documents.
+ */
+test('the datasets topic names the push flag that publishes a writable dataset',()=>{
+ const datasets=helpTopics['publishing-datasets']!;
+ assert.match(datasets,/--type dataset --access readwrite/);
+ assert.match(datasets,/--access <ACCESS>/,'the push help block in the same topic lists the flag');
+ assert.match(commandHelp('push'),/--access <ACCESS>/);
+});
