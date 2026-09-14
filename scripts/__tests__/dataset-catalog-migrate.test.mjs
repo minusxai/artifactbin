@@ -42,3 +42,17 @@ it('audits after apply and refuses to call an incomplete migration finished',asy
  }});
  expect(calls).toBe(3);expect(result).toMatchObject({ok:false,reason:'remaining'});
 });
+
+it('audits every exception-only page and reports completion with preserved historical exceptions',async()=>{
+ const calls=[],saved=[],lines=[];
+ const exceptions=[{artifactId:'aaaaaa',version:1,reason:'invalid JSX secret'},{artifactId:'zzzzzz',version:2,reason:'invalid SQL'}];
+ const result=await runMigrationCli({url:'https://artifact.test',dryRun:false,batchSize:1,retries:0,secret:'secret',write:line=>lines.push(line),saveReport:async report=>saved.push(report),fetch:async(_url,request)=>{
+  const body=JSON.parse(request.body);calls.push(body);
+  return Response.json({dryRun:true,processed:1,changed:0,plans:[],conflicts:[],done:true,nextCursor:body.after?null:'aaaaaa',historicalExceptions:[exceptions[body.after?1:0]]});
+ }});
+ expect(calls.map(call=>call.after)).toEqual([undefined,'aaaaaa',undefined,'aaaaaa']);
+ expect(saved).toHaveLength(4);
+ expect(result).toMatchObject({ok:true,completion:'complete_with_historical_exceptions',report:{historicalExceptions:exceptions}});
+ expect(lines.join('\n')).toContain('2 preserved historical exceptions');
+ expect(lines.join('\n')).not.toContain('secret');
+});

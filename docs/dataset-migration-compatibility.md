@@ -2,8 +2,8 @@
 
 ## Scope and contracts
 
-This implementation addresses legacy stored-dataset read queries and missing
-catalog metadata. Historical exception policy remains separate.
+This implementation addresses legacy stored-dataset read queries, missing
+catalog metadata and explicitly reported historical exceptions.
 Production has received a dry run, not an apply. No production content or
 credentials are included here.
 
@@ -66,13 +66,41 @@ recoverable. Inventory and audit now include those records. Preview stays
 read-only; reviewed apply normalizes their metadata without copying data or
 changing document versions.
 
-Records with neither a catalog nor a nonempty string object key now produce
+Current records with neither a catalog nor a nonempty string object key produce
 explicit blocking diagnostics, including the source ID for dependent queries.
 They remain incomplete in the final audit and are never given invented empty
 datasets. A reader regression test also observed a missing-storage dataset with
 column metadata yielding count zero; the resolver now reports that source as
 unavailable. These checks preserve record bytes for recovery. They do not add
 support for old inline-content storage or discard invalid history.
+
+### Historical exceptions
+
+As authorized, historical records that cannot be transformed or whose transformed
+markup fails data validation are preserved byte-for-byte, including their metadata
+and content. Valid historical records still migrate. Current-head failures and
+the history resource limit remain blocking. A thrown validator failure aborts the
+operation; it is not converted to a successful exception.
+
+Preview, apply and audit use the same classification and return
+`historicalExceptions: [{artifactId, version, reason}]`. These are the exceptions
+for the returned page; callers must follow `nextCursor`, even when `done` is true.
+`done` means that no eligible migration changes or blocking head/resource failures
+remain globally, not that every historical version was converted. Exception-only
+artifacts consume the page budget, so they cannot disappear from reporting.
+
+The CLI inventories every final-audit page, saves the reports, aggregates all
+exceptions and returns `completion: complete_with_historical_exceptions` when
+appropriate. Its console output explicitly counts preserved exceptions. Before
+any changed artifact is written, the existing backup and fingerprint still cover
+the entire original head and history, including unchanged exceptional versions.
+
+Exceptions are recomputed rather than stored as permanent exemptions. If content
+or a referenced dataset is repaired, the next preview may find that version
+eligible again. Restoring skipped markup still goes through normal publication
+validation; missing-storage dataset versions are refused before archiving or
+changing the head. Tests cover byte preservation, restore rejection, repeated
+audit, exception-only pagination, repaired history and stale fingerprints.
 
 ### Remaining work
 
@@ -88,12 +116,8 @@ Next milestones remain separate:
 1. Inspect the five actual production source records through an authorized private
    snapshot or admin environment; determine storage/recovery needs. Do not infer
    their exact metadata from the synthetic reproductions or the CLI's 404s.
-2. Skip and report invalid historical versions while preserving their bytes, as
-   authorized by the user. Define exceptions in preview, apply, final audit and
-   restore; current-head failures remain blocking. This policy is not implemented
-   by the SQL compatibility change.
-3. After deployment of reviewed changes, obtain a fresh production preview and
+2. After deployment of reviewed changes, obtain a fresh production preview and
    investigate residual reference, mutation, chart, date and syntax defects.
-4. Retain durable private backups and define partial-apply recovery before applying
+3. Retain durable private backups and define partial-apply recovery before applying
    reviewed current fingerprints. Verify public reader charts and all eight Show
    HN queries afterward. No rollout or new production preview is part of this change.

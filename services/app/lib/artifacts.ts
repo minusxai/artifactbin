@@ -949,6 +949,7 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
+    if(target.format==='dataset'&&!catalogOf(target))return {notArchived:true,refusal:json({error:'dataset_error',details:['Historical dataset has no catalog or stored object key']},400)};
     target=retainUserScope(target,current);
     try {await validateUserContent(tx,target,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));}catch(error){if(error instanceof DatasetError)return {notArchived:true,refusal:json({error:"dataset_error",details:[error.message]},error.status)};throw error;}
     const targetCatalog=catalogOf(target);
