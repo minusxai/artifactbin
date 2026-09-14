@@ -2,11 +2,11 @@ import { artifactIdFromPath } from '@artifactbin/utils/artifact-reference';
 /** Fixed held-out briefs. The grader and these reference checks are never staged for the agent. */
 export const sessionTasks = {
   multi: 'Open both supplied artifacts concurrently in ONE session. Set the first region to South with a Playwright control and leave the second at North. In a second CLI script call, resume the same pages and return both settled sales snapshots.',
-  resume: 'Open the first artifact and set window.probeMarker="still-here" and region South. In a SECOND CLI script call resume that exact page (do not navigate again), and return the marker and region.',
-  capture: 'Open the first artifact and select region South. In a SECOND CLI script call resume that same page, wait for sales to settle, and attach a live PNG screenshot with output.image. Also return region.',
-  duplicate: 'Open TWO pages for the first artifact in ONE session. Set only one region to South. In a SECOND CLI script call resume both stable page IDs and return their regions. Do not use the URL to distinguish duplicate pages.',
+  resume: 'Open the first artifact and set window.probeMarker="still-here" and set the artifact\'s region signal to South. In a SECOND CLI script call resume that exact page (do not navigate again), and return the marker and region.',
+  capture: 'Open the first artifact and set its region signal to South. In a SECOND CLI script call resume that same page, wait for sales to settle, and attach a live PNG screenshot with output.image. Also return region.',
+  duplicate: 'Open TWO pages for the first artifact in ONE session. Set only one page\'s region signal to South. In a SECOND CLI script call resume both stable page IDs and return their regions. Do not use the URL to distinguish duplicate pages.',
   mutate: 'Open the first artifact, inspect mx.describe(), then invoke addTask exactly once with taskTitle="Held-out task". Do not set taskTitle. Return the receipt and the tasks/taskTitle signals.',
-  subscribe: 'Open the first artifact. Subscribe to region in page.evaluate and record callback values in window.observed. Change region to South, wait for its callback, then unsubscribe. Return window.observed and leave it available for inspection.',
+  subscribe: 'Open the first artifact. Subscribe to region in page.evaluate and record callback values in window.observed. Change the artifact region signal to South, wait for its callback, then unsubscribe. Return window.observed and leave it available for inspection.',
   invalid: 'Open the first artifact. Attempt exactly mx.set({region:"South",missing:2}), catch the error, and return its code plus the current region. Do not repair or retry the invalid patch: region must remain North.',
   failure: 'In the first CLI script call open the first artifact and then throw new Error("deliberate"). Inspect the receipt using sessions status. In a second script call resume the existing page and return region. Do not recreate the page.',
 };

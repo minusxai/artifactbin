@@ -37,6 +37,10 @@ return {description, snapshot};
 Images are `{mime, base64}` attachments. Scripts can open several artifacts,
 including multiple copies of one artifact. Returned page IDs remain stable until
 those pages close. In the next script use `const page = pages['PAGE_ID']`.
+For a session containing one page, standard Playwright also gives
+`const [page] = context.pages()`. Call `sessions script SESSION_ID`, not `new`,
+to resume it. Values inside your own `return` do not name pages or sessions;
+the outer response supplies those IDs.
 The JavaScript heap and DOM remain live between calls; script variables do not.
 Independent operations may use `await Promise.all([...])`; scripts in one session
 run sequentially. Playwright functions passed to `page.evaluate()` run in the page:
@@ -80,6 +84,24 @@ own inner frame: `page.frameLocator('iframe[title="Widget"]').frameLocator('ifra
 Inspect the actual controls and their accessible names; use `selectOption` for
 native selects, or click a custom select trigger and its option. A native artifact
 control is in the main page; it does not require entering a widget frame.
+
+Inspect controls with Playwright's accessibility snapshot before choosing a
+locator; raw HTML often buries controls beneath styles and application chrome:
+
+```js
+const [page] = context.pages();
+return await page.locator('body').ariaSnapshot();
+```
+
+The kit's `<Select label="Region">` is a button with a listbox, not an HTML
+`<select>`. Operate that control with its accessible names:
+
+```js
+const [page] = context.pages();
+await page.getByRole('button', {name: 'Region', exact: true}).click();
+await page.getByRole('option', {name: 'West', exact: true}).click();
+return await page.evaluate(() => mx.read(['region'], {wait: true}));
+```
 
 A script error preserves pages. A timeout that destroys the worker returns
 `SESSION_LOST`; create a new session explicitly. Never rerun an uncertain mutation
