@@ -33,8 +33,8 @@ export function ArtifactPrint({
 // Each spread pairs two canonical examples; the gallery shares ArtifactPrint.
 const BOOKS = [
   { title: "Follow the evidence", pages: [0, 2] },
-  { title: "Tell the whole story", pages: [1, 3] },
-  { title: "Put an idea into motion", pages: [4, 5] },
+  { title: "Tell compelling data stories", pages: [1, 3] },
+  { title: "Put ideas into motion", pages: [4, 5] },
 ];
 
 export default function WorkshopDirections() {
