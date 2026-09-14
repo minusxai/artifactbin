@@ -37,7 +37,7 @@ export const opencode:HarnessAdapter={
     return {
       // `--dir` is not optional: OpenCode otherwise resolves its own project root by walking up from
       // the process cwd, adopts whatever repository it finds, and never sees the files staged for the task.
-      argv: ['opencode', 'run', '--format', 'json', '--auto', '--dir', ctx.cwd, '--model', ctx.leg.model, ctx.prompt],
+      argv: ['opencode', 'run', '--format', 'json', '--auto', '--dir', ctx.cwd, '--model', ctx.leg.model, ...(ctx.leg.variant ? ['--variant',ctx.leg.variant] : []), ctx.prompt],
       env: {
         OPENCODE_CONFIG_DIR: h,
         XDG_CONFIG_HOME: path.join(h, 'xdg-config'),

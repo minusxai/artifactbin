@@ -89,3 +89,9 @@ describe('--concurrency', () => {
     }
   });
 });
+
+it('accepts an explicit variant and skips only the informational baseline when requested', () => {
+  expect(parseArgs(['--variant=low', '--no-baseline'])).toMatchObject({variant:'low',baseline:false});
+  expect(parseArgs([]).baseline).not.toBe(false);
+  expect(()=>parseArgs(['--variant'])).toThrow();
+});

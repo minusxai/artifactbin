@@ -16,6 +16,9 @@ export interface Args {
   /** The single leg this run drives — see `lib/leg.ts`. */
   harness?: string;
   model?: string;
+  variant?: string;
+  /** Optional fixed-context cost probe; disabled by the bounded functional smoke. */
+  baseline?: boolean;
   /**
    * NAME of the variable holding the provider key. Called `envVar`, never
    * `apiKeyEnv`: CodeQL's credential heuristic reads an identifier containing
@@ -74,6 +77,8 @@ Runs ONE leg — one harness, one model — over the selected tasks and writes a
 
   --harness <name>          Harness to drive (see evals/lib/harness/).
   --model <id>              Provider model id for that harness.
+  --variant <name>          Explicit OpenCode provider reasoning variant.
+  --no-baseline             Skip the informational fixed-context cost probe.
   --api-key-env <NAME>      Environment variable holding the provider key.
   --label <text>            Report label for this leg; defaults to harness · model.
   --price-in|--price-out|--price-cache-read|--price-cache-write <dollars>
@@ -146,6 +151,12 @@ export function parseArgs(argv: string[]): Args {
     switch (flag) {
       case '--harness': args.harness = value(); break;
       case '--model': args.model = value(); break;
+      case '--variant': {
+        const variant = value();
+        if (!variant || variant.startsWith('-')) throw new Error('--variant needs a name');
+        args.variant = variant; break;
+      }
+      case '--no-baseline': args.baseline = false; break;
       case '--api-key-env': args.envVar = value(); break;
       case '--label': args.label = value(); break;
       case '--price-in': args.priceIn = rate(value(), '--price-in'); break;

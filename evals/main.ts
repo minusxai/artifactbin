@@ -44,6 +44,7 @@ import { CLI_VERSION } from '../services/cli/src/version';
 import { runCliAuth } from './lib/auth';
 import {browserShims,materializeCli} from './lib/cli-kit';
 import { taskCost } from './lib/price';
+import { phaseLogger } from './lib/phases';
 import { BASELINE_FLOW, BASELINE_PROMPT, BASELINE_ROWS_ID, measureBaseline } from './lib/baseline';
 import { ledgerMetrics, ledgerRows, parseLedger, scoredArtifactId, writtenArtifactIds } from './lib/ledger';
 import { adapterFor } from './lib/harness';
@@ -96,6 +97,7 @@ async function servedDocument(url: string): Promise<ServedDocument> {
 import { runSecondAttempts, verdictLine, type MergedVerdicts, type Outcome } from './lib/second-attempt';
 
 interface LegRun {
+  baseline?: boolean;
   protectPaths?: string[];
   /** Unix user the harness process runs as, when CI isolates it from this checkout (`lib/spawn`). */
   runAs?: string;
@@ -192,7 +194,8 @@ async function runLeg(leg: Leg, tasks: Task[], config: EvalConfig, outDir: strin
   // What this column costs BEFORE it does anything: one turn, one word, no product. It opens the
   // report because a per-task total hides a fixed per-turn overhead and lets it read as product
   // cost. Reported, never subtracted (lib/baseline.ts).
-  try {
+  if (run.baseline === false) log(`${leg.label}: informational baseline skipped`);
+  else try {
     const baseDir = path.join(legDir, 'baseline');
     const baseWorkspace = createWorkspace(leg.label, 'baseline');
     // The baseline pays the same fixed context as a task: in the installed flow the skills are on disk.
@@ -267,6 +270,8 @@ interface TaskRun {
 
 async function runTask(r: TaskRun): Promise<Outcome> {
   const { leg, task, config } = r;
+  const phase=phaseLogger(line=>log(`${leg.label}/${task.id}: phase ${line}`));
+  phase('setup:start');
   const adapter = adapterFor(leg.harness);
   // The mode is authoritative. A harness that cannot provide its action transport
   // runs the nearest treatment and the report names the substitution.
@@ -353,13 +358,14 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     rec.finalize(false);
     return false;
   }
+  phase('setup:complete');
   const baseline = prepared.baseline;
 
   const prompt = buildPrompt(prepared.fixture?.brief?{...task,brief:task.brief+'\n\n'+prepared.fixture.brief}:task, access, { vision: leg.vision, promptLevel: leg.promptLevel });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
   const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, skills };
-  log(`${leg.label}/${task.id}: doc ${start.id} — running ${leg.harness} (${leg.model})`);
+  log(`${leg.label}/${task.id}: doc ${start.id} — running ${leg.harness} (${leg.model}${leg.variant ? `; variant=${leg.variant}` : ''})`);
   await adapter.prepare(ctx);
   // The anchor `ms_to_first_publish` is measured from: the moment the human's wait begins. Taken here,
   // beside the spawn, rather than read off the ledger — whose first entry is already past the agent's
@@ -370,6 +376,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   const approver = approverNeeded(leg.mode.run)
     ? startApprover({ ledgerPath: r.ledgerPath, agentBase: r.agentBase, publicOrigin: r.publicOrigin, cookie: r.credential.cookie, log: (m) => log(`${leg.label}/${task.id}: ${m}`) })
     : null;
+  phase('agent:start');
   const startedAtMs = Date.now();
   const spawned = await runInvocation({ ...adapter.invocation(ctx), redact: [r.apiKey] }, {
     cwd,
@@ -389,6 +396,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     checkoutRoots: r.protectedRoots,
     ...(r.runAs ? { runAs: r.runAs } : {}),
   });
+  phase('agent:complete');
   approver?.stop();
   const result = adapter.reduce(spawned.stdout);
   if (spawned.timedOut) { result.ok = false; result.error = `timed out after ${config.run.timeoutMs} ms`; }
@@ -449,6 +457,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // --- score: browser (only when there is a document to look at)
   // The browser loads through the PROXY, so the document's own data transport lands in the ledger and
   // `query_ran` can be read from it. Those entries fall after `to`, outside the agent's slice.
+  phase('browser:start');
   let inspection: Awaited<ReturnType<typeof inspectDocument>> | null = null;
   if (pm.published && docUrl) {
     inspection = await inspectDocument(r.browser, `${docUrl}/raw?chrome=0`, VIEWPORT_WIDTH_PX.mobile);
@@ -463,7 +472,9 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // something the reader should see either way. A failure INSIDE the checks is the DRIVER's — the
   // reads are ours — so it answers `checks_ok: false`, leaves the kind's checks unanswered and stops
   // them gating, rather than reporting an agent that ignored the comment.
+  phase('checks:start');
   const checked = await runChecks(scorer, {
+    checkpoint:name=>phase(`check:${name}:complete`),
     task,
     driver, fixture:prepared.fixture,
     scoredId: targetId,
@@ -474,6 +485,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     served,
     record: (metric, value, kind) => rec.record(task.id, metric, value, kind),
   });
+  phase('checks:complete');
   if (!checked.ok) log(`${leg.label}/${task.id}: CHECKS FAILED at ${checked.step} — ${checked.error}`);
 
   // --- rows: numbers
@@ -607,6 +619,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   rec.finalize(passed);
+  phase('task:complete');
   // A failure the DRIVER had to stop — the turn cap or the wall clock — is structural: the same prompt
   // loops the same way, so `--ci` must not spend a second paid run on it (`lib/second-attempt`).
   const runaway = !passed && (spawned.turnCapped || spawned.timedOut);
@@ -673,10 +686,11 @@ async function main(): Promise<void> {
   fs.rmSync(args.out, { recursive: true, force: true });
   fs.mkdirSync(args.out, { recursive: true, mode: 0o700 });
 
+  const legRun:LegRun={ credentialFor, baseline:args.baseline, protectPaths: args.protectPaths, ...(args.runAs ? { runAs: args.runAs } : {}) };
   const browser = await chromium.launch();
   let merged: MergedVerdicts = { verdicts: [], recovered: [], failed: [] };
   try {
-    const first = await runLeg(leg, tasks, config, args.out, browser, { credentialFor, protectPaths: args.protectPaths, ...(args.runAs ? { runAs: args.runAs } : {}) });
+    const first = await runLeg(leg, tasks, config, args.out, browser, legRun);
     // A CI flow that failed gets ONE more turn, alone, and is named for it
     // (lib/second-attempt). The first attempt's artifacts are kept beside the
     // retry's rather than overwritten, so the flake can still be read.
@@ -685,7 +699,7 @@ async function main(): Promise<void> {
       enabled: args.retry,
       outDir: args.out,
       announce: (task) => log(`${leg.label}/${task.id}: failed — one more turn, alone`),
-      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser, { credentialFor, protectPaths: args.protectPaths, ...(args.runAs ? { runAs: args.runAs } : {}) }))[0],
+      rerun: async (task) => (await runLeg(leg, [task], config, args.out, browser, legRun))[0],
     });
   } finally {
     await settleWithin(browser.close(), TEARDOWN_MS);

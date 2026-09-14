@@ -115,3 +115,9 @@ describe('pricing a leg', () => {
     });
   });
 });
+
+it('keeps an OpenCode variant explicit and rejects it for unsupported harnesses',()=>{
+ const env={FIREWORKS_API_KEY:'fixture'};
+ expect(legFromArgs(parseArgs([...base,'--harness=opencode','--variant=low']),env).variant).toBe('low');
+ expect(()=>legFromArgs(parseArgs([...base,'--variant=low']),env)).toThrow(/OpenCode/);
+});
