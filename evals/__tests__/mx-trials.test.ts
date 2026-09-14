@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { createServer } from 'node:http';
-import { trialArtifactId, trialUpstreamUrl, writeTrialError } from '../lib/mx-trials/transport';
+import { createTrialTransport, trialArtifactId, trialUpstreamUrl, writeTrialError } from '../lib/mx-trials/transport';
 import { runDataflow } from '../../services/app/lib/sql/run-dataflow';
 import { validateMarkupStructure } from '../../services/app/lib/story/local-validation';
 import { fixtureMarkup, sessionVerdict } from '../lib/mx-trials/tasks.mjs';
@@ -19,8 +19,8 @@ it('rejects non-ID response values before they reach a harness command', () => {
   }
 });
 
-it('serves scrubbed errors as non-sniffable text, never HTML', async () => {
-  const server = createServer((_req, res) => writeTrialError(res, new Error('<script>secret</script>'), ['secret']));
+it('serves generic errors as non-sniffable text, never HTML or exception details', async () => {
+  const server = createServer((_req, res) => writeTrialError(res));
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const address = server.address();
@@ -29,9 +29,33 @@ it('serves scrubbed errors as non-sniffable text, never HTML', async () => {
     expect(response.status).toBe(502);
     expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(await response.text()).not.toContain('secret');
+    expect(await response.text()).toBe('Trial upstream request failed');
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+it('forwards only the path to the fixed local socket and preserves bodies, cookies and redirects', async () => {
+  const seen: unknown[] = [];
+  const server = createServer(async (req, res) => {
+    const chunks = []; for await (const chunk of req) chunks.push(chunk);
+    seen.push({url:req.url,method:req.method,body:Buffer.concat(chunks).toString(),encoding:req.headers['accept-encoding']});
+    res.writeHead(302, {'location':'http://external.invalid/', 'set-cookie':['one=1; Path=/','two=2; Path=/']});
+    res.end('redirect body');
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address=server.address();
+    if(!address || typeof address==='string') throw new Error('No test listener');
+    const send=createTrialTransport(address.port);
+    const response=await send('/api/browser-sessions?probe=1',{method:'POST',headers:{'content-type':'text/plain','accept-encoding':'gzip'},body:Buffer.from('payload')});
+    expect(response.status).toBe(302);
+    expect(response.headers.getSetCookie()).toEqual(['one=1; Path=/','two=2; Path=/']);
+    expect(await response.text()).toBe('redirect body');
+    await expect(send('//external.invalid/',{method:'GET',headers:{}})).rejects.toThrow();
+    expect(seen).toEqual([{url:'/api/browser-sessions?probe=1',method:'POST',body:'payload',encoding:'identity'}]);
+  } finally {
+    await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
   }
 });
 it('rejects self-reported success when the observed state or write count is wrong', () => {

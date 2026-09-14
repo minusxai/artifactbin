@@ -15,7 +15,7 @@ import { runCliAuth } from '../lib/auth.ts';
 import { readDotEnv } from '../lib/env.ts';
 import { scrubSecrets } from '../lib/secrets.ts';
 import { sessionTasks, iframeTasks, fixtureMarkup, sessionVerdict } from '../lib/mx-trials/tasks.mjs';
-import { trialArtifactId, trialUpstreamUrl, writeTrialError } from '../lib/mx-trials/transport.ts';
+import { createTrialTransport, trialArtifactId, writeTrialError } from '../lib/mx-trials/transport.ts';
 
 // This executable owns its environment boundary; provider custody remains in this process.
 const track = process.argv[2], out = path.resolve(process.argv[3] ?? 'tmp/mx-trials');
@@ -42,11 +42,12 @@ const relay=http.createServer(async(req,res)=>{
 });
 const relayPort=await listen(relay);
 let active=null;
+const sendToApp=createTrialTransport();
 const proxy=http.createServer(async(req,res)=>{
   try {
     const bytes=await readBody(req);
     const body=req.url==='/api/browser-sessions'?JSON.parse(bytes.toString()||'{}'):null;
-    const response=await fetch(trialUpstreamUrl(req.url),{method:req.method,headers:{...req.headers,host:'127.0.0.1:3392'},...(bytes.length?{body:bytes}:{}),redirect:'manual'});
+    const response=await sendToApp(req.url,{method:req.method,headers:{...req.headers,host:'127.0.0.1:3392'},...(bytes.length?{body:bytes}:{})});
     if(body&&active){
       const result=await response.json();
       if(body.op==='script'){active.ids.add(body.session_id);active.scriptIds.add(body.execution_id);}
@@ -59,7 +60,7 @@ const proxy=http.createServer(async(req,res)=>{
     const headers=Object.fromEntries(response.headers);delete headers['content-encoding'];delete headers['content-length'];
     const cookies=response.headers.getSetCookie();if(cookies.length)headers['set-cookie']=cookies;
     res.writeHead(response.status,headers);if(response.body)Readable.fromWeb(response.body).on('error',()=>res.destroy()).pipe(res);else res.end();
-  }catch(error){writeTrialError(res,error,[key]);}
+  }catch{writeTrialError(res);}
 });
 await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(3392,'127.0.0.1',resolve);});
 const base='http://127.0.0.1:3392', dataDir=path.join(work,'server');fs.mkdirSync(dataDir,{mode:0o700});
