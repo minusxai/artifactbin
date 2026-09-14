@@ -110,3 +110,21 @@ test('eager init leaves a skill addressed to another server alone — every comm
   assert.equal(await runCli(['setup','--yes','--json','--server','https://two.example'],context),0,'setup is where a new origin is adopted');
  }finally{await rm(home,{recursive:true,force:true});}
 });
+
+test('setup --server records a self-hosted origin as the default, once, and never the public server',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-setup-origin-'));const bin=join(home,'bin');const out:string[]=[];
+ try{
+  await mkdir(bin);await writeFile(join(bin,'pi'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  const context={home,cwd:home,env:{PATH:bin},interactive:false,stdout:(s:string)=>out.push(s),stderr:()=>{},fetch:async()=>{throw new Error('setup must stay offline');}};
+  assert.equal(await runCli(['setup','--yes','--json','--server','https://artifactbin.dev'],context),0);
+  await assert.rejects(stat(join(home,'.artifactbin','.env')),{code:'ENOENT'},'the public server needs no record');
+  assert.equal(await runCli(['setup','--yes','--json','--server=https://self.example'],context),0);
+  assert.equal(await readFile(join(home,'.artifactbin','.env'),'utf8'),'ARTIFACTBIN_URL=https://self.example\n');
+  out.length=0;
+  assert.equal(await runCli(['help','--json'],context),0,'no --server: the recorded origin is the one afbin names');
+  assert.ok(out.join('').includes('https://self.example/chat/install.sh'),out.join('').slice(0,300));
+  assert.ok(!out.join('').includes('https://artifactbin.dev'),'the public server is no longer this afbin\'s default');
+  assert.equal(await runCli(['setup','--yes','--json','--server','https://other.example'],context),0);
+  assert.equal(await readFile(join(home,'.artifactbin','.env'),'utf8'),'ARTIFACTBIN_URL=https://self.example\n','the first origin stays the default');
+ }finally{await rm(home,{recursive:true,force:true});}
+});

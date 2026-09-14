@@ -31,7 +31,7 @@ import {validateMarkupStructure} from '../../app/lib/story/local-validation';
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnection} from './config';
+import {loadConnection,defaultServer,saveDefaultServer} from './config';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
@@ -57,10 +57,12 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // The skill and the help text must name the server THIS afbin talks to. Eager
   // init and help both run before the workspace is read, so they use what is
   // knowable that early: an explicit --server, else the exported origin.
-  const declaredServer=(typeof flags.server==='string'?flags.server:(context.env??process.env).ARTIFACTBIN_URL)??DEFAULT_SERVER;
+  const declaredServer=typeof flags.server==='string'?flags.server:await defaultServer(home,context.env);
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout('SQL service is ready for offline local queries.\n');return 0;}
+   // An installer served from a self-hosted origin runs `setup --server <origin>`: that origin becomes the default.
+   if(typeof flags.server==='string')await saveDefaultServer(flags.server,home,context.env);
    const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    if(json)emit(result);else stdout(setupSummary(result.installations,style));
    return 0;
@@ -109,10 +111,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
-   try{const result=await diffCommand(workspace,parsed,serverOrigin()??'https://artifactbin.dev',false,stdout,undefined,style);if(result)emit(result);return 0;}
+   try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style);if(result)emit(result);return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
-  const selectedServer=serverOrigin()??'https://artifactbin.dev';
+  const selectedServer=serverOrigin()??declaredServer;
   const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer});
   const exportOptions=()=>({type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
@@ -141,13 +143,13 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const server=serverOrigin();
   if(command==='update'){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   const updated=await updateCli({home,server:server??'https://artifactbin.dev',env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
+   const updated=await updateCli({home,server:server??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
    emit(updated);
    if('installations' in updated)for(const hint of restartHints(updated.installations))stderr(hint+'\n');
    return 0;
   }
   let connection=await loadConnection(server,home,context.env);
-  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
+  const authenticate=()=>browserAuthenticate(connection?.server??server??declaredServer,{...context.auth,home,env:context.env,interactive,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
   if(command==='auth'){
    // AUTH is lazy and idempotent. A saved token is verified with one read and its account reported;
    // no token or a rejected one runs the same browser approval the rest of the CLI uses on 401.
@@ -163,6 +165,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
    connection=await authenticate();
   }
+  // A directory is tracked against ONE server and account. Sending another server this directory's account
+  // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
+  // login JavaScript (eval run local17). Name both origins and the way out before any request.
+  if(workspace.tracking&&workspace.tracking.server!==connection.server)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}

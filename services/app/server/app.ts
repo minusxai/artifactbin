@@ -359,7 +359,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const script = readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
     const pinned = script.match(/^ {2}version=(\S+)$/m)?.[1];
     const local = pinned !== undefined && localCliRelease(cliReleaseDir) === pinned;
-    return c.text(local ? script.replace(GITHUB_RELEASES, () => `${baseUrl(c.req.raw)}/chat/releases/afbin-v$version`) : script);
+    // The script is told where it came from, so a CLI installed from a self-hosted origin talks to that
+    // origin by default instead of the public server (`afbin setup --server`, then `.env`).
+    const origin = baseUrl(c.req.raw);
+    const addressed = script.replace(/^ {2}origin=''$/m, () => `  origin='${origin}'`);
+    return c.text(local ? addressed.replace(GITHUB_RELEASES, () => `${origin}/chat/releases/afbin-v$version`) : addressed);
   });
   app.use('/chat/releases/*', async (c, next) => {
     const [release = '', file = '', ...rest] = c.req.path.split('/').slice(3);

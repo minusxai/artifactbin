@@ -4,6 +4,8 @@ set -eu
 main() {
   version=0.1.16
   install_dir="${HOME}/.local/bin"
+  # The server that served this script fills this in; afbin then talks to it by default.
+  origin=''
   yes=0
   style
   while [ "$#" -gt 0 ]; do
@@ -116,13 +118,15 @@ USAGE
 # The CLI owns skill selection, installation and the summary. Read the controlling terminal so
 # `curl ... | sh` can still offer the checklist without consuming the script on stdin.
 first_run() {
+  server=''
+  [ -z "$origin" ] || server="--server=$origin"
   if [ "$yes" -eq 0 ] && [ -t 1 ] && [ -t 2 ] && ( : < /dev/tty ) 2>/dev/null; then
-    if "$install_dir/afbin" setup < /dev/tty; then
-      "$install_dir/afbin" auth < /dev/tty || warn_line 'Run afbin auth when you’re ready to sign in.'
+    if "$install_dir/afbin" setup $server < /dev/tty; then
+      "$install_dir/afbin" auth $server < /dev/tty || warn_line 'Run afbin auth when you’re ready to sign in.'
       return 0
     fi
   else
-    "$install_dir/afbin" setup --yes < /dev/null && return 0
+    "$install_dir/afbin" setup --yes $server < /dev/null && return 0
   fi
   warn_line 'afbin is installed. Run afbin setup to finish choosing your agent skills.'
 }

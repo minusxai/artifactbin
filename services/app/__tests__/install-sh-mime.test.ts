@@ -10,6 +10,8 @@ const publicDir = path.resolve(__dirname, '..', 'public');
 const script = fs.readFileSync(path.join(publicDir, 'chat', 'install.sh'), 'utf8');
 const pinned = script.match(/^ {2}version=(\S+)$/m)![1];
 const GITHUB = 'https://github.com/minusxai/artifactbin/releases/download/afbin-v$version';
+/** The script as served: the only change on a server with no CLI build is the origin it names. */
+const addressed = (origin: string) => script.replace("  origin=''", `  origin='${origin}'`);
 const app = (cliReleaseDir?: string) => createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>', publicDir, cliReleaseDir });
 const payload = '#!/bin/sh\necho local build\n';
 let dirs: string[] = [];
@@ -44,7 +46,7 @@ describe('GET /chat/*.sh', () => {
   });
   it('serves the installer byte for byte, pointing at GitHub, when this server has no CLI build', async () => {
     const body = await (await app(path.join(os.tmpdir(), 'afbin-no-such-dir')).request('/chat/install.sh')).text();
-    expect(body).toBe(script);
+    expect(body).toBe(addressed('http://localhost'));
     expect(body).toContain(`release="${GITHUB}"`);
   });
   it('points the installer at its own origin when a local CLI build matches the pinned version', async () => {
@@ -52,12 +54,22 @@ describe('GET /chat/*.sh', () => {
     const body = await (await server.request('/chat/install.sh')).text();
     expect(body).toContain('release="http://localhost/chat/releases/afbin-v$version"');
     expect(body).not.toContain('github.com');
-    expect(body.replace('http://localhost/chat/releases/afbin-v$version', GITHUB)).toBe(script);
+    expect(body.replace('http://localhost/chat/releases/afbin-v$version', GITHUB)).toBe(addressed('http://localhost'));
     const forwarded = await (await server.request('/chat/install.sh', { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifacts.example.test' } })).text();
     expect(forwarded).toContain('release="https://artifacts.example.test/chat/releases/afbin-v$version"');
   });
+  // codex, eval run local17: the CLI installed from a local origin published its first dataset to
+  // artifactbin.dev, anonymously, because nothing had told it where it came from.
+  it('tells the installer the origin it was served from, so afbin adopts it at setup', async () => {
+    expect(script).toContain("  origin=''");
+    expect(script).toContain('[ -z "$origin" ] || server="--server=$origin"');
+    expect(script).toContain('setup --yes $server');
+    const forwarded = await (await app().request('/chat/install.sh', { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifacts.example.test' } })).text();
+    expect(forwarded).toContain("  origin='https://artifacts.example.test'");
+    expect(forwarded).not.toContain("origin=''");
+  });
   it('keeps GitHub when the local build is another version than the installer pins', async () => {
-    expect(await (await app(localBuild('9.9.9')).request('/chat/install.sh')).text()).toBe(script);
+    expect(await (await app(localBuild('9.9.9')).request('/chat/install.sh')).text()).toBe(addressed('http://localhost'));
   });
 });
 

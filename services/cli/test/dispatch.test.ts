@@ -4,6 +4,8 @@ import {mkdtemp,mkdir,writeFile,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
+import {saveConnection} from '../src/config';
+import {digest} from '../src/files';
 test('local commands and malformed invocations never load credentials, call the server or create state',async()=>{
  const base=await mkdtemp(join(tmpdir(),'afbin-dispatch-'));const home=join(base,'home'),root=join(base,'work');await mkdir(home);await mkdir(root);
  try{
@@ -91,5 +93,23 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
   // …and validate then answers what was verified, so no hand-rolled JSON check is needed.
   assert.deepEqual(result.files[0].diagnostics.filter((d:{severity?:string})=>d.severity!=='notice'),[]);
   assert.deepEqual(result.verified,[{path:'doc.jsx',title:'Braces',queries:['q'],charts:1,checks:['markup validated','1 query dry-run against the published dataset','1 chart checked against query columns','title and metadata accepted']}]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('a directory tracked against one server refuses another by name, before any request — a bare 409 cost codex twenty steps (eval run local17)',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-wrong-server-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const head={id:'abc123',version:1,edit_id:'edit1',state:digest('s1'),markup:'<p id="p001">Head</p>',format:'markup',title:'T',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
+ const hosts:string[]=[];
+ const request:typeof fetch=async(input)=>{const url=new URL(String(input));hosts.push(url.host);if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${url}`);};
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://one.example',token:'mx_one'},home);await saveConnection({server:'https://two.example',token:'mx_two'},home);
+  const pulled=await invoke(['pull','abc123','--output','doc.jsx','--server','https://one.example']);assert.equal(pulled.code,0,JSON.stringify(pulled.result));
+  await writeFile(join(cwd,'doc.jsx'),(await readFile(join(cwd,'doc.jsx'),'utf8')).replace('Head','Local'));
+  const refused=await invoke(['push','doc.jsx','--server','https://two.example']);
+  assert.notEqual(refused.code,0);assert.equal(refused.result.error.code,'wrong_server',JSON.stringify(refused.result));
+  assert.match(refused.result.error.message,/tracked against https:\/\/one\.example; the command selected https:\/\/two\.example/);
+  assert.match(refused.result.error.fix,/another directory, or pass --server https:\/\/one\.example/);
+  assert.ok(!hosts.includes('two.example'),`no request reached the other server: ${hosts}`);
  }finally{await rm(root,{recursive:true,force:true});}
 });

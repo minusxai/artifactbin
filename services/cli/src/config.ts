@@ -49,6 +49,30 @@ export function normalizeServer(value: string): string {
     );
   return url.origin;
 }
+/**
+ * The origin afbin talks to when nothing selects one: the environment, else the default recorded in
+ * `.env` (an installer served from a self-hosted origin records it through `afbin setup --server`),
+ * else the public server.
+ */
+export async function defaultServer(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  const primary = await readEnvFile(join(configDir(home, env), ".env"));
+  return normalizeServer(env.ARTIFACTBIN_URL ?? primary.ARTIFACTBIN_URL ?? DEFAULT_SERVER);
+}
+/**
+ * Record `server` as the default origin, without credentials. A first origin only: once `.env` names
+ * one, it stays (the same rule saveConnection keeps), and the public server needs no record at all.
+ * Before this, a CLI installed from a self-hosted origin still published to artifactbin.dev by default
+ * (eval run local17, codex report: the first `afbin push data.csv` went to the public server, anonymously).
+ */
+export async function saveDefaultServer(server: string, home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const normalized = normalizeServer(server);
+  if (normalized === DEFAULT_SERVER) return;
+  const dir = configDir(home, env);
+  const primary = await readEnvFile(join(dir, ".env"));
+  if (primary.ARTIFACTBIN_URL) return;
+  await privateDirectory(dir);
+  await atomicWrite(join(dir, ".env"), `ARTIFACTBIN_URL=${normalized}\n`);
+}
 export async function loadConnection(
   server?: string,
   home = homedir(),
