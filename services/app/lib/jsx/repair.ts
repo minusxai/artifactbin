@@ -55,7 +55,61 @@ export interface SourceRepair {
 const MAX_PASSES = 25;
 
 /** What one repaired document accumulated, in the words the reply will carry. */
-interface BraceCount { collapsed: string[]; strays: Array<{ attr: string; line: number }>; removed: number }
+interface BraceCount { collapsed: string[]; strays: Array<{ attr: string; line: number }>; wrapped: Array<{ attr: string; line: number }>; removed: number }
+
+/** Where the expression that opens at `open` closes, counting braces and skipping strings. */
+function balancedClose(source: string, open: number): number {
+  let depth = 0, quote: string | null = null;
+  for (let i = open; i < source.length; i++) {
+    const ch = source[i];
+    if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+    if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+/**
+ * An attribute holding a JSON VALUE where JSX needs an expression: `viz={"kind": …}` or
+ * `viz={[…]}` — the object's own braces used as the expression's, so the object never got a wrapper.
+ * The signature is the value's first non-space character: a quoted key followed by `:`, or a `[`.
+ * A `{"a"}` with no colon is a legal expression holding a string and is not this.
+ *
+ * AND THE PARSER MUST HAVE STOPPED INSIDE IT. `options={["day","week"]}` and `value={[{…}]}` are
+ * perfectly legal attributes that open with `[`, and they are everywhere in these documents; wrapping
+ * one because it merely matches the shape would break a document whose real fault is elsewhere —
+ * and, since the wrap then cannot parse, would cost the repair that document actually needed. So the
+ * candidate is the attribute the parser itself stopped inside, exactly as the backtick repair asks
+ * the parser rather than the text.
+ */
+function jsonAttribute(source: string, pos: number): { attr: string; index: number; open: number; close: number; line: number } | null {
+  for (const m of source.matchAll(/([A-Za-z_][\w-]*)=\{/g)) {
+    const open = m.index! + m[0].length - 1;
+    const rest = source.slice(open + 1);
+    const value = rest.match(/^\s*/)![0].length + open + 1;
+    const first = source[value];
+    const key = first === '"' || first === "'";
+    if (!key && first !== '[') continue;
+    if (key) {
+      const end = balancedString(source, value);
+      if (end < 0 || !/^\s*:/.test(source.slice(end + 1))) continue;
+    }
+    const close = balancedClose(source, open);
+    if (close < 0 || pos < open || pos > close) continue;
+    return { attr: m[1]!, index: m.index!, open, close, line: source.slice(0, open).split('\n').length };
+  }
+  return null;
+}
+
+/** Where the string opening at `at` ends, or -1 when it never closes. */
+function balancedString(source: string, at: number): number {
+  const quote = source[at];
+  for (let i = at + 1; i < source.length; i++) {
+    if (source[i] === '\\') { i++; continue; }
+    if (source[i] === quote) return i;
+  }
+  return -1;
+}
 
 /** Where in the source the stray-`}` site that `extraClosing` named begins. */
 function siteIndex(source: string, extra: { attr: string; line: number }): number {
@@ -92,9 +146,17 @@ function repairBraces(source: string, count: BraceCount): string {
     const triple = tripleOpen(out);
     const extra = extraClosing(out);
     const extraAt = extra ? siteIndex(out, extra) : -1;
+    const json = jsonAttribute(out, pos);
     // The earliest fault first, so the parser's position moves forward with each pass. A `{{{`
     // usually leaves a stray `}` behind at the same site; `<=` repairs the opening before the tail.
-    if (triple && (!extra || extraAt < 0 || triple.index! <= extraAt)) {
+    const earliest = Math.min(...[triple?.index, extraAt >= 0 ? extraAt : undefined, json?.index].filter((at): at is number => typeof at === 'number'));
+    if (json && json.index === earliest) {
+      // The one repair the shape allows: one more brace pair around the whole balanced value.
+      out = `${out.slice(0, json.open)}{${out.slice(json.open, json.close + 1)}}${out.slice(json.close + 1)}`;
+      count.wrapped.push({ attr: json.attr, line: json.line });
+      continue;
+    }
+    if (triple && triple.index === earliest) {
       out = out.slice(0, triple.index!) + `${triple[1]}={{` + out.slice(triple.index! + triple[0].length);
       count.collapsed.push(triple[1]!);
       continue;
@@ -121,6 +183,10 @@ function repairBraces(source: string, count: BraceCount): string {
 function braceNotes(count: BraceCount): string[] {
   const notes: string[] = [];
   const names = (values: string[]) => [...new Set(values)].join('`/`');
+  if (count.wrapped.length) {
+    const lines = count.wrapped.map((site) => `line ${site.line}`);
+    notes.push(`wrapped ${count.wrapped.length} JSON attribute value${count.wrapped.length === 1 ? '' : 's'} on ${lines.join(', ')} (\`${names(count.wrapped.map((site) => site.attr))}={…}\` → \`${names(count.wrapped.map((site) => site.attr))}={{…}}\`)`);
+  }
   if (count.collapsed.length) notes.push(`collapsed ${count.collapsed.length} \`${names(count.collapsed)}={{{\` opening${count.collapsed.length === 1 ? '' : 's'}`);
   if (count.strays.length) {
     // Every site says "line N" in full, never "lines 2, 3": the CLI moves a body line onto its FILE
@@ -172,7 +238,7 @@ export function repairJsxSource(source: string): { source: string; repair: Sourc
   // escaped the backticks of a <Query> is the same document whose charts were wrapped twice. Whatever
   // is repaired is REPORTED — one shape is never fixed silently under the other's name.
   if (!parseJsx(out).ok) {
-    const count: BraceCount = { collapsed: [], strays: [], removed: 0 };
+    const count: BraceCount = { collapsed: [], strays: [], wrapped: [], removed: 0 };
     const braced = repairBraces(out, count);
     const braceNotesText = braceNotes(count);
     if (braceNotesText.length) {
