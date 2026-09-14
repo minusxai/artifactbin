@@ -114,6 +114,41 @@ describe('ledgerRows', () => {
 
   it('answers null for every ledger-derived number when nothing was observed', () => {
     expect(rows([]).versions).toBeNull();
+    expect(rows([]).agent_versions).toBeNull();
+  });
+
+  /**
+   * `versions` counts the document the DRIVER made plus every version the agent stored;
+   * `agent_versions` is the agent's own half of that, which is what "did it publish once or
+   * extend a document over the run" is actually asking. One is the other plus one, and both
+   * come from `documentWrites` so they cannot drift apart.
+   */
+  it('records agent_versions — the versions the AGENT stored, beside the total', () => {
+    const run = [
+      e({ path: '/api/artifacts', artifactId: 'abc123' }),
+      e({ path: '/api/artifacts/abc123/edits' }),
+      e({ path: '/api/artifacts/abc123/annotations/ann_4504j887w47si35kba9' }),
+      e({ method: 'PUT', path: '/api/artifacts/abc123', status: 409 }),
+    ];
+    expect(rows(run).agent_versions).toBe(2);
+    expect(rows(run).versions).toBe(3);
+  });
+
+  /**
+   * The driver hands `ledgerRows` the same options it hands `ledgerMetrics`, so `agent_versions`
+   * is a count of the SCORED DOCUMENT's versions: the dataset upload that opened a data task is
+   * not one of them. `versions` is unchanged — the driver's document plus every content write.
+   */
+  it('counts agent_versions against the scored document when the driver names one', () => {
+    const run = [
+      e({ path: '/api/artifacts', reqFormat: 'dataset', artifactId: 'ds1111' }),
+      e({ path: '/api/artifacts', artifactId: 'abc123', reqMarkup: '<h1>Report</h1>' }),
+      e({ path: '/api/artifacts/abc123/edits' }),
+    ];
+    const scoped = Object.fromEntries(ledgerRows(run, { documentId: 'abc123' }).map((r) => [r.metric, r.value]));
+    expect(scoped.agent_versions).toBe(2);
+    expect(scoped.versions).toBe(4);
+    expect(rows(run).agent_versions).toBe(3); // unscoped: every content write, the rows upload included
   });
 });
 

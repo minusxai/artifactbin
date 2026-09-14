@@ -3,7 +3,7 @@
  * never holds the agent's token — the start link handed it to the agent).
  */
 import { describe, it, expect } from 'vitest';
-import { artifactIdFromText, dataflowRows, productMetrics, titleOf } from '../lib/score/product';
+import { artifactIdFromText, dataflowRows, productMetrics, titleOf, usesIframe } from '../lib/score/product';
 
 const served = (html: string, status = 200) => ({ status, html });
 
@@ -139,4 +139,47 @@ describe('artifactIdFromText', () => {
     expect(artifactIdFromText('https://artifactbin.dev/a/AAAAA1 then https://artifactbin.dev/@me/x/BBBBB2-final')).toBe('BBBBB2');
   });
 
+});
+
+/**
+ * `<Iframe>` IS THE ESCAPE HATCH. An agent that cannot make the document's own components do
+ * something reaches for a managed frame and writes raw HTML inside it; we want native markup,
+ * so we measure the reach before we ask anyone to stop.
+ *
+ * Read from what the product SERVES, like every other product metric — and therefore NOT from
+ * the literal tag. `/a/<id>/raw` is the SSR'd document, not its source (services/app/__tests__/
+ * raw-document.test.ts), and `lib/story-ui/registry.ts` renders `<Iframe>` as a
+ * `div[data-mx-managed-frame]`. A case-sensitive `<Iframe` over the served HTML is a constant
+ * true; the marker the renderer emits is the evidence that survives.
+ */
+describe('usesIframe / no_iframe', () => {
+  const FRAME = '<div id="n3" data-mx-managed-frame="" aria-label="Managed frame: Demo" style="height:450px;width:100%"><div style="height:100%"></div></div>';
+
+  it('sees the managed-frame marker the renderer emits for <Iframe>', () => {
+    expect(usesIframe(`<html><body><h1>Demo</h1>${FRAME}</body></html>`)).toBe(true);
+  });
+
+  it('sees the component in the story island even when the marker is not in the body', () => {
+    const island = JSON.stringify({ nodes: [{ type: 'element', tag: 'Iframe', isComponent: true, attributes: [], children: [], selfClosing: true, start: 0, end: 9 }] });
+    expect(usesIframe(`<html><body><script type="application/json" id="mx-story-data">${island}</script></body></html>`)).toBe(true);
+  });
+
+  it('sees a literal <Iframe tag, for a response that does carry source', () => {
+    expect(usesIframe('<Iframe src="https://example.test" height={400} />')).toBe(true);
+  });
+
+  it('is false for a document written in native markup — and not fooled by the word alone', () => {
+    expect(usesIframe('<html><body><h1>Q3</h1><table><tr><td>1</td></tr></table><p>No frames here.</p></body></html>')).toBe(false);
+    // Prose ABOUT the component, a lowercase browser iframe of the reader chrome, and a longer tag.
+    expect(usesIframe('<p>We considered Iframe embeds and rejected them.</p><iframe title="chrome"></iframe><IframeGallery />')).toBe(false);
+  });
+
+  it('productMetrics answers noIframe for a published document and null when nothing published', () => {
+    const clean = served('<html><head><title>Q3</title></head><body><h1>Q3</h1><p>Native.</p></body></html>');
+    expect(productMetrics({ served: clean, baseline: null }).noIframe).toBe(true);
+    const framed = served(`<html><head><title>Q3</title></head><body><h1>Q3</h1>${FRAME}</body></html>`);
+    expect(productMetrics({ served: framed, baseline: null }).noIframe).toBe(false);
+    expect(productMetrics({ served: served('', 404), baseline: null }).noIframe).toBeNull();
+    expect(productMetrics({ served: served('<html><body></body></html>'), baseline: null }).noIframe).toBeNull();
+  });
 });
