@@ -1,3 +1,4 @@
+import { WORKSHOP_IMAGE_WIDTHS, workshopImageAt } from "./scene-manifest";
 import { addWorkshopHelpers } from "./workshop-helpers";
 import { separatePapers, floorClearance, PAPER_FLOOR } from "./paper-contact";
 import { applyForegroundMask } from "./foreground-mask";
@@ -321,9 +322,11 @@ export function createWorkshopScene(
       g,
       new MeshBasicMaterial({
         map: texture,
-        transparent: true,
+        // The cutout participates in depth like real foreground geometry.
+        // Transparent sorting uses object origins, which are shared by these quads.
+        transparent: z !== 65,
         side: DoubleSide,
-        depthWrite: z === 0,
+        depthWrite: z === 0 || z === 65,
         alphaTest: 0.01,
       }),
     );
@@ -377,40 +380,71 @@ export function createWorkshopScene(
   quad(ft, 65);
   const paintBackground = () => {
     if (disposed || !background.complete || !background.naturalWidth) return;
+    // Texture resolution follows the source; geometry and hit testing stay in scene units.
+    const scale = Math.min(
+      1,
+      renderer.capabilities.maxTextureSize /
+        Math.max(background.naturalWidth, background.naturalHeight),
+    );
+    const width = Math.round(background.naturalWidth * scale);
+    const height = Math.round(background.naturalHeight * scale);
+    if (base.width !== width || base.height !== height) {
+      // Three textures must be reallocated when a responsive image changes size.
+      bt.dispose();
+      ft.dispose();
+    }
+    base.width = front.width = width;
+    base.height = front.height = height;
     const b = base.getContext("2d"),
       f = front.getContext("2d");
     if (!b || !f) return;
-    b.clearRect(0, 0, SCENE.width, SCENE.height);
-    b.drawImage(background, 0, 0, SCENE.width, SCENE.height);
+    b.drawImage(background, 0, 0, width, height);
     bt.needsUpdate = true;
     if (foregroundCoverage) {
-      f.clearRect(0, 0, SCENE.width, SCENE.height);
-      f.drawImage(background, 0, 0, SCENE.width, SCENE.height);
-      const pixels = f.getImageData(0, 0, SCENE.width, SCENE.height);
-      applyForegroundMask(pixels.data, foregroundCoverage);
+      f.drawImage(mask, 0, 0, width, height);
+      const coverage = f.getImageData(0, 0, width, height).data;
+      f.clearRect(0, 0, width, height);
+      f.drawImage(background, 0, 0, width, height);
+      const pixels = f.getImageData(0, 0, width, height);
+      applyForegroundMask(pixels.data, coverage);
       f.putImageData(pixels, 0, 0);
-      ft.needsUpdate = true;
     }
+    ft.needsUpdate = true;
     schedule();
   };
   background.onload = paintBackground;
   mask.onload = () => {
     if (disposed) return;
-    const f = front.getContext("2d");
+    const coverageCanvas = document.createElement("canvas");
+    coverageCanvas.width = SCENE.width;
+    coverageCanvas.height = SCENE.height;
+    const f = coverageCanvas.getContext("2d");
     if (!f) return;
-    f.clearRect(0, 0, SCENE.width, SCENE.height);
     f.drawImage(mask, 0, 0, SCENE.width, SCENE.height);
     foregroundCoverage = f.getImageData(0, 0, SCENE.width, SCENE.height).data;
     paintBackground();
   };
   mask.src = setting.mask;
   let currentSetting = setting.name;
-  background.src = setting.image;
+  let loadedWidth = 0;
+  function selectBackground() {
+    const required =
+      canvas.getBoundingClientRect().width *
+      Math.min(window.devicePixelRatio || 1, 2);
+    const width =
+      WORKSHOP_IMAGE_WIDTHS.find((size) => size >= required) ?? 3344;
+    // Retain a larger loaded texture when shrinking, avoiding repeated downloads.
+    if (width <= loadedWidth) return;
+    loadedWidth = width;
+    background.src = workshopImageAt(currentSetting, width);
+  }
+  selectBackground();
   const setSetting = (next: WorkshopSetting) => {
     if (next.name === currentSetting) return;
     currentSetting = next.name;
     helpers?.setEnvironment(next.name);
-    background.src = next.image;
+    loadedWidth = 0;
+    selectBackground();
   };
   // Pin heads are independent of the sheet, left in place when it falls.
   const pinSurface = document.createElement("canvas");
@@ -539,6 +573,7 @@ export function createWorkshopScene(
     const r = canvas.getBoundingClientRect();
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(r.width, r.height, false);
+    selectBackground();
     schedule();
   }
   function locate(event: PointerEvent) {

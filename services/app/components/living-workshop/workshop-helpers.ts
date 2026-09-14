@@ -1,3 +1,4 @@
+import { createHelperShadows } from "./helper-shadows";
 /** Experimental rigid-joint helpers, registered in the painting's pixel space. */
 import {
   AnimationMixer,
@@ -34,6 +35,7 @@ export function addWorkshopHelpers(
   wake: () => void,
   setting: "indoor" | "outdoor" = "indoor",
 ) {
+  const projectedShadows = createHelperShadows();
   const outdoors = setting === "outdoor";
   const scene = new Scene();
   const room = new RoomEnvironment();
@@ -75,6 +77,7 @@ export function addWorkshopHelpers(
   }
   const setEnvironment = (name: "indoor" | "outdoor") => {
     const outside = name === "outdoor";
+    projectedShadows.setEnvironment(name);
     ambient.color.set(outside ? 0xf3f5ed : 0xece8db);
     ambient.intensity = outside ? 0.95 : 0.65;
     key.color.set(outside ? 0xfff9ed : 0xfff7e8);
@@ -337,6 +340,7 @@ export function addWorkshopHelpers(
       model.rotation.x = 0.1;
       mount.add(model);
       group.add(mount);
+      projectedShadows.add(mount, p.y, 30, p.role === "standing");
       const mixer = new AnimationMixer(model);
       for (const clip of gltf.animations) mixer.clipAction(clip).play();
       mixer.update(p.offset);
@@ -359,6 +363,7 @@ export function addWorkshopHelpers(
       gltf.scene.rotation.x = 0.16;
       mount.add(gltf.scene);
       group.add(mount);
+      projectedShadows.add(mount, 514, 22, true);
       const mixer = new AnimationMixer(gltf.scene);
       for (const clip of gltf.animations) mixer.clipAction(clip).play();
       mixers.push(mixer);
@@ -471,6 +476,7 @@ export function addWorkshopHelpers(
       renderer.autoClear = false;
       renderer.toneMapping = ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.2;
+      projectedShadows.render(renderer, camera);
       renderer.render(scene, camera);
       renderer.autoClear = clear;
       renderer.toneMapping = tone;
@@ -480,6 +486,7 @@ export function addWorkshopHelpers(
       disposed = true;
       group.removeFromParent();
       environment.dispose();
+      projectedShadows.dispose();
       for (const mixer of mixers) mixer.stopAllAction();
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();

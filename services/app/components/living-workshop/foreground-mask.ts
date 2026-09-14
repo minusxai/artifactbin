@@ -1,4 +1,4 @@
-/** The supplied masks encode coverage in red, not their opaque alpha channel. */
+/** Masks encode coverage in grayscale: white is foreground, black is background. */
 export function applyForegroundMask(
   pixels: Uint8ClampedArray,
   mask: Uint8ClampedArray,

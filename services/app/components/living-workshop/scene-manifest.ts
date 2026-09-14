@@ -79,7 +79,7 @@ export const WORKSHOP_PAPERS: WorkshopPaper[] = PLACEMENTS.flatMap((slot) => {
       ]
     : [];
 });
-export const WORKSHOP_IMAGE = "/landing/workshop/indoor.png";
+export const WORKSHOP_IMAGE = "/landing/workshop/indoor-1672.webp";
 
 export interface WorkshopSetting {
   /** Optional six-cell, 3 × 2 artwork atlas for the visual review routes. */
@@ -95,16 +95,27 @@ export const WORKSHOP_SETTINGS: Record<
   WorkshopSetting
 > = {
   indoor: {
-    image: "/landing/workshop/indoor.png",
+    image: "/landing/workshop/indoor-1672.webp",
     fallbackImage: WORKSHOP_IMAGE,
     liveRobots: true,
-    mask: "/landing/workshop/wide-girl-mask.svg",
+    mask: "/landing/workshop/foreground-mask-gray.png",
     name: "indoor",
   },
   outdoor: {
-    image: "/landing/workshop/outdoor.png",
+    image: "/landing/workshop/outdoor-1672.webp",
     liveRobots: true,
-    mask: "/landing/workshop/wide-girl-mask.svg",
+    mask: "/landing/workshop/foreground-mask-gray.png",
     name: "outdoor",
   },
 };
+
+// Shared delivery sizes for HTML fallback and WebGL. Originals remain authoring assets.
+export const WORKSHOP_IMAGE_WIDTHS = [960, 1672, 2560, 3344] as const;
+export function workshopImageAt(name: WorkshopSetting["name"], width: number) {
+  return `/landing/workshop/${name}-${width}.webp`;
+}
+export function workshopImageSrcSet(name: WorkshopSetting["name"]) {
+  return WORKSHOP_IMAGE_WIDTHS.map(
+    (width) => `${workshopImageAt(name, width)} ${width}w`,
+  ).join(", ");
+}

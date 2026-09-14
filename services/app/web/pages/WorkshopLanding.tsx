@@ -6,6 +6,7 @@ import { REPO_URL } from "@/lib/repo";
 import { type WorkshopScene } from "@/components/living-workshop/workshop-renderer";
 import {
   WORKSHOP_SETTINGS,
+  workshopImageSrcSet,
   WORKSHOP_PAPERS,
   type WorkshopPaper,
   type WorkshopSetting,
@@ -89,6 +90,8 @@ export default function WorkshopLanding({
           <div className="workshop-scene-frame">
             <img
               src={setting.fallbackImage ?? setting.image}
+              srcSet={workshopImageSrcSet(environment)}
+              sizes="100vw"
               alt="A sunlit artist’s workshop with green plants, a woman at a cork board, and small robot helpers."
               className="workshop-scene-fallback"
               fetchPriority="high"
