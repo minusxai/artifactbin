@@ -7,9 +7,8 @@ import {validVersion as semver,compareVersions as compare} from './version-order
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {isSea} from 'node:sea';
-import {lstat,realpath,rm} from 'node:fs/promises';
-import {dirname,join} from 'node:path';
-import {randomUUID} from 'node:crypto';
+import {lstat,readdir,realpath,rm} from 'node:fs/promises';
+import {basename,dirname,join} from 'node:path';
 import {CLI_VERSION} from './version';
 import {CliError} from './commands';
 import {normalizeServer} from './config';
@@ -76,6 +75,22 @@ async function previewUpdate(options:UpdateOptions,platform:string,arch:string):
   skills:await planSkills(options.harnesses,{home:options.home,env:options.env,version:release.version,origin:normalizeServer(options.server)}),
  };
 }
+/** A backup is named for the version it holds, so a person browsing the directory can read it. */
+const backupName=(version:string):string=>`afbin-${version.replace(/[^\w.+-]/g,'_')}`;
+/**
+ * Exactly one previous executable is worth keeping: the one the most recent successful update
+ * replaced. Older copies are ~64 MB each and nothing reads them. Only regular files are removed,
+ * never a symlink, a directory or the backup this operation just wrote; cleanup never fails an
+ * update that already replaced the executable.
+ */
+async function pruneBackups(directory:string,keep:string):Promise<void>{
+ try{
+  for(const entry of await readdir(directory,{withFileTypes:true})){
+   if(entry.name===keep||!entry.isFile())continue;
+   await rm(join(directory,entry.name),{force:true});
+  }
+ }catch{/* A missing directory or an unreadable leftover is not a reason to fail an installed update. */}
+}
 export const UPDATE_SCOPE='@cli-update';
 export async function updateCli(options:UpdateOptions&{dryRun:true}):Promise<UpdatePreview>;
 export async function updateCli(options:UpdateOptions):Promise<UpdatePreview|UpdateResult>;
@@ -135,7 +150,7 @@ async function updateLocked(options:UpdateOptions){
     const original=await readOptional(installation.path);if(!original)throw new CliError('missing_executable','The installed executable is missing.');
     if(!originalAtStart||digest(original)!==digest(originalAtStart))throw new CliError('local_changed','Installed executable changed during discovery.');
     operation.before=digest(original);operation.mode=(await lstat(installation.path)).mode&0o777;
-    operation.backup=join(state,'binary-backups',randomUUID());await privateDirectory(dirname(operation.backup));
+    operation.backup=join(state,'binary-backups',backupName(currentVersion));await privateDirectory(dirname(operation.backup));
     await atomicWrite(binaryPath,bytes,{mode:0o700});
     await (options.verifyExecutable??executableVersion)(binaryPath,operation.manifest.version,operation.manifest.protocol);
     await atomicWrite(operation.backup,original,{mode:operation.mode});
@@ -152,6 +167,8 @@ async function updateLocked(options:UpdateOptions){
    }
    options.afterReplace?.();
   }
+  // The replacement is in place, so every earlier copy is dead weight; a failed update never gets here.
+  if(operation.backup)await pruneBackups(dirname(operation.backup),basename(operation.backup));
   const installed=options.background?{installations:[],harnesses:[]}:await installSkills(operation.selected,{home:options.home,env:options.env,version:bundle.version,files:bundle.files,origin:normalizeServer(options.server),alreadyLocked:true});
   await rm(pendingPath);await rm(binaryPath,{force:true});
   return{version:operation.manifest.version,protocol:operation.manifest.protocol,recovered:!!saved,...(operation.backup?{backup:operation.backup}:{}),...installed};
