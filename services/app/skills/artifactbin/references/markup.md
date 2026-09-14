@@ -87,9 +87,8 @@ One legacy Helmet script may run after hydration in a hidden opaque realm:
 no parent DOM, cookies, storage or direct API requests. Use conditions and
 Dialog for parent UI; move DOM scripts into Iframe. See [script APIs](markup-scripts.md).
 `</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
-Inside Iframe, attach DOM handlers with `addEventListener`. The `mx` bridge
-reads/writes declared signals and runs named mutations. Subscribe to named
-queries for rows that arrive after startup; see the script API reference.
+Inside Iframe, attach DOM handlers with `addEventListener`; the `mx` bridge
+(signals, mutations, late rows) is in that same reference.
 
 <!--/bundle:skip-->
 - **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
@@ -120,14 +119,8 @@ queries for rows that arrive after startup; see the script API reference.
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
 <!--bundle:skip-->
-Social preview: two optional `<meta>` tags inside `<Helmet>`, pushed with the
-document like any other source. `<meta name="artifactbin:og-image"
-content="ref:<imageId>" />` names the card image (publish it first with `afbin
-push cover.png`); `<meta name="artifactbin:og-crop" content="x=0;y=0;width=1600"
-/>` frames the document shot instead — 40:21 out of a 1600px-wide layout, width
-400–1600. A third, `artifactbin:og-image-crop`, takes the same `x;y;width` and
-crops the named image rather than the shot. Omit them all for the default
-full-width framing.
+Social preview: `<Helmet>` metas `artifactbin:og-image` and
+`artifactbin:og-image-crop` — [export](publishing-versions.md).
 
 <!--/bundle:skip-->
 ## Images and icons

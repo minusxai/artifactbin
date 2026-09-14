@@ -82,6 +82,33 @@ describe('the publishing skill', () => {
     expect(doc).toContain('forked_from');
     expect(doc).not.toContain('afbin api');
   });
+  /*
+   * ADDED (workstream F, round 2). The social preview's mechanism lives here,
+   * beside export, where markup.md's link has pointed all along.
+   *
+   * And the screenshot copy this file used to carry taught the two loops the
+   * progressive-publish brief exists to stop: "only export if you can view
+   * images; otherwise read the stored markup" sent an agent back to re-read
+   * what it had just written, and `--page 2` "for one deck slide" turned a
+   * five-slide deck into five exports. The push receipt is the check; one
+   * whole-document image is the look.
+   */
+  it('§F2 the social preview mechanism is documented where the link points', () => {
+    const versions = renderDoc('artifactbin/references/publishing-versions.md', BASE);
+    expect(versions).toContain('artifactbin:og-image');
+    expect(versions).toContain('artifactbin:og-crop');
+    expect(versions).toContain('artifactbin:og-image-crop');
+    expect(versions).toContain('<Helmet>');
+  });
+  it('§F2 export teaches the whole document in one image, never a slide at a time', () => {
+    const flat = doc.replace(/\s+/g, ' ');
+    for (const gone of ['read the stored markup', 'one deck slide', '--page 2', 'if you can view images']) {
+      expect(flat, gone).not.toContain(gone);
+    }
+    expect(flat).toContain('A successful push is the check');
+    expect(flat).toContain('shows the whole document, every slide, in one image');
+    expect(flat).toContain('never one slide at a time');
+  });
   it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
     const errors = renderDoc('artifactbin/references/errors.md', BASE);
     expect(errors).toContain('image_fetch_failed');
@@ -218,18 +245,24 @@ describe('the markup skill', () => {
    * pushes; nothing in this doc said where they go.
    *
    * "Social preview: upload and crop" pointed at publishing-versions.md, which
-   * says nothing about either — while the real path is two `<meta>` tags in
+   * says nothing about either — while the real path is three `<meta>` tags in
    * `<Helmet>` (lib/story/social-preview reads them out of the document
    * source), documented nowhere. A pointer to a doc that does not answer costs
    * the turns of reading it and still leaves the agent without the mechanism.
+   *
+   * The explanation now lives WHERE THE OLD LINK POINTED — the generated
+   * publishing-versions.md, beside export — because markup.md is at its 8 KB
+   * reading budget and this is publication, not authoring grammar. markup.md
+   * keeps a pointer that still names the metas, so an agent grepping the
+   * authoring reference for `og-image` finds the thread rather than nothing.
    */
   it('§F the publish-time fields are named where the agent writes them: the YAML fence', () => {
     expect(doc.replace(/\s+/g, ' ')).toContain('`theme`, `template` and `colorMode` are top-level fields of the YAML fence');
   });
-  it('§F the social preview names the Helmet meta tags an agent can push', () => {
+  it('§F markup.md points at the social-preview metas and at the doc that explains them', () => {
     expect(doc).toContain('artifactbin:og-image');
-    expect(doc).toContain('artifactbin:og-crop');
     expect(doc).toContain('artifactbin:og-image-crop');
+    expect(doc).toContain('publishing-versions.md');
     expect(doc).not.toContain('[upload and crop](publishing-versions.md)');
   });
 });

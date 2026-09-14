@@ -138,15 +138,20 @@ describe('the door never advises a shape the door rejects', () => {
 /**
  * A text-only model that fetches its own render hands its harness an image it
  * cannot accept: measured, one run 400ed and died AFTER publishing correctly.
- * A vision-capable agent should still look — it is why the best-looking
- * documents are the ones whose author checked.
+ * The old answer to that — "only export if you can view images; otherwise read
+ * the stored markup" — bought the image problem with a WORSE one: it sent the
+ * agent back to re-read the document it had just written, the re-read loop the
+ * progressive-publish brief exists to stop. The push receipt already IS the
+ * check (the head is exactly the file pushed), so there is no otherwise: a look
+ * is optional, and it is one image.
  */
 describe('the export section says WHEN to look', () => {
-  it('tells an agent to fetch its render only if it can view images, and what to do otherwise', () => {
+  it('makes the push receipt the check, and never sends the agent back to re-read the markup', () => {
     const doc = buildSkillDoc(BASE);
     const section = doc.slice(doc.indexOf('## Screenshot / export'));
-    expect(section).toMatch(/view images/i);
-    expect(section).toMatch(/read the stored markup/i);
+    expect(section).toMatch(/A successful push is the check/);
+    expect(section).not.toMatch(/view images/i);
+    expect(section).not.toMatch(/read the stored markup/i);
   });
 });
 
@@ -162,15 +167,22 @@ describe('the write echo is documented as canonical', () => {
 });
 
 /**
- * A deck is reviewed one slide at a time. Undocumented, an agent GUESSES —
- * measured: `?slide=2`, `?full=1`, `?mode=full`, `?print=1`, then a throwaway
- * one-slide document per look.
+ * This used to teach the per-slide shot (`--page 2`), because an undocumented
+ * deck review had agents GUESSING `?slide=2`, `?full=1`, `?mode=full`,
+ * `?print=1`. Teaching `--page` answered the guessing and bought the loop: a
+ * five-slide deck became five exports, one per look. The default export is
+ * already the WHOLE document with every slide stacked, which answers the same
+ * question in one call — so that is what the section names, and `--page`
+ * stays on `afbin export -h` for the rare single slide.
  */
-describe('the export section teaches the per-slide shot', () => {
-  it('names --page N', () => {
+describe('the export section teaches one image of the whole document', () => {
+  it('names the whole-document export and refuses the slide-at-a-time loop', () => {
     const doc = buildSkillDoc(BASE);
     const section = doc.slice(doc.indexOf('## Screenshot / export'));
-    expect(section).toContain('--page');
+    expect(section).toContain('afbin export <ref> --output out.png');
+    expect(section).toContain('the whole document, every slide, in one image');
+    expect(section).toContain('never one slide at a time');
+    expect(section).not.toContain('--page');
   });
 });
 
