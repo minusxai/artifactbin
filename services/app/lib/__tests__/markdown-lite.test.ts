@@ -13,7 +13,7 @@
  * a `javascript:` href that this module hands out.
  */
 import { describe, it, expect } from 'vitest';
-import { parseMarkdownLite, plainText, safeHref, wrapSelection, type MdNode } from '../markdown-lite';
+import { parseInline, parseMarkdownLite, plainText, safeHref, wrapSelection, type MdNode } from '../markdown-lite';
 
 /** The tests read blocks by shape, so a tiny reader keeps them legible. */
 const para = (nodes: MdNode[], at = 0) => {
@@ -196,35 +196,24 @@ describe('wrapSelection — the composer toolbar', () => {
 });
 
 describe('bounded', () => {
-  /*
-   * THE PATH MATTERS MORE THAN THE SIZE. A pathological run alone on its own line never reaches
-   * `parseInline` at all — a line of backticks is eaten by FENCE_RE as a code fence first — so the
-   * shape has to be measured on runs sitting INSIDE a paragraph, which is where a comment's
-   * backticks actually live. The earlier version of this test measured the fence path and passed
-   * while the inline path took 156 ms.
-   *
-   * WHAT THIS NO LONGER ASSERTS: four absolute budgets ("well under 10 ms", "under 20 ms"). An
-   * absolute millisecond number in a unit suite is a property of the machine, not of the parser —
-   * it goes red on a loaded CI box and green on a fast laptop that has just regressed 3x. The bug
-   * these guarded was QUADRATIC GROWTH (one fence string built per position: a 3,000-backtick run
-   * constructed 4.5M characters before finding nothing), and growth is a ratio. A ratio is what is
-   * asserted now, so the case fails for the reason it exists and for no other.
-   */
-  const cpuMillisecondsPerParse = (body: string) => {
-    // Warm the parser before sampling. Wall time on a shared CI runner includes time when this
-    // worker is descheduled, which is not parser work. Measure CPU consumed by this process,
-    // amortized over a batch, and take the median of three.
-    for (let i = 0; i < 5; i += 1) parseMarkdownLite(body);
-    const batchSize = 20;
-    const runs = [0, 0, 0].map(() => {
-      const started = process.cpuUsage();
-      let nodes = parseMarkdownLite(body);
-      for (let i = 1; i < batchSize; i += 1) nodes = parseMarkdownLite(body);
-      const elapsed = process.cpuUsage(started);
-      expect(nodes.length).toBeGreaterThan(0);
-      return (elapsed.user + elapsed.system) / 1000 / batchSize;
-    }).sort((a, b) => a - b);
-    return runs[1]!;
+  // Count source reads at the existing inline-parser boundary. A boxed string forwards
+  // native methods to its real value while the proxy observes indexed reads and length.
+  // This bounds the repeated run-length scan that caused the original quadratic bug.
+  // It is not a timing benchmark or a bound on work inside native string methods.
+  const countedInline = (body: string) => {
+    let reads = 0;
+    const source = new Proxy(new String(body), {
+      get(target, key) {
+        if (key === 'length' || (typeof key === 'string' && /^\d+$/.test(key))) {
+          reads += 1;
+          // Fail early so reintroducing quadratic scanning cannot hang the suite.
+          if (reads > body.length * 8) throw new Error('Inline parsing exceeded eight source reads per character');
+        }
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    return { nodes: parseInline(source as unknown as string), reads };
   };
 
   it('parses a 10 KB body of pathological runs inside a paragraph, and an unclosed fence, into real nodes', () => {
@@ -237,13 +226,12 @@ describe('bounded', () => {
     expect(parseMarkdownLite(`x${'`'.repeat(3000)} and then ${'plain words '.repeat(400)}`).length).toBeGreaterThan(0);
   });
 
-  it('grows sub-quadratically on the inline backtick run — the shape that was quadratic', () => {
-    // Doubling the run must not quadruple the work. The old code did exactly that; the guard is
-    // the RATIO between two sizes on the same machine in the same process, which no amount of CI
-    // noise turns into a 4x. The generous bound is deliberate: it catches the regression class
-    // (4x, 8x, 16x) without failing on scheduler jitter.
-    const small = cpuMillisecondsPerParse(`x${'`'.repeat(8_000)}`);
-    const large = cpuMillisecondsPerParse(`x${'`'.repeat(16_000)}`);
-    expect(large / Math.max(small, 0.001), `8k took ${small} ms, 16k took ${large} ms`).toBeLessThan(3);
+  it.each([8_000, 16_000])('bounds source reads for an inline run of %i backticks', (length) => {
+    const body = `x${'`'.repeat(length)}`;
+    const { nodes, reads } = countedInline(body);
+    expect(nodes).toEqual([{ kind: 'text', text: body }]);
+    expect(parseMarkdownLite(body)).toEqual([{ kind: 'paragraph', children: nodes }]);
+    expect(reads).toBeGreaterThan(length);
+    expect(reads).toBeLessThanOrEqual(body.length * 8);
   });
 });
