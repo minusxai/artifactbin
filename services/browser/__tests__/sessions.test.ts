@@ -12,6 +12,7 @@ it('persists execution IDs before waiting, serializes scripts, and refuses cross
     expect((await sessions.request(first)).status).toBe('queued');
     await vi.waitFor(() => expect(run).toHaveBeenCalledTimes(1));
     expect((await sessions.request(first)).status).toBe('running');
+    expect(await sessions.request({actor,op:'status',session_id:'one'})).toMatchObject({execution_id:'first',status:'running'});
     expect((await sessions.request({ ...first, code: 'return 2' })).error?.code).toBe('EXECUTION_CONFLICT');
     expect((await sessions.request({ ...first, actor: { ...actor, tokenId: 'stranger' } })).error?.code).toBe('SESSION_NOT_FOUND');
     await sessions.request({ ...first, execution_id: 'second', code: 'return 2' });

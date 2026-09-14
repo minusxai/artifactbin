@@ -41,4 +41,5 @@ Read only what the task needs, in this order for a new document:
 - [datasets and media](references/publishing-datasets.md), [database catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history and deletion](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
 - [authentication](references/publishing-auth.md) — how automatic sign-in works, `--harness`, credentials per server.
+- [live sessions](references/live-sessions.md) — operate live artifact instances with Playwright and the shared `mx` API; capture their current image.
 - [commands](references/commands.md) — every command and flag; [Markdown import](references/markdown.md) for a one-time `.md` push.

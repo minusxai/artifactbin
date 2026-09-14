@@ -26,8 +26,8 @@ ${AUTHOR_REALM_LOCKDOWN}
     const copy = value => structuredClone(value);
     const request = payload => new Promise((resolve, reject) => {
       if (closed) { reject(Object.assign(new Error('Iframe disposed'),{code:'STALE_INSTANCE'})); return; }
-      if (waiting.size >= 128) { reject(new Error('Too many pending script requests')); return; }
       const id = ++sequence;
+      if (waiting.size >= 128) { reject(new Error('Too many pending script requests')); return; }
       const timer = setTimeout(() => { waiting.delete(id); reject(Object.assign(new Error('Script request timed out; recover committed effects before retrying'),{code:'TIMEOUT'})); }, payload.op === 'mutate' ? ${MUTATION_REPLY_TIMEOUT_MS} : payload.op === 'read' ? 35000 : 15000);
       waiting.set(id, { resolve, reject, timer });
       send({ id, ...payload });

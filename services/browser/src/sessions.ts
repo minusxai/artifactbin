@@ -71,6 +71,8 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
       }
       if (input.op === 'status') {
         if (input.execution_id) return structuredClone(session.executions.get(input.execution_id)?.result ?? empty(input.session_id, 'EXECUTION_NOT_FOUND', 'Execution receipt is unavailable'));
+        const latest = [...session.executions.values()].at(-1)?.result;
+        if (latest) return structuredClone({ ...latest, ...(session.status !== 'idle' ? { status: session.status } : {}) });
         return { session_id: input.session_id, status: session.status, pages: structuredClone(session.pages), attachments: [] };
       }
       const previous = session.executions.get(input.execution_id);

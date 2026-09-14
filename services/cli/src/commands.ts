@@ -69,7 +69,7 @@ export const commands: Command[] = [
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in.',min:0,max:0,flags:['harness','service'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
- {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session.',min:2,max:2,flags:['input','execution'],examples:['afbin sessions script new --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
+ {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution'],examples:['afbin sessions script new --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session'],examples:['afbin remote pi','afbin remote --name Backend codex','afbin remote --session rs_123']},
 ];
 export interface ParsedCommand {command:string;positionals:string[];flags:Record<string,string|boolean|string[]>}
