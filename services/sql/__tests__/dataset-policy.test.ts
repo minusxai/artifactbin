@@ -257,6 +257,29 @@ describe.each<[string, SqlService]>([
       ),
     ).toHaveProperty('error');
   });
+  it('keeps denying functions whose only arguments are parameters', async () => {
+    // A call over placeholders is a constant expression, and DuckDB folds it
+    // out of the plan it serializes — the parsed statement is the net.
+    const denied = { ...open, execution: { functions: { deny: ['lower'] } } };
+    expect(
+      await runRow(
+        'update rows set body=lower($_row.body) where id=$_row.id',
+        denied,
+      ),
+    ).toHaveProperty('error');
+    // Generation is refused over a row action too (here by the planner: an
+    // ungranted `llm` is not a function this instance can bind at all).
+    expect(
+      await runRow('update rows set body=llm($_row.body) where id=$_row.id'),
+    ).toHaveProperty('error');
+  });
+  it('analyzes an insert whose source is a SELECT of bound parameters', async () => {
+    expect(
+      await runRow('insert into rows (id,body) select 3, $title', open, {
+        title: 'three',
+      }),
+    ).toMatchObject({ affected: 1 });
+  });
   it('still refuses a statement that genuinely cannot be planned', async () => {
     expect(
       await runRow('update rows set status=$_row.nosuch where id=$_row.id'),
