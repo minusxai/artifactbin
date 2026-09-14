@@ -258,7 +258,7 @@ describe('the bundled teaching and the manual', () => {
     await writeFile(join(root,'sales.csv'),'month,region,revenue\n2026-07-01,East,12\n2026-08-01,West,9\n');
     for(const template of ['editorial','dashboard','deck','scrolly','example']){
      const output:string[]=[];const context={cwd:root,home:root,env:{},interactive:false,stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('bundled teaching must stay offline')};
-     // A template name as the topic prints the whole bundle now; the starter it ends with is validated from the registry.
+     // A template name as the topic prints the whole bundle; the starter is validated from the registry here.
      if(template==='example'){assert.equal(await runCli(['help',template],context),0);await writeFile(join(root,template+'.jsx'),output.join(''));output.length=0;}
      else await writeFile(join(root,template+'.jsx'),helpTopics[template]!);
      assert.equal(await runCli(['validate',template+'.jsx','--json'],context),0,output.join(''));
@@ -377,7 +377,10 @@ describe('the bundled teaching and the manual', () => {
    assert.match(themes,/Available themes: .*modernist/);
    const templates=helpDocument('templates');
    assert.match(templates,/Pick ONE by the content's shape/);
-   assert.match(templates,/Run afbin help <template> for everything that kind of document needs, its starter last/);
+   // The bundle no longer ends with the starter — `afbin pull` and `afbin help <topic>` give it, and
+   // there was no starter for `plan` at all — so the overview must not promise one.
+   assert.match(templates,/Run afbin help <template> for everything that kind of document needs, in one call/);
+   assert.doesNotMatch(helpDocument('templates')+briefDocument(),/starter last/,'nothing still promises a starter the bundle dropped');
   });
 
 });

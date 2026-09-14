@@ -45,7 +45,7 @@ export const helpTopics:Record<string,string>={
  // that read references/themes.md, which carries a one-line description per theme and says to pick
  // ONE, opened one. The reference is the better answer to the same question; same for templates.
  themes:themesOverview(referenceTopics['themes']!),
- templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> for everything that kind of document needs, its starter last.`,
+ templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> for everything that kind of document needs, in one call.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
 const isCommand=(topic?:string)=>!topic||commands.some(command=>command.name===topic||command.aliases?.includes(topic));
@@ -107,7 +107,7 @@ function helpBody(topic:string|undefined,format:string,origin:string):string{
   return manPage(topic);
  }
  if(!isCommand(topic)){
-  // A template NAME as the topic prints everything that kind of document needs, its starter last. It
+  // A template NAME as the topic prints everything that kind of document needs, in one call. It
   // used to print the ten-line starter alone, and an agent that typed `afbin help dashboard` then read
   // eleven to fourteen reference files one by one (local rounds after run 34740707220).
   if(STORY_TEMPLATE_NAMES.includes(topic as never))return helpBundle(topic as string,origin);

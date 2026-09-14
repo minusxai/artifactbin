@@ -168,6 +168,11 @@ describe('repairJsxSource — the same fault more than once', () => {
     expect(parseJsx(out!.source).ok).toBe(true);
     expect(out!.repair.message).toMatch(/removed 3 closing braces/);
     expect(out!.repair.removed).toBe(3);
+    // Each site says "line N" IN FULL. The CLI moves a body line onto its file line by rewriting
+    // `\bline (\d+)\b` past the YAML fence (cli/src/validation.ts); "on lines 2, 3" matches none of
+    // that, and the notice would then name lines that are wrong by the height of the fence.
+    expect(out!.repair.message).toContain('on line 2, line 3');
+    expect(out!.repair.message).not.toMatch(/\blines \d/);
   });
 
   it('reports a backtick repair and a brace repair together, never one silently', () => {

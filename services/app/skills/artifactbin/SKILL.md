@@ -21,7 +21,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 ## Example
 
-Before writing a document, read design, markup, then the chosen template and theme (below); a template's frame keeps content from sitting flush to the viewport edge. `afbin help example` prints this file; `afbin help <template>` (dashboard, deck, editorial, plan, scrolly) prints every reference that kind of document needs, its starter last.
+Before writing a document, read design, markup, then the chosen template and theme (below); a template's frame keeps content from sitting flush to the viewport edge. `afbin help example` prints this file; `afbin help <template>` (dashboard, deck, editorial, plan, scrolly) prints every reference that kind of document needs, in one call.
 
 ```jsx
 [[ example ]]
