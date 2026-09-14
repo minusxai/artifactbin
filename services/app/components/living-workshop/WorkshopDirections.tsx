@@ -57,9 +57,6 @@ export default function WorkshopDirections() {
             <br />
             <em>Wide possibilities.</em>
           </h2>
-          <a className="studio-text-link" href="/examples">
-            Enter the gallery <ArrowUpRight size={19} />
-          </a>
         </div>
         <div className="blue-library">
           {BOOKS.map((book, index) => (
@@ -81,8 +78,16 @@ export default function WorkshopDirections() {
               </p>
             </article>
           ))}
+          <a className="library-gallery-link" href="/examples">
+            <span className="studio-eyebrow">THERE’S MORE ON THE WALL</span>
+            <strong>
+              Enter the
+              <br />
+              <em>gallery.</em> <ArrowUpRight size={42} />
+            </strong>
+            <span>Find something worth opening.</span>
+          </a>
         </div>
-        <p>Documents, dashboards, data stories, and whatever comes next.</p>
       </section>
       <section
         className="blue-capabilities"
@@ -136,6 +141,26 @@ export default function WorkshopDirections() {
             alt={selected.alt}
             loading="lazy"
           />
+          <div
+            className="outcome-thumbnails"
+            role="group"
+            aria-label="Preview the benefits"
+          >
+            {REASONS.map((reason, index) => (
+              <button
+                key={reason.image}
+                aria-label={`Preview: ${reason.title}`}
+                aria-pressed={active === index}
+                onClick={() => setActive(index)}
+              >
+                <img
+                  src={artSrc(reason.image, "water", 380)}
+                  alt=""
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
         </figure>
       </section>
     </div>

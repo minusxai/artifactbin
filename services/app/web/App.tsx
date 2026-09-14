@@ -5,7 +5,7 @@ import { Shell } from './Shell';
 import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 
-const { ExamplesPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, HomeV2Page, HomeV3Page, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
+const { WorkshopRobotsPage, ExamplesPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, HomeV2Page, HomeV3Page, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
 
 function Analytics() {
   const { session } = useSession();
@@ -18,6 +18,7 @@ export function App() {
       <Analytics />
       <NavigationPreloads>
       <Routes>
+        <Route path="/workshop_robots" element={<WorkshopRobotsPage />} />
         <Route path="/examples" element={<ExamplesPage />} />
         <Route path="/home_v2" element={<HomeV2Page />} />
         <Route path="/home_v3" element={<HomeV3Page />} />

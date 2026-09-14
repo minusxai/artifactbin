@@ -84,6 +84,8 @@ export const WORKSHOP_IMAGE = "/landing/workshop/indoor-wide_4.webp";
 export interface WorkshopSetting {
   /** Optional six-cell, 3 × 2 artwork atlas for the visual review routes. */
   posterAtlas?: string;
+  liveRobots?: boolean;
+  fallbackImage?: string;
   image: string;
   mask: string;
   name: "indoor" | "outdoor";
@@ -93,7 +95,9 @@ export const WORKSHOP_SETTINGS: Record<
   WorkshopSetting
 > = {
   indoor: {
-    image: WORKSHOP_IMAGE,
+    image: "/landing/workshop/indoor-wide-clean-robots.png",
+    fallbackImage: WORKSHOP_IMAGE,
+    liveRobots: true,
     mask: "/landing/workshop/wide-girl-mask.svg",
     name: "indoor",
   },

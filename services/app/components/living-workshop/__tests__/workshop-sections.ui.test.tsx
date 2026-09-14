@@ -32,8 +32,17 @@ it("opens every published example and reveals the selected outcome", () => {
       showcaseHref(doc),
     );
   expect(screen.getByText(REASONS[0]!.body)).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: /Don't waste tokens/ }));
+  fireEvent.click(
+    screen.getByRole("button", { name: /Don't waste tokens/, expanded: false }),
+  );
   expect(screen.getByText(REASONS[3]!.body)).toBeVisible();
   expect(screen.queryByText(REASONS[0]!.body)).not.toBeInTheDocument();
   expect(screen.getByRole("img", { name: REASONS[3]!.alt })).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: `Preview: ${REASONS[4]!.title}` }),
+  );
+  expect(screen.getByText(REASONS[4]!.body)).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: `Preview: ${REASONS[4]!.title}` }),
+  ).toHaveAttribute("aria-pressed", "true");
 });

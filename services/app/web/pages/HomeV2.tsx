@@ -109,14 +109,14 @@ export default function HomeV2({
         <div className="workshop-picture">
           <div className="workshop-scene-frame">
             <img
-              src={setting.image}
+              src={setting.fallbackImage ?? setting.image}
               alt="A sunlit artist’s workshop with green plants, a woman at a cork board, and small robot helpers."
               className="workshop-scene-fallback"
               fetchPriority="high"
               width={1672}
               height={941}
             />
-            <AgentScreens inCanvas={sceneReady} />
+            {!setting.liveRobots && <AgentScreens inCanvas={sceneReady} />}
             <canvas
               ref={canvas}
               className="workshop-canvas"
@@ -220,16 +220,34 @@ export default function HomeV2({
       )}
       <LandingFaq column="workshop-faq" />
       <footer className="workshop-footer">
-        <a href="/" className="workshop-wordmark">
-          artifactbin
-        </a>
-        <p>A place for the things you make.</p>
-        <nav aria-label="Footer">
-          <a href={REPO_URL}>Open source ↗</a>
-          <a href="/docs-human">Docs</a>
-          <a href="/privacy">Privacy</a>
-          <a href="/terms">Terms</a>
-        </nav>
+        <div className="workshop-footer-top">
+          <div>
+            <a
+              href="/"
+              className="workshop-wordmark"
+              aria-label="artifactbin home"
+            >
+              <img src="/logo-128.png" alt="" width={64} height={64} />
+              artifactbin
+            </a>
+            <p>A place for the things you make.</p>
+          </div>
+          <a className="workshop-footer-invite" href="#workshop-install">
+            Pull up a chair <ArrowUpRight size={23} />
+          </a>
+        </div>
+        <div className="workshop-footer-bottom">
+          <span>Open source. Yours to make yours.</span>
+          <nav aria-label="Footer">
+            <a href="/examples">Examples</a>
+            <a href="/docs-human">Docs</a>
+            <a href={REPO_URL}>
+              Source <ArrowUpRight size={12} />
+            </a>
+            <a href="/privacy">Privacy</a>
+            <a href="/terms">Terms</a>
+          </nav>
+        </div>
       </footer>
     </main>
   );

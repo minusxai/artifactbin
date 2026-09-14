@@ -1,3 +1,4 @@
+import { addWorkshopHelpers } from "./workshop-helpers";
 import { separatePapers, floorClearance, PAPER_FLOOR } from "./paper-contact";
 import { applyForegroundMask } from "./foreground-mask";
 import {
@@ -74,6 +75,7 @@ export function createWorkshopScene(
   const scene = new Scene(),
     camera = new OrthographicCamera(0, SCENE.width, 0, SCENE.height, 0.1, 2000);
   camera.position.z = 1000;
+  camera.layers.enable(1);
   camera.lookAt(0, 0, 0);
   camera.updateMatrixWorld();
   scene.add(new AmbientLight(0xffffff, 2.8));
@@ -357,6 +359,9 @@ export function createWorkshopScene(
         encodeURIComponent(new XMLSerializer().serializeToString(copy));
     }
   }
+  const helpers = setting.liveRobots
+    ? addWorkshopHelpers(renderer, schedule)
+    : null;
   const background = new Image();
   images.push(background);
   background.onload = () => {
@@ -510,8 +515,10 @@ export function createWorkshopScene(
       !!gesture?.dragging ||
       time < relaxUntil;
     for (const s of sheets) updateMesh(s);
+    if (!reduced.matches) helpers?.update(dt);
     renderer.render(scene, camera);
-    if (moving) schedule();
+    helpers?.render(renderer, camera);
+    if (moving || (helpers && !reduced.matches)) schedule();
   }
   function schedule() {
     if (!disposed && visible && !frame) frame = requestAnimationFrame(draw);
@@ -684,6 +691,7 @@ export function createWorkshopScene(
     reset,
     dispose() {
       disposed = true;
+      helpers?.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       visibility.disconnect();
