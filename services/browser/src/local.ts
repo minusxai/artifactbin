@@ -1,3 +1,4 @@
+export { sessionProcessPaths } from './session-config';
 import { createBrowserSessions } from './sessions';
 import { createSessionProcess, type SessionProcessOptions } from './session-process';
 /**

@@ -107,3 +107,14 @@ it('rejects a concurrent mutation before transport and acknowledges a commit ind
   await expect(first).resolves.toMatchObject({ scope: 'dataset', status: 'committed', operationId: expect.any(String) });
   store.dispose();
 });
+
+it('passes declared row and cell arguments without creating scalar signals', async () => {
+  const mutate = vi.fn(async () => ({dataset:'owned'}));
+  const store = createDataflowStore({ flow: { ...flow, mutations: [{ name:'edit', target:'owned', sql:'update ref_owned set n=$_value where id=$_row.id', params:['_row','_value'], refs:['owned'], start:0,end:0 }] }, state:{values:{count:0,other:''},tables:{},errors:{},mutationAccess:{edit:null}} }, {
+    transport:{mutate,run:async()=>({tables:{},errors:{}}),page:async()=>({rows:[],columns:[]})},
+  });
+  await createMx(store).mutate('edit', {_row: {id:1}, _value:3});
+  expect(mutate).toHaveBeenCalledWith({count:0,other:'',_value:3},'edit',{id:1});
+  expect(store.getState().values).toEqual({count:0,other:''});
+  store.dispose();
+});

@@ -29,6 +29,7 @@ readline.createInterface({input:process.stdin}).on('line', async line => {
   if (message.type === 'init') {
     try {
       browser = await chromium.launch({headless:true});
+      browser.on('disconnected', () => process.exit(1));
       context = await browser.newContext({baseURL:message.baseURL,serviceWorkers:'block',acceptDownloads:false});
       context.setDefaultTimeout(5000); context.setDefaultNavigationTimeout(10000);
       await context.route('**/*', async route => {

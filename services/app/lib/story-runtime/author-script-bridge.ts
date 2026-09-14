@@ -1,4 +1,4 @@
-import type { MxError, MxSnapshot, MxReadOptions, Scalar } from '@artifactbin/contracts';
+import type { MxError, MxSnapshot, MxReadOptions, MxMutationArgs, Scalar } from '@artifactbin/contracts';
 import type { DataflowStore } from './store';
 import { createMx } from './mx';
 
@@ -47,7 +47,7 @@ export function createAuthorScriptBridge(store: DataflowStore, send?: (packet: A
           case 'describe': value = await mx.describe(); break;
           case 'read': value = await mx.read(message.names as string[], message.options as MxReadOptions | undefined); break;
           case 'set': value = await mx.set(message.values as Record<string, Scalar>); break;
-          case 'mutate': value = await mx.mutate(message.name as string, message.args as Record<string, Scalar> | undefined); break;
+          case 'mutate': value = await mx.mutate(message.name as string, message.args as MxMutationArgs | undefined); break;
           case 'subscribe': {
             if (!send || subscriptions.size >= 128) return refused('SUBSCRIPTION_LIMIT', 'Subscription limit exceeded');
             const subscription = id;

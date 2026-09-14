@@ -21,13 +21,14 @@ ${AUTHOR_REALM_LOCKDOWN}
     const port = event.ports[0];
     const send = port.postMessage.bind(port);
     let comments = null, commentState = null;
-    let sequence = 0, started = false;
+    let sequence = 0, started = false, closed = false;
     const waiting = new Map(), subscriptions = new Map();
     const copy = value => structuredClone(value);
     const request = payload => new Promise((resolve, reject) => {
+      if (closed) { reject(Object.assign(new Error('Iframe disposed'),{code:'STALE_INSTANCE'})); return; }
       if (waiting.size >= 128) { reject(new Error('Too many pending script requests')); return; }
       const id = ++sequence;
-      const timer = setTimeout(() => { waiting.delete(id); reject(new Error('Script request timed out')); }, payload.op === 'mutate' ? ${MUTATION_REPLY_TIMEOUT_MS} : 15000);
+      const timer = setTimeout(() => { waiting.delete(id); reject(Object.assign(new Error('Script request timed out; recover committed effects before retrying'),{code:'TIMEOUT'})); }, payload.op === 'mutate' ? ${MUTATION_REPLY_TIMEOUT_MS} : payload.op === 'read' ? 35000 : 15000);
       waiting.set(id, { resolve, reject, timer });
       send({ id, ...payload });
     });
@@ -35,6 +36,7 @@ ${AUTHOR_REALM_LOCKDOWN}
     addEventListener('error', event => send({type:'author-error',error:event.message || 'Iframe script failed'}));
     addEventListener('unhandledrejection', event => send({type:'author-error',error:String(event.reason?.message || event.reason || 'Iframe script failed')}));
     addEventListener('pagehide', () => {
+      closed = true;
       comments?.dispose();
       assetAbort?.abort(); subscriptions.clear();
       for (const task of waiting.values()) { clearTimeout(task.timer); task.reject(new Error('Iframe disposed')); }
@@ -57,7 +59,7 @@ ${AUTHOR_REALM_LOCKDOWN}
         return () => {
           if (!active) return;
           active = false; subscriptions.delete(id);
-          void request({ op: 'unsubscribe', subscription: id }).catch(report);
+          if (!closed) void request({ op: 'unsubscribe', subscription: id }).catch(report);
         };
       }
     });

@@ -17,11 +17,12 @@ export interface MxDescription {
 }
 export interface MxReadOptions { wait?: boolean; refresh?: boolean; timeoutMs?: number }
 export interface MxMutationReceipt { operationId: string; scope: 'local' | 'dataset'; status: 'committed' }
+export type MxMutationArgs = Record<string, Scalar | Record<string, Scalar>>;
 export interface MxApi {
   describe(): Promise<MxDescription>;
   read(names: string[], options?: MxReadOptions): Promise<MxSnapshot>;
   set(values: Record<string, Scalar>): Promise<MxRevision>;
-  mutate(name: string, args?: Record<string, Scalar>): Promise<MxMutationReceipt>;
+  mutate(name: string, args?: MxMutationArgs): Promise<MxMutationReceipt>;
   /** Initial snapshot is asynchronous. The returned stop function is synchronous and idempotent. */
   subscribe(names: string[], callback: (snapshot: MxSnapshot) => void): () => void;
 }

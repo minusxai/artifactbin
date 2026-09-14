@@ -1,6 +1,6 @@
 /** One capability implementation for the public page and the managed iframe transport. */
 import type { MxApi, MxSnapshot, MxReadOptions } from '@artifactbin/contracts';
-import { scalarMatches, type Scalar } from '@/lib/story/dataflow';
+import { DECL_NAME_RE, scalarMatches, type Scalar } from '@/lib/story/dataflow';
 import type { DataflowStore } from './store';
 
 export type { MxApi } from '@artifactbin/contracts';
@@ -74,6 +74,7 @@ export function createMx(store: DataflowStore): MxApi {
     },
     async read(names, options: MxReadOptions = {}) {
       validateNames(names);
+      names = [...names];
       if (!record(options) || Object.keys(options).some(key => !['wait', 'refresh', 'timeoutMs'].includes(key))
         || (options.wait !== undefined && typeof options.wait !== 'boolean')
         || (options.refresh !== undefined && typeof options.refresh !== 'boolean')
@@ -104,15 +105,26 @@ export function createMx(store: DataflowStore): MxApi {
       const decl = flow.mutations?.find(d => d.name === name);
       if (!decl) throw fail('UNKNOWN_MUTATION', 'Expected a declared mutation name');
       if (!record(args) || Object.keys(args).some(key => !decl.params.includes(key))) throw fail('UNKNOWN_ARGUMENT', 'Only the mutation’s declared arguments can be supplied');
-      const values = validatePatch(args);
+      const { _row, _value, ...scalars } = args;
+      const values = validatePatch(scalars);
+      let row: Record<string, Scalar> | undefined;
+      if (_row !== undefined) {
+        if (!record(_row) || Object.keys(_row).length > 256 || Object.entries(_row).some(([key, value]) => !DECL_NAME_RE.test(key) || !validScalar(value))) throw fail('INVALID_VALUE', 'Row arguments must be named scalars');
+        row = _row as Record<string, Scalar>;
+      }
+      if (_value !== undefined) {
+        if (!validScalar(_value)) throw fail('INVALID_VALUE', 'Cell value must be a scalar');
+        values._value = _value;
+      }
       if (store.mutating().has(name)) throw fail('BUSY', `Mutation ${name} is already running`);
       if (!store.canMutate(name)) throw fail('FORBIDDEN', store.mutationUnavailable(name) ?? 'Mutation is unavailable');
       const operationId = crypto.randomUUID();
-      await store.mutate(name, values);
+      await store.mutate(name, values, row);
       return { operationId, scope: decl.scope ?? 'dataset', status: 'committed' };
     },
     subscribe(names, callback) {
       validateNames(names);
+      names = [...names];
       if (typeof callback !== 'function') throw fail('INVALID_CALLBACK', 'Expected a snapshot callback');
       let active = true;
       let previous: string | undefined;

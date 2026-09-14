@@ -507,6 +507,7 @@ jobs:
       # before the run keeps that cost out of the gate's own timeout budget.
       - name: pull the Postgres image the datasets gate needs
         run: docker pull postgres:17-alpine
+      - run: npm run build -w services/cli
       - name: Prepare isolated browser session workers
         run: |
           sudo apt-get update

@@ -1,7 +1,7 @@
 /** Live Linux worker gate: real CLI, real artifact runtime, and OS containment. CI only. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -80,6 +80,39 @@ try {
   assert.equal(lost.status,'lost',JSON.stringify(lost)); assert.equal(lost.error.code,'SESSION_LOST');
   const refused = await cli(['script',first.session_id],'return 1');
   assert.equal(refused.error.code,'SESSION_LOST');
+  // Replay saved pi/Fireworks submissions against the shipped runtime. Only fixture IDs are rebound.
+  const widgetSource = await readFile(new URL('./fixtures/mx-agent/widget.js',import.meta.url),'utf8');
+  const agentMarkup = '<Helmet><Value name="region" default="East"/><Value name="taskTitle" default="untouched"/><Value name="tasks" type="table" value={[{title:"Existing"}]}/><Query name="sales">{`select $region || \' sales\' as name, case when $region=\'West\' then 200 else 100 end as revenue`}</Query><Mutation name="addTask">{`insert into tasks (title) values ($taskTitle)`}</Mutation></Helmet><h1>Agent transfer fixture</h1><Iframe title="Agent widget" height={240}><select id="region" aria-label="Region"><option value="East">East</option><option value="West">West</option></select><table><tbody id="rows"/></table><input id="label" aria-label="Task title"/><button id="add">Add task</button><p id="error"/><script>{'+JSON.stringify(widgetSource)+'}</script></Iframe>';
+  const published = await fetch(`${base}/api/artifacts`, {method:'POST',headers,body:JSON.stringify({markup:agentMarkup})});
+  const agentArtifact = await published.json(); assert(agentArtifact.id,JSON.stringify(agentArtifact));
+  const openSource = (await readFile(new URL('./fixtures/mx-agent/open.js',import.meta.url),'utf8')).replace('/a/sales01','/a/'+agentArtifact.id);
+  const opened = await cli(['script','new'],openSource); ids.push(opened.session_id);
+  assert.equal(opened.status,'completed',JSON.stringify(opened));
+  const agentPageId = opened.pages[0].page_id;
+  const mutationSource = (await readFile(new URL('./fixtures/mx-agent/mutate.js',import.meta.url),'utf8')).replace('3481e002-246e-48e2-b9a5-9af9a82746f0',agentPageId);
+  const mutated = await cli(['script',opened.session_id],mutationSource);
+  assert.equal(mutated.status,'completed',JSON.stringify(mutated));
+  assert.equal(mutated.result.receipt.scope,'local');
+  assert.equal(mutated.result.taskTitle.signals.taskTitle.value,'untouched');
+  assert(mutated.result.localTasks.signals.tasks.value.rows.some(row=>row.title==='Session task'));
+  const widget = await cli(['script',opened.session_id],`
+    const page = pages[${JSON.stringify(agentPageId)}];
+    const frame = page.frameLocator('iframe[title="Agent widget"]').frameLocator('iframe');
+    await frame.getByLabel('Region').selectOption('West');
+    await frame.getByText('West sales',{exact:true}).waitFor();
+    await page.evaluate(()=>mx.set({region:'East'}));
+    await frame.getByText('East sales',{exact:true}).waitFor();
+    if (await frame.getByLabel('Region').inputValue()!=='East') throw new Error('Parent selection did not synchronize');
+    await frame.getByLabel('Task title').fill('Widget task');
+    await frame.getByRole('button',{name:'Add task'}).click();
+    await page.waitForFunction(()=>mx.read(['tasks']).then(s=>s.signals.tasks.value.rows.some(row=>row.title==='Widget task')));
+    if (await frame.getByRole('button',{name:'Add task'}).isDisabled()) throw new Error('Mutation did not restore button');
+    await output.image(await page.screenshot());
+    return await page.evaluate(()=>mx.read(['region','taskTitle','tasks']));
+  `);
+  assert.equal(widget.status,'completed',JSON.stringify(widget));
+  assert.equal(widget.result.signals.taskTitle.value,'untouched');
+  assert.equal(widget.attachments.length,1);
   console.log('browser-sessions: multi-artifact, iframe/API parity, resume, image, errors, receipt recovery, ownership, filesystem/network containment, and hard deadline passed');
 } finally {
   for (const session_id of ids) await request({op:'close',session_id}).catch(() => {});

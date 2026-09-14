@@ -5,6 +5,7 @@ import { SESSION_LIMITS } from '@artifactbin/contracts';
 export interface SessionWorker {
   run(code: string): Promise<Pick<BrowserSessionResult, 'result' | 'pages' | 'attachments' | 'error'>>;
   close(): Promise<void>;
+  onClose?(listener: () => void): void;
 }
 export type SessionWorkerFactory = (actor: Actor) => Promise<SessionWorker>;
 interface Session {
@@ -48,12 +49,18 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
       if (input.op === 'script') {
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {
+          if (sessions.size >= SESSION_LIMITS.sessions) {
+            const ended = [...sessions].find(([, value]) => value.status !== 'idle');
+            if (ended) sessions.delete(ended[0]);
+          }
           if ([...sessions.values()].filter(s => s.status === 'idle').length >= SESSION_LIMITS.sessions) return empty(input.session_id, 'CAPACITY', 'Browser session capacity reached; close an existing session');
           const worker = Promise.resolve().then(() => factory(input.actor));
           // Failure is recorded on the execution, including failures before the first script.
           void worker.catch(() => {});
           session = { owner, worker, queue: Promise.resolve(), executions: new Map(), pages: [], status: 'idle', touched: Date.now() };
           sessions.set(input.session_id, session);
+          const created = session;
+          void worker.then(value => value.onClose?.(() => { if (created.status === 'idle') void close(created, 'lost'); }), () => {});
         }
       }
       if (!session || session.owner !== owner) return empty(input.session_id, 'SESSION_NOT_FOUND', 'Session is unavailable to this credential');

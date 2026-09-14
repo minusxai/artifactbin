@@ -104,7 +104,7 @@ try {
   assert.equal(refusal.status(), 400);
   assert.equal((await refusal.json()).detail, "Model output is not valid JSON");
   await inner
-    .getByText("Script operation failed or permission denied", { exact: true })
+    .getByText("Model output is not valid JSON", { exact: true })
     .waitFor()
     .catch(async (error) => {
       throw new Error(

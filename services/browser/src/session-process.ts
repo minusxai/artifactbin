@@ -26,9 +26,12 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
   const root = await mkdtemp(path.join(tmpdir(), 'afbin-session-'));
   let child: ChildProcess | undefined;
   let stopped = false;
+  const closedListeners = new Set<() => void>();
   const close = async () => {
     if (stopped) return;
     stopped = true;
+    for (const listener of closedListeners) listener();
+    closedListeners.clear();
     if (child?.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* Already exited. */ } }
     try { await resources.close(); } finally { await rm(root, { recursive: true, force: true }); }
   };
@@ -40,11 +43,11 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
     await mkdir(path.join(root, 'home'));
     await writeFile(path.join(root, 'worker.mjs'), SESSION_WORKER_SOURCE);
     const browsers = await realpath(options.browsersPath ?? path.join(homedir(), '.cache/ms-playwright'));
-    const args = ['--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp'];
+    const args = ['--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--tmpfs', '/home/session'];
     for (const dir of ['/usr', '/bin', '/lib', '/lib64', '/etc/fonts', '/etc/ld.so.cache']) if (existsSync(dir)) args.push('--ro-bind', dir, dir);
     const node = await realpath(process.execPath);
     if (!node.startsWith('/usr/') && !node.startsWith('/bin/')) args.push('--ro-bind', path.dirname(node), path.dirname(node));
-    args.push('--ro-bind', root, '/runtime', '--bind', path.join(root, 'home'), '/home/session', '--ro-bind', browsers, '/browsers', '--chdir', '/home/session', node, '--max-old-space-size=128', '/runtime/worker.mjs');
+    args.push('--ro-bind', root, '/runtime', '--ro-bind', browsers, '/browsers', '--chdir', '/home/session', node, '--max-old-space-size=128', '/runtime/worker.mjs');
     child = spawn('/bin/sh', ['-c', 'read -r start; exec "$@"', 'session-launch', '/usr/bin/bwrap', ...args], { detached: true, stdio: ['pipe', 'pipe', 'pipe'],
       env: { HOME: '/home/session', TMPDIR: '/tmp', PATH: '/usr/bin:/bin', PLAYWRIGHT_BROWSERS_PATH: '/browsers' } });
     const processChild = child;
@@ -61,7 +64,8 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
     const ready = new Promise<void>((resolve, reject) => {
       rejectTask = reject;
       child!.once('error', reject);
-      child!.once('exit', () => rejectTask?.(new Error(stderr || 'Browser worker exited')));
+      child!.once('exit', () => { rejectTask?.(new Error(stderr || 'Browser worker exited')); void close().catch(() => {}); });
+      child!.stdin!.on('error', error => { rejectTask?.(error); void close().catch(() => {}); });
       const receive = async (raw: unknown) => {
         if (!raw || typeof raw !== 'object') return;
         const message = raw as Record<string, unknown>;
@@ -113,8 +117,8 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
     let timer: ReturnType<typeof setTimeout> | undefined;
     try { await Promise.race([ready, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Browser worker startup timed out')), 15000); })]); }
     finally { clearTimeout(timer); }
-    return { close,
-      run(code) { return new Promise((resolve, reject) => { resolveTask = resolve; rejectTask = reject; send({ type: 'run', code }); }); },
+    return { close, onClose(listener) { closedListeners.add(listener); if (stopped) listener(); },
+      run(code) { return new Promise((resolve, reject) => { if (stopped) { reject(new Error('Browser worker exited')); return; } resolveTask = resolve; rejectTask = reject; send({ type: 'run', code }); }); },
     };
   } catch (error) { await close(); throw error; }
 }
