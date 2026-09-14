@@ -13,7 +13,7 @@ import { cloneElement, createContext, useContext, useEffect, useId, useMemo, use
 import type { CSSProperties, ReactElement, ReactNode } from 'react';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 import type { ComponentType } from 'react';
-import { renderStoryNodes, type BoundControlProps, type BoundSourceProps, type CellControlProps } from '@/lib/story-ui/interpreter';
+import { renderStoryNodes, type BoundControlProps, type BoundSourceProps, type CellControlProps, type RowActionProps } from '@/lib/story-ui/interpreter';
 import {Dialog, DialogContent} from '@/components/kit/dialog';
 import { useNodeKeys } from '@/lib/story-ui/use-node-keys';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
@@ -30,6 +30,7 @@ import { discoverSlides, MIN_SLIDES_FOR_RAIL, type DiscoveredSlide } from './sli
 import { discoverOutline, hasOutline, type OutlineEntry } from './outline';
 import QuestionEmbed from '@/components/views/story/QuestionEmbed';
 import InlineNumber, { type NumberAgg } from '@/components/views/story/InlineNumber';
+import { createRowActions } from './row-actions';
 import { createCellSessions, type CellSessions } from './cell-sessions';
 import type { ColumnTemplate } from '@/components/kit/data-table';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
@@ -60,6 +61,27 @@ const CellSessionsContext = createContext<CellSessions | null>(null);
 const scalarRow = (row: Row): Record<string, Scalar> => Object.fromEntries(Object.entries(row).filter((entry): entry is [string, Scalar] => {
   const v = entry[1]; return v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 }));
+
+const RowActionsContext = createContext<ReturnType<typeof createRowActions> | null>(null);
+
+function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
+  const {store, chrome} = useContext(RuntimeEmbedContext);
+  const actions = useContext(RowActionsContext);
+  const name = refName(props.run);
+  const state = useSyncExternalStore(actions?.subscribe ?? NO_SUBSCRIBE, () => actions?.get(identity), () => undefined);
+  const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name && store ? store.mutationUnavailable(name) : 'Checking edit access…', () => 'Checking edit access…');
+  const {run: _run, ...rest} = props;
+  return <>
+    <Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
+      aria-busy={state?.pending || undefined} aria-description={unavailable ?? undefined}
+      onClick={() => {
+        if (!chrome || !actions || !store || !name || unavailable !== null || props.disabled === true) return;
+        const snapshot = scalarRow(row);
+        void actions.run(identity, () => store.mutate(name, {}, snapshot));
+      }}>{children}</Button>
+    {state?.error ? <span role="alert" className="mx-write-error">{state.error}</span> : null}
+  </>;
+}
 
 function RuntimeCellControl({ tag, component: Component, props, row, identity, column, rowKey, tableName, valueField, children }: CellControlProps) {
   const ctx = useContext(RuntimeEmbedContext);
@@ -1042,6 +1064,7 @@ const NO_SUBSCRIBE = () => () => {};
 export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const store = givenStore ?? localStore;
+  const actions = useMemo(() => createRowActions(), [store]);
   const mountedRef = useRef(onMounted);
   mountedRef.current = onMounted;
   useEffect(() => { mountedRef.current?.(); }, []);
@@ -1080,7 +1103,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
       <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, managedAssets, importManagedAsset: importAsset }}>
-        {renderStoryNodes(nodes, {
+        <RowActionsContext.Provider value={actions}>{renderStoryNodes(nodes, {
           values: state.values,
           tables: state.tables,
           // Identity across an adopted document: a live update re-renders this
@@ -1090,9 +1113,10 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
           boundControl: RuntimeBoundControl,
           boundSource: RuntimeBoundSource,
           cellControl: RuntimeCellControl,
+          rowAction: RuntimeRowAction,
           decorateElement,
           decorateChildren: editChildren,
-        })}
+        })}</RowActionsContext.Provider>
       </RuntimeEmbedContext.Provider>
     </RuntimeAssetContext.Provider>
   );

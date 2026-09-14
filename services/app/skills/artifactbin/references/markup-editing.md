@@ -75,8 +75,8 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
   level only; extract nested JSON with SQL. `_`-prefixed declaration names
   are reserved. `$_value` is the committed scalar in mutation SQL.
 - Supported `run` editors: `<Select>`, native `<input>` with `type="text"` or `type="number"`,
-  `<textarea>` and `<select>`. Other controls/input types are rejected.
-- A row mutation is invoked only by a control's `run` inside a Column;
+  `<textarea>` and `<select>`. Row actions also support `<Button run="$complete">`. Other controls/input types are rejected.
+- A row mutation is invoked by a control's `run` inside a Column or a Button inside keyed For;
   that `run` must name a row mutation. Its `$_row` is the immutable original
   row snapshot from when editing began, not the latest refreshed row.
   Publish checks referenced fields and their types against the bound
@@ -129,3 +129,33 @@ mutation SQL. Writes require dataset edit permission; denied controls disable. C
 and cross-dataset foreign-key enforcement are deferred; the mutation engine
 registers only its target dataset, so the dropdown alone does not enforce
 sprint membership or dependency existence.
+
+
+## Row action buttons
+
+Use `<Button run="$complete">` for a row action. The same declared mutation
+works inside keyed `<For>` and `<DataTable>` Column templates:
+
+```jsx
+<Helmet>
+  <Value name="tasks" type="table" value={[{id: 1, label: "Review", done: false}]} />
+  <Mutation name="complete">{`update tasks set done = true where id = $_row.id`}</Mutation>
+</Helmet>
+<For each={$tasks} keyBy="id">
+  <p>{$_row.label}</p>
+  <Button run="$complete">Complete</Button>
+</For>
+<DataTable data="$tasks" rowKey="id">
+  <Column col="label" />
+  <Column col="done"><Button run="$complete">Complete</Button></Column>
+</DataTable>
+```
+
+Actions require unique, non-null string or number keys (`keyBy` or `rowKey`).
+A click captures the current row as `$_row`; buttons do not supply an edited
+`$_value`. Pending state and errors belong to the row and button, surviving
+reordering and temporary unmounting. The pending button is disabled; other
+rows remain usable. Failures appear beside the button; retry captures the
+current row. Existing mutation access checks and query refresh behavior apply.
+Captures and static previews disable actions. This example changes local
+reader state; declare a dataset-backed Mutation to persist shared changes.

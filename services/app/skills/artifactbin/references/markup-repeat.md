@@ -38,8 +38,8 @@ preserves item identity when rows move if `keyBy` is supplied. Empty results ren
 is a limit of 1,000 rows and 50,000 expanded template nodes. Nested For loops,
 DataTable, and Iframe inside For templates are not supported. Use DataTable for
 large virtualized tabular results, sorting, and paging. For renders a block wrapper accepting class and style, providing an owner
-surface for comments even when a row disappears. Bound controls and mutation
-buttons inside For are not supported; use editable DataTable columns.
+surface for comments even when a row disappears. Bound editors inside For are not supported; use editable DataTable columns.
+Row mutation buttons are supported when For has a stable keyBy.
 
 ## Identity and comments
 
@@ -55,3 +55,33 @@ for the same durable row/cell targeting. Without `rowKey`, a table still
 renders but its rows and cells cannot be durable comment targets. Removing a
 row retains its comment's table/For owner; restoring the same key restores
 the logical target. Never reuse a key for a different logical item.
+
+
+## Row action buttons
+
+Use `<Button run="$complete">` for a row action. The same declared mutation
+works inside keyed `<For>` and `<DataTable>` Column templates:
+
+```jsx
+<Helmet>
+  <Value name="tasks" type="table" value={[{id: 1, label: "Review", done: false}]} />
+  <Mutation name="complete">{`update tasks set done = true where id = $_row.id`}</Mutation>
+</Helmet>
+<For each={$tasks} keyBy="id">
+  <p>{$_row.label}</p>
+  <Button run="$complete">Complete</Button>
+</For>
+<DataTable data="$tasks" rowKey="id">
+  <Column col="label" />
+  <Column col="done"><Button run="$complete">Complete</Button></Column>
+</DataTable>
+```
+
+Actions require unique, non-null string or number keys (`keyBy` or `rowKey`).
+A click captures the current row as `$_row`; buttons do not supply an edited
+`$_value`. Pending state and errors belong to the row and button, surviving
+reordering and temporary unmounting. The pending button is disabled; other
+rows remain usable. Failures appear beside the button; retry captures the
+current row. Existing mutation access checks and query refresh behavior apply.
+Captures and static previews disable actions. This example changes local
+reader state; declare a dataset-backed Mutation to persist shared changes.
