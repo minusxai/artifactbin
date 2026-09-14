@@ -15,6 +15,7 @@ import { runCliAuth } from '../lib/auth.ts';
 import { readDotEnv } from '../lib/env.ts';
 import { scrubSecrets } from '../lib/secrets.ts';
 import { sessionTasks, iframeTasks, fixtureMarkup, sessionVerdict } from '../lib/mx-trials/tasks.mjs';
+import { trialArtifactId, trialUpstreamUrl, writeTrialError } from '../lib/mx-trials/transport.ts';
 
 // This executable owns its environment boundary; provider custody remains in this process.
 const track = process.argv[2], out = path.resolve(process.argv[3] ?? 'tmp/mx-trials');
@@ -45,7 +46,7 @@ const proxy=http.createServer(async(req,res)=>{
   try {
     const bytes=await readBody(req);
     const body=req.url==='/api/browser-sessions'?JSON.parse(bytes.toString()||'{}'):null;
-    const response=await fetch('http://127.0.0.1:3391'+req.url,{method:req.method,headers:{...req.headers,host:'127.0.0.1:3392'},...(bytes.length?{body:bytes}:{}),redirect:'manual'});
+    const response=await fetch(trialUpstreamUrl(req.url),{method:req.method,headers:{...req.headers,host:'127.0.0.1:3392'},...(bytes.length?{body:bytes}:{}),redirect:'manual'});
     if(body&&active){
       const result=await response.json();
       if(body.op==='script'){active.ids.add(body.session_id);active.scriptIds.add(body.execution_id);}
@@ -58,7 +59,7 @@ const proxy=http.createServer(async(req,res)=>{
     const headers=Object.fromEntries(response.headers);delete headers['content-encoding'];delete headers['content-length'];
     const cookies=response.headers.getSetCookie();if(cookies.length)headers['set-cookie']=cookies;
     res.writeHead(response.status,headers);if(response.body)Readable.fromWeb(response.body).on('error',()=>res.destroy()).pipe(res);else res.end();
-  }catch(error){res.writeHead(502);res.end(scrubSecrets(String(error.message),[key]));}
+  }catch(error){writeTrialError(res,error,[key]);}
 });
 await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(3392,'127.0.0.1',resolve);});
 const base='http://127.0.0.1:3392', dataDir=path.join(work,'server');fs.mkdirSync(dataDir,{mode:0o700});
@@ -71,7 +72,7 @@ try {
     const response=await fetch(base+route,{method,headers:{Authorization:`Bearer ${credential.token}`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
     const value=await response.json();if(!response.ok)throw new Error(JSON.stringify(value));return value;
   };
-  const publish=async (code,includeWidget=track==='iframe')=>{const value=await api('/api/artifacts',{markup:fixtureMarkup(code,includeWidget)});if(!value.id)throw new Error(JSON.stringify(value));return value.id;};
+  const publish=async (code,includeWidget=track==='iframe')=>{const value=await api('/api/artifacts',{markup:fixtureMarkup(code,includeWidget)});return trialArtifactId(value.id);};
   const script=async(session_id,code,create=false)=>{
     const execution_id=randomUUID();let result=await api('/api/browser-sessions',{op:'script',session_id,execution_id,create,code});
     while(['running','queued'].includes(result.status)){await sleep(100);result=await api('/api/browser-sessions',{op:'status',session_id,execution_id});}

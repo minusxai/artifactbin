@@ -1,7 +1,39 @@
 import { expect, it } from 'vitest';
+import { createServer } from 'node:http';
+import { trialArtifactId, trialUpstreamUrl, writeTrialError } from '../lib/mx-trials/transport';
 import { runDataflow } from '../../services/app/lib/sql/run-dataflow';
 import { validateMarkupStructure } from '../../services/app/lib/story/local-validation';
 import { fixtureMarkup, sessionVerdict } from '../lib/mx-trials/tasks.mjs';
+
+it('pins the relay origin and rejects authority and malformed request targets', () => {
+  expect(trialUpstreamUrl('/api/browser-sessions?x=1').href).toBe('http://127.0.0.1:3391/api/browser-sessions?x=1');
+  for (const target of ['@evil.test/', '//evil.test/', '/\\evil.test/', 'http://evil.test/', '', '/a\r\nb']) {
+    expect(() => trialUpstreamUrl(target), target).toThrow();
+  }
+});
+
+it('rejects non-ID response values before they reach a harness command', () => {
+  expect(trialArtifactId('Abc123')).toBe('Abc123');
+  for (const value of ['abc123; echo bad', '--help', '../abc123', '<script>', null, {}, 123456]) {
+    expect(() => trialArtifactId(value)).toThrow();
+  }
+});
+
+it('serves scrubbed errors as non-sniffable text, never HTML', async () => {
+  const server = createServer((_req, res) => writeTrialError(res, new Error('<script>secret</script>'), ['secret']));
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('No test listener');
+    const response = await fetch(`http://127.0.0.1:${address.port}`);
+    expect(response.status).toBe(502);
+    expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(await response.text()).not.toContain('secret');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
 it('rejects self-reported success when the observed state or write count is wrong', () => {
   const page = {url:'/a/abcdef',signals:{region:{value:'North'},taskTitle:{value:'untouched'},tasks:{value:{rows:[{title:'Existing'}]}}}};
   const evidence = {pages:[page],executions:[{session_id:'one',result:'NOT_WRITABLE'}],sourceChanged:false};
