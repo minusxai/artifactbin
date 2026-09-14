@@ -68,6 +68,11 @@ describe('the registry is curated, not generated', () => {
     }
   });
 
+  it('the read-only dataset fix names the command that publishes one writable', () => {
+    const mutate = OPERATIONS.find((op) => op.name === 'mutate_dataset')!;
+    const refusal = mutate.errors.find((e) => e.code === 'dataset_read_only')!;
+    expect(refusal.fix).toContain('--type dataset --access readwrite');
+  });
   it('the error vocabulary has a fix per code, no code twice within an operation', () => {
     for (const op of OPERATIONS) {
       const codes = op.errors.map((e) => e.code);

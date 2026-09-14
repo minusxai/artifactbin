@@ -278,7 +278,7 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
         continue;
       }
       if (r.access !== 'readwrite') {
-        details.push(`ref:${use.id} is read-only — a <Mutation> needs a dataset with access: readwrite (set it on create or PUT, PATCH /api/my/artifacts/${use.id} { "access": "readwrite" }, or from the dataset's share menu)`);
+        details.push(`ref:${use.id} is read-only — a <Mutation> needs a writable dataset: publish it with afbin push <file> --type dataset --access readwrite (API: set access on create or PUT, PATCH /api/my/artifacts/${use.id} { "access": "readwrite" }, or use the dataset's share menu)`);
         continue;
       }
     }
