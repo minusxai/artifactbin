@@ -14,7 +14,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin validate report.jsx`, `afbin push report.jsx`. For a new artifact, write the file, then validate and push the same way. Share its returned URL as asked.
 - Few turns, in this order: `afbin help <template>` (ONE call prints every reference you need, so read that instead of the files one by one), write the whole document, `afbin validate`, `afbin push`. A successful push IS the verification: the head is your file. Skip pulling, diffing, exporting, screenshotting or grepping it afterwards; to improve it, edit and push again.
 - Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Creating another artifact is a deliberate fork: copy the file and remove those five fields.
-- Only export screenshots if you can view images; otherwise check the markup.
+- Publishing is the check, whether or not you can view images. If you must look, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write you retry push to recover its result.
 
 `afbin -h`, `afbin <command> -h` and `afbin help <topic>` work offline and print the same references that sit in `references/` beside this file; bare `afbin help` prints this file's absolute location, so never search the filesystem for them.

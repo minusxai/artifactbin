@@ -204,7 +204,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
-export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again.';
+export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}
 /**
  * Eager, offline skill installation for the detected or saved harnesses. Runs before every command,
