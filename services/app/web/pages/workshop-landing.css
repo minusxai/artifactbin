@@ -567,6 +567,7 @@
   margin: 0; font: 400 4.4cqw/.99 Georgia, serif; letter-spacing: -.055em;
 }
 .workshop-pitch h1 em { color: #1b4da5; font-weight: 400; }
+.workshop-pitch-accent { color: #1b4da5; }
 .workshop-pitch > p { max-width: 26cqw; margin: 1.4cqw 0 1.8cqw; font: 1.08cqw/1.5 var(--font-sans), sans-serif; }
 .workshop-pitch-actions { display: flex; align-items: center; gap: 1.3cqw; }
 .workshop-pitch-actions button {
@@ -721,7 +722,7 @@
   .workshop-pitch-button-hint { font-size: 10px; gap: 5px; }
 }
 
-.workshop-pitch > p:not(.workshop-pitch-status) { margin-bottom: 1.1cqw; }
+.workshop-pitch > p:not(.workshop-pitch-status) { max-width: none; width: 100%; margin-bottom: 1.1cqw; }
 .workshop-pitch-command { width: 100%; }
 .workshop-pitch-command { display: flex; align-items: center; gap: 8px; }
 .workshop-pitch-command code { flex: 1; min-width: 0; font: inherit; overflow-wrap: anywhere; }
