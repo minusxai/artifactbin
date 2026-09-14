@@ -327,10 +327,20 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // the start document is not blank — it serves "Untitled / Waiting for your agent…", so "has
   // content" cannot tell a written document from an untouched one.
   const scorer = scorerFor(task.kind);
+  const driver = {
+    browser:r.browser,credential:r.credential,origin:r.publicOrigin,
+    createAccount:async(email:string)=>{
+      if(config.deployment)throw new Error('Multi-account smoke requires the isolated local server');
+      const account=await acquireCredential('outbox-oauth',{base:r.productUrl,origin:r.publicOrigin,env:{},email,localOutbox:devOutboxPath(serverDataDir(r.legDir))});
+      registerSecret(account.token);
+      registerSecret(account.cookie);
+      return account;
+    },
+  };
   const driverHeaders = { [DRIVER_HEADER]: '1' };
   const prepared = await prepareTask(
     scorer,
-    { task, base: r.agentBase, id: start.id, token: driverToken, driverHeaders, log: (m) => log(`${leg.label}/${task.id}: ${m}`) },
+    { task, driver, base: r.agentBase, id: start.id, token: driverToken, driverHeaders, log: (m) => log(`${leg.label}/${task.id}: ${m}`) },
     async () => servedDocument(`${r.productUrl}/a/${start.id}/raw?chrome=0`),
   );
   if (!prepared.ok) {
@@ -345,7 +355,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
   const baseline = prepared.baseline;
 
-  const prompt = buildPrompt(task, access, { vision: leg.vision, promptLevel: leg.promptLevel });
+  const prompt = buildPrompt(prepared.fixture?.brief?{...task,brief:task.brief+'\n\n'+prepared.fixture.brief}:task, access, { vision: leg.vision, promptLevel: leg.promptLevel });
   fs.writeFileSync(path.join(runDir, 'prompt.txt'), prompt);
 
   const ctx = { leg, prompt, cwd, homeDir, apiKey: r.apiKey, maxTurns: config.run.maxTurns, maxBudgetUsd: config.run.maxBudgetUsd, skills };
@@ -455,6 +465,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // them gating, rather than reporting an agent that ignored the comment.
   const checked = await runChecks(scorer, {
     task,
+    driver, fixture:prepared.fixture,
     scoredId: targetId,
     productUrl: r.productUrl,
     startId: start.id,

@@ -78,3 +78,22 @@ measurement behind the credential contract; it is not a CI task or an unused run
 Stage eval changes by explicit filename; never use `git add -A` after an eval run. Review transcripts and
 metrics before staging so task output and credentials cannot enter a commit. Only checks explicitly
 selected by a task determine its verdict; other measurements remain informational.
+
+## Bounded user-type smoke
+
+The PR workflow runs `users` alongside the existing installed-agent task group,
+using OpenCode and the same shipped CLI/skills. Its natural-language brief asks
+for a two-row tracker; it does not supply `memberOf`, `self`, `$_me`, or component
+syntax. Driver setup registers a second editor and an outsider through real
+login, and shares the starting report. After authoring, the driver grants the
+editor access to the agent-created dataset, then checks the native schema,
+searchable picker, filter, persistent identity labels, completion by the second
+account, rejected outsider/forged writes, trusted actor binding, and preserved
+historical identity on an unrelated edit.
+
+`evals/bounded.ts` runs this one eval with `--no-retry` and a 120-second deadline.
+The clock includes eval startup, account/CLI setup, agent work and scoring;
+standard CI checkout/install/build prerequisites are outside it. Expiry kills
+the eval's process tree, including detached harness children, and exits 124.
+The log records total elapsed milliseconds and PASS/FAIL/TIMEOUT. This is one
+scenario, not evidence for every possible user-field schema or every model.

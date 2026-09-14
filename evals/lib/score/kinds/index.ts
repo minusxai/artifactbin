@@ -4,6 +4,7 @@
  * Kept apart from `./contract` (the types every kind imports) so a kind module
  * can throw a `SetupFailure` without importing the module that imports it.
  */
+import {USER_CHECKS,userScorer} from './users';
 import type { TaskKind, TaskScorer } from './contract';
 import { TASK_KINDS } from './contract';
 import { COMMENT_CHECKS, commentScorer } from './comment';
@@ -16,6 +17,7 @@ const SCORERS: Record<TaskKind, TaskScorer> = {
   publish: publishScorer,
   comment: commentScorer,
   tracker: trackerScorer,
+  users: userScorer,
 };
 
 export function scorerFor(kind: string): TaskScorer {
@@ -35,5 +37,5 @@ export function checkNamesFor(kind: string): readonly string[] {
  * literal types: a task JSON's `checks` is a zod enum, and a widened `string[]`
  * would take the type with it.
  */
-export const KIND_CHECK_NAMES = [...PUBLISH_CHECKS, ...COMMENT_CHECKS, ...TRACKER_CHECKS] as const;
+export const KIND_CHECK_NAMES = [...PUBLISH_CHECKS, ...COMMENT_CHECKS, ...TRACKER_CHECKS, ...USER_CHECKS] as const;
 

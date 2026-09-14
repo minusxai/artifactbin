@@ -319,11 +319,12 @@ jobs:
   # THE FOUR TASKS HERE ARE ALREADY PARALLEL — `run.concurrency` is 4 in evals/config.json, and the
   # leg's wall clock is its slowest task, not their sum (measured on main 34697938970: comment 42.4s,
   # data 65.9s, edit 26.9s, cli 34.5s — 170s of work in a 92s step). So this does NOT become a
-  # per-task job matrix: that would pay this job's ~85s of fixed setup four times over to parallelise
+  # per-task job matrix for those four: that would pay this job's ~85s of fixed setup four times over to parallelise
   # work that is already parallel.
+  # The users row is one independently bounded two-account flow, parallel to the existing four.
   agent-smoke:
     needs: [plan]
-    name: agent smoke (${{ matrix.mode }})
+    name: agent smoke (${{ matrix.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -331,7 +332,11 @@ jobs:
       matrix:
         include:
           - mode: installed
+            name: installed
             tasks: comment,data,edit,cli
+          - mode: installed
+            name: users
+            tasks: users
     if: needs.plan.outputs.agent-smoke == 'true' && vars.AGENT_SMOKE_ENABLED == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -400,19 +405,24 @@ jobs:
       - run: npm run build
       - run: |
           umask 077
-          npm run eval -- --ci --run-as=eval-agent --out="$RUNNER_TEMP/agent-smoke-metrics" \
+          if [ '${{ matrix.name }}' = users ]; then
+            eval_command=(node --import tsx evals/bounded.ts)
+          else
+            eval_command=(npm run eval --)
+          fi
+          "${eval_command[@]}" --ci --run-as=eval-agent --out="$RUNNER_TEMP/agent-smoke-metrics" \
             --tasks=${{ matrix.tasks }} --mode=${{ matrix.mode }} \
             --harness=opencode \
             --model=fireworks-ai/accounts/fireworks/models/glm-5p3-flash \
             --api-key-env=FIREWORKS_API_KEY \
-            --label='opencode · glm-5p3-flash · ${{ matrix.mode }}' \
+            --label='opencode · glm-5p3-flash · ${{ matrix.name }}' \
             --price-in=0.15 --price-out=0.5 --price-cache-read=0.03
         env:
           FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: ${{ !cancelled() }}
         with:
-          name: agent-smoke-metrics-${{ matrix.mode }}
+          name: agent-smoke-metrics-${{ matrix.name }}
           path: ${{ runner.temp }}/agent-smoke-metrics/
           include-hidden-files: true
           retention-days: 14
