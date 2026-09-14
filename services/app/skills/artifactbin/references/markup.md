@@ -103,12 +103,18 @@ queries for rows that arrive after startup; see the script API reference.
   `bg-background` follow the active theme; hardcoded palettes fight it. ONE
   bespoke accent (`text-[#e2483d]`) is legitimate for the one bold moment —
   it will not follow a later theme switch.
-- `theme`, `template` and `colorMode` are top-level fields of the publish
-  call, not Helmet content. No genre named → **default to `scrolly`**; torn →
+- `theme`, `template` and `colorMode` are top-level fields of the YAML fence
+  at the top of the file you push, not Helmet content. No genre named →
+  **default to `scrolly`**; torn →
   ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
-Social preview: [upload and crop](publishing-versions.md).
+Social preview: two optional `<meta>` tags inside `<Helmet>`, pushed with the
+document like any other source. `<meta name="artifactbin:og-image"
+content="ref:<imageId>" />` names the card image (publish it first with `afbin
+push cover.png`); `<meta name="artifactbin:og-crop" content="x=0;y=0;width=1600"
+/>` frames the document shot instead — 40:21 out of a 1600px-wide layout, width
+400–1600. Omit both for the default full-width framing.
 
 ## Images and icons
 
