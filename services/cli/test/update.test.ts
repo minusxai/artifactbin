@@ -157,3 +157,16 @@ test('background downloads do not hold the normal CLI state lock',async()=>{
   release();await task;
  }finally{release?.();await rm(home,{recursive:true,force:true});}
 });
+
+test('superseded recovery journals cannot block a newer installation forever',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-superseded-')),exe=join(home,'afbin');
+ try{
+  await writeFile(exe,'old binary',{mode:0o755});
+  const options={home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone' as const,path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],background:true,verifyExecutable:async()=>{},fetch:transport()};
+  await assert.rejects(updateCli({...options,afterReplace:()=>{throw new Error('crashed');}}),/crashed/);
+  await writeFile(exe,'newer installation');
+  const result=await updateCli({...options,version:'10.0.0',fetch:async()=>assert.fail('recovery is local')});
+  assert.ok('version' in result);assert.equal(result.version,'10.0.0');assert.equal(await readFile(exe,'utf8'),'newer installation');
+  await assert.rejects(stat(join(home,'.artifactbin','pending-update.json')),{code:'ENOENT'});
+ }finally{await rm(home,{recursive:true,force:true});}
+});

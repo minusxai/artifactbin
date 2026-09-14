@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {isSea} from 'node:sea';
 import {autoUpdatePolicy,normalizeServer} from './config';
@@ -10,6 +11,7 @@ export const UPDATE_RETRY_MS=60*60*1000;
 export interface BackgroundOptions {
  home:string;
  server:string;
+ launchId?:string;
  env?:NodeJS.ProcessEnv;
  standalone?:boolean;
  executable?:string;
@@ -18,7 +20,7 @@ export interface BackgroundOptions {
  update?:()=>Promise<unknown>;
 }
 
-interface CheckState {attemptedAt:number;nextAt:number}
+interface CheckState {attemptedAt:number;nextAt:number;launchId?:string}
 const WORKER_SCOPE='@background-update-worker';
 function due(state:CheckState|undefined,now:number):boolean {
  return !state||!Number.isFinite(state.attemptedAt)||!Number.isFinite(state.nextAt)||state.attemptedAt>now||state.nextAt<=now||state.nextAt-state.attemptedAt>UPDATE_CHECK_MS;
@@ -38,7 +40,19 @@ export async function scheduleBackgroundUpdate(options:BackgroundOptions):Promis
   const server=normalizeServer(options.server);
   state=await State.openReadOnly(options.home,options.env);
   if(!due(state?.get<CheckState>(HOME_SCOPE,'background-update',server)?.value,(options.now??Date.now)()))return;
-  (options.launch??launchDetached)(options.executable??process.execPath,[BACKGROUND_UPDATE_ARG,options.home,server],options.env??process.env);
+  state?.close();state=null;
+  const launchId=await withLock(options.home,WORKER_SCOPE,async()=>{
+   const writable=await State.open(options.home,options.env,{waitMs:0});
+   try {
+    const attemptedAt=(options.now??Date.now)();
+    if(!due(writable.get<CheckState>(HOME_SCOPE,'background-update',server)?.value,attemptedAt))return;
+    const launchId=randomUUID();
+    writable.put(HOME_SCOPE,'background-update',server,{attemptedAt,nextAt:attemptedAt+UPDATE_RETRY_MS,launchId});
+    return launchId;
+   }finally{writable.close();}
+  },{waitMs:0,reentrant:false},options.env);
+  // Release before spawn so a fast worker cannot collide with its launcher's lock.
+  if(launchId)(options.launch??launchDetached)(options.executable??process.execPath,[BACKGROUND_UPDATE_ARG,options.home,server,launchId],options.env??process.env);
  }catch{/* Updates never affect command output or success. */}
  finally{state?.close();}
 }
@@ -50,7 +64,8 @@ export async function runBackgroundUpdate(options:BackgroundOptions):Promise<voi
    const state=await State.open(options.home,options.env);
    try {
     const attemptedAt=now();
-    if(!due(state.get<CheckState>(HOME_SCOPE,'background-update',server)?.value,attemptedAt))return;
+    const previous=state.get<CheckState>(HOME_SCOPE,'background-update',server)?.value;
+    if(options.launchId ? previous?.launchId!==options.launchId : !due(previous,attemptedAt))return;
     // Persist before network I/O; a killed worker leaves a finite retry time, never a stale lock.
     state.put(HOME_SCOPE,'background-update',server,{attemptedAt,nextAt:attemptedAt+UPDATE_RETRY_MS});
    }finally{state.close();}
@@ -63,8 +78,8 @@ export async function runBackgroundUpdate(options:BackgroundOptions):Promise<voi
  }catch{/* Busy, offline, disabled and broken local state are all best-effort skips. */}
 }
 /** The detached process has a hard lifetime bound, including slow-but-progressing downloads. */
-export async function backgroundUpdateMain(args:string[]):Promise<void>{
- if(args.length!==2||!isSea())return;
- const deadline=setTimeout(()=>process.exit(0),5*60*1000);
- try{await runBackgroundUpdate({home:args[0],server:args[1]});}finally{clearTimeout(deadline);}
+export async function backgroundUpdateMain(args:string[],options:Pick<BackgroundOptions,'standalone'|'update'>&{deadlineMs?:number}={}):Promise<void>{
+ if(args.length!==3||!(options.standalone??isSea()))return;
+ const deadline=setTimeout(()=>process.exit(0),options.deadlineMs??5*60*1000);
+ try{await runBackgroundUpdate({home:args[0],server:args[1],launchId:args[2],...options});}finally{clearTimeout(deadline);}
 }

@@ -62,15 +62,16 @@ async function privateFile(path: string): Promise<void> {
 export class State {
   private constructor(private readonly db: DatabaseSync, readonly path: string) {}
 
-  static async open(home: string, env: NodeJS.ProcessEnv = process.env): Promise<State> {
+  static async open(home: string, env: NodeJS.ProcessEnv = process.env, options: {waitMs?:number} = {}): Promise<State> {
     const path = join(configDir(home, env), 'state.sqlite');
     await privateFile(path);
     const {DatabaseSync} = loadSqlite();
     const db = new DatabaseSync(path);
+    try {
     await chmod(path, 0o600);
     db.exec(`
+      PRAGMA busy_timeout = ${Math.max(0,Math.floor(options.waitMs??5000))};
       PRAGMA journal_mode = WAL;
-      PRAGMA busy_timeout = 5000;
       PRAGMA synchronous = FULL;
       CREATE TABLE IF NOT EXISTS records (
         scope TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL,
@@ -79,6 +80,7 @@ export class State {
       );
     `);
     return new State(db, path);
+    }catch(error){db.close();throw error;}
   }
 
   /** Nonblocking scheduling read: no schema setup, writes, or lock wait on the foreground path. */
