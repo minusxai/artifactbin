@@ -54,9 +54,11 @@ export function normalizeServer(value: string): string {
  * `.env` (an installer served from a self-hosted origin records it through `afbin setup --server`),
  * else the public server.
  */
-export async function defaultServer(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<string> {
+/** The origin the environment or `.env` selects, or nothing: the recorded default behaves exactly like an exported `ARTIFACTBIN_URL`. */
+export async function exportedServer(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<string | undefined> {
   const primary = await readEnvFile(join(configDir(home, env), ".env"));
-  return normalizeServer(env.ARTIFACTBIN_URL ?? primary.ARTIFACTBIN_URL ?? DEFAULT_SERVER);
+  const selected = env.ARTIFACTBIN_URL ?? primary.ARTIFACTBIN_URL;
+  return selected ? normalizeServer(selected) : undefined;
 }
 /**
  * Record `server` as the default origin, without credentials. A first origin only: once `.env` names

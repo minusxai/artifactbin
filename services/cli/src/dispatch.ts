@@ -31,7 +31,7 @@ import {validateMarkupStructure} from '../../app/lib/story/local-validation';
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {loadConnection,defaultServer,saveDefaultServer} from './config';
+import {DEFAULT_SERVER,loadConnection,exportedServer,saveDefaultServer} from './config';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
@@ -57,7 +57,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // The skill and the help text must name the server THIS afbin talks to. Eager
   // init and help both run before the workspace is read, so they use what is
   // knowable that early: an explicit --server, else the exported origin.
-  const declaredServer=typeof flags.server==='string'?flags.server:await defaultServer(home,context.env);
+  // The recorded default (`.env`, written by `setup --server` from a self-hosted installer) selects a server
+  // exactly as an exported ARTIFACTBIN_URL does: codex's `afbin pull <local url>` was still refused as
+  // wrong_server on the first fixed build because only the connection loader read it (eval run local17).
+  const exportedOrigin=await exportedServer(home,context.env);
+  const declaredServer=typeof flags.server==='string'?flags.server:exportedOrigin??DEFAULT_SERVER;
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout('SQL service is ready for offline local queries.\n');return 0;}
@@ -89,7 +93,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   let workspace=await loadWorkspace(context.cwd,home);
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
-  const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??(context.env??process.env).ARTIFACTBIN_URL;
+  const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
   if(['push','pull','delete'].includes(command)&&(!account||command==='pull')&&!flags['dry-run']&&await pendingOperation(workspace))throw new CliError('pending_recovery','Recover the pending operation before changing this workspace.','Repeat the original command and inputs.');
   const pendingFiles=await stagedFiles(workspace.home,workspace.root);
   if(pendingFiles&&['push','pull','delete'].includes(command)&&!flags['dry-run']){

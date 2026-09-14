@@ -4,6 +4,8 @@ import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,stat} from 'node:fs/promise
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
+import {saveConnection} from '../src/config';
+import {digest} from '../src/files';
 import {CliError} from '../src/commands';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
@@ -122,8 +124,15 @@ test('setup --server records a self-hosted origin as the default, once, and neve
   assert.equal(await readFile(join(home,'.artifactbin','.env'),'utf8'),'ARTIFACTBIN_URL=https://self.example\n');
   out.length=0;
   assert.equal(await runCli(['help','--json'],context),0,'no --server: the recorded origin is the one afbin names');
-  assert.ok(out.join('').includes('https://self.example/chat/install.sh'),out.join('').slice(0,300));
-  assert.ok(!out.join('').includes('https://artifactbin.dev'),'the public server is no longer this afbin\'s default');
+  assert.match(out.join(''),/self\.example\/chat\/install\.sh/,out.join('').slice(0,300));
+  assert.doesNotMatch(out.join(''),/artifactbin\.dev/,'the public server is no longer this afbin\'s default');
+  // A link on the recorded origin is this afbin's own server: no --server, no wrong_server (codex, eval run local17).
+  const hosts:string[]=[];const head={id:'abc123',version:1,edit_id:'edit1',state:digest('s1'),markup:'<p id="p001">Head</p>',format:'markup',title:'T',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
+  const request:typeof fetch=async(input)=>{const url=new URL(String(input));hosts.push(url.host);if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${url}`);};
+  await saveConnection({server:'https://self.example',token:'mx_self'},home);
+  out.length=0;
+  assert.equal(await runCli(['pull','https://self.example/a/abc123','--output','doc.jsx','--json'],{...context,fetch:request}),0,out.join(''));
+  assert.deepEqual(hosts,['self.example']);
   assert.equal(await runCli(['setup','--yes','--json','--server','https://other.example'],context),0);
   assert.equal(await readFile(join(home,'.artifactbin','.env'),'utf8'),'ARTIFACTBIN_URL=https://self.example\n','the first origin stays the default');
  }finally{await rm(home,{recursive:true,force:true});}
