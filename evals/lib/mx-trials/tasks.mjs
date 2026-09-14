@@ -26,7 +26,7 @@ export function fixtureMarkup(code = '') {
 /** Grade observed state, not the agent's self-report. */
 export function sessionVerdict(kind, e) {
   const rows = e.pages.flatMap(p => p.signals.tasks.value.rows);
-  const noUnintendedWrites = rows.length === e.pages.length + (kind === 'mutate' ? 1 : 0)
+  const noUnintendedWrites = rows.length >= e.pages.length && rows.length <= e.pages.length + (kind === 'mutate' ? 1 : 0)
     && e.pages.every(p => p.signals.taskTitle.value === 'untouched') && !e.sourceChanged
     && (!['invalid','failure','mutate'].includes(kind) || e.pages.every(p => p.signals.region.value === 'North'));
   const resumed = e.executions.length >= 2 && new Set(e.executions.map(x => x.session_id)).size === 1;

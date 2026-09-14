@@ -822,7 +822,7 @@ jobs:
     name: job timings
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [plan, checks, node, ui, build, api, gates, image, compose, cli, agent-smoke, test]
+    needs: [plan, checks, node, ui, build, api, gates, image, compose, cli, agent-smoke, mx-agent-trials, test]
     if: always()
     continue-on-error: true
     # This is the one job here that reads the Actions API rather than the repository. A job-level

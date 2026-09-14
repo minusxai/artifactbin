@@ -54,6 +54,7 @@ const proxy=http.createServer(async(req,res)=>{
     // Record source writes while the agent is running, without storing credentials or unrelated bodies.
     if(active&&req.method!=='GET'&&req.method!=='HEAD'&&/^\/api\/artifacts(?:\/|$)/.test(req.url))active.sourceWrite=true;
     const headers=Object.fromEntries(response.headers);delete headers['content-encoding'];delete headers['content-length'];
+    const cookies=response.headers.getSetCookie();if(cookies.length)headers['set-cookie']=cookies;
     res.writeHead(response.status,headers);if(response.body)Readable.fromWeb(response.body).pipe(res);else res.end();
   }catch(error){res.writeHead(502);res.end(scrubSecrets(String(error.message),[key]));}
 });
@@ -82,7 +83,7 @@ try {
     try {
       await page.goto(base+'/a/'+id);await page.waitForFunction(()=>Boolean(window.mx));
       const frame=page.frameLocator('iframe[title="Trial widget"]').frameLocator('iframe');
-      await frame.locator('#rows').waitFor();
+      await frame.locator('#rows').waitFor({state:'attached'});
       const set=region=>page.evaluate(region=>mx.set({region}),region);
       const read=()=>page.evaluate(()=>mx.read(['region','taskTitle','tasks','sales'],{wait:true}));
       const text=expected=>frame.locator('#rows').filter({hasText:expected}).waitFor();
@@ -117,6 +118,8 @@ try {
   const probe=await gradeWidget('describe','');if(probe.passed)throw new Error('Broken widget passed the grader');write('grader-probe.json',probe);
   const control=await gradeWidget('describe',"mx.describe().then(d=>document.getElementById('rows').textContent=[...d.signals,...d.mutations].map(s=>s.name).join(', '));");
   if(!control.passed)throw new Error('Known-correct widget failed the grader: '+JSON.stringify(control));
+  const knownWidget=fs.readFileSync(path.join(repoRoot,'scripts/fixtures/mx-agent/widget.js'),'utf8');
+  for(const kind of ['states','mutate']){const checked=await gradeWidget(kind,knownWidget);write('grader-control-'+kind+'.json',checked);if(!checked.passed)throw new Error('Known-correct '+kind+' control failed: '+JSON.stringify(checked));}
   for(const [kind,brief] of Object.entries(track==='session'?sessionTasks:iframeTasks))for(let repeat=1;repeat<=3;repeat++){
     const name=`${kind}-${repeat}`,home=path.join(work,name),cwd=path.join(home,'task'),piHome=path.join(home,'pi'),evidence=path.join(out,name);
     for(const dir of [home,cwd,piHome,evidence])fs.mkdirSync(dir,{recursive:true,mode:0o700});
@@ -124,7 +127,7 @@ try {
     await runCliAuth({cliBin:bin,homeDir:home,harness:'pi',server:base,publicOrigin:base,cookie:credential.cookie});
     const secrets=[key,credential.token,credential.cookie];
     const connections=path.join(home,'.artifactbin','servers');
-    for(const file of fs.existsSync(connections)?fs.readdirSync(connections):[]){const env=readDotEnv(path.join(connections,file));for(const [name,value]of Object.entries(env))if(/TOKEN/.test(name))secrets.push(value);}
+    for(const file of [path.join(home,'.artifactbin','.env'),...(fs.existsSync(connections)?fs.readdirSync(connections).map(file=>path.join(connections,file)):[])]){const env=readDotEnv(file);for(const [name,value]of Object.entries(env))if(/TOKEN/.test(name))secrets.push(value);}
     const ids=track==='session'?[await publish(''),await publish('')]:[];
     fs.writeFileSync(path.join(piHome,'models.json'),JSON.stringify({providers:{fireworks:{baseUrl:`http://127.0.0.1:${relayPort}/v1`,api:'openai-completions',apiKey:'driver-relay-no-secret',models:[{id:'accounts/fireworks/models/deepseek-v4-flash-0731',reasoning:false,input:['text'],contextWindow:65536,maxTokens:4096,compat:{supportsDeveloperRole:false,supportsReasoningEffort:false}}]}}}));
     const prompt=track==='session'
@@ -141,7 +144,7 @@ try {
       let grade;
       if(track==='iframe'){
         const file=path.join(cwd,'widget.js');
-        if(fs.existsSync(file)){const code=fs.readFileSync(file,'utf8');fs.writeFileSync(path.join(evidence,'widget.js'),code);grade=await gradeWidget(kind,code);}else grade={passed:false,error:'No widget.js submission'};
+        if(fs.existsSync(file)){const code=fs.readFileSync(file,'utf8');fs.writeFileSync(path.join(evidence,'widget.js'),scrubSecrets(code,secrets));grade=await gradeWidget(kind,code);}else grade={passed:false,error:'No widget.js submission'};
       }else{
         const pages=[],executions=[...ledger.scriptIds].map(id=>ledger.records.get(id)).filter(Boolean);
         let subscriptionStopped=false;
@@ -152,8 +155,10 @@ try {
             const after=await script(session_id,`const page=Object.values(pages)[0];return await page.evaluate(async()=>{const before=JSON.stringify(window.observed);await mx.set({region:'North'});await new Promise(r=>setTimeout(r,100));return before===JSON.stringify(window.observed);});`);subscriptionStopped=after.result===true;
           }
         }
-        grade=sessionVerdict(kind,{pages,executions,statusRead:ledger.statusRead,sourceChanged:ledger.sourceWrite,subscriptionStopped});
-        fs.writeFileSync(path.join(evidence,'observations.json'),JSON.stringify({pages,executions:executions.map(x=>({...x,attachments:x.attachments?.map(a=>({mime:a.mime,bytes:Buffer.from(a.base64,'base64').length}))})),grade},null,2));
+        let sourceChanged=false;
+        for(const id of ids){try{if((await api('/api/artifacts/'+id)).version!==1)sourceChanged=true;}catch{sourceChanged=true;}}
+        grade=sessionVerdict(kind,{pages,executions,statusRead:ledger.statusRead,sourceChanged,subscriptionStopped});
+        fs.writeFileSync(path.join(evidence,'observations.json'),scrubSecrets(JSON.stringify({pages,executions:executions.map(x=>({...x,attachments:x.attachments?.map(a=>({mime:a.mime,bytes:Buffer.from(a.base64,'base64').length}))})),grade},null,2),secrets));
       }
       summary={track,kind,repeat,passed:grade.passed&&model.ok&&!run.timedOut&&!run.turnCapped,grade,modelOk:model.ok,modelError:model.error,timedOut:run.timedOut,turnCapped:run.turnCapped,turns:model.turns,toolCalls:model.toolCalls,tokens:model.tokens,costUsd:null,durationMs:run.durationMs};
     }catch(error){active=null;summary={track,kind,repeat,passed:false,infrastructureError:scrubSecrets(String(error.message),secrets)};}
