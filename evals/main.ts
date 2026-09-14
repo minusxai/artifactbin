@@ -328,7 +328,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // content" cannot tell a written document from an untouched one.
   const scorer = scorerFor(task.kind);
   const driver = {
-    browser:r.browser,credential:r.credential,origin:r.publicOrigin,
+    browser:r.browser,credential:r.credential,productUrl:r.productUrl,
     createAccount:async(email:string)=>{
       if(config.deployment)throw new Error('Multi-account smoke requires the isolated local server');
       const account=await acquireCredential('outbox-oauth',{base:r.productUrl,origin:r.publicOrigin,env:{},email,localOutbox:devOutboxPath(serverDataDir(r.legDir))});

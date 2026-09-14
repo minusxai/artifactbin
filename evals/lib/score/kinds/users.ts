@@ -14,16 +14,16 @@ export function nativeUserSchema(columns:DatasetColumn[],report:string):{assigne
 }
 interface Person extends Credential {id:string;label:string}
 interface Fixture {owner:Person;member:Person;outsider:Person}
-async function call(base:string,credential:Credential,origin:string,path:string,body?:unknown,method=body===undefined?'GET':'PUT'):Promise<Response> {
- const response=await fetch(`${base}${path}`,{method,headers:{cookie:credential.cookie,origin,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
+async function call(base:string,credential:Credential,path:string,body?:unknown,method=body===undefined?'GET':'PUT'):Promise<Response> {
+ const response=await fetch(`${base}${path}`,{method,headers:{cookie:credential.cookie,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
  if(response.status>=500)throw new DriverFailure('user flow HTTP',`${method} ${path}: ${response.status}`);
  return response;
 }
-async function person(base:string,origin:string,credential:Credential):Promise<Person> {
- const session=await call(base,credential,origin,'/api/auth/get-session');
+async function person(base:string,credential:Credential):Promise<Person> {
+ const session=await call(base,credential,'/api/auth/get-session');
  const identity=await session.json() as {user?:{id:string}};
  assert.ok(identity.user?.id,'real logged-in account');
- const profile=await (await call(base,credential,origin,'/api/my/profile')).json() as {name?:string;username:string};
+ const profile=await (await call(base,credential,'/api/my/profile')).json() as {name?:string;username:string};
  return {...credential,id:identity.user.id,label:profile.name||profile.username};
 }
 async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
@@ -36,7 +36,7 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
  const targets=[...new Set(datasetMutations(island).map(m=>m.target))];
  assert.equal(targets.length,1,'one persistent task dataset');
  const datasetId=targets[0]!;
- const api=(who:Credential,path:string,body?:unknown,method?:string)=>call(ctx.productUrl,who,driver.origin,path,body,method);
+ const api=(who:Credential,path:string,body?:unknown,method?:string)=>call(ctx.productUrl,who,path,body,method);
  const read=async()=>{
   const res=await fetch(`${ctx.productUrl}/api/artifacts/${datasetId}`,{headers:{authorization:`Bearer ${ctx.token}`}});
   if(!res.ok)throw new DriverFailure('read user dataset',String(res.status));
@@ -126,9 +126,9 @@ export const userScorer={
   const driver=ctx.driver;
   if(!driver)throw new DriverFailure('user fixture','Multi-account driver unavailable');
   const [member,outsider]=await Promise.all(['member','outsider'].map(name=>driver.createAccount(`mxmx_test_users_${ctx.id}_${name}@example.com`)));
-  const [ownerPerson,memberPerson,outsiderPerson]=await Promise.all([driver.credential,member,outsider].map(c=>person(ctx.base,driver.origin,c)));
-  const response=await call(ctx.base,driver.credential,driver.origin,`/api/my/artifacts/${ctx.id}/sharing`,{shares:[{email:member.email,role:'editor'}]});
-  assert.equal(response.status,200,'seed shared report');
+  const [ownerPerson,memberPerson,outsiderPerson]=await Promise.all([driver.credential,member,outsider].map(c=>person(driver.productUrl,c)));
+  const response=await call(driver.productUrl,driver.credential,`/api/my/artifacts/${ctx.id}/sharing`,{shares:[{email:member.email,role:'editor'}]});
+  assert.equal(response.status,200,`seed shared report: ${response.status} ${await response.text()}`);
   return {state:{owner:ownerPerson,member:memberPerson,outsider:outsiderPerson} satisfies Fixture,brief:`This report's second editor is ${memberPerson.label} (${member.email}).`};
  },
  async checks(ctx){

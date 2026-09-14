@@ -34,7 +34,7 @@ export type TaskKind = (typeof TASK_KINDS)[number];
 export interface TaskDriver {
   browser: Browser;
   credential: Credential;
-  origin: string;
+  productUrl: string;
   createAccount(email:string):Promise<Credential>;
 }
 export interface TaskFixture { state:unknown; brief?:string }
