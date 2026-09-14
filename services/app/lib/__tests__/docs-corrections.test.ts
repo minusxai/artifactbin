@@ -116,6 +116,8 @@ describe('the publishing skill', () => {
     expect(databases).not.toContain('/datasets/new');
     expect(databases).not.toContain('set_dataset_policy');
     expect(databases).not.toContain('get_dataset_policy');
+    // And how to GET that YAML for a dataset already published from a CSV.
+    expect(databases).toContain('afbin pull <id> --type dataset --output tasks.yaml');
   });
 });
 

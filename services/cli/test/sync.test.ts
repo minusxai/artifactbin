@@ -629,3 +629,45 @@ test('--policy viewers-write refuses an explicit --access read, before any reque
   assert.match(error.message,/--access readwrite/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+/**
+ * The YAML is where finer policy rules live, and the dataset an agent wants them on was published
+ * from a CSV — so pulling it as a resource must ADOPT that CSV as the YAML's source, not refuse
+ * because the CSV already claims the id (pi lost ten messages to that refusal, 14 Sep).
+ */
+test('pull --output <name>.yaml adopts the CSV a tracked dataset was published from',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-adopt-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ let head:any;let rows=[{id:1,title:'Ship',status:'todo'}];
+ const request:typeof fetch=async(input,init)=>{
+  const url=new URL(String(input));const method=init?.method??'GET';
+  if(url.pathname==='/api/artifacts'&&method==='POST'){
+   head={id:'tasks09',version:1,edit_id:'e1',state:digest('t1'),format:'dataset',access:'readwrite',dataset_policy:null,policy_revision:0};
+   return Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(url.pathname.endsWith('/content'))return new Response(JSON.stringify(rows),{headers:{'Content-Type':'application/json','X-Artifactbin-Account':'usr_one'}});
+  if(url.pathname==='/api/artifacts/tasks09')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  throw new Error(`Unexpected ${method} ${url.pathname}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},home);
+  await writeFile(join(cwd,'tasks.csv'),'id,title,status\n1,Ship,todo\n');
+  assert.equal((await invoke(['push','tasks.csv','--type','dataset','--access','readwrite'])).code,0);
+  const pulled=await invoke(['pull','tasks09','--type','dataset','--output','tasks.yaml']);
+  assert.equal(pulled.code,0,JSON.stringify(pulled.result));
+  const resource=parseResourceFile(await readFile(join(cwd,'tasks.yaml'),'utf8'));
+  assert.equal(resource.type,'dataset');if(resource.type!=='dataset')assert.fail();
+  assert.equal(resource.id,'tasks09');
+  assert.equal(resource.source,'tasks.csv','the YAML points at the file the dataset was published from');
+  assert.equal(resource.access,'readwrite');
+  assert.equal(resource.policy_revision,0);
+  // The rows stay where they were; one path tracks the dataset, and it is the YAML.
+  assert.equal(await readFile(join(cwd,'tasks.csv'),'utf8'),'id,title,status\n1,Ship,todo\n');
+  assert.deepEqual(Object.keys((await tracking(home,cwd)).files),['tasks.yaml']);
+  // A dataset a page has written to is AHEAD of the local rows: the same pull brings them down.
+  rows=[{id:1,title:'Ship',status:'done'}];head={...head,version:2,edit_id:'e2',state:digest('t2')};
+  const refreshed=await invoke(['pull','tasks.yaml']);
+  assert.equal(refreshed.code,0,JSON.stringify(refreshed.result));
+  assert.match(await readFile(join(cwd,'tasks.csv'),'utf8'),/done/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
