@@ -30,6 +30,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseJsx } from '../index';
 import { repairJsxSource } from '../repair';
+import { syntaxErrorDetail } from '../syntax-error';
 
 const escaped = '<article><Helmet><Query name="q">{\\`select 1\\`}</Query></Helmet><p>hi</p></article>';
 
@@ -121,5 +122,244 @@ describe('repairJsxSource — brace counts', () => {
   });
   it('leaves a document alone when the fault is something else', () => {
     expect(repairJsxSource('<article><p>unclosed</article>')).toBeNull();
+  });
+});
+
+/**
+ * THE SAME FAULT TWICE. The repair used to fix the first `viz={{{` (or the first stray `}`), re-parse
+ * ONCE, and refuse everything that still failed — so a document carrying TWO charts built the same
+ * wrong way was refused with `fixed:false` and cost three calls to recover (claude-code scrolly,
+ * production run 15). An agent that makes a mistake once makes it in every chart it writes, so the
+ * repair iterates: fix at the parse error, re-parse, again, bounded — and the message states the
+ * TOTAL, because "collapsed 1" against a document with two would teach the wrong lesson.
+ */
+describe('repairJsxSource — the same fault more than once', () => {
+  const twoTriples = [
+    '<article>',
+    '<Question data="$a" viz={{{"kind":"vega-lite","spec":{"mark":"line"}}}} />',
+    '<Question data="$b" viz={{{"kind":"vega-lite","spec":{"mark":"bar"}}}} />',
+    '</article>',
+  ].join('\n');
+  const twoStrays = [
+    '<article>',
+    '<Question data="$a" viz={{"kind":"line"}}} />',
+    '<Question data="$b" viz={{"kind":"bar"}}}} />',
+    '</article>',
+  ].join('\n');
+  const secondMissing = [
+    '<article>',
+    '<Question data="$a" viz={{"kind":"line"}}} />',
+    '<Question data="$b" viz={{"kind":"bar","spec":{"mark":"bar"}} />',
+    '</article>',
+  ].join('\n');
+
+  it('collapses every `{{{` opening, not the first, and counts them', () => {
+    const out = repairJsxSource(twoTriples);
+    expect(out, 'two occurrences of one fault are still one repairable document').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source.includes('{{{')).toBe(false);
+    expect(out!.repair.code).toBe('unbalanced_braces');
+    expect(out!.repair.message).toMatch(/collapsed 2 `viz=\{\{\{` openings/);
+  });
+
+  it('removes stray closing braces at every site and reports the total', () => {
+    const out = repairJsxSource(twoStrays);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/removed 3 closing braces/);
+    expect(out!.repair.removed).toBe(3);
+    // Each site says "line N" IN FULL. The CLI moves a body line onto its file line by rewriting
+    // `\bline (\d+)\b` past the YAML fence (cli/src/validation.ts); "on lines 2, 3" matches none of
+    // that, and the notice would then name lines that are wrong by the height of the fence.
+    expect(out!.repair.message).toContain('on line 2, line 3');
+    expect(out!.repair.message).not.toMatch(/\blines \d/);
+  });
+
+  it('reports a backtick repair and a brace repair together, never one silently', () => {
+    const both =
+      '<article><Helmet><Query name="q">{\\`select 1\\`}</Query></Helmet>' +
+      '<Question data="$q" viz={{{"kind":"line"}}} /></article>';
+    const out = repairJsxSource(both);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('{`select 1`}');
+    expect(out!.source).toContain('viz={{"kind":"line"}}');
+    expect(out!.repair.message).toMatch(/backslash/);
+    expect(out!.repair.message).toMatch(/viz=\{\{\{/);
+  });
+
+  it('still refuses when a later fault is a genuinely missing brace, and the hint names its line', () => {
+    expect(repairJsxSource(secondMissing), 'where a missing brace belongs is a guess, however many repairs preceded it').toBeNull();
+    const parsed = parseJsx(secondMissing);
+    expect(parsed.ok).toBe(false);
+    const detail = syntaxErrorDetail(secondMissing, parsed as Extract<typeof parsed, { ok: false }>);
+    expect(detail.message).toMatch(/`viz=\{` opened on line 3 is never closed — it needs 1 more `\}`/);
+  });
+});
+
+/**
+ * THE MISSING WRAPPER — the JSON object handed straight to the attribute, with no expression braces
+ * of its own: `viz={"kind": "vega-lite", "spec": {…}}`. Measured on the first live leg of the merged
+ * build (pi deck, local21 run `deck`): the generator serialized the object and wrote ONE brace, the
+ * refusal named it ("the viz attribute is missing its object opening brace"), pi over-corrected to
+ * `viz={{{`, inspected, and fixed it — four calls for a shape that is not a guess.
+ *
+ * It is provable the same way the other two are: an attribute expression whose first non-space
+ * character is a JSON key (`"…":`) or `[` is a VALUE where JSX needs an expression, and there is
+ * exactly one repair — wrap the whole balanced value in one more brace pair. Anything else stays a
+ * refusal, and the wrap is kept only if the document then parses.
+ */
+describe('repairJsxSource — a JSON value where an expression belongs', () => {
+  const one = '<article><Question data="$q" viz={"kind": "vega-lite", "spec": {"mark": "line"}} /></article>';
+  const two = [
+    '<article>',
+    '<Question data="$a" viz={"kind": "vega-lite", "spec": {"mark": "line"}} />',
+    '<Question data="$b" viz={"kind": "vega-lite", "spec": {"mark": "bar"}} />',
+    '</article>',
+  ].join('\n');
+  const mixed = [
+    '<article>',
+    '<Question data="$a" viz={"kind": "vega-lite", "spec": {"mark": "line"}} />',
+    '<Question data="$b" viz={{{"kind": "vega-lite", "spec": {"mark": "bar"}}}} />',
+    '</article>',
+  ].join('\n');
+  const broken = '<article><Question data="$q" viz={"kind": "vega-lite", "spec": {"mark": "line"} /></article>';
+
+  it('wraps the value in the one expression it was missing', () => {
+    const out = repairJsxSource(one);
+    expect(out, 'a JSON value in an attribute is one repair, not a guess').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('viz={{"kind": "vega-lite", "spec": {"mark": "line"}}}');
+    expect(out!.repair.code).toBe('unbalanced_braces');
+    expect(out!.repair.message).toMatch(/wrapped 1 JSON attribute value/);
+    expect(out!.repair.message).toMatch(/on line 1/);
+  });
+
+  it('wraps every occurrence and counts them', () => {
+    const out = repairJsxSource(two);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/wrapped 2 JSON attribute values/);
+    expect(out!.repair.message).toContain('on line 2, line 3');
+    expect(out!.source).toContain('"mark": "line"}}}');
+    expect(out!.source).toContain('"mark": "bar"}}}');
+  });
+
+  it('reports a wrap and a collapsed `{{{` in the same document, each by name', () => {
+    const out = repairJsxSource(mixed);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/wrapped 1 JSON attribute value/);
+    expect(out!.repair.message).toMatch(/collapsed 1 `viz=\{\{\{` opening/);
+    expect(out!.source.includes('{{{')).toBe(false);
+  });
+
+  /**
+   * `options={["day","week"]}` and `value={[{…}]}` open with `[` and are perfectly legal — the kit's
+   * own controls are full of them. The candidate is the attribute the PARSER stopped inside, so a
+   * legal array earlier in the document is not touched and does not cost the repair the document
+   * actually needs (a wrapped legal array cannot parse, so it would have refused the whole file).
+   */
+  it('leaves a legal array attribute alone and still repairs the fault further on', () => {
+    const legal = '<article><Select value="$g" options={["day","week"]} />' +
+      '<Question data="$q" viz={"kind": "vega-lite", "spec": {"mark": "line"}} /></article>';
+    const out = repairJsxSource(legal);
+    expect(out, 'the real fault is still repairable').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('options={["day","week"]}');
+    expect(out!.repair.message).toMatch(/wrapped 1 JSON attribute value/);
+    expect(repairJsxSource('<article><Select options={["day","week"]} /><p>ok</p></article>'), 'a document that parses is never touched').toBeNull();
+  });
+
+  it('still refuses a value that is genuinely broken, keeping the missing-brace hint', () => {
+    expect(repairJsxSource(broken), 'the wrap must parse or the refusal stands').toBeNull();
+    const parsed = parseJsx(broken);
+    expect(parsed.ok).toBe(false);
+    const detail = syntaxErrorDetail(broken, parsed as Extract<typeof parsed, { ok: false }>);
+    expect(detail.message).toMatch(/viz attribute is missing its object opening brace/);
+  });
+});
+
+/**
+ * THE DOUBLE BRACE ON AN ARRAY — the object form applied to a value that is not an object.
+ * `columns={{[{"col":"team", …}]}}`, measured on the merged build (claude-code dashboard, live leg
+ * local23): the door answered "JSX syntax error at line 117, column 78: Unexpected token", no hint,
+ * no repair, and it took two calls to inspect and fix. `attr={{` followed by anything that is not an
+ * object — an array, a string, a number, true/false/null — is one brace too many on each side, and
+ * removing the inner pair is the only repair the shape allows.
+ */
+describe('repairJsxSource — a JSON array in the object form’s braces', () => {
+  const one = '<article><DataTable data="$q" columns={{[{"col":"team","title":"Team"}]}} /></article>';
+  const two = [
+    '<article>',
+    '<DataTable data="$a" columns={{[{"col":"team"}]}} />',
+    '<DataTable data="$b" columns={{[{"col":"region"}]}} />',
+    '</article>',
+  ].join('\n');
+  const mixed = [
+    '<article>',
+    '<DataTable data="$a" columns={{[{"col":"team"}]}} />',
+    '<Question data="$b" viz={{{"kind": "vega-lite", "spec": {"mark": "bar"}}}} />',
+    '</article>',
+  ].join('\n');
+
+  it('removes the extra brace pair and the result parses', () => {
+    const out = repairJsxSource(one);
+    expect(out, 'an array in double braces is one repair, not a guess').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('columns={[{"col":"team","title":"Team"}]}');
+    expect(out!.repair.code).toBe('unbalanced_braces');
+    expect(out!.repair.message).toMatch(/unwrapped 1 JSON array attribute value/);
+    expect(out!.repair.message).toMatch(/on line 1/);
+  });
+
+  it('unwraps every occurrence and counts them', () => {
+    const out = repairJsxSource(two);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/unwrapped 2 JSON array attribute values/);
+    expect(out!.repair.message).toContain('on line 2, line 3');
+    expect(out!.source).toContain('columns={[{"col":"team"}]}');
+    expect(out!.source).toContain('columns={[{"col":"region"}]}');
+  });
+
+  it('reports an unwrap and a collapsed `{{{` object in the same document, each by name', () => {
+    const out = repairJsxSource(mixed);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/unwrapped 1 JSON array attribute value/);
+    expect(out!.repair.message).toMatch(/collapsed 1 `viz=\{\{\{` opening/);
+    expect(out!.source).toContain('columns={[{"col":"team"}]}');
+    expect(out!.source).toContain('viz={{"kind": "vega-lite"');
+  });
+
+  /**
+   * The scanner reads text, so the same characters INSIDE a `<Query>`'s SQL match it — and that text
+   * is content, not markup. The position gate is what keeps the repair off it: the parser stopped at
+   * the stray `}` further on, so that is what gets repaired, and the SQL arrives exactly as written.
+   * Without the gate this document still parses after the edit, so the corruption would be silent.
+   */
+  it('never edits the same characters inside a template literal, and repairs the real fault instead', () => {
+    const inString = '<article><Helmet><Query name="q">{`select \'columns={{[1]}}\' as note from public.rows`}</Query></Helmet>' +
+      '<Question data="$q" viz={{"kind":"table"}}} /></article>';
+    const out = repairJsxSource(inString);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain("select 'columns={{[1]}}' as note");
+    expect(out!.repair.message).toMatch(/removed 1 closing brace/);
+    expect(out!.repair.message).not.toMatch(/unwrapped/);
+  });
+
+  /** The object form on an OBJECT is the correct spelling and must survive untouched. */
+  it('leaves a legal array attribute and a legal `{{…}}` object alone', () => {
+    const legal = '<article><Select value="$g" options={["a","b"]} />' +
+      '<Question data="$q" viz={{"kind": "vega-lite", "spec": {"mark": "line"}}} /><p>ok</p></article>';
+    expect(parseJsx(legal).ok, 'this fixture must already parse or it proves nothing').toBe(true);
+    expect(repairJsxSource(legal)).toBeNull();
+    const withFault = '<article><Select options={["a","b"]} /><DataTable columns={{[{"col":"team"}]}} /></article>';
+    const out = repairJsxSource(withFault);
+    expect(out).not.toBeNull();
+    expect(out!.source).toContain('options={["a","b"]}');
+    expect(out!.source).toContain('columns={[{"col":"team"}]}');
   });
 });

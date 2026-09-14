@@ -20,7 +20,8 @@ import {reconcileDocument} from './reconcile';
 import {stat} from 'node:fs/promises';
 import {parseResourceFile,type ResourceSource} from './resource-file';
 import {prepareResourcePull} from './resource-pull';
-interface PullTarget {id:string;version?:number;path?:string;directory?:string;before:Buffer|null;previousPath?:string}
+/** `adopt` is the row file a dataset was published from, becoming the pulled YAML's `source`. */
+interface PullTarget {id:string;version?:number;path?:string;directory?:string;before:Buffer|null;previousPath?:string;adopt?:string}
 export async function preparePull(workspace:Workspace,args:string[],force=false,server=workspace.tracking?.server,output?:string):Promise<PullTarget[]>{
  if(output&&!args.length)throw new CliError('invalid_output','--output requires explicit pull targets.');
  // Stdout never establishes tracking, so it resolves identity alone: no destination, no accepted base, no tracked entry.
@@ -49,13 +50,21 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
   const prior=Object.entries(workspace.tracking?.files??{}).find(([,file])=>file.id===id);
   if(directory&&prior)path=join(directory,basename(prior[0]));
   path??=prior?.[0];
-  if(path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity. To inspect the published head instead, run afbin diff --remote <path> or afbin export <id> --format html.');
+  // Pulling a tracked dataset AS a resource file is not a second working copy: the YAML takes over
+  // the identity and the rows it was published from become its `source`, the shape a YAML dataset
+  // already has. Any other second path for one id stays refused.
+  const adopt=path&&prior&&prior[0]!==path&&/\.ya?ml$/i.test(path)&&['.csv','.json'].includes(extname(prior[0]).toLowerCase())?prior[0]:undefined;
+  if(adopt){
+   const bytes=await readOptional(await confinedPath(workspace.root,adopt));
+   if(bytes&&digest(bytes)!==prior![1].file&&!force)throw new CliError('local_changed',`${adopt} has local changes.`,`Push them first, or pull --force to replace them with the published rows.`);
+  }
+  if(!adopt&&path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity. To inspect the published head instead, run afbin diff --remote <path> or afbin export <id> --format html.');
   if(path&&workspace.tracking?.files[path]&&workspace.tracking.files[path].id!==id)throw new CliError('identity_mismatch',`${path} tracks a different artifact.`);
   const before=path?await readOptional(await confinedPath(workspace.root,path)):null;
   const tracked=path?workspace.tracking?.files[path]:undefined;
   if(before&&!force&&(!tracked||ref.version||!path||!(/\.(jsx|ya?ml)$/i.test(path)))&&(!tracked||digest(before)!==tracked.file))throw new CliError('local_changed',`${path} has local changes.`,'Save a backup and inspect afbin diff. Use pull --force only to overwrite this file.');
   if(targets.some(target=>target.id===id))throw new CliError('duplicate_identity',`The selected references address ${id} more than once.`);
-  targets.push({id,...(ref.version?{version:ref.version}:{}),path,directory,before,...(prior&&prior[0]!==path?{previousPath:prior[0]}:{})});
+  targets.push({id,...(ref.version?{version:ref.version}:{}),path,directory,before,...(adopt?{adopt}:{}),...(prior&&prior[0]!==path?{previousPath:prior[0]}:{})});
  }
  return targets;
 }
@@ -111,7 +120,12 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    const head=await client.request<Snapshot>(`/artifacts/${target.id}`);
    checkResourceType(options.type,head);
    if(head.id!==target.id||typeof head.edit_id!=='string'||typeof head.state!=='string'||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');
-   const previous=target.path?workspace.tracking?.files[target.path]:undefined;
+   const tracking=target.path?workspace.tracking?.files[target.path]:undefined;
+   // The adopted row file stands in as the resource's accepted source, so the pull reconciles
+   // against what this workspace already published instead of treating the rows as a stranger's.
+   const adopted=target.adopt?workspace.tracking?.files[target.adopt]:undefined;
+   const adoptedBytes=target.adopt?await readOptional(await confinedPath(workspace.root,target.adopt)):null;
+   const previous=tracking??(adopted&&adoptedBytes?{...adopted,source:{path:target.adopt!,declared:relative(join(target.path??'','..'),target.adopt!)||target.adopt!,bytes:adoptedBytes.toString('base64'),version:adopted.snapshot.version}}:undefined);
    let selected:Snapshot|undefined;
    if(target.version&&target.version!==head.version){
     selected=previous?.versions?.[String(target.version)];
@@ -153,9 +167,11 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    if(!client.account)throw new CliError('unsupported_server','The server did not return account identity.');
    // Backups live under the private state directory; the absolute path is reported so it can be found again.
    const backup=wantsBackup?await localBackup(workspace.home,path,before!):undefined;
-   // A starter (untitled, no template yet) names the agent's next call at the moment it decides what to read.
+   // A starter (untitled, no template yet) names the agent's next call at the moment it decides what to read
+   // AND how to work, so it orders the same progressive flow the brief does: a first push at once, then pushes
+   // that fill the sections. Its previous "write the whole file" ending was the instruction agents followed.
    const starter=snapshot.format==='markup'&&!snapshot.template&&(!snapshot.title||snapshot.title==='Untitled');
-   operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:'pulled',...(starter?{next:'A starter: pick its kind, then afbin help <template> (dashboard, deck, editorial, plan, scrolly) prints everything it needs in one call; write the whole file and afbin push it.'}:{})});
+   operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:'pulled',...(starter?{next:'A starter: pick its kind, then afbin help <template> (dashboard, deck, editorial, plan, scrolly) prints everything it needs in one call; push a FIRST version at once — the title and the section headings, one line each — then fill the sections in further pushes.'}:{})});
    if(target.previousPath)untracked.push(target.previousPath);
    tracked[path]={source,id:head.id,url:typeof head.url==='string'?head.url:`${client.connection.server}/a/${head.id}`,file:digest(acceptedBytes??bytes),snapshot:head,...(previous?.paths?{paths:previous.paths}:{}),...(selected?{selected,versions:{...previous?.versions,[String(selected.version)]:selected}}:previous?.versions?{versions:previous.versions}:{})};
    files.push({path,before:before?digest(before):null,data:bytes});

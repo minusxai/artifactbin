@@ -136,14 +136,14 @@ describe('ordering', () => {
    */
   it('orders by the task\'s own `order`, then by filename', () => {
     const ids = selectTasks(discoverTasks(DIR), { set: 'eval' }).map((t) => t.id);
-    expect(ids).toEqual(['deck', 'dashboard', 'report', 'scrolly', 'comment-image']);
+    expect(ids).toEqual(['deck', 'dashboard', 'report', 'scrolly', 'comment-image', 'tracker']);
   });
 
   it('an unordered task sorts before an ordered one, keeping filename order among equals', () => {
     // Every CI task is unordered, so they come back in filename order — which is
     // what `filesIn` reads, sorted the same way `discoverTasks` sorts.
     expect(selectTasks(discoverTasks(DIR), { set: 'ci' }).map((t) => t.id)).toEqual(filesIn('ci'));
-    expect(selectTasks(discoverTasks(DIR), { set: 'eval' }).map((t) => t.id).at(-1)).toBe('comment-image');
+    expect(selectTasks(discoverTasks(DIR), { set: 'eval' }).map((t) => t.id).at(-1)).toBe('tracker');
   });
 });
 

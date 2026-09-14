@@ -1,4 +1,5 @@
 import {validateDatasetPolicyForRow} from './validation';
+import { policySession, viewerMutationPolicy } from './viewer-policy';
 import type {
   DatasetPolicy,
   DatasetMutationPolicy,
@@ -103,21 +104,13 @@ export async function mutationPolicy(
     throw new Error('Direct SQL requires dataset edit access');
   if (!(await canUseDataPolicy(dataset, actor)))
     throw new Error('Dataset view access is required');
-  const role = 'viewer';
-  const selected = policy.tables.find(
-    (t) => t.table.schema === table.schema && t.table.name === table.name,
+  const selected = viewerMutationPolicy(
+    policy,
+    table,
+    policySession(actor.userId),
   );
   if (!selected) throw new Error('No policy permits writes to this table');
-  return {
-    table: selected,
-    role,
-    session: {
-      'x-hasura-role': role,
-      ...(actor.userId ? { 'x-hasura-user-id': actor.userId } : {}),
-    },
-    operations: ['insert', 'update', 'delete'],
-    execution: policy.execution,
-  };
+  return selected;
 }
 export interface MutationDocument {
   id: string;

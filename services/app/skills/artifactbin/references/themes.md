@@ -18,6 +18,7 @@ In every theme "accent" means the `primary` token (`text-primary`,
 `bg-primary`); the alert/exception colour is `destructive`; the CSS token
 `--accent` is a quiet neutral surface tint, never the accent.
 
+<!--bundle:skip-->
 ## What a theme is
 
 A `theme` is a complete design system — fonts plus the full token palette
@@ -31,3 +32,4 @@ view time, and theme token classes stay legible in both.
 Overriding a theme's tokens with ordinary `:root` CSS in the Helmet style
 block — and the full list of palette and type keys — is documented once, in
 the `<Helmet>` section of [markup.md](markup.md).
+<!--/bundle:skip-->

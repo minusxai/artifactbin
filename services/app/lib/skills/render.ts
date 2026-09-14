@@ -32,7 +32,47 @@ import { COMPUTED_FIGURE_RULE } from '@/lib/agent-guidance';
 import { OPERATIONS } from '@/lib/operations/registry';
 import type { SkillFile } from './tree';
 
-export interface RenderOptions { base: string }
+export interface RenderOptions {
+  base: string;
+  /**
+   * Render the CONDENSED copy: the spans a reference marks as bundle-skippable are dropped rather
+   * than kept. `afbin help <template>` concatenates eight references into one answer, and at 40 KB
+   * Claude Code spilled that answer to a file and read it back in three or four `sed` windows
+   * (production run 15) — the call that exists to save calls cost four. Nothing an author needs is
+   * dropped: what the markers cover is the rationale for a rule, not the rule.
+   */
+  bundle?: boolean;
+}
+
+/**
+ * THE BUNDLE MARKER. A reference marks prose the bundled copy may do without:
+ *
+ *     <!--bundle:skip-->
+ *     Why this rule exists, measured on eval run …
+ *     <!--/bundle:skip-->
+ *
+ * or inline, `rule<!--bundle:skip--> (because …)<!--/bundle:skip-->`. Full rendering — `/docs`, the
+ * installed `references/` files, `afbin help <topic>` — strips the MARKERS and keeps every byte
+ * between them, so the marked file renders exactly as it did before it was marked; only `afbin help
+ * <template>`, which reads eight files at once, drops the spans. One source, two lengths, no fork.
+ */
+const BUNDLE_SPAN = /^[ \t]*<!--bundle:skip-->[ \t]*\r?\n([\s\S]*?)^[ \t]*<!--\/bundle:skip-->[ \t]*\r?\n|<!--bundle:skip-->([\s\S]*?)<!--\/bundle:skip-->/gm;
+
+/** The full text: the markers go, everything they wrap stays, byte for byte. */
+export function stripBundleMarkers(text: string): string {
+  return text.replace(BUNDLE_SPAN, (_, block: string | undefined, inline: string | undefined) => block ?? inline ?? '');
+}
+
+/** The bundled text: the marked spans go with their markers, and the blank lines they leave close up. */
+export function condenseForBundle(text: string): string {
+  return text.replace(BUNDLE_SPAN, '').replace(/\n{3,}/g, '\n\n');
+}
+
+/** An opening marker without its closing one would silently ship the prose it meant to drop. */
+function assertMarkersResolved(text: string, at: string): string {
+  if (text.includes('bundle:skip')) throw new Error(`${at}: an unbalanced <!--bundle:skip--> marker; open and close it on lines of its own, or inline on one line.`);
+  return text;
+}
 
 /** The complete example document the brief inlines verbatim; `afbin help example` prints the same file. */
 export function skillExample(root = path.resolve(process.cwd(), 'skills')): string {
@@ -77,7 +117,7 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
   if (file.ref && entry.startsWith('themes-')) own.theme = REGISTRY_GLOBALS.themes.find((t) => t.name === entry.slice('themes-'.length));
   if (file.ref && entry.startsWith('templates-')) own.template = REGISTRY_GLOBALS.templates.find((t) => t.name === entry.slice('templates-'.length));
   try {
-    return env.renderString(file.body, {
+    const rendered = env.renderString(file.body, {
       ...REGISTRY_GLOBALS,
       base: opts.base,
       // Only the brief inlines the example; a reference that names it is a build failure, by design.
@@ -90,7 +130,9 @@ export function renderSkill(file: SkillFile, opts: RenderOptions): string {
       docsMoreLine: 'Open the relevant local file in `references/` beside this skill.',
       docsIndexHint: 'all beside this file under `references/`',
       ...own,
-    }).replace(/\n{3,}/g, '\n\n');
+    });
+    const marked = (opts.bundle ? condenseForBundle(rendered) : stripBundleMarkers(rendered)).replace(/\n{3,}/g, '\n\n');
+    return assertMarkersResolved(marked, `skills/${file.path}`);
   } catch (error) {
     throw new Error(`skills/${file.path}: ${(error as Error).message}`);
   }

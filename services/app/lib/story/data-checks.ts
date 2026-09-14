@@ -12,7 +12,9 @@ import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
  */
 import { analyzeRowScopes, mutationUsesRow, mutationUsesValue } from './row-scope';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
-import { dryRunMutations, dryRunQueries } from '@/lib/sql/engine';
+import { dryRunMutations, dryRunQueries, isQueryFailure, runMutation } from '@/lib/sql/engine';
+import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
+import type { DatasetMutationPolicy } from '@artifactbin/contracts';
 import { mutationsOf, queryOrder, refName, type Dataflow } from './dataflow';
 import { SIGNALS_TABLE } from './local-target';
 import type { DatasetColumn } from './dataset-shape';
@@ -88,18 +90,64 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   // button that fails on its first click.
   if (mutations.length) {
     const groups=mutations.some(m=>m.source)?mutations.map(m=>[m]):[mutations];
+    const policed:PolicedMutation[]=[];
     for(const group of groups){
       const inputTables={...tables};const prepared=[];
       for(const m of group){
         let sql=m.sql;
-        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,'dataset_rows');sql=compiled.sql;inputTables.dataset_rows={columns:compiled.table.columns};}catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
+        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,'dataset_rows');sql=compiled.sql;inputTables.dataset_rows={columns:compiled.table.columns};
+          if(ref.datasetPolicy){
+            const policy=viewerMutationPolicy(ref.datasetPolicy,compiled.table,placeholderSession(ref.datasetPolicy));
+            if(!policy)throw new Error(`Dataset policy: no policy permits writes to ${compiled.table.schema}.${compiled.table.name}`);
+            policed.push({name:m.name,sql,columns:compiled.table.columns,policy,...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
+          }
+        }catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
         prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
       }
       if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value','_me']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
     }
+    details.push(...await policyRefusals(policed,[...paramNames,'_value']));
   }
   if (details.length) return { kind: 'sql', details };
   return { kind: 'ok', columns, rowSchemas };
+}
+
+interface PolicedMutation {
+  name: string;
+  sql: string;
+  columns: DatasetColumn[];
+  policy: DatasetMutationPolicy;
+  /** The shape of `$_row` where the button sits inside a row scope. */
+  row?: DatasetColumn[];
+}
+
+/**
+ * THE CLICK'S OWN ANALYSIS, AT THE DOOR. A `<Mutation>` against a dataset that
+ * carries a data policy is analyzed here exactly as the write door analyzes
+ * it — same engine, same policy, placeholder bindings (a NULL scalar per
+ * declared Value, a typed `$_row` of the row scope's columns) — because the
+ * statement is authored ONCE and clicked by an entire audience. A denial is
+ * the publisher's 400, naming the mutation and the reason, instead of a button
+ * that answers 403 to every viewer who presses it.
+ *
+ * Analysis ONLY (`policyPreview`): nothing is written, and the target table is
+ * empty, so this costs one throwaway instance per policed mutation.
+ */
+async function policyRefusals(mutations: PolicedMutation[], paramNames: string[]): Promise<string[]> {
+  const out: string[] = [];
+  const params = Object.fromEntries(paramNames.map((n) => [n, null]));
+  for (const m of mutations) {
+    const result = await runMutation({
+      table: { name: 'dataset_rows', rows: [], columns: m.columns },
+      sql: m.sql,
+      params,
+      policy: m.policy,
+      policyPreview: true,
+      ...(m.row ? { row: { columns: m.row, values: {} } } : {}),
+    });
+    if (isQueryFailure(result)) out.push(`<Mutation name="${m.name}">: ${result.error}`);
+  }
+  return out;
 }
 
 /** The message Vega-Lite's normaliser throws for a spec it cannot read, or null for one it can read. */

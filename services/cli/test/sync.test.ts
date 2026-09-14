@@ -10,6 +10,7 @@ import {digest} from '../src/files';
 import {stageRequest,savePendingResponse} from '../src/pending-request';
 import {tracking,readRecord,writeRecord} from './tracking';
 import {parseResourceFile} from '../src/resource-file';
+import {parseDatasetPolicy} from '../../utils/src/dataset-policy';
 import {fork,type ChildProcess} from 'node:child_process';
 import {once} from 'node:events';
 import {cliHarness} from './harness';
@@ -448,7 +449,11 @@ test('a successful publish says the head is the pushed file, so the agent does n
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('pulling a starter names the next call — pick the kind, afbin help <template>, write, push',async()=>{
+// The starter hint is read at the ONE moment the agent decides how to work, so it must say what the
+// brief says: a first push at once carrying the title and the section headings, then pushes that fill
+// them. It used to end "write the whole file and afbin push it" — the opposite instruction, and the
+// one the agent acted on (local21: first markup write at 156–366 s, one version per task).
+test('pulling a starter names the next call — pick the kind, afbin help <template>, push a first version, then fill it',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-pull-starter-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
  const starter={id:'st4rt0',version:1,edit_id:'e1',state:digest('s1'),markup:'<div><h1>Untitled</h1><p>Waiting for your agent…</p></div>',format:'markup',title:'Untitled',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
  const titled={...starter,id:'t1tled',title:'Q3 sales review',template:'dashboard'};
@@ -458,7 +463,240 @@ test('pulling a starter names the next call — pick the kind, afbin help <templ
   await saveConnection({server:'https://example.com',token:'mx_test'},home);
   const a=await invoke(['pull','st4rt0','--output','report.jsx']);assert.equal(a.code,0,JSON.stringify(a));
   assert.match(a.result.operations[0].next,/afbin help <template> \(dashboard, deck, editorial, plan, scrolly\)/);
+  assert.match(a.result.operations[0].next,/push a FIRST version at once/,'the hint orders the first push, not a whole file');
+  assert.match(a.result.operations[0].next,/title and the section headings, one line each/,'it names what that first push carries');
+  assert.match(a.result.operations[0].next,/fill the sections in further pushes/,'and what the later pushes are for');
+  assert.doesNotMatch(a.result.operations[0].next,/write the whole file/,'the contradicting instruction is gone');
   const b=await invoke(['pull','t1tled','--output','sales.jsx']);assert.equal(b.code,0,JSON.stringify(b));
   assert.equal(b.result.operations[0].next,undefined,'a document with a title and a template is not a starter');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * A document's <Mutation source="ref:<id>"> needs its dataset published `access: readwrite`,
+ * and the CLI is the only door an agent drives: `--access` is that door, on the same push.
+ */
+test('push --type dataset --access publishes a writable dataset, changes access later, and stays silent without the flag',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-dataset-access-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ const heads=new Map<string,any>();
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  if(path==='/api/artifacts/preflight')return Response.json({valid:true},{headers:{'X-Artifactbin-Account':'usr_one'}});
+  if(path==='/api/artifacts'){
+   const id=`dsrow0${heads.size+1}`;
+   const head={id,version:1,edit_id:'e1',state:digest(`${id}-1`),format:'dataset',access:body.access??'read'};
+   heads.set(id,head);return Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  const id=path.split('/').pop()!;const previous=heads.get(id);
+  if(previous&&method==='PATCH'){
+   const head={...previous,...body,version:previous.version+1,edit_id:`e${previous.version+1}`,state:digest(`${id}-${previous.version+1}`)};
+   delete head.expectedState;heads.set(id,head);return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},home);
+  await writeFile(join(cwd,'tasks.csv'),'task,done\nship,false\n');
+  const created=await invoke(['push','tasks.csv','--type','dataset','--access','readwrite']);
+  assert.equal(created.code,0,JSON.stringify(created.result));
+  const create=calls.find(call=>call.path==='/api/artifacts'&&call.method==='POST')!;
+  assert.equal(create.body.access,'readwrite','the create carries the requested access');
+  // The reply says what the page may do with it, next to the columns it already names.
+  assert.equal(created.result.operations[0].access,'readwrite');
+  assert.deepEqual(created.result.operations[0].columns,[{name:'task',type:'string'},{name:'done',type:'boolean'}]);
+
+  // Unchanged bytes, changed access: the second push still sends the change.
+  const closed=await invoke(['push','tasks.csv','--access','read']);
+  assert.equal(closed.code,0,JSON.stringify(closed.result));
+  const patch=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.equal(patch.body.access,'read');
+  assert.equal(closed.result.operations[0].access,'read');
+
+  // No flag, no opinion: a plain dataset push sends no access key at all.
+  await writeFile(join(cwd,'notes.csv'),'note\nhello\n');
+  const plain=await invoke(['push','notes.csv','--type','dataset']);
+  assert.equal(plain.code,0,JSON.stringify(plain.result));
+  const second=calls.filter(call=>call.path==='/api/artifacts'&&call.method==='POST').at(-1)!;
+  assert.equal('access' in second.body,false);
+  // The reply still says what the server decided, so read-only is never a silent default.
+  assert.equal(plain.result.operations[0].access,'read');
+
+  // The dry-run shares the same plan, so the preflight sees the access it would publish.
+  await writeFile(join(cwd,'draft.csv'),'a\n1\n');
+  const dry=await invoke(['push','draft.csv','--access','readwrite','--dry-run']);
+  assert.equal(dry.code,0,JSON.stringify(dry.result));
+  assert.equal(calls.filter(call=>call.path==='/api/artifacts/preflight').at(-1)!.body.input.access,'readwrite');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('--access on a dataset YAML must agree with the file, and never applies to a document',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-access-disagree-'));
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>assert.fail('a refused push must not reach the server'),stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'test'},root);
+  await writeFile(join(root,'sales.csv'),'score\n42\n');
+  await writeFile(join(root,'sales.yaml'),'type: dataset\nsource: ./sales.csv\naccess: read\n');
+  const clash=await invoke(['push','sales.yaml','--access','readwrite']);
+  assert.notEqual(clash.code,0);
+  assert.equal(clash.result.error.code,'access_mismatch');
+  assert.match(clash.result.error.message,/--access readwrite/);
+  assert.match(clash.result.error.message,/sales\.yaml/);
+  assert.match(clash.result.error.message,/access: read\b/);
+  await writeFile(join(root,'report.jsx'),'<p>One</p>');
+  const document=await invoke(['push','report.jsx','--access','readwrite']);
+  assert.notEqual(document.code,0);
+  assert.equal(document.result.error.code,'unsupported_access');
+  assert.match(document.result.error.message,/report\.jsx is not a dataset/);
+  // A bare push aims the flag at the datasets it selects; with none it says so instead of publishing silently.
+  const bare=await invoke(['push','--access','readwrite']);
+  assert.notEqual(bare.code,0);
+  assert.equal(bare.result.error.code,'unsupported_access');
+  assert.match(bare.result.error.message,/no dataset was selected/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * The tracker case: a page anyone with the link can update needs BOTH a writable dataset and a data
+ * policy granting the viewer role row writes. One command does both — the policy rides a second
+ * request only because the server refuses policy on a content write, never a second command.
+ */
+test('push --policy viewers-write publishes a dataset the link audience can write, in one command',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ let head:any;
+ const curated=({dataset_policy:_policy,policy_revision:_revision,...rest}:any)=>rest;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  if(path==='/api/artifacts'&&method==='POST'){
+   // The real create reply is a curated wire: it carries access, and NOT policy_revision.
+   head={id:'tasks01',version:1,edit_id:'e1',state:digest('tasks-1'),format:'dataset',access:body.access??'read',policy_revision:0,dataset_policy:null};
+   return Response.json(curated(head),{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='PATCH'){
+   // The server's compare-and-swap: a stale revision writes nothing.
+   if(body.expectedPolicyRevision!==(head.policy_revision??0))return Response.json({error:'state_conflict',currentVersion:head.version,currentState:head.state},{status:409,headers:{'X-Artifactbin-Account':'usr_one'}});
+   head={...head,version:head.version,edit_id:`e${(head.policy_revision??0)+2}`,state:digest(`tasks-${(head.policy_revision??0)+2}`),
+    dataset_policy:body.policy??null,policy_revision:(head.policy_revision??0)+1};
+   return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='PUT'){
+   head={...head,version:head.version+1,edit_id:`v${head.version+1}`,state:digest(`tasks-v${head.version+1}`),access:body.access??head.access};
+   // Like the server's: a content write echoes a curated wire with no policy fields at all.
+   return Response.json(curated(head),{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='GET')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},home);
+  await writeFile(join(cwd,'tasks.csv'),'id,title,status\n1,Ship,todo\n');
+  const published=await invoke(['push','tasks.csv','--type','dataset','--policy','viewers-write']);
+  assert.equal(published.code,0,JSON.stringify(published.result));
+  const create=calls.find(call=>call.path==='/api/artifacts'&&call.method==='POST')!;
+  // A policy for viewers is meaningless on a read-only dataset, so the flag implies the access.
+  assert.equal(create.body.access,'readwrite');
+  assert.equal('policy' in create.body,false,'the server refuses policy on a content write');
+  const patch=calls.find(call=>call.method==='PATCH')!;
+  assert.equal(patch.path,'/api/artifacts/tasks01');
+  assert.equal(patch.body.expectedPolicyRevision,0);
+  assert.equal(patch.body.expectedState,digest('tasks-1'));
+  assert.deepEqual(patch.body.policy,{version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},
+   insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}],
+   update_permissions:[{role:'viewer',permission:{columns:'*',filter:{},check:{}}}],
+   delete_permissions:[{role:'viewer',permission:{filter:{}}}]}]});
+  // The shape the server will parse, proven against the shared parser rather than by hand.
+  assert.deepEqual(parseDatasetPolicy(patch.body.policy),patch.body.policy);
+  assert.equal(published.result.operations[0].access,'readwrite');
+  assert.equal(published.result.operations[0].policy,'viewers-write');
+
+  // Already granted: repeating the command sends nothing.
+  const count=calls.length;
+  const again=await invoke(['push','tasks.csv','--policy','viewers-write']);
+  assert.equal(again.code,0,JSON.stringify(again.result));
+  assert.equal(calls.length,count,'an unchanged policy makes no request');
+
+  // Closing it again is the same one command, and rides the observed revision.
+  const closed=await invoke(['push','tasks.csv','--policy','none']);
+  assert.equal(closed.code,0,JSON.stringify(closed.result));
+  const off=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.equal(off.body.policy,null);
+  assert.equal(off.body.expectedPolicyRevision,1);
+  assert.equal(closed.result.operations[0].policy,'none');
+
+  // New rows AND a grant in one command: the content write cannot carry a policy, and the revision
+  // it must swap on is the head's — never the one this workspace last happened to see.
+  head={...head,policy_revision:5,dataset_policy:null};
+  await writeFile(join(cwd,'tasks.csv'),'id,title,status\n1,Ship,doing\n2,Write,todo\n');
+  const both=await invoke(['push','tasks.csv','--policy','viewers-write']);
+  assert.equal(both.code,0,JSON.stringify(both.result));
+  const last=calls.slice(calls.indexOf(calls.filter(call=>call.method==='PUT').at(-1)!)).map(call=>call.method);
+  assert.deepEqual(last.filter(method=>method!=='GET'),['PUT','PATCH'],'content first, then the policy');
+  const grant=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.equal(grant.body.expectedPolicyRevision,5);
+  assert.equal(both.result.operations[0].policy,'viewers-write');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('--policy viewers-write refuses an explicit --access read, before any request',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-clash-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'test'},root);
+  await writeFile(join(root,'tasks.csv'),'id\n1\n');
+  const out:string[]=[];
+  const code=await runCli(['push','tasks.csv','--access','read','--policy','viewers-write','--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>assert.fail('a contradiction must not reach the server'),stdout:x=>out.push(x),stderr:()=>{}});
+  assert.notEqual(code,0);
+  const error=JSON.parse(out.join('')).error;
+  assert.equal(error.code,'invalid_arguments');
+  assert.match(error.message,/--policy viewers-write/);
+  assert.match(error.message,/--access readwrite/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * The YAML is where finer policy rules live, and the dataset an agent wants them on was published
+ * from a CSV — so pulling it as a resource must ADOPT that CSV as the YAML's source, not refuse
+ * because the CSV already claims the id (pi lost ten messages to that refusal, 14 Sep).
+ */
+test('pull --output <name>.yaml adopts the CSV a tracked dataset was published from',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-adopt-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ let head:any;let rows=[{id:1,title:'Ship',status:'todo'}];
+ const request:typeof fetch=async(input,init)=>{
+  const url=new URL(String(input));const method=init?.method??'GET';
+  if(url.pathname==='/api/artifacts'&&method==='POST'){
+   head={id:'tasks09',version:1,edit_id:'e1',state:digest('t1'),format:'dataset',access:'readwrite',dataset_policy:null,policy_revision:0};
+   return Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(url.pathname.endsWith('/content'))return new Response(JSON.stringify(rows),{headers:{'Content-Type':'application/json','X-Artifactbin-Account':'usr_one'}});
+  if(url.pathname==='/api/artifacts/tasks09')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  throw new Error(`Unexpected ${method} ${url.pathname}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},home);
+  await writeFile(join(cwd,'tasks.csv'),'id,title,status\n1,Ship,todo\n');
+  assert.equal((await invoke(['push','tasks.csv','--type','dataset','--access','readwrite'])).code,0);
+  const pulled=await invoke(['pull','tasks09','--type','dataset','--output','tasks.yaml']);
+  assert.equal(pulled.code,0,JSON.stringify(pulled.result));
+  const resource=parseResourceFile(await readFile(join(cwd,'tasks.yaml'),'utf8'));
+  assert.equal(resource.type,'dataset');if(resource.type!=='dataset')assert.fail();
+  assert.equal(resource.id,'tasks09');
+  assert.equal(resource.source,'tasks.csv','the YAML points at the file the dataset was published from');
+  assert.equal(resource.access,'readwrite');
+  assert.equal(resource.policy_revision,0);
+  // The rows stay where they were; one path tracks the dataset, and it is the YAML.
+  assert.equal(await readFile(join(cwd,'tasks.csv'),'utf8'),'id,title,status\n1,Ship,todo\n');
+  assert.deepEqual(Object.keys((await tracking(home,cwd)).files),['tasks.yaml']);
+  // A dataset a page has written to is AHEAD of the local rows: the same pull brings them down.
+  rows=[{id:1,title:'Ship',status:'done'}];head={...head,version:2,edit_id:'e2',state:digest('t2')};
+  const refreshed=await invoke(['pull','tasks.yaml']);
+  assert.equal(refreshed.code,0,JSON.stringify(refreshed.result));
+  assert.match(await readFile(join(cwd,'tasks.csv'),'utf8'),/done/);
  }finally{await rm(root,{recursive:true,force:true});}
 });

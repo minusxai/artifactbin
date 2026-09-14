@@ -91,6 +91,8 @@ const COMMON_CHECKS = [
    * grading rubric (`lib/local-reads`).
    */
   'no_local_checkout_reads',
+  // Progression and native-markup checks: recorded on every document task, gated where a task lists them.
+  'first_version_early', 'progressive_edits', 'no_iframe',
 ] as const;
 
 /** Every boolean the scorer can produce: the common ones plus every kind's own. */

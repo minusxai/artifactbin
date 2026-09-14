@@ -36,7 +36,7 @@ export const POST = withTokenAuth(async (request: Request, { tokenId, userId, pa
 });
 
 export const DELETE = withTokenAuth(async (_request: Request, { tokenId, userId, params }) => {
-  if (!userId) return json({ error: 'account_required', hint: 'Use a token claimed by your artifactbin account.' }, 403);
+  if (!userId) return json({ error: 'account_required', hint: 'Run `afbin auth` and sign in with an account; an anonymous credential owns no comments to delete.' }, 403);
   const deleted = await deleteAnnotationFor({ tokenId, userId }, params.id, params.annId);
   return deleted ? json({ ok: true }) : json({ error: 'not_found' }, 404);
 });

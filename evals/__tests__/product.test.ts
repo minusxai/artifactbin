@@ -3,7 +3,7 @@
  * never holds the agent's token — the start link handed it to the agent).
  */
 import { describe, it, expect } from 'vitest';
-import { artifactIdFromText, dataflowRows, productMetrics, titleOf } from '../lib/score/product';
+import { artifactIdFromText, dataflowRows, productMetrics, titleOf, usesIframe } from '../lib/score/product';
 
 const served = (html: string, status = 200) => ({ status, html });
 
@@ -139,4 +139,76 @@ describe('artifactIdFromText', () => {
     expect(artifactIdFromText('https://artifactbin.dev/a/AAAAA1 then https://artifactbin.dev/@me/x/BBBBB2-final')).toBe('BBBBB2');
   });
 
+});
+
+/**
+ * `<Iframe>` IS THE ESCAPE HATCH. An agent that cannot make the document's own components do
+ * something reaches for a managed frame and writes raw HTML inside it; we want native markup,
+ * so we measure the reach before we ask anyone to stop.
+ *
+ * Read from what the product SERVES, like every other product metric — and therefore NOT from
+ * the literal tag. `/a/<id>/raw` is the SSR'd document, not its source (services/app/__tests__/
+ * raw-document.test.ts), and `lib/story-ui/registry.ts` renders `<Iframe>` as a
+ * `div[data-mx-managed-frame]`. A case-sensitive `<Iframe` over the served HTML is a constant
+ * true; the marker the renderer emits is the evidence that survives.
+ */
+describe('usesIframe / no_iframe', () => {
+  const FRAME = '<div id="n3" data-mx-managed-frame="" aria-label="Managed frame: Demo" style="height:450px;width:100%"><div style="height:100%"></div></div>';
+
+  it('sees the managed-frame marker the renderer emits for <Iframe>', () => {
+    expect(usesIframe(`<html><body><h1>Demo</h1>${FRAME}</body></html>`)).toBe(true);
+  });
+
+  it('sees the component in the story island even when the marker is not in the body', () => {
+    const island = JSON.stringify({ nodes: [{ type: 'element', tag: 'Iframe', isComponent: true, attributes: [], children: [], selfClosing: true, start: 0, end: 9 }] });
+    expect(usesIframe(`<html><body><script type="application/json" id="mx-story-data">${island}</script></body></html>`)).toBe(true);
+  });
+
+  it('sees a literal <Iframe tag, for a response that does carry source', () => {
+    expect(usesIframe('<Iframe src="https://example.test" height={400} />')).toBe(true);
+  });
+
+  it('is false for a document written in native markup — and not fooled by the word alone', () => {
+    expect(usesIframe('<html><body><h1>Q3</h1><table><tr><td>1</td></tr></table><p>No frames here.</p></body></html>')).toBe(false);
+    // Prose ABOUT the component, a lowercase browser iframe of the reader chrome, and a longer tag.
+    expect(usesIframe('<p>We considered Iframe embeds and rejected them.</p><iframe title="chrome"></iframe><IframeGallery />')).toBe(false);
+  });
+
+  /**
+   * The fixture is the SHAPE THE PRODUCT SERVES: `lib/story/document.ts` puts every document
+   * inside `<body data-mx-story-root><div id="mx-story-root">`. Judging a hand-written page that
+   * carries neither is judging something the scorer never receives.
+   */
+  const document_ = (body: string, title = 'Q3') =>
+    served(`<html><head><title>${title}</title></head><body data-mx-story-root><div id="mx-story-root">${body}</div></body></html>`);
+
+  it('answers true for a published document in native markup, false for one that framed', () => {
+    expect(productMetrics({ served: document_('<h1>Q3</h1><p>Native.</p>'), baseline: null }).noIframe).toBe(true);
+    expect(productMetrics({ served: document_(`<h1>Q3</h1>${FRAME}`), baseline: null }).noIframe).toBe(false);
+  });
+
+  it('is null when nothing was published — an unwritten document is not a clean one', () => {
+    expect(productMetrics({ served: served('', 404), baseline: null }).noIframe).toBeNull();
+    expect(productMetrics({ served: served('<html><body></body></html>'), baseline: null }).noIframe).toBeNull();
+  });
+
+  /**
+   * REGRESSION, live leg run `local21` (pi, tracker task): the agent created its dataset and never
+   * wrote the document, so the artifact the scorer fetched was the DATASET — and `/a/<id>/raw`
+   * answers a dataset with its ROWS AS JSON, not with a document
+   * (`services/app/app/a/[id]/raw/route.ts`, `case 'dataset'`). There is no document markup to
+   * inspect, so the only honest answer is null; the run recorded `no_iframe: false`, which reads
+   * as "the agent used an Iframe" about a document that was never written.
+   */
+  it('is null when the scored artifact is a dataset, whatever its rows happen to contain', () => {
+    const rows = served(JSON.stringify({ rows: [
+      { page: '<div>home</div>', note: 'embedded via <Iframe src="x" />', frame: 'data-mx-managed-frame' },
+    ] }));
+    expect(productMetrics({ served: rows, baseline: null }).noIframe).toBeNull();
+  });
+
+  it('is null for any response that is not a served document, even one full of HTML', () => {
+    // An export, an error page, a bare fragment: none of them is the document this run published.
+    expect(productMetrics({ served: served('<html><body><h1>Not found</h1><p>gone</p></body></html>'), baseline: null }).noIframe).toBeNull();
+  });
 });

@@ -1,0 +1,25 @@
+{
+  "id": "tracker",
+  "kind": "tracker",
+  "order": 6,
+  "template": "dashboard",
+  "brief": "The file tasks.csv in your working directory holds one row per task: an id, a title, an owner, a status (todo, doing or done) and a due date. Publish it as a WRITABLE dataset — a stored dataset only accepts row writes with access: readwrite — then turn the document at the link into a shared tracker titled \"Team tracker, week 38\" — the TITLE being what a browser tab and a shared link preview show. Anyone opening the link should be able to work the tracker in place, not just read it: a table of the tasks where each row carries a button that marks that task done, and a way to add a task — a title and an owner — from the page itself. Across the top, live counts of todo, doing and done that re-run after a write, so the numbers move when a row is completed. Every number must come from the dataset, not be typed in, and the page must be the tracker itself rather than an embedded one. When it is published, reply with the document's URL and nothing else.",
+  "files": {
+    "tasks.csv": "id,title,owner,status,due\n1,Fix login redirect loop,Dana,doing,2026-09-15\n2,Ship weekly digest email,Ravi,todo,2026-09-18\n3,Migrate billing webhooks,Ines,done,2026-09-11\n4,Rewrite onboarding checklist,Tom,todo,2026-09-22\n5,Trim dashboard load time,Dana,doing,2026-09-16\n6,Retire legacy export job,Ravi,todo,2026-09-25\n7,Audit seat licences,Ines,todo,2026-09-19\n8,Publish incident postmortem,Tom,done,2026-09-09\n9,Add row-level audit log,Dana,todo,2026-09-29\n10,Refresh pricing page copy,Ravi,doing,2026-09-17\n11,Consolidate alert channels,Ines,todo,2026-09-24\n12,Draft Q4 hiring plan,Tom,doing,2026-09-30\n13,Patch CSV import encoding,Dana,todo,2026-09-21\n14,Close stale support tickets,Ravi,todo,2026-09-14\n"
+  },
+  "checks": [
+    "published",
+    "used_cli",
+    "used_start_document",
+    "dataset_created",
+    "query_ran",
+    "has_title",
+    "no_console_errors",
+    "no_failed_responses",
+    "no_local_checkout_reads",
+    "uses_row_template",
+    "declares_mutation",
+    "mutation_works",
+    "no_iframe"
+  ]
+}

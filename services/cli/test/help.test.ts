@@ -258,7 +258,7 @@ describe('the bundled teaching and the manual', () => {
     await writeFile(join(root,'sales.csv'),'month,region,revenue\n2026-07-01,East,12\n2026-08-01,West,9\n');
     for(const template of ['editorial','dashboard','deck','scrolly','example']){
      const output:string[]=[];const context={cwd:root,home:root,env:{},interactive:false,stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('bundled teaching must stay offline')};
-     // A template name as the topic prints the whole bundle now; the starter it ends with is validated from the registry.
+     // A template name as the topic prints the whole bundle; the starter is validated from the registry here.
      if(template==='example'){assert.equal(await runCli(['help',template],context),0);await writeFile(join(root,template+'.jsx'),output.join(''));output.length=0;}
      else await writeFile(join(root,template+'.jsx'),helpTopics[template]!);
      assert.equal(await runCli(['validate',template+'.jsx','--json'],context),0,output.join(''));
@@ -377,7 +377,10 @@ describe('the bundled teaching and the manual', () => {
    assert.match(themes,/Available themes: .*modernist/);
    const templates=helpDocument('templates');
    assert.match(templates,/Pick ONE by the content's shape/);
-   assert.match(templates,/Run afbin help <template> for everything that kind of document needs, its starter last/);
+   // The bundle no longer ends with the starter — `afbin pull` and `afbin help <topic>` give it, and
+   // there was no starter for `plan` at all — so the overview must not promise one.
+   assert.match(templates,/Run afbin help <template> for everything that kind of document needs, in one call/);
+   assert.doesNotMatch(helpDocument('templates')+briefDocument(),/starter last/,'nothing still promises a starter the bundle dropped');
   });
 
 });
@@ -418,13 +421,26 @@ test('afbin help --for <template> prints every reference a document of that kind
   out.length=0;
   assert.equal(await runCli(['help','dashboard'],context),0,'a template name as the topic prints the bundle, not the bare starter');
   assert.equal(out.join(''),helpBundle('dashboard'));
-  assert.ok(helpBundle('dashboard').includes(helpTopics['dashboard']),'the starter is still inside it');
-  const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets','## starter: deck'];
-  let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
-  assert.ok(text.includes(helpTopics['templates-deck']));assert.ok(text.includes(helpTopics['design']));
+  // The bundle's first line tells the agent what to DO with the reading it just paid for, and it
+  // says what the brief says: a first version early, then extension — never one whole-document write.
+  assert.ok(text.startsWith('Everything a deck needs, in reading order.'),text.slice(0,80));
+  assert.ok(text.includes('publish a first version early, then extend it in edits'),'the intro teaches progressive publishing');
+  assert.ok(!text.includes('write the whole document'),'the whole-document-then-publish instruction is gone');
+  assert.ok(!text.includes('improve the published version'),'improving a finished document is not the flow any more');
+  const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets'];  let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
+  // Every reference is still there — condensed, never dropped. One load-bearing rule from each of the
+  // three biggest parts stands in for its file, since the bundled copy is no longer the file verbatim.
+  for(const rule of ['<SlideDeck>','font-display','Helmet','public.rows'])assert.ok(text.includes(rule),rule);
   assert.ok(text.includes('Available themes:'),'the themes overview names the choices');
   assert.ok(!text.includes('templates-editorial'),'only the chosen template');
-  assert.ok(Buffer.byteLength(text)<45000,`bundle is ${Buffer.byteLength(text)} bytes; a shell tool shows an agent about 50 KB`);
+  // THE SHELL'S INLINE LIMIT. At 40 KB Claude Code spilled every bundle to a file and read it back in
+  // three or four `sed` windows (production run 15) — the one-call reference became five calls. Claude
+  // Code keeps tool output inline up to ~30,000 characters; 28,000 BYTES holds under that with a 2 KB
+  // margin, and bytes are the conservative measure (UTF-8 punctuation costs more bytes than characters).
+  for(const template of ['deck','dashboard','editorial','plan','scrolly']){
+   const bundle=helpBundle(template);
+   assert.ok(Buffer.byteLength(bundle)<28000,`the ${template} bundle is ${Buffer.byteLength(bundle)} bytes; a spilled bundle costs three reads`);
+  }
   out.length=0;
   assert.equal(await runCli(['help','--for','deck','--json'],context),0);
   assert.equal(JSON.parse(out.join('')).help,helpBundle('deck'));
@@ -432,4 +448,39 @@ test('afbin help --for <template> prints every reference a document of that kind
   assert.equal(await runCli(['help','--for','poster','--json'],context),2);
   const err=JSON.parse(out.join('')).error;assert.equal(err.code,'invalid_choice');for(const t of ["dashboard","deck","editorial","plan","scrolly"])assert.ok(err.fix.includes(t),err.fix);
  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * The dataset a document WRITES to is the one thing the datasets topic never said how to make:
+ * `access: readwrite` was only reachable through a resource YAML file no reference documents.
+ */
+test('the datasets topic names the push flag that publishes a writable dataset',()=>{
+ const datasets=helpTopics['publishing-datasets']!;
+ assert.match(datasets,/--type dataset --access readwrite/);
+ assert.match(datasets,/--policy viewers-write/,'and the grant that lets the link audience write it');
+ assert.match(datasets,/--access <ACCESS>/,'the push help block in the same topic lists the flag');
+ assert.match(datasets,/--policy <POLICY>/);
+ assert.match(commandHelp('push'),/--access <ACCESS>/);
+ assert.match(commandHelp('push'),/--policy <POLICY>/);
+});
+
+/**
+ * THE RECOVERY CATALOGUE SPEAKS afbin, NOT HTTP (workstream F).
+ *
+ * Every fix here is printed by `afbin help errors`, compiled into the installed
+ * skill AND used as the fix of any CliError raised with that code — so it is the
+ * last thing an agent reads before deciding what to do next. An agent holding
+ * only this CLI cannot POST, PATCH or address a route, so a fix that names one
+ * costs it the turn it spends trying.
+ */
+test('every recovery fix is actionable with afbin alone — no routes, methods or curl',async()=>{
+ const {diagnosticCatalog}=await import('../src/diagnostics');
+ for(const [code,entry] of Object.entries(diagnosticCatalog)){
+  assert.ok(!/\/api\/|\bcurl\b|\bPOST\b|\bPATCH\b|\bPUT\b|\bDELETE\b/.test(entry.fix),`${code} fix names an HTTP door: ${entry.fix}`);
+ }
+ // The one that did not name a door but named no afbin path either: "upload the
+ // image as a file" has no upload command — a local path in the document is the
+ // way, and push carries it.
+ assert.match(diagnosticCatalog['image_fetch_failed']!.fix,/afbin push/);
+ assert.ok(!diagnosticCatalog['image_fetch_failed']!.fix.includes('upload the image as a file'));
 });
