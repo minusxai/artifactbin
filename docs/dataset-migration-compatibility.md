@@ -2,7 +2,8 @@
 
 ## Scope and contracts
 
-This first implementation addresses legacy stored-dataset read queries only.
+This implementation addresses legacy stored-dataset read queries and missing
+catalog metadata. Historical exception policy remains separate.
 Production has received a dry run, not an apply. No production content or
 credentials are included here.
 
@@ -44,6 +45,37 @@ execution can ship consistently.
 
 ## Costs and remaining work
 
+### Metadata investigation
+
+The saved production reports contain three conflicting documents referring to
+five source datasets, but no plans/snapshots of those sources. Read-only CLI pulls
+of the first two sources returned 404 under the available identity. This does not
+distinguish missing/deleted records from access restrictions, and the production
+records have not been repaired or verified. A private source-metadata snapshot or
+securely configured admin environment is still needed for that inspection.
+
+Synthetic handler tests established that a valid legacy object key already makes
+its catalog available during preview, regardless of document/dataset ID order.
+There is no demonstrated ordering regression requiring staged writes or a
+proposed-state resolver. Planning and execution now share the same pure metadata
+interpretation to preserve this contract.
+
+The tests exposed a separate inventory bug: an explicit JSON-null catalog was
+omitted in both heads and retained versions, even when its object key made it
+recoverable. Inventory and audit now include those records. Preview stays
+read-only; reviewed apply normalizes their metadata without copying data or
+changing document versions.
+
+Records with neither a catalog nor a nonempty string object key now produce
+explicit blocking diagnostics, including the source ID for dependent queries.
+They remain incomplete in the final audit and are never given invented empty
+datasets. A reader regression test also observed a missing-storage dataset with
+column metadata yielding count zero; the resolver now reports that source as
+unavailable. These checks preserve record bytes for recovery. They do not add
+support for old inline-content storage or discard invalid history.
+
+### Remaining work
+
 Complete materialization uses memory proportional to the stored inputs, as legacy
 document execution did. Source result execution adds work and the server may
 decode the cached object again for the full input; this change is not a streaming
@@ -53,8 +85,9 @@ limits, not production-scale performance or browser verification.
 
 Next milestones remain separate:
 
-1. Reproduce null metadata failures and establish the proposed-catalog validation
-   contract. Do not assume a catalog-ordering cause without evidence.
+1. Inspect the five actual production source records through an authorized private
+   snapshot or admin environment; determine storage/recovery needs. Do not infer
+   their exact metadata from the synthetic reproductions or the CLI's 404s.
 2. Skip and report invalid historical versions while preserving their bytes, as
    authorized by the user. Define exceptions in preview, apply, final audit and
    restore; current-head failures remain blocking. This policy is not implemented

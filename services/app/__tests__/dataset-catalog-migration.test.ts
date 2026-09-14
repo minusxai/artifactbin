@@ -6,6 +6,7 @@ import {POST as query} from '@/app/a/[id]/query/route';
 import {mintToken} from '@/lib/tokens';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 import {POST as adminCatalogRoute} from '@/app/api/admin/dataset-catalog/route';
+import {storeDatasetRows} from '@/lib/story/dataset-store';
 
 const harness = useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
@@ -15,6 +16,74 @@ async function seed(id: string, format: 'dataset'|'markup'|'folder'|'image', sou
 }
 
 describe('dataset catalog migration transaction', () => {
+  it.each([
+    ['aaaaaa','zzzzzz',false], ['zzzzzz','aaaaaa',false],
+    ['aaaaaa','zzzzzz',true], ['zzzzzz','aaaaaa',true],
+  ] as const)('validates legacy catalog state independently of ID order (%s, %s, null=%s)', async(datasetId,documentId,nullCatalog)=>{
+    const stored=await storeDatasetRows([{n:42}]);
+    const meta={objectKey:stored.objectKey,columns:[{name:'n',type:'number'}],...(nullCatalog?{catalog:null}:{})};
+    await seed(datasetId,'dataset',null,meta);
+    const source=`<Helmet><Query name="q">{\`select sum(n) as n from ref_${datasetId}\`}</Query></Helmet>`;
+    await seed(documentId,'markup',source,{});
+    const db=await harness.db();
+    const before=(await db.query('SELECT * FROM artifacts ORDER BY id')).rows;
+    const preview=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10}}));
+    expect(preview.status,await preview.clone().text()).toBe(200);
+    const report=await preview.json();
+    expect(report).toMatchObject({changed:2,datasets:1,documents:1,conflicts:[],dryRun:true,done:false});
+    expect((await db.query('SELECT * FROM artifacts ORDER BY id')).rows).toEqual(before);
+    const expected=Object.fromEntries(report.plans.map((plan:{artifactId:string;fingerprint:string})=>[plan.artifactId,plan.fingerprint]));
+    const apply=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10,dryRun:false,expected}}));
+    expect(apply.status,await apply.clone().text()).toBe(200);
+    expect(await apply.json()).toMatchObject({changed:2,conflicts:[],done:true});
+    const migrated=(await db.query<{meta:Record<string,unknown>}>('SELECT meta FROM artifacts WHERE id=$1',[datasetId])).rows[0];
+    expect(migrated.meta.catalog).toMatchObject({kind:'stored',tables:[{objectKey:stored.objectKey}]});
+    const result=await query(request(`/a/${documentId}/query`,{method:'POST',json:{}}),ctx(documentId));
+    expect(result.status,await result.clone().text()).toBe(200);
+    expect((await result.json()).tables.q.rows).toEqual([{n:42}]);
+  });
+
+  it.each([{}, {catalog:null}, null, {objectKey:''}, {objectKey:12}, {columns:[{name:'n',type:'number'}]}])('reports unrecoverable dataset metadata instead of a null exception or false completion (%j)', async(meta)=>{
+    await seed('abc123','dataset',null,{});
+    await seed('zzzzzz','markup','<Helmet><Query name="q">{`select * from ref_abc123`}</Query></Helmet>',{});
+    const db=await harness.db();
+    await db.query('UPDATE artifacts SET meta=$2::jsonb WHERE id=$1',['abc123',JSON.stringify(meta)]);
+    const before=(await db.query('SELECT * FROM artifacts ORDER BY id')).rows;
+    const preview=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10}}));
+    expect(preview.status).toBe(409);const report=await preview.json();
+    expect(report).toMatchObject({changed:0,done:false,plans:[]});
+    expect(report.conflicts).toEqual(expect.arrayContaining([
+      expect.objectContaining({artifactId:'abc123',reason:expect.stringMatching(/no catalog or stored object key/)}),
+      expect.objectContaining({artifactId:'zzzzzz',reason:expect.stringMatching(/ref:abc123.*no catalog or stored object key/)}),
+    ]));
+    expect(JSON.stringify(report.conflicts)).not.toContain('Cannot read properties');
+    expect((await db.query('SELECT * FROM artifacts ORDER BY id')).rows).toEqual(before);
+    await db.query('UPDATE artifacts SET source=$2 WHERE id=$1',['zzzzzz','<Helmet><Query name="q" source="ref:abc123">{`select count(*) as n from public.rows`}</Query></Helmet>']);
+    const runtime=await query(request('/a/zzzzzz/query',{method:'POST',json:{}}),ctx('zzzzzz'));
+    expect(runtime.status).toBe(200);const state=await runtime.json();
+    expect(state.tables.q).toBeUndefined();
+    expect(state.errors.q).toMatch(/unavailable/);
+    // Invalid metadata alone must keep the final audit incomplete as well.
+    await db.query('DELETE FROM artifacts WHERE id=$1',['zzzzzz']);
+    const apply=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false});
+    expect(apply).toMatchObject({changed:0,done:false,plans:[],conflicts:[{artifactId:'abc123',reason:expect.stringMatching(/no catalog or stored object key/)}]});
+  });
+
+  it('includes null catalogs in retained dataset inventory and keeps invalid history blocking',async()=>{
+    const stored=await storeDatasetRows([{n:42}]);
+    const meta={objectKey:stored.objectKey,columns:[{name:'n',type:'number'}]};
+    await seed('abc123','dataset',null,{...meta,catalog:catalogOf({meta})});
+    const db=await harness.db();
+    await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('abc123',1,'',NULL,'dataset',$1::jsonb)",[JSON.stringify({...meta,catalog:null})]);
+    const preview=await runDatasetCatalogMigrationBatch(db,{batchSize:10});
+    expect(preview).toMatchObject({changed:1,versions:1,conflicts:[],done:false});
+    const applied=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false,expected:{abc123:preview.plans[0].fingerprint}});
+    expect(applied).toMatchObject({changed:1,versions:1,conflicts:[],done:true});
+    await db.query("UPDATE artifact_versions SET meta='{}'::jsonb WHERE artifact_id='abc123'");
+    const invalid=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false});
+    expect(invalid).toMatchObject({changed:0,done:false,conflicts:[{artifactId:'abc123',version:1,reason:expect.stringMatching(/no catalog or stored object key/)}]});
+  });
+
   it('migrates live and retained dataset metadata without changing object identity or document version', async () => {
     const meta={objectKey:'datasets/key.json',columns:[{name:'id',type:'number'}],rowCount:1};
     await seed('aaaaaa','dataset',null,meta);

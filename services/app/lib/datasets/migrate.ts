@@ -8,6 +8,7 @@ import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/co
 import { removedSqlReferenceTokens } from '@/lib/story/sql-reference-tokens';
 import { newEditId } from '@/lib/story/splice';
 import { finalizeArtifactMetadata } from '@/lib/story/parsed-artifact-metadata';
+import { catalogFromMetadata } from './catalog-metadata';
 
 interface MigrationDiagnostic { artifactId?: string; version?: number; reason: string }
 interface SourceMigration { source: string; changed: boolean; diagnostics: MigrationDiagnostic[] }
@@ -16,10 +17,8 @@ type LegacyMeta = Record<string, unknown> & { objectKey?: string; columns?: Data
 
 export function catalogMetadata(meta: LegacyMeta): LegacyMeta {
   if (meta.catalog) return meta;
-  if (!meta.objectKey) return meta;
-  const catalog: DatasetCatalog = { kind: 'stored', defaultSchema: 'public', refreshSeconds: 0,
-    tables: [{ schema: 'public', name: 'rows', columns: meta.columns ?? [], objectKey: meta.objectKey }] };
-  return { ...meta, catalog };
+  const catalog=catalogFromMetadata(meta);
+  return catalog ? { ...meta, catalog } : meta;
 }
 
 
@@ -142,8 +141,8 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
   const folderIds=new Set(targets.rows.filter(row=>row.format==='folder').map(row=>row.id));
   const markupOptions={knownTargetIds,folderIds};
   const candidates = await db.query<Record<string, unknown>>(options.expected ? 'SELECT * FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id' : `SELECT * FROM artifacts a WHERE (
-    (format='dataset' AND NOT (meta ? 'catalog')) OR format='markup' OR EXISTS (
-      SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND NOT (v.meta ? 'catalog')) OR v.format='markup')
+    (format='dataset' AND (meta->'catalog' IS NULL OR meta->'catalog'='null'::jsonb)) OR format='markup' OR EXISTS (
+      SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND (v.meta->'catalog' IS NULL OR v.meta->'catalog'='null'::jsonb)) OR v.format='markup')
     )) AND id > $1 ORDER BY id`, [options.expected ? Object.keys(options.expected) : options.after ?? '']);
   let processed=0, changed = 0, datasets = 0, documents = 0, versions = 0;
   const conflicts: MigrationDiagnostic[] = [];
@@ -153,6 +152,9 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
   for (const row of candidates.rows) {
     if(processed>=options.batchSize){nextCursor=String(candidates.rows[candidates.rows.indexOf(row)-1].id);break;}
     const artifactId = String(row.id); const format = String(row.format);
+    if(format==='dataset'&&!catalogFromMetadata(row.meta)){
+      conflicts.push({artifactId,reason:'Dataset has no catalog or stored object key'});continue;
+    }
     const plannedMeta = format === 'dataset' ? catalogMetadata((row.meta ?? {}) as LegacyMeta) : row.meta;
     const plannedSource = format === 'markup' ? migrateMarkupSource(String(row.source ?? ''),markupOptions) : { source: row.source as string | null, changed: false, diagnostics: [] };
     if (plannedSource.diagnostics.length) { conflicts.push(...plannedSource.diagnostics.map((d) => ({ ...d, artifactId }))); continue; }
@@ -160,6 +162,8 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     const before = {head:row,history:history.rows};
     if(options.expected && options.expected[artifactId] !== fingerprint(before)){conflicts.push({artifactId,reason:'reviewed_snapshot_changed'});continue;}
     if (history.rows.length > historyLimit) { conflicts.push({ artifactId, reason: 'history_limit' }); continue; }
+    const missingCatalog=history.rows.find(version=>version.format==='dataset'&&!catalogFromMetadata(version.meta));
+    if(missingCatalog){conflicts.push({artifactId,version:Number(missingCatalog.version),reason:'Dataset has no catalog or stored object key'});continue;}
     const plannedHistory = history.rows.map((version) => ({ version, meta: version.format === 'dataset' ? catalogMetadata((version.meta ?? {}) as LegacyMeta) : version.meta,
       source: version.format === 'markup' ? migrateMarkupSource(String(version.source ?? ''),markupOptions) : { source: version.source as string | null, changed: false, diagnostics: [] } }));
     const bad = plannedHistory.find((entry) => 'diagnostics' in entry.source && entry.source.diagnostics.length);
@@ -194,15 +198,15 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     if (!committed) { changed--; if (format === 'dataset') datasets--; else documents--; versions -= historyChanged.length; conflicts.push({ artifactId, reason: 'concurrent_change' }); }
   }
   const remaining = await db.query<Record<string, unknown>>(`SELECT * FROM artifacts a WHERE (
-    (format='dataset' AND NOT (meta ? 'catalog')) OR format='markup' OR EXISTS (
-      SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND NOT (v.meta ? 'catalog')) OR v.format='markup')
+    (format='dataset' AND (meta->'catalog' IS NULL OR meta->'catalog'='null'::jsonb)) OR format='markup' OR EXISTS (
+      SELECT 1 FROM artifact_versions v WHERE v.artifact_id=a.id AND ((v.format='dataset' AND (v.meta->'catalog' IS NULL OR v.meta->'catalog'='null'::jsonb)) OR v.format='markup')
     ))`);
   let hasRemaining=false;
   for(const row of remaining.rows){
     const headPlan=row.format==='markup'?migrateMarkupSource(String(row.source??''),markupOptions):null;
-    const head=row.format==='dataset'?catalogMetadata((row.meta??{}) as LegacyMeta)!==row.meta:!!headPlan&&(headPlan.changed||headPlan.diagnostics.length>0);
+    const head=row.format==='dataset'?(!catalogFromMetadata(row.meta)||catalogMetadata((row.meta??{}) as LegacyMeta)!==row.meta):!!headPlan&&(headPlan.changed||headPlan.diagnostics.length>0);
     const history=await db.query<Record<string,unknown>>('SELECT format,meta,source FROM artifact_versions WHERE artifact_id=$1',[row.id]);
-    const oldHistory=history.rows.some((version)=>{if(version.format==='dataset')return catalogMetadata((version.meta??{}) as LegacyMeta)!==version.meta;if(version.format!=='markup')return false;const plan=migrateMarkupSource(String(version.source??''),markupOptions);return plan.changed||plan.diagnostics.length>0;});
+    const oldHistory=history.rows.some((version)=>{if(version.format==='dataset')return !catalogFromMetadata(version.meta)||catalogMetadata((version.meta??{}) as LegacyMeta)!==version.meta;if(version.format!=='markup')return false;const plan=migrateMarkupSource(String(version.source??''),markupOptions);return plan.changed||plan.diagnostics.length>0;});
     if(head||oldHistory){hasRemaining=true;break;}
   }
   return { plans, nextCursor, processed, changed, datasets, documents, versions, conflicts, done: !hasRemaining, dryRun };

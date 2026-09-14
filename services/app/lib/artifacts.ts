@@ -1967,12 +1967,16 @@ function parsedDatasetPolicy(row: ArtifactRow): DatasetPolicy | undefined {
 }
 
 function rowToResolvedRef(row: ArtifactRow, owned = false): ResolvedRef {
-  const meta = row.meta as { columns?: DatasetColumn[] };
+  const meta = (row.meta ?? {}) as { columns?: DatasetColumn[] };
+  const catalog = row.format === 'dataset' ? catalogOf(row) : null;
   return {
     id: row.id,
     format: row.format,
     owned,
-    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalogOf(row)??undefined, datasetPolicy:parsedDatasetPolicy(row), query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => executeCatalog(catalogOf(row)!,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes}) } : {}),
+    ...(row.format === 'dataset' ? { columns: meta.columns ?? [], access: row.access, catalog:catalog??undefined, datasetPolicy:parsedDatasetPolicy(row), query: async(sql:string,params:Record<string,Scalar>,paramTypes?:Record<string,DatasetColumn["type"]>) => {
+      if(!catalog)throw new DatasetError(`Dataset source ref:${row.id} has no catalog or stored object key`);
+      return executeCatalog(catalog,sql,params,{datasetId:row.id,limit:1,refresh:true,paramTypes});
+    } } : {}),
     // A folder's shape is FIXED and computed, never stored — the publish door
     // and the dry run both need it to judge a <Query> over `ref_<folderId>`.
     ...(row.format === 'folder' ? { columns: CHILDREN_COLUMNS, query: (sql: string, params: Record<string, Scalar>) => queryRows({columns: CHILDREN_COLUMNS, rows: []}, sql, params) } : {}),
@@ -2271,9 +2275,11 @@ async function tableForRef(r: ArtifactRow | null, viewer: RoleActor | null): Pro
     return childrenTableFor(r, { userId: viewer?.userId ?? null, email: viewer?.email ?? null, tokenId: viewer?.tokenId ?? null });
   }
   if (r.format !== 'dataset') return null; // wrong kind → the query reports the missing table
-  const m = r.meta as { columns?: DatasetColumn[] };
+  const catalog=catalogOf(r);
+  if(!catalog)return null; // missing storage is unavailable data, never an empty computed source
+  const m = (r.meta ?? {}) as { columns?: DatasetColumn[] };
   try {
-    return { rows: await loadDatasetRows(r), columns: m.columns ?? [], ...(catalogOf(r)?{catalog:catalogOf(r)!}:{}) };
+    return { rows: await loadDatasetRows(r), columns: m.columns ?? [], catalog };
   } catch { return null; } // the query reports the missing table
 }
 
