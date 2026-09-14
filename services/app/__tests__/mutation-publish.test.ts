@@ -51,7 +51,7 @@ describe('publishing a document with a <Mutation>', () => {
     expect((row.meta as { refs: Array<{ id: string; kind: string }> }).refs).toEqual([{ id: ds, kind: 'dataset' }]);
   });
 
-  it('refuses a read-only target, naming the toggle', async () => {
+  it('refuses a read-only target, naming the push flag that opens it', async () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, { markup: POLL(ds) });
@@ -59,7 +59,9 @@ describe('publishing a document with a <Mutation>', () => {
     const text = await details(res);
     expect(text).toMatch(/^invalid_refs/);
     expect(text).toMatch(/read-only/);
-    expect(text).toMatch(/access: readwrite/);
+    // The publish-time refusal is the FIRST one an agent meets, so it names the command it can run.
+    expect(text).toContain('afbin push <file> --type dataset --access readwrite');
+    expect(text).toContain('/api/my/artifacts/');
   });
 
   it('refuses a dataset the publisher does not own, even a public readwrite one', async () => {
