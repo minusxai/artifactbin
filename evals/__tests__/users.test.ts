@@ -22,6 +22,8 @@ describe('user smoke measures native field contracts',()=>{
  });
 });
 
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {boundedRun} from '../lib/bounded-run';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,3 +45,9 @@ it('bounds setup and detached descendants, not just model time',async()=>{
 it('preserves a completed process exit status',async()=>{
  expect(await boundedRun(process.execPath,['-e','process.exit(7)'],2000)).toMatchObject({code:7,timedOut:false});
 });
+
+it('launches the actual eval entry from the repository root',()=>{
+ const root=fileURLToPath(new URL('../../',import.meta.url));
+ const output=execFileSync(process.execPath,['--import','tsx','evals/bounded.ts','--help'],{cwd:root,encoding:'utf8'});
+ expect(output).toContain('limit=120000ms PASS; no retry');
+},15000);
