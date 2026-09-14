@@ -75,6 +75,8 @@ export function addWorkshopHelpers(
     sky.layers.set(1);
     group.add(sky);
   }
+  // The arm's final pass shares the helpers' lighting.
+  for (const light of [ambient, key, bulb, sky]) light.layers.enable(2);
   const setEnvironment = (name: "indoor" | "outdoor") => {
     const outside = name === "outdoor";
     projectedShadows.setEnvironment(name);
@@ -356,6 +358,7 @@ export function addWorkshopHelpers(
     .then((gltf) => {
       remember(gltf.scene);
       if (disposed) return;
+      gltf.scene.traverse((object) => object.layers.set(2));
       const mount = new Group();
       mount.position.set(1357, 514, 22);
       mount.scale.set(93, -93, 93);
@@ -478,6 +481,13 @@ export function addWorkshopHelpers(
       renderer.toneMappingExposure = 1.2;
       projectedShadows.render(renderer, camera);
       renderer.render(scene, camera);
+      // Draw the arm above the painting cutout, papers and other helpers,
+      // retaining depth testing between the arm's own parts.
+      const cameraLayers = camera.layers.mask;
+      camera.layers.set(2);
+      renderer.clearDepth();
+      renderer.render(scene, camera);
+      camera.layers.mask = cameraLayers;
       renderer.autoClear = clear;
       renderer.toneMapping = tone;
       renderer.toneMappingExposure = exposure;

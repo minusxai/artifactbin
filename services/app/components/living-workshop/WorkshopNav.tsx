@@ -26,9 +26,11 @@ export default function WorkshopNav({ solid = false }: { solid?: boolean }) {
       >
         <a href="/" className="workshop-wordmark" aria-label="artifactbin home">
           <img src="/logo-128.png" alt="" width={128} height={128} />
-          artifactbin
+          <span className="workshop-brand-text">
+            <span>artifactbin</span>
+            <span className="workshop-tagline">Google Docs for agents</span>
+          </span>
         </a>
-        <span className="workshop-tagline">Google Docs for agents</span>
         <nav aria-label="Main navigation">
           <a href="/examples">Gallery</a>
           <a href="/docs-human">Docs</a>
@@ -39,7 +41,7 @@ export default function WorkshopNav({ solid = false }: { solid?: boolean }) {
               aria-label="Open page controls"
               onClick={() => requestPageChrome("controls")}
             >
-              <SlidersVertical size={20} />
+              <SlidersVertical size={20} strokeWidth={1.5} />
             </button>
           </Tooltip>
           <Tooltip content="Menu">
@@ -48,7 +50,7 @@ export default function WorkshopNav({ solid = false }: { solid?: boolean }) {
               aria-label="Open menu"
               onClick={() => requestPageChrome("menu")}
             >
-              <CircleUser size={20} />
+              <CircleUser size={20} strokeWidth={1.5} />
             </button>
           </Tooltip>
         </nav>
@@ -58,9 +60,9 @@ export default function WorkshopNav({ solid = false }: { solid?: boolean }) {
         anon={session?.kind === "anon"}
         fixed
         triggerless
-        panelTop={64}
+        panelTop={54}
       />
-      <PageControls fixed triggerless panelTop={64} />
+      <PageControls fixed triggerless panelTop={54} />
     </>
   );
 }

@@ -414,11 +414,11 @@
 /* Match the FAQ's reading width while keeping the cobalt ground full bleed. */
 .blue-gallery-heading,
 .blue-library {
-  max-width: 890px;
+  max-width: 1040px;
   margin-inline: auto;
 }
 .blue-capabilities {
-  max-width: 960px;
+  max-width: 1110px;
   margin-inline: auto;
   padding: 65px 35px;
   gap: 7%;

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight } from "lucide-react";
-import WorkshopStart from "@/components/living-workshop/WorkshopStart";
+import { ArrowUpRight, House, Trees } from "lucide-react";
+import WorkshopHeroPitch from "@/components/living-workshop/WorkshopHeroPitch";
 import LandingFaq from "@/components/LandingFaq";
 import { REPO_URL } from "@/lib/repo";
 import { type WorkshopScene } from "@/components/living-workshop/workshop-renderer";
@@ -12,7 +12,7 @@ import {
   type WorkshopSetting,
 } from "@/components/living-workshop/scene-manifest";
 import WorkshopNav from "@/components/living-workshop/WorkshopNav";
-import { useWorkshopAppearance } from "@/lib/workshop-appearance";
+import { useWorkshopAppearance, setWorkshopAppearance } from "@/lib/workshop-appearance";
 import WorkshopDirections from "@/components/living-workshop/WorkshopDirections";
 
 /** Public homepage: the workshop owns its chrome, not the app shell.
@@ -73,19 +73,16 @@ export default function WorkshopLanding({
   return (
     <main className="workshop-page" data-setting={environment}>
       <WorkshopNav />
-      <section className="workshop-hero" aria-label="The artifactbin workshop">
-        <div className="workshop-intro">
-          <h1>
-            Pull up a chair.
-            <br />
-            Make something.
-          </h1>
-          <p className="workshop-promise">
-            Your agents <em>publish</em> interactive HTML documents you can{" "}
-            <em>edit</em>, <em>annotate</em> and <em>share</em>.
-          </p>
-          <WorkshopStart origin={origin} />
-        </div>
+      <section className="workshop-hero workshop-option workshop-option-minimal" aria-label="The artifactbin workshop">
+      {!override && <div className="workshop-scene-switch" role="group" aria-label="Workshop setting">
+        {(["indoor", "outdoor"] as const).map((value) => (
+          <button key={value} type="button" aria-pressed={environment === value} onClick={() => setWorkshopAppearance(value)}>
+            {value === "indoor" ? <House size={13} strokeWidth={1.5} /> : <Trees size={13} strokeWidth={1.5} />}
+            {value}
+          </button>
+        ))}
+      </div>}
+        <WorkshopHeroPitch variant="minimal" origin={origin} />
         <div className="workshop-picture">
           <div className="workshop-scene-frame">
             <img
