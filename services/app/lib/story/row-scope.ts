@@ -71,12 +71,14 @@ export function sqlCode(sql: string): string {
 export function rowFieldsInSql(sql: string): string[] {
   return [...new Set([...sqlCode(sql).matchAll(/(?<![\w$])\$_row\.([A-Za-z_]\w*)/g)].map((m) => m[1]))];
 }
+export const mutationUsesValue = (sql: string): boolean => /(?<![\w$])\$_value\b/.test(sqlCode(sql));
 export const mutationUsesRow = (sql: string): boolean => /(?<![\w$])\$_(?:row|value)\b/.test(sqlCode(sql));
 
 /** Each editable invocation belongs to a declared table; no SQL authorization is inferred. */
 export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, import('@artifactbin/contracts').DatasetColumn[]>) {
   const errors: string[] = [];
   const mutationTables: Record<string, string[]> = {};
+  const actionMutations = new Set<string>();
   const attr = (n: Extract<JsxNode, {type:'element'}>, name: string): unknown => { const a = n.attributes.find((a) => a.name === name); return a?.value.static ? a.value.json : undefined; };
   const ref = (v: unknown) => typeof v === 'string' ? /^\$([A-Za-z_]\w*)$/.exec(v)?.[1] : undefined;
   type Scope = { table: string; key: unknown; repeat?: boolean };
@@ -123,6 +125,10 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
     const run = ref(attr(node, 'run'));
     if (run && inColumn && scope) {
       const inputType = attr(node, 'type');
+      if (node.tag === 'Button') {
+        actionMutations.add(run);
+        if (['value', 'checked', 'options'].some(name => attr(node, name) !== undefined)) errors.push('Row action buttons do not accept editor bindings');
+      }
       if (!(scope.repeat ? ['Button'] : ['Button', 'Select', 'input', 'textarea', 'select']).includes(node.tag) || (node.tag === 'input' && inputType !== undefined && inputType !== 'text' && inputType !== 'number')) {
         errors.push('Row run= supports Button and DataTable editors: Select, input type="text" or "number", textarea, and native select');
       }
@@ -133,5 +139,5 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
     for (const child of node.children) visit(child, scope, inColumn, node.tag);
   };
   nodes.forEach((n) => visit(n));
-  return { errors, mutationTables };
+  return { errors, mutationTables, actionMutations };
 }

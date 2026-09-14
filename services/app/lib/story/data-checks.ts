@@ -9,7 +9,7 @@ import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
  * dataset. ONE function, so the publish door (jsx-tier) and the refresh path
  * (a dataset changed → which dependents broke?) cannot drift apart.
  */
-import { analyzeRowScopes, mutationUsesRow } from './row-scope';
+import { analyzeRowScopes, mutationUsesRow, mutationUsesValue } from './row-scope';
 import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dryRunMutations, dryRunQueries } from '@/lib/sql/engine';
 import { mutationsOf, queryOrder, refName, type Dataflow } from './dataflow';
@@ -73,6 +73,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
     if (mutation && !mutationUsesRow(mutation.sql)) details.push(`Row run="$${name}" requires a row mutation using $_row or $_value`);
   }
   for (const mutation of mutations) {
+    if (scoped.actionMutations.has(mutation.name) && mutationUsesValue(mutation.sql)) details.push(`row action "${mutation.name}" cannot use $_value; use $_row fields or declared Values`);
     if (!mutationUsesRow(mutation.sql)) continue;
     const names = scoped.mutationTables[mutation.name] ?? [];
     const shapes = names.map((n) => columns[n]).filter((c): c is DatasetColumn[] => !!c);

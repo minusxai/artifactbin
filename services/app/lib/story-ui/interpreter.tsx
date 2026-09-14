@@ -31,7 +31,6 @@ import type { ColumnTemplate } from '@/components/kit/data-table';
 
 /** A keyed row action captures row values at invocation, without a cell draft. */
 export interface RowActionProps {
-  tag: string;
   props: Record<string, unknown>;
   row: Record<string, unknown>;
   identity: string;
@@ -271,13 +270,14 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
 
   const run = node.attributes.find((a) => a.name === 'run');
   if (options.row && node.tag === 'Button' && run?.value.static && refName(run.value.json)) {
+    if (node.attributes.some(a => ['value', 'checked', 'options'].includes(a.name))) return React.createElement('span', {role:'alert',key:path}, 'Row action buttons do not accept editor bindings');
     const key = options.repeatScope?.key ?? options.cellScope?.key;
     if ((options.repeatScope && !options.repeatScope.durable) || !validRowKey(key)) return React.createElement('span', {role:'alert',key:path}, 'Row actions require a stable row key');
     const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
     const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
     const identity = JSON.stringify([options.repeatScope?.owner ?? options.cellScope?.table, typeof key, key, options.keyFor?.(path) ?? path, run.value.json]);
-    if (!options.rowAction) return React.createElement('button', {...props, run:undefined, disabled:true, key:path}, ...children);
-    const element = React.createElement(options.rowAction, {key:identity, tag:node.tag, props, row:options.row, identity}, ...children);
+    if (!options.rowAction) return React.createElement(Component ?? 'button', {...props, ...(Component ? {} : {run:undefined}), disabled:true, key:path}, ...children);
+    const element = React.createElement(options.rowAction, {key:identity, props, row:options.row, identity}, ...children);
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
   }
   if (options.row && options.cellControl && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
