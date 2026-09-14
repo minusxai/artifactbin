@@ -215,8 +215,12 @@ async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;origin?:st
  const selected=await selectSkills({home:options.home,env:options.env,interactive:false});
  if(!selected.length)return;
  const plans=await planSkills(selected,{home:options.home,env:options.env,origin:options.origin});
- if(plans.every(plan=>plan.status==='unchanged'))return;
- const installed=await installSkills(selected,{home:options.home,env:options.env,origin:options.origin});
+ // Eager init installs a MISSING or version-stale skill. A skill addressed to another server is
+ // `afbin setup`'s decision: a command run with --server against a second server used to rewrite
+ // every harness's skill files on every invocation (127 "Skill updated" lines in one local pi task).
+ const stale=plans.filter(plan=>plan.status==='install'||(plan.status==='update'&&plan.installed!==plan.version));
+ if(!stale.length)return;
+ const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,env:options.env,origin:options.origin});
  for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${options.style.green(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
  for(const hint of restartHints(installed.installations))options.stderr(options.style.yellow(hint)+'\n');
 }

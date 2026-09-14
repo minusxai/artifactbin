@@ -62,3 +62,20 @@ it('explains a missing object opening brace, rather than suggesting more closing
   expect(d.message).toContain('viz={{...}}');
   expect(d.snippet).toContain('▶');
 });
+
+describe('too many braces are named too — pi spent 10 model calls on this in eval run 34741910427', () => {
+  it('names an expression that closes early with a stray `}` after it', () => {
+    // 13 opens, 15 closes: the object closed, then two more `}` before ` />`.
+    const src = '<article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>';
+    const d = detail(src);
+    expect(d.message).toMatch(/viz=/);
+    expect(d.message).toMatch(/2 too many|one `\}` too many|2 more `\}` than/);
+    expect(d.message).not.toMatch(/never closed/);
+  });
+  it('names a triple opening brace: the JSON was wrapped twice', () => {
+    const src = '<article><Question data="$q" viz={{{"kind":"vega-lite","spec":{"mark":"line"}}}} /></article>';
+    const d = detail(src);
+    expect(d.message).toMatch(/viz=\{\{\{/);
+    expect(d.message).toMatch(/one expression wrapper|viz=\{\{…\}\}/);
+  });
+});

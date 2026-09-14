@@ -61,6 +61,38 @@ function unclosedExpression(source: string): { attr: string; line: number; missi
   return best;
 }
 
+/**
+ * The mirror image: an attribute expression that CLOSES and is then followed by stray `}`s, or that
+ * opens with `{{{`. Unclosed braces are named above; these two shapes used to get only "Unexpected
+ * token" — pi counted braces by hand for ten model calls (eval run 34741910427, report).
+ */
+function extraClosing(source: string): { attr: string; line: number; extra: number } | null {
+  for (const m of source.matchAll(/([A-Za-z_][\w-]*)=\{/g)) {
+    const open = m.index! + m[0].length - 1;
+    let depth = 0;
+    let quote: string | null = null;
+    let i = open;
+    for (; i < source.length; i++) {
+      const ch = source[i];
+      if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = null; continue; }
+      if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth === 0) break; }
+    }
+    if (depth !== 0) continue;
+    let extra = 0;
+    for (let j = i + 1; j < source.length; j++) {
+      const ch = source[j];
+      if (ch === '}') extra++;
+      else if (ch === ' ' || ch === '\n' || ch === '\t') continue;
+      else break;
+    }
+    if (extra > 0) return { attr: m[1], line: source.slice(0, open).split('\n').length, extra };
+  }
+  return null;
+}
+const tripleOpen = (source: string) => /([A-Za-z_][\w-]*)=\{\{\{/.exec(source);
+
 export function syntaxErrorDetail(source: string, parsed: Extract<ParseResult, { ok: false }>): ValidationError {
   const bare = parsed.error.replace(/\s*\(\d+:\d+\)\s*$/, '');
   if (typeof parsed.pos !== 'number' || parsed.pos > source.length) {
@@ -78,11 +110,17 @@ export function syntaxErrorDetail(source: string, parsed: Extract<ParseResult, {
   // Name the OPENING when the fault is an expression that never closed — the
   // parser's position is where it noticed, which is somewhere else entirely.
   const unclosed = unclosedExpression(source);
+  const extra = unclosed ? null : extraClosing(source);
+  const triple = tripleOpen(source);
   const missingObject = /([A-Za-z_][\w-]*)=\{\s*["'][^"']+["']\s*:/.exec(source);
   const objectHint = missingObject ? ` The ${missingObject[1]} attribute is missing its object opening brace: JSX needs ${missingObject[1]}={{...}}, one expression wrapper around the complete JSON object.` : '';
   const brace = unclosed
     ? ` The \`${unclosed.attr}={\` opened on line ${unclosed.line} is never closed — it needs ${unclosed.missing} more \`}\`.`
-    : '';
+    : triple
+      ? ` \`${triple[1]}={{{\` opens three braces: write \`${triple[1]}={{…}}\` — one expression wrapper around the complete JSON object.`
+      : extra
+        ? ` The \`${extra.attr}={\` expression on line ${extra.line} closes and is followed by ${extra.extra} more \`}\` than it opened — ${extra.extra === 1 ? 'one `}` too many' : `${extra.extra} too many`}; delete ${extra.extra === 1 ? 'it' : 'them'}.`
+        : '';
   return {
     message: `JSX syntax error at line ${line}, column ${column}: ${bare} — see \`snippet\`, where ▶ marks the character.${brace}${objectHint}${(unclosed?.attr === 'viz' || missingObject?.[1] === 'viz') ? ' Build the viz object separately, then serialize it with JSON.stringify/json.dumps inside one JSX expression; do not hand-count closing braces. See markup-data.md.' : ''}`,
     start: parsed.pos,

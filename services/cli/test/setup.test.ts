@@ -93,3 +93,20 @@ describe('the first local command', () => {
    }finally{await rm(home,{recursive:true,force:true});}
   });
 });
+
+test('eager init leaves a skill addressed to another server alone — every command used to rewrite it (127 "Skill updated" lines in one local task)',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-init-origin-'));const bin=join(home,'bin');const err:string[]=[];
+ try{
+  await mkdir(bin);await writeFile(join(bin,'pi'),'#!/bin/sh\nexit 0\n',{mode:0o755});
+  const context={home,cwd:home,env:{PATH:bin},interactive:false,stdout:()=>{},stderr:(s:string)=>err.push(s),fetch:async()=>{throw new Error('init must stay offline');}};
+  assert.equal(await runCli(['help','--json','--server','https://one.example'],context),0);
+  assert.ok(err.join('').includes('Skill installed:'),err.join(''));
+  const skill=join(home,'.pi','agent','skills','artifactbin','SKILL.md');const before=await stat(skill);
+  err.length=0;
+  assert.equal(await runCli(['help','--json','--server','https://two.example'],context),0);
+  assert.equal(err.join(''),'','a second server must not rewrite the skill on every command');
+  assert.equal((await stat(skill)).mtimeMs,before.mtimeMs);
+  err.length=0;
+  assert.equal(await runCli(['setup','--yes','--json','--server','https://two.example'],context),0,'setup is where a new origin is adopted');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
