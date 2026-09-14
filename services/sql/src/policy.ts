@@ -397,10 +397,25 @@ export async function runPolicyMutation(
         (t) => t.depth === 0 && t.word && t.text === 'set',
       );
       if (setIndex < 0) refuse('missing SET');
+      // The word FROM also ENDS an operator phrase. `IS [NOT] DISTINCT FROM`
+      // is the one that reaches depth 0 — and it is the optimistic-concurrency
+      // idiom every `set_*` example in the markup reference teaches, so
+      // refusing it refused the documented way to write a row action. The
+      // call forms (`extract`/`substring`/`trim`/`overlay` … FROM …) carry
+      // their FROM inside the call's own parentheses, which this depth-0 scan
+      // already steps over.
+      const operatorFrom = (i: number) =>
+        tokens[i - 1]?.text === 'distinct' &&
+        (tokens[i - 2]?.text === 'is' ||
+          (tokens[i - 2]?.text === 'not' && tokens[i - 3]?.text === 'is'));
       if (
         tokens.some(
           (t, i) =>
-            i > setIndex && t.depth === 0 && t.word && t.text === 'from',
+            i > setIndex &&
+            t.depth === 0 &&
+            t.word &&
+            t.text === 'from' &&
+            !operatorFrom(i),
         )
       )
         refuse('UPDATE FROM is not supported');
