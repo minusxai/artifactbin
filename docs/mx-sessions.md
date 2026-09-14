@@ -37,7 +37,7 @@ under `/api/sessions` retain their contract. Credentials remain in the parent
 broker. Workers have no network namespace access to the host, no host checkout,
 and only private writable storage. The broker admits the configured app origin,
 forwards the authenticated actor (revalidating its token on each app request), strips supplied credential headers, and bounds
-request and response bodies. Linux bubblewrap/user namespaces are required;
+request and response bodies. Canonical redirects are resolved by the broker (at most ten same-origin hops); the browser retains the originally requested URL. Every hop revalidates the actor. Linux bubblewrap/user namespaces are required;
 unsupported hosts fail closed. A delegated cgroup v2 subtree bounds every worker
 to 1 GiB memory, 512 processes/threads, and one CPU. Set
 `BROWSER__SESSION_CGROUP_ROOT` to that subtree (default `/sys/fs/cgroup/afbin-sessions`). Split services additionally configure
@@ -68,6 +68,10 @@ Page objects are retained in memory; arbitrary JS heaps are not serialized to di
   trials used local pi with Fireworks DeepSeek, not local model inference.
 - Focused regressions cover token revocation, bounded asset-request queueing, and
   closing a session during worker startup. Each exposed its defect before the fix.
+- Signed-in-owner trials exposed canonical redirects escaping Playwright interception.
+  Focused tests first failed, then passed for broker redirect resolution, external-origin
+  rejection, loops, and redirect method/body handling. The paid session track now
+  requires a real navigation/query preflight before model requests.
 - [PR checks](https://github.com/minusxai/artifactbin/pull/148/checks) are the
   authoritative results for the latest revision, including agent-fixture replay.
   The broad local suite was deferred under the repository test budget.

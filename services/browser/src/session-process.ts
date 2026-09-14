@@ -1,3 +1,4 @@
+import { sessionRequest } from './session-redirects';
 import { createSessionRequestQueue } from './session-request-queue';
 import { createSessionResources } from './session-resources';
 import { spawn, type ChildProcess } from 'node:child_process';
@@ -88,7 +89,7 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
           if (body && body.length > SESSION_LIMITS.scriptBytes) throw new Error('Request body limit exceeded');
           const request = new Request(url, { method: String(message.method), headers, ...(body ? { body } : {}), signal: AbortSignal.timeout(10000) });
           await requests.run(async () => {
-            const response = await options.request(request, actor);
+            const response = await sessionRequest(request, next => options.request(next, actor));
             // Streams cannot be materialized indefinitely through this bounded bridge.
             if (response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Live event streams are unavailable in scripted sessions'); }
             const reader = response.body?.getReader();

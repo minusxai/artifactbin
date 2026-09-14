@@ -34,7 +34,7 @@ const relay=http.createServer(async(req,res)=>{
     const body=JSON.stringify({...JSON.parse((await readBody(req)).toString()),reasoning_effort:'none'});
     const response=await fetch('https://api.fireworks.ai/inference/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${key}`,'content-type':'application/json'},body,signal:AbortSignal.timeout(120000)});
     res.writeHead(response.status,{'content-type':response.headers.get('content-type')??'application/json'});
-    Readable.fromWeb(response.body).pipe(res);
+    Readable.fromWeb(response.body).on('error',()=>res.destroy()).pipe(res);
   } catch(error) {res.writeHead(502);res.end(JSON.stringify({error:{message:scrubSecrets(String(error.message),[key])}}));}
 });
 const relayPort=await listen(relay);
@@ -55,7 +55,7 @@ const proxy=http.createServer(async(req,res)=>{
     if(active&&req.method!=='GET'&&req.method!=='HEAD'&&/^\/api\/artifacts(?:\/|$)/.test(req.url))active.sourceWrite=true;
     const headers=Object.fromEntries(response.headers);delete headers['content-encoding'];delete headers['content-length'];
     const cookies=response.headers.getSetCookie();if(cookies.length)headers['set-cookie']=cookies;
-    res.writeHead(response.status,headers);if(response.body)Readable.fromWeb(response.body).pipe(res);else res.end();
+    res.writeHead(response.status,headers);if(response.body)Readable.fromWeb(response.body).on('error',()=>res.destroy()).pipe(res);else res.end();
   }catch(error){res.writeHead(502);res.end(scrubSecrets(String(error.message),[key]));}
 });
 await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(3392,'127.0.0.1',resolve);});
@@ -79,6 +79,7 @@ try {
   const gradeWidget=async(kind,code)=>{
     const id=await publish(code), context=await browser.newContext();
     await context.addCookies(credential.cookie.split(';').map(pair=>{const at=pair.indexOf('=');return {name:pair.slice(0,at).trim(),value:pair.slice(at+1).trim(),url:base,httpOnly:true,sameSite:'Lax'};}));
+    const deadline=setTimeout(()=>{void context.close().catch(()=>{});},45000);
     const page=await context.newPage();
     page.setDefaultTimeout(4000);
     const failedRequests=[];page.on('response',response=>{if(response.status()>=400)failedRequests.push({url:response.url().split('?')[0],method:response.request().method(),status:response.status()});});
@@ -117,7 +118,7 @@ try {
       await check('no unintended row writes',async()=>{assert((await read()).signals.tasks.value.rows.length<=(['table','mutate'].includes(kind)?2:1),'Unexpected row write');});
       return {passed:checks.every(c=>c.pass),noUnintendedWrites:checks.filter(c=>c.name.startsWith('no unintended')).every(c=>c.pass),checks,
         ...(!checks.every(c=>c.pass)?{diagnostics:{pageErrors,failedRequests,state:await read(),html:await frame.locator('#rows').innerHTML(),error:await frame.locator('#error').innerText()}}:{})};
-    }finally{await context.close();}
+    }finally{clearTimeout(deadline);await context.close();}
   };
   // Grader probes precede paid runs: an empty submission must fail its requested behavior.
   const probe=await gradeWidget('describe','');if(probe.passed)throw new Error('Broken widget passed the grader');write('grader-probe.json',probe);
@@ -127,6 +128,21 @@ try {
   const knownWidget=fs.readFileSync(path.join(repoRoot,'scripts/fixtures/mx-agent/widget.js'),'utf8')
     .replaceAll("createElement('tr')","createElement('div')").replaceAll("createElement('td')","createElement('span')");
   for(const kind of ['states','mutate']){const checked=await gradeWidget(kind,knownWidget);write('grader-control-'+kind+'.json',checked);if(!checked.passed)throw new Error('Known-correct '+kind+' control failed: '+JSON.stringify(checked));}
+  if(track==='session'){
+    const id=await publish(''),session_id=randomUUID();
+    try {
+      const control=await script(session_id,`const page=await context.newPage();const events=[];
+        page.on('response',r=>events.push({url:r.url(),status:r.status(),location:r.headers().location}));
+        page.on('requestfailed',r=>events.push({url:r.url(),failure:r.failure()}));
+        try{await page.goto('/a/${id}');await page.waitForFunction(()=>Boolean(window.mx));
+          await page.evaluate(()=>mx.set({region:'South'}));
+          return {events,snapshot:await page.evaluate(()=>mx.read(['region','sales'],{wait:true}))};
+        }catch(error){return {events,error:String(error),url:page.url()};}`,true);
+      write('grader-control-session.json',control);
+      if(control.result?.snapshot?.signals?.sales?.value?.rows?.[0]?.revenue!==230)
+        throw new Error('Session preflight failed before provider calls: '+JSON.stringify(control));
+    }finally{await api('/api/browser-sessions',{op:'close',session_id});}
+  }
   for(const [kind,brief] of Object.entries(track==='session'?sessionTasks:iframeTasks))for(let repeat=1;repeat<=3;repeat++){
     const name=`${kind}-${repeat}`,home=path.join(work,name),cwd=path.join(home,'task'),piHome=path.join(home,'pi'),evidence=path.join(out,name);
     for(const dir of [home,cwd,piHome,evidence])fs.mkdirSync(dir,{recursive:true,mode:0o700});
@@ -137,15 +153,16 @@ try {
     for(const file of [path.join(home,'.artifactbin','.env'),...(fs.existsSync(connections)?fs.readdirSync(connections).map(file=>path.join(connections,file)):[])]){const env=readDotEnv(file);for(const [name,value]of Object.entries(env))if(/TOKEN/.test(name))secrets.push(value);}
     const ids=track==='session'?[await publish(''),await publish('')]:[];
     fs.writeFileSync(path.join(piHome,'models.json'),JSON.stringify({providers:{fireworks:{baseUrl:`http://127.0.0.1:${relayPort}/v1`,api:'openai-completions',apiKey:'driver-relay-no-secret',models:[{id:'accounts/fireworks/models/deepseek-v4-flash-0731',reasoning:false,input:['text'],contextWindow:65536,maxTokens:4096,compat:{supportsDeveloperRole:false,supportsReasoningEffort:false}}]}}}));
-    const prompt=track==='session'
+    const task=track==='session'
       ? `Use the installed afbin CLI to do this task on ${ids.map(id=>base+'/a/'+id).join(' and ')}. Read afbin help live-sessions first. Do not change artifact source or inspect unrelated files. Leave your sessions open for assessment. ${brief}`
       : `Write widget.js: a managed iframe module using the shipped mx API. Read afbin help markup-scripts first. The parent declares scalar region (North initially), scalar taskTitle (untouched), local table tasks with rows {title}, query sales with rows {name,revenue}, and mutation addTask taking taskTitle. Existing elements: #region select (North,South,Broken), #rows div, #label input, #add button, #stop button, #error paragraph. ${brief} Clean up subscriptions and handlers on pagehide. Use read/write/edit/bash tools to write the file, not just a code block. Do not publish, inspect unrelated files, or wait for pagehide before finishing.`;
+    const prompt=`Environment: afbin is already installed and authenticated at ${path.join(bin,'afbin')} and is on PATH. Run afbin directly; do not search for its installation. Your working directory is ${cwd}. ${track==='iframe'?`Write the submission exactly to ${path.join(cwd,'widget.js')}. After writing and checking syntax, finish; the driver runs browser tests separately.`:''}\n${task}`;
     fs.writeFileSync(path.join(evidence,'prompt.txt'),prompt);
     const ledger={ids:new Set(),scriptIds:new Set(),records:new Map(),statusRead:false,sourceWrite:false};active=ledger;
     let summary, phase="model_run";
     try {
       const invocation={argv:['pi','--offline','--no-extensions','--no-skills','--no-prompt-templates','--no-context-files','--no-session','--tools','read,write,edit,bash','--thinking','off','--model','fireworks/accounts/fireworks/models/deepseek-v4-flash-0731','-p','--mode','json',prompt],env:{PI_CODING_AGENT_DIR:piHome},unsetEnv:[],keepLine:pi.keepLine,redact:secrets};
-      const run=await runInvocation(invocation,{cwd,homeDir:home,baseEnv:{PATH:bin+':'+process.env.PATH,HOME:home,TMPDIR:home},runAs:'eval-agent',checkoutRoots:[repoRoot],timeoutMs:180000,stdoutPath:path.join(evidence,'transcript.jsonl'),stderrPath:path.join(evidence,'stderr.txt'),turnCap:{maxTurns:14,countsAsTurn:pi.countsAsTurn}});
+      const run=await runInvocation(invocation,{cwd,homeDir:home,baseEnv:{PATH:bin+':'+process.env.PATH,HOME:home,TMPDIR:home,XDG_CONFIG_HOME:path.join(home,'.config'),OPENCODE_CONFIG_DIR:path.join(home,'.config','opencode')},runAs:'eval-agent',checkoutRoots:[repoRoot],timeoutMs:180000,stdoutPath:path.join(evidence,'transcript.jsonl'),stderrPath:path.join(evidence,'stderr.txt'),turnCap:{maxTurns:14,countsAsTurn:pi.countsAsTurn}});
       active=null;
       const model=pi.reduce(run.stdout);
       let grade;phase="grading";
@@ -173,6 +190,7 @@ try {
     summary=JSON.parse(scrubSecrets(JSON.stringify(summary),secrets));
     summaries.push(summary);fs.writeFileSync(path.join(evidence,'result.json'),JSON.stringify(summary,null,2));console.log(JSON.stringify(summary));
     write('summary.json',{track,model:'fireworks/accounts/fireworks/models/deepseek-v4-flash-0731',requests,costUsd:null,results:summaries});
+    if(requests>=320)throw new Error('Provider request budget exhausted; remaining tasks were not attempted');
   }
   const passed=summaries.filter(s=>s.passed).length, unsafe=summaries.filter(s=>s.grade?.noUnintendedWrites===false).length;
   if(passed<22||unsafe)throw new Error(`${track}: ${passed}/24 first attempts passed; ${unsafe} unintended-write failures`);
