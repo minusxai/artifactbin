@@ -69,7 +69,7 @@ try {
     const response=await fetch(base+route,{method,headers:{Authorization:`Bearer ${credential.token}`,'content-type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});
     const value=await response.json();if(!response.ok)throw new Error(JSON.stringify(value));return value;
   };
-  const publish=async code=>{const value=await api('/api/artifacts',{markup:fixtureMarkup(code)});if(!value.id)throw new Error(JSON.stringify(value));return value.id;};
+  const publish=async (code,includeWidget=track==='iframe')=>{const value=await api('/api/artifacts',{markup:fixtureMarkup(code,includeWidget)});if(!value.id)throw new Error(JSON.stringify(value));return value.id;};
   const script=async(session_id,code,create=false)=>{
     const execution_id=randomUUID();let result=await api('/api/browser-sessions',{op:'script',session_id,execution_id,create,code});
     while(['running','queued'].includes(result.status)){await sleep(100);result=await api('/api/browser-sessions',{op:'status',session_id,execution_id});}
@@ -77,7 +77,7 @@ try {
   };
   browser=await chromium.launch();
   const gradeWidget=async(kind,code)=>{
-    const id=await publish(code), context=await browser.newContext();
+    const id=await publish(code,true), context=await browser.newContext();
     await context.addCookies(credential.cookie.split(';').map(pair=>{const at=pair.indexOf('=');return {name:pair.slice(0,at).trim(),value:pair.slice(at+1).trim(),url:base,httpOnly:true,sameSite:'Lax'};}));
     const deadline=setTimeout(()=>{void context.close().catch(()=>{});},45000);
     const page=await context.newPage();
@@ -105,7 +105,7 @@ try {
         const state=await read();assert(state.signals.tasks.value.rows.length===2,'Expected exactly one inserted row');assert(state.signals.tasks.value.rows[1].title==='Held-out widget','Wrong inserted value');assert(!await frame.locator('#add').isDisabled(),'Button remained disabled');
       });
       if(kind==='invalid')await check('atomic refusal',async()=>{await frame.locator('#add').click();await frame.locator('#error').filter({hasText:'NOT_WRITABLE'}).waitFor();assert((await read()).signals.region.value==='North','Invalid patch changed region');});
-      if(kind==='unsubscribe')await check('unsubscribe stops updates',async()=>{await text('North');await frame.locator('#stop').click();await set('South');await read();await sleep(100);assert((await frame.locator('#rows').innerText()).includes('North')&&!(await frame.locator('#rows').innerText()).includes('South'),'Stopped subscription updated');});
+      if(kind==='unsubscribe')await check('unsubscribe stops updates',async()=>{await text('North');await frame.locator('#stop').click();const stoppedText=await frame.locator('#rows').innerText();await set('South');await read();await sleep(100);assert((await frame.locator('#rows').innerText())===stoppedText,'Stopped subscription updated');});
       if(kind==='describe')await check('capability discovery',async()=>{for(const name of ['region','taskTitle','tasks','sales','addTask'])await text(name);});
       if(kind==='states'){
         await check('pending is visible',async()=>{
@@ -128,6 +128,11 @@ try {
   const knownWidget=fs.readFileSync(path.join(repoRoot,'scripts/fixtures/mx-agent/widget.js'),'utf8')
     .replaceAll("createElement('tr')","createElement('div')").replaceAll("createElement('td')","createElement('span')");
   for(const kind of ['states','mutate']){const checked=await gradeWidget(kind,knownWidget);write('grader-control-'+kind+'.json',checked);if(!checked.passed)throw new Error('Known-correct '+kind+' control failed: '+JSON.stringify(checked));}
+  const stoppedWidget="const rows=document.getElementById('rows');const stop=mx.subscribe(['region'],s=>rows.textContent=s.signals.region.value);document.getElementById('stop').onclick=()=>{stop();rows.textContent='Unsubscribed';};";
+  const stoppedControl=await gradeWidget('unsubscribe',stoppedWidget);write('grader-control-unsubscribe.json',stoppedControl);
+  if(!stoppedControl.passed)throw new Error('Valid stop-status widget failed the grader');
+  const brokenStop=await gradeWidget('unsubscribe',stoppedWidget.replace('stop();rows.textContent','rows.textContent'));
+  write('grader-probe-unsubscribe.json',brokenStop);if(brokenStop.passed)throw new Error('Active subscription passed the stop grader');
   if(track==='session'){
     const id=await publish(''),session_id=randomUUID();
     try {
@@ -135,7 +140,8 @@ try {
         page.on('response',r=>events.push({url:r.url(),status:r.status(),location:r.headers().location}));
         page.on('requestfailed',r=>events.push({url:r.url(),failure:r.failure()}));
         try{await page.goto('/a/${id}');await page.waitForFunction(()=>Boolean(window.mx));
-          await page.evaluate(()=>mx.set({region:'South'}));
+          await page.getByLabel('Host region',{exact:true}).click();
+          await page.getByRole('option',{name:'South',exact:true}).click();
           return {events,snapshot:await page.evaluate(()=>mx.read(['region','sales'],{wait:true}))};
         }catch(error){return {events,error:String(error),url:page.url()};}`,true);
       write('grader-control-session.json',control);
@@ -151,11 +157,11 @@ try {
     const secrets=[key,credential.token,credential.cookie];
     const connections=path.join(home,'.artifactbin','servers');
     for(const file of [path.join(home,'.artifactbin','.env'),...(fs.existsSync(connections)?fs.readdirSync(connections).map(file=>path.join(connections,file)):[])]){const env=readDotEnv(file);for(const [name,value]of Object.entries(env))if(/TOKEN/.test(name))secrets.push(value);}
-    const ids=track==='session'?[await publish(''),await publish('')]:[];
+    const ids=track==='session'?await Promise.all(Array.from({length:kind==='multi'?2:1},()=>publish(''))):[];
     fs.writeFileSync(path.join(piHome,'models.json'),JSON.stringify({providers:{fireworks:{baseUrl:`http://127.0.0.1:${relayPort}/v1`,api:'openai-completions',apiKey:'driver-relay-no-secret',models:[{id:'accounts/fireworks/models/deepseek-v4-flash-0731',reasoning:false,input:['text'],contextWindow:65536,maxTokens:4096,compat:{supportsDeveloperRole:false,supportsReasoningEffort:false}}]}}}));
     const task=track==='session'
       ? `Use the installed afbin CLI to do this task on ${ids.map(id=>base+'/a/'+id).join(' and ')}. Read afbin help live-sessions first. Do not change artifact source or inspect unrelated files. Leave your sessions open for assessment. ${brief}`
-      : `Write widget.js: a managed iframe module using the shipped mx API. Read afbin help markup-scripts first. The parent declares scalar region (North initially), scalar taskTitle (untouched), local table tasks with rows {title}, query sales with rows {name,revenue}, and mutation addTask taking taskTitle. Existing elements: #region select (North,South,Broken), #rows div, #label input, #add button, #stop button, #error paragraph. ${brief} Clean up subscriptions and handlers on pagehide. Use read/write/edit/bash tools to write the file, not just a code block. Do not publish, inspect unrelated files, or wait for pagehide before finishing.`;
+      : `Write widget.js: a classic managed iframe script body using the shipped mx API, without import or export declarations. Read afbin help markup-scripts first. The parent declares scalar region (North initially), scalar taskTitle (untouched), local table tasks with rows {title}, query sales with rows {name,revenue}, and mutation addTask taking taskTitle. Existing elements: #region select (North,South,Broken), #rows div, #label input, #add button, #stop button, #error paragraph. ${brief} Clean up subscriptions and handlers on pagehide. Use read/write/edit/bash tools to write the file, not just a code block. Do not publish, inspect unrelated files, or wait for pagehide before finishing.`;
     const prompt=`Environment: afbin is already installed and authenticated at ${path.join(bin,'afbin')} and is on PATH. Run afbin directly; do not search for its installation. Your working directory is ${cwd}. ${track==='iframe'?`Write the submission exactly to ${path.join(cwd,'widget.js')}. After writing and checking syntax, finish; the driver runs browser tests separately.`:''}\n${task}`;
     fs.writeFileSync(path.join(evidence,'prompt.txt'),prompt);
     const ledger={ids:new Set(),scriptIds:new Set(),records:new Map(),statusRead:false,sourceWrite:false};active=ledger;

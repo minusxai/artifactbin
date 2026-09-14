@@ -23,6 +23,12 @@ bridge plus anonymous cached assets.
 
 `window.mx` is defined before the script runs:
 
+Author a classic script body, without `import` or `export` declarations.
+`describe()` returns arrays, not dictionaries:
+`{instanceEpoch, signals:[{name, kind, writable, type?, columns?}], mutations:[{name, scope, args, available, unavailableReason}]}`.
+List names with `description.signals.map(signal => signal.name)` and
+`description.mutations.map(mutation => mutation.name)`.
+
 - `await mx.describe()` lists scalar/table/query signals and declared mutations with their arguments and current availability.
 - `await mx.read(['count', 'results'], options?)` returns `{instanceEpoch, revision, signals}`. Each selected signal is `{value, status, error?}`; status is `ready`, `pending`, or `error`. Scalars are primitive values; tables are detached `{columns, rows, truncated?}` objects. Query rows may be null before the first result. This reads authoritative host state, including across the iframe boundary.
 - `await mx.read(['results'], {wait:true})` waits for selected queries to settle. `{refresh:true}` forces selected queries to rerun and waits. Refresh accepts query names only. `timeoutMs` defaults to 10000, capped at 30000; a timeout rejects with `code: 'TIMEOUT'` and the latest `snapshot`.

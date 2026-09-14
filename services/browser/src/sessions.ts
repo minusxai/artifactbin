@@ -1,3 +1,4 @@
+import { artifactIdFromPath } from '@artifactbin/utils/artifact-reference';
 import { randomUUID } from 'node:crypto';
 import type { Actor, BrowserSessionRequest, BrowserSessionResult, BrowserSessions } from '@artifactbin/contracts';
 import { SESSION_LIMITS } from '@artifactbin/contracts';
@@ -96,8 +97,12 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
           ]);
           if (current.status !== 'idle') return;
           if (Buffer.byteLength(JSON.stringify(output)) > SESSION_LIMITS.outputBytes) throw new Error('Session output limit exceeded');
-          Object.assign(result, output, { status: output.error ? 'failed' : 'completed' });
-          current.pages = output.pages;
+          const pages = output.pages.map(page => {
+            const artifact_id = artifactIdFromPath(new URL(page.url).pathname);
+            return { ...page, ...(artifact_id ? {artifact_id} : {}) };
+          });
+          Object.assign(result, output, { pages, status: output.error ? 'failed' : 'completed' });
+          current.pages = pages;
         } catch (error) {
           if (current.status !== 'idle') return;
           result.status = 'lost'; result.error = { code: 'SESSION_LOST', message: String((error as Error).message).slice(0, 500) };

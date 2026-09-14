@@ -26,8 +26,11 @@ const page = await context.newPage();
 await page.goto('/a/abc123'); // a URL, not a filesystem path
 await page.waitForFunction(() => Boolean(window.mx));
 const description = await page.evaluate(() => window.mx.describe());
+// Signal values belong to mx. Assigning window.count does not set a signal.
+await page.evaluate(() => window.mx.set({count: 2}));
+const snapshot = await page.evaluate(() => window.mx.read(['count'], {wait:true}));
 await output.image(await page.screenshot());
-return description;
+return {description, snapshot};
 ```
 
 `--json` returns `{session_id, execution_id, status, result, pages, attachments, error?}`.
@@ -39,6 +42,33 @@ Independent operations may use `await Promise.all([...])`; scripts in one sessio
 run sequentially. Playwright functions passed to `page.evaluate()` run in the page:
 pass outer variables as its argument, not through closures.
 
+The complete data interface is:
+
+```js
+await mx.describe();
+await mx.read(['count', 'results'], {wait: true});
+await mx.set({count: 2});
+await mx.mutate('save', {count: 3});
+const stop = mx.subscribe(['count', 'results'], snapshot => { /* render */ });
+stop();
+```
+
+Call these inside `page.evaluate()`. `set` takes one object patch. `subscribe`
+returns a synchronous stop function; snapshots contain only the requested names.
+Subscribe to all signals needed by one renderer together. Wait for `window.mx`
+after navigation before calling it. On a script error, resume the existing page
+IDs; opening another page loses continuity.
+
+Catch API errors inside the page to return their structured fields: Playwright
+does not preserve custom Error properties across its evaluation boundary.
+
+```js
+return await page.evaluate(async () => {
+  try { return await mx.set({count: 2}); }
+  catch (error) { return {error: {code: error.code, message: error.message}}; }
+});
+```
+
 The same [five-method mx API](markup-scripts.md) is exposed on `window.mx` in the
 artifact page and managed iframe. Read names from `describe()`. Use
 `page.evaluate(() => window.mx.read(['count','results'], {wait:true}))`; selected
@@ -47,6 +77,9 @@ values are at `snapshot.signals.NAME.value`. `set` changes scalar signals;
 mutation belongs to this live instance; a dataset mutation persists in the dataset.
 Use ordinary Playwright locators for user interactions. Managed content has its
 own inner frame: `page.frameLocator('iframe[title="Widget"]').frameLocator('iframe')`.
+Inspect the actual controls and their accessible names; use `selectOption` for
+native selects, or click a custom select trigger and its option. A native artifact
+control is in the main page; it does not require entering a widget frame.
 
 A script error preserves pages. A timeout that destroys the worker returns
 `SESSION_LOST`; create a new session explicitly. Never rerun an uncertain mutation

@@ -1,3 +1,4 @@
+import { artifactIdFromPath } from '@artifactbin/utils/artifact-reference';
 /** Fixed held-out briefs. The grader and these reference checks are never staged for the agent. */
 export const sessionTasks = {
   multi: 'Open both supplied artifacts concurrently in ONE session. Set the first region to South with a Playwright control and leave the second at North. In a second CLI script call, resume the same pages and return both settled sales snapshots.',
@@ -20,8 +21,8 @@ export const iframeTasks = {
   states: 'Render sales rows in #rows. While sales is pending show Loading there. If sales errors, show its message in #error. Clear the error after a successful result. React to parent changes and render values safely.',
 };
 export const widgetShell = '<select id="region" aria-label="Region"><option>North</option><option>South</option><option>Broken</option></select><div id="rows"></div><input id="label" aria-label="Task title"/><button id="add">Add task</button><button id="stop">Stop updates</button><p id="error"></p>';
-export function fixtureMarkup(code = '') {
-  return '<Helmet><Value name="region" default="North"/><Value name="taskTitle" default="untouched"/><Value name="tasks" type="table" value={[{title:"Existing"}]}/><Query name="sales">{`select $region || \' total\' as name, case when $region=\'Broken\' then cast($region as integer) when $region=\'South\' then 230 else 110 end as revenue`}</Query><Mutation name="addTask">{`insert into tasks (title) values ($taskTitle)`}</Mutation></Helmet><h1>Live mx trial</h1><Select label="Host region" value="$region" options={["North","South","Broken"]}/><Iframe title="Trial widget" height={260}>'+widgetShell+'<script>{'+JSON.stringify(code)+'}</script></Iframe>';
+export function fixtureMarkup(code = '', includeWidget = true) {
+  return '<Helmet><Value name="region" default="North"/><Value name="taskTitle" default="untouched"/><Value name="tasks" type="table" value={[{title:"Existing"}]}/><Query name="sales">{`select $region || \' total\' as name, case when $region=\'Broken\' then cast($region as integer) when $region=\'South\' then 230 else 110 end as revenue`}</Query><Mutation name="addTask">{`insert into tasks (title) values ($taskTitle)`}</Mutation></Helmet><h1>Live mx trial</h1><Select label="Host region" value="$region" options={["North","South","Broken"]}/>'+(includeWidget?'<Iframe title="Trial widget" height={260}>'+widgetShell+'<script>{'+JSON.stringify(code)+'}</script></Iframe>':'');
 }
 /** Grade observed state, not the agent's self-report. */
 export function sessionVerdict(kind, e) {
@@ -30,15 +31,16 @@ export function sessionVerdict(kind, e) {
     && e.pages.every(p => p.signals.taskTitle.value === 'untouched') && !e.sourceChanged
     && (!['invalid','failure','mutate'].includes(kind) || e.pages.every(p => p.signals.region.value === 'North'));
   const resumed = e.executions.length >= 2 && new Set(e.executions.map(x => x.session_id)).size === 1;
+  const artifactIds = new Set(e.pages.map(p => artifactIdFromPath(new URL(p.url,'http://fixture').pathname)));
   const regions = e.pages.map(p => p.signals.region.value).sort();
   const results = JSON.stringify(e.executions.map(x => x.result));
   const conditions = {
-    multi: resumed && e.pages.length === 2 && new Set(e.pages.map(p => p.url)).size === 2 && JSON.stringify(regions) === '["North","South"]',
+    multi: resumed && e.pages.length === 2 && artifactIds.size === 2 && JSON.stringify(regions) === '["North","South"]',
     resume: resumed && e.pages.length === 1 && e.pages[0].marker === 'still-here' && regions[0] === 'South' && results.includes('still-here'),
     capture: resumed && regions[0] === 'South' && e.executions.some(x => x.attachments?.some(a => a.mime === 'image/png')),
-    duplicate: resumed && e.pages.length === 2 && new Set(e.pages.map(p => p.url)).size === 1 && JSON.stringify(regions) === '["North","South"]',
+    duplicate: resumed && e.pages.length === 2 && artifactIds.size === 1 && JSON.stringify(regions) === '["North","South"]',
     mutate: e.pages.length === 1 && rows.filter(r => r.title === 'Held-out task').length === 1 && results.includes('committed'),
-    subscribe: e.pages.length === 1 && e.pages[0].observed?.includes('South') && e.subscriptionStopped,
+    subscribe: e.pages.length === 1 && e.pages[0].observed?.some(value => (value && typeof value === 'object' ? value.value : value) === 'South') && e.subscriptionStopped,
     invalid: e.pages.length === 1 && regions[0] === 'North' && results.includes('NOT_WRITABLE'),
     failure: resumed && e.pages.length === 1 && regions[0] === 'North' && e.statusRead && e.executions.some(x => x.status === 'failed' && x.error?.message === 'deliberate'),
   };
