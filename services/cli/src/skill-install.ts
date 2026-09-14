@@ -1,8 +1,8 @@
 import {compareVersions,validVersion} from './version-order';
 import {configDir} from './config';
 /** Local integration boundary: selection never writes; installation owns managed files only. */
-import {cp,lstat,mkdir,realpath,rm} from 'node:fs/promises';
-import {dirname,join,resolve,relative,isAbsolute} from 'node:path';
+import {cp,lstat,mkdir,readdir,realpath,rename,rm} from 'node:fs/promises';
+import {basename,dirname,join,resolve,relative,isAbsolute} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {emitKeypressEvents,type Key} from 'node:readline';
 import {atomicWrite,digest,isMissing,privateDirectory,readOptional} from './files';
@@ -86,6 +86,22 @@ export function restartHints(installations:readonly SkillInstallation[]):string[
  }));
 }
 export interface SkillPlan {harness:SkillHarness;path:string;status:'install'|'update'|'unchanged';source:string;installed?:string;version:string}
+/** A backup says which harness it belongs to and which version of the skill it holds. */
+const backupName=(harness:string,replaced:string|undefined):string=>`${harness}-${(replaced&&validVersion(replaced)?replaced:'unmanaged').replace(/[^\w.+-]/g,'_')}`;
+/**
+ * One superseded copy per skill destination is enough to recover an edit; older ones only grow.
+ * Entries are matched by this destination's own `<harness>-` prefix, so another harness' backup and
+ * anything a person put here are left alone, and a symlink is removed as a link, never followed.
+ * Cleanup never fails an installation whose skill files are already written.
+ */
+async function pruneSkillBackups(directory:string,keep:string,prefix:string):Promise<void>{
+ try{
+  for(const entry of await readdir(directory,{withFileTypes:true})){
+   if(entry.name===keep||!entry.name.startsWith(prefix)||entry.isSymbolicLink())continue;
+   await rm(join(directory,entry.name),{recursive:true,force:true});
+  }
+ }catch{/* A missing directory or an unreadable leftover is not a reason to fail an installed skill. */}
+}
 async function readManifest(path:string):Promise<Manifest|undefined>{
  const bytes=await readOptional(join(path,'.afbin-skill.json'));if(!bytes)return;
  try{const value=JSON.parse(bytes.toString());if(!value||typeof value.files!=='object')throw new Error();return value;}catch{return undefined;}
@@ -148,15 +164,22 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
    }
    if(previous&&previous.server!==origin)changed=true;
    if(!changed){installations.push({path,harnesses,status:'unchanged',source:previous?.source??SKILL_SOURCE,version:previous?.version??version});continue;}
-   let backup:string|undefined;
+   let backup:string|undefined;let label:string|undefined;
    if(existed&&(!previous||modified)){
     const backupRoot=join(configDir(options.home,options.env),'skill-backups');await privateDirectory(backupRoot);
-    backup=join(backupRoot,`${harnesses[0]}-${randomUUID()}`);await cp(path,backup,{recursive:true,dereference:false,errorOnExist:true,force:false});
+    label=[...harnesses].sort()[0]!;
+    backup=join(backupRoot,backupName(label,previous?.version));
+    // Copy beside the name first: a copy of the same version survives until its replacement is whole.
+    const staged=`${backup}.${randomUUID()}.tmp`;
+    await cp(path,staged,{recursive:true,dereference:false,errorOnExist:true,force:false});
+    await rm(backup,{recursive:true,force:true});await rename(staged,backup);
    }
    await mkdir(path,{recursive:true});
    for(const [file,content] of Object.entries(files)){await mkdir(dirname(join(path,file)),{recursive:true});await atomicWrite(join(path,file),content);}
    for(const file of Object.keys(previous?.files??{}))if(!(file in files))await rm(join(path,file),{force:true});
    await atomicWrite(join(path,'.afbin-skill.json'),JSON.stringify({version,source:SKILL_SOURCE,server:origin,files:Object.fromEntries(Object.entries(files).map(([file,content])=>[file,digest(content)]))}));
+   // The new skill files are in place, so this destination's earlier copies are dead weight.
+   if(backup&&label)await pruneSkillBackups(dirname(backup),basename(backup),`${label}-`);
    installations.push({path,harnesses,status:existed?'updated':'installed',source:SKILL_SOURCE,version,...(backup?{backup}:{}),...(harnesses.some(name=>name in restartHarnesses)?{restart_required:true as const}:{})});
   }
   // Preserve other settings when adding the selected integrations.

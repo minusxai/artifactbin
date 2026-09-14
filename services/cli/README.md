@@ -91,7 +91,8 @@ release pointer (`/chat/release.json`) and atomically replaces the executable. R
 continue normally; the next invocation runs the new binary and synchronizes selected skills locally.
 An older invocation cannot downgrade newer skills. Modified skill files are backed up before updates.
 Exactly one previous binary is kept, as `~/.artifactbin/binary-backups/afbin-<replaced version>`; each
-successful update prunes the older backups it supersedes.
+successful update prunes the older backups it supersedes. Skill backups follow the same rule: one copy
+per harness, as `~/.artifactbin/skill-backups/<harness>-<replaced version>`, older ones pruned.
 
 Export `CLI__AUTO_UPDATE=0` to disable background updates. Export `CLI__VERSION_PIN=X.Y.Z` to
 disable automatic changes and restrict explicit updates to that server-advertised release. Pins do
