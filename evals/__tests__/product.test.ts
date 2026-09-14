@@ -174,12 +174,41 @@ describe('usesIframe / no_iframe', () => {
     expect(usesIframe('<p>We considered Iframe embeds and rejected them.</p><iframe title="chrome"></iframe><IframeGallery />')).toBe(false);
   });
 
-  it('productMetrics answers noIframe for a published document and null when nothing published', () => {
-    const clean = served('<html><head><title>Q3</title></head><body><h1>Q3</h1><p>Native.</p></body></html>');
-    expect(productMetrics({ served: clean, baseline: null }).noIframe).toBe(true);
-    const framed = served(`<html><head><title>Q3</title></head><body><h1>Q3</h1>${FRAME}</body></html>`);
-    expect(productMetrics({ served: framed, baseline: null }).noIframe).toBe(false);
+  /**
+   * The fixture is the SHAPE THE PRODUCT SERVES: `lib/story/document.ts` puts every document
+   * inside `<body data-mx-story-root><div id="mx-story-root">`. Judging a hand-written page that
+   * carries neither is judging something the scorer never receives.
+   */
+  const document_ = (body: string, title = 'Q3') =>
+    served(`<html><head><title>${title}</title></head><body data-mx-story-root><div id="mx-story-root">${body}</div></body></html>`);
+
+  it('answers true for a published document in native markup, false for one that framed', () => {
+    expect(productMetrics({ served: document_('<h1>Q3</h1><p>Native.</p>'), baseline: null }).noIframe).toBe(true);
+    expect(productMetrics({ served: document_(`<h1>Q3</h1>${FRAME}`), baseline: null }).noIframe).toBe(false);
+  });
+
+  it('is null when nothing was published — an unwritten document is not a clean one', () => {
     expect(productMetrics({ served: served('', 404), baseline: null }).noIframe).toBeNull();
     expect(productMetrics({ served: served('<html><body></body></html>'), baseline: null }).noIframe).toBeNull();
+  });
+
+  /**
+   * REGRESSION, live leg run `local21` (pi, tracker task): the agent created its dataset and never
+   * wrote the document, so the artifact the scorer fetched was the DATASET — and `/a/<id>/raw`
+   * answers a dataset with its ROWS AS JSON, not with a document
+   * (`services/app/app/a/[id]/raw/route.ts`, `case 'dataset'`). There is no document markup to
+   * inspect, so the only honest answer is null; the run recorded `no_iframe: false`, which reads
+   * as "the agent used an Iframe" about a document that was never written.
+   */
+  it('is null when the scored artifact is a dataset, whatever its rows happen to contain', () => {
+    const rows = served(JSON.stringify({ rows: [
+      { page: '<div>home</div>', note: 'embedded via <Iframe src="x" />', frame: 'data-mx-managed-frame' },
+    ] }));
+    expect(productMetrics({ served: rows, baseline: null }).noIframe).toBeNull();
+  });
+
+  it('is null for any response that is not a served document, even one full of HTML', () => {
+    // An export, an error page, a bare fragment: none of them is the document this run published.
+    expect(productMetrics({ served: served('<html><body><h1>Not found</h1><p>gone</p></body></html>'), baseline: null }).noIframe).toBeNull();
   });
 });
