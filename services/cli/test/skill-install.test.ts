@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,symlink,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,lstat,realpath,rm,symlink,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {installSkills,restartHints,skillTargets,selectSkills} from '../src/skill-install';
@@ -85,5 +85,60 @@ test('an older invocation cannot downgrade newer installed skill files',async()=
   await installSkills(['pi'],{home,env:{},files:{'SKILL.md':'new'},version:'2.0.0'});
   await installSkills(['pi'],{home,env:{},files:{'SKILL.md':'old'},version:'1.0.0'});
   assert.equal(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),'new');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+const backupsDir=(home:string)=>join(home,'.artifactbin','skill-backups');
+
+test('successive skill backups keep only the copy the latest update replaced, named for its version',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-skill-backup-prune-'));
+ try{
+  const targets=skillTargets(home,{}),backups=backupsDir(home);
+  await mkdir(targets.pi,{recursive:true});await writeFile(join(targets.pi,'SKILL.md'),'hand written');
+  const first=await installSkills(['pi'],{home,env:{},files:bundle,version:'1.0.0'});
+  assert.equal(first.installations[0]!.backup,join(backups,'pi-unmanaged'),'a copy with no manifest says so in its name');
+  assert.deepEqual(await readdir(backups),['pi-unmanaged']);
+  await writeFile(join(targets.pi,'SKILL.md'),'my edit');
+  const second=await installSkills(['pi'],{home,env:{},files:{'SKILL.md':'v2'},version:'2.0.0'});
+  assert.equal(second.installations[0]!.backup,join(backups,'pi-1.0.0'));
+  assert.deepEqual(await readdir(backups),['pi-1.0.0'],'only the copy replaced by the most recent update is kept');
+  assert.equal(await readFile(join(backups,'pi-1.0.0','SKILL.md'),'utf8'),'my edit');
+  assert.equal(await readFile(join(targets.pi,'SKILL.md'),'utf8'),'v2');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+test('skill pruning keeps one backup per harness and never follows a symlink',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-skill-backup-harness-'));
+ try{
+  const targets=skillTargets(home,{}),backups=backupsDir(home);
+  await installSkills(['pi','codex'],{home,env:{},files:bundle,version:'1.0.0'});
+  await writeFile(join(targets.pi,'SKILL.md'),'pi edit');await writeFile(join(targets.codex,'SKILL.md'),'codex edit');
+  await installSkills(['pi','codex'],{home,env:{},files:{'SKILL.md':'v2'},version:'2.0.0'});
+  assert.deepEqual((await readdir(backups)).sort(),['codex-1.0.0','pi-1.0.0']);
+  await mkdir(join(backups,'pi-0.9.0'),{recursive:true});await writeFile(join(backups,'pi-0.9.0','SKILL.md'),'ancient');
+  const outside=join(home,'precious');await writeFile(outside,'not ours');
+  await symlink(outside,join(backups,'pi-link'));
+  await writeFile(join(targets.pi,'SKILL.md'),'pi edit two');
+  const third=await installSkills(['pi'],{home,env:{},files:{'SKILL.md':'v3'},version:'3.0.0'});
+  assert.equal(third.installations[0]!.backup,join(backups,'pi-2.0.0'));
+  assert.deepEqual((await readdir(backups)).sort(),['codex-1.0.0','pi-2.0.0','pi-link'],'another harness keeps its own backup; the symlink stays');
+  assert.equal((await lstat(join(backups,'pi-link'))).isSymbolicLink(),true);
+  assert.equal(await readFile(outside,'utf8'),'not ours','a symlink target outside the directory is never touched');
+  assert.equal(await readFile(join(backups,'codex-1.0.0','SKILL.md'),'utf8'),'codex edit');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+test('a second backup of the same version replaces the earlier copy instead of failing',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-skill-backup-same-'));
+ try{
+  const targets=skillTargets(home,{}),backups=backupsDir(home);
+  await installSkills(['pi'],{home,env:{},files:bundle,version:'1.0.0'});
+  await writeFile(join(targets.pi,'SKILL.md'),'first edit');
+  await installSkills(['pi'],{home,env:{},files:bundle,version:'1.0.0'});
+  await writeFile(join(targets.pi,'SKILL.md'),'second edit');
+  const again=await installSkills(['pi'],{home,env:{},files:bundle,version:'1.0.0'});
+  assert.equal(again.installations[0]!.backup,join(backups,'pi-1.0.0'));
+  assert.deepEqual(await readdir(backups),['pi-1.0.0']);
+  assert.equal(await readFile(join(backups,'pi-1.0.0','SKILL.md'),'utf8'),'second edit');
  }finally{await rm(home,{recursive:true,force:true});}
 });
