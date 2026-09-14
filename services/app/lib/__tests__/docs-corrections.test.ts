@@ -212,6 +212,7 @@ describe('the markup skill', () => {
   it('§F the social preview names the Helmet meta tags an agent can push', () => {
     expect(doc).toContain('artifactbin:og-image');
     expect(doc).toContain('artifactbin:og-crop');
+    expect(doc).toContain('artifactbin:og-image-crop');
     expect(doc).not.toContain('[upload and crop](publishing-versions.md)');
   });
 });

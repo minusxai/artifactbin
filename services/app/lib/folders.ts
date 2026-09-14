@@ -47,15 +47,23 @@ export const CHILDREN_COLUMNS: DatasetColumn[] = [
 ];
 
 /** One refusal for unknown, not-a-folder, not-yours, cycle and too deep — naming them apart is an existence oracle. */
-type ParentRefusal = { error: 'invalid_parent' };
+type ParentRefusal = { error: 'invalid_parent'; hint: string };
 
 /**
  * The refusal itself, exported because one door answers it without ever
  * reaching `resolveParent`: the replace path refuses a NON-OWNER's placement
  * outright (lib/artifact-wire), and it must say the same word as every other
  * way of not being allowed a parent, or the difference is an oracle.
+ *
+ * The hint is part of the constant for the same reason: it is ONE sentence
+ * listing every condition, identical for all of them, so it differentiates
+ * nothing an id-probe could read — while still telling an agent driving afbin
+ * what to write. Without it the whole refusal was `invalid_parent: Bad Request`.
  */
-export const PARENT_REFUSED: ParentRefusal = { error: 'invalid_parent' };
+export const PARENT_REFUSED: ParentRefusal = {
+  error: 'invalid_parent',
+  hint: 'folder: must name a folder artifact you own, never one inside the document being placed, and no deeper than 6 levels. Create a folder by pushing a YAML file with `type: folder`, then set folder: <id> in the fence of the file you push.',
+};
 
 /** Narrow `resolveParent`'s answer: the refusal, or a placement. */
 export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): r is ParentRefusal => 'error' in r;

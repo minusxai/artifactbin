@@ -146,6 +146,26 @@ describe('refusals an afbin command reaches name the afbin action', () => {
     expect(String(refusal.details[0])).not.toContain('parent_id');
   });
 
+  /*
+   * The refusal stays ONE undifferentiated code — naming which condition failed
+   * would reveal whether an id exists (lib/folders). A single sentence that
+   * lists every condition differentiates nothing, and it is the difference
+   * between `invalid_parent: Bad Request` and a recovery the agent can run.
+   */
+  it('a bad folder placement carries a hint at all, and it names the fence field and the folder YAML', async () => {
+    const o = await claimed('placer');
+    const doc = await create(o.token, { markup: '<p>Body</p>' });
+    for (const parent_id of ['zzzzzz', doc.id, 'not a real id']) {
+      const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: o.token, json: { markup: '<p>x</p>', parent_id } }));
+      expect(res.status, parent_id).toBe(400);
+      const refusal = await body(res);
+      expect(refusal.error, parent_id).toBe('invalid_parent');
+      // The same sentence for every cause: an existence oracle needs a difference.
+      expect(refusal.hint, parent_id).toContain('folder:');
+      expect(refusal.hint, parent_id).toContain('type: folder');
+    }
+  });
+
   it('a stale profile write names afbin pull --type profile', async () => {
     const o = await claimed('profileowner');
     const current = await accountProfile(o.userId);

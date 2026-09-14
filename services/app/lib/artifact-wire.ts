@@ -262,7 +262,8 @@ export function parseParentField(body: Record<string, unknown>): string | null |
   const p = body.parent_id;
   if (p === undefined) return undefined;
   if (p === null) return null;
-  if (typeof p !== 'string' || !ID_RE.test(p)) return json({ error: 'invalid_parent' }, 400);
+  // The same refusal, word for word, as every other way of not being allowed a parent.
+  if (typeof p !== 'string' || !ID_RE.test(p)) return json(PARENT_REFUSED, 400);
   return p;
 }
 

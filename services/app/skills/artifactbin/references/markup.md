@@ -114,7 +114,9 @@ document like any other source. `<meta name="artifactbin:og-image"
 content="ref:<imageId>" />` names the card image (publish it first with `afbin
 push cover.png`); `<meta name="artifactbin:og-crop" content="x=0;y=0;width=1600"
 />` frames the document shot instead — 40:21 out of a 1600px-wide layout, width
-400–1600. Omit both for the default full-width framing.
+400–1600. A third, `artifactbin:og-image-crop`, takes the same `x;y;width` and
+crops the named image rather than the shot. Omit them all for the default
+full-width framing.
 
 ## Images and icons
 
