@@ -38,14 +38,25 @@ const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('hydration');
 
 /**
- * The production shape, reduced: an intro paragraph carrying the measure and
- * the justification, holding the divs the author put inside it.
+ * The production shapes, reduced: an intro paragraph carrying the measure and
+ * the justification, holding the divs the author put inside it — and a dialog
+ * trigger holding the author's own <Button>.
  */
 const PROSE = '<div data-design="tw" className="mx-auto max-w-5xl p-10">'
   + '<h1 className="text-4xl">Heading</h1>'
   + '<p id="lede" className="mx-auto mt-6 max-w-md text-justify text-neutral-700">'
   + '<div id="inner" className="text-base">For over a decade now, this paragraph has carried a measure and a justification, and it needs enough words in it to wrap onto several lines so that a change of container width is unmistakable.</div>'
   + '</p>'
+  /*
+   * The SAME fault in the interactive vocabulary, and the one production
+   * actually shipped (eval run 34868729411, codex's tracker): a trigger that
+   * draws its own <button> around the <Button> the author put inside it. A
+   * button may not contain a button, so the parser closes the outer one and
+   * PROMOTES the inner to its sibling — #418, and a trigger that is an empty
+   * element next to an inert button until React throws the tree away.
+   */
+  + '<Dialog><DialogTrigger id="trigger"><Button id="add">Add task</Button></DialogTrigger>'
+  + '<DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>'
   + '<Card><CardContent>a component, so the document hydrates</CardContent></Card>'
   + '</div>';
 
@@ -64,6 +75,8 @@ const PROBE = `(() => {
   return {
     holderTag: holder.tagName.toLowerCase(),
     holderId: holder.id,
+    // Still inside the trigger, where React's tree says it is.
+    triggerHoldsButton: !!document.querySelector('#trigger #add'),
     width: Math.round(inner.getBoundingClientRect().width),
     align: s.textAlign,
     fontFamily: s.fontFamily,
@@ -145,7 +158,8 @@ async function runNoRepaint() {
   check(before !== null && after !== null, 'the document rendered at both ends');
   check(before.holderTag === 'div', `the paragraph holding a div is served as a div (${before.holderTag})`);
   check(before.holderId === 'lede', `…keeping its id, so its classes still wrap the text (${before.holderId})`);
-  for (const k of ['holderTag', 'width', 'align', 'fontFamily', 'fontSize']) {
+  check(before.triggerHoldsButton, 'the served dialog trigger still holds the author\'s Button after parsing');
+  for (const k of ['holderTag', 'triggerHoldsButton', 'width', 'align', 'fontFamily', 'fontSize']) {
     check(before[k] === after[k], `${k} is the same before and after hydration (${before[k]} vs ${after[k]})`);
   }
   check(before.align === 'justify', `the measure and justification actually apply (${before.align})`);

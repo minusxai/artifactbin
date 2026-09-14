@@ -277,6 +277,36 @@ describe('<Dialog> bound to the store', () => {
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({title:'Updated'}), 'save');
     expect(view.queryByText('Editing')).toBeNull();
   });
+
+  /**
+   * The trigger wrapping a `<Button>` — what production shipped (eval run
+   * 34868729411, codex's tracker `<DialogTrigger><Button>Add task</Button>`).
+   * Two nested `<button>`s are not HTML: the parser promotes the inner one out
+   * of the trigger, React hydrates against that reshaped DOM and throws the
+   * minified error 418 the browser gate recorded. Hydrating the SSR string is
+   * the whole check — and the dialog must still open from the author's button.
+   */
+  it('hydrates a DialogTrigger wrapped around a Button without a mismatch, and it still opens the dialog', () => {
+    const parsed = parseJsxOrThrow('<Helmet><Value name="adding" type="boolean" default={false} /></Helmet><Dialog open="$adding"><DialogTrigger><Button>Add task</Button></DialogTrigger><DialogContent aria-label="Add a task"><DialogClose>Cancel</DialogClose></DialogContent></Dialog>');
+    const {content, body: nodes} = splitHelmet(parsed.nodes);
+    const flow = {values: content.values, queries: content.queries, mutations: content.mutations};
+    const state = {values: initialValues(flow), tables: initialTables(flow), errors: {}};
+    const props = {nodes, refData: {}, dataflow: {flow, state}, colorMode: 'light' as const, chrome: true};
+    const html = renderToString(<StoryRuntimeApp {...props} />);
+    expect(html).not.toMatch(/<button[^>]*>\s*<button/); // a button around a button is what the parser tears apart
+    const host = document.createElement('div');
+    // innerHTML runs the browser's own parsing algorithm over the served
+    // markup — the step that tore the nested buttons apart.
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    const onRecoverableError = vi.fn();
+    const store = createDataflowStore({flow, state});
+    act(() => { hydrateRoot(host, <StoryRuntimeApp {...props} store={store} />, {onRecoverableError}); });
+    expect(onRecoverableError.mock.calls.map(c => String(c[0]))).toEqual([]);
+    fireEvent.click(host.querySelector('button')!); // the author's <Button>, first in the document
+    expect(store.getValue('adding')).toBe(true);
+    document.body.removeChild(host);
+  });
 });
 
 describe('native user controls',()=>{

@@ -2,7 +2,7 @@ import {withLock,HOME_SCOPE} from '../src/state';
 import {test,describe} from 'node:test';
 import {gzipSync} from 'node:zlib';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,stat} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,stat,lstat,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {updateCli} from '../src/update';
@@ -168,5 +168,66 @@ test('superseded recovery journals cannot block a newer installation forever',as
   const result=await updateCli({...options,version:'10.0.0',fetch:async()=>assert.fail('recovery is local')});
   assert.ok('version' in result);assert.equal(result.version,'10.0.0');assert.equal(await readFile(exe,'utf8'),'newer installation');
   await assert.rejects(stat(join(home,'.artifactbin','pending-update.json')),{code:'ENOENT'});
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+/** Each release serves its own executable, so consecutive updates can be told apart by their bytes. */
+function releaseTransport(version:string,payload:string,options:{corrupt?:boolean}={}){
+ const bundle=Buffer.from(JSON.stringify({version,protocol:1,files:{'SKILL.md':'---\nname: artifactbin\ndescription: Publish.\n---\nNew skill'}}));
+ const executable=Buffer.from(payload);
+ const released={version,protocol:1,platform:'darwin',arch:'arm64',binary:{file:'afbin-darwin-arm64',sha256:digest(executable)},skills:{file:'afbin-skills.json',sha256:digest(bundle)}};
+ return async(input:unknown)=>{
+  const path=String(input);
+  if(path.endsWith('/chat/release.json'))return Response.json({version,protocol:1});
+  if(path.endsWith('.manifest.json'))return Response.json(released);
+  if(path.endsWith('/afbin-skills.json'))return new Response(bundle);
+  if(path.endsWith('/afbin-darwin-arm64'))return new Response(options.corrupt?'corrupt':executable);
+  return assert.fail(path);
+ };
+}
+const standalone=(home:string,exe:string)=>({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone' as const,path:exe},platform:'darwin',arch:'arm64',harnesses:[],verifyExecutable:async()=>{}});
+
+test('consecutive updates keep exactly one backup, named for the version it holds',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-prune-')),exe=join(home,'afbin'),backups=join(home,'.artifactbin','binary-backups');
+ try{
+  await writeFile(exe,'binary 1',{mode:0o755});
+  const first=await updateCli({...standalone(home,exe),version:'1.0.0',fetch:releaseTransport('9.0.0','binary 9')}) as any;
+  assert.equal(first.backup,join(backups,'afbin-1.0.0'));
+  assert.deepEqual(await readdir(backups),['afbin-1.0.0']);
+  const second=await updateCli({...standalone(home,exe),version:'9.0.0',fetch:releaseTransport('10.0.0','binary 10')}) as any;
+  assert.equal(second.backup,join(backups,'afbin-9.0.0'));
+  assert.deepEqual(await readdir(backups),['afbin-9.0.0'],'only the executable replaced by the most recent update is kept');
+  assert.equal(await readFile(second.backup,'utf8'),'binary 9');
+  assert.equal(await readFile(exe,'utf8'),'binary 10');
+  assert.equal((await stat(second.backup)).mode&0o777,0o755);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+test('pruning removes stale regular backups and never follows a symlink',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-prune-links-')),exe=join(home,'afbin'),backups=join(home,'.artifactbin','binary-backups');
+ try{
+  await writeFile(exe,'binary 1',{mode:0o755});
+  await mkdir(backups,{recursive:true,mode:0o700});
+  await writeFile(join(backups,'afbin-0.9.0'),'ancient');
+  await writeFile(join(backups,'stray.txt'),'unrelated');
+  const outside=join(home,'precious');await writeFile(outside,'not ours');
+  await symlink(outside,join(backups,'link'));
+  const result=await updateCli({...standalone(home,exe),version:'1.0.0',fetch:releaseTransport('9.0.0','binary 9')}) as any;
+  assert.deepEqual((await readdir(backups)).sort(),['afbin-1.0.0','link'],'regular stale files are pruned; the symlink is left alone');
+  assert.equal(result.backup,join(backups,'afbin-1.0.0'));
+  assert.equal((await lstat(join(backups,'link'))).isSymbolicLink(),true);
+  assert.equal(await readFile(outside,'utf8'),'not ours','a symlink target outside the directory is never touched');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+test('a failed update leaves the existing backup untouched',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-prune-failed-')),exe=join(home,'afbin'),backups=join(home,'.artifactbin','binary-backups');
+ try{
+  await writeFile(exe,'binary 1',{mode:0o755});
+  await updateCli({...standalone(home,exe),version:'1.0.0',fetch:releaseTransport('9.0.0','binary 9')});
+  await assert.rejects(updateCli({...standalone(home,exe),version:'9.0.0',fetch:releaseTransport('10.0.0','binary 10',{corrupt:true})}),/checksum/i);
+  assert.deepEqual(await readdir(backups),['afbin-1.0.0'],'the only recoverable executable survives a failed update');
+  assert.equal(await readFile(join(backups,'afbin-1.0.0'),'utf8'),'binary 1');
+  assert.equal(await readFile(exe,'utf8'),'binary 9');
  }finally{await rm(home,{recursive:true,force:true});}
 });

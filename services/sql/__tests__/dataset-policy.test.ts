@@ -280,6 +280,48 @@ describe.each<[string, SqlService]>([
       }),
     ).toMatchObject({ affected: 1 });
   });
+  /*
+   * `is [not] distinct from` — the optimistic-concurrency idiom every `set_*`
+   * example in the markup reference teaches — carries the word FROM at depth 0,
+   * and the UPDATE-FROM guard refused all of them: a released tracker could
+   * not publish the statement its own documentation hands the agent.
+   */
+  it('accepts the concurrency idiom the markup reference teaches', async () => {
+    expect(
+      await runRow(
+        'update rows set status = $_value where id = $_row.id and status is not distinct from $_row.status',
+        open,
+        { _value: 'done' },
+      ),
+    ).toMatchObject({
+      affected: 1,
+      rows: [{ id: 1, body: 'one', status: 'done' }, table.rows[1]],
+    });
+    // What the idiom is FOR: the row moved under the reader, so nothing changes.
+    expect(
+      await svc.mutate({
+        table,
+        sql: 'update rows set status = $_value where id = $_row.id and status is distinct from $_row.status',
+        params: { _value: 'done' },
+        row: { columns: table.columns, values: { id: 1, body: 'one', status: 'open' } },
+        policy: open,
+      }),
+    ).toMatchObject({ affected: 0, rows: table.rows });
+  });
+  it('leaves FROM inside an operator call alone, and still refuses a real UPDATE ... FROM', async () => {
+    expect(
+      await runRow(
+        'update rows set body = substring(body from 1 for 2) where id = $_row.id',
+      ),
+    ).toMatchObject({ affected: 1, rows: [{ id: 1, body: 'on', status: 'open' }, table.rows[1]] });
+    expect(
+      await runRow(
+        'update rows set body=$body from rows as other where rows.id=other.id',
+        open,
+        { body: 'changed' },
+      ),
+    ).toMatchObject({ error: expect.stringContaining('UPDATE FROM') });
+  });
   it('still refuses a statement that genuinely cannot be planned', async () => {
     expect(
       await runRow('update rows set status=$_row.nosuch where id=$_row.id'),

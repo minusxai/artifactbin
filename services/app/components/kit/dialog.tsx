@@ -8,6 +8,13 @@ interface DialogState {
   setBusy: (busy: boolean) => void;
 }
 const Context = createContext<DialogState | null>(null);
+/**
+ * Everything a reader can reach with the keyboard: the Tab trap's stops inside
+ * an open dialog, and — for a trigger that delegates to the control the author
+ * put inside it — which element was actually clicked, so closing can hand the
+ * focus back to it.
+ */
+const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]';
 const ArtifactScope = createContext(false);
 /** Inline documents may cover their content, but must leave app chrome usable. */
 export function ArtifactDialogScope({children}: {children: React.ReactNode}) {
@@ -22,8 +29,41 @@ export function Dialog({open, defaultOpen = false, onOpenChange, children, ...pr
   return <Context.Provider value={{open: typeof open === 'boolean' ? open : local, setOpen, trigger, busy, setBusy}}><span {...props} className={`contents ${props.className ?? ''}`}>{children}</span></Context.Provider>;
 }
 
-export function DialogTrigger({children, ...props}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/**
+ * A trigger DRAWS a `<button>` — unless the author already put a control
+ * inside it, and then it must not.
+ *
+ * `<DialogTrigger><Button>Add task</Button></DialogTrigger>` is the shape an
+ * author reaches for (the Radix `asChild` habit), and two nested `<button>`s
+ * are not HTML: parsing the served page closes the outer one and PROMOTES the
+ * inner one to its sibling, so the browser's DOM and React's tree disagree and
+ * hydration dies with error 418 (production eval run 34868729411, codex's
+ * tracker). With a control inside, the trigger becomes a `display:contents`
+ * span that acts when that control is clicked: one button in the DOM — the
+ * author's, with its own id and styling — and the same markup on both sides.
+ *
+ * `wrapsControl` is decided by the interpreter (lib/story-ui/interpreter),
+ * which knows the authored tag names; a `child.type` check here would have to
+ * track every adapter the runtime registry substitutes for them.
+ */
+type TriggerProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {wrapsControl?: boolean};
+
+function ControlDelegate({children, act, ...props}: TriggerProps & {act: (control: HTMLElement | null) => void}) {
+  const {disabled, type: _type, ...rest} = props;
+  return <span {...rest} className={`contents ${props.className ?? ''}`} onClick={event => {
+    if (disabled) return;
+    act((event.target as HTMLElement).closest<HTMLElement>(FOCUSABLE));
+  }}>{children}</span>;
+}
+
+export function DialogTrigger({children, wrapsControl, ...props}: TriggerProps) {
   const context = useContext(Context);
+  const open = (control: HTMLElement | null) => {
+    if (!context || context.busy) return;
+    context.trigger.current = control;
+    context.setOpen(true);
+  };
+  if (wrapsControl) return <ControlDelegate {...props} act={open}>{children}</ControlDelegate>;
   return <button {...props} type="button" disabled={props.disabled || !context || context.busy} onClick={event => {
     if (!context) return;
     context.trigger.current = event.currentTarget;
@@ -31,8 +71,9 @@ export function DialogTrigger({children, ...props}: React.ButtonHTMLAttributes<H
   }}>{children}</button>;
 }
 
-export function DialogClose({children, ...props}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function DialogClose({children, wrapsControl, ...props}: TriggerProps) {
   const context = useContext(Context);
+  if (wrapsControl) return <ControlDelegate {...props} act={() => {if (!context?.busy) context?.setOpen(false);}}>{children}</ControlDelegate>;
   return <button {...props} type="button" disabled={props.disabled || !context || context.busy} onClick={() => context?.setOpen(false)}>{children}</button>;
 }
 
@@ -77,7 +118,7 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
       if (!artifactScoped || event.defaultPrevented) return;
       if (event.key === 'Escape') {event.preventDefault(); if (!submitting.current) context?.setOpen(false);}
       if (event.key === 'Tab') {
-        const stops = [...event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]')].filter(el => !el.closest('[hidden], [inert], fieldset[disabled]'));
+        const stops = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(el => !el.closest('[hidden], [inert], fieldset[disabled]'));
         const edge = event.shiftKey ? stops[0] : stops[stops.length - 1];
         if (!stops.length || document.activeElement === edge || document.activeElement === event.currentTarget) {
           event.preventDefault();
