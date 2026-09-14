@@ -8,6 +8,9 @@ import {APP_CSP,createAppServer} from '@/server/app';
 import {mintToken} from '@/lib/tokens';
 import {claimToken,createUser} from '@/lib/users';
 import {agentCookie,request,useAppHarness} from './harness';
+import {PATCH as patchArtifact} from '@/app/api/artifacts/[id]/route';
+import {observedRequest} from '@/__tests__/conditional-request';
+import {viewersWritePolicy} from '@artifactbin/utils';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 async function fixture(){
@@ -20,7 +23,9 @@ async function fixture(){
  const write=(auth?:string)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:auth,json:{mutation:'add'}}),ctx(doc));
  const permissions=async(auth?:string)=>{const r=auth?await query(request(`/a/${doc}/query`,{method:'POST',cookie:auth,json:{}}),ctx(doc)):await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));expect(r.status).toBe(200);return r.json();};
  const share=(id:string,role:'viewer'|'editor')=>updateSharingFor({tokenId:owner.id,userId:null},id,{shares:[{email:user.email,role}]});
- return {owner,friend,ds,doc,cookie,write,permissions,share};
+ // What `afbin push … --policy viewers-write` sends, byte for byte.
+ const grant=async()=>{const head=await getArtifactById(ds);const r=await patchArtifact(await observedRequest(`/api/artifacts/${ds}`,{method:'PATCH',token:owner.token,json:{policy:viewersWritePolicy(),expectedPolicyRevision:head!.policy_revision??0}}),ctx(ds));expect(r.status,await r.clone().text()).toBe(200);return r.json();};
+ return {owner,friend,ds,doc,cookie,write,permissions,share,grant};
 }
 it('denies anonymous writes and exposes read-only capability without suppressing live query rows',async()=>{
  const f=await fixture();expect((await f.write()).status).toBe(403);
@@ -56,4 +61,21 @@ it('refuses a save when the share is revoked while its SQL is running',async()=>
  });
  try {expect((await f.write(f.cookie)).status).toBe(403);expect((await getArtifactById(f.ds))?.version).toBe(1);}
  finally {spy.mockRestore();}
+});
+
+/*
+ * The tracker's requirement, end to end: a page "anyone opening the link" can update needs the
+ * `viewers-write` grant the CLI now publishes in one command. Without it a dataset VIEWER is
+ * refused; with it the same viewer — and an anonymous reader of an unlisted dataset — writes.
+ */
+it('the viewers-write shorthand is what lets a viewer, and the link audience, write',async()=>{
+ const f=await fixture();await f.share(f.ds,'viewer');
+ expect((await f.write(f.cookie)).status,'no policy: only editors write').toBe(403);
+ expect((await f.write()).status).toBe(403);
+ const saved=await f.grant();
+ expect(saved.dataset_policy).toEqual(viewersWritePolicy());
+ expect(saved.policy_revision).toBe(1);
+ expect((await f.write(f.cookie)).status,'the shared viewer now writes').toBe(200);
+ expect((await f.write()).status,'and so does the link audience').toBe(200);
+ expect((await getArtifactById(f.ds))?.version).toBe(3);
 });

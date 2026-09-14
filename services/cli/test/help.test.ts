@@ -457,8 +457,11 @@ test('afbin help --for <template> prints every reference a document of that kind
 test('the datasets topic names the push flag that publishes a writable dataset',()=>{
  const datasets=helpTopics['publishing-datasets']!;
  assert.match(datasets,/--type dataset --access readwrite/);
+ assert.match(datasets,/--policy viewers-write/,'and the grant that lets the link audience write it');
  assert.match(datasets,/--access <ACCESS>/,'the push help block in the same topic lists the flag');
+ assert.match(datasets,/--policy <POLICY>/);
  assert.match(commandHelp('push'),/--access <ACCESS>/);
+ assert.match(commandHelp('push'),/--policy <POLICY>/);
 });
 
 /**
