@@ -13,6 +13,11 @@ interface ProductMetrics {
   published: boolean;
   hasTitle: boolean;
   title: string | null;
+  /**
+   * Did the published document avoid the `<Iframe>` escape hatch? Null when nothing was
+   * published — there is no markup to look at, which is not the same as clean markup.
+   */
+  noIframe: boolean | null;
 }
 
 /** `/a/<id>` — the id is the first path segment after `/a/`, and a pretty URL ends `<id>-<slug>`. */
@@ -99,6 +104,32 @@ export function dataflowRows(html: string): number {
 const bodyOf = (html: string) => /<body[^>]*>([\s\S]*)<\/body>/i.exec(html)?.[1] ?? html;
 
 /**
+ * Did the document reach for `<Iframe>` — the escape hatch an agent takes when it cannot make
+ * the document's own components do what it wants, and the reason we are measuring at all?
+ *
+ * Asked of what the product SERVES, like every other product metric — and therefore NOT of the
+ * literal tag. `/a/<id>/raw` is the SSR'd standalone document, not its source
+ * (services/app/__tests__/raw-document.test.ts says so in its own header), and
+ * `services/app/lib/story-ui/registry.ts` renders `<Iframe>` as
+ * `div[data-mx-managed-frame]`. A case-sensitive `/<Iframe\b/` over that HTML can never match:
+ * it would be a constant true, an instrument that measures nothing.
+ *
+ * So three signals, in order of how reliably they survive rendering:
+ *   1. the managed-frame marker the renderer emits — emitted by `Iframe` and by nothing else
+ *      (`registry.ts`, `lib/story-runtime/managed-iframe.tsx`), and present in the SSR'd body
+ *      whether or not the document hydrates;
+ *   2. the component's own name in the story island's AST, for a document that carries one
+ *      (`carriesIsland` in `lib/story/document.ts` — hydrating or commenting documents);
+ *   3. the literal tag, case-sensitive and word-bounded as asked, for any response that does
+ *      carry source. `<IframeGallery>` and a lowercase browser `<iframe>` are not this.
+ */
+const IFRAME_SIGNALS: RegExp[] = [/data-mx-managed-frame/, /"tag"\s*:\s*"Iframe"/, /<Iframe\b/];
+
+export function usesIframe(html: string): boolean {
+  return IFRAME_SIGNALS.some((re) => re.test(html));
+}
+
+/**
  * Did the agent PUBLISH — asked of the product, never of the ledger.
  *
  * This used to read `successfulWrites > 0`, counted from the recording proxy,
@@ -118,10 +149,13 @@ export function productMetrics(input: { served: ServedDocument; baseline: Served
   const body = ok ? bodyOf(input.served.html) : '';
   const hasContent = /<(h1|h2|h3|p|table|ul|ol|section|article|div)\b/i.test(body);
   const base = input.baseline && input.baseline.status === 200 ? bodyOf(input.baseline.html) : null;
+  // With no baseline to compare against, content is the best available answer.
+  const published = ok && hasContent && (base === null || body !== base);
   return {
-    // With no baseline to compare against, content is the best available answer.
-    published: ok && hasContent && (base === null || body !== base),
+    published,
     hasTitle: ok && title !== null && !PLACEHOLDER_TITLES.has(title.toLowerCase()),
     title: title && title.length ? title : null,
+    // Nothing published is nothing to read: null, which the report renders "—", never a clean bill.
+    noIframe: published ? !usesIframe(input.served.html) : null,
   };
 }

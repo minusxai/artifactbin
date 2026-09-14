@@ -155,3 +155,39 @@ describe('gatedChecks', () => {
     expect(verdictFor(checks, gatedChecks(GATED, { trafficObserved: false })).failed).toEqual(['has_title']);
   });
 });
+
+/**
+ * THE PROGRESSION INSTRUMENTATION. `first_version_early`, `progressive_edits` and `no_iframe`
+ * gate nothing — no task lists them — so they reach the report only through `ALWAYS_REPORT`.
+ * Without that they would be computed on every run and then silently dropped, which is how a
+ * measurement becomes invisible instead of informative.
+ */
+describe('the progression checks are recorded on every run', () => {
+  const run = { published: true, first_version_early: false, progressive_edits: true, no_iframe: false };
+
+  it('records all three although no task gates them', () => {
+    const rec = checksToRecord(run, ['published']);
+    expect(rec.first_version_early).toBe(false);
+    expect(rec.progressive_edits).toBe(true);
+    expect(rec.no_iframe).toBe(false);
+  });
+
+  it('records nothing for the ones the scorer could not answer — the report shows "—"', () => {
+    const rec = checksToRecord({ ...run, first_version_early: null, progressive_edits: null, no_iframe: null }, ['published']);
+    for (const k of ['first_version_early', 'progressive_edits', 'no_iframe']) expect(rec).not.toHaveProperty(k);
+  });
+
+  it('and none of them can fail a run that does not gate them', () => {
+    expect(verdictFor({ ...run, has_title: true }, ['published', 'has_title'])).toEqual({ passed: true, failed: [] });
+  });
+
+  /**
+   * The two read off the ledger stop gating when nothing was observed — the same rule the rest of
+   * the ledger-only checks follow. Nothing gates them today; this is the wiring for when a task does.
+   */
+  it('the two ledger-derived ones stop gating when the ledger saw nothing', () => {
+    const gated = ['published', 'first_version_early', 'progressive_edits', 'no_iframe'];
+    expect(gatedChecks(gated, { trafficObserved: false })).toEqual(['published', 'no_iframe']);
+    expect(gatedChecks(gated, { trafficObserved: true })).toEqual(gated);
+  });
+});

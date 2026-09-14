@@ -19,6 +19,10 @@ const LEDGER_ONLY = new Set([
   'published_first_try', 'read_docs_before_write', 'no_unknown_endpoints',
   'canonical_stable', 'dataset_created', 'used_edits_endpoint',
   'query_ran',
+  // WHEN the first real document arrived, and whether the rest of the run extended it: both are
+  // read off the recorded HTTP, so both stop gating where there was no recorded HTTP. Neither
+  // gates anything today — no task lists them — and this is the wiring for when one does.
+  'first_version_early', 'progressive_edits',
 ]);
 
 /**
@@ -101,6 +105,12 @@ const ALWAYS_REPORT = new Set([
   // Whether the agent read this checkout describes any run at all — and a column
   // where it is false is a column that measured the disk instead of the wire.
   'no_local_checkout_reads',
+  // PROGRESSION, measured before anyone is asked for it: did a real document arrive early
+  // (`first_version_early`), did the run extend it (`progressive_edits`), and was it written in
+  // native markup rather than an `<Iframe>` escape hatch (`no_iframe`). No task gates any of
+  // these, and a check no task gates reaches the report only through this list — without it they
+  // would be computed on every run and then dropped, which is a measurement nobody can read.
+  'first_version_early', 'progressive_edits', 'no_iframe',
 ]);
 
 /**

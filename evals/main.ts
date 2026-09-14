@@ -400,9 +400,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The file holds exactly this task's agent traffic: its own proxy, and the driver's own setup
   // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
   const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
-  // `startedAtMs` is the anchor `ms_to_first_publish` is measured from; every other number the ledger
-  // answers is a pure function of the entries (`ledgerRows`, which owns `versions` too).
-  const lm = ledgerMetrics(ledger, { startedAtMs });
+  // `startedAtMs` is the anchor `ms_to_first_publish` is measured from, and `durationMs` the wall
+  // clock `first_version_early` takes its 40% of — the two things the caller knows and the ledger
+  // cannot. Every other number the ledger answers is a pure function of the entries (`ledgerRows`,
+  // which owns `versions` and `agent_versions` too).
+  const lm = ledgerMetrics(ledger, { startedAtMs, durationMs: spawned.durationMs });
 
   // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
   // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
@@ -488,6 +490,10 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'ms_to_first_publish', lm.msToFirstPublish);
   rec.record(task.id, 'ms_to_first_url', spawned.firstUrlAtMs);
   rec.record(task.id, 'skeleton_sections', lm.skeletonSections);
+  // …and when a READER first had something to read, which is a different write: `ms_to_first_publish`
+  // stops at the first 2xx write of any kind, and a dataset upload is a URL with nothing on it.
+  // In seconds beside `duration_s`, so the two are comparable at a glance.
+  rec.record(task.id, 's_to_first_markup_write', lm.msToFirstMarkupWrite === null ? null : Math.round(lm.msToFirstMarkupWrite / 100) / 10);
   // --- rows: text
   rec.record(task.id, 'first_error', checked.ok ? (lm.firstError ?? '') : `checks/${checked.step}: ${checked.error}`, 'text');
   rec.record(task.id, 'harness_error', result.error ?? '', 'text');
@@ -525,6 +531,12 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     dataset_created: lm.datasetCreated,
     query_ran: queryRows > 0,
     used_edits_endpoint: lm.usedEditsEndpoint,
+    // PROGRESSION — recorded on every run and gating nothing (no task lists them): did a real
+    // document arrive inside the first 40% of the wall clock, did the run then extend that same
+    // document, and was it written in native markup rather than an `<Iframe>` escape hatch.
+    first_version_early: lm.firstVersionEarly,
+    progressive_edits: lm.progressiveEdits,
+    no_iframe: pm.noIframe,
     used_cli: result.toolCalls===null?null:result.invocations.some(call=>/\bafbin\b/.test(JSON.stringify(call.input))),
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
     // …and last, so a KIND's own answer wins over a common name it also computes.

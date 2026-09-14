@@ -88,6 +88,42 @@ export function documentWrites(entries: LedgerEntry[]): number {
   return entries.filter((e) => e.status < 300 && isWrite(e)).length;
 }
 
+/**
+ * WHICH artifact a write stored into, read from the write itself.
+ *
+ * The path carries it for every write that names one (`PUT /api/artifacts/<id>`,
+ * `POST /api/artifacts/<id>/edits`); a bare `POST /api/artifacts` is a CREATE, and the only
+ * place its id can come from is the entry's own `artifactId`. That difference is the whole
+ * point for `progressiveEdits`: a create is a new artifact, never a version of an old one.
+ */
+function writtenArtifact(e: LedgerEntry): string | null {
+  const m = /^\/api\/artifacts\/([A-Za-z0-9]+)(?:\/(?:edits|revert))?$/.exec(pathOnly(e.path));
+  return m ? m[1] : (e.artifactId ?? null);
+}
+
+const isCreate = (e: LedgerEntry) => pathOnly(e.path) === '/api/artifacts';
+
+/**
+ * Did the run EXTEND one document rather than arrive as a single publish at the end?
+ *
+ * Two things at once: the agent stored at least two versions of its own (`documentWrites`),
+ * and every write after the first went back to the SAME artifact — an `/edits` diff, or a
+ * whole-document replace that keeps the id. A second `POST /api/artifacts` is a fork: a new
+ * artifact with a new URL, which is precisely the shape we do not want.
+ *
+ * A known consequence, not an oversight: a dataset-first task (`data`, `dashboard`, `deck`,
+ * `scrolly`) uploads its rows as write ONE, so the document that follows is a different
+ * artifact and the run reads false however carefully it was written. `documentWrites` counts
+ * every content write, and this shares that definition rather than inventing a second one.
+ */
+function progressiveEditsOf(entries: LedgerEntry[]): boolean {
+  const good = entries.filter((e) => e.status < 300 && isWrite(e));
+  if (good.length < 2) return false;
+  const first = writtenArtifact(good[0]);
+  if (first === null) return false;
+  return good.slice(1).every((w) => !isCreate(w) && writtenArtifact(w) === first);
+}
+
 /** One numeric row, as the driver records it. */
 interface LedgerRow {
   metric: string;
@@ -117,6 +153,9 @@ export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
     { metric: 'docs_bytes', value: m.docsBytes },
     // 1 for the document the driver made, plus every write that stored a new version.
     { metric: 'versions', value: m.observed ? 1 + documentWrites(entries) : null },
+    // The agent's own half of that count: how many versions IT stored. One is a single big
+    // publish; two or more is a document that grew while its reader could already see it.
+    { metric: 'agent_versions', value: m.observed ? documentWrites(entries) : null },
   ];
 }
 
@@ -224,6 +263,27 @@ interface LedgerMetrics {
    */
   msToFirstPublish: number | null;
   /**
+   * Ms from the same anchor to the first successful write that CARRIED MARKUP — when a reader
+   * first had something to read, as distinct from when a URL first existed (`msToFirstPublish`,
+   * which a dataset upload already satisfies). Null when no successful write ever carried markup.
+   */
+  msToFirstMarkupWrite: number | null;
+  /**
+   * Did that document arrive EARLY — inside the first 40 percent of the run's wall clock?
+   *
+   * The thing we are actually instrumenting: a person opening the shared link stares at the
+   * starter page until the agent's single big publish at the end. Strictly before the mark, so
+   * the boundary is not early. Null when the ledger observed nothing (like every other
+   * ledger-only judgement) and null when the caller gave no wall clock — 40 percent of nothing
+   * is not an answer. False, not null, for a run that simply never published markup.
+   */
+  firstVersionEarly: boolean | null;
+  /**
+   * Two or more versions stored by the agent, the later ones EXTENDING the first rather than
+   * forking a new artifact. Null when the ledger observed nothing.
+   */
+  progressiveEdits: boolean | null;
+  /**
    * Headings carried by the first successful write THAT CARRIED MARKUP — which is not always the first
    * successful write. The guardrail on "publish early": a skeleton with a real title and real sections is
    * a document arriving; an empty stub is a fast placeholder that games the timing.
@@ -240,7 +300,16 @@ interface LedgerMetrics {
 /** What the caller knows that the ledger cannot: when the agent's process actually started. */
 interface LedgerMetricsOptions {
   startedAtMs?: number;
+  /**
+   * How long the run took end to end (`spawned.durationMs` in main.ts) — the denominator
+   * `firstVersionEarly` measures its 40 percent against. The ledger's own entries stop at the
+   * last call, which is not when the agent stopped, so this cannot be derived here.
+   */
+  durationMs?: number;
 }
+
+/** A first version counts as EARLY inside this fraction of the run's wall clock. */
+const EARLY_FRACTION = 0.4;
 
 /**
  * Opening `<h1>`/`<h2>`/`<h3>` tags. Opening only — `</h1>` closes a heading rather than adding one —
@@ -276,6 +345,10 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
   // the ledger's own first entry measures from the agent's first HTTP call instead, which is a FLOOR.
   const anchor = opts.startedAtMs ?? entries[0]?.t;
   const msToFirstPublish = firstGoodWrite && anchor !== undefined ? firstGoodWrite.t - anchor : null;
+  const msToFirstMarkupWrite = firstGoodMarkupWrite && anchor !== undefined ? firstGoodMarkupWrite.t - anchor : null;
+  // A wall clock we do not have is not a slow run: with no duration (or a zero one) there is
+  // nothing to take 40 percent of, and the honest answer is null rather than false.
+  const wall = opts.durationMs !== undefined && opts.durationMs > 0 ? opts.durationMs : null;
   return {
     observed,
     httpCalls: entries.length,
@@ -295,6 +368,9 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
     docsFetches: judged(docsGets.length),
     docsBytes,
     msToFirstPublish,
+    msToFirstMarkupWrite,
+    firstVersionEarly: wall === null ? null : judged(msToFirstMarkupWrite !== null && msToFirstMarkupWrite < EARLY_FRACTION * wall),
+    progressiveEdits: judged(progressiveEditsOf(entries)),
     // Naturally null rather than `judged()`: no successful write ever carried markup, nothing to count.
     skeletonSections: firstGoodMarkupWrite === undefined ? null : (firstGoodMarkupWrite.reqMarkup!.match(HEADING_TAG) ?? []).length,
   };

@@ -139,3 +139,103 @@ describe('scoring a run whose agent named nothing', () => {
     expect(scoredArtifactId({ finalMessage: 'Done.', ledger: written, startId: null })).toBe('ledger1');
   });
 });
+
+/**
+ * PROGRESSION — the two things we want to instrument before we ask agents for them: did a real
+ * document arrive EARLY, and did the rest of the run EXTEND it rather than replace it wholesale.
+ * Both are recorded and gate nothing; both are ledger-only, so an unobserved run answers null.
+ */
+describe('firstVersionEarly — a real document inside the first 40% of the wall clock', () => {
+  const markupWrite = (t: number, over: Partial<LedgerEntry> = {}) =>
+    entry({ t, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ab3cd9', reqMarkup: '<h1>Report</h1>', ...over });
+
+  it('is true when the first successful MARKUP write lands before 40% of the run had elapsed', () => {
+    const m = ledgerMetrics([markupWrite(39_000)], { startedAtMs: 0, durationMs: 100_000 });
+    expect(m.firstVersionEarly).toBe(true);
+    expect(m.msToFirstMarkupWrite).toBe(39_000);
+  });
+
+  it('is false at and past the 40% mark — the boundary is not early', () => {
+    expect(ledgerMetrics([markupWrite(40_000)], { startedAtMs: 0, durationMs: 100_000 }).firstVersionEarly).toBe(false);
+    expect(ledgerMetrics([markupWrite(80_000)], { startedAtMs: 0, durationMs: 100_000 }).firstVersionEarly).toBe(false);
+  });
+
+  it('reads the first MARKUP write, not the dataset upload that beat it to the wire', () => {
+    // A data/dashboard/deck/scrolly run publishes its rows first. That upload is a URL
+    // (`msToFirstPublish` counts it) but it is not the document a reader can look at.
+    const ledger = [
+      entry({ t: 5_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
+      markupWrite(60_000),
+    ];
+    const m = ledgerMetrics(ledger, { startedAtMs: 0, durationMs: 100_000 });
+    expect(m.msToFirstPublish).toBe(5_000);
+    expect(m.msToFirstMarkupWrite).toBe(60_000);
+    expect(m.firstVersionEarly).toBe(false);
+  });
+
+  it('is false when the agent published no markup at all, and null when the ledger saw nothing', () => {
+    expect(ledgerMetrics([entry({ method: 'POST', path: '/api/artifacts', status: 400 })], { startedAtMs: 0, durationMs: 100_000 }).firstVersionEarly).toBe(false);
+    expect(ledgerMetrics([], { startedAtMs: 0, durationMs: 100_000 }).firstVersionEarly).toBeNull();
+  });
+
+  it('is null when the caller gave no wall clock to measure against — 40% of nothing is not an answer', () => {
+    expect(ledgerMetrics([markupWrite(1_000)], { startedAtMs: 0 }).firstVersionEarly).toBeNull();
+    expect(ledgerMetrics([markupWrite(1_000)], { startedAtMs: 0, durationMs: 0 }).firstVersionEarly).toBeNull();
+  });
+
+  it('msToFirstMarkupWrite shares the spawn anchor with msToFirstPublish, so agent boot is inside it', () => {
+    expect(ledgerMetrics([markupWrite(10_000)], { startedAtMs: 4_000 }).msToFirstMarkupWrite).toBe(6_000);
+    expect(ledgerMetrics([entry({ method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset' })]).msToFirstMarkupWrite).toBeNull();
+  });
+});
+
+describe('progressiveEdits — two versions of the agent\'s own, the later ones extending the first', () => {
+  const create = entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ab3cd9', reqMarkup: '<h1>Report</h1>' });
+
+  it('is true when the writes after the first keep the same document', () => {
+    expect(ledgerMetrics([
+      create,
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts/ab3cd9/edits', status: 200, artifactId: 'ab3cd9' }),
+      entry({ t: 3_000, method: 'PUT', path: '/api/artifacts/ab3cd9', status: 200, artifactId: 'ab3cd9' }),
+    ]).progressiveEdits).toBe(true);
+  });
+
+  it('is false when the agent forked instead — a second create is a new artifact, not a version', () => {
+    expect(ledgerMetrics([
+      create,
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'zz9999', reqMarkup: '<h1>Report</h1><p>more</p>' }),
+    ]).progressiveEdits).toBe(false);
+    expect(ledgerMetrics([
+      create,
+      entry({ t: 2_000, method: 'PUT', path: '/api/artifacts/zz9999', status: 200, artifactId: 'zz9999' }),
+    ]).progressiveEdits).toBe(false);
+  });
+
+  it('is false for the single big publish at the end — one version is not a progression', () => {
+    expect(ledgerMetrics([create]).progressiveEdits).toBe(false);
+  });
+
+  it('counts only writes the product ANSWERED — a 4xx stored nothing', () => {
+    expect(ledgerMetrics([
+      create,
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts/ab3cd9/edits', status: 409, artifactId: 'ab3cd9' }),
+    ]).progressiveEdits).toBe(false);
+  });
+
+  it('is null when the ledger observed nothing at all', () => {
+    expect(ledgerMetrics([]).progressiveEdits).toBeNull();
+  });
+
+  /**
+   * DELIBERATE, and a known limit: a dataset-first task uploads its rows as write ONE, so the
+   * document that follows is a different artifact and the run reads false however it was written.
+   * `documentWrites` is the count the brief names, and it counts every content write.
+   */
+  it('reads false on a dataset-first run whose document was then edited in place', () => {
+    expect(ledgerMetrics([
+      entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ab3cd9', reqMarkup: '<h1>Report</h1>' }),
+      entry({ t: 3_000, method: 'POST', path: '/api/artifacts/ab3cd9/edits', status: 200, artifactId: 'ab3cd9' }),
+    ]).progressiveEdits).toBe(false);
+  });
+});
