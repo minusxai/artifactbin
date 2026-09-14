@@ -220,10 +220,21 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const failure=error instanceof ApprovalRequired?{code:error.code,message:error.message,verification_url:error.verificationUrl,user_code:error.userCode,expires_at:new Date(error.expiresAt).toISOString()}:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{}),...(error.details?{details:error.details}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)};
   if(json)stdout(JSON.stringify({error:failure})+'\n');
   const diagnosed=refusalDetails(failure.message,'details'in failure?failure.details:undefined);
-  stderr(`${style.red(style.bold(failure.code))}: ${failure.message}${diagnosed.length?`\n${diagnosed.join('\n')}`:''}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
+  stderr(`${style.red(style.bold(failure.code))}: ${withoutCode(failure.code,failure.message)}${diagnosed.length?`\n${diagnosed.join('\n')}`:''}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
  }
 }
+/**
+ * THE CODE, ONCE. A refusal's message carries its own code wherever it is read — `http.ts` builds it
+ * as `<code>: <text>` so a message quoted on its own still names what was refused — and this printer
+ * puts the code in front of every human line. Together they read `invalid_sql: invalid_sql: …`.
+ *
+ * The fix belongs HERE, in the one place a refusal becomes human text, and not in `http.ts`: the
+ * message is also the `--json` envelope's `message`, which callers and tests read, so trimming it at
+ * the source would change the contract to fix the presentation. The printed line drops a prefix the
+ * printer is about to write itself; nothing else sees a different string.
+ */
+const withoutCode=(code:string,message:string):string=>message.startsWith(`${code}: `)?message.slice(code.length+2):message;
 /** How many failing files a refusal names before it stops; the rest are one counted line. */
 const MAX_REFUSAL_FILES=3;
 /**
