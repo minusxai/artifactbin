@@ -366,7 +366,7 @@ export function addWorkshopHelpers(
   )
     .then(wake)
     .catch(() => {
-      /* The painting remains usable if experimental assets fail. */
+      /* The painting remains usable if robot assets fail. */
     });
   void loader
     .loadAsync(ROOT + "workshop-arm.glb")

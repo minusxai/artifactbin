@@ -36,23 +36,6 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
 }
-.studio-text-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  text-decoration: none;
-  color: inherit;
-  border-bottom: 1px solid currentColor;
-  padding-bottom: 7px;
-  margin-top: 18px;
-  font-size: 14px;
-}
-.studio-text-link svg {
-  transition: transform 0.2s;
-}
-.studio-text-link:hover svg {
-  transform: translate(3px, -3px);
-}
 .studio-print {
   display: block;
   text-decoration: none;
@@ -117,7 +100,7 @@
 .blue-gallery {
   background: #154aa5;
   color: #fff9e8;
-  padding: 42px 8% 40px;
+  padding: 42px 2.5% 40px;
   overflow: hidden;
 }
 .blue-gallery-heading {
@@ -132,8 +115,8 @@
 }
 .blue-library {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px 6%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 34px 3%;
   padding: 20px 0 0;
   align-items: center;
 }
@@ -146,6 +129,8 @@
 .library-volume:nth-child(3) {
   transform: rotate(-1deg);
 }
+.library-volume:nth-child(4) { transform: rotate(1deg); }
+.library-volume:nth-child(5) { transform: rotate(-1.5deg); }
 .library-gallery-link {
   container-type: inline-size;
   color: inherit;
@@ -241,10 +226,10 @@
   display: none;
 }
 .library-leaf .studio-print-caption {
-  padding: 18px 18px 16px;
+  padding: 14px 13px 12px;
 }
 .library-leaf .studio-print-caption h3 {
-  font-size: clamp(15px, 1.4vw, 22px);
+  font-size: clamp(14px, 1.15vw, 20px);
 }
 .library-leaf .studio-print:hover {
   transform: none !important;
@@ -366,6 +351,10 @@
   }
 }
 
+@media (min-width: 801px) and (max-width: 1100px) {
+  .blue-library { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 800px) {
   .blue-gallery {
     padding: 60px 7% 45px;
@@ -440,10 +429,10 @@
   mix-blend-mode: multiply;
 }
 
-/* Match the FAQ's reading width while keeping the cobalt ground full bleed. */
+/* Let the books use the available width inside the gallery's narrow gutters. */
 .blue-gallery-heading,
 .blue-library {
-  max-width: 1040px;
+  max-width: none;
   margin-inline: auto;
 }
 .blue-capabilities {

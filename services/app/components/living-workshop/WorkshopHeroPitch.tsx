@@ -4,9 +4,8 @@ import { ClaudeCodeIcon, CodexIcon, PiIcon, OpenCodeIcon, GitHubIcon } from "@/c
 import { REPO_URL } from "@/lib/repo";
 import { Tooltip } from "@/components/Tooltip";
 
-/** Temporary hero comparison: one promise, one action, optional installation. */
-export default function WorkshopHeroPitch({ variant, origin }: {
-  variant: "minimal" | "glass" | "paper";
+/** Homepage introduction and agent setup actions. */
+export default function WorkshopHeroPitch({ origin }: {
   origin: string;
 }) {
   const [status, setStatus] = useState("");
@@ -34,10 +33,10 @@ export default function WorkshopHeroPitch({ variant, origin }: {
     }
   };
   return (
-    <div className={`workshop-pitch workshop-pitch-${variant}`}>
+    <div className="workshop-pitch">
       <span className="workshop-pitch-eyebrow">You, your agents, your friends & their agents</span>
-      <h1>{variant === "minimal" ? <>Make something.<br /><em>Together.</em></> : variant === "glass" ? <>From a thought.<br />To a thing.</> : <>Good ideas<br />live here.</>}</h1>
-      <p>{variant === "minimal" ? "Create with your agents. Edit, share and collaborate." : variant === "glass" ? "Create with your agent. Edit, share, make it yours." : "Documents, dashboards, little wonders. Made together."}</p>
+      <h1>Make something.<br /><em>Together.</em></h1>
+      <p>Create with your agents. Edit, share and collaborate.</p>
       <div className="workshop-pitch-command">
         <code>{command}</code>
         <Tooltip content={commandStatus === "Copied" ? "Copied!" : "Copy install command"}>

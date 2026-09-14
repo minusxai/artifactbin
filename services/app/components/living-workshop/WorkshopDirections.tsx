@@ -35,6 +35,9 @@ const BOOKS = [
   { title: "Follow the evidence", pages: [0, 2] },
   { title: "Tell compelling data stories", pages: [1, 3] },
   { title: "Put ideas into motion", pages: [4, 5] },
+  // Reuse published examples while trying the expanded five-book layout.
+  { title: "Turn data into decisions", pages: [0, 3] },
+  { title: "Share what you discover", pages: [2, 1] },
 ];
 
 export default function WorkshopDirections() {
@@ -43,13 +46,12 @@ export default function WorkshopDirections() {
   return (
     <div className="studio-directions" id="workshop-examples">
       <section
-        id="direction-3"
         className="blue-gallery"
         aria-label="The blue room"
       >
         <div className="blue-gallery-heading">
           <span className="studio-eyebrow">
-            With artifactbin you can make ...
+            With artifactbin you can ...
           </span>
         </div>
         <div className="blue-library">

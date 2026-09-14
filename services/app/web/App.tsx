@@ -5,7 +5,7 @@ import { Shell } from './Shell';
 import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 
-const { WorkshopRobotsPage, ExamplesPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
+const { ExamplesPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
 
 function Analytics() {
   const { session } = useSession();
@@ -18,12 +18,9 @@ export function App() {
       <Analytics />
       <NavigationPreloads>
       <Routes>
-        <Route path="/workshop_robots" element={<WorkshopRobotsPage />} />
         <Route path="/examples" element={<ExamplesPage />} />
         <Route path="/" element={<HomePage />} />
         <Route element={<Shell />}>
-          {/* Landing designs under review, side by side. Static paths, so
-            * they outrank the `/:user/*` profile route. Delete the losers. */}
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />

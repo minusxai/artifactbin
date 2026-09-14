@@ -3,7 +3,6 @@ import { lazyPage } from './lazy-page';
 // Deliberate dynamic-import boundary. Code preloading and rendering share these
 // top-level identities; the registry itself never imports a page eagerly.
 export const routePages = {
-  WorkshopRobotsPage: lazyPage<Record<string, never>>(() => import('./pages/WorkshopRobots')),
   ExamplesPage: lazyPage<Record<string, never>>(() => import('./pages/Examples')),
   ChatPage: lazyPage<Record<string, never>>(() => import('./pages/Chat').then(m => ({ default: m.ChatPage }))),
   AccountPage: lazyPage<Record<string, never>>(() => import('./pages/Account').then(m => ({ default: m.AccountPage })), false, true),

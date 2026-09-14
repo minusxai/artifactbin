@@ -92,7 +92,7 @@ export default function WorkshopComments() {
         const AgentIcon = firstAgent ? agentIcons[firstAgent] : MessageSquare;
         const replyCount = sample.messages.length + (replies[index]?.length ?? 0);
         return (
-          <div className="workshop-comment-anchor" data-open={open} key={sample.author}
+          <div className="workshop-comment-anchor" data-comment-region={sample.region} data-open={open} key={sample.author}
             onMouseEnter={() => setHovered(index)} onMouseLeave={() => setHovered(null)}
             onFocusCapture={() => setFocused(index)} onBlurCapture={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(null);

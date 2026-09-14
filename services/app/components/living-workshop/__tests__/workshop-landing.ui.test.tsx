@@ -13,9 +13,7 @@ import { setWorkshopAppearance } from "@/lib/workshop-appearance";
 import { WORKSHOP_PAPERS, WORKSHOP_SETTINGS } from "../scene-manifest";
 
 const scene = vi.hoisted(() => ({
-  reset: vi.fn(),
   setSetting: vi.fn(),
-  detach: vi.fn(),
   dispose: vi.fn(),
 }));
 const createScene = vi.hoisted(() => vi.fn());
@@ -42,7 +40,6 @@ it("prints the homepage artifacts on the board by default", async () => {
   await waitFor(() => expect(createScene).toHaveBeenCalledWith(
     expect.any(HTMLCanvasElement),
     WORKSHOP_PAPERS,
-    expect.any(Function),
     WORKSHOP_SETTINGS.indoor,
   ));
 });
@@ -50,10 +47,8 @@ it("prints the homepage artifacts on the board by default", async () => {
 it("keeps real canonical links usable without interacting with the canvas", () => {
   mount();
   for (const paper of WORKSHOP_PAPERS)
-    expect(screen.getByRole("link", { name: paper.title })).toHaveAttribute(
-      "href",
-      paper.href,
-    );
+    for (const link of screen.getAllByRole("link", { name: paper.title }))
+      expect(link).toHaveAttribute("href", paper.href);
 });
 it("copies deployment-aware agent instructions and reports a denied clipboard", async () => {
   clipboard

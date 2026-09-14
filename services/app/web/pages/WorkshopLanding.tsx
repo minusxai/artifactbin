@@ -8,7 +8,6 @@ import {
   WORKSHOP_SETTINGS,
   workshopImageSrcSet,
   WORKSHOP_PAPERS,
-  type WorkshopPaper,
   type WorkshopSetting,
 } from "@/components/living-workshop/scene-manifest";
 import WorkshopNav from "@/components/living-workshop/WorkshopNav";
@@ -31,7 +30,6 @@ export default function WorkshopLanding({
   initialSetting.current = setting;
   const canvas = useRef<HTMLCanvasElement>(null);
   const scene = useRef<WorkshopScene | null>(null);
-  const [reveal, setReveal] = useState<WorkshopPaper | null>(null);
   const [origin, setOrigin] = useState("https://artifactbin.dev");
   const [footerStatus, setFooterStatus] = useState("");
   const copyFooterInstructions = async () => {
@@ -55,7 +53,6 @@ export default function WorkshopLanding({
           scene.current = createWorkshopScene(
             canvas.current,
             WORKSHOP_PAPERS,
-            setReveal,
             initialSetting.current,
           );
         } catch {
@@ -76,7 +73,7 @@ export default function WorkshopLanding({
   return (
     <main className="workshop-page" data-setting={environment}>
       <WorkshopNav />
-      <section className="workshop-hero workshop-option workshop-option-minimal" aria-label="The artifactbin workshop">
+      <section className="workshop-hero" aria-label="The artifactbin workshop">
       {!override && <div className="workshop-scene-switch" role="group" aria-label="Workshop setting">
         {(["indoor", "outdoor"] as const).map((value) => (
           <button key={value} type="button" aria-pressed={environment === value} onClick={() => setWorkshopAppearance(value)}>
@@ -85,7 +82,7 @@ export default function WorkshopLanding({
           </button>
         ))}
       </div>}
-        <WorkshopHeroPitch variant="minimal" origin={origin} />
+        <WorkshopHeroPitch origin={origin} />
         <div className="workshop-picture">
           <div className="workshop-scene-frame">
             <img
@@ -106,16 +103,6 @@ export default function WorkshopLanding({
           </div>
         </div>
         <WorkshopComments />
-        <div className="workshop-reveal" role="status" aria-live="polite">
-          {reveal && (
-            <>
-              <span>{reveal.reveal}</span>
-              <a href={reveal.href}>
-                Open the artifact <ArrowUpRight size={14} />
-              </a>
-            </>
-          )}
-        </div>
       </section>
       <WorkshopDirections />
       <LandingFaq column="workshop-faq" heading="FAQs." />

@@ -27,10 +27,8 @@ it("filters the artifact wall without changing canonical destinations", () => {
 it("opens every published example and reveals the selected outcome", () => {
   render(<WorkshopDirections />);
   for (const doc of SHOWCASE)
-    expect(screen.getByRole("link", { name: doc.title })).toHaveAttribute(
-      "href",
-      showcaseHref(doc),
-    );
+    for (const link of screen.getAllByRole("link", { name: doc.title }))
+      expect(link).toHaveAttribute("href", showcaseHref(doc));
   expect(screen.getByText(REASONS[0]!.body)).toBeVisible();
   fireEvent.click(
     screen.getByRole("button", { name: /Don't waste tokens/, expanded: false }),

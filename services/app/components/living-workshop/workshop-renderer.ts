@@ -30,7 +30,6 @@ import {
   isPerforatedPaper,
   liftPaper,
   releaseCloth,
-  resetCloth,
   stepCloth,
   type Cloth,
 } from "./paper-physics";
@@ -38,8 +37,6 @@ import { type WorkshopPaper, type WorkshopSetting } from "./scene-manifest";
 
 export interface WorkshopScene {
   setSetting(setting: WorkshopSetting): void;
-  reset(): void;
-  detach(id: string): void;
   dispose(): void;
 }
 interface Sheet {
@@ -52,15 +49,18 @@ interface Sheet {
   indices: number[];
   lastTorn: number;
 }
-/** Imported only by the lazy workshop route, never by the existing home.
+/** Loaded lazily by the public homepage.
  * Same-origin textures are required by WebGL. Physics stays renderer-independent.
  */
 export function createWorkshopScene(
   canvas: HTMLCanvasElement,
   papers: WorkshopPaper[],
-  onReveal: (paper: WorkshopPaper | null) => void,
   setting: WorkshopSetting,
 ): WorkshopScene | null {
+  delete canvas.dataset.ready;
+  // The HTML painting stays visible until the first complete composition.
+  const readyPosters = new Set<string>();
+  let backgroundReady = false;
   let renderer: WebGLRenderer;
   try {
     renderer = new WebGLRenderer({
@@ -183,13 +183,14 @@ export function createWorkshopScene(
     image.onload = () => {
       if (!disposed) {
         paintPoster(sheet, index);
+        readyPosters.add(paper.id);
         schedule();
       }
     };
     image.onerror = () => {
       if (!disposed) schedule();
     };
-    image.src = setting.posterAtlas ?? `/api/showcase/${paper.id}`;
+    image.src = `/api/showcase/${paper.id}`;
     return sheet;
   });
   function paintPoster(sheet: Sheet, index: number) {
@@ -226,24 +227,7 @@ export function createWorkshopScene(
       c.beginPath();
       c.rect(margin, margin, w - margin * 2, h - margin * 2);
       c.clip();
-      if (setting.posterAtlas) {
-        // Review-only print atlas: retain each complete composition, including its type.
-        const cellWidth = sheet.image.naturalWidth / 3;
-        const cellHeight = sheet.image.naturalHeight / 2;
-        c.drawImage(
-          sheet.image,
-          (index % 3) * cellWidth,
-          Math.floor(index / 3) * cellHeight,
-          cellWidth,
-          cellHeight,
-          margin,
-          margin,
-          w - margin * 2,
-          h - margin * 2,
-        );
-      } else {
-        c.drawImage(sheet.image, (w - dw) / 2, (h - dh) / 2, dw, dh);
-      }
+      c.drawImage(sheet.image, (w - dw) / 2, (h - dh) / 2, dw, dh);
       // Blend blue ink with luminance, never the original hue: pale chart fills
       // and antialiased edges must turn blue too, while true grays stay neutral.
       // This runs only when painting a texture, never in the animation loop.
@@ -393,36 +377,6 @@ export function createWorkshopScene(
     stencilTexture.colorSpace = SRGBColorSpace;
     quad(stencilTexture, 2);
   }
-  // Screen marks join the depth-tested scene, so a foreground sheet can cover
-  // them. The same inline SVGs remain the non-WebGL accessible fallback.
-  const screenSurface = document.createElement("canvas");
-  screenSurface.width = SCENE.width;
-  screenSurface.height = SCENE.height;
-  const screenContext = screenSurface.getContext("2d");
-  if (screenContext) {
-    const screenTexture = new CanvasTexture(screenSurface);
-    screenTexture.colorSpace = SRGBColorSpace;
-    quad(screenTexture, 66);
-    for (const svg of canvas.parentElement?.querySelectorAll<SVGSVGElement>(
-      ".workshop-agent",
-    ) || []) {
-      const copy = svg.cloneNode(true) as SVGSVGElement;
-      copy.setAttribute("width", String(SCENE.width));
-      copy.setAttribute("height", String(SCENE.height));
-      copy.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-      const source = new Image();
-      images.push(source);
-      source.onload = () => {
-        if (disposed) return;
-        screenContext.drawImage(source, 0, 0, SCENE.width, SCENE.height);
-        screenTexture.needsUpdate = true;
-        schedule();
-      };
-      source.src =
-        "data:image/svg+xml;charset=utf-8," +
-        encodeURIComponent(new XMLSerializer().serializeToString(copy));
-    }
-  }
   const helpers = setting.liveRobots
     ? addWorkshopHelpers(renderer, schedule, setting.name)
     : null;
@@ -470,6 +424,7 @@ export function createWorkshopScene(
       f.putImageData(pixels, 0, 0);
     }
     ft.needsUpdate = true;
+    backgroundReady = foregroundCoverage !== null;
     schedule();
   };
   background.onload = paintBackground;
@@ -582,6 +537,7 @@ export function createWorkshopScene(
   function draw(time: number) {
     frame = 0;
     if (disposed) return;
+    if (!backgroundReady || readyPosters.size !== papers.length) return;
     const dt = Math.min(0.05, (time - (last || time)) / 1000);
     last = time;
     accumulator += dt;
@@ -594,7 +550,6 @@ export function createWorkshopScene(
           (!s.cloth.pinned && !s.cloth.settled) ||
           (time < relaxUntil && relaxing.has(s.paper.id))
         ) {
-          const wasPinned = s.cloth.pinned;
           const grab = held
             ? {
                 index: grabIndex,
@@ -610,7 +565,6 @@ export function createWorkshopScene(
             continue;
           }
           stepCloth(s.cloth, 1 / 60, grab);
-          if (wasPinned && !s.cloth.pinned) onReveal(s.paper);
         }
       }
       separatePapers(sheets.filter((s) => s.mesh.visible).map((s) => s.cloth));
@@ -644,6 +598,7 @@ export function createWorkshopScene(
     if (!reduced.matches) helpers?.update(dt);
     renderer.render(scene, camera);
     helpers?.render(renderer, camera);
+    canvas.dataset.ready = "true";
     if (moving || (!reduced.matches && (helpers || sheets.some((s) => s.cloth.pinned)))) schedule();
   }
   function schedule() {
@@ -766,38 +721,12 @@ export function createWorkshopScene(
           releaseCloth(s.cloth);
         if (!s.cloth.pinned) {
           s.cloth.age = 0;
-          onReveal(s.paper);
         }
       } else if (!cancelled) window.location.assign(s.paper.href);
     }
     canvas.style.cursor = "grab";
     if (s) relaxing.add(s.paper.id);
     relaxUntil = performance.now() + 1800;
-    schedule();
-  }
-  function detach(id: string) {
-    const s = sheets.find((s) => s.paper.id === id);
-    if (!s) return;
-    releaseCloth(s.cloth);
-    onReveal(s.paper);
-    schedule();
-  }
-  function reset() {
-    gesture = null;
-    if (activePointer !== null && canvas.hasPointerCapture(activePointer))
-      canvas.releasePointerCapture(activePointer);
-    activePointer = null;
-    relaxing.clear();
-    for (const s of sheets) {
-      s.mesh.visible = true;
-      s.shadow.visible = true;
-      resetCloth(s.cloth);
-      s.mesh.geometry.setIndex(s.indices);
-      s.shadow.geometry.setIndex(s.indices);
-      s.lastTorn = 0;
-      updateMesh(s);
-    }
-    onReveal(null);
     schedule();
   }
   const observer = new ResizeObserver(resize);
@@ -829,10 +758,9 @@ export function createWorkshopScene(
   resize();
   return {
     setSetting,
-    detach,
-    reset,
     dispose() {
       disposed = true;
+      delete canvas.dataset.ready;
       helpers?.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();

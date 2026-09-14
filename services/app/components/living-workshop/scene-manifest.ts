@@ -6,7 +6,6 @@ export interface WorkshopPaper extends PaperSlot {
   kind: string;
   href: string;
   image: string;
-  reveal: string;
 }
 // Placement belongs to the scene; titles, destinations and captures remain catalog-owned.
 const PLACEMENTS = [
@@ -17,7 +16,6 @@ const PLACEMENTS = [
     width: 145,
     height: 175,
     angle: -0.085,
-    reveal: "Edit it with your own hands.",
   },
   {
     id: "OewuPR",
@@ -26,7 +24,6 @@ const PLACEMENTS = [
     width: 282,
     height: 176,
     angle: 0.065,
-    reveal: "Leave feedback where it belongs.",
   },
   {
     id: "5fN6kY",
@@ -35,7 +32,6 @@ const PLACEMENTS = [
     width: 167,
     height: 175,
     angle: -0.09,
-    reveal: "Explore the data behind the page.",
   },
   {
     id: "wxeC8G",
@@ -44,7 +40,6 @@ const PLACEMENTS = [
     width: 163,
     height: 173,
     angle: 0.075,
-    reveal: "Make work worth sharing.",
   },
   {
     id: "yKcybb",
@@ -53,7 +48,6 @@ const PLACEMENTS = [
     width: 205,
     height: 175,
     angle: -0.06,
-    reveal: "Bring your favorite agent.",
   },
   {
     id: "EN6QaQ",
@@ -62,7 +56,6 @@ const PLACEMENTS = [
     width: 162,
     height: 166,
     angle: 0.1,
-    reveal: "Your work. Your own little corner.",
   },
 ];
 export const WORKSHOP_PAPERS: WorkshopPaper[] = PLACEMENTS.flatMap((slot) => {
@@ -82,8 +75,6 @@ export const WORKSHOP_PAPERS: WorkshopPaper[] = PLACEMENTS.flatMap((slot) => {
 export const WORKSHOP_IMAGE = "/landing/workshop/indoor-1672.webp";
 
 export interface WorkshopSetting {
-  /** Optional six-cell, 3 × 2 artwork atlas for the visual review routes. */
-  posterAtlas?: string;
   liveRobots?: boolean;
   fallbackImage?: string;
   image: string;
