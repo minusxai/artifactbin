@@ -22,6 +22,13 @@ const FACET_BESIDE_MARK = '{"kind":"vega-lite","spec":{"mark":"bar","encoding":{
 const FACET_AS_ENCODING = '{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"team","type":"nominal"},"y":{"field":"median_resolution_hours","type":"quantitative"},"column":{"field":"channel","type":"nominal"}}}}';
 
 describe('the publish door refuses a Vega-Lite spec the renderer cannot read', () => {
+  it('refuses a spec that names its own data set — the platform binds the query rows; a local pi deck published one and the browser said "Unrecognized data set"', async () => {
+    const r = await checkDocumentData(doc('{"kind":"vega-lite","spec":{"data":{"name":"table"},"mark":"bar","encoding":{"x":{"field":"team","type":"nominal"},"y":{"field":"median_resolution_hours","type":"quantitative"}}}}'), load);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.details.join('\n')).toMatch(/query \$june: .*"data" key.*remove it/);
+    expect(vegaLiteStructureError({ data: { values: [] }, mark: 'bar' })).toMatch(/"data" key/);
+    expect(vegaLiteStructureError({ mark: 'bar', encoding: {} })).toBeNull();
+  });
   it('names the query and carries the normaliser\'s message — this spec published and crashed a dashboard tile', async () => {
     const r = await checkDocumentData(doc(FACET_BESIDE_MARK), load);
     expect(r.ok).toBe(false);

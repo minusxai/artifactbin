@@ -16,7 +16,7 @@ import {join} from 'node:path';
 import {commands,commandHelp,parseCommand} from '../src/commands';
 import {colorSupport,createStyle,stripAnsi,visibleWidth,highlightDiff,highlightJson} from '../src/style';
 import {COMMAND_GROUPS,overviewScreen,commandScreen,summary} from '../src/help-screen';
-import {briefDocument,helpTopics,helpDocument,localSkillFiles,manPage,skillFilesFor} from '../src/teaching';
+import {briefDocument,helpBundle,helpTopics,helpDocument,localSkillFiles,manPage,skillFilesFor} from '../src/teaching';
 import {TEACHING_BASE,withTeachingOrigin} from '../src/teaching-origin';
 import {DEFAULT_SERVER} from '../src/config';
 import {installSkills,skillTargets} from '../src/skill-install';
@@ -258,7 +258,9 @@ describe('the bundled teaching and the manual', () => {
     await writeFile(join(root,'sales.csv'),'month,region,revenue\n2026-07-01,East,12\n2026-08-01,West,9\n');
     for(const template of ['editorial','dashboard','deck','scrolly','example']){
      const output:string[]=[];const context={cwd:root,home:root,env:{},interactive:false,stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('bundled teaching must stay offline')};
-     assert.equal(await runCli(['help',template],context),0);await writeFile(join(root,template+'.jsx'),output.join(''));output.length=0;
+     // A template name as the topic prints the whole bundle now; the starter it ends with is validated from the registry.
+     if(template==='example'){assert.equal(await runCli(['help',template],context),0);await writeFile(join(root,template+'.jsx'),output.join(''));output.length=0;}
+     else await writeFile(join(root,template+'.jsx'),helpTopics[template]!);
      assert.equal(await runCli(['validate',template+'.jsx','--json'],context),0,output.join(''));
     }
    }finally{await rm(root,{recursive:true,force:true});}
@@ -375,7 +377,7 @@ describe('the bundled teaching and the manual', () => {
    assert.match(themes,/Available themes: .*modernist/);
    const templates=helpDocument('templates');
    assert.match(templates,/Pick ONE by the content's shape/);
-   assert.match(templates,/Run afbin help <template> to print a local starter/);
+   assert.match(templates,/Run afbin help <template> for everything that kind of document needs, its starter last/);
   });
 
 });
@@ -402,5 +404,32 @@ test('bare afbin help names where the skill and its references are installed, as
   out.length=0;
   assert.equal(await runCli(['help','--json'],context),0);
   assert.equal(JSON.parse(out.join('')).help,briefDocument());
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('afbin help --for <template> prints every reference a document of that kind needs, in one call, in reading order',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-help-for-'));
+ try{
+  const out:string[]=[];
+  const context={cwd:root,home:root,env:{},interactive:false,stdout:(s:string)=>out.push(s),stderr:()=>{},fetch:async()=>assert.fail('help must stay offline')};
+  assert.equal(await runCli(['help','--for','deck'],context),0);
+  const text=out.join('');
+  assert.equal(text,helpBundle('deck'));
+  out.length=0;
+  assert.equal(await runCli(['help','dashboard'],context),0,'a template name as the topic prints the bundle, not the bare starter');
+  assert.equal(out.join(''),helpBundle('dashboard'));
+  assert.ok(helpBundle('dashboard').includes(helpTopics['dashboard']),'the starter is still inside it');
+  const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets','## starter: deck'];
+  let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
+  assert.ok(text.includes(helpTopics['templates-deck']));assert.ok(text.includes(helpTopics['design']));
+  assert.ok(text.includes('Available themes:'),'the themes overview names the choices');
+  assert.ok(!text.includes('templates-editorial'),'only the chosen template');
+  assert.ok(Buffer.byteLength(text)<45000,`bundle is ${Buffer.byteLength(text)} bytes; a shell tool shows an agent about 50 KB`);
+  out.length=0;
+  assert.equal(await runCli(['help','--for','deck','--json'],context),0);
+  assert.equal(JSON.parse(out.join('')).help,helpBundle('deck'));
+  out.length=0;
+  assert.equal(await runCli(['help','--for','poster','--json'],context),2);
+  const err=JSON.parse(out.join('')).error;assert.equal(err.code,'invalid_choice');for(const t of ["dashboard","deck","editorial","plan","scrolly"])assert.ok(err.fix.includes(t),err.fix);
  }finally{await rm(root,{recursive:true,force:true});}
 });

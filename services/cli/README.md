@@ -125,7 +125,10 @@ The first command that needs the server opens browser authentication automatical
 connection with owner-only permissions and resumes the command. Run `afbin auth` to sign in
 deliberately; local skills install eagerly on first use and update with `afbin update`.
 `ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can supply a connection; saved credentials are
-used only for their matching server origin. HTTP is restricted to localhost development. Tokens are
+used only for their matching server origin. The installer passes the origin it was served from
+to `afbin setup --server`, which records a self-hosted origin as the default in `.env` (the first
+origin recorded stays; the public server needs no record). A directory tracks one server and
+account; a command that selects another server is refused by name before any request. HTTP is restricted to localhost development. Tokens are
 sent in authorization headers, never session URLs. No legacy credential file is read.
 
 Bare commands offer a picker of installed agent executables. The harness itself must be installed.

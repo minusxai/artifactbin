@@ -20,16 +20,18 @@ import {withLock} from './state';
 import {pendingOperation} from './recoverable-operation';
 import {homedir} from 'node:os';
 import {parseCommand,CliError,type ParsedCommand} from './commands';
-import {loadWorkspace} from './workspace';
+import {loadWorkspace,inspectWorkspace,type Workspace} from './workspace';
 import {validateFiles} from './validation';
 import {deleteComments} from './delete';
 import {diffCommand,remoteStatus} from './comparison';
 import {localStatus} from './local';
-import {helpDocument,writeHelp} from './teaching';
+import {helpDocument,writeHelp,helpBundle} from './teaching';
 import {withTeachingOrigin} from './teaching-origin';
+import {validateMarkupStructure} from '../../app/lib/story/local-validation';
+import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnection} from './config';
+import {DEFAULT_SERVER,loadConnection,exportedServer,saveDefaultServer} from './config';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
@@ -55,10 +57,16 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // The skill and the help text must name the server THIS afbin talks to. Eager
   // init and help both run before the workspace is read, so they use what is
   // knowable that early: an explicit --server, else the exported origin.
-  const declaredServer=(typeof flags.server==='string'?flags.server:(context.env??process.env).ARTIFACTBIN_URL)??DEFAULT_SERVER;
+  // The recorded default (`.env`, written by `setup --server` from a self-hosted installer) selects a server
+  // exactly as an exported ARTIFACTBIN_URL does: codex's `afbin pull <local url>` was still refused as
+  // wrong_server on the first fixed build because only the connection loader read it (eval run local17).
+  const exportedOrigin=await exportedServer(home,context.env);
+  const declaredServer=typeof flags.server==='string'?flags.server:exportedOrigin??DEFAULT_SERVER;
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout('SQL service is ready for offline local queries.\n');return 0;}
+   // An installer served from a self-hosted origin runs `setup --server <origin>`: that origin becomes the default.
+   if(typeof flags.server==='string')await saveDefaultServer(flags.server,home,context.env);
    const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    if(json)emit(result);else stdout(setupSummary(result.installations,style));
    return 0;
@@ -74,7 +82,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // Everything printed is addressed, by construction: the screens render the
    // command registry today, but a topic body reaching them must not print a
    // placeholder at a person.
-   const text=screen!==undefined?withTeachingOrigin(screen,declaredServer):helpDocument(topic,format,declaredServer);
+   const text=typeof bundled.for==='string'?helpBundle(bundled.for,declaredServer):screen!==undefined?withTeachingOrigin(screen,declaredServer):helpDocument(topic,format,declaredServer);
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    if(json){emit({help:text});return 0;}
    // The printed brief says its references are files beside SKILL.md; without the absolute path an agent
@@ -85,7 +93,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   let workspace=await loadWorkspace(context.cwd,home);
   const account=await accountPlan(workspace,parsed);
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
-  const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??(context.env??process.env).ARTIFACTBIN_URL;
+  const serverOrigin=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
   if(['push','pull','delete'].includes(command)&&(!account||command==='pull')&&!flags['dry-run']&&await pendingOperation(workspace))throw new CliError('pending_recovery','Recover the pending operation before changing this workspace.','Repeat the original command and inputs.');
   const pendingFiles=await stagedFiles(workspace.home,workspace.root);
   if(pendingFiles&&['push','pull','delete'].includes(command)&&!flags['dry-run']){
@@ -100,13 +108,17 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    }
   }
   let localValidation:Awaited<ReturnType<typeof validateFiles>>|undefined;
-  if(command==='validate'&&!account){localValidation=await validateFiles(workspace,positionals,!!flags.fix);if(!flags.remote||!localValidation.valid){emit(localValidation);return localValidation.valid?0:2;}}
+  if(command==='validate'&&!account){localValidation=await validateFiles(workspace,positionals,!!flags.fix);if(!flags.remote||!localValidation.valid){
+   // One validate answers what an agent otherwise checks by hand: pi spent ten calls slicing its own viz
+   // JSON out of the file with Python before pushing (local deck, 14 Sep).
+   const verified=localValidation.valid?await verifiedSummary(workspace,positionals):undefined;
+   emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
-   try{const result=await diffCommand(workspace,parsed,serverOrigin()??'https://artifactbin.dev',false,stdout,undefined,style);if(result)emit(result);return 0;}
+   try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style);if(result)emit(result);return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
-  const selectedServer=serverOrigin()??'https://artifactbin.dev';
+  const selectedServer=serverOrigin()??declaredServer;
   const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer});
   const exportOptions=()=>({type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
@@ -135,13 +147,13 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const server=serverOrigin();
   if(command==='update'){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   const updated=await updateCli({home,server:server??'https://artifactbin.dev',env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
+   const updated=await updateCli({home,server:server??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
    emit(updated);
    if('installations' in updated)for(const hint of restartHints(updated.installations))stderr(hint+'\n');
    return 0;
   }
   let connection=await loadConnection(server,home,context.env);
-  const authenticate=()=>browserAuthenticate(connection?.server??server??'https://artifactbin.dev',{...context.auth,home,env:context.env,interactive,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
+  const authenticate=()=>browserAuthenticate(connection?.server??server??declaredServer,{...context.auth,home,env:context.env,interactive,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
   if(command==='auth'){
    // AUTH is lazy and idempotent. A saved token is verified with one read and its account reported;
    // no token or a rejected one runs the same browser approval the rest of the CLI uses on 401.
@@ -157,6 +169,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(flags['dry-run'])throw new CliError('auth_required','Sign-in is required for this operation.','Run afbin auth, or set ARTIFACTBIN_TOKEN for the selected server.');
    connection=await authenticate();
   }
+  // A directory is tracked against ONE server and account. Sending another server this directory's account
+  // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
+  // login JavaScript (eval run local17). Name both origins and the way out before any request.
+  if(workspace.tracking&&workspace.tracking.server!==connection.server)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
@@ -178,7 +194,17 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='pull'){emit(await pull(workspace,positionals,client,{format:flags.format as string|undefined,output:flags.output as string|undefined,force:!!flags.force,dryRun:!!flags['dry-run'],type:flags.type as string|undefined}));return 0;}
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
-  if(command==='push'&&!account){emit({...await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;}
+  if(command==='push'&&!account){
+   const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']});
+   // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and
+   // grepped their own document for 5–13 calls (eval runs 34740707220–34741910427). Say it once, here.
+   const published=!flags['dry-run']&&result.operations.some(op=>'status' in op&&op.status==='published');
+   // What the door checked before it accepted the document, so the agent that wants proof has it here
+   // and does not go and gather it: pi curled the page for the title, grepped for the chart spec and
+   // re-ran its queries for five calls after a successful push (local hardcore report, 14 Sep).
+   const verified=published?await verifiedSummary(workspace,positionals):undefined;
+   emit({...result,...(verified?{verified}:{}),...(published?{next:PUBLISHED_NEXT}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
+  }
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');
    return attachRemote({client,id:flags.session,interactive,stdout,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
@@ -197,6 +223,23 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   return error instanceof CliError?error.exitCode:1;
  }
 }
+/** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
+export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
+/** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
+async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[]}>|undefined>{
+ const out:Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[]}>=[];
+ for(const file of await inspectWorkspace(workspace,paths)){
+  if(!file.document||!file.bytes)continue;
+  const {split}=validateMarkupStructure(file.document.body);if(!split)continue;
+  let charts=0;const count=(nodes:JsxNode[])=>{for(const n of nodes){if(n.type!=='element')continue;if(n.tag==='Question')charts++;count(n.children);}};count(split.body);
+  // Counted by TAG, not by parsed declaration: before push a query may still name a local CSV
+ // (`source="./rows.csv"`), which the declaration parser refuses until sync rewrites it to a ref.
+ const queries=(split.helmet?.children??[]).flatMap(n=>n.type==='element'&&n.tag==='Query'?[(v=>v?.static&&typeof v.json==='string'?v.json:'')(n.attributes.find(a=>a.name==='name')?.value)]:[]).filter(Boolean);
+  out.push({path:file.path,title:split.content.title??file.document.metadata.title??null,queries,charts,
+   checks:['markup validated',...(queries.length?[`${queries.length} quer${queries.length===1?'y':'ies'} dry-run against the published dataset`]:[]),...(charts?[`${charts} chart${charts===1?'':'s'} checked against query columns`]:[]),'title and metadata accepted']});
+ }
+ return out.length?out:undefined;
+}
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}
 /**
  * Eager, offline skill installation for the detected or saved harnesses. Runs before every command,
@@ -207,8 +250,12 @@ async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;origin?:st
  const selected=await selectSkills({home:options.home,env:options.env,interactive:false});
  if(!selected.length)return;
  const plans=await planSkills(selected,{home:options.home,env:options.env,origin:options.origin});
- if(plans.every(plan=>plan.status==='unchanged'))return;
- const installed=await installSkills(selected,{home:options.home,env:options.env,origin:options.origin});
+ // Eager init installs a MISSING or version-stale skill. A skill addressed to another server is
+ // `afbin setup`'s decision: a command run with --server against a second server used to rewrite
+ // every harness's skill files on every invocation (127 "Skill updated" lines in one local pi task).
+ const stale=plans.filter(plan=>plan.status==='install'||(plan.status==='update'&&plan.installed!==plan.version));
+ if(!stale.length)return;
+ const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,env:options.env,origin:options.origin});
  for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${options.style.green(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
  for(const hint of restartHints(installed.installations))options.stderr(options.style.yellow(hint)+'\n');
 }

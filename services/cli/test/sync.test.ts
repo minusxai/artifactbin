@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,realpath,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {runCli} from '../src/dispatch';
+import {runCli,PUBLISHED_NEXT} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {parseDocument} from '../src/document';
 import {digest} from '../src/files';
@@ -414,4 +414,51 @@ describe('deleting many typed targets', () => {
     assert.equal(await readFile(join(h.root,'notes.txt'),'utf8'),'keep me\n');assert.equal(await readFile(join(h.root,'notes.yaml'),'utf8'),'type: file\nid: fil123\nsource: notes.txt\n');
    }finally{await h.cleanup();}
   });
+});
+
+test('a successful publish says the head is the pushed file, so the agent does not spend turns verifying it; a dry-run says nothing',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-published-next-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},root);await writeFile(join(root,'doc.jsx'),'<p>Hello</p>');
+  const output:string[]=[];
+  const fetch=async(input:unknown)=>{
+   if(String(input).endsWith('/preflight'))return Response.json({valid:true});
+   return Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup:'<p>Hello</p>'},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  };
+  assert.equal(await runCli(['push','doc.jsx','--dry-run','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
+  assert.equal(JSON.parse(output[0]).next,undefined);
+  output.length=0;
+  assert.equal(await runCli(['push','doc.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
+  const result=JSON.parse(output[0]);
+  assert.equal(result.operations[0].status,'published');
+  assert.equal(result.next,PUBLISHED_NEXT);
+  assert.match(result.next,/Do not pull, diff, export or grep/);
+  // What the door checked, in the same reply, so the agent has its proof without gathering it.
+  assert.deepEqual(result.verified,[{path:'doc.jsx',title:null,queries:[],charts:0,checks:['markup validated','title and metadata accepted']}]);
+  // A published dataset names its columns and types: no probing queries to learn that `month` is a string.
+  await writeFile(join(root,'rows.csv'),'month,cups\n2026-04,858\n2026-05,899\n');
+  output.length=0;
+  assert.equal(await runCli(['push','rows.csv','--type','dataset','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async(input:unknown)=>{
+   if(String(input).endsWith('/preflight'))return Response.json({valid:true});
+   return Response.json({id:'ds1234',version:1,edit_id:'d1',state:digest('d1'),format:'dataset',rows:[{month:'2026-04',cups:858},{month:'2026-05',cups:899}]},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }}),0,output.join(''));
+  const ds=JSON.parse(output[0]).operations[0];
+  assert.equal(ds.status,'published');
+  assert.deepEqual(ds.columns,[{name:'month',type:'string'},{name:'cups',type:'number'}]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('pulling a starter names the next call — pick the kind, afbin help <template>, write, push',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-pull-starter-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const starter={id:'st4rt0',version:1,edit_id:'e1',state:digest('s1'),markup:'<div><h1>Untitled</h1><p>Waiting for your agent…</p></div>',format:'markup',title:'Untitled',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
+ const titled={...starter,id:'t1tled',title:'Q3 sales review',template:'dashboard'};
+ const request:typeof fetch=async(input)=>{const path=new URL(String(input)).pathname;const h=path.includes('t1tled')?titled:starter;return Response.json(h,{headers:{'X-Artifactbin-Account':'usr_one'}});};
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},home);
+  const a=await invoke(['pull','st4rt0','--output','report.jsx']);assert.equal(a.code,0,JSON.stringify(a));
+  assert.match(a.result.operations[0].next,/afbin help <template> \(dashboard, deck, editorial, plan, scrolly\)/);
+  const b=await invoke(['pull','t1tled','--output','sales.jsx']);assert.equal(b.code,0,JSON.stringify(b));
+  assert.equal(b.result.operations[0].next,undefined,'a document with a title and a template is not a starter');
+ }finally{await rm(root,{recursive:true,force:true});}
 });

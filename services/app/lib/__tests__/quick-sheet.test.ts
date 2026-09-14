@@ -30,7 +30,7 @@ describe('the installed short skill',()=>{
  it('points to data, comments, history and recovery without another network reference',()=>{
   for(const topic of ['markup-data','publishing-annotations','publishing-auth','publishing','errors','commands'])expect(sheet).toContain(`references/${topic}.md`);
   for(const term of ['afbin comment','afbin log','afbin delete','--json','On refusal'])expect(sheet).toContain(term);
-  expect(sheet).toContain('if you can view images');
+  expect(sheet).toContain('whether or not you can view images');expect(sheet).toContain('every slide, in one image');
   const annotations=renderDoc('artifactbin/references/publishing-annotations.md','https://example.test');
   for(const flag of ['--thread','--state resolved','--quote'])expect(annotations).toContain(flag);
  });

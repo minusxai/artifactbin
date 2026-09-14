@@ -45,7 +45,9 @@ export function parsePromptLevel(raw: string): PromptLevel {
   return raw as PromptLevel;
 }
 interface PromptOptions { vision?: boolean; promptLevel?: PromptLevel }
-const VISION_LINE = 'You cannot view images. Check your work by reading the document markup.';
+// The old line ended "Check your work by reading the document markup." — and every non-vision agent did,
+// for 5–7 calls after a successful push, in every run (pi report, run 34741910427, local rounds).
+const VISION_LINE = 'You cannot view images. A successful afbin push is the check; its result says what was verified.';
 
 /**
  * The agent's prompt: the task brief, and nothing about artifactbin that the product does not itself

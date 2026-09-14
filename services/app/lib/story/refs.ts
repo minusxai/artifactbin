@@ -345,6 +345,14 @@ export function validateRecipeUse(
       out.push(`recipe ${recipeLabel} slot "${slot.name}" is not bound`);
       continue;
     }
+    // The renderer refuses an array on a single-column slot ("takes a single column, not an array"),
+    // but only at render time: agents wrote `"value":["current_total"]` for the single-value recipe
+    // in eval runs 34740707220 (claude-code deck, caught by a screenshot) and a local pi deck (a
+    // published console error). Refuse it here, where push answers.
+    if (Array.isArray(bound) && !(slot as { multi?: boolean }).multi) {
+      out.push(`recipe ${recipeLabel} slot "${slot.name}" takes a single column, not an array — write "${slot.name}": "${String(bound[0] ?? 'column')}"`);
+      continue;
+    }
     const cols = Array.isArray(bound) ? bound : [bound];
     for (const c of cols) {
       if (typeof c !== 'string') { out.push(`recipe ${recipeLabel} slot "${slot.name}" binding must be a column name`); continue; }

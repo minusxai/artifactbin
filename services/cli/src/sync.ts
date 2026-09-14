@@ -1,3 +1,6 @@
+import {inferColumns} from '@artifactbin/utils/shape';
+import {parseCsv} from '../../app/lib/data-ingest/csv';
+import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import type {PreflightDependencyResult} from '@artifactbin/contracts';
 import {readConflicts,persistConflict,clearConflict} from './conflict-state';
 import {isDeepStrictEqual} from 'node:util';
@@ -201,7 +204,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    const published=Object.fromEntries(plan.dependencies.map(d=>[d.path,{id:plan.ids[d.path],sha256:d.sha256}]));
    let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom,paths:mappings,dependencies:published}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
-   const snapshot=await recoverRequest(workspace,client,staged);operations.push({path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{})});workspace=await loadWorkspace(workspace.cwd,workspace.home);
+   const snapshot=await recoverRequest(workspace,client,staged);operations.push({path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes)});workspace=await loadWorkspace(workspace.cwd,workspace.home);
   }
   return{operations};
   }catch(error){
@@ -301,4 +304,22 @@ export async function finishSavedRequest(workspace:Workspace,server?:string):Pro
   const pending=await readPendingRequest(workspace.home,workspace.root);if(!pending?.response)return;
   await acknowledgeSavedResponse(workspace,pending);return pending.file.path;
  });
+}
+
+/**
+ * A published CSV or JSON dataset names its columns and types in the reply, so the agent writes SQL
+ * against them instead of probing: pi spent eight model calls learning that `month` was a string
+ * (local hardcore report, 14 Sep). Inferred locally from the bytes it just pushed; never a server call.
+ */
+function datasetColumns(path:string,bytes:Buffer|null):{columns?:Array<{name:string;type:string}>}{
+ if(!bytes)return{};
+ const ext=extname(path).toLowerCase();
+ try{
+  let rows:unknown;
+  if(ext==='.csv'){const csv=parseCsv(bytes.toString());rows=coerceRows(csv.headers,csv.rows);}
+  else if(ext==='.json')rows=JSON.parse(bytes.toString());
+  else return{};
+  if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))return{};
+  return{columns:inferColumns(rows as Record<string,unknown>[]).map(c=>({name:c.name,type:c.type}))};
+ }catch{return{};}
 }

@@ -388,8 +388,11 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   if (spawned.turnCapped) {
     result.ok = false;
     result.error = `turn_cap: killed after ${spawned.turns} turns (cap ${config.run.maxTurns})`;
-    result.turns = spawned.turns;
   }
+  // ONE definition of a turn for every harness: the driver's count of model calls (distinct message
+  // keys). claude-code's own `num_turns` also counts the user turns carrying tool results, so a deck
+  // reported as 47 turns was 30 model calls (run 34741910427) while pi's 37 were 37 — not comparable.
+  if (spawned.turns > 0) result.turns = spawned.turns;
   fs.writeFileSync(path.join(runDir, 'result.json'), JSON.stringify({ ...result, exitCode: spawned.exitCode, timedOut: spawned.timedOut, truncated: spawned.truncated }, null, 2));
   log(`${leg.label}/${task.id}: ${result.ok ? 'harness ok' : `harness error: ${result.error}`} in ${Math.round(spawned.durationMs / 1000)}s, ${result.turns ?? '?'} turns`);
 

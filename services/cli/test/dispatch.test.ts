@@ -1,9 +1,11 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readdir,rm} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {runCli} from '../src/dispatch';
+import {saveConnection} from '../src/config';
+import {digest} from '../src/files';
 test('local commands and malformed invocations never load credentials, call the server or create state',async()=>{
  const base=await mkdtemp(join(tmpdir(),'afbin-dispatch-'));const home=join(base,'home'),root=join(base,'work');await mkdir(home);await mkdir(root);
  try{
@@ -67,5 +69,47 @@ test('validate numbers a fenced document\'s diagnostics by FILE line and offset,
   assert.match(diag.message,/`viz=\{` opened on line 7 is never closed/,diag.message);
   assert.doesNotMatch(diag.message,/line 3\b/,diag.message);
   assert.ok(diag.start>=fence.length,`start ${diag.start} is inside the fence`);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('validate repairs a brace count it can prove, rewrites the file, and reports the repair as a notice instead of a refusal',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-brace-repair-'));
+ try{
+  const fence='---\ntitle: Braces\n---\n';
+  await writeFile(join(root,'rows.csv'),'m,v\na,1\n');
+  // pi's shape from eval run 34741910427: the object closed, then two stray `}` before ` />`.
+  await writeFile(join(root,'doc.jsx'),fence+'<Helmet><Query name="q" source="./rows.csv">{`select m, v from public.rows`}</Query></Helmet><article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>\n');
+  const output:string[]=[];
+  const code=await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
+  const result=JSON.parse(output.join(''));
+  assert.equal(code,0,output.join(''));
+  const [file]=result.files;
+  assert.equal(file.valid,true);assert.equal(file.fixed,true);
+  const notice=file.diagnostics.find((d:{code:string})=>d.code==='unbalanced_braces');
+  assert.ok(notice,JSON.stringify(file.diagnostics));assert.equal(notice.severity,'notice');assert.match(notice.message,/removed 2 closing braces/);
+  const rewritten=await readFile(join(root,'doc.jsx'),'utf8');
+  assert.ok(rewritten.startsWith(fence),'the fence is kept');
+  assert.ok(rewritten.includes('"nominal"}}}}} />'),rewritten);
+  // …and validate then answers what was verified, so no hand-rolled JSON check is needed.
+  assert.deepEqual(result.files[0].diagnostics.filter((d:{severity?:string})=>d.severity!=='notice'),[]);
+  assert.deepEqual(result.verified,[{path:'doc.jsx',title:'Braces',queries:['q'],charts:1,checks:['markup validated','1 query dry-run against the published dataset','1 chart checked against query columns','title and metadata accepted']}]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('a directory tracked against one server refuses another by name, before any request — a bare 409 cost codex twenty steps (eval run local17)',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-wrong-server-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const head={id:'abc123',version:1,edit_id:'edit1',state:digest('s1'),markup:'<p id="p001">Head</p>',format:'markup',title:'T',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
+ const hosts:string[]=[];
+ const request:typeof fetch=async(input)=>{const url=new URL(String(input));hosts.push(url.host);if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${url}`);};
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://one.example',token:'mx_one'},home);await saveConnection({server:'https://two.example',token:'mx_two'},home);
+  const pulled=await invoke(['pull','abc123','--output','doc.jsx','--server','https://one.example']);assert.equal(pulled.code,0,JSON.stringify(pulled.result));
+  await writeFile(join(cwd,'doc.jsx'),(await readFile(join(cwd,'doc.jsx'),'utf8')).replace('Head','Local'));
+  const refused=await invoke(['push','doc.jsx','--server','https://two.example']);
+  assert.notEqual(refused.code,0);assert.equal(refused.result.error.code,'wrong_server',JSON.stringify(refused.result));
+  assert.match(refused.result.error.message,/tracked against https:\/\/one\.example; the command selected https:\/\/two\.example/);
+  assert.match(refused.result.error.fix,/another directory, or pass --server https:\/\/one\.example/);
+  assert.ok(!hosts.includes('two.example'),`no request reached the other server: ${hosts}`);
  }finally{await rm(root,{recursive:true,force:true});}
 });
