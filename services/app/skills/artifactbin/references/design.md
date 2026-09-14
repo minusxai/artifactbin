@@ -5,11 +5,13 @@ description: >-
 ---
 ## Read first
 
+<!--bundle:skip-->
 Approach every artifact as the design lead at a small studio known for
 versatility: deliberate choices about palette, type, and layout, pitched at
 the treatment the task actually calls for — never templated. The kit gives
 you components; this page is about using FEWER of them, better.
 
+<!--/bundle:skip-->
 The theme carries the fonts, the palette and both color modes; what your own
 Helmet CSS adds, you carry yourself:
 
@@ -18,12 +20,16 @@ Helmet CSS adds, you carry yourself:
   `font-mono`) names a Google family, served from this origin; an unknown one
   fails the publish. CSS `url()`/`@import` is stripped at save, so a font CDN
   link never paints.
+<!--bundle:skip-->
 - **Color mode is a root class the reader flips**, not a media query: every
   theme ships light AND dark and `colorMode` picks your default. Author in
   theme tokens and both follow; hand-written colors must define both and paint
   the background explicitly — a transparent body borrows the viewer's ground.
+<!--/bundle:skip-->
+<!--bundle:skip-->
 - **Every number a viewer might question comes from data** — a `<Query>` in
   `<Helmet>`, bound with `data="$name"` — never a typed-in figure.
+<!--/bundle:skip-->
 - Choose your neutrals: a grey with a slight hue bias toward the accent reads
   as chosen; a pure mid-grey reads as unconsidered. Watch selector
   specificity (don't let two classes fight over section spacing) and give
@@ -33,47 +39,53 @@ Helmet CSS adds, you carry yourself:
 useful visuals. Todos use plain lists or tables, without checkboxes. Strike
 completed labels (`<s>`), preserving context. Save progress by editing.
 
+<!--bundle:skip-->
 ## Contents
 
 Calibrate the treatment · Ground it in the subject · Plan before you build ·
 The subject motif · Hierarchy · Typography · Space · Color · Motion · Charts ·
 Copy · Structure · When it is a UI · Avoid the default AI look · Restraint.
 
+<!--/bundle:skip-->
 ## Calibrate the treatment
 
+<!--bundle:skip-->
 - A doc deserves the same craft as a landing page — what changes is the
   treatment. A plan, memo or working report wants a UTILITARIAN treatment:
   real hierarchy, considered spacing, a proper palette, no giant hero.
   Something the user will keep, present or share — a launch page, a deck, a
   flagship report — wants an EDITORIAL treatment: opinionated calls, one real
   aesthetic risk where it serves the work.
+<!--/bundle:skip-->
+<!--bundle:skip-->
 - When unsure: a well-composed page is never the wrong answer; an
   over-designed one sometimes is.
+<!--/bundle:skip-->
 
 ## Ground it in the subject
 
 - Pin one concrete subject, its audience, and the page's single job before
-  authoring. Distinctive choices come from the subject's own world — its
-  materials, instruments, vernacular — not from a house style.
+  authoring.<!--bundle:skip--> Distinctive choices come from the subject's own world — its
+  materials, instruments, vernacular — not from a house style.<!--/bundle:skip-->
 - Build with real content throughout, never lorem placeholder.
 
 ## Plan before you build
 
 Sketch a compact plan first: which theme and WHY ([themes.md](themes.md)),
 the layout concept in a sentence, where the one bold moment goes, and the
-subject's MOTIF (below). Templates ([templates.md](templates.md))
+subject's MOTIF (below). <!--bundle:skip-->Templates ([templates.md](templates.md))
 are references, not contracts — deviate where the subject knows better, omit
 one when the subject suggests its own structure. If any part of the plan
-reads like the generic default for any similar page, revise it. Then build.
+reads like the generic default for any similar page, revise it. Then build.<!--/bundle:skip-->
 
 ## The subject motif
 
 The strongest pages carry ONE device drawn from the subject's own world and
-commit every label to it: a video explainer whose chapters are frame ranges
+commit every label to it:<!--bundle:skip--> a video explainer whose chapters are frame ranges
 under a drawn frame-ruler; an incident report typeset as a flight recorder
 log. This is the scrolly template's "conceit" — but it works at ANY register,
 deadpan as well as theatrical: a sober technical explainer with mono chapter
-stamps and an inline-SVG motif reads as designed without a single joke.
+stamps and an inline-SVG motif reads as designed without a single joke.<!--/bundle:skip-->
 Express it in the chapter labels, the figure numbering, and one small drawn
 SVG element — then stop; one motif, total commitment, no second conceit.
 
@@ -94,14 +106,16 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 - Spend it in three ROLES. DISPLAY carries the argument: few, large,
   `tracking-tight`, `text-balance`, sentence case. BODY carries reading:
   `leading-relaxed`, capped at `max-w-prose`. UTILITY (`font-mono`) carries
-  the apparatus — eyebrows, folios, figure numbers, table digits, captions.
-  Every template's "Type register" says how the genre spends them.
+  the apparatus — eyebrows, folios, figure numbers, table digits, captions.<!--bundle:skip-->
+  Every template's "Type register" says how the genre spends them.<!--/bundle:skip-->
 - Set a SCALE and stay on it: 3-4 sizes with a real jump between roles
   (`text-xs` apparatus · `text-base`/`text-lg` body · `text-4xl`+ display).
+<!--bundle:skip-->
 - Uppercase belongs to the apparatus only, always tracked (`tracking-widest`);
   never letterspace lowercase body copy. Aligned digits get `tabular-nums`.
 - Weight is hierarchy's cheapest lever — `font-semibold` headings over bold
   paragraphs; if everything is bold, nothing is.
+<!--/bundle:skip-->
 
 ## Space
 
@@ -124,9 +138,9 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 ## Motion
 
 - Leverage motion deliberately: a page-load sequence, a scroll-triggered
-  reveal, hover micro-interactions, ambient atmosphere. One orchestrated
+  reveal, hover micro-interactions, ambient atmosphere.<!--bundle:skip--> One orchestrated
   moment lands harder than scattered effects; extra animation reads as
-  AI-generated. The vocabulary — keyframes, the kit's one-class shortcuts, the
+  AI-generated.<!--/bundle:skip--> The vocabulary — keyframes, the kit's one-class shortcuts, the
   scroll-reveal observer — is [markup-motion.md](markup-motion.md); the
   judgment is yours.
 
@@ -136,6 +150,7 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 - Direct labels beat legends; gridlines stay barely-there; no gradients,
   shadows, or 3D — data-ink only.
 
+<!--bundle:skip-->
 ## Copy is design material
 
 - Write from the reader's side of the screen: name things by what people
@@ -143,6 +158,7 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 - Active voice; a control says exactly what happens. Errors say what went
   wrong and how to fix it — no apologies, no vagueness. Specific beats clever.
 
+<!--/bundle:skip-->
 ## Structure is information
 
 - Eyebrows, numbering, dividers, and labels must encode something TRUE about
@@ -150,6 +166,7 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 - Numbered markers (01 / 02 / 03) only when the content really is a sequence
   whose order the reader needs.
 
+<!--bundle:skip-->
 ## When it is a UI, not a document
 
 - A dashboard is scanned and operated, not read: summary before detail;
@@ -157,18 +174,21 @@ SVG element — then stop; one motif, total commitment, no second conceit.
 - Encode state in form as well as number — a badge, a severity stripe — and
   make what's interactive look interactive.
 
+<!--/bundle:skip-->
 ## Avoid the default AI look
 
 Unprompted AI design clusters around a few looks: cream + serif + terracotta;
 near-black with one acid accent; a purple-blue gradient hero; emoji as
 section markers; everything centered; rounded cards with accent rails. If
-your user asks for one of these, follow their words exactly; otherwise don't
+your user asks for one of these, follow their words exactly;<!--bundle:skip--> otherwise don't
 spend your freedom there — pick the theme and structure from the SUBJECT, not
-from habit.
+from habit.<!--/bundle:skip-->
 
 ## Restraint
 
 - Prefer plain typography over one more Card. Decoration that carries no
   information comes out.
+<!--bundle:skip-->
 - Spend your boldness in ONE place; keep everything around it quiet.
 - Pick the theme for the mood and let it work.
+<!--/bundle:skip-->

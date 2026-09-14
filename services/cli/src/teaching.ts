@@ -23,7 +23,17 @@ export const examples:Record<string,string>={
  deck:'<SlideDeck><Slide><h1>Presentation</h1><p>One clear point.</p></Slide></SlideDeck>',
  scrolly:'<main><section className="min-h-screen p-8"><h1>Story</h1><p>Begin here.</p></section></main>',
 };
-const referenceTopics=Object.fromEntries(Object.entries(localSkillFiles).filter(([path])=>path.startsWith('references/')).map(([path,text])=>[path.slice('references/'.length,-3),text]));
+const topicName=(path:string)=>path.slice('references/'.length,-3);
+const referenceTopics=Object.fromEntries(Object.entries(localSkillFiles).filter(([path])=>path.startsWith('references/')).map(([path,text])=>[topicName(path),text]));
+/**
+ * The same references at BUNDLE length: the copy `afbin help <template>` concatenates, with the spans
+ * their source marks as skippable dropped (lib/skills/render). A reference that marks nothing has no
+ * entry here and is bundled whole; `afbin help <topic>` prints the full file either way.
+ */
+const condensedTopics:Record<string,string>=Object.fromEntries(Object.entries(teaching.condensed as Record<string,string>).map(([path,text])=>[topicName(path),text]));
+/** One reference at bundle length, falling back to the only length it has. */
+const bundled=(topic:string):string=>condensedTopics[topic]??referenceTopics[topic]!;
+const themesOverview=(text:string)=>`${text}\n\nAvailable themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice.`;
 export const helpTopics:Record<string,string>={
  ...referenceTopics,
  /** The brief's complete commented document, as a file to copy and adapt. */
@@ -34,7 +44,7 @@ export const helpTopics:Record<string,string>={
  // 34696655937: opencode deck and scrolly, pi scrolly — three reads and three turns each) while one
  // that read references/themes.md, which carries a one-line description per theme and says to pick
  // ONE, opened one. The reference is the better answer to the same question; same for templates.
- themes:`${referenceTopics['themes']}\n\nAvailable themes: ${STORY_THEME_NAMES.join(', ')}. Set theme in the YAML fence; null clears an explicit choice.`,
+ themes:themesOverview(referenceTopics['themes']!),
  templates:`${referenceTopics['templates']}\n\nAvailable templates: ${STORY_TEMPLATE_NAMES.join(', ')}. Run afbin help <template> for everything that kind of document needs, its starter last.`,
  ...Object.fromEntries(Object.entries(examples).map(([name,body])=>[name,`---\ntemplate: ${name}\n---\n${body}\n`])),
 };
@@ -55,15 +65,24 @@ const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help
 /**
  * Every reference a document of one kind needs, in reading order, as ONE output. Agents read these
  * files one `cat` per call — 9 to 14 calls per task in eval runs 34740707220–34741910427, each one
- * growing a context that every later turn re-reads. One call, one growth. Kept under the 50 KB a
- * shell tool shows an agent; sync-and-recovery is read on a refusal, not up front.
+ * growing a context that every later turn re-reads. One call, one growth.
+ *
+ * SO IT MUST ARRIVE INLINE. At 40 KB it did not: Claude Code spills a tool output near 30,000
+ * characters to a file and reads it back in windows, so the one call that replaced nine became
+ * "Output too large (39.2KB)" plus three or four `sed` reads per task (production run 15). Every
+ * reference is still here; each is carried at its BUNDLE length, the rationale spans dropped
+ * (lib/skills/render), which is what puts the whole set under 28 KB.
+ *
+ * The starter is not in it: `afbin pull` and `afbin help <topic>` both give it, and it was the one
+ * part that had no copy for every template — `afbin help plan` threw a TypeError on the missing one.
+ * Sync-and-recovery is read on a refusal, not up front.
  */
 export function helpBundle(template:string,origin:string=DEFAULT_SERVER):string{
  if(!STORY_TEMPLATE_NAMES.includes(template as never))throw new CliError('invalid_choice',`Invalid template: ${template}.`,`Choose ${STORY_TEMPLATE_NAMES.join(', ')}.`);
  const parts:Array<[string,string]>=[
-  ['design',helpTopics['design']!],['markup',helpTopics['markup']!],['markup-data',helpTopics['markup-data']!],['markup-data-authoring',helpTopics['markup-data-authoring']!],
-  [`templates-${template}`,helpTopics[`templates-${template}`]!],['themes',helpTopics['themes']!],
-  ['publishing-datasets',helpTopics['publishing-datasets']!],[`starter: ${template}`,helpTopics[template]!],
+  ['design',bundled('design')],['markup',bundled('markup')],['markup-data',bundled('markup-data')],['markup-data-authoring',bundled('markup-data-authoring')],
+  [`templates-${template}`,bundled(`templates-${template}`)],['themes',themesOverview(bundled('themes'))],
+  ['publishing-datasets',bundled('publishing-datasets')],
  ];
  const body=parts.map(([name,text])=>`\n# ${name}\n\n${text.trim()}\n`).join('');
  return withTeachingOrigin(`Everything a ${template} needs, in reading order. Read it once; then write the whole document, publish, and improve the published version. On a refusal, run afbin help errors; for sync and recovery, afbin help publishing.\n${body}`,origin);

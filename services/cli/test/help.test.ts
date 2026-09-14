@@ -418,13 +418,21 @@ test('afbin help --for <template> prints every reference a document of that kind
   out.length=0;
   assert.equal(await runCli(['help','dashboard'],context),0,'a template name as the topic prints the bundle, not the bare starter');
   assert.equal(out.join(''),helpBundle('dashboard'));
-  assert.ok(helpBundle('dashboard').includes(helpTopics['dashboard']),'the starter is still inside it');
-  const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets','## starter: deck'];
+  const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets'];
   let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
-  assert.ok(text.includes(helpTopics['templates-deck']));assert.ok(text.includes(helpTopics['design']));
+  // Every reference is still there — condensed, never dropped. One load-bearing rule from each of the
+  // three biggest parts stands in for its file, since the bundled copy is no longer the file verbatim.
+  for(const rule of ['<SlideDeck>','font-display','Helmet','public.rows'])assert.ok(text.includes(rule),rule);
   assert.ok(text.includes('Available themes:'),'the themes overview names the choices');
   assert.ok(!text.includes('templates-editorial'),'only the chosen template');
-  assert.ok(Buffer.byteLength(text)<45000,`bundle is ${Buffer.byteLength(text)} bytes; a shell tool shows an agent about 50 KB`);
+  // THE SHELL'S INLINE LIMIT. At 40 KB Claude Code spilled every bundle to a file and read it back in
+  // three or four `sed` windows (production run 15) — the one-call reference became five calls. Claude
+  // Code keeps tool output inline up to ~30,000 characters; 28,000 BYTES holds under that with a 2 KB
+  // margin, and bytes are the conservative measure (UTF-8 punctuation costs more bytes than characters).
+  for(const template of ['deck','dashboard','editorial','plan','scrolly']){
+   const bundle=helpBundle(template);
+   assert.ok(Buffer.byteLength(bundle)<28000,`the ${template} bundle is ${Buffer.byteLength(bundle)} bytes; a spilled bundle costs three reads`);
+  }
   out.length=0;
   assert.equal(await runCli(['help','--for','deck','--json'],context),0);
   assert.equal(JSON.parse(out.join('')).help,helpBundle('deck'));

@@ -30,18 +30,20 @@ Published artifacts use `ref:<id>` in source, image and recipe attributes. SQL n
 
 Editable cells: [editing](markup-editing.md).
 
+<!--bundle:skip-->
 ## Contents
 
 Declarations · Bindings: embeds · Bindings: controls.
 
+<!--/bundle:skip-->
 ## Declarations (Helmet only)
 
 - `<Value name type default />` — a scalar the reader can change.
   `type`: `string | number | boolean | date` (default `string`); `default`
   must match it (dates `YYYY-MM-DD`); no default = `null`, which is how
-  "$region is null" in SQL means "all". A scalar also travels in the LINK:
+  "$region is null" in SQL means "all".<!--bundle:skip--> A scalar also travels in the LINK:
   the document accepts `?$region=EU` (empty = "all"), so you can hand your
-  user a pre-filtered link — and a reader's own picks rewrite the address.
+  user a pre-filtered link — and a reader's own picks rewrite the address.<!--/bundle:skip-->
 - `<Value name="tiny" type="table" value={[{…}, …]} />` — an inline table (flat
   objects; `columns={[{name,type}]}` optional). Read it in SQL by its bare
   name (`from tiny`) or bind it directly (`data="$tiny"`).
@@ -52,30 +54,32 @@ Declarations · Bindings: embeds · Bindings: controls.
   template-literal child, exactly one SELECT over that dataset’s exposed tables.
   Without `source`, SQL runs locally in DuckDB; another query
   or table Value is a table by its bare name (any order; cycles refused); a
-  scalar Value is the bound parameter `$name`, never interpolated. Dry-run
+  scalar Value is the bound parameter `$name`, never interpolated.<!--bundle:skip--> Dry-run
   at publish against the real columns: a bad column is a
   `400 {"error":"invalid_sql"}` carrying the engine's message with candidate
-  names. Results are cut at 10,000 rows; a query has 5 s. A FOLDER is a table
+  names. Results are cut at 10,000 rows; a query has 5 s.<!--/bundle:skip--><!--bundle:skip--> A FOLDER is a table
   too — use `source="ref:<folderId>"` and query `public.rows` for its children, which a document can list with
   `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
   level visibility updated_at url thumbnail views sparkline`, computed per
   VIEWER: a stranger gets the `public` children, `thumbnail` (a card) is null
   for a private child AND for every folder, `views`/`sparkline` null unless you
-  may edit the folder.
+  may edit the folder.<!--/bundle:skip-->
 - `<Mutation name source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>`
   — a `<Query>` that WRITES (the dataset needs `access: readwrite`,
   [datasets](databases.md)). Exactly one INSERT | UPDATE | DELETE
   naming one shared dataset. Runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
   `<script>`; dry-run at publish, so a button that could not work is a `400`
-  naming the fix. Data policies permit viewer actions; without a policy only editors write. Callers supply VALUES only.
+  naming the fix.<!--bundle:skip--> Data policies permit viewer actions; without a policy only editors write. Callers supply VALUES only.
   Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
-  row its own id and timestamp.
+  row its own id and timestamp.<!--/bundle:skip-->
 
+<!--bundle:skip-->
 A Mutation targeting `_signals` or an inline table is local; it never changes
 datasets or permissions. Dataset Mutations require
 `access: readwrite`. See [composable state](markup-state.md).
 
+<!--/bundle:skip-->
 First read [chart authoring](markup-data-authoring.md).
 
 ## Bindings: embeds (body)
@@ -98,18 +102,18 @@ First read [chart authoring](markup-data-authoring.md).
   ascending order is the contract):
   `{"kind":"recipe","recipe":"minusx/trend@1","bindings":{"date":"period",
   "value":["revenue"]},"columnFormats":{"revenue":{"format":"$,.0f",
-  "alias":"Revenue"}}}` (several `value` columns = one card each; `params`:
+  "alias":"Revenue"}}}`<!--bundle:skip--> (several `value` columns = one card each; `params`:
   `compareMode: "last"|"previous"` — `previous` skips a partial current
   period; `trendColor`/`valueColor` — prefer a token like `"var(--chart-2)"`,
-  which follows theme switches). All EIGHT shipped ids (slots validated at publish):
-  `minusx/trend@1`, `minusx/funnel@1` (`stage`, `value`), `minusx/waterfall@1`
-  (`category`, `value`), `minusx/radar@1` (`metric`, `value` multi, optional
-  `series`), `minusx/combo@1` (`x`, `bar`, `line`, optional `series`),
-  `minusx/single-value@1` (`value` — the FIRST row's cell; `params`: `label`,
-  `caption`, `align`, `valueColor`), `minusx/choropleth@1` (`region`, `value`;
-  `params.mapName`: `us-states`|`us-counties`|`world`|`india-states`),
-  `minusx/point-map@1` (`lat`, `lng`, optional `size`/`color`; with
-  `lat2`/`lng2` each row draws an origin→destination flow).
+  which follows theme switches)<!--/bundle:skip-->. All EIGHT shipped ids (slots validated at publish):
+  `minusx/trend@1`, `minusx/funnel@1`<!--bundle:skip--> (`stage`, `value`)<!--/bundle:skip-->, `minusx/waterfall@1`<!--bundle:skip-->
+  (`category`, `value`)<!--/bundle:skip-->, `minusx/radar@1`<!--bundle:skip--> (`metric`, `value` multi, optional
+  `series`)<!--/bundle:skip-->, `minusx/combo@1`<!--bundle:skip--> (`x`, `bar`, `line`, optional `series`)<!--/bundle:skip-->,
+  `minusx/single-value@1`<!--bundle:skip--> (`value` — the FIRST row's cell; `params`: `label`,
+  `caption`, `align`, `valueColor`)<!--/bundle:skip-->, `minusx/choropleth@1`<!--bundle:skip--> (`region`, `value`;
+  `params.mapName`: `us-states`|`us-counties`|`world`|`india-states`)<!--/bundle:skip-->,
+  `minusx/point-map@1`<!--bundle:skip--> (`lat`, `lng`, optional `size`/`color`; with
+  `lat2`/`lng2` each row draws an origin→destination flow)<!--/bundle:skip-->.
 - `<Number data="$table" col="revenue" agg="sum" prefix="$" suffix=" M" format=",.0f" />`
   — one live aggregated figure, inline. `agg` defaults to `first` (the first
   row's cell), so a total needs `agg="sum"` written out; `avg`, `min`, `max`,
@@ -117,9 +121,9 @@ First read [chart authoring](markup-data-authoring.md).
 - `<DataTable data="$table" columns={[…]} sort={{"col":…,"dir":"desc"}} height="420px" />`
   — virtualised, sortable, with more rows on scroll. `columns` picks and orders:
   `{col, title, fmt, align, bar: true (a bar behind a number), colorScale:
-  "sequential" | "diverging", width, kind: "image"}`; absent = every column.
+  "sequential" | "diverging", width, kind: "image"}`; absent = every column.<!--bundle:skip-->
   `kind: "image"` draws each cell's URL as a picture from our own copy of it,
-  fetched on first view (declared, never sniffed). `fmt` and
+  fetched on first view (declared, never sniffed).<!--/bundle:skip--> `fmt` and
   `<Number format>` are d3-format specs (`",.0f"`, `"$,.2f"`, `".1%"`); one
   that does not parse is refused at publish by name.
 
