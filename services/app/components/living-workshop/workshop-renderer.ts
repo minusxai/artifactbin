@@ -333,6 +333,44 @@ export function createWorkshopScene(
     scene.add(mesh);
     extras.push(mesh);
   }
+  // Bold painted feature notes sit above the board and beneath the paper mesh.
+  const stencilSurface = document.createElement("canvas");
+  stencilSurface.width = SCENE.width * 2;
+  stencilSurface.height = SCENE.height * 2;
+  const stencilContext = stencilSurface.getContext("2d");
+  if (stencilContext) {
+    stencilContext.scale(2, 2);
+    const notes = [
+      ["Change it with", "your own hands"],
+      ["Work on it", "together"],
+      ["Don’t waste", "tokens"],
+      ["Make work you’re", "proud to share"],
+      ["Bring your", "favorite agent"],
+      ["Artifactbin is", "truly yours"],
+    ];
+    papers.forEach((paper, index) => {
+      const ink = document.createElement("canvas");
+      ink.width = Math.ceil(paper.width * 2);
+      ink.height = 90;
+      const context = ink.getContext("2d");
+      if (!context) return;
+      context.scale(2, 2);
+      context.fillStyle = "#174c91";
+      context.font = 'bold 15px "Courier New", monospace';
+      context.textAlign = "center";
+      const lines = notes[index % notes.length];
+      lines.forEach((line, row) => context.fillText(line.toLowerCase(), paper.width / 2, 16 + row * 18, paper.width - 30));
+      stencilContext.save();
+      stencilContext.translate(paper.x, paper.y);
+      stencilContext.rotate(paper.angle);
+      stencilContext.globalAlpha = 0.95;
+      stencilContext.drawImage(ink, 0, paper.height * (index < 3 ? 0.76 : 0.68), paper.width, 45);
+      stencilContext.restore();
+    });
+    const stencilTexture = new CanvasTexture(stencilSurface);
+    stencilTexture.colorSpace = SRGBColorSpace;
+    quad(stencilTexture, 2);
+  }
   // Screen marks join the depth-tested scene, so a foreground sheet can cover
   // them. The same inline SVGs remain the non-WebGL accessible fallback.
   const screenSurface = document.createElement("canvas");
@@ -560,11 +598,31 @@ export function createWorkshopScene(
       sheets.some((s) => !s.cloth.pinned && !s.cloth.settled) ||
       !!gesture?.dragging ||
       time < relaxUntil;
-    for (const s of sheets) updateMesh(s);
+    for (const s of sheets) {
+      // Only untouched, attached sheets idle in the breeze. The top edge stays
+      // fixed; picking reads these same points, and grabbing takes over directly.
+      if (
+        !reduced.matches && s.cloth.pinned && s.cloth.torn.size === 0 &&
+        s.cloth.pins.every(Boolean) && gesture?.id !== s.paper.id &&
+        !(time < relaxUntil && relaxing.has(s.paper.id))
+      ) {
+        const phase = time / 1000 * 1.5 + s.cloth.seed * 1.7;
+        s.cloth.points.forEach((p, index) => {
+          const row = Math.floor(index / (s.cloth.columns + 1)) / s.cloth.rows;
+          const column = (index % (s.cloth.columns + 1)) / s.cloth.columns;
+          const loose = row * row * row;
+          const flutter = Math.sin(phase + column * 2.2);
+          p.x = p.px = p.homeX + loose * flutter * 1.5;
+          p.y = p.py = p.homeY - loose * (1 + flutter) * 1.8;
+          p.z = p.pz = p.homeZ + loose * (1 + flutter) * 5;
+        });
+      }
+      updateMesh(s);
+    }
     if (!reduced.matches) helpers?.update(dt);
     renderer.render(scene, camera);
     helpers?.render(renderer, camera);
-    if (moving || (helpers && !reduced.matches)) schedule();
+    if (moving || (!reduced.matches && (helpers || sheets.some((s) => s.cloth.pinned)))) schedule();
   }
   function schedule() {
     if (!disposed && visible && !frame) frame = requestAnimationFrame(draw);
@@ -626,6 +684,14 @@ export function createWorkshopScene(
   function down(event: PointerEvent) {
     if (activePointer !== null || event.button !== 0) return;
     const { p, sheet } = locate(event);
+    if (!sheet && !reduced.matches) {
+      const rect = canvas.getBoundingClientRect();
+      if (helpers?.jumpAt(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        1 - ((event.clientY - rect.top) / rect.height) * 2,
+        camera,
+      )) return;
+    }
     if (!sheet) return;
     activePointer = event.pointerId;
     gesture = beginGesture(sheet.paper.id, p);
@@ -654,7 +720,13 @@ export function createWorkshopScene(
     const { p, sheet } = locate(event);
     if (gesture && event.pointerId === activePointer)
       gesture = moveGesture(gesture, p);
-    canvas.style.cursor = gesture ? "grabbing" : sheet ? "grab" : "default";
+    const rect = canvas.getBoundingClientRect();
+    const bot = !sheet && helpers?.hitBot(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      1 - ((event.clientY - rect.top) / rect.height) * 2,
+      camera,
+    );
+    canvas.style.cursor = gesture ? "grabbing" : sheet || bot ? "grab" : "default";
     schedule();
   }
   function finish(event: PointerEvent) {

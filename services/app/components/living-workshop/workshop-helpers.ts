@@ -2,6 +2,8 @@ import { createHelperShadows } from "./helper-shadows";
 /** Experimental rigid-joint helpers, registered in the painting's pixel space. */
 import {
   AnimationMixer,
+  Raycaster,
+  Vector2,
   Vector3,
   PMREMGenerator,
   AmbientLight,
@@ -111,6 +113,10 @@ export function addWorkshopHelpers(
   const gaze = new Vector3();
   const faceForward = new Vector3(0, 0, 1);
   let elapsed = 0;
+  const hoppingBots: Array<{ mount: Group; restY: number; started: number; joints: Array<{ object: Object3D; rest: number; bend: number }> }> = [];
+  const botRay = new Raycaster();
+  botRay.layers.set(1);
+  botRay.layers.enable(2);
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
   const textures = new Set<Texture>();
@@ -341,7 +347,16 @@ export function addWorkshopHelpers(
       model.rotation.y = p.turn;
       model.rotation.x = 0.1;
       mount.add(model);
+      // The inspector stands in front of the painted woman, so its entire
+      // silhouette belongs in the foreground pass alongside the arm.
+      if (p.role === "inspector") model.traverse((object) => object.layers.set(2));
       group.add(mount);
+      const joints: Array<{ object: Object3D; rest: number; bend: number }> = [];
+      model.traverse((object) => {
+        if (/^(Left|Right)[ _](knee|hip)(?:[._]?\d+)?$/.test(object.name))
+          joints.push({ object, rest: object.rotation.x, bend: /knee/.test(object.name) ? 0.85 : -0.42 });
+      });
+      hoppingBots.push({ mount, restY: p.y, started: -Infinity, joints });
       projectedShadows.add(mount, p.y, 30, p.role === "standing");
       const mixer = new AnimationMixer(model);
       for (const clip of gltf.animations) mixer.clipAction(clip).play();
@@ -375,9 +390,41 @@ export function addWorkshopHelpers(
     .catch(() => {});
   return {
     setEnvironment,
+    hitBot: (x: number, y: number, camera: Camera) => {
+      scene.updateMatrixWorld(true);
+      botRay.setFromCamera(new Vector2(x, y), camera);
+      return botRay.intersectObjects(hoppingBots.map((bot) => bot.mount), true).length > 0;
+    },
+    jumpAt: (x: number, y: number, camera: Camera) => {
+      scene.updateMatrixWorld(true);
+      botRay.setFromCamera(new Vector2(x, y), camera);
+      const hit = botRay.intersectObjects(hoppingBots.map((bot) => bot.mount), true)[0];
+      if (!hit) return false;
+      const bot = hoppingBots.find(({ mount }) => {
+        let object: Object3D | null = hit.object;
+        while (object) {
+          if (object === mount) return true;
+          object = object.parent;
+        }
+        return false;
+      });
+      if (!bot) return false;
+      if (elapsed - bot.started >= 0.9) bot.started = elapsed;
+      wake();
+      return true;
+    },
     update: (dt: number) => {
       elapsed += dt;
       for (const mixer of mixers) mixer.update(dt);
+      for (const bot of hoppingBots) {
+        const age = elapsed - bot.started;
+        const flight = Math.max(0, Math.min(1, (age - 0.18) / 0.55));
+        const crouch = age < 0.18 ? Math.sin(age / 0.18 * Math.PI / 2)
+          : age < 0.28 ? 1 - (age - 0.18) / 0.1
+          : age > 0.73 && age < 0.9 ? 0.45 * Math.sin((age - 0.73) / 0.17 * Math.PI) : 0;
+        bot.mount.position.y = bot.restY + (bot.joints.length ? 8 * crouch : 0) - 48 * 4 * flight * (1 - flight);
+        for (const joint of bot.joints) joint.object.rotation.x = joint.rest + joint.bend * crouch;
+      }
       for (const a of dancingArms) {
         const beat = elapsed * 3.4 + a.side * 0.7;
         a.joint.rotation.x = a.x + 0.6 * Math.sin(beat);
@@ -481,8 +528,8 @@ export function addWorkshopHelpers(
       renderer.toneMappingExposure = 1.2;
       projectedShadows.render(renderer, camera);
       renderer.render(scene, camera);
-      // Draw the arm above the painting cutout, papers and other helpers,
-      // retaining depth testing between the arm's own parts.
+      // Draw foreground helpers above the painting cutout and papers,
+      // retaining depth testing between their own parts.
       const cameraLayers = camera.layers.mask;
       camera.layers.set(2);
       renderer.clearDepth();
