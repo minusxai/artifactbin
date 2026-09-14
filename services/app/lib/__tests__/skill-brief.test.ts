@@ -69,6 +69,24 @@ describe('llms.txt and the discovery head', () => {
     expect(llmsText(`${BASE}/`)).toBe(text);
   });
 
+  /**
+   * PUSH VALIDATES. The brief's Few turns bullet says there is no separate validate step — push
+   * runs `afbin validate` itself — and the one-pager is what the agent with NOTHING installed
+   * reads, so a validate of its own in that command line is the one place the contradiction costs
+   * a real call. The line still NAMES the validation, as part of push, rather than dropping it:
+   * an agent told elsewhere to validate needs to see where it went.
+   */
+  it('its command line ends at push, because push validates — no separate validate step', () => {
+    const then = llmsText(BASE).split('\n').find((line) => line.startsWith('Then:'))!;
+    expect(then).toBeDefined();
+    expect(then).toContain('afbin pull <artifact url> --output report.jsx');
+    expect(then).toContain('edit the file');
+    expect(then).toContain('afbin push report.jsx');
+    // A validate standing as its own step in the sequence — `afbin validate report.jsx;` — is the offence.
+    expect(then).not.toMatch(/afbin validate [^;()]*;/);
+    expect(then).toMatch(/push runs .*afbin validate/i);
+  });
+
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
     expect(AGENT_HELP_TITLE).toBe('Agents: read this to create, edit, or operate artifacts on the CLI using afbin');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
