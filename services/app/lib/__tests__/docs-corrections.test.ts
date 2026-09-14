@@ -104,6 +104,19 @@ describe('the publishing skill', () => {
     }
     expect(renderDoc('artifactbin/references/errors.md', BASE)).toContain('--access readwrite');
   });
+  /*
+   * The tracker leg (pi, 14 Sep): the brief asked for a page "anyone opening the link" can update,
+   * the catalogs doc named a data policy with no CLI path to it, and the agent spent 24 messages
+   * reverse-engineering the YAML field and fighting a pull before it could set one. One command.
+   */
+  it('the catalogs doc names the one command that publishes a dataset viewers can write', () => {
+    const databases = renderDoc('artifactbin/references/databases.md', BASE);
+    expect(databases).toContain('--access readwrite --policy viewers-write');
+    // UI-era instructions an afbin-driven agent cannot follow.
+    expect(databases).not.toContain('/datasets/new');
+    expect(databases).not.toContain('set_dataset_policy');
+    expect(databases).not.toContain('get_dataset_policy');
+  });
 });
 
 /*

@@ -72,11 +72,11 @@ The default schema is fixed after creation. A bare `events` resolves only there;
 
 `source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
 
-Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Writable datasets use one data policy for everyone with view access (Hasura role `viewer`); sharing sets the audience. Editors and owners configure rules with `set_dataset_policy` and read them with `get_dataset_policy`. No policy means editor-only writes. Postgres writes are unavailable.
+Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Publish the dataset those writes land in with `afbin push tasks.csv --type dataset --access readwrite --policy viewers-write`: everyone who can view the dataset may then insert, update and delete rows, which is what a page anyone with the link can work needs. Owner-only writes need no policy — `--access readwrite` alone keeps writes to editors. Sharing sets the audience; one policy covers all of it (Hasura role `viewer`). Finer rules — column lists, row filters, presets — are a `policy:` block in the dataset YAML; `--policy none` removes the grant. Postgres writes are unavailable.
 
 ## Preview and freshness
 
-Create at `/datasets/new`; edit at `/a/<id>/edit` or a pretty artifact address plus `/edit`. Tabs separate Data actions, Source & models, and Data preview. Run notebook cells before exposing outputs; edits invalidate downstream previews. Run SQL executes only on request. Saved data supports pagination and refresh; draft previews show up to 50 rows.
+Create and update a dataset with `afbin push` ([datasets](publishing-datasets.md)); its page shows data actions, source & models and a data preview to a person who opens it. Run notebook cells before exposing outputs; edits invalidate downstream previews. Run SQL executes only on request. Saved data supports pagination and refresh; draft previews show up to 50 rows.
 
 `POST /a/<id>/tables` takes `{sql,limit?,offset?,refresh?}` and returns `{rows,columns,truncated?,refreshedAt}` after dataset read authorization, and queries only final-whitelist tables and columns. It cannot query hidden notebook helpers or unexposed raw sources. `refresh:true` bypasses cached results. `refreshSeconds:0` disables caching; otherwise it is the cache lifetime. External database writes do not emit Artifactbin live events: use Refresh or rerun the document query. Database edits never create dataset definition versions.
 
