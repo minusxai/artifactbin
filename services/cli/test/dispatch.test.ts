@@ -250,3 +250,37 @@ test('a refusal names its code once on the human line, whatever shape the messag
   assert.ok(!err.join('').includes('http_status'),err.join(''));
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+/**
+ * THE JSON OBJECT HANDED STRAIGHT TO THE ATTRIBUTE, end to end. From the first live leg of the
+ * merged build (pi deck, local21): the generator wrote `viz={"kind": "vega-lite", …}` — the object
+ * with ONE brace — the CLI named it and refused with `fixed:false`, pi over-corrected to `viz={{{`,
+ * inspected the file, and fixed it: four calls. Now `afbin validate` rewrites the file and says so.
+ */
+test('validate wraps a JSON attribute value that was missing its expression braces, and reports it as a notice',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-json-wrap-'));
+ try{
+  const fence='---\ntitle: Chart\n---\n';
+  await writeFile(join(root,'doc.jsx'),fence+[
+   '<Helmet><Value name="q" type="table" value={[{"x":"a","y":1}]} /></Helmet><article>',
+   '<Question data="$q" viz={"kind": "vega-lite", "spec": {"mark": "line", "encoding": {"x": {"field": "x", "type": "nominal"}}}} />',
+   '</article>',
+  ].join('\n')+'\n');
+  const output:string[]=[];
+  const code=await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
+  assert.equal(code,0,output.join(''));
+  const [file]=JSON.parse(output.join('')).files;
+  assert.equal(file.valid,true);assert.equal(file.fixed,true);
+  const notice=file.diagnostics.find((d:{code:string})=>d.code==='unbalanced_braces');
+  assert.ok(notice,JSON.stringify(file.diagnostics));
+  assert.equal(notice.severity,'notice');
+  assert.match(notice.message,/wrapped 1 JSON attribute value/,notice.message);
+  // Body line 2 is file line 5 under a three-line fence.
+  assert.match(notice.message,/on line 5/,notice.message);
+  const rewritten=await readFile(join(root,'doc.jsx'),'utf8');
+  assert.ok(rewritten.startsWith(fence),'the fence is kept');
+  assert.ok(rewritten.includes('viz={{"kind": "vega-lite"'),rewritten);
+  assert.ok(rewritten.includes('value={[{"x":"a","y":1}]}'),'a legal array attribute is untouched');
+  assert.equal(await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:()=>{},stderr:()=>{},fetch:async()=>assert.fail('offline')}),0,'the rewritten file validates clean');
+ }finally{await rm(root,{recursive:true,force:true});}
+});

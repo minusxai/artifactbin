@@ -196,3 +196,86 @@ describe('repairJsxSource — the same fault more than once', () => {
     expect(detail.message).toMatch(/`viz=\{` opened on line 3 is never closed — it needs 1 more `\}`/);
   });
 });
+
+/**
+ * THE MISSING WRAPPER — the JSON object handed straight to the attribute, with no expression braces
+ * of its own: `viz={"kind": "vega-lite", "spec": {…}}`. Measured on the first live leg of the merged
+ * build (pi deck, local21 run `deck`): the generator serialized the object and wrote ONE brace, the
+ * refusal named it ("the viz attribute is missing its object opening brace"), pi over-corrected to
+ * `viz={{{`, inspected, and fixed it — four calls for a shape that is not a guess.
+ *
+ * It is provable the same way the other two are: an attribute expression whose first non-space
+ * character is a JSON key (`"…":`) or `[` is a VALUE where JSX needs an expression, and there is
+ * exactly one repair — wrap the whole balanced value in one more brace pair. Anything else stays a
+ * refusal, and the wrap is kept only if the document then parses.
+ */
+describe('repairJsxSource — a JSON value where an expression belongs', () => {
+  const one = '<article><Question data="$q" viz={"kind": "vega-lite", "spec": {"mark": "line"}} /></article>';
+  const two = [
+    '<article>',
+    '<Question data="$a" viz={"kind": "vega-lite", "spec": {"mark": "line"}} />',
+    '<Question data="$b" viz={"kind": "vega-lite", "spec": {"mark": "bar"}} />',
+    '</article>',
+  ].join('\n');
+  const mixed = [
+    '<article>',
+    '<Question data="$a" viz={"kind": "vega-lite", "spec": {"mark": "line"}} />',
+    '<Question data="$b" viz={{{"kind": "vega-lite", "spec": {"mark": "bar"}}}} />',
+    '</article>',
+  ].join('\n');
+  const broken = '<article><Question data="$q" viz={"kind": "vega-lite", "spec": {"mark": "line"} /></article>';
+
+  it('wraps the value in the one expression it was missing', () => {
+    const out = repairJsxSource(one);
+    expect(out, 'a JSON value in an attribute is one repair, not a guess').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('viz={{"kind": "vega-lite", "spec": {"mark": "line"}}}');
+    expect(out!.repair.code).toBe('unbalanced_braces');
+    expect(out!.repair.message).toMatch(/wrapped 1 JSON attribute value/);
+    expect(out!.repair.message).toMatch(/on line 1/);
+  });
+
+  it('wraps every occurrence and counts them', () => {
+    const out = repairJsxSource(two);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/wrapped 2 JSON attribute values/);
+    expect(out!.repair.message).toContain('on line 2, line 3');
+    expect(out!.source).toContain('"mark": "line"}}}');
+    expect(out!.source).toContain('"mark": "bar"}}}');
+  });
+
+  it('reports a wrap and a collapsed `{{{` in the same document, each by name', () => {
+    const out = repairJsxSource(mixed);
+    expect(out).not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.repair.message).toMatch(/wrapped 1 JSON attribute value/);
+    expect(out!.repair.message).toMatch(/collapsed 1 `viz=\{\{\{` opening/);
+    expect(out!.source.includes('{{{')).toBe(false);
+  });
+
+  /**
+   * `options={["day","week"]}` and `value={[{…}]}` open with `[` and are perfectly legal — the kit's
+   * own controls are full of them. The candidate is the attribute the PARSER stopped inside, so a
+   * legal array earlier in the document is not touched and does not cost the repair the document
+   * actually needs (a wrapped legal array cannot parse, so it would have refused the whole file).
+   */
+  it('leaves a legal array attribute alone and still repairs the fault further on', () => {
+    const legal = '<article><Select value="$g" options={["day","week"]} />' +
+      '<Question data="$q" viz={"kind": "vega-lite", "spec": {"mark": "line"}} /></article>';
+    const out = repairJsxSource(legal);
+    expect(out, 'the real fault is still repairable').not.toBeNull();
+    expect(parseJsx(out!.source).ok).toBe(true);
+    expect(out!.source).toContain('options={["day","week"]}');
+    expect(out!.repair.message).toMatch(/wrapped 1 JSON attribute value/);
+    expect(repairJsxSource('<article><Select options={["day","week"]} /><p>ok</p></article>'), 'a document that parses is never touched').toBeNull();
+  });
+
+  it('still refuses a value that is genuinely broken, keeping the missing-brace hint', () => {
+    expect(repairJsxSource(broken), 'the wrap must parse or the refusal stands').toBeNull();
+    const parsed = parseJsx(broken);
+    expect(parsed.ok).toBe(false);
+    const detail = syntaxErrorDetail(broken, parsed as Extract<typeof parsed, { ok: false }>);
+    expect(detail.message).toMatch(/viz attribute is missing its object opening brace/);
+  });
+});
