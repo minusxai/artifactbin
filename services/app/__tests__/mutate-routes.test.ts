@@ -201,6 +201,11 @@ describe('POST /api/artifacts/<id>/mutate — the owner\'s door', () => {
     await putArtifactRoute(await observedRequest(`/api/artifacts/${ds}`, { method: 'PUT', token: t.token, json: { dataset: ROWS, access: 'read' } }), params({ id: ds }));
     const ro = await mutateDatasetRoute(request(`/api/artifacts/${ds}/mutate`, { method: 'POST', token: t.token, json: { sql: `delete from public.rows` } }), params({ id: ds }));
     expect(ro.status).toBe(403);
+    // The refusal names the command an agent driving afbin can run, not only the HTTP routes it cannot.
+    expect((await ro.json()) as object).toEqual({
+      error: 'dataset_read_only',
+      details: [`${ds} is read-only — publish it writable: afbin push <file> --type dataset --access readwrite (API: PUT here, or PATCH /api/my/artifacts/${ds})`],
+    });
   });
 
   it('a bad statement is invalid_sql with the engine\'s message; a document id is not a dataset', async () => {

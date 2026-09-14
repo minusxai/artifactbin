@@ -462,3 +462,84 @@ test('pulling a starter names the next call — pick the kind, afbin help <templ
   assert.equal(b.result.operations[0].next,undefined,'a document with a title and a template is not a starter');
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+/**
+ * A document's <Mutation source="ref:<id>"> needs its dataset published `access: readwrite`,
+ * and the CLI is the only door an agent drives: `--access` is that door, on the same push.
+ */
+test('push --type dataset --access publishes a writable dataset, changes access later, and stays silent without the flag',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-dataset-access-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ const heads=new Map<string,any>();
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  if(path==='/api/artifacts/preflight')return Response.json({valid:true},{headers:{'X-Artifactbin-Account':'usr_one'}});
+  if(path==='/api/artifacts'){
+   const id=`dsrow0${heads.size+1}`;
+   const head={id,version:1,edit_id:'e1',state:digest(`${id}-1`),format:'dataset',access:body.access??'read'};
+   heads.set(id,head);return Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  const id=path.split('/').pop()!;const previous=heads.get(id);
+  if(previous&&method==='PATCH'){
+   const head={...previous,...body,version:previous.version+1,edit_id:`e${previous.version+1}`,state:digest(`${id}-${previous.version+1}`)};
+   delete head.expectedState;heads.set(id,head);return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},home);
+  await writeFile(join(cwd,'tasks.csv'),'task,done\nship,false\n');
+  const created=await invoke(['push','tasks.csv','--type','dataset','--access','readwrite']);
+  assert.equal(created.code,0,JSON.stringify(created.result));
+  const create=calls.find(call=>call.path==='/api/artifacts'&&call.method==='POST')!;
+  assert.equal(create.body.access,'readwrite','the create carries the requested access');
+  // The reply says what the page may do with it, next to the columns it already names.
+  assert.equal(created.result.operations[0].access,'readwrite');
+  assert.deepEqual(created.result.operations[0].columns,[{name:'task',type:'string'},{name:'done',type:'boolean'}]);
+
+  // Unchanged bytes, changed access: the second push still sends the change.
+  const closed=await invoke(['push','tasks.csv','--access','read']);
+  assert.equal(closed.code,0,JSON.stringify(closed.result));
+  const patch=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.equal(patch.body.access,'read');
+  assert.equal(closed.result.operations[0].access,'read');
+
+  // No flag, no opinion: a plain dataset push sends no access key at all.
+  await writeFile(join(cwd,'notes.csv'),'note\nhello\n');
+  const plain=await invoke(['push','notes.csv','--type','dataset']);
+  assert.equal(plain.code,0,JSON.stringify(plain.result));
+  const second=calls.filter(call=>call.path==='/api/artifacts'&&call.method==='POST').at(-1)!;
+  assert.equal('access' in second.body,false);
+  // The reply still says what the server decided, so read-only is never a silent default.
+  assert.equal(plain.result.operations[0].access,'read');
+
+  // The dry-run shares the same plan, so the preflight sees the access it would publish.
+  await writeFile(join(cwd,'draft.csv'),'a\n1\n');
+  const dry=await invoke(['push','draft.csv','--access','readwrite','--dry-run']);
+  assert.equal(dry.code,0,JSON.stringify(dry.result));
+  assert.equal(calls.filter(call=>call.path==='/api/artifacts/preflight').at(-1)!.body.input.access,'readwrite');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('--access on a dataset YAML must agree with the file, and never applies to a document',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-access-disagree-'));
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>assert.fail('a refused push must not reach the server'),stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'test'},root);
+  await writeFile(join(root,'sales.csv'),'score\n42\n');
+  await writeFile(join(root,'sales.yaml'),'type: dataset\nsource: ./sales.csv\naccess: read\n');
+  const clash=await invoke(['push','sales.yaml','--access','readwrite']);
+  assert.notEqual(clash.code,0);
+  assert.equal(clash.result.error.code,'access_mismatch');
+  assert.match(clash.result.error.message,/--access readwrite/);
+  assert.match(clash.result.error.message,/sales\.yaml/);
+  assert.match(clash.result.error.message,/access: read\b/);
+  await writeFile(join(root,'report.jsx'),'<p>One</p>');
+  const document=await invoke(['push','report.jsx','--access','readwrite']);
+  assert.notEqual(document.code,0);
+  assert.equal(document.result.error.code,'unsupported_access');
+ }finally{await rm(root,{recursive:true,force:true});}
+});

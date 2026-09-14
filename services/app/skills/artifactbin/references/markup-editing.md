@@ -7,7 +7,7 @@ order: 2
 ## Read first
 
 Use `<DataTable>` with `<Column>` children to render one template per row.
-A control's `run="$mutation"` saves its cell. Upload your dataset with `access: readwrite`
+A control's `run="$mutation"` saves its cell. Push your dataset with `--access readwrite`
 ([datasets](publishing-datasets.md)); see [data](markup-data.md) for queries and controls.
 
 ## Contents

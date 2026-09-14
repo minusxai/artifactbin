@@ -21,7 +21,8 @@ import {HttpClient} from './http';
 import {describeConflict} from './conflict';
 import {reconcileDocument} from './reconcile';
 import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,snapshotResource,writeResourceFile,type ResourceSource} from './resource-file';
-interface PushOptions {force?:boolean;dryRun?:boolean}
+/** `access` is the pushed dataset's row access — the CLI door to a dataset a document may WRITE to. */
+interface PushOptions {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite'}
 interface PushPlan {confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;dependencies:Dependency[];ids:Record<string,string>;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
 function metadataInput(metadata:DocumentMetadata):Record<string,unknown>{return Object.fromEntries(metadataFields.filter(key=>metadata[key]!==undefined).map(key=>[fieldMap[key]??key,metadata[key]]));}
@@ -43,10 +44,18 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   const knownSource=file.document?substituteDependencies(file.document.body,dependencies,knownIds):undefined;
   const resourceSource=file.resource?await readResourceSource(file.resource,file.path,workspace.root):undefined;
   const resource=file.resource;
-  const resourceSettings=resource?{...metadataInput(resource),...(resource.type==='dataset'&&resource.access!==undefined?{access:resource.access}:{})}:undefined;
+  // One access per pushed dataset: the YAML states it, --access states it for a bare CSV/JSON push,
+  // and a disagreement is refused rather than silently resolved in either direction.
+  const datasetFile=resource?resource.type==='dataset':!file.document&&['.csv','.json'].includes(extname(file.path).toLowerCase());
+  if(options.access!==undefined){
+   if(!datasetFile)throw new CliError('unsupported_access',`--access sets a dataset's row access; ${file.path} is not a dataset.`,'Push the CSV or JSON rows with --access, or drop the flag.');
+   if(resource?.type==='dataset'&&resource.access!==undefined&&resource.access!==options.access)throw new CliError('access_mismatch',`--access ${options.access} disagrees with ${file.path}, which declares access: ${resource.access}.`,'Name the same access in both, or drop the flag and let the file decide.');
+  }
+  const access=datasetFile?(resource?.type==='dataset'?resource.access??options.access:options.access):undefined;
+  const resourceSettings=resource?{...metadataInput(resource),...(access!==undefined?{access}:{})}:undefined;
   const policyChanged=resource?.type==='dataset'&&resource.policy!==undefined&&!isDeepStrictEqual(resource.policy,file.tracked?.snapshot.dataset_policy??null);
   if(policyChanged&&!file.tracked)throw new CliError('combined_policy_write','Policy changes require an existing tracked dataset; creation and policy were both refused.','Publish the dataset first, pull its YAML settings, then set its policy.');
-  const input=file.document?{...metadataInput(file.document.metadata),markup:source}:resource?{...resourceSettings,...await resourceContent(resource,file.path,workspace.root,resourceSource)}:assetInput(file.path,file.bytes);
+  const input=file.document?{...metadataInput(file.document.metadata),markup:source}:resource?{...resourceSettings,...await resourceContent(resource,file.path,workspace.root,resourceSource)}:{...assetInput(file.path,file.bytes),...(access!==undefined?{access}:{})};
   const id=file.document?.metadata.id??resource?.id??file.tracked?.id;
   if(id&&conflicts[id]&&!options.force)throw new CliError('merge_conflict',`${file.path} has an unresolved conflict.`,'Run afbin status to see it. Resolve locally and push --force, or pull --force to accept remote content.',conflicts[id],3);
   if(!id){plans.push({file,source:resourceSource,dependencies,ids,body:input,mode:'create'});continue;}
@@ -55,7 +64,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   const metadata=file.document?.metadata??resource;
   const oldMetadata=snapshotDocument(base).metadata;
   const delta:Record<string,unknown>=metadata?Object.fromEntries(metadataFields.filter(key=>metadata[key]!==undefined&&!isDeepStrictEqual(metadata[key],oldMetadata[key])).map(key=>[fieldMap[key]??key,metadata[key]])):{};
-  if(resource?.type==='dataset'&&resource.access!==undefined&&resource.access!==base.access)delta.access=resource.access;
+  if(access!==undefined&&access!==base.access)delta.access=access;
   if(policyChanged&&resource?.type==='dataset'){
    if(resource.policy_revision===undefined)throw new CliError('policy_revision_required','The YAML policy requires its observed policy_revision.','Pull the dataset YAML before changing its policy.');
    delta.policy=resource.policy;delta.expectedPolicyRevision=resource.policy_revision;
@@ -80,13 +89,13 @@ async function acknowledgeLocal(workspace:Workspace,plan:PushPlan):Promise<void>
   ...(plan.file.renamedFrom?{remove:[plan.file.renamedFrom]}:{})});
 }
 const localChanged=(plan:PushPlan)=>plan.mode!=='missing'&&(!!plan.file.renamedFrom||!!plan.file.bytes&&digest(plan.file.bytes)!==plan.file.tracked?.file);
-export async function finishLocalPush(workspace:Workspace,paths:string[],force=false):Promise<{operations:Array<Record<string,unknown>>}|null>{
- const plans=await planPush(workspace,paths,{force});
+export async function finishLocalPush(workspace:Workspace,paths:string[],options:PushOptions={}):Promise<{operations:Array<Record<string,unknown>>}|null>{
+ const plans=await planPush(workspace,paths,options);
  if(plans.some(plan=>plan.mode!=='none'&&plan.mode!=='missing'))return null;
  if(!plans.some(localChanged))return{operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:plan.mode==='missing'?'missing_file':'no_local_changes'}))};
  return withLock(workspace.home,workspace.root,async()=>{
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
-  const refreshed=await planPush(workspace,paths,{force});if(refreshed.some(plan=>plan.mode!=='none'&&plan.mode!=='missing'))return null;
+  const refreshed=await planPush(workspace,paths,options);if(refreshed.some(plan=>plan.mode!=='none'&&plan.mode!=='missing'))return null;
   const operations=[];
   for(const plan of refreshed){
    if(localChanged(plan)){await acknowledgeLocal(workspace,plan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
@@ -204,7 +213,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    const published=Object.fromEntries(plan.dependencies.map(d=>[d.path,{id:plan.ids[d.path],sha256:d.sha256}]));
    let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom,paths:mappings,dependencies:published}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
-   const snapshot=await recoverRequest(workspace,client,staged);operations.push({path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes)});workspace=await loadWorkspace(workspace.cwd,workspace.home);
+   const snapshot=await recoverRequest(workspace,client,staged);operations.push({path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)});workspace=await loadWorkspace(workspace.cwd,workspace.home);
   }
   return{operations};
   }catch(error){
@@ -311,6 +320,14 @@ export async function finishSavedRequest(workspace:Workspace,server?:string):Pro
  * against them instead of probing: pi spent eight model calls learning that `month` was a string
  * (local hardcore report, 14 Sep). Inferred locally from the bytes it just pushed; never a server call.
  */
+/**
+ * Beside those columns: whether a document may WRITE to what was just published. An agent that
+ * pushed rows for a `<Mutation>` reads its answer here instead of discovering it at publish.
+ */
+function datasetAccess(snapshot:Snapshot,body:Record<string,unknown>):{access?:string}{
+ const access=typeof snapshot.access==='string'?snapshot.access:typeof body.access==='string'?body.access:undefined;
+ return access!==undefined&&(snapshot.format==='dataset'||typeof body.access==='string')?{access}:{};
+}
 function datasetColumns(path:string,bytes:Buffer|null):{columns?:Array<{name:string;type:string}>}{
  if(!bytes)return{};
  const ext=extname(path).toLowerCase();

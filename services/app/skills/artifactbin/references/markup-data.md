@@ -63,7 +63,7 @@ Declarations · Bindings: embeds · Bindings: controls.
   for a private child AND for every folder, `views`/`sparkline` null unless you
   may edit the folder.
 - `<Mutation name source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>`
-  — a `<Query>` that WRITES (the dataset needs `access: readwrite`,
+  — a `<Query>` that WRITES (push the dataset `--access readwrite`,
   [datasets](databases.md)). Exactly one INSERT | UPDATE | DELETE
   naming one shared dataset. Runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
@@ -73,8 +73,8 @@ Declarations · Bindings: embeds · Bindings: controls.
   row its own id and timestamp.
 
 A Mutation targeting `_signals` or an inline table is local; it never changes
-datasets or permissions. Dataset Mutations require
-`access: readwrite`. See [composable state](markup-state.md).
+datasets or permissions. Dataset Mutations need `--access readwrite`. See
+[composable state](markup-state.md).
 
 First read [chart authoring](markup-data-authoring.md).
 

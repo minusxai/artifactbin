@@ -87,6 +87,23 @@ describe('the publishing skill', () => {
     expect(errors).toContain('image_fetch_failed');
     expect(errors).toContain('dataset_read_only');
   });
+  /*
+   * A `<Mutation>` needs a dataset published `access: readwrite`, and every
+   * reference that said so named a setting with no CLI door: an agent driving
+   * afbin could read the requirement and have no way to meet it. Each mention
+   * now names the flag that sets it.
+   */
+  it('every writable-dataset mention names the push flag that sets it', () => {
+    const datasets = renderDoc('artifactbin/references/publishing-datasets.md', BASE);
+    expect(datasets).toContain('--type dataset --access readwrite');
+    const editing = renderDoc('artifactbin/references/markup-editing.md', BASE);
+    const data = renderDoc('artifactbin/references/markup-data.md', BASE);
+    for (const text of [editing, data]) {
+      expect(text).toContain('--access readwrite');
+      expect(text).not.toMatch(/`access: readwrite`/);
+    }
+    expect(renderDoc('artifactbin/references/errors.md', BASE)).toContain('--access readwrite');
+  });
 });
 
 /*
