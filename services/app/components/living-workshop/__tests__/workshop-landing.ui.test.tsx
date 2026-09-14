@@ -10,7 +10,7 @@ import {
 import { MemoryRouter } from "react-router";
 import WorkshopLanding from "@/web/pages/WorkshopLanding";
 import { setWorkshopAppearance } from "@/lib/workshop-appearance";
-import { WORKSHOP_PAPERS } from "../scene-manifest";
+import { WORKSHOP_PAPERS, WORKSHOP_SETTINGS } from "../scene-manifest";
 
 const scene = vi.hoisted(() => ({
   reset: vi.fn(),
@@ -18,10 +18,12 @@ const scene = vi.hoisted(() => ({
   detach: vi.fn(),
   dispose: vi.fn(),
 }));
-vi.mock("../workshop-renderer", () => ({ createWorkshopScene: () => scene }));
+const createScene = vi.hoisted(() => vi.fn());
+vi.mock("../workshop-renderer", () => ({ createWorkshopScene: createScene }));
 const clipboard = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
+  createScene.mockReturnValue(scene);
   localStorage.clear();
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
@@ -34,6 +36,16 @@ const mount = () =>
       <WorkshopLanding />
     </MemoryRouter>,
   );
+
+it("prints the homepage artifacts on the board by default", async () => {
+  mount();
+  await waitFor(() => expect(createScene).toHaveBeenCalledWith(
+    expect.any(HTMLCanvasElement),
+    WORKSHOP_PAPERS,
+    expect.any(Function),
+    WORKSHOP_SETTINGS.indoor,
+  ));
+});
 
 it("keeps real canonical links usable without interacting with the canvas", () => {
   mount();

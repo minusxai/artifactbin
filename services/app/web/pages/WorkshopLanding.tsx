@@ -45,7 +45,7 @@ export default function WorkshopLanding({
   useEffect(() => {
     setOrigin(window.location.origin);
     const oldTitle = document.title;
-    document.title = "Pull up a chair. — artifactbin";
+    document.title = "Artifactbin - Google docs for agents";
     let cancelled = false;
     // Keep Three.js and physics in a browser-only chunk; static landing HTML stays synchronous.
     void import("@/components/living-workshop/workshop-renderer").then(
@@ -56,14 +56,7 @@ export default function WorkshopLanding({
             canvas.current,
             WORKSHOP_PAPERS,
             setReveal,
-            {
-              ...initialSetting.current,
-              posterAtlas:
-                new URLSearchParams(window.location.search).get("posters") ===
-                "real"
-                  ? undefined
-                  : "/landing/workshop/monotone-posters.webp",
-            },
+            initialSetting.current,
           );
         } catch {
           // The HTML background remains available if WebGL cannot initialize.
