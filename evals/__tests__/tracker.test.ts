@@ -118,7 +118,7 @@ describe('the kind registry knows the tracker kind', () => {
   it('answers its four check names', () => {
     expect(tracker().kind).toBe('tracker');
     expect(checkNamesFor('tracker')).toEqual(
-      expect.arrayContaining(['uses_row_template', 'declares_mutation', 'mutation_works', 'no_iframe']),
+      expect.arrayContaining(['uses_row_template', 'declares_mutation', 'mutation_works']),
     );
   });
 
@@ -134,7 +134,7 @@ describe('the three checks read off the published document', () => {
     const { spy } = fakeWire({ before: ROWS, after: ROWS, mutate: jsonRes({ error: 'unknown_mutation' }, 400) });
     const out = await tracker().checks(checkCtx());
     spy.mockRestore();
-    expect(out).toMatchObject({ uses_row_template: true, declares_mutation: true, no_iframe: true });
+    expect(out).toMatchObject({ uses_row_template: true, declares_mutation: true });
   });
 
   it('sees a keyed For as a row template too', async () => {
@@ -156,7 +156,7 @@ describe('the three checks read off the published document', () => {
 <Iframe src="https://example.test/board" height="400px" />
 <For each={$tasks}><p>{$_row.status}</p></For>`;
     const out = await tracker().checks(checkCtx({ served: { status: 200, html: island(markup, { state: state() }) } }));
-    expect(out).toMatchObject({ uses_row_template: false, declares_mutation: false, no_iframe: false, mutation_works: false });
+    expect(out).toMatchObject({ uses_row_template: false, declares_mutation: false, mutation_works: false });
   });
 
   it('answers false for a document that carries no story island at all', async () => {
@@ -165,7 +165,7 @@ describe('the three checks read off the published document', () => {
       served: { status: 404, html: '' },
       record: (m, v) => rows.push([m, v]),
     }));
-    expect(out).toEqual({ uses_row_template: false, declares_mutation: false, mutation_works: false, no_iframe: false });
+    expect(out).toEqual({ uses_row_template: false, declares_mutation: false, mutation_works: false });
     expect(String(rows.find(([m]) => m === 'mutation_probe')?.[1])).toMatch(/island/i);
   });
 });
@@ -325,7 +325,7 @@ describe('the tracker task on disk', () => {
     expect(task.checks).toEqual(expect.arrayContaining([
       'published', 'used_cli', 'used_start_document', 'dataset_created', 'query_ran', 'has_title',
       'no_console_errors', 'no_failed_responses', 'no_local_checkout_reads',
-      'uses_row_template', 'declares_mutation', 'mutation_works', 'no_iframe',
+      'uses_row_template', 'declares_mutation', 'mutation_works',
     ]));
   });
 

@@ -40,11 +40,10 @@ import { DriverFailure, type CheckContext, type TaskScorer } from './contract';
  * Declared apart from the scorer for the reason `publish.ts` gives:
  * `contracts.ts` builds its check enum from these names.
  *
- * `no_iframe` is here rather than among the common checks because at the time
- * of writing nothing else answers it; it is a task-specific check that a
- * common one may later replace (see REPORT.md).
+ * `no_iframe` is a COMMON check (evals/lib/score/product.ts) that this task gates
+ * through its `checks` list; the kind does not answer it a second time.
  */
-export const TRACKER_CHECKS = ['uses_row_template', 'declares_mutation', 'mutation_works', 'no_iframe'] as const;
+export const TRACKER_CHECKS = ['uses_row_template', 'declares_mutation', 'mutation_works'] as const;
 
 // ---------------------------------------------------------------- the island
 
@@ -414,7 +413,7 @@ export const trackerScorer = {
     const island = islandOf(ctx.served.html);
     if (!island) {
       ctx.record('mutation_probe', 'the served document carries no story island — there is nothing to write to', 'text');
-      return { uses_row_template: false, declares_mutation: false, mutation_works: false, no_iframe: false };
+      return { uses_row_template: false, declares_mutation: false, mutation_works: false };
     }
     const probe = await probeMutation(ctx, island);
     ctx.record('mutation_probe', probe.note, 'text');
@@ -422,7 +421,6 @@ export const trackerScorer = {
       uses_row_template: usesRowTemplate(island),
       declares_mutation: declaresMutation(island),
       mutation_works: probe.ok,
-      no_iframe: noIframe(island),
     };
   },
 } as const satisfies TaskScorer;

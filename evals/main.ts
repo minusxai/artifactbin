@@ -455,6 +455,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // them gating, rather than reporting an agent that ignored the comment.
   const checked = await runChecks(scorer, {
     task,
+    scoredId: targetId,
     productUrl: r.productUrl,
     startId: start.id,
     token: driverToken,
