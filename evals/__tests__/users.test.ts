@@ -31,10 +31,17 @@ import {setTimeout as delay} from 'node:timers/promises';
 it('bounds setup and detached descendants, not just model time',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'afbin-deadline-'));
  const marker=path.join(dir,'escaped');
- const grandchild=`setTimeout(()=>require('fs').writeFileSync(${JSON.stringify(marker)},'escaped'),900)`;
- const parent=`require('child_process').spawn(process.execPath,['-e',${JSON.stringify(grandchild)}],{detached:true,stdio:'ignore'});setTimeout(()=>{},1000)`;
+ const parent=`
+  const child="setTimeout(()=>require('fs').writeFileSync(process.argv[1],'escaped'),900)";
+  require('child_process').spawn(process.execPath,['-e',child,process.argv[1]],{detached:true,stdio:'ignore'});
+  setTimeout(()=>{},1000);
+ `;
  try {
-  const result=await boundedRun(process.execPath,['-e',parent],300);
+  const args=['-e',parent,marker];
+  expect(await boundedRun(process.execPath,args,2000)).toMatchObject({code:0,timedOut:false});
+  expect(fs.readFileSync(marker,'utf8')).toBe('escaped');
+  fs.rmSync(marker);
+  const result=await boundedRun(process.execPath,args,300);
   expect(result.timedOut).toBe(true);
   expect(result.code).toBe(124);
   expect(result.elapsedMs).toBeLessThan(850);
