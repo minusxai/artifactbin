@@ -91,9 +91,8 @@ export default function WorkshopDirections() {
             FROM FIRST DRAFT TO SOMETHING YOU’RE PROUD OF
           </span>
           <h2 id="workshop-outcomes-title">
-            Good work.
-            <br />
-            <em>On your terms.</em>
+            <span>Agent-ready infrastructure.</span>
+            <em>Out of the box.</em>
           </h2>
           <div className="blue-feature-choices">
             {REASONS.map((reason, index) => (
@@ -123,9 +122,6 @@ export default function WorkshopDirections() {
               </div>
             ))}
           </div>
-          <a className="studio-text-link" href="/docs-human">
-            See how it works <ArrowUpRight size={18} />
-          </a>
         </div>
         <figure>
           <img

@@ -273,7 +273,18 @@
   align-items: center;
 }
 .blue-capabilities h2 {
-  font-size: clamp(43px, 5vw, 75px);
+  container-type: inline-size;
+  line-height: 1.15;
+}
+.blue-capabilities h2 > span,
+.blue-capabilities h2 > em {
+  display: block;
+  font-size: clamp(18px, 7.8cqi, 36px);
+  letter-spacing: -0.025em;
+  white-space: nowrap;
+}
+.blue-capabilities h2 > em {
+  margin-top: 6px;
 }
 .blue-feature-choices {
   margin-top: 30px;
@@ -323,7 +334,7 @@
   animation: studio-appear 0.35s ease;
 }
 .blue-feature-choices strong {
-  font-size: clamp(19px, 1.9vw, 28px);
+  font-size: clamp(17px, 1.5vw, 23px);
 }
 .blue-feature-choices button {
   color: #536176;

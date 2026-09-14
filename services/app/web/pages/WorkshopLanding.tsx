@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, House, Trees } from "lucide-react";
+import { ArrowUpRight, House, Trees, FilePlus2, Copy, Check } from "lucide-react";
 import WorkshopHeroPitch from "@/components/living-workshop/WorkshopHeroPitch";
 import LandingFaq from "@/components/LandingFaq";
 import { REPO_URL } from "@/lib/repo";
@@ -32,6 +32,15 @@ export default function WorkshopLanding({
   const scene = useRef<WorkshopScene | null>(null);
   const [reveal, setReveal] = useState<WorkshopPaper | null>(null);
   const [origin, setOrigin] = useState("https://artifactbin.dev");
+  const [footerStatus, setFooterStatus] = useState("");
+  const copyFooterInstructions = async () => {
+    try {
+      await navigator.clipboard.writeText(`Help me create an artifact with artifactbin. Read ${origin}/docs-human for setup, then ask me what I want to make.`);
+      setFooterStatus("Copied. Paste into your agent.");
+    } catch {
+      setFooterStatus("Couldn't copy. Open the setup guide.");
+    }
+  };
   useEffect(() => {
     setOrigin(window.location.origin);
     const oldTitle = document.title;
@@ -114,7 +123,7 @@ export default function WorkshopLanding({
         </div>
       </section>
       <WorkshopDirections />
-      <LandingFaq column="workshop-faq" />
+      <LandingFaq column="workshop-faq" heading="FAQs." />
       <footer className="workshop-footer">
         <div className="workshop-footer-top">
           <div>
@@ -124,23 +133,36 @@ export default function WorkshopLanding({
               aria-label="artifactbin home"
             >
               <img src="/logo-128.png" alt="" width={64} height={64} />
-              artifactbin
+              <span className="workshop-brand-text">
+                <span>artifactbin</span>
+                <span className="workshop-tagline">Google Docs for agents</span>
+              </span>
             </a>
-            <p>A place for the things you make.</p>
           </div>
-          <a className="workshop-footer-invite" href="#workshop-install">
-            Pull up a chair <ArrowUpRight size={23} />
-          </a>
+          <div>
+            <div className="workshop-pitch-actions">
+              <button type="button" onClick={() => void copyFooterInstructions()} aria-label="Create Artifact — copy agent instructions">
+                <span className="workshop-pitch-create-label"><FilePlus2 size={16} strokeWidth={1.5} />Create Artifact</span>
+                <span className="workshop-pitch-button-hint">
+                  {footerStatus.startsWith("Copied") ? <Check size={14} /> : <Copy size={14} />}
+                  {footerStatus.startsWith("Copied") ? "instructions copied" : "copy agent instructions"}
+                </span>
+              </button>
+            </div>
+            {footerStatus && <p role="status">{footerStatus} <a href="/docs-human">Setup guide ↗</a></p>}
+          </div>
         </div>
         <div className="workshop-footer-bottom">
-          <span>Open source. Yours to make yours.</span>
+          <a className="workshop-footer-license" href={`${REPO_URL}/blob/main/LICENSE`}>
+            Open source <span aria-hidden="true">·</span> Apache 2.0
+          </a>
           <nav aria-label="Footer">
-            <a href="/examples">Examples</a>
+            <a href="/examples">Gallery</a>
             <a href="/docs-human">Docs</a>
             <a href={REPO_URL}>
-              Source <ArrowUpRight size={12} />
+              GitHub <ArrowUpRight size={12} />
             </a>
-            <a href="/privacy">Privacy</a>
+            <a className="workshop-footer-legal" href="/privacy">Privacy</a>
             <a href="/terms">Terms</a>
           </nav>
         </div>

@@ -41,13 +41,13 @@ const SUMMARY =
   'flex cursor-pointer list-none items-start justify-between gap-4 py-4 ' +
   'marker:content-none [&::-webkit-details-marker]:hidden focus-visible:outline-none';
 
-export default function LandingFaq({ column = PAGE_COLUMN }: { column?: string }) {
+export default function LandingFaq({ column = PAGE_COLUMN, heading }: { column?: string; heading?: string }) {
   return (
     <section aria-label="FAQs" className={column}>
-      <p className="mb-6 flex items-center gap-4 font-mono text-xs tracking-[0.18em] text-muted uppercase">
+      {heading ? <h2 className="workshop-faq-heading">{heading}</h2> : <p className="mb-6 flex items-center gap-4 font-mono text-xs tracking-[0.18em] text-muted uppercase">
         FAQs
         <span aria-hidden className="h-px flex-1 bg-edge" />
-      </p>
+      </p>}
 
       {/* The run owns its top rule and every item its bottom one, so neighbours
         * share a single hairline and nothing doubles at a seam — the same way
