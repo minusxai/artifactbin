@@ -30,7 +30,11 @@ export function sessionVerdict(kind, e) {
   const noUnintendedWrites = rows.length >= e.pages.length && rows.length <= e.pages.length + (kind === 'mutate' ? 1 : 0)
     && e.pages.every(p => p.signals.taskTitle.value === 'untouched') && !e.sourceChanged
     && (!['invalid','failure','mutate'].includes(kind) || e.pages.every(p => p.signals.region.value === 'North'));
-  const resumed = e.executions.length >= 2 && new Set(e.executions.map(x => x.session_id)).size === 1;
+  // A failed, empty startup cannot break page continuity. Require the actual
+  // final page IDs in multiple receipts; a recreated page is not a resume.
+  const pageExecutions = e.executions.filter(x => x.pages?.length > 0);
+  const resumed = pageExecutions.length >= 2 && new Set(pageExecutions.map(x => x.session_id)).size === 1
+    && e.pages.every(p => pageExecutions.filter(x => x.pages.some(page => page.page_id === p.id)).length >= 2);
   const artifactIds = new Set(e.pages.map(p => artifactIdFromPath(new URL(p.url,'http://fixture').pathname)));
   const regions = e.pages.map(p => p.signals.region.value).sort();
   const results = JSON.stringify(e.executions.map(x => x.result));

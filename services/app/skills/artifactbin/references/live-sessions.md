@@ -4,8 +4,8 @@ description: Operate live artifacts with JavaScript, Playwright and mx.
 ---
 # Live artifact sessions
 
-Read an artifact with `afbin pull` to understand its declarations, then operate a
-live instance without editing its source:
+Read declarations with `afbin pull ARTIFACT_ID --output source.jsx`, or inspect
+`mx.describe()` in a live page. Operate the instance without editing its source:
 
 ```sh
 afbin sessions script new --input actions.js --json
@@ -20,6 +20,11 @@ and `return`, without exporting or wrapping a function. Each call gets:
 - `context`: a real Playwright BrowserContext with the server as `baseURL`.
 - `pages`: a read-only object mapping returned `page_id` strings to live Page objects.
 - `output.image(bytes)`: attach a PNG/JPEG, e.g. `await output.image(await page.screenshot())`.
+
+A `new` session starts with **zero pages**. Its first script must create a page
+with `await context.newPage()`. Use `context.pages()` or `pages[page_id]` only
+after a page has been created. Reuse the returned session ID for subsequent
+scripts, including inspection and recovery after an ordinary script error.
 
 ```js
 const page = await context.newPage();
@@ -94,7 +99,10 @@ return await page.locator('body').ariaSnapshot();
 ```
 
 The kit's `<Select label="Region">` is a button with a listbox, not an HTML
-`<select>`. Operate that control with its accessible names:
+`<select>`. The following example assumes its label is exactly Region; replace
+the label with the actual accessible name from the snapshot. To change a known
+scalar directly, `page.evaluate(() => mx.set({region: 'West'}))` needs no locator.
+To exercise the UI instead:
 
 ```js
 const [page] = context.pages();

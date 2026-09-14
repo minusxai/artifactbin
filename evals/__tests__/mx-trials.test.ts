@@ -59,9 +59,24 @@ it('the fixture produces ready rows and an intentional query error', async () =>
 
 it('identifies duplicate artifacts independently of signal query parameters', () => {
   const page = {signals:{region:{value:'North'},taskTitle:{value:'untouched'},tasks:{value:{rows:[{title:'Existing'}]}}}};
-  const evidence={pages:[{...page,url:'http://app/@owner/abcdef',id:'one'},{...page,url:'http://app/@owner/abcdef?$region=South',id:'two',signals:{...page.signals,region:{value:'South'}}}],executions:[{session_id:'session'},{session_id:'session'}],sourceChanged:false};
+  const receipt={session_id:'session',pages:[{page_id:'one'},{page_id:'two'}]};
+  const evidence={pages:[{...page,url:'http://app/@owner/abcdef',id:'one'},{...page,url:'http://app/@owner/abcdef?$region=South',id:'two',signals:{...page.signals,region:{value:'South'}}}],executions:[receipt,receipt],sourceChanged:false};
   expect(sessionVerdict('duplicate',evidence).passed).toBe(true);
   expect(sessionVerdict('duplicate',{...evidence,pages:[evidence.pages[0],{...evidence.pages[1],url:'http://app/@owner/ghijkl'}]}).passed).toBe(false);
+});
+
+it('grades page continuity without counting a failed attempt that never created a page', () => {
+  const page={id:'page',url:'/a/abcdef',marker:'still-here',signals:{region:{value:'South'},taskTitle:{value:'untouched'},tasks:{value:{rows:[{title:'Existing'}]}}}};
+  const receipt={session_id:'session',pages:[{page_id:'page'}],status:'completed',result:{marker:'still-here'}};
+  const evidence={pages:[page],sourceChanged:false,executions:[{session_id:'unused',status:'failed',pages:[]},receipt,receipt]};
+  expect(sessionVerdict('resume',evidence).passed).toBe(true);
+});
+
+it('rejects recreated pages even if they share a session and claim the same marker', () => {
+  const page={id:'page',url:'/a/abcdef',marker:'still-here',signals:{region:{value:'South'},taskTitle:{value:'untouched'},tasks:{value:{rows:[{title:'Existing'}]}}}};
+  const receipt={session_id:'session',pages:[{page_id:'page'}],status:'completed',result:{marker:'still-here'}};
+  const evidence={pages:[page],sourceChanged:false,executions:[{...receipt,pages:[{page_id:'old-page'}]},receipt]};
+  expect(sessionVerdict('resume',evidence).passed).toBe(false);
 });
 
 it('can build session fixtures without inert iframe controls', () => {
