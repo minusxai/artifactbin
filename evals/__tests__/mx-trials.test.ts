@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+import { runDataflow } from '../../services/app/lib/sql/run-dataflow';
 import { validateMarkupStructure } from '../../services/app/lib/story/local-validation';
 import { fixtureMarkup, sessionVerdict } from '../lib/mx-trials/tasks.mjs';
 it('rejects self-reported success when the observed state or write count is wrong', () => {
@@ -12,4 +13,14 @@ it('rejects self-reported success when the observed state or write count is wron
 
 it('uses a publishable real-runtime fixture', () => {
   expect(validateMarkupStructure(fixtureMarkup('')).errors).toEqual([]);
+});
+
+it('the fixture produces ready rows and an intentional query error', async () => {
+  const {content} = validateMarkupStructure(fixtureMarkup('')).split!;
+  const flow = {values:content.values,queries:content.queries,mutations:content.mutations};
+  const ready = await runDataflow(flow, {});
+  expect(ready.errors).toEqual({});
+  expect(ready.tables.sales.rows).toEqual([{name:'North total',revenue:110}]);
+  const broken = await runDataflow(flow, {}, {values:{region:'Broken'}});
+  expect(broken.errors.sales).toMatch(/convert|cast|invalid/i);
 });

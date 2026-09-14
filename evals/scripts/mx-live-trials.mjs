@@ -79,6 +79,7 @@ try {
   const gradeWidget=async(kind,code)=>{
     const id=await publish(code), context=await browser.newContext({extraHTTPHeaders:{Authorization:`Bearer ${credential.token}`}}), page=await context.newPage();
     page.setDefaultTimeout(4000);
+    const pageErrors=[];page.on('pageerror',error=>pageErrors.push(String(error.message)));page.on('console',message=>{if(message.type()==='error')pageErrors.push(message.text());});
     const checks=[];const check=async(name,fn)=>{try{await fn();checks.push({name,pass:true});}catch(error){checks.push({name,pass:false,error:String(error.message).slice(0,300)});}};
     try {
       await page.goto(base+'/a/'+id);await page.waitForFunction(()=>Boolean(window.mx));
@@ -111,14 +112,17 @@ try {
       }
       await check('no unintended scalar writes',async()=>{assert((await read()).signals.taskTitle.value==='untouched','Mutation overwrote its argument signal');});
       await check('no unintended row writes',async()=>{assert((await read()).signals.tasks.value.rows.length<=(['table','mutate'].includes(kind)?2:1),'Unexpected row write');});
-      return {passed:checks.every(c=>c.pass),noUnintendedWrites:checks.filter(c=>c.name.startsWith('no unintended')).every(c=>c.pass),checks};
+      return {passed:checks.every(c=>c.pass),noUnintendedWrites:checks.filter(c=>c.name.startsWith('no unintended')).every(c=>c.pass),checks,
+        ...(!checks.every(c=>c.pass)?{diagnostics:{pageErrors,state:await read(),html:await frame.locator('#rows').innerHTML(),error:await frame.locator('#error').innerText()}}:{})};
     }finally{await context.close();}
   };
   // Grader probes precede paid runs: an empty submission must fail its requested behavior.
   const probe=await gradeWidget('describe','');if(probe.passed)throw new Error('Broken widget passed the grader');write('grader-probe.json',probe);
   const control=await gradeWidget('describe',"mx.describe().then(d=>document.getElementById('rows').textContent=[...d.signals,...d.mutations].map(s=>s.name).join(', '));");
   if(!control.passed)throw new Error('Known-correct widget failed the grader: '+JSON.stringify(control));
-  const knownWidget=fs.readFileSync(path.join(repoRoot,'scripts/fixtures/mx-agent/widget.js'),'utf8');
+  // This control was authored for a tbody; the generic benchmark outlet is a div.
+  const knownWidget=fs.readFileSync(path.join(repoRoot,'scripts/fixtures/mx-agent/widget.js'),'utf8')
+    .replaceAll("createElement('tr')","createElement('div')").replaceAll("createElement('td')","createElement('span')");
   for(const kind of ['states','mutate']){const checked=await gradeWidget(kind,knownWidget);write('grader-control-'+kind+'.json',checked);if(!checked.passed)throw new Error('Known-correct '+kind+' control failed: '+JSON.stringify(checked));}
   for(const [kind,brief] of Object.entries(track==='session'?sessionTasks:iframeTasks))for(let repeat=1;repeat<=3;repeat++){
     const name=`${kind}-${repeat}`,home=path.join(work,name),cwd=path.join(home,'task'),piHome=path.join(home,'pi'),evidence=path.join(out,name);
@@ -135,13 +139,13 @@ try {
       : `Write widget.js: a managed iframe module using the shipped mx API. Read afbin help markup-scripts first. The parent declares scalar region (North initially), scalar taskTitle (untouched), local table tasks with rows {title}, query sales with rows {name,revenue}, and mutation addTask taking taskTitle. Existing elements: #region select (North,South,Broken), #rows div, #label input, #add button, #stop button, #error paragraph. ${brief} Clean up subscriptions and handlers on pagehide. Use read/write/edit/bash tools to write the file, not just a code block. Do not publish, inspect unrelated files, or wait for pagehide before finishing.`;
     fs.writeFileSync(path.join(evidence,'prompt.txt'),prompt);
     const ledger={ids:new Set(),scriptIds:new Set(),records:new Map(),statusRead:false,sourceWrite:false};active=ledger;
-    let summary;
+    let summary, phase="model_run";
     try {
       const invocation={argv:['pi','--offline','--no-extensions','--no-skills','--no-prompt-templates','--no-context-files','--no-session','--tools','read,write,edit,bash','--thinking','off','--model','fireworks/accounts/fireworks/models/deepseek-v4-flash-0731','-p','--mode','json',prompt],env:{PI_CODING_AGENT_DIR:piHome},unsetEnv:[],keepLine:pi.keepLine,redact:secrets};
       const run=await runInvocation(invocation,{cwd,homeDir:home,baseEnv:{PATH:bin+':'+process.env.PATH,HOME:home,TMPDIR:home},runAs:'eval-agent',checkoutRoots:[repoRoot],timeoutMs:180000,stdoutPath:path.join(evidence,'transcript.jsonl'),stderrPath:path.join(evidence,'stderr.txt'),turnCap:{maxTurns:14,countsAsTurn:pi.countsAsTurn}});
       active=null;
       const model=pi.reduce(run.stdout);
-      let grade;
+      let grade;phase="grading";
       if(track==='iframe'){
         const file=path.join(cwd,'widget.js');
         if(fs.existsSync(file)){const code=fs.readFileSync(file,'utf8');fs.writeFileSync(path.join(evidence,'widget.js'),scrubSecrets(code,secrets));grade=await gradeWidget(kind,code);}else grade={passed:false,error:'No widget.js submission'};
@@ -161,8 +165,9 @@ try {
         fs.writeFileSync(path.join(evidence,'observations.json'),scrubSecrets(JSON.stringify({pages,executions:executions.map(x=>({...x,attachments:x.attachments?.map(a=>({mime:a.mime,bytes:Buffer.from(a.base64,'base64').length}))})),grade},null,2),secrets));
       }
       summary={track,kind,repeat,passed:grade.passed&&model.ok&&!run.timedOut&&!run.turnCapped,grade,modelOk:model.ok,modelError:model.error,timedOut:run.timedOut,turnCapped:run.turnCapped,turns:model.turns,toolCalls:model.toolCalls,tokens:model.tokens,costUsd:null,durationMs:run.durationMs};
-    }catch(error){active=null;summary={track,kind,repeat,passed:false,infrastructureError:scrubSecrets(String(error.message),secrets)};}
+    }catch(error){active=null;summary={track,kind,repeat,passed:false,failurePhase:phase,error:scrubSecrets(String(error.message),secrets)};}
     finally{active=null;for(const session_id of ledger.ids)await api('/api/browser-sessions',{op:'close',session_id}).catch(()=>{});}
+    summary=JSON.parse(scrubSecrets(JSON.stringify(summary),secrets));
     summaries.push(summary);fs.writeFileSync(path.join(evidence,'result.json'),JSON.stringify(summary,null,2));console.log(JSON.stringify(summary));
     write('summary.json',{track,model:'fireworks/accounts/fireworks/models/deepseek-v4-flash-0731',requests,costUsd:null,results:summaries});
   }
