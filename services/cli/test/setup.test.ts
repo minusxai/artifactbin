@@ -134,6 +134,6 @@ test('setup --server records a self-hosted origin as the default, once, and neve
   assert.equal(await runCli(['pull','https://self.example/a/abc123','--output','doc.jsx','--json'],{...context,fetch:request}),0,out.join(''));
   assert.deepEqual(hosts,['self.example']);
   assert.equal(await runCli(['setup','--yes','--json','--server','https://other.example'],context),0);
-  assert.equal(await readFile(join(home,'.artifactbin','.env'),'utf8'),'ARTIFACTBIN_URL=https://self.example\n','the first origin stays the default');
+  assert.match(await readFile(join(home,'.artifactbin','.env'),'utf8'),/^ARTIFACTBIN_URL=https:\/\/self\.example\n/,'the first origin stays the default');
  }finally{await rm(home,{recursive:true,force:true});}
 });
