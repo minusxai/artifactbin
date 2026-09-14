@@ -581,7 +581,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   }
 
   // --- rows: images (every variant the config asks for and the product can produce)
-  if (pm.published && targetId && docUrl) {
+  if (task.capture !== false && pm.published && targetId && docUrl) {
     for (const size of config.capture.sizes) {
       for (const renderer of config.capture.renderers) {
         const variant = { size, renderer };

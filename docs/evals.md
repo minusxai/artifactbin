@@ -95,5 +95,7 @@ historical identity on an unrelated edit.
 The clock includes eval startup, account/CLI setup, agent work and scoring;
 standard CI checkout/install/build prerequisites are outside it. Expiry kills
 the eval's process tree, including detached harness children, and exits 124.
-The log records total elapsed milliseconds and PASS/FAIL/TIMEOUT. This is one
+The log records total elapsed milliseconds and PASS/FAIL/TIMEOUT. This functional
+smoke sets `capture: false` to skip supplementary screenshot exports; its browser
+interaction checks still run. This is one
 scenario, not evidence for every possible user-field schema or every model.

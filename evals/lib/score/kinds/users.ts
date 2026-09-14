@@ -71,7 +71,7 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
   const names=await owner.getByRole('option').allTextContents();
   assert.ok(names.includes(fixture.owner.label)&&names.includes(fixture.member.label),'both report members offered');
   assert.ok(!names.includes(fixture.outsider.label),'outsider absent');
-  await owner.getByRole('textbox',{name:'Search Assign task',exact:true}).fill(fixture.member.label);
+  await owner.getByRole('searchbox',{name:'Search Assign task',exact:true}).fill(fixture.member.label);
   await owner.getByRole('option',{name:fixture.member.label,exact:true}).waitFor();
   assert.equal(await owner.getByRole('option').count(),1,'search narrows member choices');
   const assignment=await write(owner,()=>owner.getByRole('option',{name:fixture.member.label,exact:true}).click());
