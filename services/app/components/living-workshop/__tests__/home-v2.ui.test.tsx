@@ -21,7 +21,7 @@ beforeEach(() => {
 const mount = () =>
   render(
     <MemoryRouter>
-      <HomeV2 />
+      <HomeV2 environment="outdoor" />
     </MemoryRouter>,
   );
 
