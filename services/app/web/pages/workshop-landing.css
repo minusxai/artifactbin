@@ -9,6 +9,121 @@
   font-family: var(--font-sans), sans-serif;
   overflow: hidden;
 }
+
+/* One shared palette for the comment circles and their scene highlights. */
+.workshop-hero {
+  --comment-color-1: #2980b9;
+  --comment-color-2: #d35400;
+  --comment-color-3: #27ae60;
+  --comment-color-4: #8e44ad;
+  --comment-color-5: #f39c12;
+  --comment-color-6: #16a085;
+  --comment-color-7: #c0392b;
+  --comment-color-8: #34495e;
+}
+.workshop-hero:has([data-comment-highlight="poster"]) { --highlight-color: var(--comment-color-1); }
+.workshop-hero:has([data-comment-highlight="bots"]) { --highlight-color: var(--comment-color-2); }
+.workshop-hero:has([data-comment-highlight="install"]) { --highlight-color: var(--comment-color-3); }
+.workshop-hero:has([data-comment-highlight="poster-middle"]) { --highlight-color: var(--comment-color-4); }
+.workshop-hero:has([data-comment-highlight="poster-right"]) { --highlight-color: var(--comment-color-5); }
+.workshop-hero:has([data-comment-highlight="artifact-box"]) { --highlight-color: var(--comment-color-6); }
+.workshop-hero:has([data-comment-highlight="books"]) { --highlight-color: var(--comment-color-7); }
+.workshop-hero:has([data-comment-highlight="open-source"]) { --highlight-color: var(--comment-color-8); }
+
+/* One right-edge rail; scene targets highlight without intercepting its interactions. */
+.workshop-comments {
+  position: absolute; top: 16%; bottom: 5%; right: 12px; z-index: 20;
+  display: grid; grid-template-columns: 44px;
+  grid-template-rows: 36px .6fr 36px 1.7fr 36px .8fr 36px 1.3fr 36px .4fr 36px 1.6fr 36px 1fr 36px;
+}
+.workshop-comment-anchor { position: static; grid-row: 1; --comment-color: var(--comment-color-1); }
+.workshop-comment-anchor:nth-child(2) { --comment-color: var(--comment-color-2); grid-row: 3; }
+.workshop-comment-anchor:nth-child(3) { --comment-color: var(--comment-color-3); grid-row: 5; }
+.workshop-comment-anchor:nth-child(4) { --comment-color: var(--comment-color-4); grid-row: 7; }
+.workshop-comment-anchor:nth-child(5) { --comment-color: var(--comment-color-5); grid-row: 9; }
+.workshop-comment-anchor:nth-child(6) { --comment-color: var(--comment-color-6); grid-row: 11; }
+.workshop-comment-anchor:nth-child(7) { --comment-color: var(--comment-color-7); grid-row: 13; }
+.workshop-comment-anchor:nth-child(8) { --comment-color: var(--comment-color-8); grid-row: 15; }
+.workshop-comment-anchor[data-open="true"] { z-index: 3; }
+.workshop-comment-pin {
+  position: relative; display: flex; align-items: center; gap: 4px; width: 44px; height: 36px;
+  padding: 6px; border: 1px solid #dcded0; border-radius: 50% 50% 50% 3px;
+  background: #fffdf8; color: #17261f; box-shadow: none; border-color: #dcded0;
+  transition: box-shadow .15s, transform .15s;
+}
+.workshop-comment-pin:hover { transform: translateY(-2px); }
+.workshop-comment-avatar {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 22px; height: 22px; border: 1px solid #1b4da540; border-radius: 50%;
+  background: #e9eef8; color: #1b4da5; font: 600 10px var(--font-sans), sans-serif;
+}
+.workshop-comment-pin > .workshop-comment-avatar {
+  background: var(--comment-color);
+  border-color: transparent;
+  color: #fff;
+}
+.workshop-comment-count { font: 700 9px var(--font-mono), monospace; }
+.workshop-comment-preview {
+  position: absolute; right: -1px; bottom: -1px; display: flex; flex-direction: column; gap: 8px;
+  width: 270px; padding: 13px; border: 1px solid #dcded0; border-radius: 5px;
+  background: #fffdf8; color: #17261f; text-align: left; font: 13px/1.4 var(--font-sans), sans-serif;
+  opacity: 0; visibility: hidden; transform: translateY(4px); pointer-events: none;
+  box-shadow: 0 5px 20px #17261f20; transition: opacity .15s, transform .15s, visibility .15s;
+}
+.workshop-comment-preview strong { font-size: 11px; }
+.workshop-comment-preview small { display: flex; align-items: center; gap: 6px; color: #666e64; font-size: 10px; }
+.workshop-comment-preview small span { margin-left: auto; }
+.workshop-comment-anchor:not([data-open="true"]) .workshop-comment-pin:is(:hover, :focus-visible) .workshop-comment-preview { opacity: 1; visibility: visible; transform: none; }
+.workshop-comment-thread {
+  overflow-y: auto;
+  position: absolute; top: 0; right: 56px; width: 310px; max-width: calc(100vw - 84px);
+  border: 1px solid #dcded0; border-radius: 6px; background: #fffdf8; color: #17261f;
+  box-shadow: 0 8px 32px #17261f25; font: 13px/1.45 var(--font-sans), sans-serif;
+  animation: workshop-comment-enter .15s ease-out;
+}
+.workshop-comment-thread > header, .workshop-comment-thread > header > div, .workshop-comment-thread > header > span { display: flex; align-items: center; gap: 8px; }
+.workshop-comment-thread > header { justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid #dcded0; font-size: 11px; }
+.workshop-comment-thread > header button { display: flex; padding: 6px; border: 0; background: transparent; color: #666e64; border-radius: 4px; }
+.workshop-comment-thread > header button:hover { background: #e9eef8; color: #1b4da5; }
+.workshop-comment-messages { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
+.workshop-comment-messages article { padding: 12px; border-bottom: 1px solid #dcded080; }
+.workshop-comment-byline { display: flex; align-items: center; gap: 7px; font-size: 11px; }
+.workshop-comment-byline small { margin-left: auto; color: #666e64; font: 9px var(--font-mono), monospace; }
+.workshop-comment-messages p { margin: 7px 0 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.workshop-comment-thread form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 12px 0; }
+.workshop-comment-thread textarea { width: 100%; resize: vertical; max-height: 100px; padding: 8px; border: 1px solid #dcded0; border-radius: 4px; background: #fff; color: #17261f; font: inherit; }
+.workshop-comment-thread textarea:focus-visible { outline: 2px solid #1b4da5; outline-offset: 2px; }
+.workshop-comment-thread button[type="submit"] { padding: 5px 12px; border: 0; border-radius: 4px; background: #1b4da5; color: #fff; font: 11px var(--font-sans), sans-serif; }
+.workshop-comment-thread button:disabled { opacity: .45; cursor: default; }
+.workshop-comment-demo { margin: 10px 12px 12px; color: #666e64; font-size: 10px; }
+@keyframes workshop-comment-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+/* Targets follow the first poster and robot group in the 1448 × 815 scene. */
+.workshop-comment-highlight {
+  position: absolute; z-index: 7; pointer-events: none;
+  border: 2px solid var(--highlight-color); border-radius: 6px;
+  background: color-mix(in srgb, var(--highlight-color) 8%, transparent); box-shadow: 0 0 0 4px #ffffff70;
+  animation: workshop-comment-enter .15s ease-out;
+}
+.workshop-comment-highlight[data-comment-highlight="poster"] { left: 50%; top: 9%; width: 11%; height: 23%; transform: rotate(-4.87deg); }
+.workshop-comment-highlight[data-comment-highlight="bots"] { left: 35%; top: 39%; width: 41%; height: 53%; }
+.workshop-comment-highlight[data-comment-highlight="poster-middle"] { left: 62.4%; top: 8.5%; width: 15.8%; height: 22.5%; transform: rotate(3.72deg); }
+.workshop-comment-highlight[data-comment-highlight="poster-right"] { left: 79.5%; top: 10.5%; width: 12%; height: 23%; transform: rotate(-5.16deg); }
+.workshop-comment-highlight[data-comment-highlight="artifact-box"] { left: 73%; top: 65%; width: 24%; height: 29%; }
+.workshop-comment-highlight[data-comment-highlight="books"] { left: 20.5%; top: 73%; width: 9%; height: 14%; }
+.workshop-comment-highlight:is([data-comment-highlight="install"], [data-comment-highlight="open-source"]) { display: none; }
+.workshop-hero:has([data-comment-highlight="install"]) .workshop-pitch-command {
+  outline: 2px solid var(--highlight-color); outline-offset: 4px; background: color-mix(in srgb, var(--highlight-color) 12%, #fffdf8);
+}
+.workshop-hero:has([data-comment-highlight="open-source"]) .workshop-open-source {
+  outline: 2px solid var(--highlight-color); outline-offset: 4px; background: color-mix(in srgb, var(--highlight-color) 12%, #fffdf8); border-radius: 3px;
+}
+@media (max-width: 700px) {
+  .workshop-comment-thread { max-height: 65svh; overflow-y: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workshop-comment-pin, .workshop-comment-preview { transition: none; }
+  .workshop-comment-thread, .workshop-comment-highlight { animation: none; }
+}
 .workshop-page a {
   color: inherit;
   text-decoration: none;
@@ -846,12 +961,6 @@
   background: #f7f7edf0;
   border-radius: 2px;
 }
-.workshop-page[data-setting="outdoor"] .workshop-nav nav {
-  text-shadow:
-    0 0 4px #fff,
-    0 0 8px #fff,
-    0 0 12px #fff;
-}
 
 @media (max-width: 800px) {
   .workshop-page {
@@ -1085,6 +1194,10 @@
 
 .workshop-pitch > p:not(.workshop-pitch-status) { margin-bottom: 1.1cqw; }
 .workshop-pitch-command { width: 100%; }
+.workshop-pitch-command { display: flex; align-items: center; gap: 8px; }
+.workshop-pitch-command code { flex: 1; min-width: 0; font: inherit; overflow-wrap: anywhere; }
+.workshop-command-copy { display: inline-flex; align-items: center; justify-content: center; flex: none; padding: 5px; border: 0; border-radius: 3px; background: transparent; color: inherit; }
+.workshop-command-copy:hover { background: #1b4da514; }
 .workshop-pitch .workshop-agent-row {
   width: 100%;
   box-sizing: border-box;
@@ -1110,4 +1223,13 @@
   .workshop-pitch-minimal { top: 73px; }
   .workshop-pitch-command { margin-bottom: 8px; }
   .workshop-pitch .workshop-agent-row { margin-top: 7px; }
+}
+
+.workshop-agent-support { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; width: max-content; max-width: 145%; margin-top: .45cqw; }
+.workshop-pitch .workshop-agent-support .workshop-agent-row { flex: 0 1 auto; min-width: 0; width: auto; margin: 0; gap: 6px 10px; justify-content: flex-start; }
+.workshop-open-source { display: inline-flex; flex: none; align-items: center; gap: 5px; padding: 6px 8px; border-radius: 2px; background: #f7f7edf0; color: #17261f; white-space: nowrap; font: 10px/1.35 var(--font-sans), sans-serif; }
+.workshop-open-source svg { flex: none; }
+.workshop-open-source:hover { color: #1b4da5; }
+@media (max-width: 700px) {
+  .workshop-agent-support { width: auto; max-width: 100%; margin-top: 7px; gap: 4px; }
 }

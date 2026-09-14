@@ -14,6 +14,7 @@ import {
 import WorkshopNav from "@/components/living-workshop/WorkshopNav";
 import { useWorkshopAppearance, setWorkshopAppearance } from "@/lib/workshop-appearance";
 import WorkshopDirections from "@/components/living-workshop/WorkshopDirections";
+import WorkshopComments from "@/components/living-workshop/WorkshopComments";
 
 /** Public homepage: the workshop owns its chrome, not the app shell.
  * Canvas is visual enhancement; installation and all destinations stay in HTML.
@@ -111,6 +112,7 @@ export default function WorkshopLanding({
             />
           </div>
         </div>
+        <WorkshopComments />
         <div className="workshop-reveal" role="status" aria-live="polite">
           {reveal && (
             <>
