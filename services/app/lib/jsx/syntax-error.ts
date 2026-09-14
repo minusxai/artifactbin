@@ -93,6 +93,59 @@ export function extraClosing(source: string): { attr: string; line: number; extr
 }
 export const tripleOpen = (source: string) => /([A-Za-z_][\w-]*)=\{\{\{/.exec(source);
 
+/** Where the expression that opens at `open` closes, counting braces and skipping strings. */
+export function balancedClose(source: string, open: number): number {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = open; i < source.length; i++) {
+    const ch = source[i];
+    if (quote) { if (ch === '\\') i++; else if (ch === quote) quote = null; continue; }
+    if (ch === '"' || ch === "'" || ch === '`') { quote = ch; continue; }
+    if (ch === '{') depth++; else if (ch === '}') { depth--; if (depth === 0) return i; }
+  }
+  return -1;
+}
+
+/** Where the string opening at `at` ends, or -1 when it never closes. */
+export function balancedString(source: string, at: number): number {
+  const quote = source[at];
+  for (let i = at + 1; i < source.length; i++) {
+    if (source[i] === '\\') { i++; continue; }
+    if (source[i] === quote) return i;
+  }
+  return -1;
+}
+
+/**
+ * THE OBJECT FORM ON SOMETHING THAT IS NOT AN OBJECT: `columns={{[{"col":"team"}]}}`.
+ *
+ * `viz={{…}}` is the spelling every doc shows, so an agent that has written it fifty times writes it
+ * for a column LIST too — and `{ {[…]} }` is a block holding an array, which the parser could only
+ * call "Unexpected token" at a column in the middle of line 117 (claude-code dashboard, live leg
+ * local23: two calls to inspect and fix). The outer pair is one brace too many on each side.
+ *
+ * The signature is what follows `attr={{`: an array, a string that is not a KEY (no `:` after it), a
+ * number, or `true`/`false`/`null`. A string followed by `:` is the legal object form and is not
+ * this; `{{{` is the other fault and `tripleOpen` names it.
+ */
+export function doubleWrapped(source: string): { attr: string; line: number; open: number; inner: number; close: number } | null {
+  for (const m of source.matchAll(/([A-Za-z_][\w-]*)=\{\{/g)) {
+    const open = m.index! + m[0].length - 2;
+    const inner = open + 1;
+    const value = source.slice(inner + 1).match(/^\s*/)![0].length + inner + 1;
+    const first = source[value];
+    if (first === undefined) continue;
+    if (first === '"' || first === "'") {
+      const end = balancedString(source, value);
+      if (end < 0 || /^\s*:/.test(source.slice(end + 1))) continue;
+    } else if (!'[-0123456789'.includes(first) && !/^(true|false|null)\b/.test(source.slice(value))) continue;
+    const close = balancedClose(source, inner);
+    if (close < 0) continue;
+    return { attr: m[1]!, line: source.slice(0, open).split('\n').length, open, inner, close };
+  }
+  return null;
+}
+
 export function syntaxErrorDetail(source: string, parsed: Extract<ParseResult, { ok: false }>): ValidationError {
   const bare = parsed.error.replace(/\s*\(\d+:\d+\)\s*$/, '');
   if (typeof parsed.pos !== 'number' || parsed.pos > source.length) {
@@ -112,13 +165,16 @@ export function syntaxErrorDetail(source: string, parsed: Extract<ParseResult, {
   const unclosed = unclosedExpression(source);
   const extra = unclosed ? null : extraClosing(source);
   const triple = tripleOpen(source);
+  const doubled = unclosed || triple ? null : doubleWrapped(source);
   const missingObject = /([A-Za-z_][\w-]*)=\{\s*["'][^"']+["']\s*:/.exec(source);
   const objectHint = missingObject ? ` The ${missingObject[1]} attribute is missing its object opening brace: JSX needs ${missingObject[1]}={{...}}, one expression wrapper around the complete JSON object.` : '';
   const brace = unclosed
     ? ` The \`${unclosed.attr}={\` opened on line ${unclosed.line} is never closed — it needs ${unclosed.missing} more \`}\`.`
     : triple
       ? ` \`${triple[1]}={{{\` opens three braces: write \`${triple[1]}={{…}}\` — one expression wrapper around the complete JSON object.`
-      : extra
+      : doubled
+        ? ` The \`${doubled.attr}={{\` on line ${doubled.line} wraps a value that is not an object in an extra brace pair — the double braces belong to \`viz={{…}}\`, an object; write \`${doubled.attr}={[…]}\`, one expression wrapper around the array.`
+        : extra
         ? ` The \`${extra.attr}={\` expression on line ${extra.line} closes and is followed by ${extra.extra} more \`}\` than it opened — ${extra.extra === 1 ? 'one `}` too many' : `${extra.extra} too many`}; delete ${extra.extra === 1 ? 'it' : 'them'}.`
         : '';
   return {
