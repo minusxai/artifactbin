@@ -10,6 +10,7 @@ import {digest} from '../src/files';
 import {stageRequest,savePendingResponse} from '../src/pending-request';
 import {tracking,readRecord,writeRecord} from './tracking';
 import {parseResourceFile} from '../src/resource-file';
+import {parseDatasetPolicy} from '../../utils/src/dataset-policy';
 import {fork,type ChildProcess} from 'node:child_process';
 import {once} from 'node:events';
 import {cliHarness} from './harness';
@@ -547,5 +548,84 @@ test('--access on a dataset YAML must agree with the file, and never applies to 
   assert.notEqual(bare.code,0);
   assert.equal(bare.result.error.code,'unsupported_access');
   assert.match(bare.result.error.message,/no dataset was selected/);
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * The tracker case: a page anyone with the link can update needs BOTH a writable dataset and a data
+ * policy granting the viewer role row writes. One command does both — the policy rides a second
+ * request only because the server refuses policy on a content write, never a second command.
+ */
+test('push --policy viewers-write publishes a dataset the link audience can write, in one command',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ let head:any;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  if(path==='/api/artifacts'&&method==='POST'){
+   // The real create reply is a curated wire: it carries access, and NOT policy_revision.
+   head={id:'tasks01',version:1,edit_id:'e1',state:digest('tasks-1'),format:'dataset',access:body.access??'read'};
+   return Response.json(head,{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='PATCH'){
+   head={...head,version:head.version,edit_id:`e${(head.policy_revision??0)+2}`,state:digest(`tasks-${(head.policy_revision??0)+2}`),
+    dataset_policy:body.policy??null,policy_revision:(head.policy_revision??0)+1};
+   return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'mx_test'},home);
+  await writeFile(join(cwd,'tasks.csv'),'id,title,status\n1,Ship,todo\n');
+  const published=await invoke(['push','tasks.csv','--type','dataset','--policy','viewers-write']);
+  assert.equal(published.code,0,JSON.stringify(published.result));
+  const create=calls.find(call=>call.path==='/api/artifacts'&&call.method==='POST')!;
+  // A policy for viewers is meaningless on a read-only dataset, so the flag implies the access.
+  assert.equal(create.body.access,'readwrite');
+  assert.equal('policy' in create.body,false,'the server refuses policy on a content write');
+  const patch=calls.find(call=>call.method==='PATCH')!;
+  assert.equal(patch.path,'/api/artifacts/tasks01');
+  assert.equal(patch.body.expectedPolicyRevision,0);
+  assert.equal(patch.body.expectedState,digest('tasks-1'));
+  assert.deepEqual(patch.body.policy,{version:1,enforcement:'enabled',tables:[{table:{schema:'public',name:'rows'},
+   insert_permissions:[{role:'viewer',permission:{columns:'*',check:{}}}],
+   update_permissions:[{role:'viewer',permission:{columns:'*',filter:{},check:{}}}],
+   delete_permissions:[{role:'viewer',permission:{filter:{}}}]}]});
+  // The shape the server will parse, proven against the shared parser rather than by hand.
+  assert.deepEqual(parseDatasetPolicy(patch.body.policy),patch.body.policy);
+  assert.equal(published.result.operations[0].access,'readwrite');
+  assert.equal(published.result.operations[0].policy,'viewers-write');
+
+  // Already granted: repeating the command sends nothing.
+  const count=calls.length;
+  const again=await invoke(['push','tasks.csv','--policy','viewers-write']);
+  assert.equal(again.code,0,JSON.stringify(again.result));
+  assert.equal(calls.length,count,'an unchanged policy makes no request');
+
+  // Closing it again is the same one command, and rides the observed revision.
+  const closed=await invoke(['push','tasks.csv','--policy','none']);
+  assert.equal(closed.code,0,JSON.stringify(closed.result));
+  const off=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.equal(off.body.policy,null);
+  assert.equal(off.body.expectedPolicyRevision,1);
+  assert.equal(closed.result.operations[0].policy,'none');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('--policy viewers-write refuses an explicit --access read, before any request',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-clash-'));
+ try{
+  await saveConnection({server:'https://example.com',token:'test'},root);
+  await writeFile(join(root,'tasks.csv'),'id\n1\n');
+  const out:string[]=[];
+  const code=await runCli(['push','tasks.csv','--access','read','--policy','viewers-write','--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>assert.fail('a contradiction must not reach the server'),stdout:x=>out.push(x),stderr:()=>{}});
+  assert.notEqual(code,0);
+  const error=JSON.parse(out.join('')).error;
+  assert.equal(error.code,'invalid_arguments');
+  assert.match(error.message,/--policy viewers-write/);
+  assert.match(error.message,/--access readwrite/);
  }finally{await rm(root,{recursive:true,force:true});}
 });
