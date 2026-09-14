@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,writeFile,rm,mkdir,readFile,readdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {parseResourceFile,reconcileResource} from '../src/resource-file';
+import {parseResourceFile,reconcileResource,resourceContent} from '../src/resource-file';
+import {helpDocument} from '../src/teaching';
+import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
 import {runCli} from '../src/dispatch';
 import {validateFiles} from '../src/validation';
 import {loadWorkspace} from '../src/workspace';
@@ -91,4 +93,25 @@ describe('validate --remote', () => {
     assert.equal(code,0,h.out.join(''));assert.equal(h.last().valid,true);assert.ok(h.calls.every(c=>c.method==='GET'||c.path==='/api/artifacts/preflight'),'only reads and the preflight');
    }finally{await h.cleanup();}
   });
+});
+
+test('the shipped user guide supplies a usable typed dataset resource and source',async()=>{
+ const text=helpDocument('users');
+ const yaml=/```yaml\n([\s\S]*?)```/.exec(text)?.[1];
+ const jsx=/```jsx\n([\s\S]*?)```/.exec(text)?.[1];
+ assert.ok(yaml&&jsx,'both files must be supplied');
+ const root=await mkdtemp(join(tmpdir(),'afbin-user-guide-'));
+ try {
+  const resource=parseResourceFile(yaml);
+  assert.equal(resource.type,'dataset');
+  assert.equal(resource.source,'people.jsx');
+  assert.equal(resource.access,'readwrite');
+  await writeFile(join(root,'people.jsx'),jsx);
+  const payload=await resourceContent(resource,join(root,'people.yaml'),root);
+  const dataset=parseDatasetDefinition(String(payload.dataset));
+  assert.deepEqual(dataset.tables[0].columns?.filter(c=>typeof c!=='string'&&c.type==='user'),[
+   {name:'assigned_to',type:'user',constraints:{memberOf:['current']}},
+   {name:'completed_by',type:'user',constraints:{self:true}},
+  ]);
+ }finally{await rm(root,{recursive:true,force:true});}
 });

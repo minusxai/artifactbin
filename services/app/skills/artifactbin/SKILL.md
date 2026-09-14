@@ -38,7 +38,7 @@ Read only what the task needs, in this order for a new document:
 - [sync and recovery](references/publishing.md) — status, diff, dry-run, force, retrying an uncertain write, node ids.
 - [errors](references/errors.md) — every refusal code and its fix.
 - [comments](references/publishing-annotations.md) — `afbin comment` lists, starts, answers and resolves threads.
-- [datasets and media](references/publishing-datasets.md), [database catalogs](references/databases.md), [queries](references/publishing-query.md).
+- [datasets and media](references/publishing-datasets.md), [database catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history and deletion](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
 - [authentication](references/publishing-auth.md) — how automatic sign-in works, `--harness`, credentials per server.
 - [commands](references/commands.md) — every command and flag; [Markdown import](references/markdown.md) for a one-time `.md` push.

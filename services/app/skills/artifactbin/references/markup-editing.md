@@ -10,6 +10,8 @@ Use `<DataTable>` with `<Column>` children to render one template per row.
 A control's `run="$mutation"` saves its cell. Push your dataset with `--access readwrite`
 ([datasets](publishing-datasets.md)); see [data](markup-data.md) for queries and controls.
 
+People fields: [user schema, publishing and controls](databases-users.md) (`afbin help users`).
+
 ## Contents
 
 Example · Scope and identity · Committing · References and authorization.

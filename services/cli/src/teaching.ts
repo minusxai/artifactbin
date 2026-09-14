@@ -39,6 +39,8 @@ export const helpTopics:Record<string,string>={
  /** The brief's complete commented document, as a file to copy and adapt. */
  example:teaching.example,
  data:referenceTopics['markup-data'],
+ users:referenceTopics['databases-users'],
+ dataset:referenceTopics['publishing-datasets'],
  // The OVERVIEWS, not a bare name list. `afbin help themes` used to print only the six names and "use
  // help themes-<name>", so an agent choosing a mood opened three theme guides in a row (eval run
  // 34696655937: opencode deck and scrolly, pi scrolly — three reads and three turns each) while one

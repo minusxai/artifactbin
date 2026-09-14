@@ -6,19 +6,44 @@ description: Native user fields, membership constraints, current identity and me
 ## User fields
 
 `user` is a nullable account ID, displayed by name in DataTable. Declare identity
-columns in a stored dataset, not as free-text labels:
+columns in a stored dataset. To publish typed columns, use these two files.
+
+Save this resource as `people.yaml`:
+
+```yaml
+type: dataset
+title: Team tasks
+source: people.jsx
+access: readwrite
+```
+
+Save the definition below as `people.jsx`. The Dataset definition belongs in
+this file, separate from your report's JSX:
+
 
 ```jsx
 <Dataset kind="stored">
   <Table schema="public" name="rows"
     columns={[
       {"name":"id","type":"number"},
+      {"name":"task","type":"string"},
       {"name":"assigned_to","type":"user","constraints":{"memberOf":["current"]}},
       {"name":"completed_by","type":"user","constraints":{"self":true}}
     ]}
-    rows={[{"id":1,"assigned_to":null,"completed_by":null}]} />
+    rows={[{"id":1,"task":"Review proposal","assigned_to":null,"completed_by":null}]} />
 </Dataset>
 ```
+
+Publish the YAML resource (the CLI reads its JSX source):
+
+```sh
+afbin push people.yaml --yes --json
+```
+
+Use the returned dataset ID in place of `tsk123` in the report below. Keep the
+identity fields in an existing report's YAML fence when editing it; publish the
+report with `afbin push report.jsx --yes --json`. CSV infers ordinary columns;
+the Dataset definition above declares native user types and constraints.
 
 `memberOf` is always a nonempty array of unique references. Membership in ANY
 listed document is sufficient; other constraints combine with AND. Eligible
@@ -40,7 +65,13 @@ read.
 ```jsx
 <Helmet>
   <Value name="person" source="ref:tsk123" column="assigned_to" />
-  <Query name="tasks" source="ref:tsk123">{`select * from public.rows`}</Query>
+  <Query name="tasks" source="ref:tsk123">{`
+    select *, '' as action from public.rows
+    where $person is null or assigned_to=$person order by id
+  `}</Query>
+  <Mutation name="rename" source="ref:tsk123" expectedAffected={1}>{`
+    update public.rows set task=$_value where id=$_row.id
+  `}</Mutation>
   <Mutation name="assign" source="ref:tsk123" expectedAffected={1}>{`
     update public.rows set assigned_to=$_value where id=$_row.id
   `}</Mutation>
@@ -50,7 +81,7 @@ read.
 </Helmet>
 <Select label="Person filter" value="$person" />
 <DataTable data="$tasks" rowKey="id">
-  <Column col="id" />
+  <Column col="task"><input aria-label="Task title" value="$_row.task" run="$rename" /></Column>
   <Column col="assigned_to"><Select label="Assign task" value="$_row.assigned_to" run="$assign" /></Column>
   <Column col="completed_by" />
   <Column col="action"><Button run="$complete">Complete</Button></Column>

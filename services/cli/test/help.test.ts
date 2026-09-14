@@ -484,3 +484,12 @@ test('every recovery fix is actionable with afbin alone — no routes, methods o
  assert.match(diagnosticCatalog['image_fetch_failed']!.fix,/afbin push/);
  assert.ok(!diagnosticCatalog['image_fetch_failed']!.fix.includes('upload the image as a file'));
 });
+
+test('user authoring help includes the actual typed-resource publish path',()=>{
+ const users=helpDocument('users');
+ assert.match(users,/source: people\.jsx/);
+ assert.match(users,/afbin push people\.yaml/);
+ assert.match(users,/where \$person is null or assigned_to=\$person/);
+ assert.match(helpDocument('dataset'),/publishing|Datasets/i);
+ assert.match(localSkillFiles['references/markup-editing.md'],/databases-users\.md/);
+});

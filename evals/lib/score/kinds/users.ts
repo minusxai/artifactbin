@@ -106,7 +106,7 @@ async function verify(ctx:CheckContext,checks:Record<string,boolean>) {
   assert.ok((await read()).rows.every(r=>r[schema.completed]!==fixture.owner.id),'forged client actor never stored');
   checks.user_constraints_enforced=true;
   await open(owner);
-  await write(owner,()=>owner.getByRole('button',{name:'Complete task',exact:true}).nth(1).click());
+  await write(owner,()=>owner.getByRole('button',{name:'Complete task',exact:true}).last().click());
   completed=(await read()).rows;
   assert.equal(completed.filter(r=>r[schema.completed]===fixture.owner.id).length,1,'owner click records owner, not a hardcoded teammate');
   assert.equal(completed.filter(r=>r[schema.completed]===fixture.member.id).length,1,'teammate completion persists');
