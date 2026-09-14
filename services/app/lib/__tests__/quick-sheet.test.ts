@@ -9,23 +9,31 @@ describe('the installed short skill',()=>{
   // nine agent-facing surfaces at once by agent-starter-consistency.test.ts, case (c).
  });
  /**
-  * A person is waiting on a blank page: the brief orders a FIRST published version inside the
-  * first few calls, then extension by further edits and pushes — and says in the same breath
-  * that extending is not re-checking, so the anti-re-read rule survives the change. The second
-  * bullet keeps that first version native: the kit covers the content, `<Iframe>` is the escape
-  * hatch for an isolated script or canvas, never a layout tool. Both are asserted on the BULLET,
-  * not the page, so a stray sentence elsewhere cannot satisfy them, and on the shipped
+  * A person is waiting on a blank page. The FIRST wording of this rule was exhortative ("publish a
+  * FIRST version in your first few calls") and MEASURED not to move anything: on local21, six tasks
+  * across pi and opencode, the first markup write landed at 156–366 s and every task published
+  * exactly one version. So the rule is now countable — three calls of the pull, and a first push
+  * carrying only the title and the section headings — because an agent can check a count against
+  * its own transcript and cannot check "early". The tests follow: they assert the NUMBER and the
+  * CONTENT of that first push, not the encouragement.
+  *
+  * The second bullet keeps that first version native: the kit covers the content, `<Iframe>` is the
+  * escape hatch for an isolated script or canvas, never a layout tool. Both are asserted on the
+  * BULLET, not the page, so a stray sentence elsewhere cannot satisfy them, and on the shipped
   * `teaching.json` too — the generated bundle is the copy the CLI actually hands an agent.
   */
- it('orders a first published version early, then extension, and native markup before Iframe',()=>{
+ it('counts the first push — three calls, title and headings — then fills sections, and native markup before Iframe',()=>{
   const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
   const fewTurns=bullet('- Few turns');
   expect(fewTurns).toBeDefined();
-  expect(fewTurns).toContain('publish a FIRST version');
-  expect(fewTurns).toContain('first few calls');
-  expect(fewTurns).toMatch(/extend it with further edits and pushes/);
+  // Countable, not exhortative: a number of calls and a named payload for the first push.
+  expect(fewTurns).toContain('push a FIRST version within three calls of the pull');
+  expect(fewTurns).toMatch(/title and section headings, one line each/);
+  expect(fewTurns).toMatch(/fill the sections in later pushes/);
   expect(fewTurns).toContain('waiting on a blank page');
-  expect(fewTurns).toContain('extending is not re-checking');
+  expect(fewTurns).toMatch(/is not re-checking/);
+  // Vague encouragement is the failure mode this replaced; it must not come back.
+  for(const vague of ['first few calls','early','as soon as you can'])expect(fewTurns,vague).not.toContain(vague);
   // The verification rule is kept verbatim, not softened by the new flow.
   expect(fewTurns).toContain('A successful push IS the verification');
   expect(fewTurns).toMatch(/Skip pulling, diffing, exporting[^.]*afterwards/);
@@ -36,7 +44,7 @@ describe('the installed short skill',()=>{
   for(const text of ['text, data, charts, tables, controls and motion','<Iframe>','isolated DOM script or canvas','never for layout or content'])expect(native).toContain(text);
   // The bundle the CLI ships carries the same two bullets: a copy edit without
   // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
-  expect(teaching.files['SKILL.md']).toContain('publish a FIRST version');
+  expect(teaching.files['SKILL.md']).toContain('push a FIRST version within three calls of the pull');
   expect(teaching.files['SKILL.md']).toContain('- Native markup first');
   expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
  });
