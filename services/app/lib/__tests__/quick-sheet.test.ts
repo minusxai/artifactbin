@@ -8,6 +8,38 @@ describe('the installed short skill',()=>{
   // The retired vocabulary (MCP, /docs/, token, mint, /raw, …) is banned across all
   // nine agent-facing surfaces at once by agent-starter-consistency.test.ts, case (c).
  });
+ /**
+  * A person is waiting on a blank page: the brief orders a FIRST published version inside the
+  * first few calls, then extension by further edits and pushes — and says in the same breath
+  * that extending is not re-checking, so the anti-re-read rule survives the change. The second
+  * bullet keeps that first version native: the kit covers the content, `<Iframe>` is the escape
+  * hatch for an isolated script or canvas, never a layout tool. Both are asserted on the BULLET,
+  * not the page, so a stray sentence elsewhere cannot satisfy them, and on the shipped
+  * `teaching.json` too — the generated bundle is the copy the CLI actually hands an agent.
+  */
+ it('orders a first published version early, then extension, and native markup before Iframe',()=>{
+  const bullet=(start:string)=>sheet.split('\n').find(line=>line.startsWith(start))!;
+  const fewTurns=bullet('- Few turns');
+  expect(fewTurns).toBeDefined();
+  expect(fewTurns).toContain('publish a FIRST version');
+  expect(fewTurns).toContain('first few calls');
+  expect(fewTurns).toMatch(/extend it with further edits and pushes/);
+  expect(fewTurns).toContain('waiting on a blank page');
+  expect(fewTurns).toContain('extending is not re-checking');
+  // The verification rule is kept verbatim, not softened by the new flow.
+  expect(fewTurns).toContain('A successful push IS the verification');
+  expect(fewTurns).toMatch(/Skip pulling, diffing, exporting[^.]*afterwards/);
+  expect(fewTurns).not.toContain('write the whole document');
+  expect(fewTurns.length).toBeLessThan(600);
+  const native=bullet('- Native markup first');
+  expect(native).toBeDefined();
+  for(const text of ['text, data, charts, tables, controls and motion','<Iframe>','isolated DOM script or canvas','never for layout or content'])expect(native).toContain(text);
+  // The bundle the CLI ships carries the same two bullets: a copy edit without
+  // `npm run generate:teaching -w services/cli` leaves every agent on the old brief.
+  expect(teaching.files['SKILL.md']).toContain('publish a FIRST version');
+  expect(teaching.files['SKILL.md']).toContain('- Native markup first');
+  expect(teaching.files['SKILL.md']).not.toContain('write the whole document');
+ });
  it('uses the same push for create and update with local validation',()=>{
   for(const text of ['afbin pull','afbin push report.jsx','new artifact','afbin validate'])expect(sheet).toContain(text);
   // The publishing guide naming ~/.artifactbin/state.sqlite is

@@ -419,6 +419,12 @@ test('afbin help --for <template> prints every reference a document of that kind
   assert.equal(await runCli(['help','dashboard'],context),0,'a template name as the topic prints the bundle, not the bare starter');
   assert.equal(out.join(''),helpBundle('dashboard'));
   assert.ok(helpBundle('dashboard').includes(helpTopics['dashboard']),'the starter is still inside it');
+  // The bundle's first line tells the agent what to DO with the reading it just paid for, and it
+  // says what the brief says: a first version early, then extension — never one whole-document write.
+  assert.ok(text.startsWith('Everything a deck needs, in reading order.'),text.slice(0,80));
+  assert.ok(text.includes('publish a first version early, then extend it in edits'),'the intro teaches progressive publishing');
+  assert.ok(!text.includes('write the whole document'),'the whole-document-then-publish instruction is gone');
+  assert.ok(!text.includes('improve the published version'),'improving a finished document is not the flow any more');
   const order=['## design','## markup','## markup-data','## markup-data-authoring','## templates-deck','## themes','## publishing-datasets','## starter: deck'];
   let at=-1;for(const h of order){const i=text.indexOf(`\n# ${h.slice(3)}\n`);assert.ok(i>at,`${h} missing or out of order`);at=i;}
   assert.ok(text.includes(helpTopics['templates-deck']));assert.ok(text.includes(helpTopics['design']));
