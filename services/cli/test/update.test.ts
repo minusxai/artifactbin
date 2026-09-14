@@ -1,3 +1,4 @@
+import {withLock,HOME_SCOPE} from '../src/state';
 import {test,describe} from 'node:test';
 import {gzipSync} from 'node:zlib';
 import assert from 'node:assert/strict';
@@ -118,4 +119,54 @@ describe('update --dry-run', () => {
     assert.deepEqual((await readdir(h.root)).filter(name=>name!=='.artifactbin'),[],'dry-run writes nothing to the home directory');
    }finally{await h.cleanup();}
   });
+});
+
+test('background update replaces only the executable and recovers without rewriting skills',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-background-')),exe=join(home,'afbin');
+ try {
+  await writeFile(exe,'old binary',{mode:0o755});
+  const options={home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone' as const,path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:['pi' as const],background:true,verifyExecutable:async()=>{},fetch:transport()};
+  await assert.rejects(updateCli({...options,afterReplace:()=>{throw new Error('crashed');}}),/crashed/);
+  await updateCli({...options,fetch:async()=>assert.fail('recover offline')});
+  assert.equal(await readFile(exe,'utf8'),'new binary');
+  await assert.rejects(stat(skillTargets(home,{}).pi),{code:'ENOENT'});
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+test('an executable changed during discovery is never overwritten by the older worker',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-raced-')),exe=join(home,'afbin');
+ try {
+  await writeFile(exe,'old binary',{mode:0o755});
+  const fetcher=transport();
+  await assert.rejects(updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],verifyExecutable:async()=>{},fetch:async(input)=>{
+   if(String(input).endsWith('/chat/release.json'))await writeFile(exe,'newer binary');
+   return fetcher(input);
+  }}),/changed/i);
+  assert.equal(await readFile(exe,'utf8'),'newer binary');
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+test('background downloads do not hold the normal CLI state lock',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-lock-')),exe=join(home,'afbin');let release!:()=>void;
+ try {
+  await writeFile(exe,'old binary',{mode:0o755});const fetcher=transport();
+  const task=updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],background:true,verifyExecutable:async()=>{},fetch:async(input)=>{
+   if(String(input).endsWith('/chat/release.json'))await new Promise<void>(r=>{release=r;});return fetcher(input);
+  }});
+  for(let i=0;!release&&i<100;i++)await new Promise(r=>setTimeout(r,5));assert.ok(release);
+  assert.equal(await withLock(home,HOME_SCOPE,async()=>true,{waitMs:0,reentrant:false},{}),true);
+  release();await task;
+ }finally{release?.();await rm(home,{recursive:true,force:true});}
+});
+
+test('superseded recovery journals cannot block a newer installation forever',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-update-superseded-')),exe=join(home,'afbin');
+ try{
+  await writeFile(exe,'old binary',{mode:0o755});
+  const options={home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone' as const,path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],background:true,verifyExecutable:async()=>{},fetch:transport()};
+  await assert.rejects(updateCli({...options,afterReplace:()=>{throw new Error('crashed');}}),/crashed/);
+  await writeFile(exe,'newer installation');
+  const result=await updateCli({...options,version:'10.0.0',fetch:async()=>assert.fail('recovery is local')});
+  assert.ok('version' in result);assert.equal(result.version,'10.0.0');assert.equal(await readFile(exe,'utf8'),'newer installation');
+  await assert.rejects(stat(join(home,'.artifactbin','pending-update.json')),{code:'ENOENT'});
+ }finally{await rm(home,{recursive:true,force:true});}
 });

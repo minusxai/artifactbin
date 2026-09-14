@@ -1,3 +1,4 @@
+import {checkBackgroundUpdate} from './test-background-update.mjs';
 /** Release gate: execute the real binary outside the checkout, without writable temp or credentials. */
 import {mkdtemp,writeFile,readFile,stat,rm,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -15,7 +16,7 @@ const server=createServer((request,response)=>{requests++;if(request.url.endsWit
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 try{
  const blocker=join(home,'blocked');await writeFile(blocker,'not a temp directory');await writeFile(join(home,'report.jsx'),'<article><h1>Offline release</h1></article>');
- const env={HOME:home,PATH:process.env.PATH,ARTIFACTBIN_URL:`http://127.0.0.1:${server.address().port}`,TMPDIR:blocker,TMP:blocker,TEMP:blocker,CLI__SERVICE_BASE_URL:`http://127.0.0.1:${server.address().port}/chat/releases`};
+ const env={CLI__AUTO_UPDATE:'0',HOME:home,PATH:process.env.PATH,ARTIFACTBIN_URL:`http://127.0.0.1:${server.address().port}`,TMPDIR:blocker,TMP:blocker,TEMP:blocker,CLI__SERVICE_BASE_URL:`http://127.0.0.1:${server.address().port}/chat/releases`};
  for(const args of [['--version','--json'],['-h'],['help','markup'],['help','publishing-auth'],['help','errors'],['help','--format','markdown'],['help','export','--format','man','--output','-'],['help','--format','man','--output','afbin.1','--json'],['validate','report.jsx','--json'],['status','--json'],['diff','--json']]){
   const result=await run(binary,args,{cwd:home,env,timeout:10000,maxBuffer:1048576});assert.equal(result.stderr,'',args.join(' '));if(args.includes('--json'))assert.doesNotThrow(()=>JSON.parse(result.stdout));
  }
@@ -50,6 +51,7 @@ try{
  assert.deepEqual(gunzipSync(await readFile(binary+'.gz')),await readFile(binary));
  assert.equal(createHash('sha256').update(await readFile(binary+'.gz')).digest('hex'),manifest.binary.gzip.sha256);
  const sizes=JSON.parse(await readFile(binary+'.sizes.json','utf8'));assert.equal(sizes.coreInstalled,(await stat(binary)).size);assert.equal(sizes.coreDownload,(await stat(binary+'.gz')).size);
+ await checkBackgroundUpdate(binary);
  console.log(JSON.stringify(sizes));
  console.log(`Release ${process.platform}/${process.arch}: offline core, corrupt package rejection, concurrent SQL prefetch, cached bound local SQL, gzip identity and asset checksums passed.`);
 }finally{server.close();await rm(home,{recursive:true,force:true});}

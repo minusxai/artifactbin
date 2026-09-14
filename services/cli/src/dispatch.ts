@@ -1,3 +1,5 @@
+import {scheduleBackgroundUpdate} from './background-update';
+import {compareVersions,validVersion} from './version-order';
 import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
 import {forkResources} from './fork';
 import {exportResources} from './export';
@@ -62,6 +64,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // wrong_server on the first fixed build because only the connection loader read it (eval run local17).
   const exportedOrigin=await exportedServer(home,context.env);
   const declaredServer=typeof flags.server==='string'?flags.server:exportedOrigin??DEFAULT_SERVER;
+  if(command!=='update'&&command!=='setup')await scheduleBackgroundUpdate({home,server:declaredServer,env:context.env});
   // Explicit setup must select first: eager initialization would install opted-out skills before the picker.
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout('SQL service is ready for offline local queries.\n');return 0;}
@@ -253,9 +256,9 @@ async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;origin?:st
  // Eager init installs a MISSING or version-stale skill. A skill addressed to another server is
  // `afbin setup`'s decision: a command run with --server against a second server used to rewrite
  // every harness's skill files on every invocation (127 "Skill updated" lines in one local pi task).
- const stale=plans.filter(plan=>plan.status==='install'||(plan.status==='update'&&plan.installed!==plan.version));
+ const stale=plans.filter(plan=>plan.status==='install'||(plan.status==='update'&&(!validVersion(plan.installed)||compareVersions(plan.installed,plan.version)<0)));
  if(!stale.length)return;
- const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,env:options.env,origin:options.origin});
+ const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,env:options.env,origin:options.origin,preserveSelection:true});
  for(const item of installed.installations)if(item.status!=='unchanged')options.stderr(`${options.style.green(`Skill ${item.status}:`)} ${item.path}${item.backup?` (backup: ${item.backup})`:''}\n`);
  for(const hint of restartHints(installed.installations))options.stderr(options.style.yellow(hint)+'\n');
 }

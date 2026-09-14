@@ -82,14 +82,26 @@ For automation, use `setup --yes --json --harness pi --harness opencode`, or `--
 A pending browser approval returns its URL and expiry; approve it and rerun setup. `--yes` does not
 approve the browser or imply `--force`. No noninteractive prompt waits for input.
 
-`afbin update` explicitly updates the standalone executable and the selected local skills, with
-checksums and recoverable backups. It asks the selected server for the release it speaks
-(`/chat/release.json`) and takes the bytes from that published release. `afbin update --dry-run`
-resolves the release and reports the binary and skill changes without installing anything.
-An installation that did not come from the verified
-installer is reported, never overwritten. Setup and update mark a skill written for a harness that
-reads its skills at startup (Claude Code, Codex) `restart_required` and name it on stderr. Ordinary commands never poll releases. Use
-`afbin update -h` for selection and recovery options.
+Managed standalone installations check for updates in a detached background process, at most
+once a day. Normal commands only inspect local state and launch the worker; they never wait for
+update network requests. Failed or interrupted attempts retry after an hour on a later invocation.
+The worker uses an OS-held lock (released even after SIGKILL), 30-second download stall timeouts
+and a five-minute overall deadline. It downloads checksummed releases from the configured server's
+release pointer (`/chat/release.json`) and atomically replaces the executable. Running commands
+continue normally; the next invocation runs the new binary and synchronizes selected skills locally.
+An older invocation cannot downgrade newer skills. Modified skill files are backed up before updates.
+
+Export `CLI__AUTO_UPDATE=0` to disable background updates. Export `CLI__VERSION_PIN=X.Y.Z` to
+disable automatic changes and restrict explicit updates to that server-advertised release. Pins do
+not download arbitrary versions: use the installer's `--version` to install a particular release.
+Source/npm installations remain managed by their package manager and never self-update.
+
+`afbin update` still performs an explicit foreground update of the standalone executable and selected
+skills, reporting errors and recovering interrupted installations. `afbin update --dry-run` previews
+changes. Background workers never write skills, change saved harness selections, authenticate,
+or print into the invoking command. Setup and subsequent local skill synchronization report restart
+instructions for Claude Code and Codex, which load skills at startup; running sessions do not reload.
+A server must deploy its new release pointer after the release has published before users discover it.
 
 ## Local development
 

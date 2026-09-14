@@ -1,7 +1,8 @@
 import {download} from './release-download';
 import {gunzipSync} from 'node:zlib';
 export {DOWNLOAD_STALL_MS} from './release-download';
-import {configDir} from './config';
+import {configDir,autoUpdatePolicy} from './config';
+import {validVersion as semver,compareVersions as compare} from './version-order';
 /** Explicit release update. Ordinary commands never import release metadata from the network. */
 import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -24,11 +25,9 @@ interface ReleasePointer {version:string;protocol:number}
 interface ReleaseManifest {version:string;protocol:number;platform:string;arch:string;binary:{file:string;sha256:string;gzip?:{file:string;sha256:string}};skills:{file:string;sha256:string}}
 interface SkillBundle {version:string;protocol:number;files:Record<string,string>}
 interface PendingUpdate {schema:1;installation:Installation;manifest:ReleaseManifest;skills:string;selected:SkillHarness[];before?:string;mode?:number;backup?:string}
-interface UpdateOptions {home:string;server:string;stallMs?:number;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
+interface UpdateOptions {background?:boolean;home:string;server:string;stallMs?:number;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
 interface UpdatePreview {dry_run:true;server:string;release:ReleasePointer;binary:{installation:'standalone'|'unmanaged';path?:string;current:string;available:string;change:'update'|'current'|'unavailable';reason?:string;asset?:string};skills:SkillPlan[]}
 interface UpdateResult {version:string;protocol:number;recovered:boolean;backup?:string;installations:SkillInstallation[];harnesses:SkillHarness[]}
-const semver=(value:unknown):value is string=>typeof value==='string'&&/^\d+\.\d+\.\d+$/.test(value);
-function compare(a:string,b:string):number{const x=a.split('.').map(BigInt),y=b.split('.').map(BigInt);for(let i=0;i<3;i++)if(x[i]!==y[i])return x[i]>y[i]?1:-1;return 0;}
 /** The pointer names a version and the protocol that server speaks; any other field is ignored. */
 function verifyPointer(value:any):asserts value is ReleasePointer{
  if(!value||!semver(value.version)||!Number.isSafeInteger(value.protocol)||value.protocol<1)throw new CliError('unsupported_server','The selected server did not name a compatible CLI release.','Check the server origin, or update from the server that serves your installer.');
@@ -49,9 +48,14 @@ async function detectInstallation(server:string,executable=process.execPath,stan
  throw new CliError('unmanaged_installation','This afbin was not installed as a verified standalone executable.',`Install it with ${normalizeServer(server)}/chat/install.sh, then rerun afbin update.`);
 }
 async function executableVersion(path:string,version:string,protocol:number):Promise<void>{
+ const value=await installedVersion(path);
+ if(value.version!==version||value.protocol!==protocol)throw new CliError('invalid_release','Downloaded executable version/protocol differs from its manifest.');
+}
+async function installedVersion(path:string):Promise<{version:string;protocol:number}>{
  const result=await run(path,['--version','--json'],{env:{},timeout:15000,maxBuffer:65536});
  let value:any;try{value=JSON.parse(result.stdout);}catch{throw new CliError('invalid_release','Downloaded executable did not report its version.');}
- if(value.version!==version||value.protocol!==protocol)throw new CliError('invalid_release','Downloaded executable version/protocol differs from its manifest.');
+ if(!semver(value.version)||!Number.isSafeInteger(value.protocol))throw new CliError('invalid_release','Installed executable did not report its version.');
+ return value;
 }
 async function releasePointerOf(options:UpdateOptions,fetcher:typeof fetch):Promise<ReleasePointer>{
  const value=JSON.parse((await download(`${normalizeServer(options.server)}${releasePointer}`,fetcher,65536,options.stallMs)).toString());
@@ -72,13 +76,21 @@ async function previewUpdate(options:UpdateOptions,platform:string,arch:string):
   skills:await planSkills(options.harnesses,{home:options.home,env:options.env,version:release.version,origin:normalizeServer(options.server)}),
  };
 }
+export const UPDATE_SCOPE='@cli-update';
 export async function updateCli(options:UpdateOptions&{dryRun:true}):Promise<UpdatePreview>;
 export async function updateCli(options:UpdateOptions):Promise<UpdatePreview|UpdateResult>;
 export async function updateCli(options:UpdateOptions){
+ if(options.dryRun)return previewUpdate(options,options.platform??process.platform,options.arch??process.arch);
+ return withLock(options.home,UPDATE_SCOPE,()=>updateLocked(options),{waitMs:options.background?0:undefined,reentrant:false},options.env);
+}
+async function updateLocked(options:UpdateOptions){
  const platform=options.platform??process.platform,arch=options.arch??process.arch;
  if(!['darwin','linux'].includes(platform)||!['arm64','x64'].includes(arch))throw new CliError('unsupported_platform','Standalone releases support macOS and Linux on arm64 or x64.');
  if(options.dryRun)return previewUpdate(options,platform,arch);
  const installation=options.installation??await detectInstallation(options.server);
+ const currentVersion=options.version??(await installedVersion(installation.path)).version;
+ const originalAtStart=await readOptional(installation.path);
+ const pin=autoUpdatePolicy(options.env).pin;
  const state=configDir(options.home,options.env),pendingPath=join(state,'pending-update.json'),binaryPath=join(state,'update-download');
  // Recover before making a release or server request. The release remains frozen across interruptions.
  const saved=await readOptional(pendingPath);
@@ -86,17 +98,24 @@ export async function updateCli(options:UpdateOptions){
  if(saved){try{pending=JSON.parse(saved.toString());}catch{throw new CliError('invalid_update_journal','Invalid pending update journal.');}
   if(pending?.schema!==1||JSON.stringify(pending.installation)!==JSON.stringify(installation)||!Array.isArray(pending.selected)||pending.selected.some(x=>!skillHarnesses.includes(x)))throw new CliError('invalid_update_journal','Pending update does not match this installation.');
   verifyManifest(pending.manifest,platform,arch);verifySkills(Buffer.from(pending.skills),pending.manifest);
+  if(compare(pending.manifest.version,currentVersion)<0){
+   await rm(pendingPath);await rm(binaryPath,{force:true});
+   return {version:currentVersion,protocol:pending.manifest.protocol,recovered:true,installations:[],harnesses:[]};
+  }
+  if(pin&&pending.manifest.version!==pin)throw new CliError('version_pinned','Pending update differs from CLI__VERSION_PIN.');
  }
  let bytes:Buffer|undefined;
  if(!pending){
   const fetcher=options.fetch??fetch;
   const release=await releasePointerOf(options,fetcher);
-  if(compare(release.version,options.version??CLI_VERSION)<0)throw new CliError('compatible_release_unavailable','The selected server names an older release than the installed CLI.','Retry after a compatible CLI release is published.');
+  if(pin&&release.version!==pin)throw new CliError('version_pinned','The server release differs from CLI__VERSION_PIN.');
+  if(options.background&&compare(release.version,currentVersion)<=0)return {version:currentVersion,protocol:release.protocol,recovered:false,installations:[],harnesses:[]};
+  if(compare(release.version,currentVersion)<0)throw new CliError('compatible_release_unavailable','The selected server names an older release than the installed CLI.','Retry after a compatible CLI release is published.');
   const base=`${downloads}/afbin-v${release.version}`;
   const manifest=JSON.parse((await download(`${base}/afbin-${platform}-${arch}.manifest.json`,fetcher,65536,options.stallMs)).toString());verifyManifest(manifest,platform,arch);
   if(manifest.version!==release.version||manifest.protocol!==release.protocol)throw new CliError('compatible_release_unavailable','The published release does not match the protocol the selected server named.','Retry after a compatible CLI release is published.');
   const skillBytes=await download(`${base}/${manifest.skills.file}`,fetcher,4194304,options.stallMs);verifySkills(skillBytes,manifest);
-  if(manifest.version!==(options.version??CLI_VERSION)){
+  if(manifest.version!==currentVersion){
    const asset=manifest.binary.gzip??manifest.binary;
    bytes=await download(`${base}/${asset.file}`,fetcher,268435456,options.stallMs);
    if(digest(bytes)!==asset.sha256)throw new CliError('checksum_mismatch','Download checksum mismatch; nothing was installed.');
@@ -106,7 +125,7 @@ export async function updateCli(options:UpdateOptions){
   pending={schema:1,installation,manifest,skills:skillBytes.toString(),selected:options.harnesses};
  }
  const operation=pending;
- return withLock(options.home,HOME_SCOPE,async()=>{
+ const commit=async()=>{
   const current=await readOptional(pendingPath);
   if(current&&!saved)throw new CliError('pending_recovery','Another update was staged. Rerun afbin update to recover it.');
   if(saved&&current?.toString()!==saved.toString())throw new CliError('pending_recovery','Pending update changed. Rerun afbin update.');
@@ -114,6 +133,7 @@ export async function updateCli(options:UpdateOptions){
   if(!saved){
    if(bytes){
     const original=await readOptional(installation.path);if(!original)throw new CliError('missing_executable','The installed executable is missing.');
+    if(!originalAtStart||digest(original)!==digest(originalAtStart))throw new CliError('local_changed','Installed executable changed during discovery.');
     operation.before=digest(original);operation.mode=(await lstat(installation.path)).mode&0o777;
     operation.backup=join(state,'binary-backups',randomUUID());await privateDirectory(dirname(operation.backup));
     await atomicWrite(binaryPath,bytes,{mode:0o700});
@@ -132,8 +152,9 @@ export async function updateCli(options:UpdateOptions){
    }
    options.afterReplace?.();
   }
-  const installed=await installSkills(operation.selected,{home:options.home,env:options.env,version:bundle.version,files:bundle.files,origin:normalizeServer(options.server),alreadyLocked:true});
+  const installed=options.background?{installations:[],harnesses:[]}:await installSkills(operation.selected,{home:options.home,env:options.env,version:bundle.version,files:bundle.files,origin:normalizeServer(options.server),alreadyLocked:true});
   await rm(pendingPath);await rm(binaryPath,{force:true});
   return{version:operation.manifest.version,protocol:operation.manifest.protocol,recovered:!!saved,...(operation.backup?{backup:operation.backup}:{}),...installed};
- });
+ };
+ return options.background?commit():withLock(options.home,HOME_SCOPE,commit,{},options.env);
 }

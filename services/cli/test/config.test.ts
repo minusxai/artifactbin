@@ -1,3 +1,4 @@
+import {autoUpdatePolicy} from '../src/config';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, stat, rm } from "node:fs/promises";
@@ -112,4 +113,11 @@ test("service mirrors preserve release identity under a safe path prefix", () =>
  assert.equal(servicePackageUrl(release,{CLI__SERVICE_BASE_URL:'http://127.0.0.1:6400/chat/releases/'}),'http://127.0.0.1:6400/chat/releases/afbin-v0.1.13/afbin-sql-linux-x64.gz');
  assert.equal(servicePackageUrl(release,{CLI__SERVICE_BASE_URL:'https://mirror.example/packages'}),'https://mirror.example/packages/afbin-v0.1.13/afbin-sql-linux-x64.gz');
  for(const base of ['http://mirror.example','https://user:secret@mirror.example','https://mirror.example/?token=secret','https://mirror.example/#secret'])assert.throws(()=>servicePackageUrl(release,{CLI__SERVICE_BASE_URL:base}));
+});
+
+test('automatic update policy is opt-out and a version pin always suppresses background changes',()=>{
+ assert.deepEqual(autoUpdatePolicy({}),{enabled:true});
+ for(const value of ['0','false','off'])assert.equal(autoUpdatePolicy({CLI__AUTO_UPDATE:value}).enabled,false);
+ assert.deepEqual(autoUpdatePolicy({CLI__VERSION_PIN:'1.2.3'}),{enabled:false,pin:'1.2.3'});
+ assert.equal(autoUpdatePolicy({CLI__VERSION_PIN:'bad'}).enabled,false);
 });

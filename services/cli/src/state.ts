@@ -33,6 +33,7 @@ export type StateKind =
   | 'conversion'         // key: source path  value: {target, sha256}
   | 'account'            // key: path         value: {resource, sha256}; the binding lives on the 'workspace' record
   | 'retired-create'     // key: path         value: {id, path, server, key}
+  | 'background-update' // key: server origin; value: local check/backoff timestamps
   | 'archive';           // key: <kind>/<id>  value: anything kept for forensics, never read by commands
 
 interface StateRecord<T = unknown> {key: string; value: T; data: Buffer | null}
@@ -61,15 +62,16 @@ async function privateFile(path: string): Promise<void> {
 export class State {
   private constructor(private readonly db: DatabaseSync, readonly path: string) {}
 
-  static async open(home: string, env: NodeJS.ProcessEnv = process.env): Promise<State> {
+  static async open(home: string, env: NodeJS.ProcessEnv = process.env, options: {waitMs?:number} = {}): Promise<State> {
     const path = join(configDir(home, env), 'state.sqlite');
     await privateFile(path);
     const {DatabaseSync} = loadSqlite();
     const db = new DatabaseSync(path);
+    try {
     await chmod(path, 0o600);
     db.exec(`
+      PRAGMA busy_timeout = ${Math.max(0,Math.floor(options.waitMs??5000))};
       PRAGMA journal_mode = WAL;
-      PRAGMA busy_timeout = 5000;
       PRAGMA synchronous = FULL;
       CREATE TABLE IF NOT EXISTS records (
         scope TEXT NOT NULL, kind TEXT NOT NULL, key TEXT NOT NULL,
@@ -78,6 +80,17 @@ export class State {
       );
     `);
     return new State(db, path);
+    }catch(error){db.close();throw error;}
+  }
+
+  /** Nonblocking scheduling read: no schema setup, writes, or lock wait on the foreground path. */
+  static async openReadOnly(home: string, env: NodeJS.ProcessEnv = process.env): Promise<State | null> {
+    const path = join(configDir(home, env), 'state.sqlite');
+    try { await stat(path); } catch(error) { if(isMissing(error))return null; throw error; }
+    const {DatabaseSync}=loadSqlite();
+    const db=new DatabaseSync(path,{readOnly:true});
+    db.exec('PRAGMA busy_timeout = 0');
+    return new State(db,path);
   }
 
   /** Reads never create local state: null when no store exists yet for this home. */
@@ -139,7 +152,7 @@ export class State {
 }
 
 const locks = new Map<string, Promise<unknown>>();
-interface LockOptions {waitMs?: number}
+interface LockOptions {waitMs?: number; reentrant?: boolean}
 /**
  * How long a competing operation waits for the scope before it is refused as
  * `workspace_busy`. Agents that run their tool calls in parallel (Pi, Claude Code)
@@ -161,7 +174,7 @@ const LOCK_WAIT_NOTICE_MS = 1_000;
 export async function withLock<T>(home: string, scope: string, run: () => Promise<T>, options: LockOptions = {}, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   const name = createHash('sha256').update(scope).digest('hex').slice(0, 16);
   const file = join(configDir(home, env), 'locks', `${name}.sqlite`);
-  if (locks.has(file)) return run();
+  if (options.reentrant !== false && locks.has(file)) return run();
   await privateFile(file);
   const {DatabaseSync} = loadSqlite();
   const db = new DatabaseSync(file);
@@ -184,5 +197,5 @@ export async function withLock<T>(home: string, scope: string, run: () => Promis
   })();
   locks.set(file, held);
   try { return await held; }
-  finally { locks.delete(file); db.close(); }
+  finally { if(locks.get(file)===held)locks.delete(file); db.close(); }
 }
