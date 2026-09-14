@@ -49,13 +49,8 @@ export default function WorkshopDirections() {
       >
         <div className="blue-gallery-heading">
           <span className="studio-eyebrow">
-            A PLACE FOR THE THINGS YOU MAKE
+            With artifactbin you can make ...
           </span>
-          <h2>
-            Small beginnings.
-            <br />
-            <em>Wide possibilities.</em>
-          </h2>
         </div>
         <div className="blue-library">
           {BOOKS.map((book, index) => (
@@ -80,11 +75,10 @@ export default function WorkshopDirections() {
           <a className="library-gallery-link" href="/examples">
             <span className="studio-eyebrow">THERE’S MORE ON THE WALL</span>
             <strong>
-              Enter the
-              <br />
-              <em>gallery.</em> <ArrowUpRight size={42} />
+              <span>Enter the <em>gallery</em></span>
+              <ArrowUpRight aria-hidden="true" />
             </strong>
-            <span>Find something worth opening.</span>
+            <span>Find something worth sharing</span>
           </a>
         </div>
       </section>
