@@ -27,6 +27,8 @@ export const flags: Record<string,Flag> = {
  limit:{value:'N',description:'Maximum results in this page (1–100).'},cursor:{value:'CURSOR',description:'Continue from a returned next_cursor.'},
  input:{value:'PATH',description:'Read command input from a local file; use - for stdin.'},
  harness:{value:'NAME',repeat:true,description:'Select a skill installation target: claude, codex, pi, opencode; repeat to select several, or use none.'},
+ access:{value:'ACCESS',description:'Publish or change a dataset\'s row access: read (the default) or readwrite, which a document writing to it requires.'},
+ policy:{value:'POLICY',description:'Grant dataset row writes: viewers-write lets everyone who can view it insert, update and delete rows; none removes the grant.'},
  write:{description:'Execute a dataset row mutation explicitly; otherwise queries only read.'},
  param:{value:'NAME=VALUE',repeat:true,description:'Bind a named scalar parameter; repeat for distinct names.'},
  name:{value:'NAME',description:'Select a named query/table, or name a remote terminal session.'},
@@ -52,7 +54,7 @@ export const commands: Command[] = [
  {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts or account resources and reconcile tracked files.',min:0,max:Infinity,flags:['type','output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2','afbin pull --type profile']},
  {name:'fork',usage:'<ref> [<ref> ...]',description:'Create a distinct private local draft from a resource; publish it later with push.',min:1,max:Infinity,flags:['type','output','dry-run'],examples:['afbin fork abc123 --output copy.jsx','afbin fork report.jsx --dry-run']},
  {name:'export',usage:'<ref> [<ref> ...]',description:'Export one image of the whole document, every slide stacked; --page picks one slide; data and original bytes too.',min:1,max:Infinity,flags:['type','format','output','name','page','force','dry-run'],examples:['afbin export abc123 --output report.png','afbin export sales.csv --format json --output -']},
- {name:'push',usage:'[<ref> ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['type','restore','refresh','secret-env','dry-run','force'],examples:['afbin push report.jsx','afbin push --dry-run','afbin push --restore abc123']},
+ {name:'push',usage:'[<ref> ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['type','access','policy','restore','refresh','secret-env','dry-run','force'],examples:['afbin push report.jsx','afbin push tasks.csv --type dataset --access readwrite','afbin push --dry-run','afbin push --restore abc123']},
  {name:'validate',usage:'[path ...]',description:'Check local files without network access; --remote adds read-only server checks.',min:0,max:Infinity,flags:['fix','remote'],examples:['afbin validate report.jsx','afbin validate --fix report.jsx']},
  {name:'status',usage:'[<ref> ...]',description:'Report local changes, conflicts and installation state; remote state is last observed.',min:0,max:Infinity,flags:['type','remote'],examples:['afbin status','afbin status --remote']},
  {name:'diff',usage:'[<ref> ...]',description:'Compute changes locally against the saved, historical or refreshed base.',min:0,max:Infinity,flags:['type','remote','output'],examples:['afbin diff report.jsx','afbin diff --remote report.jsx']},
@@ -128,6 +130,10 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(command.name==='export'&&f.output==='-'&&f.json)throw new CliError('conflicting_output','--json cannot share stdout with exported bytes.','Choose a file with --output, or omit --json.');
  if(command.name==='fork'&&f.output==='-')throw new CliError('unsupported_output','fork writes an editable local draft; choose a file or directory with --output.');
  if(f.state!==undefined)f.state=enumArgument(f.state,['open','resolved'],'state');
+ if(f.access!==undefined)f.access=enumArgument(f.access,['read','readwrite'],'access');
+ if(f.policy!==undefined)f.policy=enumArgument(f.policy,['viewers-write','none'],'policy');
+ // A viewers' grant on a read-only dataset can never fire: refuse the contradiction rather than publish it.
+ if(f.policy==='viewers-write'&&f.access==='read')throw new CliError('invalid_arguments','--policy viewers-write needs --access readwrite; a read-only dataset refuses every row write.','Drop --access read — the policy implies readwrite — or use --policy none.');
  if(command.name!=='export'&&f.json&&f.format&&f.format!=='json'&&(!f.output||f.output==='-'))throw new CliError('conflicting_output','--json cannot share stdout with another representation.','Choose a file with --output, or omit --json.');
  if(['log','comment'].includes(command.name)&&result.positionals.length>1&&f.cursor)throw new CliError('invalid_cursor','--cursor requires one target.');
  if(f.limit!==undefined&&(!/^\d+$/.test(String(f.limit))||Number(f.limit)<1||Number(f.limit)>100))throw new CliError('invalid_limit','--limit must be an integer from 1 to 100.');

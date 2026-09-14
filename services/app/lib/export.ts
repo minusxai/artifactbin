@@ -387,7 +387,7 @@ export async function exportImageResponse(
   if (!capture) return json({ error: 'unknown_mode', allowed: ['full', 'card', 'preview'] }, 400);
   // One slide of a deck, 1-based. Absent is 0 — the whole document.
   const slide = parseExportSlide(q.slide ?? null);
-  if (slide === null) return json({ error: 'unknown_slide', hint: 'slide is a 1-based slide number, e.g. ?slide=2' }, 400);
+  if (slide === null) return json({ error: 'unknown_slide', hint: 'a slide is a 1-based slide number of this document; select one with --page, e.g. afbin export <ref> --format png --page 2' }, 400);
   const draftCrop = capture === 'preview' && q.crop ? parseSocialPreviewCrop(q.crop) : null;
   if (capture === 'preview' && q.crop && !draftCrop) {
     return json({ error: 'unknown_crop', hint: 'crop must be x=<px>;y=<px>;width=<px>' }, 400);

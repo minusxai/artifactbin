@@ -16,9 +16,9 @@ import type { Operation, OpContext, OpReply } from './registry';
 const ACCOUNT_REQUIRED = {
   status: 403,
   code: 'account_required',
-  fix: 'use a token claimed by your artifactbin account; an unclaimed token owns no sessions',
+  fix: 'run `afbin auth` and sign in with an account; an anonymous credential owns no sessions',
 };
-const NOT_FOUND = { status: 404, code: 'not_found', fix: 'list your sessions and use an id from that answer' };
+const NOT_FOUND = { status: 404, code: 'not_found', fix: 'run afbin list --type session and use an id from that answer' };
 const reply = (body: Record<string, unknown>, status = 200): OpReply => ({ status, body });
 
 /** Every session operation is owner-scoped; an unclaimed token owns nothing. */

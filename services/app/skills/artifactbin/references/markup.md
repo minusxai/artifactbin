@@ -8,8 +8,10 @@ description: >-
 `markup` is **static JSX data** over the component registry.
 Keep content and interactions native; use Iframe for isolated DOM scripts or canvas.
 
+<!--bundle:skip-->
 Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spans.
 
+<!--/bundle:skip-->
 - **Static JSX only**: literal props (strings, numbers, booleans, arrays,
   `{{…}}` objects), plus safe signal conditions; no arbitrary expressions,
   spreads or inline handlers (`onClick=` is
@@ -23,10 +25,13 @@ Invalid JSX returns `400 {"error":"invalid_jsx","details":[…]}` with exact spa
   Editable dataset cells: [editing](markup-editing.md).
   [motion](markup-motion.md) · [video](markup-video.md) · [svg](markup-svg.md).
 
+<!--bundle:skip-->
 ## Contents
 
 Skeleton · Vocabulary · Helmet · Images · Layout.
 
+<!--/bundle:skip-->
+<!--bundle:skip-->
 ## Skeleton (editorial)
 
 ```jsx
@@ -43,6 +48,7 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
   </section>
 </div>
 ```
+<!--/bundle:skip-->
 
 ## Component vocabulary (the complete allowlist)
 
@@ -76,14 +82,15 @@ Parent CSS and data declarations belong here. Iframe owns its own CSS/JS.
 </Helmet>
 ```
 
+<!--bundle:skip-->
 One legacy Helmet script may run after hydration in a hidden opaque realm:
 no parent DOM, cookies, storage or direct API requests. Use conditions and
 Dialog for parent UI; move DOM scripts into Iframe. See [script APIs](markup-scripts.md).
 `</script` cannot appear in the text (split it: `'</scr' + 'ipt'`).
-Inside Iframe, attach DOM handlers with `addEventListener`. The `mx` bridge
-reads/writes declared signals and runs named mutations. Subscribe to named
-queries for rows that arrive after startup; see the script API reference.
+Inside Iframe, attach DOM handlers with `addEventListener`; the `mx` bridge
+(signals, mutations, late rows) is in that same reference.
 
+<!--/bundle:skip-->
 - **Custom CSS lives in that `<style>` block, never inline** (`style=` is rejected).
   Scope rules to your own class names (bare element selectors leak into chart
   chrome); colors from theme tokens (`var(--primary)`).
@@ -91,25 +98,31 @@ queries for rows that arrive after startup; see the script API reference.
   style block. At save, `position: fixed/sticky`, `@import` and a `url()`
   outside `@font-face` are stripped; `100vh` becomes the reader viewport.
 - **Override a theme** in that block under `:root` — no theme-name selector
-  or `!important`: `:root { --background: #0c0d0e; --primary: #ff6a1f; --chart-1: #ec6100; --font-display: Georgia, serif; }`.
+  or `!important`: `:root { --background: #0c0d0e; --primary: #ff6a1f; --chart-1: #ec6100; --font-display: Georgia, serif; }`.<!--bundle:skip-->
   Keys: `--background --foreground --card --popover --primary --secondary
   --muted --accent --destructive` (each with `-foreground`), `--border
-  --input --ring --radius --chart-1..5`, `--font-body --font-display --font-mono`.
+  --input --ring --radius --chart-1..5`, `--font-body --font-display --font-mono`.<!--/bundle:skip-->
+<!--bundle:skip-->
 - **Web fonts**: `<meta name="font-display" content="Lobster" />` (also
   `font-body`, `font-mono`) names a Google family, served from this origin;
   an unknown family fails the publish. An `@font-face` `url(https://…)` in
   your `<style>` is imported the same way.
+<!--/bundle:skip-->
 - **Theme tokens first**: `text-muted-foreground`, `bg-muted`, `border-border`,
   `bg-background` follow the active theme; hardcoded palettes fight it. ONE
   bespoke accent (`text-[#e2483d]`) is legitimate for the one bold moment —
   it will not follow a later theme switch.
-- `theme`, `template` and `colorMode` are top-level fields of the publish
-  call, not Helmet content. No genre named → **default to `scrolly`**; torn →
+- `theme`, `template` and `colorMode` are top-level fields of the YAML fence
+  at the top of the file you push, not Helmet content. No genre named →
+  **default to `scrolly`**; torn →
   ask the user. `colorMode`
   (`light | dark`) is the AUTHOR'S DEFAULT — readers flip it, so design in theme tokens.
 
-Social preview: [upload and crop](publishing-versions.md).
+<!--bundle:skip-->
+Social preview: `<Helmet>` metas `artifactbin:og-image` and
+`artifactbin:og-image-crop` — [export](publishing-versions.md).
 
+<!--/bundle:skip-->
 ## Images and icons
 
 - `<img src="ref:<imageId>" />` — an uploaded image
@@ -118,11 +131,14 @@ Social preview: [upload and crop](publishing-versions.md).
   ours, and a URL that will not fetch is a warning, not a failed publish.
 - In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
+<!--bundle:skip-->
 - An image `src` also binds: `"$pick"`, or `"https://…/{$pick}.png"` to
   compose one — the only braced position; the first reader imports it.
+<!--/bundle:skip-->
 - `<Icon name="chart-bar" />` — a lucide icon, inline (kebab-case names from
   lucide.dev). Size it with a `size-*` class; it inherits `currentColor`.
 
+<!--bundle:skip-->
 ## Layout components
 
 `<SlideDeck><Slide title="…">…</Slide></SlideDeck>` — a presentation, each
@@ -131,6 +147,8 @@ h={3}>…</GridItem></Grid>` — the 12-column canvas (`dashboard`).
 
 Flow columns: [Grid](templates.md).
 
+<!--/bundle:skip-->
+<!--bundle:skip-->
 ## Do / Don't
 
 - DO cap body copy at `max-w-prose`; let CHARTS break wider. Every table is
@@ -138,4 +156,5 @@ Flow columns: [Grid](templates.md).
 - Three or more `<h2>` sections get a table of contents made from the
   headings — write `<h2>`s as short claims. Decks and `<Grid>` dashboards get none.
 
+<!--/bundle:skip-->
 [Three.js, libraries and file references](markup-libraries.md).

@@ -88,6 +88,59 @@ export function documentWrites(entries: LedgerEntry[]): number {
   return entries.filter((e) => e.status < 300 && isWrite(e)).length;
 }
 
+/**
+ * WHICH artifact a write stored into, read from the write itself.
+ *
+ * The path carries it for every write that names one (`PUT /api/artifacts/<id>`,
+ * `POST /api/artifacts/<id>/edits`); a bare `POST /api/artifacts` is a CREATE, and the only
+ * place its id can come from is the entry's own `artifactId`. That difference is the whole
+ * point for `progressiveEdits`: a create is a new artifact, never a version of an old one.
+ */
+function writtenArtifact(e: LedgerEntry): string | null {
+  const m = /^\/api\/artifacts\/([A-Za-z0-9]+)(?:\/(?:edits|revert))?$/.exec(pathOnly(e.path));
+  return m ? m[1] : (e.artifactId ?? null);
+}
+
+const isCreate = (e: LedgerEntry) => pathOnly(e.path) === '/api/artifacts';
+
+/**
+ * THE VERSIONS OF ONE DOCUMENT — every successful write that stored into the artifact the run is
+ * scored on, minus the rows upload (`reqFormat: 'dataset'`), which is a dataset and not a version
+ * of anything anybody reads.
+ *
+ * Scoping to the document is what makes the count mean what it says. Counting CONTENT writes
+ * instead made `data`, `dashboard`, `deck` and `scrolly` read as "no progression" for the shape
+ * we are asking for, because their rows upload is write one and the document that follows is a
+ * different artifact. A dataset upload is not a version of the document.
+ *
+ * Every write here after the first is by construction an edit of the same document — an `/edits`
+ * diff, a `/revert`, or a whole-document `PUT` that keeps the id — because a write that forked a
+ * new artifact has a different id and is not in this list. So `>= 2` IS the progression.
+ *
+ * Not filtered on `reqMarkup`: an `/edits` diff is a version of the document whether or not the
+ * ledger recorded the markup it carried.
+ */
+function markupWritesTo(entries: LedgerEntry[], documentId: string): LedgerEntry[] {
+  return entries.filter((e) => e.status < 300 && isWrite(e) && e.reqFormat !== 'dataset' && writtenArtifact(e) === documentId);
+}
+
+/**
+ * The same question with no document to scope to — the legacy answer, kept so a caller that
+ * passes no `documentId` (and every test pinned before the scoping existed) reads exactly as it
+ * did: two content writes, the later ones keeping the first one's id.
+ *
+ * Weaker on purpose, and only ever reached without a scored document: it cannot tell a rows
+ * upload from a document, so a dataset-first run reads false here. `markupWritesTo` is the
+ * answer whenever the driver knows which artifact the run is scored on, which is always.
+ */
+function progressiveEditsOf(entries: LedgerEntry[]): boolean {
+  const good = entries.filter((e) => e.status < 300 && isWrite(e));
+  if (good.length < 2) return false;
+  const first = writtenArtifact(good[0]);
+  if (first === null) return false;
+  return good.slice(1).every((w) => !isCreate(w) && writtenArtifact(w) === first);
+}
+
 /** One numeric row, as the driver records it. */
 interface LedgerRow {
   metric: string;
@@ -105,8 +158,8 @@ interface LedgerRow {
  * predicate was guarded and its CALLER was not. The driver now records exactly
  * what this returns, so the count and its use are one thing to break.
  */
-export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
-  const m = ledgerMetrics(entries);
+export function ledgerRows(entries: LedgerEntry[], opts: LedgerMetricsOptions = {}): LedgerRow[] {
+  const m = ledgerMetrics(entries, opts);
   return [
     { metric: 'http_calls', value: m.httpCalls },
     { metric: 'write_attempts', value: m.writeAttempts },
@@ -117,6 +170,10 @@ export function ledgerRows(entries: LedgerEntry[]): LedgerRow[] {
     { metric: 'docs_bytes', value: m.docsBytes },
     // 1 for the document the driver made, plus every write that stored a new version.
     { metric: 'versions', value: m.observed ? 1 + documentWrites(entries) : null },
+    // The agent's own half of that count: how many versions of the SCORED DOCUMENT it stored. One
+    // is a single big publish; two or more is a document that grew while a reader could already
+    // see it. The rows upload of a dataset-first task is not one of them (`markupWritesTo`).
+    { metric: 'agent_versions', value: m.observed ? m.agentVersions : null },
   ];
 }
 
@@ -224,6 +281,33 @@ interface LedgerMetrics {
    */
   msToFirstPublish: number | null;
   /**
+   * Ms from the same anchor to the first successful write that CARRIED MARKUP — when a reader
+   * first had something to read, as distinct from when a URL first existed (`msToFirstPublish`,
+   * which a dataset upload already satisfies). Null when no successful write ever carried markup.
+   */
+  msToFirstMarkupWrite: number | null;
+  /**
+   * Did that document arrive EARLY — inside the first 40 percent of the run's wall clock?
+   *
+   * The thing we are actually instrumenting: a person opening the shared link stares at the
+   * starter page until the agent's single big publish at the end. Strictly before the mark, so
+   * the boundary is not early. Null when the ledger observed nothing (like every other
+   * ledger-only judgement) and null when the caller gave no wall clock — 40 percent of nothing
+   * is not an answer. False, not null, for a run that simply never published markup.
+   */
+  firstVersionEarly: boolean | null;
+  /**
+   * Two or more versions of the SCORED DOCUMENT stored by the agent — a document that grew while
+   * its reader could already see it, rather than one big publish at the end. Null when the ledger
+   * observed nothing.
+   */
+  progressiveEdits: boolean | null;
+  /**
+   * How many versions of that document the agent stored itself (`versions` is this plus the one
+   * the driver made). The rows upload of a dataset-first task is not one of them.
+   */
+  agentVersions: number;
+  /**
    * Headings carried by the first successful write THAT CARRIED MARKUP — which is not always the first
    * successful write. The guardrail on "publish early": a skeleton with a real title and real sections is
    * a document arriving; an empty stub is a fast placeholder that games the timing.
@@ -238,9 +322,29 @@ interface LedgerMetrics {
 }
 
 /** What the caller knows that the ledger cannot: when the agent's process actually started. */
-interface LedgerMetricsOptions {
+export interface LedgerMetricsOptions {
   startedAtMs?: number;
+  /**
+   * How long the run took end to end (`spawned.durationMs` in main.ts) — the denominator
+   * `firstVersionEarly` measures its 40 percent against. The ledger's own entries stop at the
+   * last call, which is not when the agent stopped, so this cannot be derived here.
+   */
+  durationMs?: number;
+  /**
+   * WHICH artifact the run is scored on (`scoredArtifactId`, the same id `used_start_document`
+   * compares against) — so "a version of the document" can mean the document rather than any
+   * content write. The ledger cannot decide this alone: it sees a dataset upload, a scratch
+   * document and the deliverable as three writes of the same shape, and the agent's own final
+   * message is part of the answer.
+   *
+   * Absent — a run with no scored document, and every caller written before the scoping — falls
+   * back to the unscoped readings, so nothing already pinned moves.
+   */
+  documentId?: string;
 }
+
+/** A first version counts as EARLY inside this fraction of the run's wall clock. */
+const EARLY_FRACTION = 0.4;
 
 /**
  * Opening `<h1>`/`<h2>`/`<h3>` tags. Opening only — `</h1>` closes a heading rather than adding one —
@@ -271,11 +375,22 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
   // the first 2xx write that carried markup — a dataset-first task writes its rows before its document,
   // and grading the rows upload would leave the guardrail blank on exactly those tasks.
   const firstGoodWrite = writes.find((w) => w.status < 300);
-  const firstGoodMarkupWrite = writes.find((w) => w.status < 300 && w.reqMarkup !== undefined);
+  // The versions OF THE DOCUMENT this run is scored on, when the caller knows which one that is:
+  // every successful write to that artifact except the rows upload. Without a `documentId` — no
+  // scored document, or a caller from before the scoping — it degrades to "every successful write
+  // that carried markup", which is what this read before and what the unscoped tests pin.
+  const markupWrites = opts.documentId === undefined
+    ? writes.filter((w) => w.status < 300 && w.reqMarkup !== undefined)
+    : markupWritesTo(entries, opts.documentId);
+  const firstGoodMarkupWrite = markupWrites[0];
   // The anchor is the caller's — process spawn — because agent boot is part of the wait. Falling back to
   // the ledger's own first entry measures from the agent's first HTTP call instead, which is a FLOOR.
   const anchor = opts.startedAtMs ?? entries[0]?.t;
   const msToFirstPublish = firstGoodWrite && anchor !== undefined ? firstGoodWrite.t - anchor : null;
+  const msToFirstMarkupWrite = firstGoodMarkupWrite && anchor !== undefined ? firstGoodMarkupWrite.t - anchor : null;
+  // A wall clock we do not have is not a slow run: with no duration (or a zero one) there is
+  // nothing to take 40 percent of, and the honest answer is null rather than false.
+  const wall = opts.durationMs !== undefined && opts.durationMs > 0 ? opts.durationMs : null;
   return {
     observed,
     httpCalls: entries.length,
@@ -295,7 +410,15 @@ export function ledgerMetrics(entries: LedgerEntry[], opts: LedgerMetricsOptions
     docsFetches: judged(docsGets.length),
     docsBytes,
     msToFirstPublish,
-    // Naturally null rather than `judged()`: no successful write ever carried markup, nothing to count.
-    skeletonSections: firstGoodMarkupWrite === undefined ? null : (firstGoodMarkupWrite.reqMarkup!.match(HEADING_TAG) ?? []).length,
+    msToFirstMarkupWrite,
+    firstVersionEarly: wall === null ? null : judged(msToFirstMarkupWrite !== null && msToFirstMarkupWrite < EARLY_FRACTION * wall),
+    // Scoped to the document when the caller named one — two writes to it ARE a progression,
+    // because a write that forked a new artifact is not in the list. Unscoped, the older reading.
+    progressiveEdits: judged(opts.documentId === undefined ? progressiveEditsOf(entries) : markupWrites.length >= 2),
+    agentVersions: opts.documentId === undefined ? documentWrites(entries) : markupWrites.length,
+    // Naturally null rather than `judged()`: nothing carried markup, so there is nothing to count.
+    // The `reqMarkup` guard matters once the list is document-scoped: an `/edits` diff is a version
+    // of the document whether or not the ledger kept the markup it sent.
+    skeletonSections: firstGoodMarkupWrite?.reqMarkup === undefined ? null : (firstGoodMarkupWrite.reqMarkup.match(HEADING_TAG) ?? []).length,
   };
 }

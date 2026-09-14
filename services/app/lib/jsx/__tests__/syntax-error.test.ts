@@ -79,3 +79,17 @@ describe('too many braces are named too — pi spent 10 model calls on this in e
     expect(d.message).toMatch(/one expression wrapper|viz=\{\{…\}\}/);
   });
 });
+
+/**
+ * THE MIRROR OF THE MISSING WRAPPER: a JSON ARRAY given the object form's double braces.
+ * `columns={{[{"col":"team"}]}}` is `{ {[…]} }` — a block holding an array — and the parser said only
+ * "Unexpected token" with no hint at all (claude-code dashboard, live leg local23, line 117): two
+ * calls to inspect and fix a document the refusal could have explained in one line.
+ */
+it('names an array wrapped in the object form’s double braces', () => {
+  const d = detail('<article><DataTable data="$q" columns={{[{"col":"team","title":"Team"}]}} /></article>');
+  expect(d.message).toContain('columns');
+  expect(d.message).toMatch(/extra brace pair|one brace too many/);
+  expect(d.message).toContain('columns={[');
+  expect(d.snippet).toContain('▶');
+});

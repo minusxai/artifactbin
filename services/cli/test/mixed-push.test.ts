@@ -92,3 +92,52 @@ describe('a workspace of artifacts and a profile', () => {
    }finally{await h.cleanup();}
   });
 });
+
+/**
+ * WHY `metadata_requires_patch` IS NOT AN afbin REFUSAL (workstream F).
+ *
+ * The server's edits door answers metadata keys with
+ * `metadata_requires_patch`, whose hint is "Use PATCH with expectedState … or
+ * PUT with expectedVersion …" — two methods an agent driving afbin never
+ * chooses. It stays worded for the HTTP surface because the CLI cannot reach
+ * it: `planPush` only picks `edit` when the metadata delta is EMPTY, and an
+ * edit body is exactly {source, edit_id}. The moment a fence field moves too,
+ * the plan is a conditional replacement. This pins both halves.
+ */
+test('a body-only push sends source and edit_id to /edits; a fence change makes it a conditional replace instead',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-edit-door-'));
+ let head={id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',title:'Original',markup:'<p id="first">First</p>'};
+ const seen:Array<{path:string;method:string;body:Record<string,unknown>}>=[];
+ const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{home:root,cwd:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(input,init)=>{
+  const method=init?.method??'GET';
+  if(method!=='GET'){
+   const body=JSON.parse(String(init!.body)) as Record<string,unknown>;
+   seen.push({path:new URL(String(input)).pathname,method,body});
+   head={...head,version:head.version+1,edit_id:`e${head.version+1}`,state:digest(`e${head.version+1}`),
+    ...(typeof body.source==='string'?{markup:body.source}:{}),...(typeof body.markup==='string'?{markup:body.markup}:{}),
+    ...(typeof body.title==='string'?{title:body.title}:{})};
+  }
+  return Response.json(head,{headers:{'X-Artifactbin-Account':'account'}});
+ }});return{code,result:JSON.parse(out.join(''))};};
+ try{
+  await saveConnection({server:'https://example.com',token:'test'},root);
+  assert.equal((await invoke(['pull','abc123','--output','doc.jsx'])).code,0);
+  const bodyOnly=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));
+  bodyOnly.body=bodyOnly.body.replace('First','Edited');
+  await writeFile(join(root,'doc.jsx'),writeDocument(bodyOnly));
+  assert.equal((await invoke(['push','doc.jsx'])).code,0);
+  const edit=seen.at(-1)!;
+  assert.match(edit.path,/\/artifacts\/abc123\/edits$/);
+  assert.equal(edit.method,'POST');
+  assert.deepEqual(Object.keys(edit.body).sort(),['edit_id','source'],'an edit body carries no metadata key, so the edits door never refuses one');
+
+  const mixed=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));
+  mixed.body=mixed.body.replace('Edited','Edited again');mixed.metadata.title='Renamed';
+  await writeFile(join(root,'doc.jsx'),writeDocument(mixed));
+  assert.equal((await invoke(['push','doc.jsx'])).code,0);
+  const replace=seen.at(-1)!;
+  assert.equal(replace.method,'PUT');
+  assert.ok(!replace.path.endsWith('/edits'),'a fence change never travels through the edits door');
+  assert.equal(replace.body.title,'Renamed');
+ }finally{await rm(root,{recursive:true,force:true});}
+});

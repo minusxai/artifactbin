@@ -254,3 +254,30 @@ export function compilePolicyPredicate(
   };
   return { sql: walk(value), params };
 }
+
+/**
+ * The one shorthand a publisher needs: everyone who can VIEW the dataset may add, change and remove
+ * rows in it — the grant a page whose buttons write must have. `viewer` is the only role a data
+ * policy may name (lib/datasets/policy/validation), and `public.rows` is the table a flat CSV or JSON
+ * dataset exposes; a multi-table catalog spells its own rules out in the dataset YAML instead.
+ */
+export function viewersWritePolicy(
+  table: { schema: string; name: string } = { schema: 'public', name: 'rows' },
+): DatasetPolicy {
+  return {
+    version: 1,
+    enforcement: 'enabled',
+    tables: [
+      {
+        table,
+        insert_permissions: [
+          { role: 'viewer', permission: { columns: '*', check: {} } },
+        ],
+        update_permissions: [
+          { role: 'viewer', permission: { columns: '*', filter: {}, check: {} } },
+        ],
+        delete_permissions: [{ role: 'viewer', permission: { filter: {} } }],
+      },
+    ],
+  };
+}

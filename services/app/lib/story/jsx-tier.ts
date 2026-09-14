@@ -101,7 +101,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   if (externalAssets.images.length > MAX_EXTERNAL_IMAGES_PER_PUBLISH) {
     return json({
       error: 'too_many_external_images',
-      details: [`this publish imports ${externalAssets.images.length} external images; the cap is ${MAX_EXTERNAL_IMAGES_PER_PUBLISH} — upload the rest as image artifacts and reference them as ref:<id>`],
+      details: [`this publish imports ${externalAssets.images.length} external images; the cap is ${MAX_EXTERNAL_IMAGES_PER_PUBLISH} — save the rest beside the document and reference their relative paths, and afbin push publishes them with it as ref:<id>`],
     }, 400);
   }
   /*
@@ -124,7 +124,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   const warnings: AssetWarning[] = wanted.slice(MAX_EXTERNAL_ASSETS_PER_PUBLISH).map(({ url }) => ({
     code: 'too_many_external_assets',
     url,
-    fix: `this document names ${wanted.length} external assets; the cap is ${MAX_EXTERNAL_ASSETS_PER_PUBLISH} — this one was not imported, so upload it as an image artifact or drop it`,
+    fix: `this document names ${wanted.length} external assets; the cap is ${MAX_EXTERNAL_ASSETS_PER_PUBLISH} — this one was not imported, so save it beside the document and reference its relative path for afbin push to publish, or drop it`,
   }));
 
 

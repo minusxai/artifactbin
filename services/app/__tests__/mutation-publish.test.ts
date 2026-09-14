@@ -9,7 +9,9 @@ import {observedRequest} from '@/__tests__/conditional-request';
  */
 import { storedMarkup } from '@/test/helpers/echo';
 import { describe, expect, it } from 'vitest';
-import { PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
+import { PATCH as patchArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
+import { viewersWritePolicy } from '@artifactbin/utils';
+import type { DatasetPolicy } from '@artifactbin/contracts';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { POST as previewRoute } from '@/app/api/preview/route';
 import { getArtifactById } from '@/lib/artifacts';
@@ -51,7 +53,7 @@ describe('publishing a document with a <Mutation>', () => {
     expect((row.meta as { refs: Array<{ id: string; kind: string }> }).refs).toEqual([{ id: ds, kind: 'dataset' }]);
   });
 
-  it('refuses a read-only target, naming the toggle', async () => {
+  it('refuses a read-only target, naming the push flag that opens it', async () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token);
     const res = await create(t.token, { markup: POLL(ds) });
@@ -59,7 +61,9 @@ describe('publishing a document with a <Mutation>', () => {
     const text = await details(res);
     expect(text).toMatch(/^invalid_refs/);
     expect(text).toMatch(/read-only/);
-    expect(text).toMatch(/access: readwrite/);
+    // The publish-time refusal is the FIRST one an agent meets, so it names the command it can run.
+    expect(text).toContain('afbin push <file> --type dataset --access readwrite');
+    expect(text).toContain('/api/my/artifacts/');
   });
 
   it('refuses a dataset the publisher does not own, even a public readwrite one', async () => {
@@ -98,6 +102,55 @@ describe('publishing a document with a <Mutation>', () => {
     const pre = await previewRoute(request('/api/preview', { method: 'POST', token: t.token, json: { markup: wrong } }));
     expect(pre.status).toBe(400);
     expect(await details(pre)).toMatch(/needs a <Mutation>/);
+  });
+
+  /*
+   * A DATASET POLICY IS A PUBLISH-TIME CHECK TOO. A `<Mutation>` behind a
+   * button is written once and clicked by everyone the policy speaks for, so
+   * the analysis a click performs runs HERE, with placeholder bindings — a
+   * statement the policy denies, or one that cannot be analyzed at all, is a
+   * 400 naming the mutation, not a button that answers 403 to every viewer.
+   */
+  const setPolicy = async (token: string, id: string, policy: DatasetPolicy) => {
+    const res = await patchArtifactRoute(
+      await observedRequest(`/api/artifacts/${id}`, { method: 'PATCH', token, json: { policy, expectedPolicyRevision: 0 } }),
+      params({ id }),
+    );
+    expect(res.status, await res.clone().text()).toBe(200);
+  };
+  const UPDATES_WHO: DatasetPolicy = {
+    version: 1,
+    enforcement: 'enabled',
+    tables: [{ table: { schema: 'public', name: 'rows' }, update_permissions: [{ role: 'viewer', permission: { columns: ['who'], filter: {}, check: {} } }] }],
+  };
+  const ROW_ACTION = (ds: string, sql: string) =>
+    `<Helmet><Query name="tasks" source="ref:${ds}">{\`select * from public.rows\`}</Query>`
+    + `<Mutation name="claim" source="ref:${ds}">{\`${sql}\`}</Mutation></Helmet>`
+    + '<For each={$tasks} keyBy="choice"><Button run="$claim">Claim</Button></For>';
+
+  it('refuses a mutation the dataset policy denies, naming the mutation and the reason', async () => {
+    const t = await mintToken('t');
+    const ds = await dataset(t.token, { access: 'readwrite' });
+    await setPolicy(t.token, ds, UPDATES_WHO);
+    // The policy permits no INSERT at all …
+    const inserts = await create(t.token, { markup: POLL(ds) });
+    expect(inserts.status, await inserts.clone().text()).toBe(400);
+    const text = await details(inserts);
+    expect(text).toMatch(/^invalid_sql/);
+    expect(text).toContain('<Mutation name="vote">');
+    expect(text).toContain('Dataset policy');
+    // … and no write to `choice`, even from a row action it can analyze.
+    const column = await create(t.token, { markup: ROW_ACTION(ds, `update public.rows set choice='taken' where who=$_row.who`) });
+    expect(column.status).toBe(400);
+    expect(await details(column)).toContain('<Mutation name="claim">');
+  });
+
+  it('publishes a $_row row action a viewers-write policy admits', async () => {
+    const t = await mintToken('t');
+    const ds = await dataset(t.token, { access: 'readwrite' });
+    await setPolicy(t.token, ds, viewersWritePolicy());
+    const res = await create(t.token, { markup: ROW_ACTION(ds, `update public.rows set who='taken' where choice=$_row.choice`) });
+    expect(res.status, await res.clone().text()).toBe(201);
   });
 
   it('the toggle is checked at every write: a PUT after the dataset went read-only is refused', async () => {

@@ -400,14 +400,22 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The file holds exactly this task's agent traffic: its own proxy, and the driver's own setup
   // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
   const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
-  // `startedAtMs` is the anchor `ms_to_first_publish` is measured from; every other number the ledger
-  // answers is a pure function of the entries (`ledgerRows`, which owns `versions` too).
-  const lm = ledgerMetrics(ledger, { startedAtMs });
 
-  // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
-  // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
-  // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
+  // WHICH ARTIFACT THIS RUN IS SCORED ON, decided before the ledger is read rather than after: the
+  // agent need not have used the document the start link named — Claude Opus 5 created its own,
+  // twice — so `scoredArtifactId` picks it (the agent's answer, then the ledger, then the start
+  // document), `used_start_document` records whether it was the one it was given, and the version
+  // counts below are counts of THAT document rather than of every content write.
   const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
+
+  // The three things the caller knows and the ledger cannot: the anchor `ms_to_first_publish` is
+  // measured from, the wall clock `first_version_early` takes its 40% of, and which document the
+  // versions are versions OF. Everything else is a pure function of the entries (`ledgerRows`,
+  // which owns `versions` and `agent_versions` too, and takes the same options for that reason).
+  const ledgerOpts = { startedAtMs, durationMs: spawned.durationMs, ...(targetId ? { documentId: targetId } : {}) };
+  const lm = ledgerMetrics(ledger, ledgerOpts);
+
+  // --- score: product
 
   // AND THEN THE PERSON SHARES IT. Every document the agent made is born PRIVATE to the account, while
   // every read below is anonymous — the reader's view is the whole point of the score — so a flawless
@@ -447,6 +455,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // them gating, rather than reporting an agent that ignored the comment.
   const checked = await runChecks(scorer, {
     task,
+    scoredId: targetId,
     productUrl: r.productUrl,
     startId: start.id,
     token: driverToken,
@@ -476,7 +485,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'approvals', approver ? approver.approved.length : setupApprovals, 'number');
   // Every number the ledger answers, `versions` included, built in ONE pure place (`ledgerRows`) so
   // the count and its caller are one thing to break.
-  for (const row of ledgerRows(ledger)) rec.record(task.id, row.metric, row.value);
+  for (const row of ledgerRows(ledger, ledgerOpts)) rec.record(task.id, row.metric, row.value);
   rec.record(task.id, 'query_rows', queryRows);
   // --- rows: m1 instrumentation. Recorded on EVERY run, as plain rows rather than through `checks`:
   // the check map is gated by what each task grades, and these are observations about the agent, not
@@ -488,6 +497,10 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'ms_to_first_publish', lm.msToFirstPublish);
   rec.record(task.id, 'ms_to_first_url', spawned.firstUrlAtMs);
   rec.record(task.id, 'skeleton_sections', lm.skeletonSections);
+  // …and when a READER first had something to read, which is a different write: `ms_to_first_publish`
+  // stops at the first 2xx write of any kind, and a dataset upload is a URL with nothing on it.
+  // In seconds beside `duration_s`, so the two are comparable at a glance.
+  rec.record(task.id, 's_to_first_markup_write', lm.msToFirstMarkupWrite === null ? null : Math.round(lm.msToFirstMarkupWrite / 100) / 10);
   // --- rows: text
   rec.record(task.id, 'first_error', checked.ok ? (lm.firstError ?? '') : `checks/${checked.step}: ${checked.error}`, 'text');
   rec.record(task.id, 'harness_error', result.error ?? '', 'text');
@@ -525,6 +538,12 @@ async function runTask(r: TaskRun): Promise<Outcome> {
     dataset_created: lm.datasetCreated,
     query_ran: queryRows > 0,
     used_edits_endpoint: lm.usedEditsEndpoint,
+    // PROGRESSION — recorded on every run and gating nothing (no task lists them): did a real
+    // document arrive inside the first 40% of the wall clock, did the run then extend that same
+    // document, and was it written in native markup rather than an `<Iframe>` escape hatch.
+    first_version_early: lm.firstVersionEarly,
+    progressive_edits: lm.progressiveEdits,
+    no_iframe: pm.noIframe,
     used_cli: result.toolCalls===null?null:result.invocations.some(call=>/\bafbin\b/.test(JSON.stringify(call.input))),
     no_local_checkout_reads: checkoutReads === null ? null : checkoutReads === 0,
     // …and last, so a KIND's own answer wins over a common name it also computes.

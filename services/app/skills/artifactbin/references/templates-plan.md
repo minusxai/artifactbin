@@ -95,15 +95,17 @@ annotations, and a compact milestone ledger. Use one accent for screen IDs,
 arrows and active status; use text and shape as well as color. Align drawings
 on a shared grid and vary their size by importance. On narrow containers,
 use `grid-cols-1` before wider column variants and `min-w-0` on panels.
-Stack screens in journey order with readable labels. Wide desktop drawings
+Stack screens in journey order with readable labels.<!--bundle:skip--> Wide desktop drawings
 need a bounded `overflow-x-auto` region and a visible scroll hint. Check
-the document surface itself for clipping, not just the page scroll width. Keep prose to decisions
+the document surface itself for clipping, not just the page scroll width.<!--/bundle:skip--> Keep prose to decisions
 and explanations that the drawings cannot carry.
 
+<!--bundle:skip-->
 Do
 - Show actual content, navigation, primary actions and meaningful state variants.
 - Label each screen and connect it to the flow; give each milestone an acceptance criterion.
 
+<!--/bundle:skip-->
 Don't
 - Substitute a component inventory for wireframes, or a task timeline for screen transitions.
 - Add decorative device frames, giant heroes or tiny diagram labels.

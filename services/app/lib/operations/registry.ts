@@ -461,7 +461,7 @@ const mutateDatasetOp: Operation = {
   errors: [
     NOT_FOUND,
     { status: 400, code: 'not_a_dataset', fix: 'only datasets hold rows — this id is another tier' },
-    { status: 403, code: 'dataset_read_only', fix: 'set access: readwrite on the dataset first' },
+    { status: 403, code: 'dataset_read_only', fix: 'publish the dataset writable first: afbin push <file> --type dataset --access readwrite, or set access: readwrite on it here' },
     { status: 400, code: 'invalid_sql', fix: 'one statement, INSERT/UPDATE/DELETE only, naming a catalog table such as public.rows — the detail says what was wrong' },
     { status: 409, code: 'dataset_full', fix: 'the write would cross the row cap — delete rows or split the dataset' },
     { status: 503, code: 'dataset_busy', fix: 'concurrent writes contended — retry after a moment (Retry-After rides the response)' },

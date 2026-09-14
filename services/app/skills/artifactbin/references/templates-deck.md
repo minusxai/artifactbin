@@ -68,9 +68,11 @@ fixed/sticky are banned — a slide is a tall section):
 
 ACTS AND COLOR RHYTHM (the interleaving that makes it feel designed):
 - EVERY deck ships at least one full-bleed solid-accent divider slide, however short it is.
+<!--bundle:skip-->
   A deck of quiet paper slides is the failure this genre exists to prevent — the divider is
   not decoration you drop when slides are scarce, it is the one slide that makes the rest
   read as a deck. Asked for N slides, the divider is one of the N; spend it, don't skip it.
+<!--/bundle:skip-->
 - Group slides into 2-4 numbered acts, and each act OPENS with a divider. Under 6 slides,
   run ONE act: cover → divider → content → content → close. Above that, one divider per act.
 - The divider is a `<Slide>` like every other (the skeleton's second), minus the header
@@ -98,19 +100,23 @@ SLIDE TYPES (pick per beat; each stays one idea):
   (`valueColor` = the accent, huge `valueFontSize`) — plus a two-line muted caption. NOTHING else.
   Use once or twice as an act's exclamation point.
 - Table slide: a compact table; uppercase tracked `<th>`, hairline row rules, `tabular-nums`.
+<!--bundle:skip-->
 - Quote slide: display-size quote in `text-muted-foreground` (softer than headlines, not black),
   hanging quote mark, `— attribution` line. A breather between dense slides.
 - Timeline: a horizontal rail — uppercase tracked date labels over square nodes over bold
   labels + muted notes, one left edge per milestone; the CURRENT step is the one accent square.
+<!--/bundle:skip-->
 - Cover and Close share one grammar — the skeleton's cover. The close restates the lead
   number and the next step, then contact.
 
+<!--bundle:skip-->
 Do
 - Ship at least one solid-accent divider slide — a five-slide deck still gets one.
 - Speakable headlines; huge type, few words; the air below the content.
 - At most a cover entrance (`animate-fade-up`, staggered) — slides page, they don't
   perform.
 - One accent element per figure; contents ↔ dividers mirrored to the word.
+<!--/bundle:skip-->
 Don't
 - Ship a deck of nothing but paper slides; color a CONTENT slide's ground (the divider is
   the exception, and it is the only one).

@@ -138,10 +138,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
-  if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
+  if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
   if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
-   const result=await finishLocalPush(workspace,positionals,!!flags.force);if(result){emit(result);return 0;}
+   const result=await finishLocalPush(workspace,positionals,{force:!!flags.force,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(result){emit(result);return 0;}
   }
   if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined);if(!targets.length){emit({operations:[]});return 0;}}
   let commentBody=typeof flags.body==='string'?flags.body:undefined;
@@ -198,7 +198,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='push'&&!account&&typeof flags['secret-env']==='string'){secretBinding=await bindDatasetSecret(workspace,positionals,client,context.env??process.env,flags['secret-env'],!!flags['dry-run']);if(secretBinding.dry_run){emit(secretBinding);return 0;}}
   if(command==='push'&&!account&&markdownPlan?.conversions.length&&!flags['dry-run']){await commitMarkdown(markdownPlan);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account){
-   const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run']});
+   const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});
    // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and
    // grepped their own document for 5–13 calls (eval runs 34740707220–34741910427). Say it once, here.
    const published=!flags['dry-run']&&result.operations.some(op=>'status' in op&&op.status==='published');
@@ -222,9 +222,59 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  }catch(error){
   const failure=error instanceof ApprovalRequired?{code:error.code,message:error.message,verification_url:error.verificationUrl,user_code:error.userCode,expires_at:new Date(error.expiresAt).toISOString()}:error instanceof CliError?{code:error.code,message:error.message,...(error.fix?{fix:error.fix}:{}),...(error.details?{details:error.details}:{})}:{code:'operation_failed',message:error instanceof Error?error.message:String(error)};
   if(json)stdout(JSON.stringify({error:failure})+'\n');
-  stderr(`${style.red(style.bold(failure.code))}: ${failure.message}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
+  const diagnosed=refusalDetails(failure.message,'details'in failure?failure.details:undefined);
+  stderr(`${style.red(style.bold(failure.code))}: ${withoutCode(failure.code,failure.message)}${diagnosed.length?`\n${diagnosed.join('\n')}`:''}${'fix'in failure&&failure.fix?`\n${style.dim(failure.fix)}`:''}\n`);
   return error instanceof CliError?error.exitCode:1;
  }
+}
+/**
+ * THE CODE, ONCE. A refusal's message carries its own code wherever it is read — `http.ts` builds it
+ * as `<code>: <text>` so a message quoted on its own still names what was refused — and this printer
+ * puts the code in front of every human line. Together they read `invalid_sql: invalid_sql: …`.
+ *
+ * The fix belongs HERE, in the one place a refusal becomes human text, and not in `http.ts`: the
+ * message is also the `--json` envelope's `message`, which callers and tests read, so trimming it at
+ * the source would change the contract to fix the presentation. The printed line drops a prefix the
+ * printer is about to write itself; nothing else sees a different string.
+ */
+const withoutCode=(code:string,message:string):string=>message.startsWith(`${code}: `)?message.slice(code.length+2):message;
+/** How many failing files a refusal names before it stops; the rest are one counted line. */
+const MAX_REFUSAL_FILES=3;
+/**
+ * THE DIAGNOSIS THE REFUSAL ALREADY CARRIES, as human lines.
+ *
+ * Every CliError may hold `details`, and `--json` has always printed them; the human text printed
+ * the message and the fix and nothing else. So a refused push read
+ *
+ *     validation_failed: Local validation failed.
+ *     Run afbin validate and correct the reported errors.
+ *
+ * and the agent's next call was `afbin validate` — a whole turn to READ a message it had already
+ * been handed (claude-code scrolly, production run 15, calls 16–17). Two shapes reach here and both
+ * are already in hand: a local validation's per-file diagnostics, and the `details` strings a server
+ * refusal carries (a bad column, a refused SQL function).
+ *
+ * Printed ONCE: `http.ts` builds the message out of those same strings when the server sends no
+ * message of its own, so a line the message already contains is dropped rather than repeated. Only
+ * the two known shapes are read — `{http_status:401}` on auth_required is a detail for `--json`,
+ * not a line for a person — and a repair NOTICE is not a failure, so it is not the file's diagnostic.
+ */
+function refusalDetails(message:string,details:unknown):string[]{
+ if(!details||typeof details!=='object')return [];
+ const lines:string[]=[];
+ const files=(details as {files?:unknown}).files;
+ if(Array.isArray(files)){
+  const failed=files.filter((file):file is {path:string;diagnostics:Array<{message?:unknown;severity?:unknown}>}=>
+   !!file&&typeof file==='object'&&(file as {valid?:unknown}).valid===false&&typeof (file as {path?:unknown}).path==='string'&&Array.isArray((file as {diagnostics?:unknown}).diagnostics));
+  for(const file of failed.slice(0,MAX_REFUSAL_FILES)){
+   const first=file.diagnostics.find(diagnostic=>!!diagnostic&&typeof diagnostic.message==='string'&&diagnostic.severity!=='notice');
+   if(first)lines.push(`${file.path}: ${first.message as string}`);
+  }
+  if(failed.length>MAX_REFUSAL_FILES)lines.push(`… and ${failed.length-MAX_REFUSAL_FILES} more files; run afbin validate for the rest.`);
+ }
+ const strings=(details as {details?:unknown}).details;
+ if(Array.isArray(strings))lines.push(...strings.filter((detail):detail is string=>typeof detail==='string'));
+ return lines.filter(line=>!message.includes(line));
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
 export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
