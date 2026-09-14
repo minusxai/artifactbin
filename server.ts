@@ -101,8 +101,8 @@ async function main(): Promise<void> {
     setServices({ sql: createSql({ maxRows: MAX_QUERY_ROWS, timeoutMs: QUERY_TIMEOUT_MS }) });
   }
   if (!BROWSER_SERVICE_URL) {
-    const { createBrowser } = await import('@artifactbin/browser/local');
-    setServices({ browser: createBrowser() });
+    const { createBrowser, sessionProcessPaths } = await import('@artifactbin/browser/local');
+    setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL, request: async (request, actor) => inProcess(app)(request, actor) } }) });
   }
   if (!EVENTS_SERVICE_URL) {
     const { backfillAnalyticsEvents, createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');

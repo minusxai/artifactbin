@@ -93,7 +93,7 @@ const PROBE = `<Helmet><title>Sec Probe</title><Value name="probe" type="string"
   var id = location.pathname.split('/')[2] || 'unknown';
   fetch('/a/' + id + '/query?q=%7B%7D').then(function(r){ out.ownQuery = 'OK ' + r.status; render(); }, function(){ out.ownQuery = 'blocked'; render(); });
   fetch('/a/' + id + '/start', { method: 'POST' }).then(function(r){ out.start = 'OK ' + r.status; render(); }, function(){ out.start = 'blocked'; render(); });
-  function render(){ mx.params.set('probe', JSON.stringify(out)); }
+  function render(){ void mx.set({probe:JSON.stringify(out)}); }
   render();
 })();
 \`}</script></Helmet>

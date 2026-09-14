@@ -263,9 +263,9 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
   const AUTHOR = [
     "for (const kind of ['like','follow','edit']) top.postMessage({type:'mx:reader-action',kind},'*');",
     "top.postMessage({type:'mx:text-edit',path:'0',nonce:'guessed',innerHtml:'FORGED'},'*');",
-    "mx.mutate('undeclared').then(()=>mx.params.set('mutation','escaped'),()=>mx.params.set('mutation','refused'));",
-    'mx.params.subscribe(values=>{ if (values.output !== values.input * 2) mx.params.set("output", values.input * 2); });',
-    "mx.params.set('input',3);",
+    "mx.mutate('undeclared').then(()=>mx.set({mutation:'escaped'}),()=>mx.set({mutation:'refused'}));",
+    'mx.subscribe(["input","output"],snapshot=>{const input=snapshot.signals.input.value;if(snapshot.signals.output.value!==input*2)void mx.set({output:input*2});});',
+    "mx.set({input:3});",
   ].join('\n');
   const scripted = (code) => '<Helmet>'
     + '<Value name="mutation" type="string" default="waiting" />'
@@ -306,7 +306,7 @@ check(await afterRealm.evaluate("document.querySelectorAll('#script-made').lengt
 
   // A changed script replaces its old realm, and a removed script revokes it.
   const oldRealm = await f4.locator('iframe[title="Isolated artifact script"]').elementHandle();
-  await api(`/api/artifacts/${isolated.id}`, { markup: scripted("mx.params.set('output',77)") }, 'PUT');
+  await api(`/api/artifacts/${isolated.id}`, { markup: scripted("mx.set({output:77})") }, 'PUT');
   await f4.waitForFunction(() => document.querySelector('#probe-output')?.textContent === '77', null, { timeout: 20000 });
   check(await oldRealm.evaluate((el) => el.isConnected) === false, 'a changed script replaces its old realm');
   await api(`/api/artifacts/${isolated.id}`, { markup: '<h1 id="heading">Script removed</h1><Card>Still interactive</Card>' }, 'PUT');

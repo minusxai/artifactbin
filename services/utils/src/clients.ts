@@ -48,6 +48,14 @@ export function sqlClient(url: string, opts: { deadlineMs?: number; serviceSecre
 export function browserClient(url: string, opts: { deadlineMs?: number; serviceSecret?: string } = {}): BrowserService {
   const deadline = opts.deadlineMs ?? 30_000;
   return {
+    sessions: {
+      async request(input) {
+        const response = await fetch(`${url}${BROWSER_ROUTES.sessions}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(opts.serviceSecret ? { [SERVICE_AUTH_HEADER]: opts.serviceSecret } : {}) }, body: JSON.stringify(input), signal: AbortSignal.timeout(deadline) });
+        if (!response.ok) throw new Error(`Browser session service returned ${response.status}`);
+        return response.json();
+      },
+      async close() {},
+    },
     async render(req: RenderRequest): Promise<RenderResult> {
       try {
         const res = await fetch(`${url}${BROWSER_ROUTES.render}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(opts.serviceSecret ? { [SERVICE_AUTH_HEADER]: opts.serviceSecret } : {}) }, body: JSON.stringify(req), signal: AbortSignal.timeout(deadline) });

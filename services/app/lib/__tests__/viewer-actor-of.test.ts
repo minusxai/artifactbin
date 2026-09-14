@@ -4,8 +4,9 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
-import { ACTOR_HEADER } from '@artifactbin/contracts';
+import { ACTOR_HEADER, BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
 import { sessionActor } from '@/lib/viewer';
+import { mintToken, revokeToken } from '@/lib/tokens';
 
 describe('sessionActor', () => {
   it('prefers the actor attached to the Request over any header', async () => {
@@ -19,6 +20,17 @@ describe('sessionActor', () => {
     const actor = await sessionActor(new Request('http://x/api/page/session'));
     expect(actor.credential).toBe('none');
     expect(actor.viewer).toBeNull();
+  });
+
+  it('revalidates a long-lived browser session identity after its token is revoked', async () => {
+    const token = await mintToken('mxmx_test_browser_session');
+    const request = new Request('http://x/a/abc123', { headers: { [BROWSER_SESSION_HEADER]: '1' } });
+    attachActor(request, { credential: 'bearer', tokenId: token.id });
+    try {
+      expect((await sessionActor(request)).tokenId).toBe(token.id);
+      await revokeToken(token.id);
+      expect(await sessionActor(request)).toMatchObject({ credential: 'none', tokenId: null, viewer: null });
+    } finally { await revokeToken(token.id); }
   });
 
   /*

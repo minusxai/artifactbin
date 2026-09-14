@@ -187,9 +187,9 @@ if (island?.textContent && root) {
 
     /*
      * THE AUTHOR'S SCRIPT RUNS AT THE FIRST COMMIT, and paint-first changes
-     * what it finds there: the rows are no longer inlined, so `mx.data.get()`
+     * what it finds there: the rows are no longer inlined, so `mx.read()`
      * is empty for the moment it takes the document to fetch them. A script
-     * that needs its rows subscribes (`mx.data.subscribe`), which skills/markup
+     * that needs its rows subscribes (`mx.subscribe`), which skills/markup
      * now teaches.
      *
      * It was worth trying the other way — hold the script until the first run
@@ -273,7 +273,7 @@ if (island?.textContent && root) {
       applyDocumentChrome(document, update, readerOverride);
       // Absent declarations mean the data did not change — replacing the flow
       // with an empty one would drop every table the reader is looking at.
-      if (update.dataflow) store.replaceFlow(update.dataflow);
+      if (update.dataflow) { store.replaceFlow(update.dataflow); installMx(store); }
       if (update.authorScript !== undefined) authorSession?.replace(update.authorScript);
       current = {
         ...current,

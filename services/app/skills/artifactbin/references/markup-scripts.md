@@ -23,22 +23,24 @@ bridge plus anonymous cached assets.
 
 `window.mx` is defined before the script runs:
 
-- `mx.params.get(name)`, `.set(name, value)`, `.subscribe(names, fn)`: declared scalar
-  signals. Writes re-run dependent queries and update bound embeds. A set crosses
-  an asynchronous channel; an immediate get can return the preceding snapshot.
-  Subscribe to observe the accepted value. The subscription returns an unsubscribe
-  function. Pass explicit names, e.g. `mx.params.subscribe(['count'], fn)`;
-  callbacks receive only selected values when relevant state changes.
-- `mx.data.get(name)`: a detached `{rows, columns}` result, or undefined before it
-  arrives. **Rows arrive after the script starts**; use `mx.data.subscribe(['results'], fn)`.
-  Subscribers receive `(selectedState, pendingNames)`. `.pending()` returns pending names.
-  Both subscription APIs retain broad `.subscribe(fn)` compatibility.
-- `mx.refresh(names?)`: refresh all queries or the named declared queries.
-- `mx.canMutate(name)` and `mx.mutationReason(name)`: current permission and denial
-  reason (null when allowed). Permissions arrive asynchronously and can be revoked;
-  use `mx.data.subscribe(fn)` to update action controls.
-- `await mx.mutate(name, values?)`: run a declared mutation with optional scalar
-  signal overrides. Store and server permissions still apply; failures reject.
+Author a classic script body, without `import` or `export` declarations.
+`describe()` returns arrays, not dictionaries:
+`{instanceEpoch, signals:[{name, kind, writable, type?, columns?}], mutations:[{name, scope, args, available, unavailableReason}]}`.
+List names with `description.signals.map(signal => signal.name)` and
+`description.mutations.map(mutation => mutation.name)`.
+
+- `await mx.describe()` lists scalar/table/query signals and declared mutations with their arguments and current availability.
+- `await mx.read(['count', 'results'], options?)` returns `{instanceEpoch, revision, signals}`. Each selected signal is `{value, status, error?}`; status is `ready`, `pending`, or `error`. Scalars are primitive values; tables are detached `{columns, rows, truncated?}` objects. Query rows may be null before the first result. This reads authoritative host state, including across the iframe boundary.
+- `await mx.read(['results'], {wait:true})` waits for selected queries to settle. `{refresh:true}` forces selected queries to rerun and waits. Refresh accepts query names only. `timeoutMs` defaults to 10000, capped at 30000; a timeout rejects with `code: 'TIMEOUT'` and the latest `snapshot`.
+- `await mx.set({count: 2})` validates the entire scalar patch before writing. Bound controls update and dependent queries rerun. Tables and query results cannot be set. The acknowledgment includes `instanceEpoch` and `revision`; it does not wait for queries.
+- `await mx.mutate('save', {count: 3})` executes a declared mutation with per-call arguments, without changing scalar signals. It returns `{operationId, scope, status:'committed'}`. Declared row/cell parameters can be passed as `{_row:{id:1}, _value:3}`. Permissions still apply; a concurrent call to the same mutation rejects with `BUSY`. A committed write is not undone by a later refresh failure.
+- `const stop = mx.subscribe(['count', 'results'], snapshot => { ... })` delivers an asynchronous initial snapshot and subsequent selected value/status/error changes. It coalesces rapid updates. `stop()` is synchronous and idempotent; call it on `pagehide`. Callback arguments have exactly the same shape as `read()`.
+
+Use `snapshot.signals.results.value.rows`, not `snapshot.results` or `snapshot.tables`.
+Render pending and error states explicitly. Keep event handlers in `try/catch/finally`
+so failed writes restore disabled controls. Do not await a never-ending lifetime
+promise at module top level: finish startup, register handlers, and return.
+Errors expose `code` and `message`; query errors are also carried on their signal.
 
 Only currently declared signals, queries, and mutations are accepted. There is
 no script API for liking, following, commenting, source edits, arbitrary URLs,

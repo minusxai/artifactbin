@@ -28,7 +28,7 @@ const doc1 = (ds_) => `<Helmet><title>Dataflow gate</title><Value name="region" 
 <Query name="sales" source="ref:${ds_}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>
 </Helmet><div data-design="tw" className="@container p-8"><h1 className="text-3xl font-bold">Sales</h1>
 <select aria-label="Region" value="$region" options="$regions" />
-<Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`var out = document.getElementById('out'); var changed = false; function show() { if (changed) return; var t = mx.data.get('sales'); out.textContent = 'mx:' + (typeof mx) + ' rows=' + (t ? t.rows.length : 0); } show(); mx.data.subscribe(['sales'], show); mx.params.subscribe(['region'], function (v) { changed = true; out.textContent = 'changed:' + v.region; });\`}</script></Iframe>
+<Iframe title="Dataflow script" height={100}><p id="out">pending</p><script>{\`const out=document.getElementById('out');let initial;mx.subscribe(['sales','region'],snapshot=>{const region=snapshot.signals.region.value;if(initial===undefined)initial=region;if(region!==initial){out.textContent='changed:'+region;return;}const table=snapshot.signals.sales.value;out.textContent='mx:'+typeof mx+' rows='+(table?table.rows.length:0);});\`}</script></Iframe>
 <p>Total <Number data="$sales" col="revenue" agg="sum" prefix="$" /></p>
 <Question title="Revenue by region" data="$sales" viz={{"kind":"table"}} height="300px" /></div>`;
 const doc = await j(await api('/api/artifacts', { markup: doc1(ds.id) }));
@@ -69,7 +69,7 @@ const managedRealm = async host => {
 };
 /*
  * PAINT FIRST moved what an author script finds at startup. The rows are no
- * longer inlined, so `mx.data.get()` is empty for the round trip it takes to
+ * longer inlined, so `mx.read()` is empty for the round trip it takes to
  * fetch them — a script that needs them SUBSCRIBES, which is what the document
  * above does and what /docs/llm teaches. The script still runs at the first
  * commit; only the data is late.
@@ -78,7 +78,7 @@ const scriptRealm = await managedRealm(frame);
 await scriptRealm.waitForFunction(() => document.getElementById('out')?.textContent?.startsWith('mx:'), null, { timeout: 20000 }).catch(() => {});
 check(/^mx:object /.test(await scriptRealm.textContent('#out').catch(() => '')), 'window.mx is defined when the managed author script runs');
 await scriptRealm.waitForFunction(() => /rows=2/.test(document.getElementById('out')?.textContent ?? ''), null, { timeout: 20000 }).catch(() => {});
-check(/^mx:object rows=2/.test(await scriptRealm.textContent('#out').catch(() => '')), 'and its query rows reach the managed script through mx.data.subscribe');
+check(/^mx:object rows=2/.test(await scriptRealm.textContent('#out').catch(() => '')), 'and its query rows reach the managed script through mx.subscribe');
 check(!pageErrors.some((e) => /hydrat/i.test(e)), 'no hydration error — the author script ran after the first commit');
 const options = await frame.$$eval('select[aria-label="Region"] option', (os) => os.map((o) => o.value + '=' + o.textContent));
 check(JSON.stringify(options) === JSON.stringify(['=All', 'EU=EU', 'NA=NA']), `the bound select lists the query (All + values): ${options.join(' ')}`);
@@ -100,7 +100,7 @@ check((await frame.textContent('[aria-label="Live number"]')) === '$1,200', 'cha
 const busy = await frame.evaluate(() => ({ seen: window.__busySeen, flash: window.__flashSeen, now: document.querySelector('[aria-label="Question embed"]').getAttribute('aria-busy') }));
 check(busy.seen && !busy.flash && busy.now === 'false', `the embed showed the busy state during the re-run and cleared it (busy=${busy.seen}, flash=${busy.flash})`);
 check(!/EU/.test(await frame.textContent('[aria-label="Data table"]')), 'and the table shows only the selected region');
-check((await scriptRealm.textContent('#out')) === 'changed:NA', 'the managed author script saw the change through mx.params.subscribe');
+check((await scriptRealm.textContent('#out')) === 'changed:NA', 'the managed author script saw the change through mx.subscribe');
 check(directCalls.length === 0 && relayCalls.some(call => call.body.values?.region === 'NA'), `the scoped query POST carries the selected value (${directCalls.length} GET, ${relayCalls.length} POST)`);
 await frame.selectOption('select[aria-label="Region"]', '');
 await frame.waitForFunction(() => document.querySelector('[aria-label="Live number"]')?.textContent === '$2,040', null, { timeout: 15000 }).catch(() => {});

@@ -28,6 +28,7 @@
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
+  { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
   { name: 'comment-targets', needsMail: false, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, timeoutMs: 60_000 },
   { name: 'generation-mutations', needsMail: false, needsGenerationFixture: true, timeoutMs: 70_000 },

@@ -75,7 +75,7 @@ try {
     await page.waitForTimeout(100);
   }
   assert(inner, "managed composer frame mounted");
-  await inner.waitForFunction(() => window.mx.canMutate('step'), null, {timeout: 15000}).catch(async error => { throw new Error(`${error.message}; capability: ${await inner.evaluate(() => window.mx.mutationReason('step'))}`); });
+  await inner.waitForFunction(async () => (await window.mx.describe()).mutations.find(m=>m.name==='step')?.available, null, {timeout: 15000}).catch(async error => { throw new Error(`${error.message}; capability: ${await inner.evaluate(async () => (await window.mx.describe()).mutations.find(m=>m.name==='step')?.unavailableReason)}`); });
   await inner.getByRole("button", { name: "Do it", exact: true }).click();
   await inner.getByText("Saved", { exact: true }).waitFor({ timeout: 40_000 }).catch(async error => { throw new Error(`${error.message}; composer status: ${await inner.locator("#status").textContent()}`); });
   assert.equal(await count(), before + 1, "slow narration should run once");
@@ -104,7 +104,7 @@ try {
   assert.equal(refusal.status(), 400);
   assert.equal((await refusal.json()).detail, "Model output is not valid JSON");
   await inner
-    .getByText("Script operation failed or permission denied", { exact: true })
+    .getByText("Model output is not valid JSON", { exact: true })
     .waitFor()
     .catch(async (error) => {
       throw new Error(

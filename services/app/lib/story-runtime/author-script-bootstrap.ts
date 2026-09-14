@@ -21,14 +21,14 @@ ${AUTHOR_REALM_LOCKDOWN}
     const port = event.ports[0];
     const send = port.postMessage.bind(port);
     let comments = null, commentState = null;
-    let state = { values: {}, tables: {}, errors: {}, mutationAccess: {} }, pending = [], sequence = 0, started = false;
-    const waiting = new Map(), valuesListeners = new Set(), dataListeners = new Set();
-    const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key) ? object[key] : undefined;
+    let sequence = 0, started = false, closed = false;
+    const waiting = new Map(), subscriptions = new Map();
     const copy = value => structuredClone(value);
     const request = payload => new Promise((resolve, reject) => {
-      if (waiting.size >= 128) { reject(new Error('Too many pending script requests')); return; }
+      if (closed) { reject(Object.assign(new Error('Iframe disposed'),{code:'STALE_INSTANCE'})); return; }
       const id = ++sequence;
-      const timer = setTimeout(() => { waiting.delete(id); reject(new Error('Script request timed out')); }, payload.op === 'mutate' ? ${MUTATION_REPLY_TIMEOUT_MS} : 15000);
+      if (waiting.size >= 128) { reject(new Error('Too many pending script requests')); return; }
+      const timer = setTimeout(() => { waiting.delete(id); reject(Object.assign(new Error('Script request timed out; recover committed effects before retrying'),{code:'TIMEOUT'})); }, payload.op === 'mutate' ? ${MUTATION_REPLY_TIMEOUT_MS} : payload.op === 'read' ? 35000 : 15000);
       waiting.set(id, { resolve, reject, timer });
       send({ id, ...payload });
     });
@@ -36,72 +36,44 @@ ${AUTHOR_REALM_LOCKDOWN}
     addEventListener('error', event => send({type:'author-error',error:event.message || 'Iframe script failed'}));
     addEventListener('unhandledrejection', event => send({type:'author-error',error:String(event.reason?.message || event.reason || 'Iframe script failed')}));
     addEventListener('pagehide', () => {
+      closed = true;
       comments?.dispose();
-      assetAbort?.abort(); valuesListeners.clear(); dataListeners.clear();
+      assetAbort?.abort(); subscriptions.clear();
       for (const task of waiting.values()) { clearTimeout(task.timer); task.reject(new Error('Iframe disposed')); }
       waiting.clear(); port.close();
     });
     const report = error => console.error('[artifact script]', error.message);
-    const subscribe = listeners => (names, listener) => {
-      if (typeof names === 'function' && listener === undefined) { listener = names; names = null; }
-      if (typeof listener !== 'function') throw new TypeError('Expected a listener');
-      if (names !== null && (!Array.isArray(names) || names.length > 128 || names.some(name => typeof name !== 'string' || !name.length || name.length > 128 || ['__proto__','prototype','constructor'].includes(name)))) throw new TypeError('Expected at most 128 valid names');
-      if (listeners.size >= 128) throw new Error('Too many script subscriptions');
-      const entry = { names: names === null ? null : [...new Set(names)], listener };
-      listeners.add(entry); return () => listeners.delete(entry);
-    };
-    const select = (object, names) => names === null ? object : Object.fromEntries(names.filter(name => Object.prototype.hasOwnProperty.call(object, name)).map(name => [name, object[name]]));
-    const relevant = (names, changed) => names === null ? changed.length > 0 : names.some(name => changed.includes(name));
-    const mx = {
-      params: {
-        get: name => own(state.values, name) ?? null,
-        set: (name, value) => { void request({ op: 'set', name, value }).catch(report); },
-        subscribe: subscribe(valuesListeners)
-      },
-      data: {
-        get: name => copy(own(state.tables, name)),
-        pending: () => [...pending],
-        subscribe: subscribe(dataListeners)
-      },
-      refresh: names => { void request({ op: 'refresh', ...(names === undefined ? {} : { names }) }).catch(report); },
-      canMutate: name => own(state.mutationAccess, name) === null,
-      mutationReason: name => own(state.mutationAccess, name) ?? (Object.prototype.hasOwnProperty.call(state.mutationAccess, name) ? null : 'Checking edit access…'),
-      mutate: (name, values) => request({ op: 'mutate', name, ...(values === undefined ? {} : { values }) })
-    };
+    const mx = Object.freeze({
+      describe: () => request({ op: 'describe' }),
+      read: (names, options) => request({ op: 'read', names, options }),
+      set: values => request({ op: 'set', values }),
+      mutate: (name, args) => request({ op: 'mutate', name, args }),
+      subscribe: (names, callback) => {
+        if (!Array.isArray(names) || names.length > 256 || names.some(name => typeof name !== 'string')) throw new TypeError('Expected declared signal names');
+        if (typeof callback !== 'function') throw new TypeError('Expected a snapshot callback');
+        if (subscriptions.size >= 128) throw new Error('Too many script subscriptions');
+        const id = sequence + 1;
+        let active = true;
+        subscriptions.set(id, callback);
+        void request({ op: 'subscribe', names }).catch(error => { subscriptions.delete(id); report(error); });
+        return () => {
+          if (!active) return;
+          active = false; subscriptions.delete(id);
+          if (!closed) void request({ op: 'unsubscribe', subscription: id }).catch(report);
+        };
+      }
+    });
     Object.defineProperty(window, 'mx', { value: mx, writable: false, configurable: false });
     port.onmessage = async event => {
       const message = event.data;
       if (message.type === 'comment-state') {
         commentState = message; comments?.update(message);
-      } else if (message.type === 'state') {
-        if (message.reset) state = { values: {}, tables: {}, errors: {}, mutationAccess: {} };
-        const changed = { values: [], tables: [], errors: [], mutationAccess: [] };
-        for (const field of ['values', 'tables', 'errors', 'mutationAccess']) {
-          for (const [name, value] of Object.entries(message.state[field] || {})) {
-            if (value === undefined) {
-              if (Object.prototype.hasOwnProperty.call(state[field], name)) { delete state[field][name]; changed[field].push(name); }
-            } else if (!Object.is(own(state[field], name), value)) {
-              Object.defineProperty(state[field], name, { value, enumerable: true, configurable: true, writable: true });
-              changed[field].push(name);
-            }
-          }
+      } else if (message.type === 'signals') {
+        for (const {subscription, snapshot} of message.updates) {
+          const callback = subscriptions.get(subscription);
+          if (callback) { try { callback(copy(snapshot)); } catch (error) { report(error); } }
         }
-        const nextPending = message.pending === undefined ? pending : message.pending;
-        const pendingChanges = [...pending.filter(name => !nextPending.includes(name)), ...nextPending.filter(name => !pending.includes(name))];
-        pending = nextPending;
-        for (const {names, listener} of valuesListeners) {
-          if (!relevant(names, changed.values)) continue;
-          try { listener(copy(select(state.values, names))); } catch (error) { report(error); }
-        }
-        for (const {names, listener} of dataListeners) {
-          const dataChanges = [...changed.tables, ...changed.errors, ...pendingChanges];
-          if (!relevant(names, names === null ? [...dataChanges, ...changed.values, ...changed.mutationAccess] : dataChanges)) continue;
-          const selected = names === null ? state : { values: {}, tables: select(state.tables, names), errors: select(state.errors, names) };
-          try { listener(copy(selected), names === null ? [...pending] : pending.filter(name => names.includes(name))); } catch (error) { report(error); }
-        }
-        // Backpressure: the host keeps at most one unacknowledged state packet.
-        // A slow child cannot accumulate snapshots; mutation commands stay FIFO.
-        send({ type: 'state-ack' });
+        send({ type: 'signals-ack' });
       } else if (message.type === 'run' && !started) {
         started = true;
         try {
@@ -138,7 +110,7 @@ ${AUTHOR_REALM_LOCKDOWN}
         } catch (error) { send({type:'author-error',error:String(error.message || error)}); }
       } else if (waiting.has(message.id)) {
         const task = waiting.get(message.id); waiting.delete(message.id); clearTimeout(task.timer);
-        if (message.ok) task.resolve(message.value); else task.reject(new Error(message.error));
+        if (message.ok) task.resolve(message.value); else task.reject(Object.assign(new Error(message.error?.message || message.error), {code: message.error?.code || 'OPERATION_FAILED', ...(message.snapshot ? {snapshot: message.snapshot} : {})}));
       }
     };
     port.start();

@@ -1,3 +1,4 @@
+import type { BrowserSessions } from './browser-sessions';
 /**
  * THE BROWSER SERVICE — a Chromium that renders a URL to an image. Stateless:
  * the app hands it a URL (carrying its own short-lived signed key) and gets
@@ -51,8 +52,9 @@ export type RenderResult =
 
 export interface BrowserService {
   render(request: RenderRequest): Promise<RenderResult>;
+  sessions?: BrowserSessions;
   /** Release the browser (a local implementation holds one); a client has nothing to release. */
   close?(): Promise<void>;
 }
 
-export const BROWSER_ROUTES = { render: '/render' } as const;
+export const BROWSER_ROUTES = { render: '/render', sessions: '/sessions' } as const;

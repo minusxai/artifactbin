@@ -1,3 +1,6 @@
+export { sessionProcessPaths } from './session-config';
+import { createBrowserSessions } from './sessions';
+import { createSessionProcess, type SessionProcessOptions } from './session-process';
 /**
  * CHROMIUM, IN THIS PROCESS. The only entry of this package that loads
  * Playwright; import it from a composition root only. One browser, launched
@@ -27,7 +30,7 @@ export function requestOriginAllowed(target:string,pageOrigin:string,allowedOrig
   try{return new Set([pageOrigin,...allowedOrigins]).has(new URL(target).origin);}catch{return false;}
 }
 
-export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserService & { close(): Promise<void> } {
+export function createBrowser(opts: { idleShutdownMs?: number; sessions?: SessionProcessOptions } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
   let browser: Promise<Browser> | undefined;
   let chain: Promise<unknown> = Promise.resolve();
@@ -179,7 +182,12 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
     }
   }
 
+  const sessions = createBrowserSessions(actor => {
+    if (!opts.sessions) throw new Error('Browser session forwarding is not configured');
+    return createSessionProcess(actor, opts.sessions);
+  });
   return {
+    sessions,
     render(req): Promise<RenderResult> {
       const run = chain.then(() => shoot(req)).then(
         (r): RenderResult => ({ ok: true, ...r }),
@@ -193,6 +201,6 @@ export function createBrowser(opts: { idleShutdownMs?: number } = {}): BrowserSe
       chain = run;
       return run;
     },
-    close,
+    async close() { await sessions.close(); await close(); },
   };
 }

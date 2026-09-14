@@ -428,6 +428,68 @@ jobs:
           include-hidden-files: true
           retention-days: 14
 
+  # Explicit opt-in for the held-out interface benchmark; paid trials never join ordinary unit tests.
+  mx-agent-trials:
+    needs: [plan]
+    name: mx agent trials (${{ matrix.track }})
+    if: >-
+      github.event_name == 'pull_request' &&
+      contains(github.event.pull_request.labels.*.name, 'mx-agent-trials') &&
+      vars.AGENT_SMOKE_ENABLED == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        track: [iframe, session]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+          cache: npm
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v2-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm i -g @earendil-works/pi-coding-agent@0.77.0
+      - run: npm run build -w services/cli
+      - run: npm run build:binary -w services/cli
+      - run: npm run build
+      - name: Isolate the agent and prepare bounded session workers
+        run: |
+          sudo useradd --no-log-init --create-home --shell /bin/bash eval-agent
+          chmod 700 "$GITHUB_WORKSPACE"
+          if sudo -n -u eval-agent test -r "$GITHUB_WORKSPACE/package.json"; then exit 1; fi
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
+          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
+          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
+      - name: Eight tasks, three first attempts each, no grader feedback
+        run: |
+          umask 077
+          npx tsx evals/scripts/mx-live-trials.mjs '${{ matrix.track }}' "$RUNNER_TEMP/mx-trial-metrics"
+        env:
+          FIREWORKS_API_KEY: ${{ secrets.FIREWORKS_API_KEY }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ !cancelled() }}
+        with:
+          name: mx-trial-metrics-${{ matrix.track }}
+          path: ${{ runner.temp }}/mx-trial-metrics/
+          retention-days: 14
+
   # THE BROWSER GATES, which until now were a MANUAL pre-merge ritual — 34
   # scripts guarding invariants CLAUDE.md calls load-bearing, run by whoever
   # remembered. They were unaffordable in CI at ~25 minutes, and they were 25
@@ -507,11 +569,27 @@ jobs:
       # before the run keeps that cost out of the gate's own timeout budget.
       - name: pull the Postgres image the datasets gate needs
         run: docker pull postgres:17-alpine
+      - run: npm run build -w services/cli
+      - name: Prepare isolated browser session workers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
+          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
+          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: every gate, four servers
         run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/4
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: browser-session-images-${{ matrix.shard }}
+          path: tmp/browser-session-evidence/*.png
+          if-no-files-found: ignore
 
   # THE IMAGE IS THE ARTIFACT THAT DEPLOYS, and nothing else here proves it
   # builds or runs. `npm run build` produces the bundle from the FULL
@@ -744,7 +822,7 @@ jobs:
     name: job timings
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [plan, checks, node, ui, build, api, gates, image, compose, cli, agent-smoke, test]
+    needs: [plan, checks, node, ui, build, api, gates, image, compose, cli, agent-smoke, mx-agent-trials, test]
     if: always()
     continue-on-error: true
     # This is the one job here that reads the Actions API rather than the repository. A job-level

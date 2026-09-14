@@ -161,7 +161,7 @@ describe('StoryRuntimeApp — kit control components', () => {
     expect(store.getValue('region')).toBeNull();
   });
 
-  it('an external store write (mx.params.set, a live update) reflects in every control', () => {
+  it('an external store write (mx.set, a live update) reflects in every control', () => {
     const { nodes, dataflow } = build(BODY);
     const store = createDataflowStore(dataflow);
     const { getByLabelText } = render(

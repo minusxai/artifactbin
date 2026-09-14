@@ -6,7 +6,7 @@
  */
 import { currentRequest } from './request-context';
 import { actorOf } from '@artifactbin/utils';
-import type { Credential } from '@artifactbin/contracts';
+import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts';
 import { syncProfile } from './profiles';
 import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRole, type ArtifactRow, type RoleActor, type TokenActor, type Viewer } from './artifacts';
 import { liveAgentSession } from './agent-session';
@@ -80,6 +80,10 @@ function attachedActor(request: Request | undefined): RequestActor | null {
 async function proxyActor(request: Request | undefined): Promise<RequestActor | null> {
   const attached = attachedActor(request);
   if (attached) {
+    if ((request ?? currentRequest())?.headers.get(BROWSER_SESSION_HEADER) === '1') {
+      const token = attached.tokenId ? await resolveTokenById(attached.tokenId) : null;
+      if (!token || token.userId !== (attached.viewer?.userId ?? null)) return NO_ACTOR;
+    }
     // The app's own row for this person follows the claims (lib/profiles) — created on first sight, updated on change.
     if (attached.credential === 'session' && attached.viewer?.userId) await syncProfile({ userId: attached.viewer.userId, email: attached.viewer.email ?? undefined });
     return attached;

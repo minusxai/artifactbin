@@ -1,3 +1,4 @@
+import { installMx } from './mx';
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
 import type { QueryTransport } from './store';
@@ -109,6 +110,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       redraw(n => n + 1);
     };
     const author = createAuthorScriptSession(store);
+    let publicMx = installMx(store);
     const stopOutline = root.current ? wireOutline(document,root.current) : () => {};
     const stopTables = root.current ? markScrollableTables(document,root.current) : () => {};
     const stopValues = syncValuesToUrl(store, () => store.flow, { post: values => emit({ type: STORY_VALUES_MESSAGE, nonce, values }) });
@@ -166,7 +168,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
       update(update) {
         if (disposed) return;
         setStyles(previous => ({...previous, ...(update.compiledCss !== undefined ? {compiledCss:update.compiledCss} : {}), ...(update.authorCss !== undefined ? {authorCss:update.authorCss} : {}), ...(update.theme !== undefined ? {theme:update.theme} : {})}));
-        if (update.dataflow) store.replaceFlow(update.dataflow);
+        if (update.dataflow) { store.replaceFlow(update.dataflow); publicMx = installMx(store); }
         if (update.authorScript !== undefined) author.replace(update.authorScript);
         documentData = { ...documentData, nodes: update.nodes, ...(update.refData ? { refData: { ...documentData.refData, ...update.refData } } : {}), ...(update.colorMode ? { colorMode: update.colorMode } : {}) };
         if (readerModeOverride) documentData.colorMode = readerModeOverride;
@@ -185,6 +187,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
         author.dispose();
         editRef.current?.dispose(); editRef.current = null;
         annotate?.dispose(); selection?.dispose();
+        if (window.mx === publicMx) delete window.mx;
         store.dispose();
         if (lifetime.transport && 'dispose' in lifetime.transport) (lifetime.transport as QueryTransport & {dispose():void}).dispose();
       },
