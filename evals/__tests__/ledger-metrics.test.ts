@@ -227,6 +227,19 @@ describe('progressiveEdits — two versions of the agent\'s own, the later ones 
   });
 
   /**
+   * An OLD ledger whose create carries no `artifactId` (the field postdates those runs) leaves the
+   * first write's document unidentifiable, and an unidentifiable first document cannot be shown to
+   * be the one the later writes extended. False, deliberately — the alternative is crediting a
+   * progression we cannot see. Newer ledgers always carry the id, so this is history only.
+   */
+  it('is false when the first write does not say which artifact it made', () => {
+    expect(ledgerMetrics([
+      entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqMarkup: '<h1>Report</h1>' }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts/ab3cd9/edits', status: 200, artifactId: 'ab3cd9' }),
+    ]).progressiveEdits).toBe(false);
+  });
+
+  /**
    * DELIBERATE, and a known limit: a dataset-first task uploads its rows as write ONE, so the
    * document that follows is a different artifact and the run reads false however it was written.
    * `documentWrites` is the count the brief names, and it counts every content write.
