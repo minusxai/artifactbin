@@ -153,6 +153,23 @@ describe('publishing a document with a <Mutation>', () => {
     expect(res.status, await res.clone().text()).toBe(201);
   });
 
+  /*
+   * THE STATEMENT THE SKILL REFERENCE HANDS THE AGENT. Every `set_*` example in
+   * references/markup-editing.md guards its write with `is not distinct from`,
+   * and the word FROM in that operator phrase read as an UPDATE ... FROM clause:
+   * a released tracker could not publish its own documented row action.
+   */
+  it('publishes the documented set_* row action, concurrency guard and all', async () => {
+    const t = await mintToken('t');
+    const ds = await dataset(t.token, { access: 'readwrite' });
+    await setPolicy(t.token, ds, viewersWritePolicy());
+    const markup = `<Helmet><Query name="tasks" source="ref:${ds}">{\`select * from public.rows\`}</Query>`
+      + `<Mutation name="set_who" expectedAffected={1} source="ref:${ds}">{\`update public.rows set who = $_value where choice = $_row.choice and who is not distinct from $_row.who\`}</Mutation></Helmet>`
+      + '<DataTable data="$tasks" rowKey="choice"><Column col="choice"/><Column col="who"><Select value="$_row.who" options={["seed","alice"]} run="$set_who"/></Column></DataTable>';
+    const res = await create(t.token, { markup });
+    expect(res.status, await res.clone().text()).toBe(201);
+  });
+
   it('the toggle is checked at every write: a PUT after the dataset went read-only is refused', async () => {
     const t = await mintToken('t');
     const ds = await dataset(t.token, { access: 'readwrite' });
