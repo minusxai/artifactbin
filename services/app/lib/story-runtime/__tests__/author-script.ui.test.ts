@@ -9,27 +9,29 @@ afterEach(() => { document.body.replaceChildren(); vi.useRealTimers(); vi.unstub
 describe('isolated author script host', () => {
   // That the bootstrap PARSES is subsumed by managed-comment-bootstrap.test.ts, which
   // runs the shipped bootstrap — and the production-minified build of it — for real.
-  it('coalesces state only, keeps the initial snapshot, and cancels disposed delivery',()=>{
+  it('coalesces selected signals, bounds unacknowledged packets, and cancels disposed delivery', async () => {
     vi.useFakeTimers();
     const port={postMessage:vi.fn(),start:vi.fn(),close:vi.fn(),onmessage:null as null | ((event:{data:unknown})=>void)};
     vi.stubGlobal('MessageChannel',class {port1=port;port2={};});
     const store=createDataflowStore({flow:{values:[{kind:'scalar',name:'n',type:'number',default:0,start:0,end:0}],queries:[]}});
     const dispose=startAuthorScript('void 0',store);
     document.querySelector('iframe')!.dispatchEvent(new Event('load'));
-    expect(port.postMessage.mock.calls[0][0]).toMatchObject({type:'state',reset:true,state:{values:{n:0}}});
-    port.onmessage!({data:{type:'state-ack'}});
-    port.postMessage.mockClear();
+    port.onmessage!({data:{id:1,op:'subscribe',names:['n']}});
+    await vi.advanceTimersByTimeAsync(16);
+    const packets = () => port.postMessage.mock.calls.map(call => call[0]).filter(packet => packet.type === 'signals');
+    expect(packets()).toHaveLength(1);
+    expect(packets()[0].updates[0]).toMatchObject({subscription:1,snapshot:{signals:{n:{value:0,status:'ready'}}}});
     for(let n=1;n<=100;n++)store.setValue('n',n);
-    expect(port.postMessage).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(16);
-    expect(port.postMessage).toHaveBeenCalledExactlyOnceWith({type:'state',state:{values:{n:100}}});
-    store.setValue('n',101); vi.advanceTimersByTime(16);
-    expect(port.postMessage).toHaveBeenCalledTimes(1);
-    port.onmessage!({data:{type:'state-ack'}});vi.advanceTimersByTime(16);
-    expect(port.postMessage).toHaveBeenLastCalledWith({type:'state',state:{values:{n:101}}});
-    port.onmessage!({data:{type:'state-ack'}});
-    store.setValue('n',102); dispose();vi.advanceTimersByTime(16);
-    expect(port.postMessage).toHaveBeenCalledTimes(2);expect(port.close).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(32);
+    expect(packets()).toHaveLength(1);
+    port.onmessage!({data:{type:'signals-ack'}});
+    await vi.advanceTimersByTimeAsync(16);
+    expect(packets()).toHaveLength(2);
+    expect(packets()[1].updates[0].snapshot.signals.n.value).toBe(100);
+    port.onmessage!({data:{type:'signals-ack'}});
+    store.setValue('n',101); dispose();
+    await vi.advanceTimersByTimeAsync(32);
+    expect(packets()).toHaveLength(2);expect(port.close).toHaveBeenCalledOnce();
   });
   it('preserves unchanged code, replaces changed code, and revokes removed code', () => {
     const store = createDataflowStore({ flow: { values: [], queries: [] } });

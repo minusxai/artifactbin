@@ -1,10 +1,9 @@
+import { mxFlowKey } from './mx';
 import {connectManagedComments} from './managed-comment-host';
 import type { DataflowStore } from './store';
 import { createAuthorScriptBridge } from './author-script-bridge';
 import { AUTHOR_SCRIPT_DOCUMENT } from './author-script-bootstrap';
-import { AUTHOR_SCRIPT_FRAME_TITLE, AUTHOR_SCRIPT_INIT, type AuthorScriptSnapshot } from './author-script-contract';
-import { authorStateDelta } from './author-state';
-import type { DataflowState } from '@/lib/story/dataflow';
+import { AUTHOR_SCRIPT_FRAME_TITLE, AUTHOR_SCRIPT_INIT } from './author-script-contract';
 import { AUTHOR_FRAME_PATH } from './author-frame';
 import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
 import {createManagedAssetResolver,type ManagedAssetsConfig,type ManagedAssetRelay} from './managed-assets';
@@ -31,6 +30,18 @@ export function createAuthorScriptSession(store: DataflowStore, doc: Document = 
 /** Own one sandbox + port. Disposing revokes its capability and removes its frame. */
 interface AuthorScriptMount {host: HTMLElement; title: string; html: string; document: string; scripts?: ManagedIframeContent['scripts']; assets?: ManagedAssetsConfig; importAsset?:ManagedAssetRelay; resolveArtifactId?:string}
 export function startAuthorScript(source: string, store: DataflowStore, doc: Document = document, visible?: AuthorScriptMount): () => void {
+  let key = mxFlowKey(store.flow);
+  let stop = mountAuthorScript(source, store, doc, visible);
+  const unsubscribe = store.subscribe(() => {
+    const next = mxFlowKey(store.flow);
+    if (next === key) return;
+    key = next; stop();
+    stop = mountAuthorScript(source, store, doc, visible);
+  });
+  return () => { unsubscribe(); stop(); };
+}
+
+function mountAuthorScript(source: string, store: DataflowStore, doc: Document, visible?: AuthorScriptMount): () => void {
   const frame = doc.createElement('iframe');
   frame.title = visible?.title ?? AUTHOR_SCRIPT_FRAME_TITLE;
   frame.hidden = !visible;
@@ -47,16 +58,11 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     wrapperUrl.searchParams.set('artifact',visible.resolveArtifactId);
   }
   frame.src=wrapperUrl.href;
-  const bridge = createAuthorScriptBridge(store);
+  const bridge = createAuthorScriptBridge(store, packet => { if (!disposed) port?.postMessage(packet); });
   const assets=createManagedAssetResolver(visible?.assets,visible?.importAsset);
   let disposed = false;
   let port: MessagePort | null = null;
-  let unsubscribe = () => {};
   let comments: ReturnType<typeof connectManagedComments> | null = null;
-  let delivered: DataflowState | null = null;
-  let deliveredPending: string[] = [];
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let awaitingState = false;
   let lastRequestId = 0;
   const fail=(message:string)=>{
     dispose();
@@ -67,21 +73,6 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     if(event.source===frame.contentWindow&&event.data==='mx:author:navigated')fail('Interactive content attempted navigation and was stopped.');
   };
   doc.defaultView?.addEventListener('message',navigation);
-  const snapshot = () => {
-    timer = null;
-    if (disposed || !port || awaitingState) return;
-    const next=store.getState(), pending=[...store.pending()];
-    const reset=delivered===null;
-    const delta=authorStateDelta(delivered,next);
-    const pendingChanged=reset || pending.length!==deliveredPending.length || pending.some(name=>!deliveredPending.includes(name));
-    delivered=next; deliveredPending=pending;
-    if(reset || delta || pendingChanged) {
-      awaitingState=true;
-      port.postMessage({type:'state',state:delta??{},...(reset?{reset:true}:{}),...(pendingChanged?{pending}:{})} satisfies AuthorScriptSnapshot);
-    }
-  };
-  // One timer, no queue of full snapshots; commands/replies never use this path.
-  const schedule = () => { if(!disposed && !awaitingState && timer===null) timer=setTimeout(snapshot,16); };
   const dispose = () => {
     if (disposed) return;
     disposed = true;
@@ -89,9 +80,6 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     bridge.dispose();
     assets.dispose();clearTimeout(startup);
     doc.defaultView?.removeEventListener('message',navigation);
-    unsubscribe();
-    if(timer!==null) clearTimeout(timer);
-    timer=null;
     port?.close();
     frame.remove();
   };
@@ -107,10 +95,7 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
       if (disposed) return;
       if(event.data?.type==='author-ready'){clearTimeout(startup);frame.setAttribute('data-mx-author-ready','');return;}
       if(event.data?.type==='author-error'){fail(String(event.data.error).slice(0,500));return;}
-      if(event.data?.type==='state-ack') {
-        if(awaitingState) { awaitingState=false; schedule(); }
-        return;
-      }
+      if(event.data?.type==='signals-ack') { bridge.acknowledge(); return; }
       if(typeof event.data?.type==='string' && event.data.type.startsWith('comment-')) { comments?.receive(event.data); return; }
       const requestId = Number(event.data?.id);
       if (!Number.isSafeInteger(requestId) || requestId < 1 || requestId <= lastRequestId) {
@@ -129,8 +114,6 @@ export function startAuthorScript(source: string, store: DataflowStore, doc: Doc
     port.start();
     // '*' is necessary for an opaque target. The port goes only to this exact WindowProxy.
     frame.contentWindow.postMessage({type:AUTHOR_SCRIPT_INIT,document:visible?.document??AUTHOR_SCRIPT_DOCUMENT}, '*', [channel.port2]);
-    snapshot();
-    unsubscribe = store.subscribe(schedule);
     port.postMessage({ type: 'run', source, ...(visible ? {html:visible.html,scripts:visible.scripts,assetOrigin:visible.assets?.origin,managed:visible.scripts!==undefined} : {}) });
     if(visible?.scripts!==undefined) {
       const owner=visible.host.closest<HTMLElement>('[data-mx-managed-frame]')??visible.host;

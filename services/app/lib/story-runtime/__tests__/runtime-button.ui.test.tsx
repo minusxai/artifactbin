@@ -116,14 +116,13 @@ describe('the LIVE face (runtime registry)', () => {
 });
 
 describe('mx.mutate — the author script\'s handle on a write', () => {
-  it('performs the mutation, and an override becomes a real value change first', async () => {
+  it('performs the mutation with per-call arguments without changing scalar signals', async () => {
     const writes: Array<Record<string, unknown>> = [];
     const store = storeWith(async (values) => { writes.push(values); return { dataset: 'abc123' }; });
     const mx = createMx(store);
     await mx.mutate('vote', { choice: 'salad' });
     expect(writes).toEqual([{ choice: 'salad' }]);
-    // The override is the document's value now — a bound control shows it.
-    expect(mx.params.get('choice')).toBe('salad');
+    expect((await mx.read(['choice'])).signals.choice.value).toBe('ramen');
   });
 
   // A rejection carrying the server's message is store-mutate.test.ts's case: mx.mutate

@@ -3,9 +3,10 @@
 import { createEnv, log, serviceSecretForServer } from '@artifactbin/utils';
 import { serveBrowser } from './index';
 import { createBrowser } from './local';
+import { sessionProcessOptions } from './session-config';
 
 const { env } = createEnv(process.env);
 const port = Number(env('APP', 'PORT') ?? '8080');
 const serviceSecret = serviceSecretForServer(process.env);
-const listening = serveBrowser(createBrowser(), { ...(serviceSecret ? { serviceSecret } : {}) }).listen(port, '0.0.0.0');
+const listening = serveBrowser(createBrowser({ sessions: sessionProcessOptions(process.env) }), { ...(serviceSecret ? { serviceSecret } : {}) }).listen(port, '0.0.0.0');
 log('browser').info(`listening on ${listening.url}`);

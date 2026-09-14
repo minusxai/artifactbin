@@ -8,7 +8,7 @@
  * much as the bytes are, because retry and 503-vs-500 depend on it.
  */
 import http from 'node:http';
-import type { BrowserService, RenderRequest } from '@artifactbin/contracts';
+import type { BrowserService, RenderRequest, BrowserSessionRequest } from '@artifactbin/contracts';
 import { BROWSER_ROUTES, SERVICE_AUTH_HEADER } from '@artifactbin/contracts';
 import type { JsonServer } from '@artifactbin/utils';
 
@@ -18,18 +18,24 @@ export { BROWSER_ROUTES } from '@artifactbin/contracts';
 export { browserClient } from '@artifactbin/utils';
 
 export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
-  const maxBody = opts.maxBody ?? 64 * 1024;
+  const maxBody = opts.maxBody ?? 96 * 1024;
   const server = http.createServer(async (req, res) => {
     const json = (status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
     // The one GET the shell answers — the Docker HEALTHCHECK and the compose `depends_on` condition.
     if (req.method === 'GET' && req.url === '/health') return json(200, { ok: true });
     if (opts.serviceSecret && req.headers[SERVICE_AUTH_HEADER] !== opts.serviceSecret) return json(401, { error: 'unauthorized' });
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
-    if (req.url !== BROWSER_ROUTES.render) return json(404, { error: 'not_found' });
+    if (req.url !== BROWSER_ROUTES.render && req.url !== BROWSER_ROUTES.sessions) return json(404, { error: 'not_found' });
     const chunks: Buffer[] = []; let size = 0;
     for await (const c of req) { size += (c as Buffer).length; if (size > maxBody) { json(413, { error: 'too_large' }); req.destroy(); return; } chunks.push(c as Buffer); }
     let input: RenderRequest;
     try { input = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return json(400, { error: 'bad_request' }); }
+    if (req.url === BROWSER_ROUTES.sessions) {
+      if (!svc.sessions) return json(503, { error: 'sessions_unavailable' });
+      const request = input as unknown as BrowserSessionRequest;
+      if (!request || !['script', 'status', 'close'].includes(request.op) || !request.actor || typeof request.actor !== 'object') return json(400, { error: 'bad_request' });
+      return json(200, await svc.sessions.request(request));
+    }
     const r = await svc.render(input);
     if (r.ok) { res.writeHead(200, { 'content-type': r.mime, 'content-length': String(r.bytes.byteLength) }); return res.end(Buffer.from(r.bytes)); }
     return json(200, r);

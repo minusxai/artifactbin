@@ -84,7 +84,8 @@ COPY --from=builder /app/node_modules/playwright-core ./node_modules/playwright-
 # launches. Installing exactly what runs keeps the image under its size
 # budget with room to spare; scripts/image-checks.mjs's render probe is the
 # guard that what is installed is what launches.
-RUN node node_modules/playwright/cli.js install --with-deps chromium-headless-shell \
+RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap \
+    && node node_modules/playwright/cli.js install --with-deps chromium-headless-shell \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/dist/browser.mjs ./browser.mjs

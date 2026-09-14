@@ -42,16 +42,22 @@ Counter and canvas · Libraries and assets · Comments and dynamic elements · S
   <script>{`
     const canvas = document.getElementById('counter');
     const ctx = canvas.getContext('2d');
-    function draw(values) {
+    function draw(snapshot) {
+      const count = snapshot.signals.count.value;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#2563eb';
       ctx.font = '32px system-ui';
-      ctx.fillText('Count: ' + (values.count ?? 0), 12, 55);
+      ctx.fillText('Count: ' + (count ?? 0), 12, 55);
     }
-    draw({count: mx.params.get('count')});
-    const stop = mx.params.subscribe(['count'], draw);
-    document.getElementById('increment').addEventListener('click', () => {
-      mx.params.set('count', Number(mx.params.get('count') ?? 0) + 1);
+    const stop = mx.subscribe(['count'], draw);
+    const button = document.getElementById('increment');
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        const snapshot = await mx.read(['count']);
+        await mx.set({count: Number(snapshot.signals.count.value ?? 0) + 1});
+      } catch (error) { button.textContent = error.message; }
+      finally { button.disabled = false; }
     });
     addEventListener('pagehide', stop);
   `}</script>
@@ -134,18 +140,17 @@ adapter to expose semantic nodes; otherwise select the containing element or are
 
 ## State and compatibility
 
-`mx.params.subscribe(['count'], fn)` supplies a detached object containing those
-scalar values when relevant state changes. `mx.data.subscribe(['results'], fn)`
-supplies `(state, pendingNames)`: results are at `state.tables.results`, with
-selected errors at `state.errors`. Subscriptions return
-unsubscribe functions; initial results can arrive after script startup.
-Legacy `.subscribe(fn)` still subscribes broadly; prefer explicit names to avoid
-unrelated updates. `.get(name)` reads the current snapshot, not a synchronous
-acknowledgment of `.set(name, value)`.
+The same five methods work in the artifact page and managed iframe:
+`describe`, `read`, `set`, `mutate`, and `subscribe`. Reads and subscription
+callbacks return `{instanceEpoch, revision, signals}`; a selected entry has
+`value`, `status`, and optional `{code, message}` error. Local tables and query
+results share the signal namespace with scalar values. Subscriptions return a
+synchronous unsubscribe function and deliver an asynchronous initial snapshot.
 
-Use `mx.refresh(names)` for declared queries and `await mx.mutate(name, values)`
-for declared mutations. No bridge operation permits arbitrary account APIs or
-source edits. See [script API](markup-scripts.md).
+Use `await mx.read(['results'], {refresh:true})` to refresh declared queries and
+`await mx.mutate(name, args)` for declared mutations. Mutation arguments apply
+only to that call. No bridge operation permits arbitrary account APIs or source
+edits. See [script API](markup-scripts.md).
 
 The hidden Helmet script remains compatible. Use generic `<Iframe>` for new
 visible scenes; pinned libraries are documented in [libraries](markup-libraries.md).

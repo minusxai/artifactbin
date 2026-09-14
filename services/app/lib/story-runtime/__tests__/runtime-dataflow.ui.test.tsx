@@ -122,7 +122,7 @@ describe('StoryRuntimeApp — dataflow', () => {
     expect(numberWrap.getAttribute('aria-busy')).toBe('true');
     expect(numberWrap.classList.contains('mx-busy-inline')).toBe(true);
     // The author script can see the same thing.
-    expect(createMx(store).data.pending()).toEqual(['sales']);
+    expect((await createMx(store).read(['sales'])).signals.sales.status).toBe('pending');
     await act(async () => {
       resolveRun!({ tables: { sales: { rows: [{ region: 'NA', revenue: 1200 }], columns: STATE.tables.sales.columns } }, errors: {} });
       await Promise.resolve();
@@ -132,7 +132,7 @@ describe('StoryRuntimeApp — dataflow', () => {
     expect(embed.getAttribute('aria-busy')).toBe('false');
     expect(embed.classList.contains('mx-busy')).toBe(false);
     expect((getByLabelText('Live number').closest('[aria-busy]') as HTMLElement).getAttribute('aria-busy')).toBe('false');
-    expect(createMx(store).data.pending()).toEqual([]);
+    expect((await createMx(store).read(['sales'])).signals.sales.status).toBe('ready');
   });
 
   it('a Question over a TRUNCATED table says so — a chart must never pass a sample off as the set', () => {
@@ -205,26 +205,24 @@ describe('StoryRuntimeApp — dataflow', () => {
     const { dataflow } = build(BODY);
     const store = createDataflowStore(dataflow);
     const mx = createMx(store);
-    expect(mx.params.get('min_rev')).toBe(100);
-    expect(mx.data.get('sales')?.rows).toHaveLength(2);
+    expect((await mx.read(['min_rev'])).signals.min_rev.value).toBe(100);
+    expect((await mx.read(['sales'])).signals.sales.value).toMatchObject({ rows: STATE.tables.sales.rows });
     const seen: unknown[] = [];
-    const off = mx.params.subscribe((values) => seen.push(values.region));
-    mx.params.set('region', 'EU');
+    const off = mx.subscribe(['region'], snapshot => seen.push(snapshot.signals.region.value));
+    await mx.set({ region: 'EU' });
     expect(store.getValue('region')).toBe('EU');
-    expect(seen).toEqual(['EU']);
+    await waitFor(() => expect(seen).toEqual(['EU']));
     off();
-    mx.params.set('region', 'NA');
+    await mx.set({ region: 'NA' });
     expect(seen).toEqual(['EU']);
-    // data.subscribe hands the state AND the pending names; pending() reads them any time.
-    const pendingSeen: string[][] = [];
+    const pendingSeen: string[] = [];
     const store2 = createDataflowStore(dataflow, { debounceMs: 0, transport: { run: () => new Promise(() => {}), page: () => Promise.reject(new Error('n/a')) } });
     const mx2 = createMx(store2);
-    mx2.data.subscribe((_state, pending) => pendingSeen.push(pending));
-    expect(mx2.data.pending()).toEqual([]);
-    mx2.params.set('region', 'EU');
-    await new Promise((r) => setTimeout(r, 5));
-    expect(mx2.data.pending()).toEqual(['sales']);
-    expect(pendingSeen.at(-1)).toEqual(['sales']);
+    const stop = mx2.subscribe(['sales'], snapshot => pendingSeen.push(snapshot.signals.sales.status));
+    expect((await mx2.read(['sales'])).signals.sales.status).toBe('ready');
+    await mx2.set({ region: 'EU' });
+    await waitFor(() => expect(pendingSeen.at(-1)).toBe('pending'));
+    stop(); store.dispose(); store2.dispose();
   });
 
   it('signals onMounted exactly once, after the first commit — the moment an author script may run', async () => {

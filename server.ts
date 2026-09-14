@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   }
   if (!BROWSER_SERVICE_URL) {
     const { createBrowser } = await import('@artifactbin/browser/local');
-    setServices({ browser: createBrowser() });
+    setServices({ browser: createBrowser({ sessions: { baseURL, request: async (request, actor) => inProcess(app)(request, actor) } }) });
   }
   if (!EVENTS_SERVICE_URL) {
     const { backfillAnalyticsEvents, createEvents, ensureEventsSchema } = await import('@artifactbin/events/local');

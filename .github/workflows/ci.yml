@@ -507,6 +507,15 @@ jobs:
       # before the run keeps that cost out of the gate's own timeout budget.
       - name: pull the Postgres image the datasets gate needs
         run: docker pull postgres:17-alpine
+      - name: Prepare isolated browser session workers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
+          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
+          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: every gate, four servers
         run: node scripts/gates.mjs --servers=4 --shard=${{ matrix.shard }}/4
         env:
