@@ -10,6 +10,7 @@ import type { ValidationError } from './types';
 
 export * from './types';
 export { parseJsx } from './parse';
+export { repairJsxSource } from './repair';
 export { serializeJsx } from './serialize';
 // Node-level validation for callers that split the tree before validating
 // (lib/story/helmet.ts excludes the Helmet subtree while keeping exact spans).

@@ -20,13 +20,15 @@ import {withLock} from './state';
 import {pendingOperation} from './recoverable-operation';
 import {homedir} from 'node:os';
 import {parseCommand,CliError,type ParsedCommand} from './commands';
-import {loadWorkspace} from './workspace';
+import {loadWorkspace,inspectWorkspace,type Workspace} from './workspace';
 import {validateFiles} from './validation';
 import {deleteComments} from './delete';
 import {diffCommand,remoteStatus} from './comparison';
 import {localStatus} from './local';
 import {helpDocument,writeHelp,helpBundle} from './teaching';
 import {withTeachingOrigin} from './teaching-origin';
+import {validateMarkupStructure} from '../../app/lib/story/local-validation';
+import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
 import {DEFAULT_SERVER,loadConnection} from './config';
@@ -183,7 +185,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and
    // grepped their own document for 5–13 calls (eval runs 34740707220–34741910427). Say it once, here.
    const published=!flags['dry-run']&&result.operations.some(op=>'status' in op&&op.status==='published');
-   emit({...result,...(published?{next:PUBLISHED_NEXT}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
+   // What the door checked before it accepted the document, so the agent that wants proof has it here
+   // and does not go and gather it: pi curled the page for the title, grepped for the chart spec and
+   // re-ran its queries for five calls after a successful push (local hardcore report, 14 Sep).
+   const verified=published?await verifiedSummary(workspace,positionals):undefined;
+   emit({...result,...(verified?{verified}:{}),...(published?{next:PUBLISHED_NEXT}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
   }
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');
@@ -205,6 +211,19 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
 export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
+/** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
+async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[]}>|undefined>{
+ const out:Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[]}>=[];
+ for(const file of await inspectWorkspace(workspace,paths)){
+  if(!file.document||!file.bytes)continue;
+  const {split}=validateMarkupStructure(file.document.body);if(!split)continue;
+  let charts=0;const count=(nodes:JsxNode[])=>{for(const n of nodes){if(n.type!=='element')continue;if(n.tag==='Question')charts++;count(n.children);}};count(split.body);
+  const queries=split.content.queries.map(q=>q.name);
+  out.push({path:file.path,title:split.content.title??file.document.metadata.title??null,queries,charts,
+   checks:['markup validated',...(queries.length?[`${queries.length} quer${queries.length===1?'y':'ies'} dry-run against the published dataset`]:[]),...(charts?[`${charts} chart${charts===1?'':'s'} checked against query columns`]:[]),'title and metadata accepted']});
+ }
+ return out.length?out:undefined;
+}
 async function readStdin():Promise<string>{const chunks:Buffer[]=[];for await(const chunk of process.stdin)chunks.push(Buffer.from(chunk));return Buffer.concat(chunks).toString();}
 /**
  * Eager, offline skill installation for the detected or saved harnesses. Runs before every command,

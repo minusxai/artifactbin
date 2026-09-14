@@ -33,7 +33,7 @@ const CONTEXT = 60;
  * how many braces short. Scanning for it is unambiguous: strings and template
  * literals are skipped, so a `}` inside SQL or a label cannot be miscounted.
  */
-function unclosedExpression(source: string): { attr: string; line: number; missing: number } | null {
+export function unclosedExpression(source: string): { attr: string; line: number; missing: number } | null {
   let best: { attr: string; line: number; missing: number } | null = null;
   for (const m of source.matchAll(/([A-Za-z_][\w-]*)=\{/g)) {
     const open = m.index! + m[0].length - 1;
@@ -66,7 +66,7 @@ function unclosedExpression(source: string): { attr: string; line: number; missi
  * opens with `{{{`. Unclosed braces are named above; these two shapes used to get only "Unexpected
  * token" — pi counted braces by hand for ten model calls (eval run 34741910427, report).
  */
-function extraClosing(source: string): { attr: string; line: number; extra: number } | null {
+export function extraClosing(source: string): { attr: string; line: number; extra: number } | null {
   for (const m of source.matchAll(/([A-Za-z_][\w-]*)=\{/g)) {
     const open = m.index! + m[0].length - 1;
     let depth = 0;
@@ -91,7 +91,7 @@ function extraClosing(source: string): { attr: string; line: number; extra: numb
   }
   return null;
 }
-const tripleOpen = (source: string) => /([A-Za-z_][\w-]*)=\{\{\{/.exec(source);
+export const tripleOpen = (source: string) => /([A-Za-z_][\w-]*)=\{\{\{/.exec(source);
 
 export function syntaxErrorDetail(source: string, parsed: Extract<ParseResult, { ok: false }>): ValidationError {
   const bare = parsed.error.replace(/\s*\(\d+:\d+\)\s*$/, '');
