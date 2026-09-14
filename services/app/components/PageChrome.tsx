@@ -17,6 +17,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { forgetTokens } from '@/lib/browser-session';
 import { CHROME_IDENTITY } from '@/lib/chrome-identity';
 import { crumbsFor } from '@/lib/breadcrumb';
+import { useWorkshopAppearance, setWorkshopAppearance } from '@/lib/workshop-appearance';
 import { usePathname } from '@/lib/navigation';
 
 export type AppearanceMode = 'light' | 'dark';
@@ -166,6 +167,7 @@ export function PageMenu({
         </a>
 
         {link('/', 'Artifacts', <FileText size={15} strokeWidth={1.5} />, pathname === '/')}
+        {link('/examples', 'Gallery', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/examples')}
         {link('/chat', 'Remote sessions', <User size={15} strokeWidth={1.5} />, pathname === '/chat')}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
         {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}
@@ -312,6 +314,7 @@ export function PageControls({
 }) {
   const phone = useIsPhoneViewport();
   const [open, setOpen] = useState(false);
+  const workshop = useWorkshopAppearance();
   const [appMode, setAppMode] = useState<AppearanceMode>(currentAppAppearance);
   const toggle = useExclusiveLayer(open, setOpen);
   useOpenOnRequest('controls', open, setOpen);
@@ -344,6 +347,18 @@ export function PageControls({
   const body = (
     <div className="space-y-4">
       <AppearancePicker mode={mode} onPick={pickMode} />
+      <fieldset className="border-t border-edge pt-3">
+        <legend className="font-mono text-xs text-muted">Homepage scene</legend>
+        <div className="mt-2 flex gap-2">
+          {(['indoor', 'outdoor'] as const).map((value) => (
+            <button key={value} type="button" aria-pressed={workshop === value}
+              onClick={() => setWorkshopAppearance(value)}
+              className={`flex-1 rounded border px-3 py-2 text-sm ${workshop === value ? 'border-accent bg-accent-soft text-accent' : 'border-edge text-muted'}`}>
+              {value === 'indoor' ? 'Indoor' : 'Outdoor'}
+            </button>
+          ))}
+        </div>
+      </fieldset>
       {children && (
         <div className="border-t border-edge pt-3">
           {typeof children === 'function' ? children(close) : children}

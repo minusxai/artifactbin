@@ -36,6 +36,7 @@ import {
 import { type WorkshopPaper, type WorkshopSetting } from "./scene-manifest";
 
 export interface WorkshopScene {
+  setSetting(setting: WorkshopSetting): void;
   reset(): void;
   detach(id: string): void;
   dispose(): void;
@@ -360,46 +361,57 @@ export function createWorkshopScene(
     }
   }
   const helpers = setting.liveRobots
-    ? addWorkshopHelpers(renderer, schedule)
+    ? addWorkshopHelpers(renderer, schedule, setting.name)
     : null;
   const background = new Image();
-  images.push(background);
-  background.onload = () => {
-    if (disposed) return;
-    const base = document.createElement("canvas");
-    base.width = SCENE.width;
-    base.height = SCENE.height;
-    const b = base.getContext("2d");
-    if (!b) return;
+  const mask = new Image();
+  images.push(background, mask);
+  const base = document.createElement("canvas");
+  const front = document.createElement("canvas");
+  base.width = front.width = SCENE.width;
+  base.height = front.height = SCENE.height;
+  const bt = new CanvasTexture(base),
+    ft = new CanvasTexture(front);
+  bt.colorSpace = ft.colorSpace = SRGBColorSpace;
+  quad(bt, 0);
+  quad(ft, 65);
+  const paintBackground = () => {
+    if (disposed || !background.complete || !background.naturalWidth) return;
+    const b = base.getContext("2d"),
+      f = front.getContext("2d");
+    if (!b || !f) return;
+    b.clearRect(0, 0, SCENE.width, SCENE.height);
     b.drawImage(background, 0, 0, SCENE.width, SCENE.height);
-    const bt = new CanvasTexture(base);
-    bt.colorSpace = SRGBColorSpace;
-    quad(bt, 0);
-    const mask = new Image();
-    images.push(mask);
-    mask.onload = () => {
-      if (disposed) return;
-      const front = document.createElement("canvas");
-      front.width = SCENE.width;
-      front.height = SCENE.height;
-      const f = front.getContext("2d");
-      if (!f) return;
-      f.drawImage(mask, 0, 0, SCENE.width, SCENE.height);
-      foregroundCoverage = f.getImageData(0, 0, SCENE.width, SCENE.height).data;
+    bt.needsUpdate = true;
+    if (foregroundCoverage) {
       f.clearRect(0, 0, SCENE.width, SCENE.height);
       f.drawImage(background, 0, 0, SCENE.width, SCENE.height);
       const pixels = f.getImageData(0, 0, SCENE.width, SCENE.height);
       applyForegroundMask(pixels.data, foregroundCoverage);
       f.putImageData(pixels, 0, 0);
-      const ft = new CanvasTexture(front);
-      ft.colorSpace = SRGBColorSpace;
-      quad(ft, 65);
-      schedule();
-    };
-    mask.src = setting.mask;
+      ft.needsUpdate = true;
+    }
     schedule();
   };
+  background.onload = paintBackground;
+  mask.onload = () => {
+    if (disposed) return;
+    const f = front.getContext("2d");
+    if (!f) return;
+    f.clearRect(0, 0, SCENE.width, SCENE.height);
+    f.drawImage(mask, 0, 0, SCENE.width, SCENE.height);
+    foregroundCoverage = f.getImageData(0, 0, SCENE.width, SCENE.height).data;
+    paintBackground();
+  };
+  mask.src = setting.mask;
+  let currentSetting = setting.name;
   background.src = setting.image;
+  const setSetting = (next: WorkshopSetting) => {
+    if (next.name === currentSetting) return;
+    currentSetting = next.name;
+    helpers?.setEnvironment(next.name);
+    background.src = next.image;
+  };
   // Pin heads are independent of the sheet, left in place when it falls.
   const pinSurface = document.createElement("canvas");
   pinSurface.width = SCENE.width;
@@ -687,6 +699,7 @@ export function createWorkshopScene(
   canvas.addEventListener("webglcontextrestored", restore);
   resize();
   return {
+    setSetting,
     detach,
     reset,
     dispose() {

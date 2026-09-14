@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, ArrowLeft } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { SHOWCASE, type ShowcaseKind } from "@/lib/showcase";
 import { ArtifactPrint } from "@/components/living-workshop/WorkshopDirections";
 import "./examples.css";
+import WorkshopNav from "@/components/living-workshop/WorkshopNav";
 
 const FILTERS: { label: string; kinds: ShowcaseKind[] }[] = [
   { label: "All work", kinds: [] },
@@ -25,17 +26,7 @@ export default function Examples() {
   );
   return (
     <main className="artifact-gallery">
-      <nav className="gallery-nav" aria-label="Gallery navigation">
-        <a href="/home_v2" className="gallery-wordmark">
-          artifactbin
-        </a>
-        <a href="/home_v2">
-          <ArrowLeft size={15} /> Back to the workshop
-        </a>
-        <a href="/docs-human">
-          Make your own <ArrowUpRight size={16} />
-        </a>
-      </nav>
+      <WorkshopNav solid />
       <header className="gallery-intro">
         <span className="studio-eyebrow">THE ARTIFACT WALL</span>
         <h1>
@@ -82,7 +73,7 @@ export default function Examples() {
       <footer className="gallery-footer">
         <span>THERE'S ROOM FOR YOURS, TOO.</span>
         <h2>What will you make?</h2>
-        <a href="/home_v2#workshop-install">
+        <a href="/#workshop-install">
           Pull up a chair <ArrowUpRight size={20} />
         </a>
       </footer>

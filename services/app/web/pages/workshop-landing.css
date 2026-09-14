@@ -26,15 +26,22 @@
   container-type: inline-size;
 }
 .workshop-nav {
-  position: absolute;
-  z-index: 3;
+  position: fixed;
+  z-index: 30;
   top: 0;
-  left: 9%;
-  right: 8%;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-top: 1.5cqw;
+  padding: 0.9vw 8% 10px 9%;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+.workshop-nav-solid {
+  background: #faf7f0;
+  box-shadow: 0 1px 0 #17261f18;
 }
 .workshop-wordmark {
   display: inline-flex;
@@ -526,10 +533,9 @@
 }
 @media (max-width: 800px) {
   .workshop-nav {
-    position: relative;
-    left: auto;
-    right: auto;
-    padding: 22px 6% 0;
+    position: fixed;
+    padding: 16px 6%;
+    background: #faf7f0;
   }
   .workshop-nav nav {
     gap: 18px;
@@ -802,4 +808,36 @@
     0 0 4px #fff,
     0 0 8px #fff,
     0 0 12px #fff;
+}
+
+@media (max-width: 800px) {
+  .workshop-page {
+    padding-top: 72px;
+  }
+}
+
+.workshop-nav nav {
+  align-items: center;
+  gap: 20px;
+}
+.workshop-nav nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 5px;
+  cursor: pointer;
+}
+.artifact-gallery {
+  padding-top: 92px;
+}
+@media (max-width: 800px) {
+  .workshop-nav .workshop-tagline {
+    display: none;
+  }
+  .workshop-nav nav {
+    gap: 8px;
+  }
 }

@@ -5,6 +5,9 @@ import '@fontsource-variable/jetbrains-mono';
 import '@fontsource/ibm-plex-sans/400.css';
 import '@fontsource/ibm-plex-sans/500.css';
 import '@/app/globals.css';
+// Shared server-rendered landing components must not import styles into Node.
+import './pages/workshop-landing.css';
+import '@/components/living-workshop/workshop-directions.css';
 import trustedCss from '@/app/globals.css?inline';
 import { configureTrustedUiStyles } from '@/components/TrustedUi';
 import { App } from './App';

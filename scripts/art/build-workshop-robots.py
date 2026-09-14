@@ -150,7 +150,7 @@ for agent in ['claude','codex','pi']:
     m.surface_render_method='DITHERED'
     screen_materials.append(m)
 mesh=bpy.data.meshes.new('Screen UV plane')
-mesh.from_pydata([(-.095,-.205,1.105),(.095,-.205,1.105),(.095,-.205,1.295),(-.095,-.205,1.295)],[],[(0,1,2,3)])
+mesh.from_pydata([(-.19,-.212,1.01),(.19,-.212,1.01),(.19,-.212,1.39),(-.19,-.212,1.39)],[],[(0,1,2,3)])
 mesh.uv_layers.new(name='UVMap')
 for loop,uv in zip(mesh.uv_layers.active.data,[(0,0),(1,0),(1,1),(0,1)]):loop.uv=uv
 screen=bpy.data.objects.new('Agent display',mesh);bpy.context.collection.objects.link(screen)
@@ -289,38 +289,47 @@ def role_bot(role):
             if sign < 0:posed_arm(role+str(sign),(sign*.29,0,1.34),(sign*.40,-.025,1.06),(sign*.35,-.16,.84),torso)
             else:
                 posed_arm('Pointing',(.29,0,1.34),(.49,-.025,1.53),(.73,-.08,1.73),torso)
-                link('Pointing index finger',(.74,-.10,1.73),(.85,-.10,1.90),.033,.038,rubber,torso)
+                point_elbow=next(o for o in descendants(torso) if o.name.startswith('Pointing elbow') and o.type=='EMPTY')
+                link('Pointing index finger',(.74,-.10,1.73),(.85,-.10,1.90),.033,.038,rubber,point_elbow)
     elif role=='pencil':
-        posed_arm('Pencil left',(-.29,0,1.34),(-.46,-.20,1.12),(-.29,-.40,1.08),torso,True)
-        posed_arm('Pencil right',(.29,0,1.34),(.43,-.18,1.18),(.27,-.40,1.42),torso,True)
-        cylinder('Oversized cobalt pencil',(-1.0,-.42,.66),(.80,-.42,1.75),.085,blue,torso)
-        cylinder('Pencil upper carved wood',(.80,-.42,1.75),(1.04,-.42,1.895),.085,wood,torso,r2=.016)
-        cylinder('Pencil upper graphite',(1.04,-.42,1.895),(1.12,-.42,1.943),.016,blue,torso,r2=0)
-        cylinder('Pencil lower carved wood',(-1.0,-.42,.66),(-1.24,-.42,.515),.085,wood,torso,r2=.016)
-        cylinder('Pencil lower graphite',(-1.24,-.42,.515),(-1.32,-.42,.467),.016,blue,torso,r2=0)
+        cradle=pivot('Pencil cradle',(0,-.20,1.25),torso)
+        posed_arm('Pencil left',(-.29,0,1.34),(-.46,-.20,1.02),(-.29,-.40,.78),cradle,True)
+        posed_arm('Pencil right',(.29,0,1.34),(.43,-.18,1.06),(.27,-.40,.98),cradle,True)
+        cylinder('Oversized cobalt pencil',(-1.0,-.42,.49),(.80,-.42,1.13),.085,blue,cradle)
+        cylinder('Pencil upper carved wood',(.80,-.42,1.13),(1.04,-.42,1.215),.085,wood,cradle,r2=.016)
+        cylinder('Pencil upper graphite',(1.04,-.42,1.215),(1.12,-.42,1.243),.016,blue,cradle,r2=0)
+        cylinder('Pencil lower carved wood',(-1.0,-.42,.49),(-1.24,-.42,.405),.085,wood,cradle,r2=.016)
+        cylinder('Pencil lower graphite',(-1.24,-.42,.405),(-1.32,-.42,.377),.016,blue,cradle,r2=0)
+    elif role=='inspector':
+        # A shallow squat with planted feet, bent knees and lowered hips.
+        for child in list(variant.children):
+            if child.name.startswith(('Left hip','Right hip')):
+                remove_tree(child)
+            else:
+                child.location.z -= .20
+        for side,x in [('Inspector left',-.19),('Inspector right',.19)]:
+            h=(x,.08,.59);k=(x,-.22,.34);a=(x,-.07,.14)
+            hinge(side+' hip',h,.10,variant)
+            link(side+' thigh',h,k,.17,.19,ivory,variant)
+            hinge(side+' knee',k,.092,variant)
+            link(side+' shin',k,a,.15,.17,cream,variant)
+            ball(side+' ankle',a,.075,rubber,variant)
+            box(side+' boot',(x,-.12,.075),(.22,.33,.14),rubber,.06,variant)
+            box(side+' boot enamel',(x,-.135,.133),(.17,.21,.05),ivory,.02,variant)
+        posed_arm('Inspector left',(-.29,0,1.14),(-.40,-.22,.91),(-.30,-.34,.71),torso)
+        posed_arm('Inspector right',(.29,0,1.14),(.48,-.22,1.00),(.40,-.55,1.14),torso,True)
+        grip=next(o for o in descendants(torso) if o.name=='Inspector right elbow')
+        cylinder('Magnifying glass cobalt handle',(.40,-.56,1.12),(.25,-.65,1.27),.045,blue,grip)
+        bpy.ops.mesh.primitive_torus_add(major_radius=.20,minor_radius=.035,major_segments=48,minor_segments=12,location=(.12,-.69,1.42),rotation=(1.35,0,0))
+        finish(bpy.context.object,'Magnifying glass ivory rim',blue,grip)
+        cylinder('Lens highlight',(-.02,-.72,1.55),(.10,-.73,1.61),.014,led,grip)
     else:
-        posed_arm('Paper left',(-.29,0,1.34),(-.44,-.22,1.12),(-.31,-.39,1.18),torso,True)
-        posed_arm('Paper right',(.29,0,1.34),(.43,-.22,1.10),(.31,-.39,1.18),torso,True)
-        vertices=[];faces=[];uvs=[]
-        for j in range(13):
-            for i in range(17):
-                u=i/16;v=j/12
-                vertices.append(((u-.5)*.82,-.47+.035*math.sin(u*math.pi),.77+v*.70))
-                uvs.append(((2+u)/3,v/2))
-        for j in range(12):
-            for i in range(16):
-                k=j*17+i;faces.append((k,k+1,k+18,k+17))
-        mesh=bpy.data.meshes.new('Gently bowed paper');mesh.from_pydata(vertices,[],faces);mesh.uv_layers.new()
-        for poly in mesh.polygons:
-            for li in poly.loop_indices:mesh.uv_layers.active.data[li].uv=uvs[mesh.loops[li].vertex_index]
-        page=bpy.data.objects.new('Held artifact page',mesh);bpy.context.collection.objects.link(page)
-        mat=material('Printed cobalt artifact',(1,1,1),.95)
-        tex=mat.node_tree.nodes.new('ShaderNodeTexImage');tex.image=bpy.data.images.load(str(OUT.parent/'monotone-posters.webp'));tex.image.pack()
-        bs=mat.node_tree.nodes.get('Principled BSDF');mat.node_tree.links.new(tex.outputs['Color'],bs.inputs['Base Color'])
-        finish(page,'Held artifact page',mat,torso)
+        posed_arm('Paper left',(-.29,0,1.34),(-.46,-.03,1.10),(-.55,-.18,1.24),torso)
+        # Bent elbows leave both hands free for a playful dance.
+        posed_arm('Paper right',(.29,0,1.34),(.46,-.03,1.10),(.55,-.18,1.24),torso)
     return variant
 
-variants={role:role_bot(role) for role in ['standing','pencil','paper']}
+variants={role:role_bot(role) for role in ['standing','pencil','paper','inspector']}
 for role,variant in variants.items():
     export(variant,'workshop-bot-'+role+'.glb')
     for obj in descendants(variant):obj.hide_render=True

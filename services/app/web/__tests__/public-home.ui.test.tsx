@@ -22,10 +22,10 @@ it('removes server sibling only when real Home commits, keeping Landing through 
   expect(initial.isConnected).toBe(true);
   render(<MemoryRouter><SessionProvider><HomePage /></SessionProvider></MemoryRouter>);
   expect(initial.isConnected).toBe(false);
-  expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Your agents');
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Pull up a chair');
   expect(screen.queryByLabelText('Loading workspace')).toBeNull();
   await act(async () => resolve(new Response(JSON.stringify({ kind: 'none', user: null }))));
-  expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Your agents');
+  expect(screen.getByRole('heading', { level: 1 }).textContent).toContain('Pull up a chair');
   expect(screen.queryByLabelText('Loading workspace')).toBeNull();
 });
 it('clears the server sibling on navigation before Home ever loads', () => {

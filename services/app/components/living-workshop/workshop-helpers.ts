@@ -1,9 +1,12 @@
 /** Experimental rigid-joint helpers, registered in the painting's pixel space. */
 import {
   AnimationMixer,
+  Vector3,
   PMREMGenerator,
   AmbientLight,
+  HemisphereLight,
   DirectionalLight,
+  PointLight,
   CanvasTexture,
   PlaneGeometry,
   MeshBasicMaterial,
@@ -26,7 +29,12 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const ROOT = "/landing/workshop/robots/";
-export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
+export function addWorkshopHelpers(
+  renderer: WebGLRenderer,
+  wake: () => void,
+  setting: "indoor" | "outdoor" = "indoor",
+) {
+  const outdoors = setting === "outdoor";
   const scene = new Scene();
   const room = new RoomEnvironment();
   const pmrem = new PMREMGenerator(renderer);
@@ -39,27 +47,64 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
   const group = new Group();
   scene.add(group);
   // Paper lighting is intentionally bright. Helpers get their own softer rig.
-  const ambient = new AmbientLight(0xece8db, 1.1);
+  const ambient = new AmbientLight(
+    outdoors ? 0xf3f5ed : 0xece8db,
+    outdoors ? 0.95 : 0.65,
+  );
   ambient.layers.set(1);
   group.add(ambient);
-  const key = new DirectionalLight(0xfff1dc, 3.0);
+  const key = new DirectionalLight(
+    outdoors ? 0xfff9ed : 0xfff7e8,
+    outdoors ? 4.0 : 4.5,
+  );
   key.layers.set(1);
-  key.position.set(-400, -700, 1000);
+  key.position.set(-650, outdoors ? -1000 : -200, outdoors ? 1100 : 650);
+  key.target.position.set(850, 400, 0);
+  group.add(key.target);
   group.add(key);
-  const fill = new DirectionalLight(0xdce8ff, 1.4);
-  fill.layers.set(1);
-  fill.position.set(900, 200, 900);
-  group.add(fill);
+  // The painted pendant at the upper right is the second direct source.
+  const bulb = new PointLight(0xffd19b, 240000, 1800, 2);
+  bulb.layers.set(1);
+  bulb.position.set(1400, 85, 260);
+  group.add(bulb);
+  const sky = new HemisphereLight(0xe4f1ff, 0xd6caa4, 0);
+  {
+    sky.position.set(0, -1, 0);
+    sky.layers.set(1);
+    group.add(sky);
+  }
+  const setEnvironment = (name: "indoor" | "outdoor") => {
+    const outside = name === "outdoor";
+    ambient.color.set(outside ? 0xf3f5ed : 0xece8db);
+    ambient.intensity = outside ? 0.95 : 0.65;
+    key.color.set(outside ? 0xfff9ed : 0xfff7e8);
+    key.intensity = outside ? 4 : 4.5;
+    key.position.set(-650, outside ? -1000 : -200, outside ? 1100 : 650);
+    bulb.intensity = outside ? 0 : 240000;
+    sky.intensity = outside ? 1 : 0;
+  };
+  setEnvironment(setting);
   let disposed = false;
   const mixers: AnimationMixer[] = [];
+  const dancingArms: Array<{
+    joint: Object3D;
+    x: number;
+    z: number;
+    side: number;
+  }> = [];
   const gestures: Array<{
     role: string;
     head?: Object3D;
+    gazeTarget?: Object3D;
     torso?: Object3D;
+    arm?: Object3D;
+    armRest: [number, number, number];
     headRest: [number, number, number];
     torsoRest: [number, number, number];
     offset: number;
   }> = [];
+  const gaze = new Vector3();
+  const faceForward = new Vector3(0, 0, 1);
   let elapsed = 0;
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<Material>();
@@ -89,13 +134,23 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
     shadow.position.set(x, y, 2);
     group.add(shadow);
   }
+  contactShadow(910, 727, 48, 10);
   contactShadow(675, 483, 45, 8);
   contactShadow(565, 664, 55, 12);
-  contactShadow(1019, 705, 48, 10);
+  contactShadow(1036, 705, 48, 10);
   contactShadow(1357, 514, 62, 10);
   const loader = new GLTFLoader();
   const textureLoader = new TextureLoader();
   const placements = [
+    {
+      x: 910,
+      y: 727,
+      size: 57,
+      turn: 0.824,
+      agent: "opencode",
+      role: "inspector",
+      offset: 1.3,
+    },
     {
       x: 675,
       y: 483,
@@ -109,16 +164,16 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
       x: 565,
       y: 664,
       size: 64,
-      turn: -0.2,
+      turn: 0.34,
       agent: "codex",
       role: "pencil",
       offset: 2.2,
     },
     {
-      x: 1019,
+      x: 1036,
       y: 705,
       size: 56,
-      turn: -0.48,
+      turn: 0.4,
       agent: "pi",
       role: "paper",
       offset: 4.1,
@@ -132,6 +187,9 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
       for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
         materials.add(m);
         if (m instanceof MeshStandardMaterial) {
+          if (m.name === "Warm porcelain / pastel ivory")
+            m.color.set("#fff3dc");
+          if (m.name === "Light cream enamel") m.color.set("#fff9ec");
           if (m.name === "Smoked monitor glass") {
             m.envMapIntensity = 0.12;
             m.roughness = 0.4;
@@ -149,7 +207,9 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
   }
   void Promise.all(
     placements.map(async (p) => {
-      const gltf = await loader.loadAsync(ROOT + `workshop-bot-${p.role}.glb`);
+      const gltf = await loader.loadAsync(
+        ROOT + `workshop-bot-${p.role}.glb?pose=close-inspection-2`,
+      );
       remember(gltf.scene);
       const texture = await textureLoader.loadAsync(
         ROOT + `badge-${p.agent}.png`,
@@ -162,15 +222,58 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
       texture.flipY = false;
       textures.add(texture);
       const model = gltf.scene.clone(true);
-      let head: Object3D | undefined, torso: Object3D | undefined;
+      let gazeTarget: Object3D | undefined;
+      let head: Object3D | undefined,
+        torso: Object3D | undefined,
+        arm: Object3D | undefined;
       model.traverse((o) => {
+        if (/^Magnifying[ _]glass[ _]ivory[ _]rim/.test(o.name)) gazeTarget = o;
+        if (
+          p.role === "paper" &&
+          /^Paper[ _](left|right)[ _]shoulder(?:[._]?\d+)?$/.test(o.name)
+        ) {
+          dancingArms.push({
+            joint: o,
+            x: o.rotation.x,
+            z: o.rotation.z,
+            side: o.name.includes("left") ? -1 : 1,
+          });
+        }
+        if (
+          p.role === "inspector" &&
+          /^Inspector[ _]right[ _]elbow(?:[._]?\d+)?$/.test(o.name)
+        )
+          arm = o;
         if (/^Head[ _]tilt/.test(o.name)) head = o;
+        if (p.role === "pencil" && /^Pencil[ _]cradle/.test(o.name)) arm = o;
+        if (
+          p.role === "standing" &&
+          /^Pointing[ _]elbow(?:[._]?\d+)?$/.test(o.name)
+        )
+          arm = o;
         if (/^Torso(?:[._]?\d+)?$/.test(o.name)) torso = o;
       });
+      if (p.role === "inspector" && torso?.parent) {
+        // Put the bend at the hips, below the chest, while keeping both feet planted.
+        const hipBend = new Group();
+        hipBend.position.copy(torso.position);
+        hipBend.position.y -= 0.3;
+        torso.parent.add(hipBend);
+        model.updateMatrixWorld(true);
+        hipBend.attach(torso);
+        torso = hipBend;
+      }
       gestures.push({
         role: p.role,
         head,
+        gazeTarget,
         torso,
+        arm,
+        armRest: [
+          arm?.rotation.x ?? 0,
+          arm?.rotation.y ?? 0,
+          arm?.rotation.z ?? 0,
+        ],
         headRest: [
           head?.rotation.x ?? 0,
           head?.rotation.y ?? 0,
@@ -185,7 +288,33 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
       });
       model.traverse((o) => {
         if (!(o instanceof Mesh)) return;
+        if (
+          p.role === "inspector" &&
+          /^Magnifying[ _]glass[ _]ivory[ _]rim/.test(o.name)
+        ) {
+          const rim = new MeshStandardMaterial({
+            color: "#005bbf",
+            roughness: 0.3,
+          });
+          o.material = rim;
+          materials.add(rim);
+        }
         const source = Array.isArray(o.material) ? o.material[0] : o.material;
+        if (
+          p.role === "pencil" &&
+          source instanceof MeshStandardMaterial &&
+          /^(Oversized[ _]cobalt[ _]pencil|Pencil[ _].*[ _]graphite)/.test(
+            o.name,
+          )
+        ) {
+          const paint = source.clone();
+          paint.color.set("#245da9");
+          paint.roughness = 0.92;
+          paint.metalness = 0;
+          paint.envMapIntensity = 0.08;
+          o.material = paint;
+          materials.add(paint);
+        }
         if (
           source instanceof MeshStandardMaterial &&
           source.name.startsWith("Agent chest badge")
@@ -237,47 +366,101 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
     })
     .catch(() => {});
   return {
+    setEnvironment,
     update: (dt: number) => {
       elapsed += dt;
       for (const mixer of mixers) mixer.update(dt);
+      for (const a of dancingArms) {
+        const beat = elapsed * 3.4 + a.side * 0.7;
+        a.joint.rotation.x = a.x + 0.6 * Math.sin(beat);
+        a.joint.rotation.z =
+          a.z + a.side * (0.18 + 0.44 * Math.sin(beat + 0.8));
+      }
       for (const g of gestures) {
         const t = elapsed + g.offset;
         if (g.head) {
           const [x, y, z] = g.headRest;
+          if (g.role === "inspector")
+            g.head.rotation.set(
+              x + 0.38 + 0.1 * Math.sin(t * 0.8),
+              y - 0.25 + 0.1 * Math.sin(t * 0.55),
+              z + 0.04 * Math.sin(t),
+            );
           if (g.role === "pencil")
             g.head.rotation.set(
-              x + 0.23 * Math.sin(t * 0.7),
-              y + 0.1 * Math.sin(t * 0.43),
+              x + 0.6 * Math.sin(t * 0.85),
+              y + 0.3 * Math.sin(t * 0.55),
               z,
             );
           if (g.role === "paper")
             g.head.rotation.set(
-              x + 0.035 * Math.sin(t * 2.4),
-              y + 0.08 * Math.sin(t * 1.2),
-              z + 0.12 * Math.sin(t * 2.4),
+              x + 0.18 * Math.sin(t * 3.0),
+              y + 0.4 * Math.sin(t * 1.5),
+              z + 0.6 * Math.sin(t * 3.0),
             );
           if (g.role === "standing") {
             const phase = t % 9;
             const nod =
               phase > 2 && phase < 4.5
-                ? 0.23 *
+                ? 0.6 *
                   Math.sin((phase - 2) * 10) *
                   Math.sin(((phase - 2) / 2.5) * Math.PI)
-                : 0.025 * Math.sin(t);
-            g.head.rotation.set(
-              x + nod,
-              y + 0.32 + 0.16 * Math.sin(t * 0.65),
-              z,
-            );
+                : 0.05 * Math.sin(t);
+            g.head.rotation.set(x + nod, y + 0.32 + 0.4 * Math.sin(t * 0.8), z);
           }
+        }
+        if (g.arm) {
+          const [x, y, z] = g.armRest;
+          if (g.role === "inspector")
+            g.arm.rotation.set(
+              x + 0.05 * Math.sin(t * 0.8),
+              y,
+              z + 0.05 * Math.sin(t * 0.8),
+            );
+          if (g.role === "pencil")
+            g.arm.rotation.set(
+              x + 0.13 * Math.sin(t * 1.4),
+              y,
+              z + 0.18 * Math.sin(t * 1.4 + 0.5),
+            );
+          if (g.role === "standing")
+            g.arm.rotation.set(
+              x + 0.14 * Math.sin(t * 1.8),
+              y,
+              z + 0.28 * Math.sin(t * 1.8),
+            );
         }
         if (g.torso) {
           const [x, y, z] = g.torsoRest;
           g.torso.rotation.set(
-            x + (g.role === "pencil" ? 0.018 * Math.sin(t * 1.1) : 0),
-            y,
-            z + (g.role === "paper" ? 0.012 * Math.sin(t * 2.4) : 0),
+            x +
+              (g.role === "inspector"
+                ? 0.824 + 0.12 * Math.sin(t * 0.8)
+                : g.role === "pencil"
+                  ? 0.09 * Math.sin(t * 1.1)
+                  : 0),
+            y + (g.role === "paper" ? 0.12 * Math.sin(t * 3.0) : 0),
+            z + (g.role === "paper" ? 0.17 * Math.sin(t * 3.0 + 0.7) : 0),
           );
+        }
+        if (g.role === "inspector" && g.head?.parent && g.gazeTarget) {
+          // Aim the monitor's forward axis at the moving lens in head-parent space.
+          g.gazeTarget.getWorldPosition(gaze);
+          g.head.parent.worldToLocal(gaze);
+          gaze.sub(g.head.position).normalize();
+          // Keep the monitor readable in three-quarter view while glancing down.
+          const yaw = Math.max(
+            -0.35,
+            Math.min(0.35, Math.atan2(gaze.x, gaze.z)),
+          );
+          const pitch = Math.min(0.65, Math.max(0.25, -Math.asin(gaze.y)));
+          gaze.set(
+            Math.sin(yaw) * Math.cos(pitch),
+            -Math.sin(pitch),
+            Math.cos(yaw) * Math.cos(pitch),
+          );
+          g.head.quaternion.setFromUnitVectors(faceForward, gaze);
+          g.head.rotateY(-Math.PI / 18);
         }
       }
     },
@@ -287,7 +470,7 @@ export function addWorkshopHelpers(renderer: WebGLRenderer, wake: () => void) {
         exposure = renderer.toneMappingExposure;
       renderer.autoClear = false;
       renderer.toneMapping = ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.1;
+      renderer.toneMappingExposure = 1.2;
       renderer.render(scene, camera);
       renderer.autoClear = clear;
       renderer.toneMapping = tone;

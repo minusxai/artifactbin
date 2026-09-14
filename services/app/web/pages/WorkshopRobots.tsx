@@ -47,7 +47,7 @@ export default function WorkshopRobots() {
   return (
     <main className="robot-review">
       <nav>
-        <a href="/home_v2">
+        <a href="/">
           <ArrowLeft size={16} /> Back to the workshop
         </a>
         <a href="/" className="robot-review-brand">

@@ -2,7 +2,6 @@ import { useState } from "react";
 import { ArrowUpRight, ArrowRight, Minus } from "lucide-react";
 import { SHOWCASE, showcaseHref, showcaseCardUrl } from "@/lib/showcase";
 import { artSrc, REASONS } from "@/lib/landing-content";
-import "./workshop-directions.css";
 
 export function ArtifactPrint({
   index,

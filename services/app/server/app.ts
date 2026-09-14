@@ -172,7 +172,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
 }
 
 
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/examples|\/home_v2|\/home_v3|\/workshop_robots|\/datasets\/new)$/;
+const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/examples|\/workshop_robots|\/datasets\/new)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. `/docs`

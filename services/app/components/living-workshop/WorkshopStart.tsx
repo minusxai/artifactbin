@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { ArrowUpRight, Check, Copy } from "lucide-react";
-import { ClaudeCodeIcon, CodexIcon, PiIcon } from "@/components/brand-icons";
+import {
+  ClaudeCodeIcon,
+  CodexIcon,
+  PiIcon,
+  OpenCodeIcon,
+} from "@/components/brand-icons";
 import { Tooltip } from "@/components/Tooltip";
 
 /**
@@ -17,7 +22,7 @@ const AGENTS = [
   { name: "Claude Code", mark: <ClaudeCodeIcon size={13} /> },
   { name: "Codex", mark: <CodexIcon size={13} /> },
   { name: "pi", mark: <PiIcon size={13} /> },
-  { name: "OpenCode", mark: null },
+  { name: "OpenCode", mark: <OpenCodeIcon size={13} /> },
 ];
 
 export default function WorkshopStart({ origin }: { origin: string }) {

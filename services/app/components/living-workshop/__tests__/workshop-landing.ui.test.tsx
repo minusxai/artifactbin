@@ -1,11 +1,19 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import HomeV2 from "@/web/pages/HomeV2";
+import WorkshopLanding from "@/web/pages/WorkshopLanding";
+import { setWorkshopAppearance } from "@/lib/workshop-appearance";
 import { WORKSHOP_PAPERS } from "../scene-manifest";
 
 const scene = vi.hoisted(() => ({
   reset: vi.fn(),
+  setSetting: vi.fn(),
   detach: vi.fn(),
   dispose: vi.fn(),
 }));
@@ -13,6 +21,7 @@ vi.mock("../workshop-renderer", () => ({ createWorkshopScene: () => scene }));
 const clipboard = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   Object.defineProperty(navigator, "clipboard", {
     configurable: true,
     value: { writeText: clipboard },
@@ -21,7 +30,7 @@ beforeEach(() => {
 const mount = () =>
   render(
     <MemoryRouter>
-      <HomeV2 environment="outdoor" />
+      <WorkshopLanding />
     </MemoryRouter>,
   );
 
@@ -52,19 +61,16 @@ it("copies the deployment-aware install command and reports a denied clipboard",
     await screen.findByText("Select and copy the command above."),
   ).toBeInTheDocument();
 });
-it("provides keyboard reveal without a reset strip and disposes the scene on leaving", () => {
+it("switches the background without disposing the live board", async () => {
   const view = mount();
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: `Reveal behind ${WORKSHOP_PAPERS[0].title}`,
-    }),
+  await act(async () => {});
+  act(() => setWorkshopAppearance("outdoor"));
+  expect(scene.setSetting).toHaveBeenLastCalledWith(
+    expect.objectContaining({ name: "outdoor" }),
   );
-  expect(scene.detach).toHaveBeenCalledWith(WORKSHOP_PAPERS[0].id);
-  expect(
-    screen.queryByRole("button", { name: "Reset board" }),
-  ).not.toBeInTheDocument();
+  expect(scene.dispose).not.toHaveBeenCalled();
   view.unmount();
-  expect(scene.dispose).toHaveBeenCalled();
+  expect(scene.dispose).toHaveBeenCalledOnce();
 });
 
 it("copies an agent prompt from the green create action", async () => {

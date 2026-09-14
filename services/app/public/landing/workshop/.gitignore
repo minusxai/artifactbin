@@ -1,0 +1,10 @@
+# Preserve exploration originals locally; ship only the selected scene assets.
+/*
+!/.gitignore
+!/final-image-prompts.json
+!/indoor.png
+!/monotone-posters-prompt.json
+!/monotone-posters.webp
+!/outdoor.png
+!/wide-girl-mask.svg
+!/robots/

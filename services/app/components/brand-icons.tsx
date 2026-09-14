@@ -106,3 +106,4 @@ export function GitHubIcon(props: IconProps) {
     </svg>
   );
 }
+

@@ -113,7 +113,7 @@ describe('the address heals after checking read access', () => {
 
 describe('the app\'s paths', () => {
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
-    for (const p of ['/', '/login', '/account', '/assets', '/trash', '/docs-human', '/examples', '/home_v2', '/home_v3', '/workshop_robots']) {
+    for (const p of ['/', '/login', '/account', '/assets', '/trash', '/docs-human', '/examples', '/workshop_robots']) {
       const res = await app.request(p);
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');
