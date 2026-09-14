@@ -209,6 +209,29 @@ describe('the markup skill', () => {
     expect(doc).toContain('{/* … */}');
     expect(doc).toContain('`<html>`');
   });
+  /*
+   * ADDED (workstream F — the agent-actionability audit). Two sentences an
+   * afbin agent could not act on.
+   *
+   * "top-level fields of the publish call" is the HTTP body's name for them.
+   * The agent writes theme/template/colorMode in the file's YAML fence and
+   * pushes; nothing in this doc said where they go.
+   *
+   * "Social preview: upload and crop" pointed at publishing-versions.md, which
+   * says nothing about either — while the real path is two `<meta>` tags in
+   * `<Helmet>` (lib/story/social-preview reads them out of the document
+   * source), documented nowhere. A pointer to a doc that does not answer costs
+   * the turns of reading it and still leaves the agent without the mechanism.
+   */
+  it('§F the publish-time fields are named where the agent writes them: the YAML fence', () => {
+    expect(doc.replace(/\s+/g, ' ')).toContain('`theme`, `template` and `colorMode` are top-level fields of the YAML fence');
+  });
+  it('§F the social preview names the Helmet meta tags an agent can push', () => {
+    expect(doc).toContain('artifactbin:og-image');
+    expect(doc).toContain('artifactbin:og-crop');
+    expect(doc).toContain('artifactbin:og-image-crop');
+    expect(doc).not.toContain('[upload and crop](publishing-versions.md)');
+  });
 });
 
 /*

@@ -49,7 +49,7 @@ export const POST = withTokenAuth(async (request, {tokenId, userId, params, clie
     (body.node_id !== undefined && (typeof body.node_id !== 'string' || !body.node_id.trim())) ||
     (body.quote !== undefined && (typeof body.quote !== 'string' || !body.quote.trim())) ||
     (body.node_id === undefined) === (body.quote === undefined))
-    return json({error: 'invalid_annotation_body', hint: 'Supply body and exactly one of node_id or quote'}, 400);
+    return json({error: 'invalid_annotation_body', hint: 'Supply the comment text with --body (or --input) and exactly one anchor: --node ID or --quote TEXT.'}, 400);
   const actor={tokenId,userId};
   const key=request.headers.get('Idempotency-Key');
   const work=async(receipt?:MutationReceipt)=>{
@@ -58,7 +58,7 @@ export const POST = withTokenAuth(async (request, {tokenId, userId, params, clie
   }, annotationAuthorForRequest(request, clientHarness),receipt);
   if (made instanceof Response) return made;
   if (!made) return json({error: 'not_found'}, 404);
-  if ('refused' in made) return json({error: made.refused, hint: 'Read the current document and use a unique quote or stable node_id'}, made.refused === 'stale' ? 409 : 400);
+  if ('refused' in made) return json({error: made.refused, hint: 'Read the current document again, then anchor with a --quote that appears exactly once, or with the node id from its stored markup as --node.'}, made.refused === 'stale' ? 409 : 400);
   notifyRemoteComment(userId, params.id, made.id, made.thread[0]);
   return json(made, 201);
   };

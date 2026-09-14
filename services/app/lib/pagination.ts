@@ -22,5 +22,5 @@ export function decodePage(input: Record<string, unknown>, kind: 'artifacts' | '
     } else if (typeof p.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(p.id) ||
       typeof p.created !== 'string' || !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}(?::?\d{2})?)$/.test(p.created) || !Number.isFinite(Date.parse(p.created))) throw new Error();
     return {limit, cursor: p};
-  } catch { return json({error: 'invalid_cursor', hint: 'Use next_cursor from the same listing endpoint'}, 400); }
+  } catch { return json({error: 'invalid_cursor', hint: 'Pass --cursor only the next_cursor the same listing returned; a cursor never carries over to another command or filter'}, 400); }
 }

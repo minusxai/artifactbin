@@ -262,7 +262,8 @@ export function parseParentField(body: Record<string, unknown>): string | null |
   const p = body.parent_id;
   if (p === undefined) return undefined;
   if (p === null) return null;
-  if (typeof p !== 'string' || !ID_RE.test(p)) return json({ error: 'invalid_parent' }, 400);
+  // The same refusal, word for word, as every other way of not being allowed a parent.
+  if (typeof p !== 'string' || !ID_RE.test(p)) return json(PARENT_REFUSED, 400);
   return p;
 }
 
@@ -408,7 +409,7 @@ export async function replaceArtifactWithBody(
    */
   if (current.format === 'folder') {
     if (CONTENT_FIELDS.some((f) => body[f] !== undefined)) {
-      return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Send title, visibility or parent_id instead'] }, 400);
+      return json({ error: 'not_editable', details: ['a folder has no content — its page is its listing. Only title, visibility and folder are editable, in the folder YAML you push'] }, 400);
     }
   }
   const prepared: PreparedContent | Response = current.format === 'folder'

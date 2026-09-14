@@ -460,3 +460,24 @@ test('the datasets topic names the push flag that publishes a writable dataset',
  assert.match(datasets,/--access <ACCESS>/,'the push help block in the same topic lists the flag');
  assert.match(commandHelp('push'),/--access <ACCESS>/);
 });
+
+/**
+ * THE RECOVERY CATALOGUE SPEAKS afbin, NOT HTTP (workstream F).
+ *
+ * Every fix here is printed by `afbin help errors`, compiled into the installed
+ * skill AND used as the fix of any CliError raised with that code — so it is the
+ * last thing an agent reads before deciding what to do next. An agent holding
+ * only this CLI cannot POST, PATCH or address a route, so a fix that names one
+ * costs it the turn it spends trying.
+ */
+test('every recovery fix is actionable with afbin alone — no routes, methods or curl',async()=>{
+ const {diagnosticCatalog}=await import('../src/diagnostics');
+ for(const [code,entry] of Object.entries(diagnosticCatalog)){
+  assert.ok(!/\/api\/|\bcurl\b|\bPOST\b|\bPATCH\b|\bPUT\b|\bDELETE\b/.test(entry.fix),`${code} fix names an HTTP door: ${entry.fix}`);
+ }
+ // The one that did not name a door but named no afbin path either: "upload the
+ // image as a file" has no upload command — a local path in the document is the
+ // way, and push carries it.
+ assert.match(diagnosticCatalog['image_fetch_failed']!.fix,/afbin push/);
+ assert.ok(!diagnosticCatalog['image_fetch_failed']!.fix.includes('upload the image as a file'));
+});
