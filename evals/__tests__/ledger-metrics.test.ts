@@ -187,6 +187,30 @@ describe('firstVersionEarly — a real document inside the first 40% of the wall
     expect(ledgerMetrics([markupWrite(10_000)], { startedAtMs: 4_000 }).msToFirstMarkupWrite).toBe(6_000);
     expect(ledgerMetrics([entry({ method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset' })]).msToFirstMarkupWrite).toBeNull();
   });
+
+  it('measures the first write to THE SCORED DOCUMENT when the driver names one', () => {
+    // The scratch document at 10s is not the deliverable; the clock runs to the real one at 70s,
+    // which is past 40% of a 100s run.
+    const ledger = [
+      entry({ t: 10_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'zz9999', reqMarkup: '<h1>scratch</h1>' }),
+      entry({ t: 70_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ab3cd9', reqMarkup: '<h1>Report</h1><h2>Detail</h2>' }),
+    ];
+    const m = ledgerMetrics(ledger, { startedAtMs: 0, durationMs: 100_000, documentId: 'ab3cd9' });
+    expect(m.msToFirstMarkupWrite).toBe(70_000);
+    expect(m.firstVersionEarly).toBe(false);
+    expect(m.skeletonSections).toBe(2);
+    // Unscoped, the scratch write is the first markup write and the run looks early.
+    expect(ledgerMetrics(ledger, { startedAtMs: 0, durationMs: 100_000 }).firstVersionEarly).toBe(true);
+  });
+
+  it('an /edits version with no recorded markup is still a version, and leaves skeletonSections null', () => {
+    const m = ledgerMetrics([
+      entry({ t: 1_000, method: 'POST', path: '/api/artifacts/ab3cd9/edits', status: 200, artifactId: 'ab3cd9' }),
+    ], { startedAtMs: 0, durationMs: 100_000, documentId: 'ab3cd9' });
+    expect(m.agentVersions).toBe(1);
+    expect(m.msToFirstMarkupWrite).toBe(1_000);
+    expect(m.skeletonSections).toBeNull();
+  });
 });
 
 describe('progressiveEdits — two versions of the agent\'s own, the later ones extending the first', () => {
@@ -240,15 +264,46 @@ describe('progressiveEdits — two versions of the agent\'s own, the later ones 
   });
 
   /**
-   * DELIBERATE, and a known limit: a dataset-first task uploads its rows as write ONE, so the
-   * document that follows is a different artifact and the run reads false however it was written.
-   * `documentWrites` is the count the brief names, and it counts every content write.
+   * A DATASET UPLOAD IS NOT A VERSION OF THE DOCUMENT. `data`, `dashboard`, `deck` and `scrolly`
+   * push their rows first, so counting content writes made a document that was published early
+   * and then extended read as no progression at all. Told which artifact the run is scored on,
+   * the count is a count of THAT document and the rows upload falls out of it.
    */
-  it('reads false on a dataset-first run whose document was then edited in place', () => {
-    expect(ledgerMetrics([
-      entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
-      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ab3cd9', reqMarkup: '<h1>Report</h1>' }),
-      entry({ t: 3_000, method: 'POST', path: '/api/artifacts/ab3cd9/edits', status: 200, artifactId: 'ab3cd9' }),
-    ]).progressiveEdits).toBe(false);
+  const DATASET_FIRST = [
+    entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, reqFormat: 'dataset', artifactId: 'ds1111' }),
+    entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ab3cd9', reqMarkup: '<h1>Report</h1>' }),
+    entry({ t: 3_000, method: 'POST', path: '/api/artifacts/ab3cd9/edits', status: 200, artifactId: 'ab3cd9' }),
+  ];
+
+  it('counts versions of the SCORED DOCUMENT on a dataset-first run, not the rows upload', () => {
+    const m = ledgerMetrics(DATASET_FIRST, { documentId: 'ab3cd9' });
+    expect(m.progressiveEdits).toBe(true);
+    expect(m.agentVersions).toBe(2);
+  });
+
+  it('does not count a write to any OTHER artifact as a version of the document', () => {
+    // A scratch document the agent made to look at its own rendering is not the deliverable.
+    const m = ledgerMetrics([
+      entry({ t: 1_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'ab3cd9', reqMarkup: '<h1>Report</h1>' }),
+      entry({ t: 2_000, method: 'POST', path: '/api/artifacts', status: 201, artifactId: 'zz9999', reqMarkup: '<h1>scratch</h1>' }),
+      entry({ t: 3_000, method: 'PUT', path: '/api/artifacts/zz9999', status: 200, artifactId: 'zz9999' }),
+    ], { documentId: 'ab3cd9' });
+    expect(m.progressiveEdits).toBe(false);
+    expect(m.agentVersions).toBe(1);
+  });
+
+  it('is null for an unobserved ledger and 0 versions even when a document id was named', () => {
+    expect(ledgerMetrics([], { documentId: 'ab3cd9' }).progressiveEdits).toBeNull();
+    expect(ledgerMetrics([], { documentId: 'ab3cd9' }).agentVersions).toBe(0);
+  });
+
+  /**
+   * The unscoped reading is the LEGACY one, reached only where there is no scored document. It
+   * cannot tell a rows upload from a document, so the same dataset-first run reads false — which
+   * is exactly why the driver always passes the id.
+   */
+  it('falls back to the unscoped reading when no document id was given', () => {
+    expect(ledgerMetrics(DATASET_FIRST).progressiveEdits).toBe(false);
+    expect(ledgerMetrics(DATASET_FIRST).agentVersions).toBe(3);
   });
 });

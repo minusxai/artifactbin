@@ -400,16 +400,22 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   // The file holds exactly this task's agent traffic: its own proxy, and the driver's own setup
   // calls marked and skipped (`DRIVER_HEADER`). No window, so nothing depends on when it ran.
   const ledger = parseLedger(fs.readFileSync(r.ledgerPath, 'utf8'));
-  // `startedAtMs` is the anchor `ms_to_first_publish` is measured from, and `durationMs` the wall
-  // clock `first_version_early` takes its 40% of — the two things the caller knows and the ledger
-  // cannot. Every other number the ledger answers is a pure function of the entries (`ledgerRows`,
-  // which owns `versions` and `agent_versions` too).
-  const lm = ledgerMetrics(ledger, { startedAtMs, durationMs: spawned.durationMs });
 
-  // --- score: product. The agent need not have used the document the start link named — Claude Opus 5
-  // created its own, twice — so `scoredArtifactId` decides which artifact to score (its answer, then the
-  // ledger, then the start document) and `used_start_document` records whether it was the one it was given.
+  // WHICH ARTIFACT THIS RUN IS SCORED ON, decided before the ledger is read rather than after: the
+  // agent need not have used the document the start link named — Claude Opus 5 created its own,
+  // twice — so `scoredArtifactId` picks it (the agent's answer, then the ledger, then the start
+  // document), `used_start_document` records whether it was the one it was given, and the version
+  // counts below are counts of THAT document rather than of every content write.
   const targetId = scoredArtifactId({ finalMessage: result.finalMessage, ledger, startId: start.id });
+
+  // The three things the caller knows and the ledger cannot: the anchor `ms_to_first_publish` is
+  // measured from, the wall clock `first_version_early` takes its 40% of, and which document the
+  // versions are versions OF. Everything else is a pure function of the entries (`ledgerRows`,
+  // which owns `versions` and `agent_versions` too, and takes the same options for that reason).
+  const ledgerOpts = { startedAtMs, durationMs: spawned.durationMs, ...(targetId ? { documentId: targetId } : {}) };
+  const lm = ledgerMetrics(ledger, ledgerOpts);
+
+  // --- score: product
 
   // AND THEN THE PERSON SHARES IT. Every document the agent made is born PRIVATE to the account, while
   // every read below is anonymous — the reader's view is the whole point of the score — so a flawless
@@ -478,7 +484,7 @@ async function runTask(r: TaskRun): Promise<Outcome> {
   rec.record(task.id, 'approvals', approver ? approver.approved.length : setupApprovals, 'number');
   // Every number the ledger answers, `versions` included, built in ONE pure place (`ledgerRows`) so
   // the count and its caller are one thing to break.
-  for (const row of ledgerRows(ledger)) rec.record(task.id, row.metric, row.value);
+  for (const row of ledgerRows(ledger, ledgerOpts)) rec.record(task.id, row.metric, row.value);
   rec.record(task.id, 'query_rows', queryRows);
   // --- rows: m1 instrumentation. Recorded on EVERY run, as plain rows rather than through `checks`:
   // the check map is gated by what each task grades, and these are observations about the agent, not

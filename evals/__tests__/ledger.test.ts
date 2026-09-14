@@ -133,6 +133,23 @@ describe('ledgerRows', () => {
     expect(rows(run).agent_versions).toBe(2);
     expect(rows(run).versions).toBe(3);
   });
+
+  /**
+   * The driver hands `ledgerRows` the same options it hands `ledgerMetrics`, so `agent_versions`
+   * is a count of the SCORED DOCUMENT's versions: the dataset upload that opened a data task is
+   * not one of them. `versions` is unchanged — the driver's document plus every content write.
+   */
+  it('counts agent_versions against the scored document when the driver names one', () => {
+    const run = [
+      e({ path: '/api/artifacts', reqFormat: 'dataset', artifactId: 'ds1111' }),
+      e({ path: '/api/artifacts', artifactId: 'abc123', reqMarkup: '<h1>Report</h1>' }),
+      e({ path: '/api/artifacts/abc123/edits' }),
+    ];
+    const scoped = Object.fromEntries(ledgerRows(run, { documentId: 'abc123' }).map((r) => [r.metric, r.value]));
+    expect(scoped.agent_versions).toBe(2);
+    expect(scoped.versions).toBe(4);
+    expect(rows(run).agent_versions).toBe(3); // unscoped: every content write, the rows upload included
+  });
 });
 
 describe('endpoint and transport metrics', () => {
