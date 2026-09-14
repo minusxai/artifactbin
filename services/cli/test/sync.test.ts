@@ -541,5 +541,11 @@ test('--access on a dataset YAML must agree with the file, and never applies to 
   const document=await invoke(['push','report.jsx','--access','readwrite']);
   assert.notEqual(document.code,0);
   assert.equal(document.result.error.code,'unsupported_access');
+  assert.match(document.result.error.message,/report\.jsx is not a dataset/);
+  // A bare push aims the flag at the datasets it selects; with none it says so instead of publishing silently.
+  const bare=await invoke(['push','--access','readwrite']);
+  assert.notEqual(bare.code,0);
+  assert.equal(bare.result.error.code,'unsupported_access');
+  assert.match(bare.result.error.message,/no dataset was selected/);
  }finally{await rm(root,{recursive:true,force:true});}
 });

@@ -30,6 +30,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
  const validation=await validateFiles(workspace,paths,false,{skipMissingTracked:true});if(!validation.valid)throw new CliError('validation_failed','Local validation failed.','Run afbin validate and correct the reported errors.',validation);
  const conflicts=await readConflicts(workspace.home,workspace.root);
  const plans:PushPlan[]=[];
+ let accessible=false;
  for(const file of await inspectWorkspace(workspace,paths)){
   await checkRetiredCreate(workspace.home,workspace.root,file.path,file.document?.metadata.id??file.tracked?.id);
   if(!file.bytes&&file.tracked){plans.push({file,dependencies:[],ids:{},body:{},mode:'missing',id:file.tracked.id});continue;}
@@ -48,7 +49,10 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   // and a disagreement is refused rather than silently resolved in either direction.
   const datasetFile=resource?resource.type==='dataset':!file.document&&['.csv','.json'].includes(extname(file.path).toLowerCase());
   if(options.access!==undefined){
-   if(!datasetFile)throw new CliError('unsupported_access',`--access sets a dataset's row access; ${file.path} is not a dataset.`,'Push the CSV or JSON rows with --access, or drop the flag.');
+   // A NAMED target that cannot take an access is a typo, not an instruction to ignore the flag; a bare
+   // push aims it at the datasets among the tracked files, and refuses below if there are none.
+   if(!datasetFile&&paths?.length)throw new CliError('unsupported_access',`--access sets a dataset's row access; ${file.path} is not a dataset.`,'Push the CSV or JSON rows with --access, or drop the flag.');
+   if(datasetFile)accessible=true;
    if(resource?.type==='dataset'&&resource.access!==undefined&&resource.access!==options.access)throw new CliError('access_mismatch',`--access ${options.access} disagrees with ${file.path}, which declares access: ${resource.access}.`,'Name the same access in both, or drop the flag and let the file decide.');
   }
   const access=datasetFile?(resource?.type==='dataset'?resource.access??options.access:options.access):undefined;
@@ -76,6 +80,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   const body=mode==='edit'?{source,edit_id:metadata?.edit_id??base.edit_id}:mode==='metadata'?{...delta,expectedState:metadata?.state??base.state}: {...input,expectedState:metadata?.state??base.state,expectedVersion:metadata?.head_version??base.version};
   plans.push({file,source:resourceSource,dependencies,ids,body,mode,id,reconcile:!options.force&&!historical&&!!(file.document||resource)&&(mode==='replace'||mode==='metadata')});
  }
+ if(options.access!==undefined&&!accessible)throw new CliError('unsupported_access','--access sets a dataset\'s row access; no dataset was selected.','Name the CSV, JSON or dataset YAML to publish with --access.');
  // Selected documents own publication of their local dependencies. A bare push
  // must not also replace those assets in place and change existing readers.
  const composedPaths=new Set(plans.flatMap(plan=>plan.dependencies.map(dependency=>dependency.path)));
