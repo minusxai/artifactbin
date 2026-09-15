@@ -186,14 +186,15 @@ describe('rows live in the object store, not the database column', () => {
     expect(keys[0]).toBe(keys[1]);
   });
 
-  it('answers [] for a row with no object key — rows live in the store, full stop', async () => {
-    // Pre-object-store inline rows are a retired shape (pre-production, no
-    // back-compat): a row without a key has no rows, not hidden ones.
+  it('recovers surviving legacy inline JSON when no object key exists', async () => {
+    // Surviving pre-object-store rows are recoverable; corrupt bytes are not.
     const { body } = await create({ title: 'legacy', dataset: 'a\n1' });
     const db = await harness.db();
-    await db.query(`UPDATE artifacts SET content = '[{"a":42}]', meta = meta - 'objectKey' WHERE id = $1`, [body.id]);
+    await db.query(`UPDATE artifacts SET content = '[{"a":42}]', meta = meta - 'objectKey' - 'catalog' WHERE id = $1`, [body.id]);
     const row = (await db.query<{ content: string; meta: unknown }>('SELECT content, meta FROM artifacts WHERE id = $1', [body.id])).rows[0];
-    expect(await loadDatasetRows(row)).toEqual([]);
+    expect(await loadDatasetRows(row)).toEqual([{a:42}]);
+    expect(await loadDatasetRows({content:'invalid JSON',meta:{}})).toEqual([]);
+    expect(await loadDatasetRows({content:'[{"nested":{"a":42}}]',meta:{}})).toEqual([]);
   });
 });
 
