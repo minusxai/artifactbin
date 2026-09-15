@@ -32,6 +32,12 @@ export function requestOriginAllowed(target:string,pageOrigin:string,allowedOrig
   try{return new Set([pageOrigin,...allowedOrigins]).has(new URL(target).origin);}catch{return false;}
 }
 
+/** Serialized into Chromium: keep this predicate synchronous and self-contained. */
+function chartsSettled(selector:string):boolean {
+ const root=document.querySelector(selector);
+ return !!root&&!root.matches('[data-mx-chart-state="pending"]')&&!root.querySelector('[data-mx-chart-state="pending"]');
+}
+
 export function createBrowser(opts: { idleShutdownMs?: number; sessions?: SessionProcessOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
   const upload=opts.upload??browserUploadOptions(process.env);
@@ -66,8 +72,9 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
       ? clamp(req.viewport.width / Math.max(1, requestedCrop.width), 1, 4)
       : 1;
     // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
-    const renderTimer=setTimeout(()=>{void b.close().catch(()=>{});},remaining());
-    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity, serviceWorkers: 'block' }).catch(error=>{clearTimeout(renderTimer);throw error;});
+    let deadlineClose:Promise<void>|undefined;
+    const renderTimer=setTimeout(()=>{deadlineClose=b.close().catch(()=>{});},remaining());
+    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity, serviceWorkers: 'block' }).catch(async error=>{clearTimeout(renderTimer);await deadlineClose;throw error;});
     const forwarding = new AbortController();
     const pending = new Set<Promise<void>>();
     try {
@@ -110,15 +117,16 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
       // Readiness covers lazy placeholders and Vega's asynchronous work. Two
       // frames ensure a React handoff cannot expose a transient empty state.
-      const waitForCharts=()=>page.waitForFunction(async selector=>{
-        // No locally named function: tsx keepNames would inject a Node-only
-        // __name helper into the function serialized into Chromium.
-        const before=document.querySelector(selector);
-        if(!before||before.matches('[data-mx-chart-state="pending"]')||before.querySelector('[data-mx-chart-state="pending"]'))return false;
-        await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
-        const after=document.querySelector(selector);
-        return !!after&&!after.matches('[data-mx-chart-state="pending"]')&&!after.querySelector('[data-mx-chart-state="pending"]');
-      },req.selector,{timeout:remaining()});
+      const waitForCharts=async()=>{
+        for(;;){
+          // Playwright treats a returned Promise as truthy; the polled predicate
+          // must be synchronous. Await animation frames separately, then recheck.
+          await page.waitForFunction(chartsSettled,req.selector,{timeout:remaining()});
+          await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))));
+          if(await page.evaluate(chartsSettled,req.selector))return;
+          remaining();
+        }
+      };
       await waitForCharts();
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
         const slides = surface.locator('[data-mx-slide]');
@@ -201,6 +209,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
       await Promise.allSettled(pending);
       clearTimeout(renderTimer);
       await page.close().catch(() => {});
+      await deadlineClose;
       scheduleIdle();
     }
   }
