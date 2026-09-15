@@ -1,4 +1,3 @@
-import AdminDocuments from '@/components/AdminDocuments';
 import { usePageData } from '../use-page-data';
 import { Navigate } from 'react-router';
 import DatasetUpload from '@/components/DatasetUpload';
@@ -8,7 +7,7 @@ import { useSession } from '../session';
 
 export function AccountPage() {
   const { session } = useSession();
-  const { data, error, refresh } = usePageData<{ username: string | null; adminEligible?: boolean }>('/api/page/account');
+  const { data, error, refresh } = usePageData<{ username: string | null }>('/api/page/account');
   if (session && !session.user) return <Navigate to="/login?callbackUrl=/account" replace />;
   return (
     <main className="mx-auto mt-8 max-w-3xl px-6 pb-24">
@@ -27,7 +26,6 @@ export function AccountPage() {
       <div className="mt-6"><TokensPanel /></div>
       <h2 className="mt-8 text-base font-semibold"><span className="text-accent">&gt;</span> data</h2>
       <div className="mt-4"><DatasetUpload /></div>
-      {data?.adminEligible && <AdminDocuments />}
     </main>
   );
 }

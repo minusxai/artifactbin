@@ -293,12 +293,12 @@ content and version numbers remain intact. Invalid/missing bytes remain explicit
 The complete-input dataflow path also recognizes these inline sources, so dependent aggregates
 never silently use the displayed 1,000-row sample.
 
-## Administrative source repair
+## Administrative document access
 
-Verified account allowlisting and explicit admin requests are owned by
-`lib/admin-documents.ts`, separate from reader and dataset policy. Proxy identity
-lookups stay in the proxy; the app consumes trusted claims. The audit and version
-write are atomic. See [admin document repair](admin-document-repair.md).
+`ADMIN__EMAILS` grants verified browser accounts editor access to markup documents
+through the existing role and SQL scope checks. `lib/viewer.ts` carries verified
+session claims; `lib/admin-access.ts` checks the deployment allowlist. Ownership
+and dataset permissions remain separate. See [admin access](admin-document-repair.md).
 
 ## Export images and refresh coordination
 

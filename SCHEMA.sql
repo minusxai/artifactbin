@@ -32,37 +32,6 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
-CREATE TABLE IF NOT EXISTS app.admin_document_audit (
-  id TEXT NOT NULL,
-  actor_user_id TEXT NOT NULL,
-  actor_token_id TEXT,
-  action TEXT NOT NULL,
-  artifact_id TEXT,
-  reason TEXT,
-  before_version INTEGER,
-  after_version INTEGER,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (id)
-);
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS actor_user_id TEXT NOT NULL;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS actor_token_id TEXT;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS action TEXT NOT NULL;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS artifact_id TEXT;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS reason TEXT;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS before_version INTEGER;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS after_version INTEGER;
-
-ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
-
 CREATE TABLE IF NOT EXISTS app.export_images (
   id TEXT NOT NULL,
   artifact_id TEXT NOT NULL,
