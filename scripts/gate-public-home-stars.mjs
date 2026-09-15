@@ -40,7 +40,10 @@ try {
   await noJs.close();
   console.log('ok public heading and shared topbar without JavaScript');
 
-  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: null });
+  // This gate exercises chrome and startup, including the real canvas readiness.
+  // Idle WebGL animation can starve software-rendered CI input for seconds per
+  // click. Reduced motion keeps scene loading/rendering without that idle loop.
+  const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: null, reducedMotion: 'reduce' });
   await githubWidgetFixture(context);
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
@@ -79,8 +82,8 @@ try {
     requestAnimationFrame(sample);
   });
   releaseScripts();
-  await page.locator('[data-mx-initial-home]').waitFor({ state: 'detached' });
   try {
+    await page.locator('[data-mx-initial-home]').waitFor({ state: 'detached' });
     assert(await createAction(page).isEnabled(), 'interactive Create becomes enabled at handoff');
   } catch (error) {
     console.error('handoff state:', await page.evaluate(() => ({
@@ -204,7 +207,7 @@ try {
 
   // A gesture attempted during startup must wait for the working React control,
   // never succeed against the inert server copy and silently disappear.
-  const early = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  const early = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'], reducedMotion: 'reduce' });
   await githubWidgetFixture(early);
   const earlyPage = await early.newPage();
   let releaseEarly;
@@ -223,7 +226,7 @@ try {
   await early.close();
   console.log('ok early Create gesture waits for the interactive control and copies setup instructions');
   // A blocked metadata endpoint must not hide or replace the repository link.
-  const blocked = await browser.newContext();
+  const blocked = await browser.newContext({ reducedMotion: 'reduce' });
   await githubWidgetFixture(blocked);
   await blocked.route('**/api/external/github', route => route.abort());
   const failurePage = await blocked.newPage();
