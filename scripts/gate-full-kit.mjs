@@ -98,6 +98,9 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 await page.route(/^https:\/\/buttons\.github\.io\/buttons\.html(?:\?|$)/, route => route.fulfill({ contentType: 'text/html', body: '<a href="https://github.com/minusxai/artifactbin" target="_blank">Star</a>' }));
 // The shell (and its frame) belongs to the owner; readers get the document.
 await becomeOwner(page, BASE, mint.token);
+// Owner setup visits the home page, whose live showcase images may still be
+// loading. Unload that page before observing the kitchen sink's own requests.
+await page.goto('about:blank');
 
 const external = [];
 const requests = [];
@@ -191,7 +194,7 @@ check(await frame.locator('[data-mx-inline-story] iframe').count() === 1
 const csp = await frame.evaluate('window.__csp || []');
 await Promise.all(requestChecks);
 check(csp.length === 0, `no CSP violations${csp.length ? `: ${csp.join(', ')}` : ''}`);
-check(external.length === 0, `no external requests${external.length ? `: ${external.slice(0, 3).join(', ')}` : ''}`);
+check(external.length === 0, `no external requests${external.length ? `: ${external.slice(0, 3).map(value => { const url = new URL(value); return url.origin + url.pathname; }).join(', ')}` : ''}`);
 check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 
 // 3b. the chart module is LAZY: a prose document must not download it
