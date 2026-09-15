@@ -126,7 +126,8 @@ export function migrateMarkupSource(source: string,options:MarkupMigrationOption
   return { source: migrated, changed: migrated !== source, diagnostics: [] };
 }
 
-interface DatasetMigrationOptions { after?: string; expected?: Record<string,string>; batchSize: number; dryRun?: boolean; maxHistoricalVersionsPerArtifact?: number; validate?: (source: string, artifact: Record<string, unknown>, version?: number) => Promise<string[]>; beforeCommit?: (artifactId: string) => void | Promise<void>; failBeforeCommit?: () => void }
+/** allowPartial repairs validated records while retaining and reporting every invalid record. */
+interface DatasetMigrationOptions { allowPartial?: boolean; after?: string; expected?: Record<string,string>; batchSize: number; dryRun?: boolean; maxHistoricalVersionsPerArtifact?: number; validate?: (source: string, artifact: Record<string, unknown>, version?: number) => Promise<string[]>; beforeCommit?: (artifactId: string) => void | Promise<void>; failBeforeCommit?: () => void }
 interface MigrationSnapshot { head: Record<string,unknown>; history: Record<string,unknown>[] }
 interface DatasetMigrationPlan { artifactId: string; fingerprint: string; before: MigrationSnapshot; after: MigrationSnapshot }
 const fingerprint = (snapshot: MigrationSnapshot): string => createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
@@ -154,26 +155,37 @@ export async function runDatasetCatalogMigrationBatch(db: Db, options: DatasetMi
     const artifactId = String(row.id); const format = String(row.format);
     const plannedMeta = format === 'dataset' ? catalogMetadata((row.meta ?? {}) as LegacyMeta) : row.meta;
     const plannedSource = format === 'markup' ? migrateMarkupSource(String(row.source ?? ''),markupOptions) : { source: row.source as string | null, changed: false, diagnostics: [] };
-    if (plannedSource.diagnostics.length) { conflicts.push(...plannedSource.diagnostics.map((d) => ({ ...d, artifactId }))); continue; }
+    if (plannedSource.diagnostics.length) { conflicts.push(...plannedSource.diagnostics.map((d) => ({ ...d, artifactId }))); if (!options.allowPartial) continue; }
     const history = await db.query<Record<string, unknown>>('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version', [artifactId]);
     const before = {head:row,history:history.rows};
     if(options.expected && options.expected[artifactId] !== fingerprint(before)){conflicts.push({artifactId,reason:'reviewed_snapshot_changed'});continue;}
     if (history.rows.length > historyLimit) { conflicts.push({ artifactId, reason: 'history_limit' }); continue; }
     const plannedHistory = history.rows.map((version) => ({ version, meta: version.format === 'dataset' ? catalogMetadata((version.meta ?? {}) as LegacyMeta) : version.meta,
       source: version.format === 'markup' ? migrateMarkupSource(String(version.source ?? ''),markupOptions) : { source: version.source as string | null, changed: false, diagnostics: [] } }));
-    const bad = plannedHistory.find((entry) => 'diagnostics' in entry.source && entry.source.diagnostics.length);
-    if (bad) { conflicts.push({ artifactId, version: Number(bad.version.version), reason: bad.source.diagnostics[0].reason }); continue; }
-    const headChanged = plannedSource.changed || plannedMeta !== row.meta;
-    const historyChanged = plannedHistory.filter((entry) => entry.meta !== entry.version.meta || ('changed' in entry.source && entry.source.changed));
+    const bad = plannedHistory.filter(entry => entry.source.diagnostics.length);
+    for (const entry of bad) conflicts.push(...entry.source.diagnostics.map(diagnostic => ({...diagnostic,artifactId,version:Number(entry.version.version)})));
+    if (bad.length && !options.allowPartial) continue;
+    let headChanged = !plannedSource.diagnostics.length && (plannedSource.changed || plannedMeta !== row.meta);
+    let historyChanged = plannedHistory.filter(entry => !entry.source.diagnostics.length && (entry.meta !== entry.version.meta || entry.source.changed));
     if (!headChanged && !historyChanged.length) continue;
     processed++;
     if (options.validate) {
-      const headErrors = format === 'markup' ? await options.validate(String(plannedSource.source ?? ''), row) : [];
-      if (headErrors.length) { conflicts.push({artifactId,reason:headErrors.join('; ')}); continue; }
-      let rejected=false;
-      for(const entry of historyChanged){if(entry.version.format!=='markup')continue;const source='source' in entry.source?entry.source.source:entry.source;if(typeof source!=='string')continue;const errors=await options.validate(source,row,Number(entry.version.version));if(errors.length){conflicts.push({artifactId,version:Number(entry.version.version),reason:errors.join('; ')});rejected=true;break;}}
-      if(rejected)continue;
+      const headErrors = format === 'markup' && (headChanged || !options.allowPartial) ? await options.validate(String(plannedSource.source ?? ''), row) : [];
+      if (headErrors.length) {
+        conflicts.push({artifactId,reason:headErrors.join('; ')});
+        if (!options.allowPartial) continue;
+        headChanged = false;
+      }
+      const rejected = new Set<typeof historyChanged[number]>();
+      for (const entry of historyChanged) {
+        if (entry.version.format !== 'markup' || typeof entry.source.source !== 'string') continue;
+        const errors = await options.validate(entry.source.source, row, Number(entry.version.version));
+        if (errors.length) { conflicts.push({artifactId,version:Number(entry.version.version),reason:errors.join('; ')}); rejected.add(entry); }
+      }
+      if (rejected.size && !options.allowPartial) continue;
+      historyChanged = historyChanged.filter(entry => !rejected.has(entry));
     }
+    if (!headChanged && !historyChanged.length) continue;
     const after:MigrationSnapshot={
       head:headChanged?{...row,meta:finalizeArtifactMetadata(format,plannedSource.source,plannedMeta as Record<string,unknown>),source:plannedSource.source,edit_id:newEditId()}:row,
       history:plannedHistory.map(entry=>historyChanged.includes(entry)?{...entry.version,meta:finalizeArtifactMetadata(String(entry.version.format),entry.source.source,entry.meta as Record<string,unknown>),source:entry.source.source}:entry.version),

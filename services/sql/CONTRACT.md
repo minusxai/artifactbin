@@ -47,3 +47,13 @@ then discarded, so the caller has nothing to persist. Omitting this field preser
 `__tests__/editable-row.test.ts` exercises these rules through both local and HTTP transports.
 
 Model call options are normalized temperature/maxTokens values; they cross the demand/replay seam and participate in the invocation key. SQL never resolves operator configuration or API-key references.
+
+Catalog reads optionally carry `RunInput.catalog`: a default schema, logical table names,
+permitted columns, table-data keys or stored model SQL, and optional scalar parameter types.
+They contain exactly one result query. The service mounts only those columns under the logical
+schema/table names; transport keys never become readable relations. DuckDB's native parser
+checks the original SQL and catalog references. System/cross-catalog relations and dynamic table
+functions are rejected. Models resolve lazily as views, retaining full intermediate data and
+rejecting dependency cycles. Typed parameters remain bound values; query literal bytes are preserved.
+The ordinary read admission, external-access lock, deadline and pagination caps still apply.
+PostgreSQL catalogs continue to use the app's PostgreSQL compiler before the PostgreSQL transport.

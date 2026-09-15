@@ -20,7 +20,7 @@ import { migrationRequest, parseMigrationArgs as parseShared, redactingWriter, r
 
 const BACKUP_DIR_FLAG = { '--backup-dir': (out, value) => { out.backupDir = value ?? ''; } };
 
-export const parseMigrationArgs = (argv, environment = process.env) => parseShared(argv, environment, BACKUP_DIR_FLAG);
+export const parseMigrationArgs = (argv, environment = process.env) => ({...parseShared(argv.filter(arg=>arg!=='--allow-partial'), environment, BACKUP_DIR_FLAG),allowPartial:argv.includes('--allow-partial')});
 
 /** Inventory and persist every page before the first write. The server compares each reviewed snapshot. */
 export async function runMigrationCli(options) {
@@ -37,7 +37,7 @@ export async function runMigrationCli(options) {
   });
   const request = (input) => migrationRequest({
     fetchFn: options.fetch, endpoint, secret: options.secret, timeoutMs: options.timeoutMs, retries: options.retries, write,
-    body: { batchSize: options.batchSize, maxHistoricalVersionsPerArtifact: options.historyLimit ?? 1000, ...input },
+    body: { ...(options.allowPartial ? {allowPartial:true} : {}), batchSize: options.batchSize, maxHistoricalVersionsPerArtifact: options.historyLimit ?? 1000, ...input },
   });
 
   const pages = []; let after; const cursors = new Set(); let blocked = false;
@@ -53,19 +53,27 @@ export async function runMigrationCli(options) {
     cursors.add(after);
   }
   write(`migration preview and backups: ${backupDir}`);
-  if (blocked) return { ok: false, reason: 'conflict', report: pages.at(-1) };
+  if (blocked && !options.allowPartial) return { ok: false, reason: 'conflict', report: pages.at(-1) };
   if (options.dryRun) return { ok: true, report: pages.at(-1) };
   for (const preview of pages) {
     const expected = Object.fromEntries((preview.plans ?? []).map((plan) => [plan.artifactId, plan.fingerprint]));
     if (!Object.keys(expected).length) continue;
     const result = await request({ dryRun: false, expected });
-    if (!result.ok) { write('migration stopped; keep backups and preview again before retrying'); return result; }
+    if (!result.ok && !(options.allowPartial && result.report && result.report.changed === Object.keys(expected).length && result.report.conflicts.every(conflict => preview.conflicts.some(prior => JSON.stringify(prior) === JSON.stringify(conflict))))) { write('migration stopped; keep backups and preview again before retrying'); return result; }
     write(`apply: processed=${result.report.processed} changed=${result.report.changed} done=${result.report.done}`);
   }
-  const audit = await request({ dryRun: true });
-  if (!audit.ok) return audit;
-  await saveReport(audit.report);
-  if (!audit.report.done || audit.report.changed || audit.report.conflicts?.length) {
+  let audit, auditAfter, remaining = false;
+  const auditCursors = new Set();
+  do {
+    audit = await request({ dryRun: true, ...(auditAfter ? {after:auditAfter} : {}) });
+    if (!audit.report) return audit;
+    await saveReport(audit.report);
+    if (!audit.ok || !audit.report.done || audit.report.changed || audit.report.conflicts?.length) remaining = true;
+    auditAfter = audit.report.nextCursor;
+    if (auditAfter && auditCursors.has(auditAfter)) return {ok:false,reason:'no_progress'};
+    if (auditAfter) auditCursors.add(auditAfter);
+  } while (auditAfter);
+  if (remaining) {
     write('migration incomplete: the final audit found remaining work; keep backups and review a fresh preview');
     return { ok: false, reason: 'remaining', report: audit.report };
   }

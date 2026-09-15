@@ -63,3 +63,15 @@ it('uses catalog table names at the direct mutation HTTP boundary and refuses im
  const rows = await tableQuery(request(`/a/${id}/tables`,{method:'POST',json:{sql:'select n from public.rows'}}),ctx(id));
  expect((await rows.json()).rows).toEqual([{n:2}]);
 });
+
+it('publishes and reads native DuckDB source queries used by older artifacts',async()=>{
+ const token=await mintToken('legacy query owner');
+ const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:[{hours:1},{hours:2},{hours:3},{hours:10}]}}));
+ expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
+ const sql="select median(hours::double) as median, strftime(strptime('2026-01','%Y-%m'),'%Y-%m') as month from (select * from public.rows)";
+ const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:`<Helmet><Query name="legacy" source="ref:${id}">{\`${sql}\`}</Query></Helmet><DataTable data="$legacy" />`}}));
+ expect(doc.status,await doc.clone().text()).toBe(201);const did=(await doc.json()).id;
+ const response=await query(request(`/a/${did}/query`,{method:'POST',token:token.token,json:{}}),ctx(did));
+ expect(response.status,await response.clone().text()).toBe(200);
+ expect((await response.json()).tables.legacy.rows).toEqual([{median:2.5,month:'2026-01'}]);
+});

@@ -263,3 +263,17 @@ CLI upgrades pin their own package checksum; source/npm builds retain their inst
 `CLI__SERVICE_BASE_URL` is owned by CLI config and changes only package transport, never trust. A base URL may include a path prefix;
 the local eval proxy serves the same compressed/core/native assets under `/chat/releases`.
 Browser rendering remains server-side and adds no mandatory browser bytes to this release.
+
+## Dataset SQL dialects and legacy repair
+
+Stored catalog reads cross the SQL service boundary as an isolated logical catalog, not rewritten
+PostgreSQL SQL. `services/sql/src/read-catalog.ts` owns native DuckDB AST admission, catalog relation
+checks, permitted-column registration, lazy model views and typed parameter casts. The original
+SQL executes without a JSON AST round trip (which would round exact integers through JavaScript).
+`lib/datasets/sql.ts` remains the PostgreSQL compiler. Computed row sources use the stored path too.
+
+The dataset-catalog migration defaults to refusing any invalid version. Operators may explicitly
+use `scripts/dataset-catalog-migrate.mjs --allow-partial --apply` to repair validated heads/history
+while retaining invalid records unchanged. Every unresolved record remains in the reports; this
+mode never turns an incomplete audit into success. Preview backups precede all writes, complete
+artifact/history fingerprints still guard each transaction, and the final audit follows all pages.

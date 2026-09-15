@@ -215,3 +215,20 @@ describe('admin dataset catalog migration door', () => {
     expect(response.status).toBe(200);expect(await response.json()).toMatchObject({dryRun:true,done:true});
   });
 });
+
+it('explicit partial migration repairs the live head and valid history while retaining every invalid version', async () => {
+ const source='<Helmet><Query name="q">{`select * from ref_abc123`}</Query></Helmet>';
+ await seed('abc123','dataset',null,{objectKey:'rows',columns:[]});
+ await seed('aaaaaa','markup',source,{},4);
+ const db=await harness.db();
+ for(const [version,text] of [[1,'<p broken={'],[2,source],[3,source]] as const) await db.query('INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ($1,$2,\'\',$3,\'markup\',\'{}\')',['aaaaaa',version,text]);
+ const before=await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',['aaaaaa']);
+ const report=await runDatasetCatalogMigrationBatch(db,{batchSize:10,allowPartial:true,dryRun:false,validate:async(_source,_row,version)=>version===3?['old data no longer exists']:[]});
+ expect(report.conflicts).toEqual(expect.arrayContaining([{artifactId:'aaaaaa',version:1,reason:expect.stringContaining('invalid JSX')},{artifactId:'aaaaaa',version:3,reason:'old data no longer exists'}]));
+ expect(report).toMatchObject({documents:1,versions:1,done:false});
+ const head=(await db.query<{source:string;version:number}>('SELECT source,version FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0];
+ expect(head.source).toContain('source="ref:abc123"');expect(head.version).toBe(4);
+ const after=await db.query('SELECT * FROM artifact_versions WHERE artifact_id=$1 ORDER BY version',['aaaaaa']);
+ expect(after.rows[0]).toEqual(before.rows[0]);expect(after.rows[2]).toEqual(before.rows[2]);
+ expect(after.rows[1].source).toContain('source="ref:abc123"');
+});

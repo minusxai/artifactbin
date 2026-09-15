@@ -42,3 +42,12 @@ it('audits after apply and refuses to call an incomplete migration finished',asy
  }});
  expect(calls).toBe(3);expect(result).toMatchObject({ok:false,reason:'remaining'});
 });
+
+it('explicit partial mode backs up and applies valid records while reporting unresolved ones',async()=>{
+ const calls=[],saved=[];const conflict={artifactId:'aaaaaa',version:1,reason:'invalid JSX'};
+ const plan={artifactId:'aaaaaa',fingerprint:'a'.repeat(64),before:{head:{source:'old'},history:[{source:'broken'}]},after:{head:{source:'new'},history:[{source:'broken'}]}};
+ const fetch=async(_url,request)=>{const body=JSON.parse(request.body);calls.push(body);const final=calls.length>2;return Response.json({dryRun:body.dryRun,changed:final?0:1,processed:1,plans:final?[]:[plan],conflicts:[conflict],nextCursor:null,done:false},{status:409});};
+ const result=await runMigrationCli({url:'https://artifact.test',dryRun:false,allowPartial:true,batchSize:1,retries:0,secret:'secret',fetch,write:()=>{},saveReport:async report=>saved.push(report)});
+ expect(calls).toHaveLength(3);expect(calls[1]).toMatchObject({dryRun:false,allowPartial:true,expected:{aaaaaa:plan.fingerprint}});
+ expect(saved.length).toBeGreaterThanOrEqual(2);expect(result).toMatchObject({ok:false,reason:'remaining'});
+});
