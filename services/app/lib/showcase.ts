@@ -22,7 +22,7 @@ export const SHOWCASE_ORIGIN = 'https://artifactbin.dev';
 export const SHOWCASE_ASSETS_ORIGIN = 'https://a.artifactbin.dev';
 
 /** The shape a reader is about to open. Sets expectations before the click. */
-export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'product plan' | 'eda' | 'animation' | 'maps';
+export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'product plan' | 'eda' | 'animation' | 'maps' | 'coding agent plan' | 'micro app';
 
 interface ShowcaseDoc {
   order: number;
@@ -73,6 +73,30 @@ const ENTRIES: readonly ShowcaseDoc[] = [
     title: 'The best language for coding agents',
     kind: 'eda',
   },
+  {
+    order: 7,
+    id: "gb7wpH",
+    title: "Homepage Redesign",
+    kind: "coding agent plan"
+  },
+  {
+    order: 8,
+    id: "5fN6kY",
+    title: "Artifactbin 90-day product plan",
+    kind: 'product plan'
+  },
+  {
+    order: 9,
+    id: "HLAUdN",
+    title: "Weightloss with friends",
+    kind: "micro app"
+  },
+  {
+    order: 10,
+    id: "oHmbko",
+    title: "Badminton today?",
+    kind: "micro app"
+  }
 ];
 
 /** The wheel reads this, so `order` is the only thing that decides sequence. */
@@ -92,7 +116,9 @@ const KIND_LABELS: Record<ShowcaseKind, string> = {
   deck: 'slides',
   eda: 'EDA',
   animation: 'animations',
-  maps: 'maps'
+  maps: 'maps',
+  'coding agent plan': 'coding agent plan',
+  'micro app': 'micro app'
 };
 
 /**

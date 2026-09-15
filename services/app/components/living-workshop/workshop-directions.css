@@ -32,7 +32,7 @@
   align-items: center; justify-content: center; text-align: center; gap: 18px;
 }
 .library-gallery-link strong {
-  display: flex; align-items: center; gap: 0.2em; white-space: nowrap; font: 400 clamp(20px, 9cqi, 56px)/1 Georgia, serif;
+  display: flex; align-items: center; gap: 0.2em; white-space: nowrap; font: 400 clamp(18px, 7cqi, 56px)/1 Georgia, serif;
   letter-spacing: -0.045em;
 }
 .library-gallery-link strong svg { width: 0.8em; height: 0.8em; flex-shrink: 0; }

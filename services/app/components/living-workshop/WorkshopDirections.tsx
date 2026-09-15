@@ -32,8 +32,8 @@ export function ArtifactPrint({
 const THEMES = [
   { title: "follow the evidence", pages: [0, 2] },
   { title: "tell compelling data stories", pages: [1, 3] },
-  { title: "put ideas into action", pages: [4, 5] },
-  { title: "build micro-apps with friends", pages: [0, 3] },
+  { title: "put ideas into action", pages: [6, 7] },
+  { title: "build micro-apps with friends", pages: [8, 9] },
   { title: "create beautiful visuals", pages: [4, 5] },
 ];
 
@@ -72,9 +72,9 @@ export default function WorkshopDirections() {
             </article>
           ))}
           <a className="library-gallery-link" href="/examples">
-            <span className="studio-eyebrow">THERE’S MORE ON THE WALL</span>
+            <span className="studio-eyebrow">THERE’S MORE IN THE BIN</span>
             <strong>
-              <span>Enter the <em>gallery</em></span>
+              <span>Rummage through the <em>bin</em></span>
               <ArrowUpRight aria-hidden="true" />
             </strong>
             <span>Find something worth sharing</span>
