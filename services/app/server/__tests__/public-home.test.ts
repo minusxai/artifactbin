@@ -40,13 +40,12 @@ describe('public homepage first response', () => {
     expect(head).toContain('as="fetch" crossorigin="anonymous"');
     expect(head).toContain('https://artifactbin.dev/a/YPLu0U/export?format=jpg&amp;mode=card');
   });
-  it('uses the same local poster URL as the renderer in development', async () => {
+  it('leaves development poster requests to the bounded renderer loader', async () => {
     const dev = createAppServer({ indexHtml: async () => indexHtml, devHmrPort: 3041 });
     const head = (await (await dev.request('/')).text()).split('</head>')[0]!;
-    expect(head).toContain('/__dev/showcase/a/YPLu0U/export?format=jpg&amp;mode=card');
+    expect(head).not.toContain('/__dev/showcase/');
     expect(head).toContain('workshop-renderer.ts');
     expect(head).not.toContain('/@fs//');
-    expect(head.match(/href="\/__dev\/showcase\//g)).toHaveLength(2);
   });
   it('treats an invalid cookie as a public visitor', async () => {
     expect(await (await app.request(request('/', { cookie: `session=expired; ${AGENT_COOKIE}=invalid` }))).text()).toContain('aria-label="The artifactbin workshop"');

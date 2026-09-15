@@ -40,7 +40,7 @@ it.each(["load", "error"])("paints a paper loading indicator only until image %s
     clearRect: vi.fn(), save: vi.fn(), restore: vi.fn(), beginPath: vi.fn(),
     lineTo: vi.fn(), closePath: vi.fn(), clip: vi.fn(), fillRect: vi.fn(),
     arc: vi.fn(), fill: vi.fn(), stroke: vi.fn(), translate: vi.fn(), rotate: vi.fn(),
-    rect: vi.fn(), drawImage: vi.fn(), putImageData: vi.fn(),
+    fillText: vi.fn(), rect: vi.fn(), drawImage: vi.fn(), putImageData: vi.fn(),
     getImageData: () => ({ data: new Uint8ClampedArray(4) }),
     createLinearGradient: () => ({ addColorStop() {} }),
   };
@@ -60,6 +60,7 @@ it.each(["load", "error"])("paints a paper loading indicator only until image %s
     expect(context.drawImage).toHaveBeenCalled();
   } else {
     image.onerror!.call(image, new Event("error"));
+    expect(context.fillText).toHaveBeenCalledWith(WORKSHOP_PAPERS[0]!.kind.toUpperCase(), expect.any(Number), expect.any(Number));
   }
   expect(context.stroke).not.toHaveBeenCalled();
 });

@@ -144,3 +144,14 @@ it("keeps the FAQ and footer links after the feature section", () => {
   for (const [name, href] of [["Gallery", "/examples"], ["Docs", "/docs-human"], ["Privacy", "/privacy"], ["Terms", "/terms"]])
     expect(within(footer).getByRole("link", { name })).toHaveAttribute("href", href);
 });
+
+it("opens navigation from the mobile hamburger and dismisses with Escape", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Open navigation menu" }));
+  const menu = screen.getByRole("navigation", { name: "Menu" });
+  expect(within(menu).getByRole("link", { name: "Gallery" })).toHaveAttribute("href", "/examples");
+  expect(within(menu).getByRole("link", { name: "Human Docs" })).toHaveAttribute("href", "/docs-human");
+  expect(within(menu).getByRole("link", { name: "Account" })).toHaveAttribute("href", "/account");
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.queryByRole("navigation", { name: "Menu" })).not.toBeInTheDocument();
+});

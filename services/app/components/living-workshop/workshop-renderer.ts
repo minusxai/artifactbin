@@ -1,3 +1,4 @@
+import { createPosterLoader } from "./poster-loader";
 import { workshopPosterUrl } from "./workshop-assets";
 import { WORKSHOP_IMAGE_WIDTHS, workshopImageAt } from "./scene-manifest";
 import { addWorkshopHelpers } from "./workshop-helpers";
@@ -101,6 +102,7 @@ export function createWorkshopScene(
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   const images: HTMLImageElement[] = [],
     extras: Array<Mesh<BufferGeometry, MeshBasicMaterial>> = [];
+  const posterLoader = createPosterLoader();
   const sheets: Sheet[] = papers.map((paper, index) => {
     const cloth = makeCloth(
       paper.x,
@@ -205,7 +207,7 @@ export function createWorkshopScene(
     // Without it, pixel reads and WebGL uploads throw after an otherwise successful load.
     // A host without CORS follows onerror and keeps the existing paper placeholder.
     image.crossOrigin = "anonymous";
-    image.src = workshopPosterUrl(paper.image, !!import.meta.env?.DEV);
+    posterLoader.load(image, workshopPosterUrl(paper.image, !!import.meta.env?.DEV));
     return sheet;
   });
   function paintPoster(sheet: Sheet, index: number) {
@@ -266,6 +268,22 @@ export function createWorkshopScene(
       }
       c.putImageData(print, margin, margin);
       c.restore();
+    }
+    if (!sheet.loading && !sheet.image.naturalWidth) {
+      // An unavailable export still leaves a recognizable, clickable artifact cover.
+      c.fillStyle = "#174c91";
+      c.textAlign = "left";
+      c.font = '18px "Courier New", monospace';
+      c.fillText(sheet.paper.kind.toUpperCase(), 36, 58);
+      c.fillRect(36, 78, w - 72, 2);
+      c.font = 'bold 34px Georgia, serif';
+      const lines: string[] = [];
+      for (const word of sheet.paper.title.split(/\s+/)) {
+        const lastLine = lines.at(-1);
+        if (lastLine && lastLine.length + word.length < 22) lines[lines.length - 1] += ` ${word}`;
+        else lines.push(word);
+      }
+      lines.slice(0, 5).forEach((line, row) => c.fillText(line, 36, 130 + row * 43, w - 72));
     }
     // Light fiber speckles and a warm edge tie the printed surface to the room.
     for (let i = 0; i < 950; i++) {
@@ -818,6 +836,7 @@ export function createWorkshopScene(
       disposed = true;
       delete canvas.dataset.ready;
       helpers?.dispose();
+      posterLoader.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       visibility.disconnect();

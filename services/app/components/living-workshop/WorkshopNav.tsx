@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CircleUser, SlidersVertical } from "lucide-react";
+import { CircleUser, Menu, SlidersVertical } from "lucide-react";
 import {
   PageMenu,
   PageControls,
@@ -32,6 +32,7 @@ export default function WorkshopNav({ solid = false }: { solid?: boolean }) {
           </span>
         </a>
         <nav aria-label="Main navigation">
+          <div className="workshop-nav-desktop">
           <a href="/examples">Gallery</a>
           <a href="/docs-human">Docs</a>
           <GitHubStar placement="desktop-bar" />
@@ -53,6 +54,10 @@ export default function WorkshopNav({ solid = false }: { solid?: boolean }) {
               <CircleUser size={20} strokeWidth={1.5} />
             </button>
           </Tooltip>
+          </div>
+          <button className="workshop-nav-mobile" type="button" aria-label="Open navigation menu" onClick={() => requestPageChrome("menu")}>
+            <Menu size={24} strokeWidth={1.5} />
+          </button>
         </nav>
       </header>
       <PageMenu
