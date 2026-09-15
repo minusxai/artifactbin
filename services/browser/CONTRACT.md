@@ -56,7 +56,10 @@ and returns image metadata (mime, byte count, width, height) or the usual failur
 verdict. The signed upload URL never enters the page, logs, or database. Uploads
 are bounded, do not follow redirects, and may travel through a configured gateway
 that admits only the configured storage origin and export prefix. `/render`
-continues returning bytes for callers and local object stores.
+continues returning bytes for callers and local object stores. Missing upload
+capability returns `upload_unavailable`; apps then persist through the original
+byte transport, so existing S3 deployments and mixed-version rollouts still work.
+An attempted upload failure does not switch transports.
 
 Both methods wait until chart elements marked `data-mx-chart-state="pending"`
 settle. This covers the lazy chart module and asynchronous chart rendering;

@@ -32,6 +32,16 @@ describe('persistent export delivery',()=>{
    expect(calls).toBe(1);
   }finally{await resetExportRenderer();setServices({});}
  });
+ it('keeps S3 exports working when a browser has not enabled direct uploads',async()=>{
+  const token=await mintToken('rollout'),row=await createArtifact(token.id,null,{format:'markup',content:'',source:'<p>hello</p>',meta:{},title:'Rollout',description:null});
+  const store=objectStore(),original=store.signedUpload;let renders=0,uploads=0;
+  store.signedUpload=async()=>({url:'https://storage.example/exports/objects/test.png',contentType:'image/png'});
+  setServices({browser:{render:async()=>{renders++;return {ok:true,mime:'image/png',bytes:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64')};},renderAndUpload:async()=>{uploads++;return {ok:false,reason:'upload_unavailable'};}}});
+  try{
+   const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`),{params:Promise.resolve({id:row.id})});
+   expect(response.status).toBe(302);expect(uploads).toBe(1);expect(renders).toBe(1);
+  }finally{await resetExportRenderer();setServices({});if(original)store.signedUpload=original;else delete store.signedUpload;}
+ });
  it('streams a published image through a scoped grant and rejects other scopes and expired grants',async()=>{
   const body=Buffer.from('image fixture'),key=`exports/objects/${id}.png`;
   await objectStore().put(key,body,'image/png');

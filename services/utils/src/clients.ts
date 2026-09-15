@@ -61,8 +61,10 @@ export function browserClient(url: string, opts: { deadlineMs?: number; serviceS
     async renderAndUpload(input){
       try{
         const response=await fetch(`${url}${BROWSER_ROUTES.renderUpload}`,{method:'POST',headers:{'content-type':'application/json',...(opts.serviceSecret?{[SERVICE_AUTH_HEADER]:opts.serviceSecret}:{})},body:JSON.stringify(input),signal:AbortSignal.timeout(Math.max(deadline,45_000))});
-        if(!response.ok)return {ok:false,reason:'unavailable',detail:`${response.status}`};
-        return await response.json() as RenderUploadResult;
+        if(response.status===404)return {ok:false,reason:'upload_unavailable'};
+        const result=await response.json() as RenderUploadResult;
+        if(response.ok||(!result.ok&&result.reason==='upload_unavailable'))return result;
+        return {ok:false,reason:'unavailable',detail:`${response.status}`};
       }catch{return {ok:false,reason:'unavailable',detail:'Export upload service unavailable'};}
     },
     async render(req: RenderRequest): Promise<RenderResult> {

@@ -53,6 +53,7 @@ export type RenderResult =
 /** A narrowly scoped signed PUT URL; never exposed to the rendered page. */
 export interface RenderUploadRequest { render:RenderRequest; upload:{url:string;contentType:'image/png'|'image/jpeg'} }
 export type RenderUploadResult =
+ | {ok:false;reason:'upload_unavailable'}
  | {ok:true;mime:'image/png'|'image/jpeg';bytes:number;width:number;height:number}
  | Exclude<RenderResult,{ok:true}>;
 

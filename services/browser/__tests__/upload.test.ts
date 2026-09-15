@@ -1,5 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {withHttpServer} from '@artifactbin/test-support/net';
+import {serveBrowser} from '../src/index';
+import {browserClient} from '@artifactbin/utils';
 import {uploadGateway} from '../src/upload-gateway';
 import {uploadImage} from '../src/upload';
 
@@ -49,4 +51,12 @@ describe('upload gateway',()=>{
    expect(hits).toBe(1);
   }finally{await gateway.close();await sink.close();}
  });
+});
+
+it('reports missing upload capability without confusing it with a failed render',async()=>{
+ const service=serveBrowser({render:async()=>({ok:false,reason:'unavailable'})}),listening=service.listen(0);
+ try{
+  const result=await browserClient(listening.url).renderAndUpload!({render:{url:'http://app.test',format:'png',selector:'body',capture:'full',viewport:{width:100,height:100}},upload:{url:'https://storage.test/exports/objects/a',contentType:'image/png'}});
+  expect(result).toEqual({ok:false,reason:'upload_unavailable'});
+ }finally{await service.close();}
 });

@@ -242,8 +242,10 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
     const object_key=`exports/objects/${id}.${format}`;
     const upload=await store.signedUpload(object_key,EXPORT_MIME[format]);
     const result=await browser.renderAndUpload({render:renderRequest(input,format,capture,slide,opts.crop),upload});
-    if(!result.ok)throw new RenderFailure(result.reason==='no_slide'?{ok:false,reason:'no_slide',slides:result.slides}:{ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'});
-    return {object_key,mime:result.mime,bytes:result.bytes,width:result.width,height:result.height};
+    if(result.ok)return {object_key,mime:result.mime,bytes:result.bytes,width:result.width,height:result.height};
+    if(result.reason!=='upload_unavailable')throw new RenderFailure(result.reason==='no_slide'?{ok:false,reason:'no_slide',slides:result.slides}:{ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'});
+    // A mixed-version or unconfigured browser retains the original byte
+    // transport. Upload failures themselves never silently switch transports.
    }
    const result=await renderWithRetry(input,format,capture,slide,opts.crop);
    if(!result.ok)throw new RenderFailure(result.reason==='no_slide'?{ok:false,reason:'no_slide',slides:result.slides}:{ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'});

@@ -37,7 +37,7 @@ export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serv
       return json(200, await svc.sessions.request(request));
     }
     if(req.url===BROWSER_ROUTES.renderUpload){
-      if(!svc.renderAndUpload)return json(503,{ok:false,reason:"unavailable"});
+      if(!svc.renderAndUpload)return json(503,{ok:false,reason:"upload_unavailable"});
       return json(200,await svc.renderAndUpload(input as unknown as RenderUploadRequest));
     }
     const r = await svc.render(input);
