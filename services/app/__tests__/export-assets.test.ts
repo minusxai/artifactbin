@@ -1,4 +1,5 @@
-import {describe,it,expect} from 'vitest';
+import {describe,it,expect,vi} from 'vitest';
+import * as assetDelivery from '@/lib/export/assets';
 import {useAppHarness} from './harness';
 import {getDb} from '@/lib/db';
 import {objectStore,createS3Store, cachedReads} from '@/lib/object-store';
@@ -13,6 +14,24 @@ import {mintExportKey} from '@/lib/export-key';
 useAppHarness();
 const id='11111111-1111-4111-8111-111111111111';
 describe('persistent export delivery',()=>{
+ it.each([
+  ['http://assets.localhost:3030',200],
+  ['http://localhost:3030',302],
+  ['https://assets.example.com',302],
+ ])('delivers image bytes safely when the configured asset origin is %s',async(origin,status)=>{
+  const token=await mintToken('delivery'),row=await createArtifact(token.id,null,{format:'markup',content:'',source:'<p>delivery</p>',meta:{},title:'Delivery',description:null});
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64');
+  const location=`${origin}/assets/export/${id}?key=${mintExportKey(`export-asset:${id}`)}`;
+  const spy=vi.spyOn(assetDelivery,'exportAssetUrl').mockReturnValue(location);
+  setServices({browser:{render:async()=>({ok:true,mime:'image/png',bytes:png})}});
+  try {
+   const response=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`,{headers:{'X-Artifactbin-Export-Delivery':'redirect'}}),{params:Promise.resolve({id:row.id})});
+   expect(response.status).toBe(status);
+   if(status===200){expect(response.headers.get('location')).toBeNull();expect(Buffer.from(await response.arrayBuffer())).toEqual(png);}
+   else expect(response.headers.get('location')).toBe(location);
+  }finally{spy.mockRestore();await resetExportRenderer();setServices({});}
+ });
+
  it('redirects an authorized export to the persistent image and retains it across renderer resets',async()=>{
   const token=await mintToken('export'),row=await createArtifact(token.id,null,{format:'markup',content:'',source:'<p>hello</p>',meta:{},title:'Export',description:null});
   let calls=0;
