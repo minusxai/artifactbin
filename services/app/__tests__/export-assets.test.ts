@@ -16,7 +16,7 @@ describe('persistent export delivery',()=>{
  it('redirects an authorized export to the persistent image and retains it across renderer resets',async()=>{
   const token=await mintToken('export'),row=await createArtifact(token.id,null,{format:'markup',content:'',source:'<p>hello</p>',meta:{},title:'Export',description:null});
   let calls=0;
-  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0R8AAAAASUVORK5CYII=','base64');
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64');
   setServices({browser:{render:async()=>{calls++;return {ok:true,mime:'image/png',bytes:png};}}});
   try {
    for(let i=0;i<2;i++){
@@ -26,6 +26,9 @@ describe('persistent export delivery',()=>{
     const bytes=await exportAssetResponse(new Request(asset),asset.pathname.split('/').at(-1)!);
     expect(Buffer.from(await bytes.arrayBuffer())).toEqual(png);await resetExportRenderer();
    }
+   expect(calls).toBe(1);
+   const legacy=await exportImage(new Request(`http://localhost:3030/a/${row.id}/export`,{headers:{'X-Artifactbin-Protocol':'1'}}),{params:Promise.resolve({id:row.id})});
+   expect(legacy.status).toBe(200);expect(Buffer.from(await legacy.arrayBuffer())).toEqual(png);
    expect(calls).toBe(1);
   }finally{await resetExportRenderer();setServices({});}
  });

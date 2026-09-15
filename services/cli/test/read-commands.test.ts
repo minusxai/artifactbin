@@ -138,6 +138,7 @@ test('image exports select OG/refresh and follow only image grants without forwa
  const result=await serverRenderer('https://example.com',client).image('abc123',{format:'png',og:true,refresh:true});
  assert.equal(result.bytes.toString(),'pixels');
  assert.match(seen[0].url,/mode=card/);assert.match(seen[0].url,/refresh=1/);
+ assert.equal(seen[0].headers.get('X-Artifactbin-Export-Delivery'),'redirect');
  assert.equal(seen[1].url,grant);assert.equal(seen[1].headers.get('authorization'),null);
  const refused=new HttpClient({connection:{server:'https://example.com',token:'test-only'},fetch:async()=>new Response(null,{status:302,headers:{location:'https://elsewhere.example/private'}})});
  await assert.rejects(refused.view('/a/abc123/export'),/redirect/i);

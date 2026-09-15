@@ -31,7 +31,7 @@ const read = async () => {
   return res.json();
 };
 const card = async () => {
-  const res = await fetch(`${BASE}/a/${start.id}/export?mode=card&format=png`, { headers: auth });
+  const res = await fetch(`${BASE}/a/${start.id}/export?mode=card&format=png&refresh=1`, { headers: auth });
   if (!res.ok) throw new Error(`card failed: ${res.status} ${await res.text()}`);
   return Buffer.from(await res.arrayBuffer());
 };

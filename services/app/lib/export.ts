@@ -175,7 +175,7 @@ function renderRequest(
 ): RenderRequest {
   return {
     // The key is minted HERE, at the moment the request goes out — see
-    // RenderInput. A cold browser launch is unbounded, and a key that expired
+    // RenderInput. Previously an unbounded cold launch let the key expire
     // in the queue produced a 200 PNG of a 404 page.
     url: input.urlFor(),
     format,
@@ -368,7 +368,7 @@ export async function exportImageResponse(
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
     // value any reader has seen. Minted lazily (see RenderInput): a cold
-    // browser launch is unbounded, and a key that expired in the queue
+    // browser launch used to be unbounded, and a key that expired in the queue
     // produced a 200 PNG of a 404 page.
     // A markup document is photographed from its OWN page (`raw?chrome=0` —
     // the document with none of the reading chrome); the data tiers have no
@@ -399,17 +399,8 @@ export async function exportImageResponse(
     headers: {
       'Content-Type': rendered.mime,
       'X-Content-Type-Options': 'nosniff',
-      // Cards are fetched by browsers en masse (profile grids) behind a
-      // version-busted URL (&v=), so they may cache hard. Editor previews are
-      // private-cacheable; full shots keep no-store so an agent re-asking
-      // after an edit never sees stale output.
-      'Cache-Control': draftCrop
-        ? 'private, no-store'
-        : capture === 'card'
-        ? 'public, max-age=86400'
-        : capture === 'preview'
-          ? 'private, max-age=86400'
-          : 'no-store',
+      // Editor overviews are versioned by their caller; draft crops are ephemeral.
+      'Cache-Control': draftCrop ? 'private, no-store' : 'private, max-age=86400',
     },
   });
 }

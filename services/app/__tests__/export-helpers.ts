@@ -1,7 +1,7 @@
 import {expect} from 'vitest';
 import {GET} from '@/app/a/[id]/export/route';
 import {exportAssetResponse} from '@/lib/export/assets';
-export const EXPORT_PNG=new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0R8AAAAASUVORK5CYII=','base64'));
+export const EXPORT_PNG=new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==','base64'));
 /** Follow the real redirect through the real asset handler; failures and editor previews stay direct. */
 export async function exportImage(request:Request,context:Parameters<typeof GET>[1]):Promise<Response>{
  const response=await GET(request,context);

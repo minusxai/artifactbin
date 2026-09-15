@@ -139,7 +139,15 @@ try {
   const exportMarkup='<main><Iframe title="Internal export" height={100}><style>{`body{margin:0}`}</style><canvas width="100" height="100"/><script src="'+cdn+'/one.js"/><script type="module">{`await new Promise(resolve=>setTimeout(resolve,1800));const ctx=document.querySelector("canvas").getContext("2d");ctx.fillStyle=window.bundleOrder==="A"?"#33cc33":"#cc3333";ctx.fillRect(0,0,100,100);`}</script></Iframe></main>';
   const exportDoc=await mainFetch(backend+'/api/artifacts',{method:'POST',headers:authHeaders,body:JSON.stringify({title:'Internal asset export',markup:exportMarkup,visibility:'unlisted'})});assert(exportDoc.ok,await exportDoc.clone().text());
   const exportId=(await exportDoc.json()).id, beforeExportWire=wire.length;
-  const exported=await mainFetch(backend+'/a/'+exportId+'/export?format=png');assert(exported.ok,await exported.clone().text());
+  const redirect=await mainFetch(backend+'/a/'+exportId+'/export?format=png');assert.equal(redirect.status,302);
+  const imageUrl=new URL(redirect.headers.get('location'));assert.equal(imageUrl.origin,assets);
+  // Resolve the granted asset through the real asset-host middleware using the
+  // fixture's internal listener; the renderer still has no public TLS access.
+  const exported=await new Promise((resolve,reject)=>{
+    const req=httpRequest(backend+imageUrl.pathname+imageUrl.search,{headers:{host:new URL(assets).host,'x-forwarded-host':new URL(assets).host,'x-forwarded-proto':'https'}},res=>{
+      const chunks=[];res.on('data',chunk=>chunks.push(chunk));res.on('error',reject);res.on('end',()=>resolve(new Response(Buffer.concat(chunks),{status:res.statusCode,headers:res.headers})));
+    });req.on('error',reject);req.end();
+  });assert(exported.ok,await exported.clone().text());
   const {data:pixels,info}=await sharp(Buffer.from(await exported.arrayBuffer())).raw().toBuffer({resolveWithObject:true});
   let green=0;for(let offset=0;offset<pixels.length;offset+=info.channels)if(pixels[offset]===51&&pixels[offset+1]===204&&pixels[offset+2]===51)green++;
   assert(green>=9000,'cold managed export includes the cached library and awaited canvas');

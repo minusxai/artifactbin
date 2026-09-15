@@ -36,6 +36,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // `search` carries the reader's `<Value>` picks straight through to the page
   // this shoots (lib/story/url-values) — the raw route is the one door that
   // validates them, so an export cannot disagree with what it photographs.
+  // Installed older CLIs reject redirects. They keep the streaming binary
+  // adapter until they advertise support; browser/OG URLs use redirects.
+  const delivery=request.headers.has('X-Artifactbin-Protocol')&&request.headers.get('X-Artifactbin-Export-Delivery')!=='redirect'?'bytes':'redirect';
   return exportImageResponse(artifact, {
     refresh: q.get('refresh'),
     format: q.get('format'),
@@ -44,5 +47,5 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     crop: q.get('crop'),
     image: q.get('image'),
     search: new URL(request.url).search,
-  }, baseUrl(request), 'redirect');
+  }, baseUrl(request), delivery);
 }

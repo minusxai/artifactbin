@@ -111,12 +111,13 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
       // Readiness covers lazy placeholders and Vega's asynchronous work. Two
       // frames ensure a React handoff cannot expose a transient empty state.
       const waitForCharts=()=>page.waitForFunction(async selector=>{
-        const settled=()=>{const root=document.querySelector(selector);return !!root
-          && !root.matches('[data-mx-chart-state="pending"]')
-          && !root.querySelector('[data-mx-chart-state="pending"]');};
-        if(!settled())return false;
+        // No locally named function: tsx keepNames would inject a Node-only
+        // __name helper into the function serialized into Chromium.
+        const before=document.querySelector(selector);
+        if(!before||before.matches('[data-mx-chart-state="pending"]')||before.querySelector('[data-mx-chart-state="pending"]'))return false;
         await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
-        return settled();
+        const after=document.querySelector(selector);
+        return !!after&&!after.matches('[data-mx-chart-state="pending"]')&&!after.querySelector('[data-mx-chart-state="pending"]');
       },req.selector,{timeout:remaining()});
       await waitForCharts();
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
@@ -213,7 +214,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
     render(req): Promise<RenderResult> {
       const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
       const run = chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error("Render timed out in queue");return shoot({...req,timeoutMs:remaining});}).then(
-        (r): RenderResult => ({ ok: true, ...r }),
+        (r): RenderResult => Date.now()>deadline ? {ok:false,reason:'failed',detail:'Render deadline'} : { ok: true, ...r },
         (e): RenderResult => {
           if (e instanceof NoSlideError) return { ok: false, reason: 'no_slide', slides: e.slides };
           if (e instanceof NavigationError) return { ok: false, reason: 'navigation', detail: e.message };

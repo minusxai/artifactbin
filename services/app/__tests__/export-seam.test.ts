@@ -164,7 +164,7 @@ describe('the export route through the browser seam', () => {
 
 
 describe('stored export admission before screenshot work', () => {
-  it('refreshes both cache layers when a repair changes edit identity without changing version', async () => {
+  it('refreshes the stored image when a repair changes edit identity without changing version', async () => {
     const render = vi.fn(async (): Promise<RenderResult> => ({ ok: true, mime: 'image/png', bytes: PNG }));
     setServices({ browser: { render } });
     const original = { id: 'repaired-export', version: 3, edit_id: 'before' };

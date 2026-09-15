@@ -95,7 +95,7 @@ describe('GET /a/:id/export', () => {
    * scripts/gate-export-slice.mjs against a running server.
    */
   it(
-    'answers export-shaped for a document — never a redirect to something else',
+    'resolves a document export to image bytes through its scoped asset redirect',
     async () => {
       const { id } = await create(WITH_HEAD);
       const res = await shot(id, 'png');
@@ -250,7 +250,7 @@ describe('GET /a/:id/export?slide=N', () => {
 });
 
 /**
- * Renders are cached by artifact VERSION, in memory and in the object store —
+ * Image metadata tracks artifact revisions and renderer generation —
  * which is what makes an og card free to serve. So a change to WHAT the shot
  * covers must change the key too: without it, every document already published
  * would keep serving the picture taken by the old renderer (for the fix that

@@ -38,7 +38,7 @@ function scripted(...answers: RenderResult[]): BrowserService & { seen: RenderRe
 const PNG: RenderResult = { ok: true, mime: 'image/png', bytes: EXPORT_PNG };
 
 let n = 0;
-/** A fresh version every time, so neither cache layer can answer for the browser. */
+/** A fresh revision per test; the harness isolates persistent cache state. */
 // `source` rides along because the export door reads the document's own
 // `<Value>` declarations to canonicalize a link's selection (lib/export).
 const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'markup' as const, source: '<p>hi</p>' });

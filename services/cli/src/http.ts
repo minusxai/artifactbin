@@ -29,6 +29,7 @@ export class HttpClient {
   for(let attempt=0;attempt<3;attempt++){
    let response:Response;
    try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:imageExport?'manual':'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{
+    ...(imageExport?{'X-Artifactbin-Export-Delivery':'redirect'}:{}),
     ...headers,Authorization:`Bearer ${this.connection.token}`,'X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),
     ...(body!==undefined?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
     ...(this.options.readOnly?{'X-Artifactbin-Dry-Run':'1'}:{}),

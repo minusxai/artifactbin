@@ -99,7 +99,7 @@ describe('the page title follows the document', () => {
     // request origin — behind a reverse proxy the forwarded origin must win
     // over the container's own address. Out of a request scope the origin
     // falls back to PUBLIC_BASE_URL, which is what this sees.
-    expect(images[0].url).toMatch(new RegExp(`^https?://[^/]+/a/${doc.id}/export\\?mode=card&v=\\d+&r=2$`));
+    expect(images[0].url).toMatch(new RegExp(`^https?://[^/]+/a/${doc.id}/export\\?mode=card&v=\\d+&r=3$`));
     expect(images[0].url).toContain('://');
     expect(images[0]).toMatchObject({ width: 1600, height: 840 });
   });
