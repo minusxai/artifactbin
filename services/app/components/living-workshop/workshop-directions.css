@@ -171,20 +171,24 @@
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  background: #faf4e5;
   color: var(--studio-ink);
-  border-radius: 3px 9px 9px 3px;
-  border-bottom: 5px double #d8ccb2;
-  box-shadow:
-    0 3px 0 #bdb093,
-    0 7px 0 -2px #e9dfcb,
-    0 25px 35px -12px #041c5766;
+  isolation: isolate;
+  filter: drop-shadow(0 9px 9px #041c572b);
+}
+.library-book-paper {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
 }
 .library-spread:after {
   content: "";
   position: absolute;
-  inset: 0 auto 0 50%;
-  width: 30px;
+  inset: 4% auto 4% 50%;
+  width: 12px;
   transform: translateX(-50%);
   background: linear-gradient(
     90deg,
@@ -200,16 +204,8 @@
   min-width: 0;
   overflow: hidden;
 }
-.library-leaf:first-child {
-  background: linear-gradient(100deg, #fffaf0, #faf4e5 85%, #e7dcc6);
-  border-radius: 3px 0 0 3px;
-}
-.library-leaf:last-child {
-  background: linear-gradient(90deg, #eee4cf, #fffbef 15%, #faf4e5);
-  border-radius: 0 9px 9px 0;
-}
 .library-leaf .studio-print-sheet {
-  margin: 12px 12px 0;
+  margin: 20px 12px 0;
   padding: 0;
   border: 1px solid #d5cbb3;
   border-radius: 6px;
@@ -226,7 +222,7 @@
   display: none;
 }
 .library-leaf .studio-print-caption {
-  padding: 14px 13px 12px;
+  padding: 14px 13px 26px;
 }
 .library-leaf .studio-print-caption h3 {
   font-size: clamp(14px, 1.15vw, 20px);

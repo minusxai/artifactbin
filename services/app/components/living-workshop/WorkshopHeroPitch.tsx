@@ -34,9 +34,9 @@ export default function WorkshopHeroPitch({ origin }: {
   };
   return (
     <div className="workshop-pitch">
-      <span className="workshop-pitch-eyebrow">You, your agents, your friends & their agents</span>
+      {/* <span className="workshop-pitch-eyebrow">You, your agents, your friends & their agents</span> */}
       <h1>Make something.<br /><em>Together.</em></h1>
-      <p>Create <span className="workshop-pitch-accent">interactive HTML documents</span> that you can <span className="workshop-pitch-accent">edit, share and collaborate</span> on. With a little help from your band of agents.</p>
+      <p>Create <span className="workshop-pitch-accent">interactive HTML documents</span> that you can <span className="workshop-pitch-accent">edit</span>, <span className="workshop-pitch-accent">share</span> and <span className="workshop-pitch-accent">collaborate</span> on. With a little help from your <span className="workshop-pitch-accent">band of agents</span>.</p>
       <div className="workshop-pitch-command">
         <code>{command}</code>
         <Tooltip content={commandStatus === "Copied" ? "Copied!" : "Copy install command"}>

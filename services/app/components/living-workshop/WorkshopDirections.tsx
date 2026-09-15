@@ -67,6 +67,24 @@ export default function WorkshopDirections() {
                     <ArtifactPrint index={page} />
                   </div>
                 ))}
+                <svg className="library-book-paper" viewBox="0 0 600 360" preserveAspectRatio="none" aria-hidden="true">
+                  <defs>
+                    <path id={`book-leaf-${index}`} d="M5 10Q155 -7 300 14V348Q155 328 5 342Q0 342 0 337V15Q0 10 5 10Z" />
+                    <linearGradient id={`book-ink-${index}`}>
+                      <stop offset="0" stopColor="#fffaf0" />
+                      <stop offset=".87" stopColor="#faf4e5" />
+                      <stop offset="1" stopColor="#e5dac3" />
+                    </linearGradient>
+                  </defs>
+                  {[false, true].map((right) => (
+                    <g key={String(right)} transform={right ? "translate(600 0) scale(-1 1)" : undefined}>
+                      <use href={`#book-leaf-${index}`} y="5" fill="#bcae91" />
+                      <use href={`#book-leaf-${index}`} y="3" fill="#f4ead6" />
+                      <use href={`#book-leaf-${index}`} y="1.5" fill="#d8ccb2" />
+                      <use href={`#book-leaf-${index}`} fill={`url(#book-ink-${index})`} />
+                    </g>
+                  ))}
+                </svg>
               </div>
               <p className="library-caption">
                 <span>0{index + 1}</span>
