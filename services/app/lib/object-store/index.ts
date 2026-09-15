@@ -12,6 +12,7 @@
  * is what keeps `S3_URL` optional: unset, the app still runs on a laptop and in
  * CI with no external service, which is the same promise PGLite makes.
  */
+import type { RenderUploadRequest } from '@artifactbin/contracts';
 import { createRequire } from 'node:module';
 import { createHash, randomBytes } from 'crypto';
 import { mkdir, open, readFile, rm, writeFile } from 'fs/promises';
@@ -56,6 +57,7 @@ export interface ByteRange {
 
 export interface ObjectStore {
   readonly backend: 's3' | 'local';
+  signedUpload?(key: string, contentType: 'image/png' | 'image/jpeg'): Promise<RenderUploadRequest['upload']>;
   put(key: string, body: Buffer | string, contentType?: string): Promise<void>;
   get(key: string): Promise<Buffer>;
   /**
@@ -84,9 +86,9 @@ export interface ObjectStore {
  *
  * Every key this app reads is IMMUTABLE: content-addressed (`kind/sha256` for
  * datasets, ref images and webfonts) or version-addressed
- * (`exports/<id>/<version>…`). So caching at the STORE serves every reader —
+ * (export objects use allocated immutable IDs). So caching at the STORE serves every reader —
  * the document build, `/query`, mutate, the `ref:` image route, `/webfonts`
- * and the exporter — instead of one cache per caller, which is how a
+ * instead of one cache per caller, which is how a
  * dataset-only cache becomes four caches nobody can reason about.
  *
  * Measured before it existed: a document reading three datasets fetched all
@@ -119,7 +121,7 @@ const forget = (key: string): void => {
 /** Wrap a store so repeated reads of one key cost one fetch. */
 export function cachedReads(store: ObjectStore): ObjectStore {
   return {
-    backend: store.backend,
+    ...store,
     async put(key, body, contentType) { forget(key); return store.put(key, body, contentType); },
     async delete(key) { forget(key); return store.delete(key); },
     // Deliberately NOT cached and deliberately not counted: a streaming read is
@@ -178,7 +180,9 @@ export function createS3Store(config: S3Config): ObjectStore {
   // `createRequire` rather than a bare `require`: this package is ESM, so the
   // synchronous escape hatch has to be asked for by name.
   const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = nodeRequire('@aws-sdk/client-s3');
+  const { getSignedUrl } = nodeRequire('@aws-sdk/s3-request-presigner');
   const client = new S3Client({
+    requestChecksumCalculation: 'WHEN_REQUIRED',
     region: config.region,
     endpoint: config.endpoint,
     forcePathStyle: config.forcePathStyle,
@@ -186,6 +190,12 @@ export function createS3Store(config: S3Config): ObjectStore {
   });
   return {
     backend: 's3',
+    async signedUpload(key, contentType) {
+      const url = await getSignedUrl(client, new PutObjectCommand({
+        Bucket: config.bucket, Key: storageKeyFor(config, key), ContentType: contentType,
+      }), { expiresIn: 60, signableHeaders: new Set(['content-type']) });
+      return { url, contentType };
+    },
     async put(key, body, contentType) {
       await client.send(new PutObjectCommand({
         Bucket: config.bucket, Key: storageKeyFor(config, key), Body: body,

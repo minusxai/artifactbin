@@ -119,6 +119,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "@/lib/viz/interactive-map",
   "@/lib/viz/query-data",
   "@/lib/viz/recipe-file",
+  "@/lib/viz/render-readiness",
   "@/lib/viz/render-vega",
   "@/lib/viz/shared-tooltip",
   "@/lib/viz/spark-markup",

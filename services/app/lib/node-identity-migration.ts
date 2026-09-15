@@ -1,7 +1,7 @@
 /**
  * App-owned, resumable source-identity backfill contract.
  *
- * The admin runtime passes the process's cached Db. This module must never call
+ * Server-side maintenance code passes its exclusively owned Db. This module must never call
  * getDb itself or open a PGLite instance. One invocation owns one bounded batch;
  * the operator repeats it until `done`.
  */

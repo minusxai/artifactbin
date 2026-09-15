@@ -274,12 +274,17 @@ checks, permitted-column registration, lazy model views and typed parameter cast
 SQL executes without a JSON AST round trip (which would round exact integers through JavaScript).
 `lib/datasets/sql.ts` remains the PostgreSQL compiler. Computed row sources use the stored path too.
 
+Manual data migrations require server shell access (SSH or equivalent infrastructure access).
+There are no migration HTTP endpoints or remote migration clients. The database-level functions
+in `lib/node-identity-migration.ts` and `lib/datasets/migrate.ts` remain available for reviewed
+on-server maintenance code; no standalone migration command is shipped. Stop the app before
+opening its PGLite directory from a maintenance process, and use the deployment's database and
+object-store configuration. Back up and preview changes before applying them.
+
 The dataset-catalog migration retains invalid historical versions as explicit exceptions while
-repairing validated heads and history. Operators may use
-`scripts/dataset-catalog-migrate.mjs --allow-partial --apply` to apply valid artifact plans even
-when other current heads have blocking conflicts. Unresolved heads remain in every report and
-produce an incomplete result. Preview backups precede all writes, complete artifact/history
-fingerprints guard each transaction, and the final audit follows all pages.
+repairing validated heads and history. Callers must validate document data, preserve preview
+snapshots before writes, pass reviewed fingerprints to apply, and audit every page afterward.
+Unresolved heads remain conflicts; complete artifact/history fingerprints guard each transaction.
 
 Legacy datasets with surviving flat JSON in `content` receive a read-time catalog adapter.
 Migration plans a content-addressed object key without writing; apply uploads the original bytes
@@ -294,3 +299,24 @@ Verified account allowlisting and explicit admin requests are owned by
 `lib/admin-documents.ts`, separate from reader and dataset policy. Proxy identity
 lookups stay in the proxy; the app consumes trusted claims. The audit and version
 write are atomic. See [admin document repair](admin-document-repair.md).
+
+## Export images and refresh coordination
+
+`/a/:id/export` remains the image front door; `mode=card` selects the saved OG
+cover/framing and the default photographs the document. `refresh=1` waits for a
+new result. Completed images are immutable objects, served through scoped asset
+URLs with streaming reads. No completed export bytes live in app RAM caches.
+
+The app's export cache owns one row per artifact/variant and an immutable image
+record per successful render. A conditional claim grants a 60-second lease;
+rendering/upload happen outside transactions. Cached images remain readable
+while refreshing after one hour or a source-revision change. Cold/explicit
+refresh callers wait up to 35 seconds with jittered 1/2/4/8-second polling.
+Publishing checks the claim token and lease; failures retain the old image and
+back off. The browser has a 30-second render budget and waits for pending chart
+markers to clear, including lazy loading and Vega work. A timeout is not an image.
+
+S3 production renders use an object-scoped signed PUT; browser returns only
+image metadata. Local stores keep the same cache/asset contracts through the
+existing byte renderer. A restricted upload gateway can stream PUTs to the
+configured S3 export prefix while the browser stays on its internal network.

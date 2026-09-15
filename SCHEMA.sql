@@ -63,6 +63,64 @@ ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS after_version INTE
 
 ALTER TABLE app.admin_document_audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+CREATE TABLE IF NOT EXISTS app.export_images (
+  id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  object_key TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  bytes INTEGER NOT NULL,
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS object_key TEXT NOT NULL;
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS mime TEXT NOT NULL;
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS bytes INTEGER NOT NULL;
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS width INTEGER NOT NULL;
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS height INTEGER NOT NULL;
+
+ALTER TABLE app.export_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_export_images_artifact ON app.export_images (artifact_id);
+
+CREATE TABLE IF NOT EXISTS app.export_image_cache (
+  cache_key TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  image_id TEXT,
+  source_revision TEXT,
+  expires_at TIMESTAMPTZ,
+  claim_token TEXT,
+  lease_until TIMESTAMPTZ,
+  retry_after TIMESTAMPTZ,
+  PRIMARY KEY (cache_key)
+);
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS cache_key TEXT NOT NULL;
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS image_id TEXT;
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS source_revision TEXT;
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS claim_token TEXT;
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS lease_until TIMESTAMPTZ;
+
+ALTER TABLE app.export_image_cache ADD COLUMN IF NOT EXISTS retry_after TIMESTAMPTZ;
+
 CREATE TABLE IF NOT EXISTS app.mutation_receipts (
   scope TEXT NOT NULL,
   operation_key TEXT NOT NULL,

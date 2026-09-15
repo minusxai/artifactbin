@@ -524,6 +524,37 @@ const DATASET_RESULT_CACHE: Table = {
   primaryKey: ['cache_key'],
 };
 
+/** Immutable export images and the shared, fenced refresh pointer for each variant. */
+const EXPORT_IMAGES: Table = {
+ name:'export_images',
+ columns:[
+  {name:'id',type:'TEXT',notNull:true},
+  {name:'artifact_id',type:'TEXT',notNull:true},
+  {name:'object_key',type:'TEXT',notNull:true},
+  {name:'mime',type:'TEXT',notNull:true},
+  {name:'bytes',type:'INTEGER',notNull:true},
+  {name:'width',type:'INTEGER',notNull:true},
+  {name:'height',type:'INTEGER',notNull:true},
+  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ ],
+ primaryKey:['id'],
+ indexes:[{name:'idx_export_images_artifact',columns:['artifact_id']}],
+};
+const EXPORT_IMAGE_CACHE: Table = {
+ name:'export_image_cache',
+ columns:[
+  {name:'cache_key',type:'TEXT',notNull:true},
+  {name:'artifact_id',type:'TEXT',notNull:true},
+  {name:'image_id',type:'TEXT'},
+  {name:'source_revision',type:'TEXT'},
+  {name:'expires_at',type:'TIMESTAMPTZ'},
+  {name:'claim_token',type:'TEXT'},
+  {name:'lease_until',type:'TIMESTAMPTZ'},
+  {name:'retry_after',type:'TIMESTAMPTZ'},
+ ],
+ primaryKey:['cache_key'],
+};
+
 /** At-most-once mutation admission, including external generation before the content transaction. */
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
@@ -594,7 +625,7 @@ const ADMIN_DOCUMENT_AUDIT: Table = {
   primaryKey:['id'],
 };
 
-export const TABLES: Table[] = [ADMIN_DOCUMENT_AUDIT, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
+export const TABLES: Table[] = [ADMIN_DOCUMENT_AUDIT, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

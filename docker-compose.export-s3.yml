@@ -1,0 +1,26 @@
+# Optional overlay for docker-compose.lean.yml when S3_URL is configured.
+# Browser stays internal-only; only this bounded PUT gateway joins egress.
+# Set the exact origin and path prefix produced by the app's S3 signer.
+services:
+  browser:
+    environment:
+      BROWSER__UPLOAD_ORIGIN: ${BROWSER__UPLOAD_ORIGIN:?Set the exact S3 HTTPS origin}
+      BROWSER__UPLOAD_PREFIX: ${BROWSER__UPLOAD_PREFIX:?Set the export object prefix}
+      BROWSER__UPLOAD_PROXY_URL: http://upload-gateway:8080
+    depends_on:
+      upload-gateway:
+        condition: service_healthy
+  upload-gateway:
+    image: artifactbin-lean-browser
+    command: ["node", "upload-gateway.mjs"]
+    restart: unless-stopped
+    networks: [compute, export-upload]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      APP__PORT: 8080
+      BROWSER__UPLOAD_ORIGIN: ${BROWSER__UPLOAD_ORIGIN:?Set the exact S3 HTTPS origin}
+      BROWSER__UPLOAD_PREFIX: ${BROWSER__UPLOAD_PREFIX:?Set the export object prefix}
+networks:
+  export-upload: {}

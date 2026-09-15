@@ -22,14 +22,14 @@ import type {Workspace,Snapshot} from './workspace';
 interface Renderer {
  /** The shareable published view; derivable offline, which is why open never needs the network. */
  viewUrl(id:string):string;
- image(id:string,options:{format:'png'|'jpg';page?:number}):Promise<{bytes:Buffer;contentType:string}>;
+ image(id:string,options:{format:'png'|'jpg';page?:number;og?:boolean;refresh?:boolean}):Promise<{bytes:Buffer;contentType:string}>;
  html(id:string):Promise<{bytes:Buffer;contentType:string}>;
 }
 export function serverRenderer(server:string,client?:HttpClient):Renderer{
  const rendering=():HttpClient=>{if(!client)throw new CliError('renderer_unavailable','Rendering runs on the server and needs credentials for it.',RENDERER_FIX);return client;};
  return {
   viewUrl:id=>`${server}/a/${id}`,
-  image:(id,options)=>rendering().view(`/a/${id}/export?format=${options.format}${options.page!==undefined?`&slide=${options.page}`:''}`),
+  image:(id,options)=>rendering().view(`/a/${id}/export?format=${options.format}${options.page!==undefined?`&slide=${options.page}`:''}${options.og?'&mode=card':''}${options.refresh?'&refresh=1':''}`),
   html:id=>rendering().view(`/a/${id}/raw`),
  };
 }
@@ -40,7 +40,7 @@ const EXTENSIONS:Record<string,string>={png:'png',jpg:'jpg',html:'html',csv:'csv
 const rendered=(format:string):format is typeof RENDERED[number]=>RENDERED.includes(format as never);
 
 interface ExportOptions {
- type?:string;format?:string;output?:string;name?:string;page?:number;force?:boolean;dryRun?:boolean;
+ type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
  server:string;client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
 }
 interface ExportTarget {ref:string;format:string;id?:string;path?:string;version?:number;render:boolean}
@@ -54,6 +54,8 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
  const stdoutBytes=options.bytes??(value=>process.stdout.write(value));
  const format=selectFormat(refs,options);
  if(rendered(format)&&options.name!==undefined)throw new CliError('unsupported_format',`--name selects data, not a ${format} rendering.`,'Export csv, json or yaml with --name, or drop --name.');
+ if((options.og||options.refresh)&&!['png','jpg'].includes(format))throw new CliError('unsupported_format','--og and --refresh require an image export.','Use --format png or jpg.');
+ if(options.og&&options.page!==undefined)throw new CliError('invalid_flags','--og cannot be combined with --page.');
  if(options.page!==undefined&&format!=='png'&&format!=='jpg')throw new CliError('unsupported_format',`--page selects one slide of an image export, not ${format}.`,'Use --format png or jpg with --page, or export the whole resource.');
  const targets:ExportTarget[]=[];
  for(const input of refs){
@@ -116,7 +118,7 @@ async function unchangedHead(workspace:Workspace,path:string):Promise<void>{
 
 async function renderTarget(target:ExportTarget,options:ExportOptions):Promise<Buffer>{
  const renderer=serverRenderer(options.server,options.client);
- const result=target.format==='html'?await renderer.html(target.id!):await renderer.image(target.id!,{format:target.format as 'png'|'jpg',...(options.page!==undefined?{page:options.page}:{})});
+ const result=target.format==='html'?await renderer.html(target.id!):await renderer.image(target.id!,{format:target.format as 'png'|'jpg',og:options.og,refresh:options.refresh,...(options.page!==undefined?{page:options.page}:{})});
  return result.bytes;
 }
 

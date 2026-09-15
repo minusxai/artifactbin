@@ -38,6 +38,8 @@ import { roleFor, sessionActor } from '@/lib/viewer';
 import { baseUrl, json } from '@/lib/http';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import { GET as publicAssetBytes } from '@/app/assets/[hash]/route';
+import { CARD_RENDER_GENERATION } from '@/lib/export-card';
+import { exportAssetResponse } from '@/lib/export/assets';
 import { publicRefAssetResponse } from '@/lib/public-ref-assets';
 import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
@@ -78,7 +80,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
   const fontPreloads = (runtime.fontPreloads ?? []).map(url => `<link rel="preload" href="${escapeHtml(url)}" as="font" type="font/woff2" crossorigin>`).join('');
   const metadata = fontPreloads + `<meta property="og:title" content="${escapeHtml(runtime.title)}">`
     + (description ? `<meta name="description" content="${escapeHtml(description)}"><meta property="og:description" content="${escapeHtml(description)}">` : '')
-    + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card"><meta name="twitter:card" content="summary_large_image">`;
+    + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card&amp;r=${CARD_RENDER_GENERATION}"><meta name="twitter:card" content="summary_large_image">`;
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
     .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style><div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></div></body>`);
@@ -209,7 +211,9 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (incoming.host !== new URL(assetsOrigin).host && baseUrl(c.req.raw) !== assetsOrigin) return next();
     const request = new Request(assetsOrigin + incoming.pathname + incoming.search, { method: c.req.method });
     if (!isPublicAssetRequest(request, assetsOrigin)) return new Response('not found', { status: 404 });
-    const response = incoming.pathname.startsWith('/assets/ref/')
+    const response = incoming.pathname.startsWith('/assets/export/')
+      ? await exportAssetResponse(request, incoming.pathname.slice('/assets/export/'.length))
+      : incoming.pathname.startsWith('/assets/ref/')
       ? await publicRefAssetResponse(request, incoming.pathname.slice('/assets/ref/'.length))
       : await publicAssetBytes(request, { params: Promise.resolve({ hash: incoming.pathname.slice('/assets/'.length) }) });
     const safe = publicAssetResponse(response);

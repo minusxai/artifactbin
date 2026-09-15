@@ -1,7 +1,8 @@
 # The production shape: one web process + Postgres.
 # TLS terminates in front (Caddy/Traefik/your host's proxy) — the app serves
 # plain HTTP on ${APP__PORT:-3030}. Single web replica by design: the export
-# browser singleton, in-memory caches, and rate limiters assume one process.
+# browser singleton and rate limiters assume one process; export cache metadata
+# itself is shared through Postgres.
 services:
   web:
     build: .

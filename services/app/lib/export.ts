@@ -1,24 +1,12 @@
-/**
- * On-demand artifact → image rendering, the curlable screenshot path
- * (`GET /a/<id>/export`). There is no browserless way to rasterize arbitrary
- * HTML (Node SVG rasterizers ignore foreignObject; Satori is a flexbox subset
- * — minusx Story_Design_V2 §13), so a real browser takes the picture.
- *
- * THE BROWSER IS NOT THIS MODULE'S ANY MORE. Chromium — the singleton, the
- * serialising chain, the idle shutdown, and the capture modes — lives in
- * `@artifactbin/browser`, and this module reaches it through the services
- * registry (`lib/services`): an HTTP client when `BROWSER__SERVICE_URL` names
- * a service, the local Playwright one a composition root registered
- * otherwise. Nothing here imports Playwright, which is what lets the app
- * image ship without it (`lib/__tests__/lean-imports.test.ts`).
- *
- * What stays here is everything the SERVICE must not know: which URL a row is
- * photographed at and with which short-lived signed key, what a shot COVERS
- * as a cache segment, the two-layer cache (in-memory LRU + the object store),
- * the one retry, and the verdict → HTTP mapping. The service renders a URL;
- * the product decides what to render and what a failure means.
- */
+/** Export policy and adapters. The DB cache owns refresh coordination; the browser
+ * owns readiness/capture/upload; the asset route streams immutable stored images.
+ * Routes authorize the artifact before calling this module. */
 import sharp from 'sharp';
+import {Readable} from 'node:stream';
+import type {RenderRequest} from '@artifactbin/contracts';
+import {getDb} from './db';
+import {createExportCache,type ExportImage} from './export/cache';
+import {exportAssetUrl} from './export/assets';
 import { loadImage } from './story/image-store';
 import { createHash } from 'node:crypto';
 import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
@@ -45,29 +33,14 @@ type ExportCapture = 'full' | 'card' | 'preview';
 /** Rendered viewport width; height follows the content (full-page capture). */
 const EXPORT_WIDTH = 1200;
 const EXPORT_VIEWPORT_HEIGHT = 630; // og card ratio; fullPage grows past it as needed
-const RENDER_TIMEOUT_MS = 15_000;
+const RENDER_TIMEOUT_MS = 30_000;
 const PAGE_SETTLE_MS = 1500; // live /v pages: charts and embeds hydrate after mount
 /** How long to wait before the single re-render (see renderArtifactImage). */
 const RENDER_RETRY_MS = 1_000;
 
-/**
- * WHICH RENDERER TOOK THE PICTURE. Shots are cached by artifact version, in
- * memory and in the object store, so a version that was already shot is never
- * re-rendered — which means a change to what a shot COVERS must change the key,
- * or every document already published keeps serving the old picture.
- *
- * Generation 2: a markup document is shot from its own page (`raw?chrome=0`)
- * rather than through the app page's iframe element, whose box is the viewport
- * — "full" used to mean the first screen, on every document ever exported.
- * Generation 4: managed iframe exports admit their configured asset origin;
- * Generation 5: managed iframe exports wait for author/module readiness;
- * earlier generations could cache a blank frame before its bundle loaded.
- *
- * Bump this whenever the framing changes. Old entries then go cold on their own,
- * exactly like the card key's stage size does.
- */
-export const EXPORT_RENDER_GENERATION = 5;
-const CACHE_MAX_ENTRIES = 24;
+/** Bump to invalidate images made by an older capture implementation. */
+export const EXPORT_RENDER_GENERATION = 6;
+
 
 /** `format` value → export format; null when absent or unrecognized. */
 export function parseExportFormat(value: string | null): ExportFormat | null {
@@ -99,14 +72,7 @@ export function parseExportSlide(value: string | null): number | null {
  * generation.
  */
 function exportCaptureKey(capture: ExportCapture, slide: number, selection = ''): string {
-  /*
-   * A SELECTION IS PART OF WHAT THE SHOT IS. Both cache layers are keyed by
-   * artifact version — that is what makes one render serve every unfurl and
-   * every profile thumbnail, with no invalidation ever run — and it is also
-   * exactly what would hand `?$region=NA` the picture taken of the defaults:
-   * same id, same version, same key. Hashed because this string is also an
-   * object-store PATH, and short because it only has to separate.
-   */
+  // Only canonical document selections split the cache, never arbitrary query parameters.
   const pick = selection ? `-p${createHash('sha256').update(selection).digest('hex').slice(0, 12)}` : '';
   if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}`;
   if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-r${CARD_RENDER_GENERATION}-g${EXPORT_RENDER_GENERATION}${pick}`;
@@ -124,8 +90,8 @@ function exportRevision(artifact: ExportIdentity): string {
   return `${artifact.version}${edit}`;
 }
 
-/** The durable cache address includes repairs as well as versioned edits. */
-export function exportStoreKey(
+/** Stable output identity; revision freshness is tracked separately in the DB. */
+export function exportCacheKey(
   artifact: ExportIdentity,
   format: ExportFormat,
   capture: ExportCapture,
@@ -133,7 +99,7 @@ export function exportStoreKey(
   /** The CANONICAL selection token (lib/story/url-values urlSelection), never raw params. */
   selection = '',
 ): string {
-  return `exports/${artifact.id}/${exportRevision(artifact)}.${exportCaptureKey(capture, slide, selection)}.${format}`;
+  return `${artifact.id}:${exportCaptureKey(capture, slide, selection)}:${format}`;
 }
 
 export type RenderResult =
@@ -142,25 +108,12 @@ export type RenderResult =
   /** The document has fewer slides than were asked for — a 404 that says how many. */
   | { ok: false; reason: 'no_slide'; slides: number };
 
-interface ExportState {
-  /** Only cache misses serialize, including retry/persistence. */
-  chain: Promise<unknown>;
-  inFlight: Map<string, Promise<RenderResult>>;
-  cache: Map<string, { mime: string; bytes: Buffer }>;
+let cache:Promise<ReturnType<typeof createExportCache>>|undefined;
+const sharedCache=()=>cache??=(getDb().then(db=>createExportCache(db)));
+class RenderFailure extends Error {
+  constructor(readonly result:Exclude<RenderResult,{ok:true}>){super(result.reason);}
 }
-
-declare global {
-  // eslint-disable-next-line no-var
-  var __artifact_bin_export__: ExportState | undefined;
-}
-
-function state(): ExportState {
-  if (!global.__artifact_bin_export__) {
-    global.__artifact_bin_export__ = { chain: Promise.resolve(), cache: new Map(), inFlight: new Map() };
-  }
-  global.__artifact_bin_export__.inFlight ??= new Map();
-  return global.__artifact_bin_export__;
-}
+type ResolvedImage = {ok:true;image:ExportImage} | Exclude<RenderResult,{ok:true}>;
 
 /**
  * WHAT A RENDER WORKS FROM: a live page URL. Every tier renders in the app —
@@ -213,16 +166,16 @@ type Shot =
   | { ok: false; reason: 'failed' }
   | { ok: false; reason: 'no_slide'; slides: number };
 
-async function renderOnce(
+function renderRequest(
   input: RenderInput,
   format: ExportFormat,
   capture: ExportCapture,
   slide = 0,
   crop?: SocialPreviewCrop,
-): Promise<Shot> {
-  const rendered = await services().browser.render({
+): RenderRequest {
+  return {
     // The key is minted HERE, at the moment the request goes out — see
-    // RenderInput. A cold browser launch is unbounded, and a key that expired
+    // RenderInput. Previously an unbounded cold launch let the key expire
     // in the queue produced a 200 PNG of a 404 page.
     url: input.urlFor(),
     format,
@@ -246,129 +199,79 @@ async function renderOnce(
     waitForManagedFrames: true,
     settleMs: PAGE_SETTLE_MS,
     timeoutMs: RENDER_TIMEOUT_MS,
-  });
+  };
+}
+
+async function renderOnce(input:RenderInput,format:ExportFormat,capture:ExportCapture,slide=0,crop?:SocialPreviewCrop,timeoutMs=RENDER_TIMEOUT_MS):Promise<Shot>{
+  const rendered=await services().browser.render({...renderRequest(input,format,capture,slide,crop),timeoutMs});
   if (rendered.ok) return { ok: true, mime: rendered.mime, bytes: Buffer.from(rendered.bytes) };
   if (rendered.reason === 'no_slide') return { ok: false, reason: 'no_slide', slides: rendered.slides };
-  /*
-   * The caller gets a NAME (`render_failed`); the operator gets the reason.
-   * Without this the whole path was silent: a 500 with `{"error":
-   * "render_failed"}` and nothing anywhere saying whether the browser was
-   * missing, the page 404'd, or TLS refused — which is exactly what an export
-   * behind a reverse proxy looked like from the outside.
-   */
-  if (rendered.reason !== 'unavailable') console.error(`[export] render ${rendered.reason}:`, rendered.detail ?? '');
+  // Report the verdict without logging signed navigation URLs from service details.
+  if (rendered.reason !== 'unavailable') console.error(`[export] render ${rendered.reason}`);
   return { ok: false, reason: rendered.reason };
 }
 
-/**
- * Render an artifact to image bytes. TWO cache layers sit in front of the
- * browser, both keyed by version and edit identity so edits and repairs miss naturally and no
- * invalidation is ever run: an in-memory LRU, and the object store behind it.
- * A hit at either costs no browser work at all — which is what makes one
- * render serve every og unfurl and profile thumbnail for that version.
- * `opts.pageUrl` is a thunk, minted per attempt — see RenderInput.
- */
-export function renderArtifactImage(
-  artifact: ExportIdentity,
-  format: ExportFormat,
-  // `pageUrl` is REQUIRED: every artifact is shot from its live page. The old
-  // optional shape existed so a row could be photographed from its stored HTML
-  // instead — which only the retired html tier ever had.
-  /** `selection` is the CANONICAL token from urlSelection — a raw search string here
-   * would give one document unlimited keys for byte-identical renders. */
-  opts: {
-    pageUrl: () => string;
-    target: string;
-    capture?: ExportCapture;
-    slide?: number;
-    selection?: string;
-    crop?: SocialPreviewCrop;
-    /** Editor-only draft crops stay in the bounded memory LRU, never durable storage. */
-    volatile?: boolean;
-  },
-): Promise<RenderResult> {
-  const s = state();
-  const capture = opts.capture ?? 'full';
-  const slide = opts.slide ?? 0;
-  // The reader's `<Value>` picks, when this shot is of a selected document.
-  const selection = opts.selection ?? '';
-  const draftKey = opts.volatile && opts.crop
-    ? `-draft-${opts.crop.x}-${opts.crop.y}-${opts.crop.width}`
-    : '';
-  const captureKey = `${exportCaptureKey(capture, slide, selection)}${draftKey}`;
-  const key = `${artifact.id}:${exportRevision(artifact)}:${captureKey}:${format}`;
-  const hit = s.cache.get(key);
-  if (hit) return Promise.resolve({ ok: true, ...hit });
-  const pending = s.inFlight.get(key);
-  if (pending) return pending;
-
-  // The durable layer includes edit identity, so a repair misses naturally and the
-  // stale entry just goes cold — no invalidation to run, ever. One render
-  // then serves every og unfurl and profile thumbnail for that version,
-  // across restarts.
-  const storeKey = opts.volatile ? null : exportStoreKey(artifact, format, capture, slide, selection);
-  const input: RenderInput = { urlFor: opts.pageUrl, target: opts.target };
-  const work = (async (): Promise<RenderResult> => {
-    // Stored hits never join the screenshot queue. Same-key callers share
-    // both this lookup and any ensuing render through inFlight.
-    const stored = storeKey ? await objectStore().get(storeKey).then(
-      bytes => ({ mime: EXPORT_MIME[format], bytes }), () => null,
-    ) : null;
-    if (stored) { remember(s, key, stored); return { ok: true, ...stored }; }
-    const run = s.chain.then(async (): Promise<RenderResult> => {
-      const cached = s.cache.get(key);
-      if (cached) return { ok: true, ...cached };
-      /*
-       * ONE retry on a failed render: a shot taken immediately after a write can
-       * race the fresh version — the page loads, but what the exporter is waiting
-       * for is not there yet — and answers render_failed, which an agent then
-       * spends turns diagnosing (measured: two turns on a real run). Only that
-       * race is retried: a missing browser ('unavailable'), a missing slide
-       * ('no_slide') and an unreachable page ('navigation') are ANSWERS — a
-       * server that is not answering answers no faster the second time, and
-       * re-asking only doubles the wait before the caller learns.
-       *
-       * A failure that took the FULL wait already polled for what it wanted and
-       * never saw it — that is an answer too, and re-running it only doubles the
-       * time before the caller hears it. Only a FAST 'failed' looks like a race.
-       */
-      const startedAt = Date.now();
-      let rendered = await renderOnce(input, format, capture, slide, opts.crop);
-      if (!rendered.ok && rendered.reason === 'failed' && Date.now() - startedAt <= RENDER_TIMEOUT_MS / 2) {
-        await new Promise((r) => setTimeout(r, RENDER_RETRY_MS));
-        rendered = await renderOnce(input, format, capture, slide, opts.crop);
-      }
-      // Only now do the service's four verdicts become the app's three: the
-      // page could not be reached is a FAILURE, never "there is no browser here".
-      if (!rendered.ok) return rendered.reason === 'navigation' ? { ok: false, reason: 'failed' } : rendered;
-      const shot = { mime: rendered.mime, bytes: rendered.bytes };
-      // Best-effort persist: a failed put costs a re-render later, never the shot.
-      if (storeKey) await objectStore().put(storeKey, shot.bytes, shot.mime).catch(() => {});
-      remember(s, key, shot);
-      return { ok: true, ...shot };
-    });
-    s.chain = run.catch(() => {});
-    return run;
-  })();
-  /*
-   * The service answers a VERDICT rather than throwing, so this catch is the
-   * backstop for THIS module's own failures (the object store, a bad URL from
-   * the thunk) — not for a render that went wrong. The caller still gets a
-   * name; the operator gets the reason.
-   */
-  const result = work.catch((error): RenderResult => {
-    console.error('[export] render failed:', error);
-    return { ok: false, reason: 'failed' };
-  });
-  s.inFlight.set(key, result);
-  void result.then(() => { if (s.inFlight.get(key) === result) s.inFlight.delete(key); });
-  return result;
+interface ImageOptions {
+ pageUrl:()=>string;target:string;capture?:ExportCapture;slide?:number;selection?:string;
+ crop?:SocialPreviewCrop;volatile?:boolean;refresh?:boolean;
 }
-
-/** Keep the newest shots, drop the oldest — a small LRU in front of the store. */
-function remember(s: ExportState, key: string, shot: { mime: string; bytes: Buffer }): void {
-  if (s.cache.size >= CACHE_MAX_ENTRIES) s.cache.delete(s.cache.keys().next().value as string);
-  s.cache.set(key, shot);
+async function renderWithRetry(input:RenderInput,format:ExportFormat,capture:ExportCapture,slide=0,crop?:SocialPreviewCrop):Promise<Shot>{
+ const started=Date.now();let result=await renderOnce(input,format,capture,slide,crop);
+ if(!result.ok&&result.reason==='failed'&&Date.now()-started<=RENDER_TIMEOUT_MS/2){
+  await new Promise(r=>setTimeout(r,RENDER_RETRY_MS));
+  result=await renderOnce(input,format,capture,slide,crop,Math.max(1,RENDER_TIMEOUT_MS-(Date.now()-started)));
+ }
+ return result;
+}
+async function storeBytes(id:string,bytes:Buffer,format:ExportFormat):Promise<Omit<ExportImage,'id'|'artifact_id'>>{
+ const meta=await sharp(bytes).metadata();
+ if(!meta.width||!meta.height)throw new Error('Image dimensions missing');
+ const object_key=`exports/objects/${id}.${format}`,mime=EXPORT_MIME[format];
+ await objectStore().put(object_key,bytes,mime);
+ return {object_key,mime,bytes:bytes.length,width:meta.width,height:meta.height};
+}
+async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,opts:ImageOptions):Promise<ResolvedImage>{
+ const capture=opts.capture??'full',slide=opts.slide??0;
+ try {
+  const image=await (await sharedCache()).read({
+   cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection),
+   artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,
+  },async id=>{
+   const input={urlFor:opts.pageUrl,target:opts.target},store=objectStore(),browser=services().browser;
+   if(store.signedUpload&&browser.renderAndUpload){
+    const object_key=`exports/objects/${id}.${format}`;
+    const upload=await store.signedUpload(object_key,EXPORT_MIME[format]);
+    const result=await browser.renderAndUpload({render:renderRequest(input,format,capture,slide,opts.crop),upload});
+    if(result.ok)return {object_key,mime:result.mime,bytes:result.bytes,width:result.width,height:result.height};
+    if(result.reason!=='upload_unavailable')throw new RenderFailure(result.reason==='no_slide'?{ok:false,reason:'no_slide',slides:result.slides}:{ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'});
+    // A mixed-version or unconfigured browser retains the original byte
+    // transport. Upload failures themselves never silently switch transports.
+   }
+   const result=await renderWithRetry(input,format,capture,slide,opts.crop);
+   if(!result.ok)throw new RenderFailure(result.reason==='no_slide'?{ok:false,reason:'no_slide',slides:result.slides}:{ok:false,reason:result.reason==='unavailable'?'unavailable':'failed'});
+   return storeBytes(id,result.bytes,format);
+  });
+  return {ok:true,image};
+ }catch(error){return error instanceof RenderFailure?error.result:{ok:false,reason:'failed'};}
+}
+/** Binary adapter used by operations; completed exports are never retained in RAM. */
+export async function renderArtifactImage(artifact:ExportIdentity,format:ExportFormat,opts:ImageOptions):Promise<RenderResult>{
+ if(opts.volatile){
+  const result=await renderWithRetry({urlFor:opts.pageUrl,target:opts.target},format,opts.capture??'full',opts.slide,opts.crop);
+  return !result.ok&&result.reason==='navigation'?{ok:false,reason:'failed'}:result;
+ }
+ const resolved=await resolveArtifactImage(artifact,format,opts);
+ if(!resolved.ok)return resolved;
+ try {
+  const stream=await objectStore().getStream(resolved.image.object_key),chunks:Buffer[]=[];
+  for await(const chunk of stream)chunks.push(Buffer.from(chunk));
+  return {ok:true,mime:resolved.image.mime,bytes:Buffer.concat(chunks)};
+ }catch{return {ok:false,reason:'failed'};}
+}
+async function imageResponse(image:ExportImage,base:string,delivery:'bytes'|'redirect'):Promise<Response>{
+ if(delivery==='redirect')return new Response(null,{status:302,headers:{location:exportAssetUrl(image.id,base),'cache-control':'no-store'}});
+ const stream=await objectStore().getStream(image.object_key);
+ return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>,{headers:{'content-type':image.mime,'cache-control':'no-store','x-content-type-options':'nosniff'}});
 }
 
 /**
@@ -383,11 +286,13 @@ export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
   artifact: ExportIdentity & Pick<ArtifactRow, 'format' | 'source'>,
-  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null },
+  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null; refresh?: string | null },
   base: string,
+  delivery:'bytes'|'redirect'='bytes',
 ): Promise<Response> {
   // Default png; anything unrecognized is a client error rather than a
   // surprise format, since this path exists only to produce an image.
+  if(q.refresh!=null&&q.refresh!=='1')return json({error:'unknown_refresh'},400);
   const format = parseExportFormat(q.format ?? 'png');
   if (!format) return json({ error: 'unknown_format', allowed: ['png', 'jpg'] }, 400);
   // Default full page (agents ask for this to see the whole document); 'card'
@@ -403,43 +308,7 @@ export async function exportImageResponse(
     return json({ error: 'unknown_crop', hint: 'crop must be x=<px>;y=<px>;width=<px>' }, 400);
   }
 
-  /*
-   * THE READER'S SELECTION, forwarded to the page this shoots — so
-   * `/a/<id>/export?$region=NA` photographs the document the link describes
-   * and an agent can look at what its user will see. Never for the CARD: an
-   * unfurl is of the DOCUMENT, and one reader's filter is not what the next
-   * person should meet in a preview.
-   *
-   * READ THROUGH THE FLOW, not taken from the params. Forwarding was all this
-   * needed; KEYING on it is what made the difference matter. Both cache layers
-   * are addressed by artifact VERSION — which is what makes one render serve
-   * every unfurl and thumbnail with no invalidation ever run — so a token taken
-   * from the raw `$` params gave one document unlimited distinct keys: the
-   * document ignores a name it does not declare, a value its type refuses and a
-   * value already at its default, so `?$junk=17` renders bytes identical to the
-   * default shot and then stores them forever under a key of their own. The
-   * EXPORT door bounds the RATE (30/min per actor) and not the TOTAL. Now
-   * anything the document would ignore collapses onto the default shot's key,
-   * byte for byte, and one selection has one identity however its link was
-   * written (lib/story/url-values urlSelection).
-   */
-  /*
-   * A FOLDER IS PHOTOGRAPHED ON THE APP PAGE, and that is the whole of it here:
-   * `isDocument` is markup alone again. A folder has no document — its listing
-   * is app data the page endpoint answers and `withBootstrap` inlines — so the
-   * camera goes to `/a/<id>?key=` with `main` as its target, the path every
-   * data tier already takes. The `?key=` is what keeps that address on the SPA
-   * (server/app `servesDocumentDirectly` bows out for a key), and the page
-   * endpoint honours the same signed key, so the shot carries the OWNER's shelf
-   * without the headless browser holding a session.
-   *
-   * The card's crop goes with it: `socialPreviewCrop` reads a document's source
-   * for the author's own framing, and a folder has none.
-   *
-   * Named once and read at all three sites below — the address, the crop, and
-   * the declarations a selection is read through — because a row that is a
-   * document for one of them and not the others is a card of the wrong thing.
-   */
+  // Full captures honor canonical reader selections; social cards use saved defaults.
   const isDocument = artifact.format === 'markup';
   const flow = isDocument ? declarationsForRow(artifact)?.flow ?? null : null;
   const imageOverview = capture === 'preview' && q.image === '1';
@@ -451,8 +320,9 @@ export async function exportImageResponse(
     const image = document ? await referencedArtifactForRow(document, imageId) : null;
     if (image?.format === 'image') {
       try {
-        const stored = await loadImage(image);
-        if (stored) {
+        const produceCover=async()=>{
+          const stored = await loadImage(image);
+          if(!stored)throw new Error('Cover unavailable');
           // Normalize EXIF orientation before measuring/extracting so browser
           // coordinates and exported pixels refer to the same image.
           const oriented = await sharp(stored.body).rotate().toBuffer({ resolveWithObject: true });
@@ -471,12 +341,14 @@ export async function exportImageResponse(
           }
           if (!imageOverview) pipeline = pipeline.resize(CARD_WIDTH, CARD_HEIGHT, { fit: 'cover', position: 'centre' });
           const bytes = await (format === 'jpg' ? pipeline.flatten({ background: '#ffffff' }).jpeg({ quality: 90 }) : pipeline.png()).toBuffer();
-          return new Response(new Uint8Array(bytes), { headers: {
-            'Content-Type': EXPORT_MIME[format],
-            'X-Content-Type-Options': 'nosniff',
-            'Cache-Control': imageOverview ? 'private, no-store' : 'public, max-age=86400',
-          } });
-        }
+          return bytes;
+        };
+        if(imageOverview)return new Response(new Uint8Array(await produceCover()),{headers:{'content-type':EXPORT_MIME[format],'cache-control':'private, no-store','x-content-type-options':'nosniff'}});
+        const cover=await (await sharedCache()).read({
+          cacheKey:`${artifact.id}:cover-g${EXPORT_RENDER_GENERATION}:${format}`,
+          artifactId:artifact.id,revision:`${exportRevision(artifact)}:${image.id}:${exportRevision(image)}`,refresh:q.refresh==='1',
+        },async id=>storeBytes(id,await produceCover(),format));
+        return imageResponse(cover,base,delivery);
       } catch {
         // A removed or unreadable asset falls back to the saved document crop.
       }
@@ -485,7 +357,8 @@ export async function exportImageResponse(
   if (imageOverview) return json({ error: 'image_unavailable' }, 404);
   const selection = capture === 'card' || capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 
-  const rendered = await renderArtifactImage(artifact, format, {
+  const options:ImageOptions = {
+    refresh:q.refresh==='1',
     capture,
     ...(draftCrop
       ? { crop: draftCrop, volatile: true }
@@ -497,7 +370,7 @@ export async function exportImageResponse(
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
     // value any reader has seen. Minted lazily (see RenderInput): a cold
-    // browser launch is unbounded, and a key that expired in the queue
+    // browser launch used to be unbounded, and a key that expired in the queue
     // produced a 200 PNG of a 404 page.
     // A markup document is photographed from its OWN page (`raw?chrome=0` —
     // the document with none of the reading chrome); the data tiers have no
@@ -511,7 +384,10 @@ export async function exportImageResponse(
     // BY NAME, not by position: a served document is the page itself.
     target: isDocument ? 'body' : 'main',
     ...(slide > 0 ? { slide } : {}),
-  });
+  };
+  const rendered=options.volatile||capture==='preview'
+    ? await renderArtifactImage(artifact,format,{...options,volatile:true})
+    : await resolveArtifactImage(artifact,format,options);
   if (!rendered.ok) {
     // A document with fewer slides than asked for is a missing RESOURCE, and
     // the count is the one thing the caller needs to correct itself in one step.
@@ -519,22 +395,14 @@ export async function exportImageResponse(
     const unavailable = rendered.reason === 'unavailable';
     return json({ error: unavailable ? 'render_unavailable' : 'render_failed' }, unavailable ? 503 : 500);
   }
+  if('image' in rendered)return imageResponse(rendered.image,base,delivery);
   return new Response(new Uint8Array(rendered.bytes), {
     status: 200,
     headers: {
       'Content-Type': rendered.mime,
       'X-Content-Type-Options': 'nosniff',
-      // Cards are fetched by browsers en masse (profile grids) behind a
-      // version-busted URL (&v=), so they may cache hard. Editor previews are
-      // private-cacheable; full shots keep no-store so an agent re-asking
-      // after an edit never sees stale output.
-      'Cache-Control': draftCrop
-        ? 'private, no-store'
-        : capture === 'card'
-        ? 'public, max-age=86400'
-        : capture === 'preview'
-          ? 'private, max-age=86400'
-          : 'no-store',
+      // Editor overviews are versioned by their caller; draft crops are ephemeral.
+      'Cache-Control': draftCrop ? 'private, no-store' : 'private, max-age=86400',
     },
   });
 }
@@ -546,8 +414,7 @@ export async function exportImageResponse(
  * not declare one) rather than a singleton this module owns.
  */
 export async function resetExportRenderer(): Promise<void> {
-  const s = state();
-  s.cache.clear();
-  global.__artifact_bin_export__ = undefined;
+  if(cache)await (await cache).drain();
+  cache=undefined;
   await services().browser.close?.();
 }

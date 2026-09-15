@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import sharp from 'sharp';
 import { useAppHarness, request } from './harness';
 import { POST as create } from '@/app/api/artifacts/route';
-import { GET as exportImage } from '@/app/a/[id]/export/route';
+import {exportImage,EXPORT_PNG} from './export-helpers';
 import { mintToken } from '@/lib/tokens';
 import { createUser } from '@/lib/users';
 import { getDb } from '@/lib/db';
@@ -53,7 +53,7 @@ describe('uploaded social preview cards', () => {
     const doc = await (await publish(token, { markup: markup(image.id), visibility: 'private' })).json();
     expect((await exportImage(request(`/a/${doc.id}/export?mode=card`), params(doc.id))).status).toBe(404);
     await (await getDb()).query('UPDATE artifacts SET deleted_at = now() WHERE id = $1', [image.id]);
-    const bytes = new Uint8Array([1, 2, 3]);
+    const bytes = EXPORT_PNG;
     setServices({ browser: fakeBrowser({ ok: true, mime: 'image/png', bytes }) });
     try {
       const card = await exportImage(request(`/a/${doc.id}/export?mode=card`, { token }), params(doc.id));

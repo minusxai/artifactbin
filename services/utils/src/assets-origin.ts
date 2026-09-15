@@ -14,6 +14,9 @@ export function parseAssetsOrigin(main: string, controls: string | null, configu
 export function isPublicAssetRequest(request: Request, origin: string): boolean {
   const url = new URL(request.url);
   if (url.origin !== origin || !['GET', 'HEAD'].includes(request.method)) return false;
+  if (/^\/assets\/export\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(url.pathname)) {
+    return [...url.searchParams.keys()].length === 1 && /^[1-9][0-9]*\.[0-9a-f]{64}$/.test(url.searchParams.get('key') ?? '');
+  }
   if (/^\/assets\/ref\/[A-Za-z0-9]{6}$/.test(url.pathname)) return url.search === '';
   if (!/^\/assets\/[0-9a-f]{64}$/.test(url.pathname)) return false;
   for (const [key, value] of url.searchParams) {

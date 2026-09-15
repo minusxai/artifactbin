@@ -16,7 +16,12 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { exportImageResponse, resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';
+import {useAppHarness} from '@/__tests__/harness';
+import {EXPORT_PNG} from '@/__tests__/export-helpers';
+import {getDb} from '@/lib/db';
 import {ASSETS_ORIGIN} from '@/lib/config';
+
+useAppHarness();
 
 /** A browser that answers whatever this test says, and counts the asks. */
 function scripted(...answers: RenderResult[]): BrowserService & { seen: RenderRequest[] } {
@@ -30,10 +35,10 @@ function scripted(...answers: RenderResult[]): BrowserService & { seen: RenderRe
   };
 }
 
-const PNG: RenderResult = { ok: true, mime: 'image/png', bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };
+const PNG: RenderResult = { ok: true, mime: 'image/png', bytes: EXPORT_PNG };
 
 let n = 0;
-/** A fresh version every time, so neither cache layer can answer for the browser. */
+/** A fresh revision per test; the harness isolates persistent cache state. */
 // `source` rides along because the export door reads the document's own
 // `<Value>` declarations to canonicalize a link's selection (lib/export).
 const row = () => ({ id: 'exprt1', version: ++n + 1000, format: 'markup' as const, source: '<p>hi</p>' });
@@ -51,6 +56,7 @@ describe('the browser verdict becomes the HTTP answer', () => {
     const artifact=row();
     const failed=scripted({ok:false,reason:'failed'});setServices({browser:failed});
     expect((await exportImageResponse(artifact,{},'http://localhost:3000')).status).toBe(500);
+    await (await getDb()).query('UPDATE export_image_cache SET retry_after=NULL');
     const recovered=scripted(PNG);setServices({browser:recovered});
     expect((await exportImageResponse(artifact,{},'http://localhost:3000')).status).toBe(200);
     expect(recovered.seen).toHaveLength(1);

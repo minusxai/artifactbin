@@ -37,6 +37,7 @@ COPY services ./services
 # NOT needed, and copying it would bust the install layer's cache for nothing.
 COPY scripts/build-server.mjs scripts/runtime-externals.mjs ./scripts/
 RUN node scripts/build-server.mjs dist/browser.mjs services/browser/src/server.ts
+RUN node scripts/build-server.mjs dist/upload-gateway.mjs services/browser/src/upload-gateway-server.ts
 
 FROM node:22-slim
 
@@ -89,6 +90,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends bubblewrap \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/dist/browser.mjs ./browser.mjs
+COPY --from=builder /app/dist/upload-gateway.mjs ./upload-gateway.mjs
 
 EXPOSE 8080
 

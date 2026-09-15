@@ -10,6 +10,7 @@
  * finalized on unmount.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {beginChartRender,trackChartRender} from '@/lib/viz/render-readiness';
 import { specSignature } from '@/lib/viz/spec-identity';
 import { ChartError } from '@/components/plotx/ChartError';
 import type { View } from 'vega';
@@ -165,6 +166,7 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
     if (!el) return;
     let view: View | null = null;
     let cancelled = false;
+    const finishRender=beginChartRender(el);
     // Async so state updates never fire synchronously inside the effect body.
     (async () => {
       try {
@@ -302,7 +304,7 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
               v.signal('mxGuideW', bandW > 0 ? bandW : GUIDE_WIDTH);
               v.signal('mxGuideOpacity', bandW > 0 ? GUIDE_BAND_OPACITY : GUIDE_OPACITY);
             }
-            v.runAsync().catch(() => { /* race on unmount */ });
+            trackChartRender(el,()=>v.runAsync()).catch(() => { /* race on unmount */ });
           };
           const hideAll = () => { controller.hide(); setGuide(false); };
 
@@ -410,10 +412,11 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
         // Full stack to the console — the error box shows only the message.
         console.error('[VegaChart] render failed:', e);
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      }
+      } finally { finishRender(); }
     })();
     return () => {
       cancelled = true;
+      finishRender();
       viewRef.current = null;
       // The per-mark card is a document-level singleton with no owner once this view is
       // finalized: a rebuild with it up would leave it pinned there forever. Its dismiss policy
@@ -458,7 +461,7 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
     }
     // Keep the shared-tooltip index in sync with the live rows (no view rebuild).
     if (tooltipRef.current) tooltipRef.current.holder.data = buildTooltipData(rows, tooltipRef.current.plan);
-    view.runAsync().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    trackChartRender(containerRef.current!,()=>view.runAsync()).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
     replanLegendWrap();
   }, [rows, replanLegendWrap]);
 
@@ -484,13 +487,13 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
       const view = viewRef.current;
       if (!view) return;
       const { width, height } = sizeOf(el);
-      resizeVegaView(view, {
+      trackChartRender(el,()=>resizeVegaView(view, {
         width,
         height,
         facetLayout: vlSpecRef.current
           ? computeFacetLayoutPlan(vlSpecRef.current, rowsRef.current, width, height)
           : null,
-      }).runAsync().catch(() => { /* resize race on unmount */ });
+      }).runAsync()).catch(() => { /* resize race on unmount */ });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -515,7 +518,7 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
     } else {
       return;
     }
-    view.runAsync().catch(() => { /* race on unmount */ });
+    trackChartRender(containerRef.current!,()=>view.runAsync()).catch(() => { /* race on unmount */ });
     const params = view.signal('mxViewParams') as Record<string, unknown> | undefined;
     if (params) onViewChangeRef.current?.(roundViewParams(params));
   }, []);
@@ -534,6 +537,7 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
       )}
       <div
         ref={containerRef}
+        data-mx-chart-state="pending"
         aria-label={ariaLabel}
         className="h-full w-full overflow-hidden [&_.vega-embed]:block [&_svg]:block"
       />
