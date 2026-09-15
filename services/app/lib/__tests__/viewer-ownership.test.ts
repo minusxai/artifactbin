@@ -56,8 +56,8 @@ describe('isOwner', () => {
 
 describe('actorForArtifacts', () => {
   it('an account scopes by user, whether or not a token rides along', () => {
-    expect(actorForArtifacts(account('usr_a'))).toEqual({ tokenId: '', userId: 'usr_a' });
-    expect(actorForArtifacts(account('usr_a', 'tok_1'))).toEqual({ tokenId: 'tok_1', userId: 'usr_a' });
+    expect(actorForArtifacts(account('usr_a'))).toEqual({ tokenId: '', userId: 'usr_a', email: null });
+    expect(actorForArtifacts(account('usr_a', 'tok_1'))).toEqual({ tokenId: 'tok_1', userId: 'usr_a', email: null });
   });
 
   it('a browser scopes by its token alone', () => {

@@ -92,12 +92,16 @@ const doc = await publish({ markup, theme: 'modernist', colorMode: 'dark', title
 console.log(`   doc: ${BASE}/a/${doc.id}`);
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+const context = await browser.newContext({ viewport: { width: 1400, height: 950 } });
+// Login visits Home, whose showcase thumbnails can finish loading after its
+// DOM is ready. Close that page so its requests cannot enter the document gate.
+const loginPage = await context.newPage();
+await becomeOwner(loginPage, BASE, mint.token);
+await loginPage.close();
+const page = await context.newPage();
 // The vendor document is deterministic here; the separate widget gate exercises
 // its sandboxed fetch and popup behavior. No fixture enters the running app.
 await page.route(/^https:\/\/buttons\.github\.io\/buttons\.html(?:\?|$)/, route => route.fulfill({ contentType: 'text/html', body: '<a href="https://github.com/minusxai/artifactbin" target="_blank">Star</a>' }));
-// The shell (and its frame) belongs to the owner; readers get the document.
-await becomeOwner(page, BASE, mint.token);
 
 const external = [];
 const requests = [];

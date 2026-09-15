@@ -66,7 +66,7 @@ function attachedActor(request: Request | undefined): RequestActor | null {
   const actor = carrying ? actorOf(carrying) : null;
   if (!actor) return null;
   return {
-    viewer: actor.userId ? { userId: actor.userId, email: actor.email ?? null } : null,
+    viewer: actor.userId ? { userId: actor.userId, email: actor.email ?? null, ...(actor.credential === 'session' && !carrying?.headers.has(BROWSER_SESSION_HEADER) ? {emailVerified:actor.emailVerified === true} : {}) } : null,
     tokenId: actor.tokenId ?? null,
     credential: actor.credential,
     ...(actor.heldTokenIds ? { heldTokenIds: actor.heldTokenIds } : {}),
@@ -158,12 +158,12 @@ export async function requestOrSessionActor(request: Request): Promise<RequestAc
  * back to the token, so the empty string is never consulted for a user.
  */
 export function actorForArtifacts(actor: RequestActor): TokenActor | null {
-  if (actor.viewer?.userId) return { tokenId: actor.tokenId ?? '', userId: actor.viewer.userId };
+  if (actor.viewer?.userId) return { ...actor.viewer, tokenId: actor.tokenId ?? '' };
   return actor.tokenId ? { tokenId: actor.tokenId, userId: null } : null;
 }
 
 /** A request's credentials as the ids and address the role decision reads. */
-const roleActor = (actor: RequestActor): RoleActor => ({ userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId, email: actor.viewer?.email ?? null });
+const roleActor = (actor: RequestActor): RoleActor => ({ ...actor.viewer, userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId });
 
 /** Does this actor OWN the row — pure (lib/artifacts ownsArtifact), for the places that need only that. */
 export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: RequestActor): boolean {
@@ -177,7 +177,7 @@ export function isOwner(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, actor: R
  * this, so they cannot disagree on who gets the shell; `none` is the miss that
  * every serving path answers as the uniform 404.
  */
-export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>, actor: RequestActor): Promise<ArtifactRole> {
+export function roleFor(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>, actor: RequestActor): Promise<ArtifactRole> {
   return artifactRole(row, roleActor(actor));
 }
 
