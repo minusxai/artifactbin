@@ -25,3 +25,4 @@ export * from './account-resource';
 export * from './preflight';
 
 export { BUILD_ASSET_PATH, BUILD_ASSET_HEADER } from './build-assets';
+export {ADMIN_DOCUMENT_HEADER, type AdminDocument, type AdminDocumentList} from './admin-documents';

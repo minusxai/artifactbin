@@ -82,7 +82,7 @@ const SCHEMA_RE = /^[a-z_][a-z0-9_]*$/;
  * by the caller and deliberately untyped about the tables Better Auth owns —
  * so the read names exactly what it needs and nothing more.
  */
-type IdentityTables = { user: { id: string; email: string } };
+type IdentityTables = { user: { id: string; email: string; emailVerified: boolean } };
 
 /** The address on a user row, through the SAME handle Better Auth writes with (so it is the same schema, always). */
 const emailOf = async (db: Kysely<Record<string, unknown>>, userId: string): Promise<string | undefined> => {
@@ -94,7 +94,7 @@ const emailOf = async (db: Kysely<Record<string, unknown>>, userId: string): Pro
 export interface HumanAuth {
   /** Better Auth's HTTP handler: mount at /api/auth/*. */
   handler: (request: Request) => Promise<Response>;
-  sessions: { resolve(request: Request): Promise<{ userId: string; email: string; emailVerified: boolean } | null> };
+  sessions: { resolve(request: Request): Promise<{ userId: string; email: string; emailVerified: boolean } | null>; identity?(userId: string): Promise<{ userId: string; email: string; emailVerified: boolean } | null> };
   /** The instance, for the proxy's own routes (sign-out on revoke, …). */
   api: ReturnType<typeof betterAuth>['api'];
 }
@@ -304,6 +304,11 @@ export async function createHumanAuth(opts: HumanAuthOptions): Promise<HumanAuth
     handler: (request) => auth.handler(request),
     api: auth.api,
     sessions: {
+      async identity(userId) {
+        const row = await (db as unknown as Kysely<IdentityTables>).selectFrom('user')
+          .select(['id', 'email', 'emailVerified']).where('id', '=', userId).executeTakeFirst();
+        return row ? {userId: row.id, email: row.email, emailVerified: row.emailVerified === true} : null;
+      },
       async resolve(request) {
         const s = await auth.api.getSession({ headers: request.headers }).catch(() => null);
         if (!s?.user?.id) return null;

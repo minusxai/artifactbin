@@ -322,3 +322,8 @@ export const EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
  * (`APP__SCHEMA` + a literal). Default `events`; prod names its own.
  */
 export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
+
+/** Exact verified account emails eligible for explicit document administration. Empty disables it. */
+export const adminEmails = (): ReadonlySet<string> => new Set((env('ADMIN', 'EMAILS') ?? '').split(',').map(email => email.trim().toLowerCase()).filter(Boolean));
+// Register this request-time setting with the startup environment audit too.
+adminEmails();

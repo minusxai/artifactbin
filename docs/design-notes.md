@@ -287,3 +287,10 @@ only after locking the reviewed database snapshot, then updates catalog metadata
 content and version numbers remain intact. Invalid/missing bytes remain explicit conflicts.
 The complete-input dataflow path also recognizes these inline sources, so dependent aggregates
 never silently use the displayed 1,000-row sample.
+
+## Administrative source repair
+
+Verified account allowlisting and explicit admin requests are owned by
+`lib/admin-documents.ts`, separate from reader and dataset policy. Proxy identity
+lookups stay in the proxy; the app consumes trusted claims. The audit and version
+write are atomic. See [admin document repair](admin-document-repair.md).

@@ -5,6 +5,7 @@ export {CliError} from './errors';
 /** Single executable vocabulary for parsing, help, man pages and local skills. */
 export interface Flag { short?: string; value?: string; repeat?: boolean; description: string }
 export const flags: Record<string,Flag> = {
+ reason:{value:'TEXT',description:'Explain this administrative document repair for the audit log.'},
  service:{value:'NAME',description:'Prepare an optional local service for offline use: sql.'},
  type:{value:'TYPE',description:'Select the resource kind: artifact, folder, dataset, file, profile or session; list adds table; delete adds comment. Fixed names ignore case.'},
  in:{value:'REF',description:'Scope to a containing folder, artifact or dataset.'},
@@ -51,6 +52,7 @@ export const FORMATS:Record<string,readonly string[]>={
 export const globalFlags=['help','version','json','server','yes'];
 export interface Command {name:string; aliases?:string[]; usage:string; description:string; min:number; max:number; flags:string[]; examples:string[]}
 export const commands: Command[] = [
+ {name:'admin',usage:'list [text] | pull <id> --output <file.jsx> | push <file.jsx> --reason <text>',description:'Explicit administrative source inspection and repair; requires a verified email in ADMIN__EMAILS.',min:1,max:2,flags:['output','reason','cursor'],examples:['afbin admin list mx.data','afbin admin pull abc123 --output repair.jsx','afbin admin push repair.jsx --reason "Repair legacy widget"']},
  {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','dry-run','output','format'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
  {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts or account resources and reconcile tracked files.',min:0,max:Infinity,flags:['type','output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2','afbin pull --type profile']},
  {name:'fork',usage:'<ref> [<ref> ...]',description:'Create a distinct private local draft from a resource; publish it later with push.',min:1,max:Infinity,flags:['type','output','dry-run'],examples:['afbin fork abc123 --output copy.jsx','afbin fork report.jsx --dry-run']},

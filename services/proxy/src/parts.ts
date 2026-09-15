@@ -21,7 +21,7 @@
  * is no prefix list to drift.
  */
 import {
-  ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
+  ADMIN_DOCUMENT_HEADER, ACTOR_HEADER, REVALIDATE_ACTOR_HEADER, ANONYMOUS, denyResponse, FORWARDED_FOR, FORWARDED_HOST, FORWARDED_PROTO,
   isInternalApiPath,
   type Actor, type EventsService, type Part, type Queryable, type TokenReader, type Upstream,
 } from '@artifactbin/contracts';
@@ -47,6 +47,8 @@ export interface SessionInfo { userId: string; email?: string; emailVerified?: b
  */
 export interface SessionStore {
   resolve(request: Request): Promise<SessionInfo | null>;
+  /** Fresh identity claims for explicit administrative bearer requests. Missing disables that access. */
+  identity?(userId: string): Promise<SessionInfo | null>;
   handler?: (request: Request) => Promise<Response>;
 }
 
@@ -442,7 +444,14 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (presented) {
     const token = await o.tokens.byToken(presented);
-    if (token && tokenFitsRequest(token, request, o)) return { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
+    if (token && tokenFitsRequest(token, request, o)) {
+      const actor: Actor = { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
+      if (token.userId && new URL(request.url).pathname.startsWith('/api/admin/documents') && request.headers.get(ADMIN_DOCUMENT_HEADER) === '1') {
+        const identity = await o.sessions.identity?.(token.userId).catch(() => null);
+        if (identity?.userId === token.userId) return {...actor, email: identity.email, emailVerified: identity.emailVerified};
+      }
+      return actor;
+    }
     return ANONYMOUS;
   }
   const secure = o.secure ?? false;

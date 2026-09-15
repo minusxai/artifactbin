@@ -577,7 +577,24 @@ const DATASET_USAGE: Table = {
   columns:[{name:'bucket',type:'TEXT',notNull:true},{name:'calls',type:'INTEGER',notNull:true,default:'0'}],
   primaryKey:['bucket'],
 };
-export const TABLES: Table[] = [MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
+/** Durable privileged access audit; source and credentials never enter the audit payload. */
+const ADMIN_DOCUMENT_AUDIT: Table = {
+  name: 'admin_document_audit',
+  columns: [
+    {name:'id',type:'TEXT',notNull:true},
+    {name:'actor_user_id',type:'TEXT',notNull:true},
+    {name:'actor_token_id',type:'TEXT'},
+    {name:'action',type:'TEXT',notNull:true},
+    {name:'artifact_id',type:'TEXT'},
+    {name:'reason',type:'TEXT'},
+    {name:'before_version',type:'INTEGER'},
+    {name:'after_version',type:'INTEGER'},
+    {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  ],
+  primaryKey:['id'],
+};
+
+export const TABLES: Table[] = [ADMIN_DOCUMENT_AUDIT, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);
