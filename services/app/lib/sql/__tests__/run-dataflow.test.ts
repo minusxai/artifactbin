@@ -32,6 +32,17 @@ const FLOW = flowOf(
 );
 
 describe('runDataflow', () => {
+  it('uses complete local source inputs for joins and aggregates, including empty and null rows', async () => {
+    const flow=flowOf('<Query name="left_rows" source="ref:abc123">{`select * from public.rows`}</Query><Query name="right_rows" source="ref:def456">{`select * from public.rows`}</Query><Query name="stats">{`select count(*) as n, median(a.n) as middle from left_rows a join right_rows b on true`}</Query>');
+    const columns=[{name:'n',type:'number' as const}];
+    for(const rows of [Array.from({length:10005},(_,n)=>({n:n+1})),[{n:null}],[]]) {
+      const state=await runDataflow(flow,{abc123:{rows,columns},def456:{rows:[{n:1}],columns}},{only:['stats']});
+      expect(state.errors).toEqual({});
+      expect(state.tables.stats.rows).toEqual([{n:rows.length,middle:rows.length===10005?5003:null}]);
+      expect(state.tables.left_rows.rows.length).toBe(Math.min(rows.length,10000));
+    }
+  });
+
   it('runs every query in dependency order with defaults bound and returns tables + values', async () => {
     const state = await runDataflow(FLOW, DATASETS);
     expect(state.values).toEqual({ region: null, min_rev: 0 });

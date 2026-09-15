@@ -14,7 +14,7 @@ describe('dataset catalog migration planning', () => {
     const source = '<Helmet>\n<Query name="q">{`select ref_abc123.id, \'ref_abc123\' s from ref_abc123 -- ref_abc123\nwhere note <> \'x\'`}</Query>\n<Mutation name="m">{`update ref_abc123 set n=$_value where id=$_row.id /* ref_abc123 */`}</Mutation>\n</Helmet><p id="same"> exact </p>';
     const out = migrateMarkupSource(source);
     expect(out.diagnostics).toEqual([]);
-    expect(out.source).toContain('<Query name="q" source="ref:abc123">{`select rows.id, \'ref_abc123\' s from public.rows -- ref_abc123');
+    expect(out.source).toContain('<Query name="q">{`select source_abc123.id, \'ref_abc123\' s from source_abc123 -- ref_abc123');
     expect(out.source).toContain('<Mutation name="m" source="ref:abc123">{`update public.rows set n=$_value where id=$_row.id /* ref_abc123 */`}');
     expect(out.source.endsWith('</Helmet><p id="same"> exact </p>')).toBe(true);
     expect(migrateMarkupSource(out.source).source).toBe(out.source);
@@ -48,7 +48,7 @@ describe('dataset catalog migration planning', () => {
     const out=migrateMarkupSource(source);
     expect(out.diagnostics).toEqual([]);
     expect(out.source).toContain("E'ref_abc123\\'x', $body$ref_abc123$body$");
-    expect(out.source).toContain('"rows".id from "public"."rows"');
+    expect(out.source).toContain('"source_abc123".id from "source_abc123"');
   });
 
   it('federates folders and datasets through the same explicit source contract',()=>{

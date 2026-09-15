@@ -15,14 +15,12 @@ import {queryPostgres} from './postgres';
 import {connectionShape} from './input';
 import type {DatasetColumn} from '@/lib/story/dataset-shape';
 import {catalogInputShape} from './input';
+import {catalogFromMetadata} from './catalog-metadata';
 const shape=catalogInputShape;
 
 /** Transitional legacy normalization stays at this boundary until catalog migration is complete. */
 export function catalogOf(row:{meta:unknown}):DatasetCatalog|null {
- const meta=row.meta as Record<string,unknown>|null;
- if(meta?.catalog)return meta.catalog as DatasetCatalog;
- if(typeof meta?.objectKey==='string')return {kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns:(meta.columns??[]) as DatasetTable['columns'],objectKey:meta.objectKey}]};
- return null;
+ return catalogFromMetadata(row.meta);
 }
 /** Reader-safe catalog: public relations only, never connection or notebook internals. */
 export function publicCatalogOf(row:{meta:unknown}):DatasetCatalog|null {

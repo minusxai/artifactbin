@@ -37,7 +37,17 @@ export async function runMigrationCli(options) {
   });
   const request = (input) => migrationRequest({
     fetchFn: options.fetch, endpoint, secret: options.secret, timeoutMs: options.timeoutMs, retries: options.retries, write,
-    body: { ...(options.allowPartial ? {allowPartial:true} : {}), batchSize: options.batchSize, maxHistoricalVersionsPerArtifact: options.historyLimit ?? 1000, ...input },
+    body: { batchSize: options.batchSize, maxHistoricalVersionsPerArtifact: options.historyLimit ?? 1000, ...input },
+  });
+  const logExceptions = (report) => {
+    for (const exception of report.historicalExceptions ?? [])
+      write(`historical exception: ${exception.artifactId}@${exception.version}: ${exception.reason}`);
+  };
+  const summarize = (reports) => ({...reports.at(-1),
+    ...Object.fromEntries(['processed','changed','datasets','documents','versions'].map(key=>[key,reports.reduce((sum,report)=>sum+(report[key]??0),0)])),
+    done:reports.every(report=>report.done===true),
+    plans:reports.flatMap(report=>report.plans??[]),conflicts:reports.flatMap(report=>report.conflicts??[]),
+    historicalExceptions:reports.flatMap(report=>report.historicalExceptions??[]),
   });
 
   const pages = []; let after; const cursors = new Set(); let blocked = false;
@@ -45,6 +55,7 @@ export async function runMigrationCli(options) {
     const result = await request({ dryRun: true, ...(after ? { after } : {}) });
     if (!result.report) return result;
     await saveReport(result.report); pages.push(result.report);
+    logExceptions(result.report);
     write(`dry-run: processed=${result.report.processed} changed=${result.report.changed} done=${result.report.done}`);
     if (!result.ok) { blocked = true; write(`migration blocked: ${result.report.conflicts.map((c) => `${c.artifactId}:${c.reason}`).join(', ')}`); }
     after = result.report.nextCursor;
@@ -54,31 +65,35 @@ export async function runMigrationCli(options) {
   }
   write(`migration preview and backups: ${backupDir}`);
   if (blocked && !options.allowPartial) return { ok: false, reason: 'conflict', report: pages.at(-1) };
-  if (options.dryRun) return { ok: true, report: pages.at(-1) };
+  if (options.dryRun) return { ok: true, report: summarize(pages) };
   for (const preview of pages) {
     const expected = Object.fromEntries((preview.plans ?? []).map((plan) => [plan.artifactId, plan.fingerprint]));
     if (!Object.keys(expected).length) continue;
     const result = await request({ dryRun: false, expected });
-    if (!result.ok && !(options.allowPartial && result.report && result.report.changed === Object.keys(expected).length && result.report.conflicts.every(conflict => preview.conflicts.some(prior => JSON.stringify(prior) === JSON.stringify(conflict))))) { write('migration stopped; keep backups and preview again before retrying'); return result; }
+    if (!result.ok) { write('migration stopped; keep backups and preview again before retrying'); return result; }
+    logExceptions(result.report);
     write(`apply: processed=${result.report.processed} changed=${result.report.changed} done=${result.report.done}`);
   }
-  let audit, auditAfter, remaining = false;
-  const auditCursors = new Set();
-  do {
-    audit = await request({ dryRun: true, ...(auditAfter ? {after:auditAfter} : {}) });
-    if (!audit.report) return audit;
-    await saveReport(audit.report);
-    if (!audit.ok || !audit.report.done || audit.report.changed || audit.report.conflicts?.length) remaining = true;
-    auditAfter = audit.report.nextCursor;
-    if (auditAfter && auditCursors.has(auditAfter)) return {ok:false,reason:'no_progress'};
-    if (auditAfter) auditCursors.add(auditAfter);
-  } while (auditAfter);
-  if (remaining) {
-    write('migration incomplete: the final audit found remaining work; keep backups and review a fresh preview');
-    return { ok: false, reason: 'remaining', report: audit.report };
+  // Exception-only artifacts consume pages too. A globally done first page
+  // does not imply that it contains every historical exception.
+  const audits=[];let auditAfter;const auditCursors=new Set();
+  for(;;){
+    const audit=await request({dryRun:true,...(auditAfter?{after:auditAfter}:{})});
+    if(audit.report){await saveReport(audit.report);logExceptions(audit.report);audits.push(audit.report);}
+    if(!audit.report)return audit;
+    auditAfter=audit.report.nextCursor;
+    if(!auditAfter)break;
+    if(auditCursors.has(auditAfter))return {ok:false,reason:'no_progress'};
+    auditCursors.add(auditAfter);
   }
-  write('migration complete: final audit found no remaining reference or catalog changes');
-  return { ok: true, report: audit.report };
+  const report=summarize(audits);
+  if (audits.some(audit=>!audit.done || audit.changed || audit.conflicts?.length)) {
+    write('migration incomplete: the final audit found remaining work; keep backups and review a fresh preview');
+    return { ok: false, reason: 'remaining', report };
+  }
+  const exceptions=report.historicalExceptions.length;
+  write(exceptions?`migration complete with ${exceptions} preserved historical exceptions; inspect the saved reports`:'migration complete: final audit found no remaining reference or catalog changes');
+  return { ok: true, completion:exceptions?'complete_with_historical_exceptions':'complete', report };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

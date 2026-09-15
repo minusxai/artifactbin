@@ -272,8 +272,9 @@ checks, permitted-column registration, lazy model views and typed parameter cast
 SQL executes without a JSON AST round trip (which would round exact integers through JavaScript).
 `lib/datasets/sql.ts` remains the PostgreSQL compiler. Computed row sources use the stored path too.
 
-The dataset-catalog migration defaults to refusing any invalid version. Operators may explicitly
-use `scripts/dataset-catalog-migrate.mjs --allow-partial --apply` to repair validated heads/history
-while retaining invalid records unchanged. Every unresolved record remains in the reports; this
-mode never turns an incomplete audit into success. Preview backups precede all writes, complete
-artifact/history fingerprints still guard each transaction, and the final audit follows all pages.
+The dataset-catalog migration retains invalid historical versions as explicit exceptions while
+repairing validated heads and history. Operators may use
+`scripts/dataset-catalog-migrate.mjs --allow-partial --apply` to apply valid artifact plans even
+when other current heads have blocking conflicts. Unresolved heads remain in every report and
+produce an incomplete result. Preview backups precede all writes, complete artifact/history
+fingerprints guard each transaction, and the final audit follows all pages.
