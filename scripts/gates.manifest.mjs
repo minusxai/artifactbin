@@ -22,6 +22,7 @@
  * @property {string} name            `gate-<name>.mjs`
  * @property {boolean} needsMail      reads a login code from the mail sink
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
+ * @property {boolean} [exclusive]    runs alone after parallel gates finish (software-rendering contention)
  * @property {boolean} [needsGenerationFixture]  needs the deterministic model server (lib/generation-fixture)
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
@@ -32,7 +33,7 @@ export const GATE_SPECS = Object.freeze([
   { name: 'comment-targets', needsMail: false, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, timeoutMs: 60_000 },
   { name: 'generation-mutations', needsMail: false, needsGenerationFixture: true, timeoutMs: 70_000 },
-  { name: 'public-home-stars', needsMail: false, serialGroup: 'clipboard', timeoutMs: 60_000 },
+  { name: 'public-home-stars', needsMail: false, serialGroup: 'clipboard', exclusive: true, timeoutMs: 60_000 },
   { name: 'seamless-navigation', needsMail: true, timeoutMs: 60_000 },
   { name: 'managed-iframe', needsMail: false, timeoutMs: 60_000 },
   { name: 'libraries', needsMail: false, timeoutMs: 60_000 },

@@ -32,6 +32,7 @@ import { GATE_SPECS, checkManifest, specFor } from './gates.manifest.mjs';
 import {startGenerationFixture} from './lib/generation-fixture.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
+import { runGateQueue } from './gates.queue.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -277,27 +278,23 @@ const withinSerialGroup = (serialGroup, task) => {
 };
 
 console.log(`gates: ${targets.length} server(s), ${selected.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
-const queue = [...selected];
 const failed = [];
 const timings = [];
 const wall = Date.now();
 
-/** One worker per server, each pulling the next gate — so a slow gate delays
- *  only its own worker and the set finishes when the last one does. */
-await Promise.all(targets.map(async (base) => {
-  for (let gate = queue.shift(); gate; gate = queue.shift()) {
-    const spec = specFor(gate.name);
-    const { ok, output, seconds } = await withinSerialGroup(
-      spec.serialGroup,
-      () => run(gate, base, spec.timeoutMs),
-    );
-    timings.push({ name: gate.name, seconds });
-    if (!ok) failed.push(gate.name);
-    console.log(`──────── ${gate.name} ${ok ? '' : 'FAILED '}(${seconds.toFixed(0)}s) ────────`);
-    console.log(output.trimEnd());
-    console.log('');
-  }
-}));
+/** Group locks apply in both the parallel and exclusive execution phases. */
+await runGateQueue(selected.map(gate => ({ ...gate, exclusive: specFor(gate.name).exclusive })), targets, async (gate, base) => {
+  const spec = specFor(gate.name);
+  const { ok, output, seconds } = await withinSerialGroup(
+    spec.serialGroup,
+    () => run(gate, base, spec.timeoutMs),
+  );
+  timings.push({ name: gate.name, seconds });
+  if (!ok) failed.push(gate.name);
+  console.log(`──────── ${gate.name} ${ok ? '' : 'FAILED '}(${seconds.toFixed(0)}s) ────────`);
+  console.log(output.trimEnd());
+  console.log('');
+});
 
 /*
  * A gate that failed under load gets ONE more turn, ALONE.
@@ -315,9 +312,11 @@ await Promise.all(targets.map(async (base) => {
  * a genuine flake.
  */
 const retried = [];
-if (failed.length > 0 && targets.length > 1) {
-  console.log(`\n──────── retrying ${failed.length} gate(s) alone ────────`);
-  for (const name of [...failed]) {
+// Exclusive gates already ran alone; their failures are not contention retries.
+const retryable = failed.filter(name => !specFor(name).exclusive);
+if (retryable.length > 0 && targets.length > 1) {
+  console.log(`\n──────── retrying ${retryable.length} gate(s) alone ────────`);
+  for (const name of retryable) {
     const gate = selected.find((g) => g.name === name);
     const spec = specFor(gate.name);
     const { ok, output, seconds } = await run(gate, targets[0], spec.timeoutMs);

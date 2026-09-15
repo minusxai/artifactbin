@@ -3,7 +3,7 @@
  * gate's own source.
  *
  * The row shape is deliberately small: `{ name, needsMail, serialGroup?,
- * needsGenerationFixture?, timeoutMs }`, and every one of those fields is read
+ * needsGenerationFixture?, exclusive?, timeoutMs }`, and every one of those fields is read
  * by scripts/gates.mjs. The fields that used to be here and were read by
  * nothing — `start`, `why`, `needsClipboard` — drifted precisely because
  * nothing could contradict them, so rule 2 now refuses them outright.
@@ -19,7 +19,7 @@ const SCRIPTS = path.resolve(import.meta.dirname, '..');
 const onDisk = readdirSync(SCRIPTS).filter((f) => f.startsWith('gate-') && f.endsWith('.mjs')).map((f) => f.slice(5, -4)).sort();
 const source = (name) => readFileSync(path.join(SCRIPTS, `gate-${name}.mjs`), 'utf8');
 const MAIL = /dev-mail|DEV_OUTBOX|startMailSink|\/mail\b|mailSink|MAIL_SINK|readCode|latestCode|becomeAccountOwner/;
-const ALLOWED_FIELDS = new Set(['name', 'needsMail', 'serialGroup', 'needsGenerationFixture', 'timeoutMs']);
+const ALLOWED_FIELDS = new Set(['name', 'needsMail', 'serialGroup', 'needsGenerationFixture', 'exclusive', 'timeoutMs']);
 
 describe('the manifest and the disk are one set', () => {
   it('1. every gate file has a row and every row has a file', () => {
@@ -34,6 +34,7 @@ describe('the manifest and the disk are one set', () => {
       expect(Number.isInteger(spec.timeoutMs) && spec.timeoutMs > 0, `${spec.name} timeoutMs`).toBe(true);
       if (spec.serialGroup !== undefined) expect(typeof spec.serialGroup, spec.name).toBe('string');
       if (spec.needsGenerationFixture !== undefined) expect(spec.needsGenerationFixture, spec.name).toBe(true);
+      if (spec.exclusive !== undefined) expect(spec.exclusive, spec.name).toBe(true);
     }
   });
 
@@ -79,7 +80,7 @@ describe('the rows tell the truth about their sources', () => {
     const runner = readFileSync(path.join(SCRIPTS, 'gates.mjs'), 'utf8');
     expect(runner).toMatch(/from '\.\/gates\.manifest\.mjs'/);
     expect(runner).toMatch(/checkManifest\(/);
-    for (const field of ['timeoutMs', 'serialGroup', 'needsMail', 'needsGenerationFixture']) {
+    for (const field of ['timeoutMs', 'serialGroup', 'needsMail', 'needsGenerationFixture', 'exclusive']) {
       expect(runner, `the runner never reads ${field}`).toContain(field);
     }
     // No gate is special-cased by NAME in the runner: that is what the fields are for.
