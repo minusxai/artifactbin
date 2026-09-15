@@ -36,8 +36,8 @@ it('saves through the normal edit and replacement routes with real actor attribu
  expect(row).toMatchObject({user_id:'usr_owner',actor_user_id:'usr_admin',visibility:'private',version:3});
  expect((await (await harness.db()).query('SELECT 1 FROM artifact_versions WHERE artifact_id=$1',['abc123'])).rows).toHaveLength(2);
 });
-it('does not elevate other users, unverified identities, bearer tokens, agent cookies or forged headers',async()=>{
- for(const actor of [{...admin,email:'other@example.com'},{...admin,emailVerified:false},{...admin,credential:'bearer' as const,tokenId:'tok_admin'},{...admin,credential:'agent-cookie' as const,tokenId:'tok_admin'}]){
+it('does not elevate other users, unverified identities, agent cookies or forged headers',async()=>{
+ for(const actor of [{...admin,email:'other@example.com'},{...admin,emailVerified:false},{...admin,credential:'agent-cookie' as const,tokenId:'tok_admin'}]){
   expect((await GET(request(path,{actor}),context)).status).toBe(404);
  }
  expect((await GET(request(path,{actor:{...admin,email:'other@example.com'},headers:{'x-admin-email':admin.email!,'X-Artifactbin-Admin':'1'}}),context)).status).toBe(404);

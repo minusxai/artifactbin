@@ -1,6 +1,6 @@
 import {adminEmails} from './config';
 
-/** Claims are supplied by the verified browser-session bridge, never request JSON. */
+/** Claims are supplied by the authenticated account bridge, never request JSON. */
 export interface VerifiedAccount {
  userId:string|null;
  email?:string|null;

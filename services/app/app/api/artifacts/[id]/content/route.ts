@@ -1,3 +1,4 @@
+import {tokenActorForRequest} from '@/lib/viewer';
 import {readableArtifact} from '@/lib/artifact-read';
 /** Authenticated immutable content reads never use public serving/import paths. */
 import {withTokenAuth} from '@/lib/auth';
@@ -17,7 +18,7 @@ const readableDefinition=(catalog:DatasetCatalog)=>serializeDatasetDefinition({
 });
 
 export const GET=withTokenAuth(async(request,{tokenId,userId,params})=>{
- const actor={tokenId,userId};const readable=await readableArtifact(actor,params.id);
+ const actor=tokenActorForRequest(request,{tokenId,userId});const readable=await readableArtifact(actor,params.id);
  if(!readable)return json({error:'not_found'},404);
  const head=readable.row;
  const raw=new URL(request.url).searchParams.get('version');

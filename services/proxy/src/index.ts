@@ -34,5 +34,6 @@ import type { SessionStore } from './parts';
 /** Better Auth as the parts see it — the one adapter between HumanAuth's shape and ProxyOptions.sessions. */
 export const sessionStoreOf = (h: HumanAuth): SessionStore => ({
   resolve: (request) => h.sessions.resolve(request),
+  ...(h.sessions.identity ? {identity: h.sessions.identity.bind(h.sessions)} : {}),
   handler: (request) => h.handler(request),
 });
