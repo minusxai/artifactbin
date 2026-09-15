@@ -1,3 +1,4 @@
+import { runtimeId } from './runtime-id';
 import { installMx } from './mx';
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { StoryDocumentUpdate, StoryIslandData } from './contract';
@@ -86,7 +87,7 @@ export function InlineStoryRuntime(props: InlineStoryRuntimeProps): ReactNode {
     let annotationCommand: Parameters<FrameAnnotateSession['update']>[0] | null = null;
     let selectionCommand: Parameters<FrameSelectionActions['update']>[0] | null = null;
     const listeners = new Set<(event: unknown) => void>();
-    const nonce = crypto.randomUUID();
+    const nonce = runtimeId();
     const emit = (event: unknown) => { if (!disposed) for (const listener of [...listeners]) listener(event); };
     const channel: RuntimeChannel = { nonce, post: event => queueMicrotask(() => emit(event)), innerHtmlOf: element => element.innerHTML };
     // The lazy module, grant and protected portal may arrive in any order.

@@ -1,3 +1,4 @@
+import { runtimeId } from './runtime-id';
 import type { ManagedCommentEvent, ManagedCommentState } from './managed-comment-contract';
 import { parseCommentTarget } from '@/lib/story/comment-target';
 import { canonicalQuote, parseAnnotationRange, isTargetRange, type AnnotationRect } from '@/lib/story/annotation-range';
@@ -33,7 +34,7 @@ export function bindManagedComments(doc: Document, consumer: Consumer): {sync():
 export function connectManagedComments(input: HTMLElement, send: (state: ManagedCommentState) => void): {receive(message: unknown): void; dispose(): void} {
   const element = input.closest<HTMLElement>('[data-mx-managed-frame]') ?? input;
   const r = registry(element.ownerDocument);
-  const generation = crypto.randomUUID();
+  const generation = runtimeId();
   const host: Host = {element,generation,send,state:{type:'comment-state',generation,...(r.consumer?.state(element) ?? disabled())}};
   r.hosts.add(host); send(host.state);
   let disposed = false;

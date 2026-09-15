@@ -118,3 +118,21 @@ it('passes declared row and cell arguments without creating scalar signals', asy
   expect(store.getState().values).toEqual({count:0,other:''});
   store.dispose();
 });
+
+it('initializes and mutates over internal HTTP without crypto.randomUUID', async () => {
+  const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
+  vi.stubGlobal('crypto', { getRandomValues });
+  const store = createDataflowStore({ flow: { ...flow, mutations: [{ name: 'save', target: 'owned', sql: 'update ref_owned set n=$count', params: ['count'], refs: ['owned'], start: 0, end: 0 }] },
+    state: { values: { count: 0, other: '' }, tables: {}, errors: {}, mutationAccess: { save: null } } }, {
+    transport: { mutate: async () => ({ dataset: 'owned' }), run: async () => ({ tables: {}, errors: {}, mutationAccess: { save: null } }), page: async () => ({ rows: [], columns: [] }) },
+  });
+  try {
+    const mx = createMx(store);
+    const snapshot = await mx.read(['count']);
+    expect(snapshot.instanceEpoch).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    const first = await mx.mutate('save', { count: 1 });
+    const second = await mx.mutate('save', { count: 2 });
+    expect(first.operationId).toBeTruthy();
+    expect(second.operationId).not.toBe(first.operationId);
+  } finally { store.dispose(); vi.unstubAllGlobals(); }
+});

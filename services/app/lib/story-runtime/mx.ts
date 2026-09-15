@@ -1,3 +1,4 @@
+import { runtimeId } from './runtime-id';
 /** One capability implementation for the public page and the managed iframe transport. */
 import type { MxApi, MxSnapshot, MxReadOptions } from '@artifactbin/contracts';
 import { DECL_NAME_RE, scalarMatches, type Scalar } from '@/lib/story/dataflow';
@@ -27,7 +28,7 @@ export function createMx(store: DataflowStore): MxApi {
   const key = mxFlowKey(store.flow);
   if (cached?.key === key) return cached.api;
   const flow = store.flow;
-  const instanceEpoch = crypto.randomUUID();
+  const instanceEpoch = runtimeId();
   let revision = 0;
   const alive = () => {
     if (store.disposed || mxFlowKey(store.flow) !== key) throw fail('STALE_INSTANCE', 'This artifact instance has been replaced or closed');
@@ -118,7 +119,7 @@ export function createMx(store: DataflowStore): MxApi {
       }
       if (store.mutating().has(name)) throw fail('BUSY', `Mutation ${name} is already running`);
       if (!store.canMutate(name)) throw fail('FORBIDDEN', store.mutationUnavailable(name) ?? 'Mutation is unavailable');
-      const operationId = crypto.randomUUID();
+      const operationId = runtimeId();
       await store.mutate(name, values, row);
       return { operationId, scope: decl.scope ?? 'dataset', status: 'committed' };
     },
