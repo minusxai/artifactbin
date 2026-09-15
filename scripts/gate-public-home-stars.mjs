@@ -48,8 +48,8 @@ try {
   let releasePoster;
   const poster = new Promise(resolve => { releasePoster = resolve; });
   const posterPixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4GQAAAAASUVORK5CYII=', 'base64');
-  await page.route('**/a/*/export?*', async route => {
-    if (route.request().url().includes('/YPLu0U/')) await poster;
+  await page.route('**/landing/posters/*.webp', async route => {
+    if (route.request().url().endsWith('/YPLu0U.webp')) await poster;
     await route.fulfill({ contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: posterPixel });
   });
   let releaseScripts;
@@ -95,6 +95,18 @@ try {
   const controlsBox = await page.getByRole('button', { name: 'Open page controls', exact: true }).boundingBox();
   assert(appBox.x + appBox.width <= controlsBox.x, 'Star button leaves page controls unobstructed');
   assert(appBox.y < 44 && appBox.x > 640);
+  const galleryBox = await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('link', { name: 'Gallery', exact: true }).boundingBox();
+  assert(appBox.x + appBox.width <= galleryBox.x, 'desktop Star precedes Gallery and Docs');
+  for (const width of [320, 390, 640, 800]) {
+    await page.setViewportSize({ width, height: 844 });
+    const mobileStar = page.locator('header [data-mx-github-star]:visible');
+    assert.equal(await mobileStar.count(), 1, 'mobile navigation retains one Star link');
+    const box = await mobileStar.boundingBox();
+    const menu = await page.getByRole('button', { name: 'Open navigation menu', exact: true }).boundingBox();
+    const brand = await page.locator('header').getByRole('link', { name: 'artifactbin home', exact: true }).boundingBox();
+    assert(brand.x + brand.width <= box.x && box.x + box.width <= menu.x && menu.x + menu.width <= width, `mobile Star fits between brand and menu at ${width}px`);
+  }
+  await page.setViewportSize({ width: 1280, height: 800 });
   console.log('ok uninterrupted landing through slow JS/session/home; asynchronous count in app topbar');
   await appStar.locator('a').evaluate(link => { window.__starBeforeControls = link; });
   for (let i = 0; i < 4; i++) {
