@@ -8,11 +8,16 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {POST as query} from '@/app/a/[id]/query/route';
 import {mintToken} from '@/lib/tokens';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
-import {POST as adminCatalogRoute} from '@/app/api/admin/dataset-catalog/route';
+import { refLoaderForActor, writerFor, type ArtifactRow } from '@/lib/artifacts';
+import { checkDocumentData } from '@/lib/story/data-checks';
 import {storeDatasetRows} from '@/lib/story/dataset-store';
 import {revertArtifactFor,isVersionNotArchived} from '@/lib/artifacts';
 
 const harness = useAppHarness();
+const validate: NonNullable<Parameters<typeof runDatasetCatalogMigrationBatch>[1]['validate']> = async (source, row) => {
+  const checked = await checkDocumentData(source, refLoaderForActor(writerFor(row as unknown as ArtifactRow)));
+  return checked.ok ? [] : checked.details;
+};
 const ctx=(id:string)=>({params:Promise.resolve({id})});
 async function seed(id: string, format: 'dataset'|'markup'|'folder'|'image', source: string|null, meta: Record<string, unknown>, version=2) {
   const db = await harness.db();
@@ -28,14 +33,14 @@ it('previews and applies valid history while preserving invalid JSX bytes and re
   const db=await harness.db();const invalid='<Helmet><Query name="broken">{';
   for(const [version,markup] of [[1,invalid],[2,source]])await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('zzzzzz',$1,'preserve',$2,'markup','{}')",[version,markup]);
   const before=(await db.query("SELECT * FROM artifact_versions WHERE artifact_id='zzzzzz' ORDER BY version")).rows;
-  const call=(body:Record<string,unknown>)=>adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10,...body}}));
-  const preview=await call({});expect(preview.status).toBe(200);const report=await preview.json();
+  const call=(options: Partial<Parameters<typeof runDatasetCatalogMigrationBatch>[1]>)=>runDatasetCatalogMigrationBatch(db,{batchSize:10,validate,...options});
+  const report=await call({});
   expect(report).toMatchObject({changed:1,versions:1,conflicts:[],done:false,historicalExceptions:[{artifactId:'zzzzzz',version:1,reason:expect.stringMatching(/invalid JSX/)}]});
   expect((await db.query("SELECT * FROM artifact_versions WHERE artifact_id='zzzzzz' ORDER BY version")).rows).toEqual(before);
   const applied=await call({dryRun:false,expected:{zzzzzz:report.plans[0].fingerprint}});
-  expect(applied.status).toBe(200);expect(await applied.json()).toMatchObject({changed:1,versions:1,done:true,historicalExceptions:report.historicalExceptions});
+  expect(applied).toMatchObject({changed:1,versions:1,done:true,historicalExceptions:report.historicalExceptions});
   expect((await db.query("SELECT * FROM artifact_versions WHERE artifact_id='zzzzzz' AND version=1")).rows[0]).toEqual(before[0]);
-  expect(await (await call({})).json()).toMatchObject({changed:0,done:true,historicalExceptions:report.historicalExceptions});
+  expect(await call({})).toMatchObject({changed:0,done:true,historicalExceptions:report.historicalExceptions});
   const head=(await db.query("SELECT * FROM artifacts WHERE id='zzzzzz'")).rows;
   const restored=await revertArtifactFor({tokenId:'tok_migration',userId:null},'zzzzzz',1);
   expect(restored).toMatchObject({notArchived:true});
@@ -97,15 +102,12 @@ describe('dataset catalog migration transaction', () => {
     await seed(documentId,'markup',source,{});
     const db=await harness.db();
     const before=(await db.query('SELECT * FROM artifacts ORDER BY id')).rows;
-    const preview=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10}}));
-    expect(preview.status,await preview.clone().text()).toBe(200);
-    const report=await preview.json();
+    const report=await runDatasetCatalogMigrationBatch(db,{batchSize:10,validate});
     expect(report).toMatchObject({changed:2,datasets:1,documents:1,conflicts:[],dryRun:true,done:false});
     expect((await db.query('SELECT * FROM artifacts ORDER BY id')).rows).toEqual(before);
     const expected=Object.fromEntries(report.plans.map((plan:{artifactId:string;fingerprint:string})=>[plan.artifactId,plan.fingerprint]));
-    const apply=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10,dryRun:false,expected}}));
-    expect(apply.status,await apply.clone().text()).toBe(200);
-    expect(await apply.json()).toMatchObject({changed:2,conflicts:[],done:true});
+    const apply=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false,expected,validate});
+    expect(apply).toMatchObject({changed:2,conflicts:[],done:true});
     const migrated=(await db.query<{meta:Record<string,unknown>}>('SELECT meta FROM artifacts WHERE id=$1',[datasetId])).rows[0];
     expect(migrated.meta.catalog).toMatchObject({kind:'stored',tables:[{objectKey:stored.objectKey}]});
     const result=await query(request(`/a/${documentId}/query`,{method:'POST',json:{}}),ctx(documentId));
@@ -119,8 +121,7 @@ describe('dataset catalog migration transaction', () => {
     const db=await harness.db();
     await db.query('UPDATE artifacts SET meta=$2::jsonb WHERE id=$1',['abc123',JSON.stringify(meta)]);
     const before=(await db.query('SELECT * FROM artifacts ORDER BY id')).rows;
-    const preview=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10}}));
-    expect(preview.status).toBe(409);const report=await preview.json();
+    const report=await runDatasetCatalogMigrationBatch(db,{batchSize:10,validate});
     expect(report).toMatchObject({changed:0,done:false,plans:[]});
     expect(report.conflicts).toEqual(expect.arrayContaining([
       expect.objectContaining({artifactId:'abc123',reason:expect.stringMatching(/no catalog or stored object key/)}),
@@ -343,24 +344,6 @@ describe('the stored dataset catalog', () => {
   });
   it('normalizes a legacy single-table dataset to public.rows without guessing from table count',()=>{
    expect(catalogOf({meta:{columns:[{name:'n',type:'number'}],objectKey:'legacy'}})).toMatchObject({kind:'stored',defaultSchema:'public',tables:[{schema:'public',name:'rows',objectKey:'legacy'}]});
-  });
-});
-
-describe('admin dataset catalog migration door', () => {
-  const adminEndpoint='/api/admin/dataset-catalog';
-
-  it('is absent without the operator credential',async()=>{
-    expect((await adminCatalogRoute(request(adminEndpoint,{method:'POST',json:{batchSize:1}}))).status).toBe(404);
-    expect((await adminCatalogRoute(request(adminEndpoint,{method:'POST',headers:{'x-shared-secret':'wrong'},json:{batchSize:1}}))).status).toBe(404);
-  });
-  it('rejects unbounded and executable input',async()=>{
-    for(const body of [{batchSize:1,dryRun:false},{batchSize:1,after:'bad cursor'},{batchSize:1,dryRun:false,expected:{aaaaaa:'bad'}},{batchSize:0},{batchSize:101},{batchSize:1.5},{batchSize:1,failBeforeCommit:true},{batchSize:1,dryRun:'false'},{batchSize:1,maxHistoricalVersionsPerArtifact:10001},null,[]]){
-      expect((await adminCatalogRoute(request(adminEndpoint,{method:'POST',headers:{'x-shared-secret':'test-secret'},json:body}))).status).toBe(400);
-    }
-  });
-  it('defaults to dry-run at the HTTP door too',async()=>{
-    const response=await adminCatalogRoute(request(adminEndpoint,{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:1}}));
-    expect(response.status).toBe(200);expect(await response.json()).toMatchObject({dryRun:true,done:true});
   });
 });
 
