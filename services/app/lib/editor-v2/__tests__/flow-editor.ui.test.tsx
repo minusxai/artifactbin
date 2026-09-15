@@ -26,7 +26,8 @@ describe('mounted editor flow', () => {
     });
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(serializeJsx(onChange.mock.calls[0][0])).toMatch(/<strong[^>]*>paste<\/strong>/);
-    expect(serializeJsx(onChange.mock.calls[0][0])).not.toContain('bad');
+    // Generated IDs can contain the hex substring 'bad'; only the pasted class is forbidden.
+    expect(serializeJsx(onChange.mock.calls[0][0])).not.toMatch(/\bclass(?:Name)?=["'][^"']*\bbad\b/);
   });
   it('retains the editor DOM and selection on an unchanged source echo', () => {
     const initial = nodes('<p id="a">alpha</p><p id="b">bravo</p>');

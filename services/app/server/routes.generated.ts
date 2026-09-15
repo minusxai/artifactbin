@@ -81,10 +81,11 @@ import * as r77 from '@/app/api/tokens/reject/route';
 import * as r78 from '@/app/api/tokens/route';
 import * as r79 from '@/app/api/users/[id]/follow/route';
 import * as r80 from '@/app/assets/[hash]/route';
-import * as r81 from '@/app/health/route';
-import * as r82 from '@/app/llms.txt/route';
-import * as r83 from '@/app/tiles/[...tile]/route';
-import * as r84 from '@/app/webfonts/[file]/route';
+import * as r81 from '@/app/assets/export/[id]/route';
+import * as r82 from '@/app/health/route';
+import * as r83 from '@/app/llms.txt/route';
+import * as r84 from '@/app/tiles/[...tile]/route';
+import * as r85 from '@/app/webfonts/[file]/route';
 
 export interface RouteEntry { path: string; dir: string; methods: string[]; module: Record<string, unknown> }
 export const ROUTES: RouteEntry[] = [
@@ -169,8 +170,9 @@ export const ROUTES: RouteEntry[] = [
   { path: "/api/tokens", dir: "/api/tokens", methods: ["POST"], module: r78 },
   { path: "/api/users/:id/follow", dir: "/api/users/[id]/follow", methods: ["GET","POST","DELETE"], module: r79 },
   { path: "/assets/:hash", dir: "/assets/[hash]", methods: ["GET"], module: r80 },
-  { path: "/health", dir: "/health", methods: ["GET"], module: r81 },
-  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r82 },
-  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r83 },
-  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r84 },
+  { path: "/assets/export/:id", dir: "/assets/export/[id]", methods: ["GET","HEAD"], module: r81 },
+  { path: "/health", dir: "/health", methods: ["GET"], module: r82 },
+  { path: "/llms.txt", dir: "/llms.txt", methods: ["GET"], module: r83 },
+  { path: "/tiles/:tile{.+}", dir: "/tiles/[...tile]", methods: ["GET"], module: r84 },
+  { path: "/webfonts/:file", dir: "/webfonts/[file]", methods: ["GET"], module: r85 },
 ];

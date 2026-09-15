@@ -229,7 +229,7 @@ describe('public profile listing', () => {
     // Each card carries the version-busted og-card export as its thumbnail,
     // over a quiet spinner (a steady spin, never a blink) that shows while
     // the shot renders server-side.
-    expect(markup).toContain(`/a/${open.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=2`);
+    expect(markup).toContain(`/a/${open.id}/export?format=jpg&amp;mode=card&amp;v=1&amp;r=3`);
     expect(markup).toContain('animate-spin');
     expect(markup).not.toContain('animate-pulse');
   });

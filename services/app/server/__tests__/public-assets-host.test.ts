@@ -5,6 +5,7 @@ import { inProcess, overHttp } from '@artifactbin/utils';
 import {it,expect,vi} from 'vitest';
 vi.mock('@/lib/config',async original=>({...await original<typeof import('@/lib/config')>(),get PUBLIC_BASE_URL(){return 'https://example.test';},ASSETS_ORIGIN:'https://assets.example.test'}));
 import {useAppHarness} from '@/__tests__/harness';
+import {exportAssetUrl} from '@/lib/export/assets';
 import {getDb} from '@/lib/db';
 import {objectStore,objectKey} from '@/lib/object-store';
 import {createAppServer} from '../app';
@@ -93,4 +94,19 @@ it('production composition bypasses identity only for manifest-listed files and 
    expect(session).toHaveBeenCalledOnce();
   }
  } finally { await server.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+it('serves a scoped exported image through both app and proxy asset-origin boundaries',async()=>{
+ const id='11111111-1111-4111-8111-111111111111',key=`exports/objects/${id}.png`,body=Buffer.from('image bytes');
+ await objectStore().put(key,body,'image/png');
+ await(await getDb()).query('INSERT INTO export_images(id,artifact_id,object_key,mime,bytes,width,height) VALUES($1,$2,$3,$4,$5,1,1)',[id,'abc123',key,'image/png',body.length]);
+ const app=createAppServer({indexHtml:async()=>'<head></head>'}),options=await testProxyOptions({upstream:async request=>app.fetch(request)});
+ options.env={...options.env,APP__PUBLIC_BASE_URL:'https://example.test',APP__ASSETS_ORIGIN:'https://assets.example.test'};
+ const proxy=createProxy(options),url=exportAssetUrl(id,'https://example.test');
+ for(const fetch of [app.fetch,proxy.fetch]){
+  const response=await fetch(new Request(url));expect(response.status).toBe(200);expect(await response.text()).toBe('image bytes');
+  expect(response.headers.get('access-control-allow-origin')).toBe('*');
+  expect((await fetch(new Request(url+'&key=duplicate'))).status).toBe(404);
+  expect((await fetch(new Request(url.split('?')[0]!))).status).toBe(404);
+ }
 });

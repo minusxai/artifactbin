@@ -19,7 +19,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest } from '@artifactbin/contracts';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
-import { GET as exportRoute } from '@/app/a/[id]/export/route';
+import {exportImage as exportRoute} from './export-helpers';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { resetExportRenderer } from '@/lib/export';
 import { setServices } from '@/lib/services';

@@ -10,4 +10,4 @@
 export const CARD_WIDTH = 1600;
 export const CARD_HEIGHT = 840;
 /** Changes whenever card pixels change, so browsers and durable caches miss old renders. */
-export const CARD_RENDER_GENERATION = 2;
+export const CARD_RENDER_GENERATION = 3;

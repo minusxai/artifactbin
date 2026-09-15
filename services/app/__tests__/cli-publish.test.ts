@@ -23,6 +23,8 @@ import { State } from '../../cli/src/state';
 import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest } from '@artifactbin/contracts';
 import { setServices } from '@/lib/services';
+import {EXPORT_PNG} from './export-helpers';
+import {exportAssetResponse} from '@/lib/export/assets';
 import { resetExportRenderer } from '@/lib/export';
 import { GET as exportImage } from '@/app/a/[id]/export/route';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
@@ -177,13 +179,14 @@ describe('cli-dependencies', () => {
 });
 
 describe('cli-export', () => {
-  const EXPORT_BYTES=new Uint8Array([0x89,0x50,0x4e,0x47,0x45,0x58,0x50,0x4f,0x52,0x54]);
+  const EXPORT_BYTES=EXPORT_PNG;
   let browser=fakeBrowser({ok:true,mime:'image/png',bytes:EXPORT_BYTES});
   beforeEach(async()=>{await resetExportRenderer();browser=fakeBrowser({ok:true,mime:'image/png',bytes:EXPORT_BYTES});setServices({browser});});
   afterEach(async()=>{setServices({});await resetExportRenderer();});
 
   /** The viewer routes the CLI renders through; the bearer API half is the shared transport's. */
   const viewerRoutes=(request:Request,url:URL)=>{
+   if(url.pathname.startsWith('/assets/export/')){expect(request.headers.get('authorization')).toBeNull();return exportAssetResponse(request,url.pathname.split('/').at(-1)!);}
    const view=/^\/a\/([^/]+)\/(export|raw)$/.exec(url.pathname);
    return view?(view[2]==='export'?exportImage:serveRaw)(request,{params:Promise.resolve({id:view[1]!})}):undefined;
   };
@@ -206,7 +209,8 @@ describe('cli-export', () => {
     // A tracked file identical to its observed head renders that head, and --page becomes slide.
     const shot=await run(['export','deck.jsx','--format','png','--page','2','--output','slide.png']);
     expect(shot.code,JSON.stringify(shot.result)).toBe(0);
-    expect(addressesCalled(calls)).toEqual([`GET /a/${id}/export?format=png&slide=2`]);
+    expect(addressesCalled(calls)[0]).toBe(`GET /a/${id}/export?format=png&slide=2`);
+    expect(addressesCalled(calls)[1]).toMatch(/^GET \/assets\/export\//);expect(calls).toHaveLength(2);
     expect(new Uint8Array(await readFile(join(root,'slide.png')))).toEqual(EXPORT_BYTES);
     expect(shot.result.operations[0].format).toBe('png');
     // The render request the route actually built names this document's own slide.

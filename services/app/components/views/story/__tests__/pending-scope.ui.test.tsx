@@ -26,6 +26,7 @@ describe('which chart gets to say "loading"', () => {
   it('says loading while ITS OWN table is in flight', () => {
     const { getByLabelText } = render({ pendingTables: ['mine'] });
     expect(getByLabelText('Chart placeholder').textContent).toMatch(/loading/i);
+    expect(getByLabelText('Chart placeholder').getAttribute('data-mx-chart-state')).toBe('pending');
   });
 
   it('does NOT say loading because a DIFFERENT table is loading', () => {
@@ -52,5 +53,6 @@ describe('which chart gets to say "loading"', () => {
   it('accepts the pending set as a Set too (the store hands one)', () => {
     const { getByLabelText } = render({ pendingTables: new Set(['mine']) });
     expect(getByLabelText('Chart placeholder').textContent).toMatch(/loading/i);
+    expect(getByLabelText('Chart placeholder').getAttribute('data-mx-chart-state')).toBe('pending');
   });
 });

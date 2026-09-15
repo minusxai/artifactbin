@@ -61,3 +61,5 @@ it('keeps editor annotation receipts beside app-owned atomic source edits',()=>{
 });
 
 it('sharing revision belongs to app artifact state',()=>{expect(renderedSchema().schema).toMatch(/sharing_revision/);});
+
+it('export metadata and refresh claims belong to the app',()=>{expect(declared()['app.export_images']).toBe('app');expect(declared()['app.export_image_cache']).toBe('app');});

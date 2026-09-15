@@ -24,10 +24,12 @@ export class HttpClient {
  private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl,signal?:AbortSignal):Promise<unknown>{
   const url=address(path,this.connection.server);
   if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight')throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
+  const imageExport=address===viewerUrl&&/^\/a\/[A-Za-z0-9]{6}\/export$/.test(url.pathname);
   let refreshed=false,authenticated=false;
   for(let attempt=0;attempt<3;attempt++){
    let response:Response;
-   try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{
+   try{response=await (this.options.fetch??fetch)(url.toString(),{method,redirect:imageExport?'manual':'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]):AbortSignal.timeout(timeoutMs),headers:{
+    ...(imageExport?{'X-Artifactbin-Export-Delivery':'redirect'}:{}),
     ...headers,Authorization:`Bearer ${this.connection.token}`,'X-Artifactbin-Protocol':String(CLI_PROTOCOL_VERSION),
     ...(body!==undefined?{'Content-Type':'application/json'}:{}),...(this.account?{'X-Artifactbin-Account':this.account}:{}),
     ...(this.options.readOnly?{'X-Artifactbin-Dry-Run':'1'}:{}),
@@ -36,6 +38,16 @@ export class HttpClient {
     if(signal?.aborted)throw new CliError('cancelled','The request was cancelled.');
     if(readOnly||['GET','HEAD','DELETE'].includes(method))throw transportFailure(this.connection.server,error);
     throw new CliError('outcome_unknown',`The ${method} request to ${this.connection.server} did not return a confirmed response (${transportFailure(this.connection.server,error).message}).`);
+   }
+   if(imageExport&&response.status===302){
+    const asset=new URL(response.headers.get('location')??'',url);
+    const secure=asset.protocol==='https:'||(asset.origin===url.origin&&['localhost','127.0.0.1','[::1]'].includes(asset.hostname));
+    if(!secure||asset.username||asset.password||asset.hash||!/^\/assets\/export\/[0-9a-f-]{36}$/.test(asset.pathname)
+     ||[...asset.searchParams.keys()].length!==1||!/^[1-9][0-9]*\.[0-9a-f]{64}$/.test(asset.searchParams.get('key')??''))
+     throw new CliError('invalid_redirect','The export returned an invalid image redirect.');
+    // This scoped grant is sufficient; account and bearer headers never follow it.
+    try{response=await(this.options.fetch??fetch)(asset.toString(),{method:'GET',redirect:'error',credentials:'omit',signal:AbortSignal.timeout(timeoutMs)});}
+    catch{throw new CliError('transport_error','The exported image could not be downloaded.');}
    }
    if(response.status===401){
     if(!this.options.readOnly&&!refreshed&&this.connection.refreshToken&&this.connection.clientId){

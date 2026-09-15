@@ -1,0 +1,10 @@
+import {createServer} from 'node:http';
+import {createEnv,log} from '@artifactbin/utils';
+import {browserUploadOptions} from './upload-config';
+import {uploadGateway} from './upload-gateway';
+const options=browserUploadOptions(process.env);
+if(!options)throw new Error('Upload gateway requires BROWSER__UPLOAD_ORIGIN and BROWSER__UPLOAD_PREFIX');
+const {env}=createEnv(process.env),port=Number(env('APP','PORT')??'8080');
+const server=createServer(uploadGateway(options));
+server.requestTimeout=20_000;server.headersTimeout=5_000;
+server.listen(port,'0.0.0.0',()=>log('upload-gateway').info(`listening on ${port}`));
