@@ -1,0 +1,42 @@
+name: OSS executable proof
+on:
+  pull_request:
+    paths:
+      - 'scripts/probes/executable/**'
+      - '.github/workflows/executable-proof.yml'
+permissions:
+  contents: read
+concurrency:
+  group: executable-proof-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  proof:
+    name: executable proof (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel]
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/proof-browser
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Package embedded JS drivers and native-only download fixtures
+        run: node scripts/probes/executable/build.mjs
+      - name: Run actual executable outside checkout with no Node or npm on PATH
+        run: node scripts/probes/executable/check.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: executable-proof-${{ matrix.os }}
+          path: |
+            node_modules/.cache/executable-proof/evidence.json
+            node_modules/.cache/executable-proof/result.png
+          if-no-files-found: warn
