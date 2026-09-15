@@ -11,14 +11,14 @@ import {provisionRuntime} from '../../../services/cli/scripts/runtime.mjs';
 import {injectNative} from '../../../services/cli/scripts/inject-native.mjs';
 
 // Build-only environment boundary: Playwright's CI install cache locates native input files.
-const require = createRequire(import.meta.url);
+const packageRequire = createRequire(import.meta.url);
 const output = resolve('node_modules/.cache/executable-proof');
 await rm(output, {recursive: true, force: true});
 await mkdir(join(output, 'payloads'), {recursive: true});
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const manifest = {sql: [], chromium: [], downloads: [], versions: {
-  duckdb: require('@duckdb/node-api/package.json').version,
-  playwright: require('playwright-core/package.json').version,
+  duckdb: packageRequire('@duckdb/node-api/package.json').version,
+  playwright: packageRequire('playwright-core/package.json').version,
 }};
 async function collect(root, prefix, visit) {
   for (const entry of await readdir(join(root, prefix), {withFileTypes: true})) {
@@ -40,7 +40,7 @@ async function payload(group, root, path, link) {
   await copyFile(source, join(output, 'payloads', key));
   manifest[group].push(file); manifest.downloads.push(file);
 }
-const sqlRoot = dirname(require.resolve(`@duckdb/node-bindings-${process.platform}-${process.arch}/package.json`));
+const sqlRoot = dirname(packageRequire.resolve(`@duckdb/node-bindings-${process.platform}-${process.arch}/package.json`));
 await collect(sqlRoot, '', async (path, link) => {
   if (/\.(node|dylib|so|dll)$/.test(path)) await payload('sql', sqlRoot, path, link);
 });
@@ -62,14 +62,14 @@ async function embedPackage(name, root) {
     files[join(name, path)] = {data: (await readFile(source)).toString('base64'), mode: (await stat(source)).mode & 0o777};
   });
 }
-await embedPackage('playwright-core', dirname(require.resolve('playwright-core/package.json')));
-const pgliteRoot = dirname(dirname(require.resolve('@electric-sql/pglite')));
+await embedPackage('playwright-core', dirname(packageRequire.resolve('playwright-core/package.json')));
+const pgliteRoot = dirname(dirname(packageRequire.resolve('@electric-sql/pglite')));
 await embedPackage('pglite', pgliteRoot);
 manifest.versions.pglite = JSON.parse(await readFile(join(pgliteRoot, 'package.json'), 'utf8')).version;
 const drivers = gzipSync(JSON.stringify(files));
 manifest.driverBytes = drivers.length;
 await writeFile(join(output, 'drivers.gz'), drivers);
-await build({entryPoints: [require.resolve('@duckdb/node-api')], outfile: join(output, 'duckdb.cjs'),
+await build({entryPoints: [packageRequire.resolve('@duckdb/node-api')], outfile: join(output, 'duckdb.cjs'),
   bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['@duckdb/node-bindings']});
 await writeFile(join(output, 'manifest.json'), JSON.stringify(manifest));
 const runtime = await provisionRuntime();
