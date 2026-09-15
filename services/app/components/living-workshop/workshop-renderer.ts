@@ -49,6 +49,8 @@ interface Sheet {
   image: HTMLImageElement;
   indices: number[];
   lastTorn: number;
+  loading: boolean;
+  loadingStock?: HTMLCanvasElement;
 }
 /** Loaded lazily by the public homepage.
  * Canvas textures must be origin-clean. Physics stays renderer-independent.
@@ -85,6 +87,7 @@ export function createWorkshopScene(
   light.position.set(-400, -700, 1000);
   scene.add(light);
   let foregroundCoverage: Uint8ClampedArray | null = null;
+  let lastLoadingFrame = 0;
   let frame = 0,
     last = 0,
     accumulator = 0,
@@ -168,7 +171,7 @@ export function createWorkshopScene(
     shadow.frustumCulled = false;
     scene.add(shadow, mesh);
     const image = new Image(),
-      sheet = {
+      sheet: Sheet = {
         paper,
         cloth,
         mesh,
@@ -177,11 +180,13 @@ export function createWorkshopScene(
         image,
         indices,
         lastTorn: 0,
+        loading: true,
       };
     images.push(image);
     paintPoster(sheet, index);
     image.onload = () => {
       if (!disposed) {
+        sheet.loading = false;
         paintPoster(sheet, index);
         schedule();
       }
@@ -189,6 +194,8 @@ export function createWorkshopScene(
     image.onerror = () => {
       if (!disposed) {
         // Keep the paper placeholder: one failed export must not block the scene.
+        sheet.loading = false;
+        paintPoster(sheet, index);
         schedule();
       }
     };
@@ -303,6 +310,41 @@ export function createWorkshopScene(
       c.fill();
     }
     c.restore();
+    if (sheet.loading) {
+      // Cache the paper once. Spinner frames only repaint this small texture,
+      // without rebuilding the stock, reading pixels, or touching loaded posters.
+      const stock = document.createElement("canvas");
+      stock.width = w;
+      stock.height = h;
+      stock.getContext("2d")?.drawImage(surface, 0, 0);
+      sheet.loadingStock = stock;
+      paintLoadingIndicator(sheet, 0);
+    } else {
+      sheet.loadingStock = undefined;
+    }
+    sheet.texture.needsUpdate = true;
+  }
+  function paintLoadingIndicator(sheet: Sheet, time: number) {
+    if (!sheet.loadingStock) return;
+    const surface = sheet.texture.image as HTMLCanvasElement;
+    const context = surface.getContext("2d");
+    if (!context) return;
+    context.clearRect(0, 0, surface.width, surface.height);
+    context.drawImage(sheet.loadingStock, 0, 0);
+    context.save();
+    context.translate(surface.width / 2, surface.height / 2);
+    context.lineWidth = 5;
+    context.strokeStyle = "#d8d0bd";
+    context.beginPath();
+    context.arc(0, 0, 24, 0, Math.PI * 2);
+    context.stroke();
+    context.rotate(time / 240);
+    context.strokeStyle = "#2456a1";
+    context.lineCap = "round";
+    context.beginPath();
+    context.arc(0, 0, 24, 0, Math.PI * 0.7);
+    context.stroke();
+    context.restore();
     sheet.texture.needsUpdate = true;
   }
   function quad(texture: CanvasTexture, z: number) {
@@ -604,6 +646,10 @@ export function createWorkshopScene(
         });
       }
       updateMesh(s);
+    }
+    if (!reduced.matches && time - lastLoadingFrame >= 100) {
+      for (const sheet of sheets) if (sheet.loading) paintLoadingIndicator(sheet, time);
+      lastLoadingFrame = time;
     }
     if (!reduced.matches) helpers?.update(dt);
     renderer.render(scene, camera);

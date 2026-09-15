@@ -43,6 +43,7 @@ try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: null });
   await githubWidgetFixture(context);
   const page = await context.newPage();
+  page.setDefaultTimeout(10_000);
   // One deliberately slow poster must not delay ready robots or the live canvas.
   let releasePoster;
   const poster = new Promise(resolve => { releasePoster = resolve; });
@@ -101,12 +102,14 @@ try {
     assert(await appStar.locator('a').evaluate(link => link === window.__starBeforeControls), 'Page Controls preserves the permanent link');
     await readyStar(appStar);
   }
+  console.log('ok repeated page controls preserve the Star link');
   await page.goto(`${base}/privacy`, { waitUntil: 'domcontentloaded' });
   await page.locator('header [data-mx-github-star]:visible').waitFor();
   assert.equal(await page.locator('[data-mx-initial-home]').count(), 0);
   await page.goBack({ waitUntil: 'domcontentloaded' });
   await workshop(page).getByRole('heading', { level: 1 }).waitFor();
 
+  console.log('ok privacy navigation and Back');
   const doc = await startDocument(base);
   const published = await fetch(`${base}/api/artifacts/${doc.id}`, {
     method: 'PUT', headers: { Authorization: `Bearer ${doc.token}`, 'Content-Type': 'application/json' },
@@ -120,6 +123,7 @@ try {
   await page.goto(base, { waitUntil: 'domcontentloaded' });
   assert.equal(await page.locator('[data-mx-initial-home]').count(), 0);
   await page.getByText('Drafts held by this browser', { exact: false }).waitFor();
+  console.log('ok anonymous drafts after adopting a connection');
   await page.goto(`${base}/a/${doc.id}`, { waitUntil: 'domcontentloaded' });
   const star = page.locator('[data-mx-reader-rail] [data-mx-github-star]:visible');
   await star.waitFor();
@@ -133,6 +137,7 @@ try {
   await page.getByText('mxmx_test updated star title', { exact: true }).first().waitFor();
   assert(await star.locator('a').evaluate(link => link === window.__readerStar), 'live title updates preserve the permanent link');
   await readyStar(star);
+  console.log('ok live reader title update preserves the Star link');
   const parentUrl = page.url();
   const popupPromise = page.waitForEvent('popup');
   await star.getByRole('link').click();

@@ -205,6 +205,9 @@ images using the same URLs and CORS modes as their consumers. Development warms
 only two proxied posters to leave HTTP/1 connections available for JavaScript;
 production posters use the canonical origin. The renderer reveals the canvas
 when its background is ready and updates posters and robots independently.
+Pending posters show a loading ring on the paper texture; image load or failure
+removes it. Reduced motion keeps the ring static, and only pending textures
+are repainted during animation.
 
 Initial Home navigation overlaps its core JSON request with its lazy route code.
 The session-owned page store holds startup results until identity resolves; the
