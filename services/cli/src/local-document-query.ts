@@ -7,7 +7,7 @@ import {splitHelmet} from '../../app/lib/story/helmet';
 import {selectedQueries,type Dataflow} from '../../app/lib/story/dataflow';
 import {validateQueryValues} from '../../app/lib/story/query-values';
 import {evaluateDataflow,type DatasetTables} from '../../app/lib/sql/dataflow-core';
-import {compileDatasetSql} from '../../app/lib/datasets/sql';
+import {tableQueryInput} from '@artifactbin/utils';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import {parseDocument} from './document';
@@ -50,8 +50,7 @@ export async function localDocumentQuery(workspace:Workspace,path:string,source:
  const sql=createSql();const results=[];
  for(const name of selected){
   const state=await evaluateDataflow({run:input=>sql.run(input),queryRows:async(table,query,params,page)=>{
-   const compiled=compileDatasetSql({kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns:table.columns,source:{schema:'main',table:'source_rows'}}]},query,params);
-   const outcome=(await sql.run({tables:{source_rows:table},queries:[{name:'result',sql:compiled.sql}],params:Object.fromEntries(compiled.values.map((v,i)=>[String(i+1),v])),...(page?{page:{...page,name:'result'}}:{})})).result;
+   const outcome=(await sql.run(tableQueryInput(table,query,params,page))).result;
    if(!outcome||isQueryFailure(outcome))throw new CliError('query_failed',outcome?.error??'No result.');return outcome;
   }},flow,datasets,{values,only:[name],page:{name,offset,limit:limit+1}});
   if(state.errors[name])throw new CliError('query_failed',state.errors[name]);const table=state.tables[name];if(!table)continue;

@@ -47,12 +47,9 @@ execution can ship consistently.
 
 ### Metadata investigation
 
-The saved production reports contain three conflicting documents referring to
-five source datasets, but no plans/snapshots of those sources. Read-only CLI pulls
-of the first two sources returned 404 under the available identity. This does not
-distinguish missing/deleted records from access restrictions, and the production
-records have not been repaired or verified. A private source-metadata snapshot or
-securely configured admin environment is still needed for that inspection.
+A later read-only production inventory confirmed five legacy datasets retain their original
+flat JSON rows in `content`, including a 1,700-row table. They have columns and row counts but
+no object key. This is recoverable storage, distinct from absent/deleted referenced datasets.
 
 Synthetic handler tests established that a valid legacy object key already makes
 its catalog available during preview, regardless of document/dataset ID order.
@@ -68,11 +65,13 @@ changing document versions.
 
 Current records with neither a catalog nor a nonempty string object key produce
 explicit blocking diagnostics, including the source ID for dependent queries.
-They remain incomplete in the final audit and are never given invented empty
-datasets. A reader regression test also observed a missing-storage dataset with
+Those with no valid inline JSON also remain incomplete in the final audit and are never
+given invented empty datasets. A reader regression test also observed a missing-storage dataset with
 column metadata yielding count zero; the resolver now reports that source as
-unavailable. These checks preserve record bytes for recovery. They do not add
-support for old inline-content storage or discard invalid history.
+unavailable. These checks preserve record bytes for recovery. The inline adapter now reads surviving flat JSON without inventing rows. Migration plans a
+content-addressed object key, uploads the exact original bytes after locking the reviewed snapshot,
+and commits catalog metadata while retaining original content and version numbers. Preview never
+writes objects. Invalid history remains preserved and explicitly reported.
 
 ### Historical exceptions
 

@@ -53,7 +53,17 @@ export interface QueryPage {
   sort?: { col: string; dir: 'asc' | 'desc' };
 }
 
+/** An isolated DuckDB catalog. Only these logical tables and columns are exposed.
+ * Models are native read SQL, bound lazily so unused drafts cannot break a read. */
+export interface SqlReadCatalog {
+  defaultSchema: string;
+  tables: Array<{ schema: string; name: string; columns: DatasetColumn[]; source?: string; sql?: string }>;
+  paramTypes?: Record<string, ColumnType>;
+}
+
 export interface RunInput {
+  /** One catalog query; table keys are transport identities, never SQL names. */
+  catalog?: SqlReadCatalog;
   /** Registered tables by SQL name — `ref_<id>` for datasets, the declared name for inline tables. */
   tables: Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
   /** Queries in RUN ORDER (dependencies first). */

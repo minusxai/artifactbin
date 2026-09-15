@@ -1,3 +1,6 @@
+import {objectKey,objectStore} from '@/lib/object-store';
+import {executeCatalog} from '@/lib/datasets/execute';
+import {loadDatasetRows} from '@/lib/story/dataset-store';
 import { describe, expect, it } from 'vitest';
 import { request,useAppHarness } from './harness';
 import { runDatasetCatalogMigrationBatch } from '@/lib/datasets/migrate';
@@ -359,4 +362,25 @@ describe('admin dataset catalog migration door', () => {
     const response=await adminCatalogRoute(request(adminEndpoint,{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:1}}));
     expect(response.status).toBe(200);expect(await response.json()).toMatchObject({dryRun:true,done:true});
   });
+});
+
+it('reads and migrates surviving inline dataset bytes, preserving head and historical row contents',async()=>{
+ const db=await harness.db();const content='[{"hours":1},{"hours":2},{"hours":3},{"hours":10}]',oldContent='[{"hours":9}]';
+ const meta={columns:[{name:'hours',type:'number'}],rowCount:4};
+ await seed('inline1','dataset',null,meta,2);
+ await db.query('UPDATE artifacts SET content=$2 WHERE id=$1',['inline1',content]);
+ await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('inline1',1,$1,NULL,'dataset',$2::jsonb)",[oldContent,JSON.stringify({...meta,rowCount:1})]);
+ const before=(await db.query<{meta:unknown;content:string;version:number}>('SELECT * FROM artifacts WHERE id=$1',['inline1'])).rows[0];
+ expect(await loadDatasetRows({content,meta})).toEqual(JSON.parse(content));
+ expect(await executeCatalog(catalogOf(before)!, 'select median(hours::double) as median from public.rows')).toMatchObject({rows:[{median:2.5}]});
+ const dry=await runDatasetCatalogMigrationBatch(db,{batchSize:10});
+ expect(dry).toMatchObject({changed:1,datasets:1,versions:1,conflicts:[]});
+ await expect(objectStore().get(objectKey('dataset',content))).rejects.toThrow();
+ const result=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false,expected:{inline1:dry.plans[0].fingerprint}});
+ expect(result).toMatchObject({changed:1,done:true,conflicts:[]});
+ const after=(await db.query<{meta:unknown;content:string;version:number}>('SELECT * FROM artifacts WHERE id=$1',['inline1'])).rows[0];
+ expect(after.content).toBe(content);expect(after.version).toBe(2);expect(catalogOf(after)?.tables[0].legacyContent).toBeUndefined();
+ expect((await objectStore().get(objectKey('dataset',content))).toString()).toBe(content);
+ expect((await objectStore().get(objectKey('dataset',oldContent))).toString()).toBe(oldContent);
+ expect((await runDatasetCatalogMigrationBatch(db,{batchSize:10})).changed).toBe(0);
 });

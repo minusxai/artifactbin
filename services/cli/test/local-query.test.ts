@@ -47,3 +47,13 @@ describe('declared mutations', () => {
    }finally{await h.cleanup();}
   });
 });
+
+test('local dataset queries execute DuckDB functions and syntax without PostgreSQL translation',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-native-sql-'));
+ try{
+  await writeFile(join(root,'rows.json'),'[{"hours":1},{"hours":2},{"hours":3},{"hours":10}]');
+  await writeFile(join(root,'read.sql'),"select median(hours::double) as median, strftime(strptime('2026-01','%Y-%m'),'%Y-%m') as month from (select * from public.rows)");
+  const out:string[]=[];const code=await runCli(['query','rows.json','--input','read.sql','--json'],{cwd:root,home:root,env:{},interactive:false,fetch:async()=>{throw Error('must stay offline');},stdout:s=>out.push(s),stderr:()=>{}});
+  assert.equal(code,0,out.join(''));assert.deepEqual(JSON.parse(out.join('')).results[0].rows,[{median:2.5,month:'2026-01'}]);
+ }finally{await rm(root,{recursive:true,force:true});}
+});

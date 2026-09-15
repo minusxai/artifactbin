@@ -19,11 +19,11 @@ import {catalogFromMetadata} from './catalog-metadata';
 const shape=catalogInputShape;
 
 /** Transitional legacy normalization stays at this boundary until catalog migration is complete. */
-export function catalogOf(row:{meta:unknown}):DatasetCatalog|null {
- return catalogFromMetadata(row.meta);
+export function catalogOf(row:{meta:unknown;content?:string}):DatasetCatalog|null {
+ return catalogFromMetadata(row.meta,row.content);
 }
 /** Reader-safe catalog: public relations only, never connection or notebook internals. */
-export function publicCatalogOf(row:{meta:unknown}):DatasetCatalog|null {
+export function publicCatalogOf(row:{meta:unknown;content?:string}):DatasetCatalog|null {
  const catalog=catalogOf(row);if(!catalog)return null;
  return {kind:catalog.kind,defaultSchema:catalog.defaultSchema,refreshSeconds:catalog.refreshSeconds,tables:catalog.tables.map(({schema,name,columns})=>({schema,name,columns}))};
 }
@@ -82,5 +82,5 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
  }catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Dataset validation failed']},error instanceof DatasetError?error.status:400);}
 }
 export async function storedTables(catalog:DatasetCatalog,objects?:Pick<ContentObjects,'get'>):Promise<Record<string,{rows:Record<string,unknown>[];columns:DatasetTable['columns']}>> {
- return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.objectKey?(objects?JSON.parse((await objects.get(t.objectKey)).toString('utf8')):await loadDatasetRows({content:'',meta:{objectKey:t.objectKey}})):[],columns:t.columns}] as const)));
+ return Object.fromEntries(await Promise.all(catalog.tables.map(async(t,i)=>[ `dataset_table_${i}`,{rows:t.legacyContent?JSON.parse(t.legacyContent):t.objectKey?(objects?JSON.parse((await objects.get(t.objectKey)).toString('utf8')):await loadDatasetRows({content:'',meta:{objectKey:t.objectKey}})):[],columns:t.columns}] as const)));
 }

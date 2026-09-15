@@ -20,7 +20,7 @@ import { migrationRequest, parseMigrationArgs as parseShared, redactingWriter, r
 
 const BACKUP_DIR_FLAG = { '--backup-dir': (out, value) => { out.backupDir = value ?? ''; } };
 
-export const parseMigrationArgs = (argv, environment = process.env) => parseShared(argv, environment, BACKUP_DIR_FLAG);
+export const parseMigrationArgs = (argv, environment = process.env) => ({...parseShared(argv.filter(arg=>arg!=='--allow-partial'), environment, BACKUP_DIR_FLAG),allowPartial:argv.includes('--allow-partial')});
 
 /** Inventory and persist every page before the first write. The server compares each reviewed snapshot. */
 export async function runMigrationCli(options) {
@@ -64,7 +64,7 @@ export async function runMigrationCli(options) {
     cursors.add(after);
   }
   write(`migration preview and backups: ${backupDir}`);
-  if (blocked) return { ok: false, reason: 'conflict', report: pages.at(-1) };
+  if (blocked && !options.allowPartial) return { ok: false, reason: 'conflict', report: pages.at(-1) };
   if (options.dryRun) return { ok: true, report: summarize(pages) };
   for (const preview of pages) {
     const expected = Object.fromEntries((preview.plans ?? []).map((plan) => [plan.artifactId, plan.fingerprint]));
@@ -80,7 +80,7 @@ export async function runMigrationCli(options) {
   for(;;){
     const audit=await request({dryRun:true,...(auditAfter?{after:auditAfter}:{})});
     if(audit.report){await saveReport(audit.report);logExceptions(audit.report);audits.push(audit.report);}
-    if(!audit.ok)return audit;
+    if(!audit.report)return audit;
     auditAfter=audit.report.nextCursor;
     if(!auditAfter)break;
     if(auditCursors.has(auditAfter))return {ok:false,reason:'no_progress'};

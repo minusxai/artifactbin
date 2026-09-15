@@ -114,16 +114,26 @@ function exportCaptureKey(capture: ExportCapture, slide: number, selection = '')
   return `full-g${EXPORT_RENDER_GENERATION}${pick}`;
 }
 
-/** The durable cache address for one shot — version-keyed, so an edit misses naturally. */
+type ExportIdentity = Pick<ArtifactRow, 'id' | 'version'> & Partial<Pick<ArtifactRow, 'edit_id'>>;
+
+/** Repairs rotate edit_id while preserving history's public version numbers. */
+function exportRevision(artifact: ExportIdentity): string {
+  const edit = artifact.edit_id
+    ? `-e${createHash('sha256').update(artifact.edit_id).digest('hex').slice(0, 16)}`
+    : '';
+  return `${artifact.version}${edit}`;
+}
+
+/** The durable cache address includes repairs as well as versioned edits. */
 export function exportStoreKey(
-  artifact: Pick<ArtifactRow, 'id' | 'version'>,
+  artifact: ExportIdentity,
   format: ExportFormat,
   capture: ExportCapture,
   slide = 0,
   /** The CANONICAL selection token (lib/story/url-values urlSelection), never raw params. */
   selection = '',
 ): string {
-  return `exports/${artifact.id}/${artifact.version}.${exportCaptureKey(capture, slide, selection)}.${format}`;
+  return `exports/${artifact.id}/${exportRevision(artifact)}.${exportCaptureKey(capture, slide, selection)}.${format}`;
 }
 
 export type RenderResult =
@@ -252,14 +262,14 @@ async function renderOnce(
 
 /**
  * Render an artifact to image bytes. TWO cache layers sit in front of the
- * browser, both keyed by VERSION so an edit misses naturally and no
+ * browser, both keyed by version and edit identity so edits and repairs miss naturally and no
  * invalidation is ever run: an in-memory LRU, and the object store behind it.
  * A hit at either costs no browser work at all — which is what makes one
  * render serve every og unfurl and profile thumbnail for that version.
  * `opts.pageUrl` is a thunk, minted per attempt — see RenderInput.
  */
 export function renderArtifactImage(
-  artifact: Pick<ArtifactRow, 'id' | 'version'>,
+  artifact: ExportIdentity,
   format: ExportFormat,
   // `pageUrl` is REQUIRED: every artifact is shot from its live page. The old
   // optional shape existed so a row could be photographed from its stored HTML
@@ -286,13 +296,13 @@ export function renderArtifactImage(
     ? `-draft-${opts.crop.x}-${opts.crop.y}-${opts.crop.width}`
     : '';
   const captureKey = `${exportCaptureKey(capture, slide, selection)}${draftKey}`;
-  const key = `${artifact.id}:${artifact.version}:${captureKey}:${format}`;
+  const key = `${artifact.id}:${exportRevision(artifact)}:${captureKey}:${format}`;
   const hit = s.cache.get(key);
   if (hit) return Promise.resolve({ ok: true, ...hit });
   const pending = s.inFlight.get(key);
   if (pending) return pending;
 
-  // The durable layer: version-keyed, so an edit misses naturally and the
+  // The durable layer includes edit identity, so a repair misses naturally and the
   // stale entry just goes cold — no invalidation to run, ever. One render
   // then serves every og unfurl and profile thumbnail for that version,
   // across restarts.
@@ -372,7 +382,7 @@ function remember(s: ExportState, key: string, shot: { mime: string; bytes: Buff
 export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
-  artifact: Pick<ArtifactRow, 'id' | 'version' | 'format' | 'source'>,
+  artifact: ExportIdentity & Pick<ArtifactRow, 'format' | 'source'>,
   q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null },
   base: string,
 ): Promise<Response> {

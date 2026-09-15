@@ -3,7 +3,7 @@ import {extname,join} from 'node:path';
 import {createSql} from '@artifactbin/sql/local';
 import {inferColumns} from '@artifactbin/utils/shape';
 import {isQueryFailure,type Scalar} from '@artifactbin/contracts';
-import {compileDatasetSql} from '../../app/lib/datasets/sql';
+import {tableQueryInput} from '@artifactbin/utils';
 import {parseCsv} from '../../app/lib/data-ingest/csv';
 import {coerceRows} from '../../app/lib/data-ingest/coerce';
 import {resolveReference} from './reference';
@@ -64,8 +64,7 @@ export async function localQuery(workspace:Workspace,parsed:ParsedCommand,sql:st
    if(!page||page.fingerprint!==fingerprint||!Number.isSafeInteger(page.offset)||Number(page.offset)<0)throw new CliError('invalid_cursor','The cursor does not match these inputs.','Run the query without --cursor to start again.');
    offset=Number(page.offset);
   }
-  const compiled=compileDatasetSql({kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns,source:{schema:'main',table:'source_rows'}}]},query,params);
-  const outcome=(await createSql().run({tables:{source_rows:{rows:source.rows,columns}},queries:[{name:'result',sql:compiled.sql}],params:Object.fromEntries(compiled.values.map((value,i)=>[String(i+1),value])),limit:limit+1,page:{name:'result',offset,limit:limit+1}})).result;
+  const outcome=(await createSql().run({...tableQueryInput({rows:source.rows,columns},query,params,{offset,limit:limit+1}),limit:limit+1})).result;
   if(!outcome||isQueryFailure(outcome))throw new CliError('query_failed',outcome?.error??'The local query produced no result.','Run afbin query -h for supported inputs.');
   const more=outcome.rows.length>limit;
   results.push({path:source.path,execution:'local',columns:outcome.columns,rows:outcome.rows.slice(0,limit),next_cursor:more?Buffer.from(JSON.stringify({fingerprint,offset:offset+limit})).toString('base64url'):null});

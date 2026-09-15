@@ -1,4 +1,5 @@
 import {COLUMN_SQL_TYPES} from './column-types';
+import {prepareReadCatalog} from './read-catalog';
 import {userColumnLineage} from './user-column-lineage';
 /**
  * The SQL engine — the ONLY file that imports DuckDB.
@@ -136,15 +137,17 @@ async function registerTable(
   conn: DuckDBConnection,
   name: string,
   input: { rows: Row[]; columns: DatasetColumn[] },
+  schema?: string,
 ): Promise<void> {
   const columns = input.columns.length ? input.columns : inferColumns(input.rows);
+  const qualified = schema ? `${quoteIdent(schema)}.${quoteIdent(name)}` : quoteIdent(name);
   const ddl = columns.map((c) => `${quoteIdent(c.name)} ${COLUMN_SQL_TYPES[c.type]}`).join(', ');
-  await conn.run(`CREATE TABLE ${quoteIdent(name)} (${ddl || '"_empty" VARCHAR'})`);
+  await conn.run(`CREATE TABLE ${qualified} (${ddl || '"_empty" VARCHAR'})`);
   if (input.rows.length === 0) return;
   const struct = `[{${columns.map((c) => `${JSON.stringify(c.name)}:${JSON.stringify(COLUMN_SQL_TYPES[c.type])}`).join(',')}}]`;
   const select = columns.map((c) => `r.${quoteIdent(c.name)}`).join(', ');
   await conn.run(
-    `INSERT INTO ${quoteIdent(name)} SELECT ${select} FROM (SELECT unnest(from_json($rows, '${struct}')) r)`,
+    `INSERT INTO ${qualified} SELECT ${select} FROM (SELECT unnest(from_json($rows, '${struct}')) r)`,
     { rows: JSON.stringify(input.rows) },
   );
 }
@@ -281,10 +284,16 @@ export async function runQueries(input: RunInput, caps: SqlCaps): Promise<Record
   const instance = await createInstance();
   const conn = await instance.connect();
   try {
-    for (const [name, t] of Object.entries(input.tables)) await registerTable(conn, name, t);
+    const admit = input.catalog ? await prepareReadCatalog(conn, input, (name, table, schema) => registerTable(conn, name, table, schema)) : null;
+    if (!admit) for (const [name, t] of Object.entries(input.tables)) await registerTable(conn, name, t);
 
-    const shapes = {...input.tables};
-    for (const query of input.queries) {
+    const shapes = input.catalog ? Object.fromEntries(input.catalog.tables.filter(table => input.catalog!.tables.filter(other => other.name === table.name).length === 1).map(table => [table.name, {columns:table.columns}])) : {...input.tables};
+    for (const original of input.queries) {
+      let query = original;
+      if (admit) {
+        try { query = {...original, sql: await admit(original.sql)}; }
+        catch (error) { out[query.name] = {error:message(error)}; continue; }
+      }
       const page = input.page && input.page.name === query.name ? input.page : null;
       out[query.name] = page
         ? await runOne(conn, pagedQuery(query, page), input.params, queryBounds(input, caps, page).limit, timeoutMs, caps, page)
@@ -293,6 +302,7 @@ export async function runQueries(input: RunInput, caps: SqlCaps): Promise<Record
       if (isQueryFailure(result)) continue;
       result.columns = await userColumnLineage(conn,query.sql,shapes,result.columns);
       shapes[query.name] = result;
+      if (input.catalog) continue;
       // The result becomes a table, so the next query can read it by name.
       try {
         await registerTable(conn, query.name, { rows: result.rows, columns: result.columns });
@@ -300,6 +310,8 @@ export async function runQueries(input: RunInput, caps: SqlCaps): Promise<Record
         out[query.name] = { error: `result of <Query name="${query.name}"> could not be materialised: ${message(e)}` };
       }
     }
+  } catch (error) {
+    for (const query of input.queries) out[query.name] ??= {error:message(error)};
   } finally {
     conn.closeSync();
     instance.closeSync();

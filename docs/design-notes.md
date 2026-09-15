@@ -222,7 +222,9 @@ and initializing; coverage settings and identity ordering remain unchanged.
 
 Export cache lookup precedes screenshot queue admission. Per-key in-flight work
 coalesces storage lookup and rendering; only misses serialize, and failed keys
-are released. Access checks still precede this module, keys remain versioned,
+are released. Access checks still precede this module. Both cache layers include
+the version and edit identity, so migrations that preserve versions invalidate
+pre-repair screenshots without deleting immutable objects,
 and volatile previews never enter durable storage.
 
 The paired-performance workflow builds the production reference and candidate
@@ -263,3 +265,25 @@ CLI upgrades pin their own package checksum; source/npm builds retain their inst
 `CLI__SERVICE_BASE_URL` is owned by CLI config and changes only package transport, never trust. A base URL may include a path prefix;
 the local eval proxy serves the same compressed/core/native assets under `/chat/releases`.
 Browser rendering remains server-side and adds no mandatory browser bytes to this release.
+
+## Dataset SQL dialects and legacy repair
+
+Stored catalog reads cross the SQL service boundary as an isolated logical catalog, not rewritten
+PostgreSQL SQL. `services/sql/src/read-catalog.ts` owns native DuckDB AST admission, catalog relation
+checks, permitted-column registration, lazy model views and typed parameter casts. The original
+SQL executes without a JSON AST round trip (which would round exact integers through JavaScript).
+`lib/datasets/sql.ts` remains the PostgreSQL compiler. Computed row sources use the stored path too.
+
+The dataset-catalog migration retains invalid historical versions as explicit exceptions while
+repairing validated heads and history. Operators may use
+`scripts/dataset-catalog-migrate.mjs --allow-partial --apply` to apply valid artifact plans even
+when other current heads have blocking conflicts. Unresolved heads remain in every report and
+produce an incomplete result. Preview backups precede all writes, complete artifact/history
+fingerprints guard each transaction, and the final audit follows all pages.
+
+Legacy datasets with surviving flat JSON in `content` receive a read-time catalog adapter.
+Migration plans a content-addressed object key without writing; apply uploads the original bytes
+only after locking the reviewed database snapshot, then updates catalog metadata. Original inline
+content and version numbers remain intact. Invalid/missing bytes remain explicit conflicts.
+The complete-input dataflow path also recognizes these inline sources, so dependent aggregates
+never silently use the displayed 1,000-row sample.

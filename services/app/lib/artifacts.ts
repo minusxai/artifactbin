@@ -2353,6 +2353,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
       if(!table.catalog)return table;
       if(table.catalog.kind!=='stored')return undefined;
       const stored=table.catalog.tables.find(t=>t.schema==='public'&&t.name==='rows');
+      if(stored?.legacyContent)return {rows:await loadDatasetRows({content:stored.legacyContent,meta:{}}),columns:stored.columns};
       if(!stored?.objectKey||stored.sql||stored.source||stored.modelCellId)return undefined;
       return {rows:await loadDatasetRows({content:'',meta:{objectKey:stored.objectKey}}),columns:stored.columns};
     },

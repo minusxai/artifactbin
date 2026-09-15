@@ -144,3 +144,51 @@ describe('serveSql service authentication', () => {
     } finally { await protectedServer.close(); }
   });
 });
+
+// The same native dialect and isolation must survive the HTTP boundary.
+describe.each<[string, SqlService]>([['in-process', local], ['over HTTP', remote]])('%s catalog reads', (_name, svc) => {
+  const base = {
+    tables: { payload: { ...TABLE, rows: TABLE.rows.map(row => ({...row, secret: 'hidden'})) } },
+    catalog: { defaultSchema: 'public', tables: [{schema:'public',name:'rows',source:'payload',columns:TABLE.columns}] },
+    params: {},
+  };
+  const run = (sql: string) => svc.run({...base,queries:[{name:'q',sql}]});
+  it('uses DuckDB syntax, functions and casts and returns the correct aggregate', async () => {
+    const r=await run("select median(a::double) as median, strftime(strptime('2026-01', '%Y-%m'), '%Y-%m') as month from public.rows");
+    expect(r.q).toMatchObject({rows:[{median:2.5,month:'2026-01'}]});
+  });
+  it('supports native QUALIFY, CTEs, exact literals and unaliased subqueries', async () => {
+    const r=await run("with q as (select * from rows) select a, cast(9007199254740993 as varchar) as exact from (select * from q) qualify row_number() over(order by a desc)=1");
+    expect(r.q).toMatchObject({rows:[{a:4,exact:'9007199254740993'}]});
+  });
+  it('retains pagination and reports the full count', async () => {
+    const r=await svc.run({...base,queries:[{name:'q',sql:'select * from rows'}],page:{name:'q',limit:2,offset:1,sort:{col:'a',dir:'desc'}}});
+    expect(r.q).toMatchObject({rows:[{a:3},{a:2}],totalRows:4});
+  });
+  it.each(['select secret from rows','select * from payload','select * from main.payload','select * from information_schema.tables','select * from pg_catalog.pg_tables',"select * from query('select * from payload')","select * from read_csv('/etc/passwd')",'select * from rows; drop table rows','delete from rows returning *'])('refuses forbidden access: %s', async sql => {
+    expect((await run(sql)).q).toHaveProperty('error');
+  });
+  it('binds typed date and nullable parameters without touching quoted text', async () => {
+    const r=await svc.run({...base,catalog:{...base.catalog,paramTypes:{day:'date',empty:'string'}},params:{day:'2026-09-15',empty:null},queries:[{name:'q',sql:"select date_part('year', $day) as year, $empty is null as missing, '$day' as literal"}]});
+    expect(r.q).toMatchObject({rows:[{year:2026,missing:true,literal:'$day'}]});
+  });
+  it('resolves model dependencies without exposing unselected model columns or truncating intermediate rows', async () => {
+    const catalog={...base.catalog,tables:[...base.catalog.tables,{schema:'public',name:'model',sql:'select a, a*10 as hidden from rows',columns:TABLE.columns},{schema:'public',name:'unused',sql:'INVALID UNUSED DRAFT',columns:[]}]};
+    const read=(sql:string)=>svc.run({...base,catalog,queries:[{name:'q',sql}]});
+    expect((await read('select sum(a) as total from model')).q).toMatchObject({rows:[{total:10}]});
+    expect((await read('select hidden from model')).q).toHaveProperty('error');
+    expect((await read('select * from unused')).q).toHaveProperty('error');
+  });
+});
+
+it('catalog reads keep schema bindings, quoted names, model isolation and native parameters', async () => {
+ const catalog={defaultSchema:'sales',tables:[
+   {schema:'sales',name:'Odd " Rows',source:'a',columns:TABLE.columns},
+   {schema:'support',name:'Odd " Rows',source:'b',columns:TABLE.columns},
+   {schema:'sales',name:'bad',sql:"select * from query('select * from information_schema.tables')",columns:[]},
+   {schema:'sales',name:'cycle',sql:'select * from cycle',columns:[]},
+ ]};
+ const run=(sql:string)=>local.run({catalog,tables:{a:TABLE,b:{...TABLE,rows:[{a:9}]}},queries:[{name:'q',sql}],params:{},page:{name:'q',limit:3,offset:0}});
+ expect((await run('select sum(s.a) as total from "Odd "" Rows" s join support."Odd "" Rows" t on true; -- trailing comment')).q).toMatchObject({rows:[{total:10}]});
+ for(const sql of ['select * from bad','select * from cycle','with payload as (select * from main.payload) select * from payload','with pg_tables as (select 1) select * from pg_catalog.pg_tables','select * from memory.sales."Odd "" Rows"']) expect((await run(sql)).q).toHaveProperty('error');
+});
