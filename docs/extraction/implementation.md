@@ -1,6 +1,6 @@
 # Toolkit extraction execution record
 
-Source reference: artifactbin2 at 83a80d72. Existing production reference: artifact-bin-prod at a9cf3d9. Neither deployment changes during extraction.
+Source reference: artifactbin2 at 83a80d72. Existing production reference: the production checkout at a9cf3d9. Neither deployment changes during extraction.
 
 ## Boundaries
 

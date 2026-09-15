@@ -12,10 +12,10 @@ const base = new URL(process.argv[2]).origin;
 // A downstream matrix substitutes the candidate executable without editing scenarios.
 const cli = resolve(process.env.CONFORMANCE__CLI ?? 'services/cli/dist/afbin.mjs');
 const root = await mkdtemp(join(tmpdir(), 'afbin-conformance-'));
-const home = join(root, 'client');
+const home = join(root, '.artifactbin');
 const workspace = join(root, 'author');
 await mkdir(workspace);
-const env = { ...process.env, ARTIFACTBIN_HOME: home, ARTIFACTBIN_URL: base, CLI__AUTO_UPDATE: '0' };
+const env = { ...process.env, HOME: root, ARTIFACTBIN_HOME: home, ARTIFACTBIN_URL: base, CLI__AUTO_UPDATE: '0' };
 delete env.ARTIFACTBIN_TOKEN;
 delete env.ARTIFACTBIN_REFRESH_TOKEN;
 const evidence = [];
