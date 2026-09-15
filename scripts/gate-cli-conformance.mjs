@@ -19,6 +19,10 @@ const env = { ...process.env, HOME: root, ARTIFACTBIN_HOME: home, ARTIFACTBIN_UR
 delete env.ARTIFACTBIN_TOKEN;
 delete env.ARTIFACTBIN_REFRESH_TOKEN;
 const evidence = [];
+const failures = [];
+async function scenario(run) {
+  try { await run(); } catch (error) { failures.push(error); console.error(error); }
+}
 const record = name => { evidence.push(name); console.log(`ok ${name}`); };
 async function invoke(args, { cwd = workspace, expected = 0, approve = false } = {}) {
   const child = spawn(cli.endsWith('.mjs') ? process.execPath : cli,
@@ -83,16 +87,22 @@ try {
   const head = await read.json();
   assert.match(head.markup, /source="ref:/);
   record('CLI publication resolves local dataset references');
+  await scenario(async () => {
   const other = (await connectAgent(base)).token;
   const hidden = status => assert.equal(status, 404, 'private read must remain hidden');
-  hidden((await api(`/api/artifacts/${id}`, null)).status);
+  assert.equal((await api(`/api/artifacts/${id}`, null)).status, 401, 'API requires authentication');
+  hidden((await api(`/a/${id}`, null)).status);
   hidden((await api(`/api/artifacts/${id}`, other)).status);
   // Controlled contract violation: the same assertion must reject a leaked private response.
-  assert.throws(() => hidden(200), /private read must remain hidden/);
+  assert.throws(() => hidden(read.status), /private read must remain hidden/);
   record('owner/non-owner/anonymous private access; leak negative control');
+  });
+  await scenario(async () => {
   const query = await invoke(['query', id, '--name', 'sales', '--param', 'region=EU']);
-  assert.equal(Number(query.rows?.[0]?.total), 2, JSON.stringify(query));
+  assert.equal(Number(query.results?.[0]?.rows?.[0]?.total), 2, JSON.stringify(query));
   record('CLI query executes host DuckDB with bound parameters');
+  });
+  await scenario(async () => {
   const second = join(root, 'second');
   await mkdir(second);
   await invoke(['pull', id, '--output', 'copy.jsx'], { cwd: second });
@@ -101,16 +111,20 @@ try {
   await invoke(['push', 'report.jsx']);
   const stale = await readFile(join(second, 'copy.jsx'), 'utf8');
   await writeFile(join(second, 'copy.jsx'), stale.replace('Baseline report', 'Conflicting edit'));
-  const conflict = await invoke(['push', 'copy.jsx'], { cwd: second, expected: 1 });
+  const conflict = await invoke(['push', 'copy.jsx'], { cwd: second, expected: 2 });
   assert.match(JSON.stringify(conflict), /conflict|changed/);
   assert.match(await readFile(join(second, 'copy.jsx'), 'utf8'), /Conflicting edit/);
   await invoke(['pull', 'copy.jsx', '--force'], { cwd: second });
   assert.match(await readFile(join(second, 'copy.jsx'), 'utf8'), /First edit/);
   record('two-workspace conflict preserves draft and explicit recovery works');
+  });
+  await scenario(async () => {
   await invoke(['export', id, '--output', 'report.png']);
   const png = await readFile(join(workspace, 'report.png'));
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   record('CLI export returns a real Chromium PNG');
+  });
+  if (failures.length) throw new AggregateError(failures, 'CLI host conformance failed');
   console.log(JSON.stringify({ suite: 'cli-host-conformance', checks: evidence, cli, base }));
 } finally {
   sink.close();
