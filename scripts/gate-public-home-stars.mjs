@@ -6,6 +6,8 @@ import { githubWidgetFixture } from './lib/github-widget-fixture.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:12001';
 const browser = await chromium.launch({ headless: true });
+const workshop = page => page.getByRole('region', { name: 'The artifactbin workshop', exact: true });
+const createAction = page => workshop(page).getByRole('button', { name: 'Create Artifact — copy agent instructions', exact: true });
 async function readyStar(star) {
   await star.locator('[data-mx-github-count]').filter({ hasText: '1,234' }).waitFor();
   assert(await star.locator('a svg').isVisible());
@@ -20,9 +22,10 @@ try {
   await githubWidgetFixture(noJs);
   const plain = await noJs.newPage();
   await plain.goto(base, { waitUntil: 'domcontentloaded' });
-  await plain.locator('h1').waitFor();
-  assert.match(await plain.locator('h1').innerText(), /Your agents/);
-  assert(await plain.getByRole('link', { name: 'Home', exact: true }).isVisible());
+  const heading = workshop(plain).getByRole('heading', { level: 1 });
+  await heading.waitFor();
+  assert((await heading.innerText()).trim().length > 0, 'public hero has a readable heading');
+  assert(await plain.locator('header').getByRole('link', { name: 'artifactbin home', exact: true }).isVisible());
   const plainStar = plain.locator('header [data-mx-github-star]:visible');
   assert(await plainStar.locator('a svg').isVisible(), 'GitHub icon works without JavaScript');
   assert.equal(await plainStar.locator('a').getAttribute('href'), 'https://github.com/minusxai/artifactbin');
@@ -41,14 +44,15 @@ try {
   await page.goto(base, { waitUntil: 'commit' });
   await page.locator('[data-mx-initial-home] h1').waitFor();
   assert(await page.locator('[data-mx-initial-home] h1').isVisible());
-  assert(await page.getByRole('button', { name: 'Create a live document for my agent', exact: true }).first().isDisabled(), 'server presentation must not accept a Create gesture before JavaScript commits');
+  assert(await createAction(page).isDisabled(), 'server presentation must not accept a Create gesture before JavaScript commits');
   // Observe rendered frames across both the JS and data release boundaries.
   await page.evaluate(() => {
+    const heading = document.querySelector('[aria-label="The artifactbin workshop"] h1').textContent;
     window.__homeFailures = [];
     window.__watchHome = true;
     const sample = () => {
       if (!window.__watchHome) return;
-      const visible = [...document.querySelectorAll('h1')].some(el => el.textContent.includes('Your agents') && el.getBoundingClientRect().height > 0);
+      const visible = [...document.querySelectorAll('[aria-label="The artifactbin workshop"] h1')].some(el => el.textContent === heading && el.getBoundingClientRect().height > 0);
       if (!visible) window.__homeFailures.push('heading disappeared');
       requestAnimationFrame(sample);
     };
@@ -56,7 +60,7 @@ try {
   });
   releaseScripts();
   await page.locator('[data-mx-initial-home]').waitFor({ state: 'detached' });
-  assert(await page.getByRole('button', { name: 'Create a live document for my agent', exact: true }).first().isEnabled(), 'interactive Create becomes enabled at handoff');
+  assert(await createAction(page).isEnabled(), 'interactive Create becomes enabled at handoff');
   assert(await page.locator('h1').isVisible());
   assert.equal(await page.getByLabel('Loading workspace', { exact: true }).count(), 0);
   releaseData();
@@ -80,7 +84,7 @@ try {
   await page.locator('header [data-mx-github-star]:visible').waitFor();
   assert.equal(await page.locator('[data-mx-initial-home]').count(), 0);
   await page.goBack({ waitUntil: 'domcontentloaded' });
-  await page.locator('h1').filter({ hasText: 'Your agents' }).waitFor();
+  await workshop(page).getByRole('heading', { level: 1 }).waitFor();
 
   const doc = await startDocument(base);
   const published = await fetch(`${base}/api/artifacts/${doc.id}`, {
@@ -152,15 +156,17 @@ try {
   const earlyScripts = new Promise(resolve => { releaseEarly = resolve; });
   await earlyPage.route('**/assets/*.js', async route => { await earlyScripts; await route.continue(); });
   await earlyPage.goto(base, { waitUntil: 'commit' });
-  const earlyCreate = earlyPage.getByRole('button', { name: 'Create a live document for my agent', exact: true }).first();
+  const earlyCreate = createAction(earlyPage);
   await earlyCreate.waitFor();
-  const created = earlyPage.waitForResponse(response => response.url().endsWith('/api/start') && response.request().method() === 'POST');
+  let starts = 0;
+  earlyPage.on('request', request => { if (new URL(request.url()).pathname === '/api/start' && request.method() === 'POST') starts++; });
   const click = earlyCreate.click();
   releaseEarly();
   await click;
-  assert((await created).ok(), 'the early click reaches the actual create handler');
+  await earlyPage.waitForFunction(origin => navigator.clipboard.readText().then(text => text.includes(`${origin}/docs-human`)), new URL(base).origin);
+  assert.equal(starts, 0, 'the workshop copies setup instructions without creating a document');
   await early.close();
-  console.log('ok early Create gesture waits for the interactive control and creates a document');
+  console.log('ok early Create gesture waits for the interactive control and copies setup instructions');
   // A blocked metadata endpoint must not hide or replace the repository link.
   const blocked = await browser.newContext();
   await githubWidgetFixture(blocked);

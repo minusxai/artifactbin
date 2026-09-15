@@ -35,7 +35,7 @@ try {
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--mx-navigation-probe').trim()), '', 'old author stylesheet removed');
   await page.getByLabel('Go home', { exact: true }).click();
   await page.waitForURL(`${base}/`);
-  await page.getByLabel('Get started', { exact: true }).waitFor();
+  await page.getByRole('region', { name: 'The artifactbin workshop', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'artifact to app is client navigation');
   const heldArtifact = [];
   const holdArtifact = (route) => { heldArtifact.push(route); };
