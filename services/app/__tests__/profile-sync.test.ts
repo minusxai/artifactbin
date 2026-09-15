@@ -22,7 +22,7 @@ describe('profile sync from the actor', () => {
   it('creates the app\'s row for a session actor the app has never seen, with a handle assigned', async () => {
     const before = profileWrites();
     const actor = await sessionActor(actorRequest({ credential: 'session', userId: 'usr_new1', email: 'new@example.com', emailVerified: true }));
-    expect(actor.viewer).toEqual({ userId: 'usr_new1', email: 'new@example.com' });
+    expect(actor.viewer).toEqual({ userId: 'usr_new1', email: 'new@example.com', emailVerified: true });
     const db = await harness.db();
     const row = (await db.query<{ id: string; email: string; username: string | null }>('SELECT id, email, username FROM users WHERE id = $1', ['usr_new1'])).rows[0];
     expect(row).toMatchObject({ id: 'usr_new1', email: 'new@example.com' });

@@ -1,3 +1,4 @@
+import {isDocumentAdmin,type VerifiedAccount} from './admin-access';
 import {isQueryFailure} from '@artifactbin/contracts';
 import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
@@ -162,14 +163,14 @@ export interface ArtifactRow {
 }
 
 /** Who is looking, as far as the serving paths know. Null = no session. */
-export type Viewer = { userId: string; email: string | null } | null;
+export type Viewer = (VerifiedAccount & { userId: string; email: string | null }) | null;
 
 /**
  * The ONE read-access decision, made by every public serving path before any
  * bytes leave. Fail closed: an unresolvable session is just a null viewer.
  */
 export async function canReadArtifact(
-  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'>,
+  row: Pick<ArtifactRow, 'id' | 'visibility' | 'user_id' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>,
   viewer: Viewer,
 ): Promise<boolean> {
   // One decision, asked one way: reading is simply the bottom of the lattice.
@@ -177,11 +178,11 @@ export async function canReadArtifact(
   // here — the same as before, and sound because `private` requires an account
   // to anchor its ACL (getSharingFor's canPrivate), so a token-owned document
   // is never private.
-  return canRead(await effectiveRole({ ...row, token_id: '' }, { userId: viewer?.userId ?? null, tokenId: null, email: viewer?.email ?? null }));
+  return canRead(await effectiveRole({ ...row, token_id: '' }, { ...viewer, userId: viewer?.userId ?? null, tokenId: null }));
 }
 
 /** Any credential the serving paths resolve, as the ids and address effectiveRole needs. */
-export interface RoleActor {
+export interface RoleActor extends VerifiedAccount {
   userId: string | null;
   tokenId: string | null;
   /**
@@ -231,15 +232,16 @@ export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, act
  * request would otherwise pay for.
  */
 export async function roleWithoutLink(
-  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'>,
+  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'> & Partial<Pick<ArtifactRow,'format'>>,
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
+  if (row.format === 'markup' && isDocumentAdmin(actor)) return 'editor';
   return namedRoleFor(row, actor);
 }
 
 export async function effectiveRole(
-  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'>,
+  row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>,
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   const held = await roleWithoutLink(row, actor);
@@ -741,7 +743,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
 
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)})`, val: actor.userId })
+    ? live({ where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${isDocumentAdmin(actor) ? " OR artifacts.format = 'markup'" : ''})`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
@@ -1761,7 +1763,7 @@ export function fontResolver(): (family: string) => Promise<Response | null> {
 // Safe because creation stamps user_id from the token and claiming backfills
 // it: a user-owned token cannot have artifacts its user scope would miss.
 
-export interface TokenActor {
+export interface TokenActor extends VerifiedAccount {
   tokenId: string;
   userId: string | null;
 }
