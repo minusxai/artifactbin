@@ -3,7 +3,6 @@ import { expect, it } from "vitest";
 import {
   makeCloth,
   releaseCloth,
-  resetCloth,
   stepCloth,
 } from "../paper-physics";
 it("does not switch to a target pose when an animation timer expires", () => {
@@ -43,24 +42,6 @@ it("falls from its release position, settles within the floor and does not share
   expect(b.settled).toBe(true);
   expect(Math.max(...a.points.map((p) => p.y))).toBeLessThanOrEqual(1080);
   expect(Math.abs(a.points[0].x - b.points[0].x)).toBeGreaterThan(100);
-});
-it("resets positions, velocities, tears and pins after a violent pull", () => {
-  const c = makeCloth(650, 100, 180, 210, 0, 2);
-  for (let i = 0; i < 20; i++)
-    stepCloth(c, 1 / 60, {
-      index: c.points.length - 1,
-      x: 1000,
-      y: 500,
-      z: 100,
-    });
-  releaseCloth(c);
-  resetCloth(c);
-  expect(c.pinned).toBe(true);
-  expect(c.torn.size).toBe(0);
-  expect(c.bonds.every((b) => !b.broken)).toBe(true);
-  expect(
-    c.points.every((p) => p.x === p.homeX && p.y === p.homeY && p.px === p.x),
-  ).toBe(true);
 });
 it("keeps the printed body nearly inextensible and tears only across the top seam", () => {
   const c = makeCloth(650, 100, 180, 210, 0, 0);

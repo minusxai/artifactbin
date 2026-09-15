@@ -88,8 +88,8 @@ describe('what the dashboard leads with', () => {
   it('SIGNED OUT: shows the landing, not a login form and not the token browser', async () => {
     home = { signedIn: false };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByLabelText('Get started')).toBeInTheDocument());
-    expect(screen.getByLabelText('What you can use it for')).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'The artifactbin workshop' });
+    expect(screen.getByRole('region', { name: 'The blue room' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Log in with email')).toBeNull();
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
@@ -194,7 +194,7 @@ describe('what the dashboard leads with', () => {
     cleanup();
     home = { signedIn: false };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByLabelText('Get started')).toBeInTheDocument());
+    await screen.findByRole('region', { name: 'The artifactbin workshop' });
     expect(screen.queryByLabelText('Trash')).toBeNull();
   });
 

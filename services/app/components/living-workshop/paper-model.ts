@@ -16,7 +16,6 @@ export interface PaperGesture {
   current: Point;
   dragging: boolean;
 }
-export type Release = { kind: "open" | "return" | "detach"; id: string };
 export function scenePoint(
   point: Point,
   bounds: { left: number; top: number; width: number; height: number },
@@ -37,30 +36,4 @@ export function moveGesture(gesture: PaperGesture, point: Point): PaperGesture {
       gesture.dragging ||
       Math.hypot(point.x - gesture.origin.x, point.y - gesture.origin.y) > 10,
   };
-}
-export function releaseGesture(
-  gesture: PaperGesture,
-  cancelled = false,
-): Release {
-  const distance = Math.hypot(
-    gesture.current.x - gesture.origin.x,
-    gesture.current.y - gesture.origin.y,
-  );
-  return {
-    id: gesture.id,
-    kind: cancelled
-      ? "return"
-      : !gesture.dragging
-        ? "open"
-        : distance > 85
-          ? "detach"
-          : "return",
-  };
-}
-export function paperContains(slot: PaperSlot, point: Point): boolean {
-  const dx = point.x - slot.x,
-    dy = point.y - slot.y;
-  const x = dx * Math.cos(slot.angle) + dy * Math.sin(slot.angle);
-  const y = -dx * Math.sin(slot.angle) + dy * Math.cos(slot.angle);
-  return x >= 0 && x <= slot.width && y >= 0 && y <= slot.height;
 }

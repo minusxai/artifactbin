@@ -1,12 +1,6 @@
-# Preserve exploration originals locally; ship only the selected scene assets.
+# Only runtime assets belong in public; authoring sources live in scripts/art/workshop.
 /*
 !/.gitignore
-!/final-image-prompts.json
-!/indoor.jpg
-!/monotone-posters-prompt.json
-!/monotone-posters.webp
-!/outdoor.jpg
-!/foreground-mask-source.png
 !/foreground-mask-gray.png
 !/robots/
 !/indoor-960.webp
@@ -17,3 +11,5 @@
 !/outdoor-1672.webp
 !/outdoor-2560.webp
 !/outdoor-3344.webp
+/robots/workshop-bot.glb
+/robots/workshop-helpers.png

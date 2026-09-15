@@ -49,3 +49,6 @@ services/app/public/libraries/
 
 # agent worktrees (local only)
 .claude/worktrees/
+
+# Finder metadata is never a project asset.
+.DS_Store

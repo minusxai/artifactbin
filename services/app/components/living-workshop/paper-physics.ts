@@ -161,21 +161,6 @@ export function liftPaper(c: Cloth) {
   c.settled = false;
   c.quietFrames = 0;
 }
-export function resetCloth(c: Cloth) {
-  c.pinned = true;
-  c.quietFrames = 0;
-  c.settled = false;
-  c.age = 0;
-  c.torn.clear();
-  c.tearProgress = 0;
-  c.pins = [true, true];
-  for (const b of c.bonds) b.broken = false;
-  for (const p of c.points) {
-    p.x = p.px = p.homeX;
-    p.y = p.py = p.homeY;
-    p.z = p.pz = p.homeZ;
-  }
-}
 export function stepCloth(
   c: Cloth,
   dt: number,

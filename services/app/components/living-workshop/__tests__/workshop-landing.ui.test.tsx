@@ -20,7 +20,11 @@ const createScene = vi.hoisted(() => vi.fn());
 vi.mock("../workshop-renderer", () => ({ createWorkshopScene: createScene }));
 const clipboard = vi.fn();
 beforeEach(() => {
+  vi.restoreAllMocks();
   vi.clearAllMocks();
+  clipboard.mockReset();
+  // jsdom has no layout; give the comment positioner a visible scene.
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 1448, 815));
   createScene.mockReturnValue(scene);
   localStorage.clear();
   Object.defineProperty(navigator, "clipboard", {
@@ -50,24 +54,21 @@ it("keeps real canonical links usable without interacting with the canvas", () =
     for (const link of screen.getAllByRole("link", { name: paper.title }))
       expect(link).toHaveAttribute("href", paper.href);
 });
-it("copies deployment-aware agent instructions and reports a denied clipboard", async () => {
-  clipboard
-    .mockResolvedValueOnce(undefined)
-    .mockRejectedValueOnce(new Error("denied"));
-  mount();
-  fireEvent.click(screen.getByRole("button", { name: "Create Artifact — copy agent instructions" }));
-  await waitFor(() =>
-    expect(clipboard).toHaveBeenCalledWith(
-      `Help me create an artifact with artifactbin. Read ${window.location.origin}/docs-human for setup, then ask me what I want to make.`,
-    ),
-  );
-  expect(
-    await screen.findByText(/Copied\. Paste into your agent\./),
-  ).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Create Artifact — copy agent instructions" }));
-  expect(
-    await screen.findByText(/Couldn't copy\. Open the setup guide below\./),
-  ).toBeInTheDocument();
+it.each(["hero", "footer"])("copies deployment-aware instructions from the %s and reports clipboard denial", async (area) => {
+  clipboard.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("denied"));
+  const { container } = mount();
+  const scope = within(area === "hero"
+    ? screen.getByRole("region", { name: "The artifactbin workshop" })
+    : container.querySelector("footer")!);
+  const button = scope.getByRole("button", { name: "Create Artifact — copy agent instructions" });
+  fireEvent.click(button);
+  await waitFor(() => expect(clipboard).toHaveBeenCalledWith(
+    `Help me create an artifact with artifactbin. Read ${window.location.origin}/docs-human for setup, then ask me what I want to make.`,
+  ));
+  expect(await scope.findByText(/Copied\. Paste into your agent\./)).toBeInTheDocument();
+  fireEvent.click(button);
+  expect(await scope.findByText(/Couldn't copy\. Open the setup guide/)).toBeInTheDocument();
+  expect(scope.getByRole("link", { name: /Setup guide/ })).toHaveAttribute("href", "/docs-human");
 });
 it("switches the background without disposing the live board", async () => {
   const view = mount();
@@ -79,24 +80,6 @@ it("switches the background without disposing the live board", async () => {
   expect(scene.dispose).not.toHaveBeenCalled();
   view.unmount();
   expect(scene.dispose).toHaveBeenCalledOnce();
-});
-
-it("copies an agent prompt from the green create action", async () => {
-  clipboard.mockResolvedValue(undefined);
-  mount();
-  fireEvent.click(
-    screen.getByRole("button", {
-      name: "Create Artifact — copy agent instructions",
-    }),
-  );
-  await waitFor(() =>
-    expect(clipboard).toHaveBeenCalledWith(
-      expect.stringContaining("create an artifact with artifactbin."),
-    ),
-  );
-  expect(
-    await screen.findByText(/Copied\. Paste into your agent\./),
-  ).toBeInTheDocument();
 });
 
 it("lets visitors open, reply to, and resolve a sample comment locally", () => {
@@ -151,29 +134,13 @@ it("highlights the corresponding scene region on hover, focus, and open", () => 
   expect(highlight()).toBeNull();
 });
 
- it("shows the poster exchange and the pi and OpenCode answers", () => {
+it("keeps the FAQ and footer links after the feature section", () => {
   const { container } = mount();
-  fireEvent.click(screen.getByRole("button", { name: "Open sample comment by Maya" }));
-  const poster = screen.getByRole("region", { name: "Sample conversation with Maya" });
-  for (const text of ["Yep!", "Try tearing the posters off the board haha"]) expect(within(poster).getByText(text)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Open sample comment by Leo" }));
-  expect(screen.getByText("Yes, super easy!")).toBeInTheDocument();
-  expect(within(screen.getByRole("region", { name: "Sample conversation with Leo" })).getAllByText("pi").length).toBeGreaterThan(0);
-  fireEvent.click(screen.getByRole("button", { name: "Open sample comment by Nina" }));
-  expect(container.querySelector("[data-comment-highlight]")).toHaveAttribute("data-comment-highlight", "install");
-  const install = screen.getByRole("region", { name: "Sample conversation with Nina" });
-  expect(within(install).getAllByText("OpenCode").length).toBeGreaterThan(0);
-  expect(within(install).getByText(/The CLI gives your agent/)).toBeInTheDocument();
-});
-
-it("keeps FAQ exchanges short and removes the extra human from the poster thread", () => {
-  mount();
-  for (const name of ["Maya", "Leo", "Nina", "Sam", "Ava", "Ben", "Iris", "Theo"]) {
-    fireEvent.click(screen.getByRole("button", { name: `Open sample comment by ${name}` }));
-    const thread = screen.getByRole("region", { name: `Sample conversation with ${name}` });
-    expect(within(thread).getAllByRole("article").length).toBeLessThanOrEqual(3);
-    expect(within(thread).queryByText("Codex, what else can we do here?")).not.toBeInTheDocument();
-    if (name === "Sam") expect(within(thread).getByText("Wait, why not just make an HTML file?")).toBeInTheDocument();
-    if (name === "Theo") expect(within(thread).getByText(/hosted service is free today/)).toBeInTheDocument();
-  }
+  const features = screen.getByRole("region", { name: /Agent-ready infrastructure/ });
+  const faq = screen.getByLabelText("FAQs");
+  const footer = container.querySelector("footer")!;
+  expect(features.compareDocumentPosition(faq) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(faq.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  for (const [name, href] of [["Gallery", "/examples"], ["Docs", "/docs-human"], ["Privacy", "/privacy"], ["Terms", "/terms"]])
+    expect(within(footer).getByRole("link", { name })).toHaveAttribute("href", href);
 });

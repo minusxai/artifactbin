@@ -1,7 +1,7 @@
 """Blender background authoring: ivory/cobalt rigid-joint workshop helpers.
 Run: node scripts/art/export-agent-badges.cjs
 Then: Blender --background --python scripts/art/build-workshop-robots.py
-GLBs retain named pivots and a six-second blink/idle cycle; .blend is the editable source.
+GLBs retain named pivots and a six-second blink/idle cycle; this script is the editable source.
 """
 import bpy
 import math
@@ -10,7 +10,6 @@ from mathutils import Vector
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'services/app/public/landing/workshop/robots'
-SOURCE = Path.home() / 'Downloads/artifactbin-workshop-robots.blend'
 OUT.mkdir(parents=True, exist_ok=True)
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
@@ -246,7 +245,6 @@ def export(root,name):
     for o in descendants(root):o.select_set(True)
     bpy.context.view_layer.objects.active=root
     bpy.ops.export_scene.gltf(filepath=str(OUT/name),export_format='GLB',use_selection=True,export_animations=True,export_animation_mode='SCENE',export_frame_range=True)
-export(bot,'workshop-bot.glb')
 export(arm,'workshop-arm.glb')
 
 # Author three role-specific poses, including actual hand/prop contact.
@@ -333,42 +331,4 @@ variants={role:role_bot(role) for role in ['standing','pencil','paper','inspecto
 for role,variant in variants.items():
     export(variant,'workshop-bot-'+role+'.glb')
     for obj in descendants(variant):obj.hide_render=True
-# Default model review uses the standing pose, with an expressive face.
-export(variants['standing'],'workshop-bot.glb')
-for obj in descendants(bot):obj.hide_render=True
-bot=variants['standing']
-for obj in descendants(bot):obj.hide_render=False
-# Separate beauty-stage placement, not baked into either GLB's origin.
-bot.location.x=-1.02
-arm.location.x=1.55
-arm.location.z=.30
-box('Display plinth',(1.55,0,.14),(.90,.72,.28),wood,.025)
-floor=material('Backdrop / warm parchment',(.83,.79,.68),.88)
-box('Ground',(0,0,-.07),(200,200,.1),floor,.0)
-scene.world.color=(.6,.6,.6)
-scene.world.use_nodes=True
-scene.world.node_tree.nodes['Background'].inputs[0].default_value=(.92,.86,.76,1)
-scene.world.node_tree.nodes['Background'].inputs[1].default_value=.45
-
-def light(name,loc,energy,size):
-    bpy.ops.object.light_add(type='AREA',location=loc)
-    o=bpy.context.object;o.name=name;o.data.energy=energy;o.data.shape='DISK';o.data.size=size
-    o.rotation_euler=(Vector((0,0,1))-o.location).to_track_quat('-Z','Y').to_euler()
-light('Large soft window',(-3,-4,6),650,5)
-light('Warm fill',(4,-1,4),280,4)
-light('Top rim',(1,3,5),480,3)
-bpy.ops.object.camera_add(location=(3.5,-7.5,3.1))
-camera=bpy.context.object
-camera.rotation_euler=(Vector((.25,0,1.03))-camera.location).to_track_quat('-Z','Y').to_euler()
-camera.data.type='ORTHO';camera.data.ortho_scale=4.7
-scene.camera=camera
-scene.render.engine='CYCLES';scene.cycles.samples=40
-scene.cycles.use_denoising=True
-scene.render.resolution_x=1500;scene.render.resolution_y=1050;scene.render.resolution_percentage=100
-scene.view_settings.view_transform='AgX'
-scene.render.image_settings.file_format='PNG'
-scene.render.filepath=str(OUT/'workshop-helpers.png')
-scene.frame_set(24)
-bpy.ops.wm.save_as_mainfile(filepath=str(SOURCE))
-bpy.ops.render.render(write_still=True)
-print('WORKSHOP_ASSETS_READY', OUT, SOURCE)
+print('WORKSHOP_ASSETS_READY', OUT)

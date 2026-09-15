@@ -11,23 +11,23 @@ describe('public homepage first response', () => {
     const response = await app.request('/');
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('Your agents');
+    expect(html).toContain('aria-label="The artifactbin workshop"');
     expect(html).toContain('interactive HTML documents');
-    expect(html).toContain('aria-label="Home"');
+    expect(html).toContain('aria-label="Main navigation"');
     expect(html).not.toContain('aria-label="Loading page"');
     expect(html).not.toContain('aria-label="Loading workspace"');
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(html).toContain('data-mx-initial-home');
   });
   it('treats an invalid cookie as a public visitor', async () => {
-    expect(await (await app.request(request('/', { cookie: `session=expired; ${AGENT_COOKIE}=invalid` }))).text()).toContain('Your agents');
+    expect(await (await app.request(request('/', { cookie: `session=expired; ${AGENT_COOKIE}=invalid` }))).text()).toContain('aria-label="The artifactbin workshop"');
   });
   it('does not start or await GitHub while serving homepage HTML', async () => {
     const upstream = vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => {}));
     try {
       const local = createAppServer({ indexHtml: async () => '<html><head></head><body><div id="root"></div></body></html>' });
       const response = await local.request('/');
-      expect(await response.text()).toContain('Your agents');
+      expect(await response.text()).toContain('aria-label="The artifactbin workshop"');
       expect(upstream).not.toHaveBeenCalled();
     } finally { upstream.mockRestore(); }
   });
@@ -37,7 +37,7 @@ describe('public homepage first response', () => {
   ])('does not bootstrap public landing for validated $credential actor', async actor => {
     const response = await app.request(request('/', { actor }));
     const html = await response.text();
-    expect(html).not.toContain('Your agents');
+    expect(html).not.toContain('aria-label="The artifactbin workshop"');
     expect(html).not.toContain('private@example.com');
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
