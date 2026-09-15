@@ -9,6 +9,8 @@ import { createSessionProcess, type SessionProcessOptions } from './session-proc
  */
 import { chromium, type Browser } from 'playwright';
 import sharp from 'sharp';
+import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
+import {browserUploadOptions} from './upload-config';
 import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { internalAssetResponse } from './internal-assets';
 
@@ -30,15 +32,16 @@ export function requestOriginAllowed(target:string,pageOrigin:string,allowedOrig
   try{return new Set([pageOrigin,...allowedOrigins]).has(new URL(target).origin);}catch{return false;}
 }
 
-export function createBrowser(opts: { idleShutdownMs?: number; sessions?: SessionProcessOptions } = {}): BrowserService & { close(): Promise<void> } {
+export function createBrowser(opts: { idleShutdownMs?: number; sessions?: SessionProcessOptions; upload?:UploadOptions } = {}): BrowserService & { close(): Promise<void> } {
   const idleMs = opts.idleShutdownMs ?? 60_000;
+  const upload=opts.upload??browserUploadOptions(process.env);
   let browser: Promise<Browser> | undefined;
   let chain: Promise<unknown> = Promise.resolve();
   let idle: ReturnType<typeof setTimeout> | undefined;
 
-  const get = (): Promise<Browser> => {
+  const get = (timeoutMs=DEFAULT_TIMEOUT_MS): Promise<Browser> => {
     if (!browser) {
-      const p = chromium.launch({ headless: true }).catch((e) => { if (browser === p) browser = undefined; throw e; });
+      const p = chromium.launch({ headless: true, timeout:timeoutMs }).catch((e) => { if (browser === p) browser = undefined; throw e; });
       browser = p;
     }
     return browser;
@@ -51,9 +54,11 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
   const scheduleIdle = () => { if (idle) clearTimeout(idle); idle = setTimeout(() => void close(), idleMs); idle.unref?.(); };
 
   async function shoot(req: RenderRequest): Promise<{ mime: 'image/png' | 'image/jpeg'; bytes: Uint8Array }> {
-    let b = await get();
-    if (!b.isConnected()) { await close(); b = await get(); }
-    const timeout = req.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
+    const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw new Error('Render deadline');return ms;};
+    let b = await get(remaining());
+    if (!b.isConnected()) { await close(); b = await get(remaining()); }
+    const timeout = remaining();
     const requestedCrop = typeof req.capture === 'object' && 'card' in req.capture ? req.capture.card : null;
     // A crop narrower than the output must be RASTERIZED at the corresponding
     // density. Scaling a 637px screenshot to 1600px only enlarges its pixels.
@@ -61,7 +66,8 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
       ? clamp(req.viewport.width / Math.max(1, requestedCrop.width), 1, 4)
       : 1;
     // reducedMotion: the motion kit never arms scroll reveals under it, so a capture always sees the finished page.
-    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity, serviceWorkers: 'block' });
+    const renderTimer=setTimeout(()=>{void b.close().catch(()=>{});},remaining());
+    const page = await b.newPage({ viewport: req.viewport, reducedMotion: 'reduce', deviceScaleFactor: cardDensity, serviceWorkers: 'block' }).catch(error=>{clearTimeout(renderTimer);throw error;});
     const forwarding = new AbortController();
     const pending = new Set<Promise<void>>();
     try {
@@ -102,12 +108,24 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
         return [...root.querySelectorAll('[data-mx-managed-frame]')].every(host=>host.querySelector('iframe[data-mx-author-ready]'));
       },req.selector,{timeout});
       await page.waitForTimeout(req.settleMs ?? DEFAULT_SETTLE_MS);
+      // Readiness covers lazy placeholders and Vega's asynchronous work. Two
+      // frames ensure a React handoff cannot expose a transient empty state.
+      const waitForCharts=()=>page.waitForFunction(async selector=>{
+        const settled=()=>{const root=document.querySelector(selector);return !!root
+          && !root.matches('[data-mx-chart-state="pending"]')
+          && !root.querySelector('[data-mx-chart-state="pending"]');};
+        if(!settled())return false;
+        await new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve())));
+        return settled();
+      },req.selector,{timeout:remaining()});
+      await waitForCharts();
       if (typeof req.capture === 'object' && 'slide' in req.capture) {
         const slides = surface.locator('[data-mx-slide]');
         const count = await slides.count();
         if (req.capture.slide > count) throw new NoSlideError(count);
         const one = slides.nth(req.capture.slide - 1);
         await one.scrollIntoViewIfNeeded({ timeout });
+        await waitForCharts();
         return { mime, bytes: new Uint8Array(await one.screenshot(shotOpts)) };
       }
       if (req.capture === 'full') return { mime, bytes: new Uint8Array(await surface.screenshot(shotOpts)) };
@@ -130,6 +148,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
           const documentY = initialScrollY + box.y + y;
           await page.evaluate((top) => window.scrollTo(0, top), documentY);
           const scrollY = await page.evaluate(() => window.scrollY);
+          await waitForCharts();
           const bytes = await page.screenshot({
             // Keep the high-density intermediate lossless. JPEG is encoded
             // once, after the fractional clip is normalized to exact output.
@@ -148,6 +167,7 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
         const client = await page.context().newCDPSession(page);
         try {
           const scale = Math.min(PREVIEW_WIDTH / sourceWidth, PREVIEW_MAX_HEIGHT / sourceHeight);
+          await waitForCharts();
           const captured = await client.send('Page.captureScreenshot', {
             format: req.format === 'jpg' ? 'jpeg' : 'png',
             ...(req.format === 'jpg' ? { quality: req.quality ?? 85 } : {}),
@@ -172,11 +192,13 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
       let box = (await surface.boundingBox()) ?? { x: 0, y: 0, width, height };
       await page.setViewportSize({ width, height: Math.ceil(box.y) + height });
       box = (await surface.boundingBox()) ?? box;
+      await waitForCharts();
       const bytes = await page.screenshot({ clip: { x: box.x, y: box.y, width: Math.min(box.width, width) || width, height }, ...shotOpts });
       return { mime, bytes: new Uint8Array(bytes) };
     } finally {
       forwarding.abort();
       await Promise.allSettled(pending);
+      clearTimeout(renderTimer);
       await page.close().catch(() => {});
       scheduleIdle();
     }
@@ -186,10 +208,11 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
     if (!opts.sessions) throw new Error('Browser session forwarding is not configured');
     return createSessionProcess(actor, opts.sessions);
   });
-  return {
+  const service:BrowserService & {close():Promise<void>} = {
     sessions,
     render(req): Promise<RenderResult> {
-      const run = chain.then(() => shoot(req)).then(
+      const deadline=Date.now()+(req.timeoutMs??DEFAULT_TIMEOUT_MS);
+      const run = chain.then(() => {const remaining=deadline-Date.now();if(remaining<=0)throw new Error("Render timed out in queue");return shoot({...req,timeoutMs:remaining});}).then(
         (r): RenderResult => ({ ok: true, ...r }),
         (e): RenderResult => {
           if (e instanceof NoSlideError) return { ok: false, reason: 'no_slide', slides: e.slides };
@@ -203,4 +226,16 @@ export function createBrowser(opts: { idleShutdownMs?: number; sessions?: Sessio
     },
     async close() { await sessions.close(); await close(); },
   };
+  if(upload)service.renderAndUpload=async request=>{
+    try{
+      admittedUploadUrl(request.upload.url,upload);
+      const deadline=Date.now()+(request.render.timeoutMs??DEFAULT_TIMEOUT_MS);
+      if(request.upload.contentType!==(request.render.format==='jpg'?'image/jpeg':'image/png'))throw new Error('Mismatched upload format');
+      const result=await service.render(request.render);if(!result.ok)return result;
+      const metadata=await sharp(result.bytes).metadata();
+      await uploadImage(request.upload,result.bytes,upload,deadline-Date.now());
+      return {ok:true,mime:result.mime,bytes:result.bytes.byteLength,width:metadata.width!,height:metadata.height!};
+    }catch{return {ok:false,reason:'failed',detail:'Export upload failed'};}
+  };
+  return service;
 }

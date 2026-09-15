@@ -10,21 +10,21 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { useAppHarness, request } from '@/__tests__/harness';
 import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest } from '@artifactbin/contracts';
-import { GET as exportImage } from '@/app/a/[id]/export/route';
+import {exportImage,EXPORT_PNG} from './export-helpers';
 import { GET as serveRaw } from '@/app/a/[id]/raw/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import teaching from '../../cli/src/generated/teaching.json';
 import { createAppServer } from '@/server/app';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
-import { EXPORT_RENDER_GENERATION, exportStoreKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
-import { getArtifactById } from '@/lib/artifacts';
-import { objectStore } from '@/lib/object-store';
+import { EXPORT_RENDER_GENERATION, exportCacheKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
+
+
 import { setServices } from '@/lib/services';
 import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/export-card';
 import { mintExportKey } from '@/lib/export-key';
 
 const SECRET = 'test-secret';
-const EXPORT_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x45, 0x58, 0x50, 0x4f, 0x52, 0x54]);
+const EXPORT_BYTES = EXPORT_PNG;
 useAppHarness();
 
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -129,18 +129,11 @@ describe('GET /a/:id/export', () => {
   it(
     'serves from the object store without rendering when the version is already shot',
     async () => {
-      // Seed the store BEFORE this artifact's first-ever shot: the memory
-      // layer is necessarily cold, so verbatim bytes prove the store answered
-      // and no browser was involved.
       const { id } = await create(WITH_HEAD);
-      const artifact = (await getArtifactById(id))!;
-      const fake = Buffer.from('89504e47deadbeef', 'hex');
-      // Addressed through the same helper the renderer uses, so a change to the
-      // key (a new renderer generation) cannot leave this test seeding a stale one.
-      await objectStore().put(exportStoreKey(artifact, 'png', 'full'), fake, 'image/png');
-      const res = await shot(id, 'png');
-      expect(res.status).toBe(200);
-      expect(Buffer.from(await res.arrayBuffer()).equals(fake)).toBe(true);
+      await shot(id,'png');await resetExportRenderer();
+      setServices({browser:fakeBrowser({ok:false,reason:'unavailable'})});
+      const res=await shot(id,'png');
+      expect(res.status).toBe(200);expect(new Uint8Array(await res.arrayBuffer())).toEqual(EXPORT_BYTES);
     },
   );
 
@@ -267,12 +260,12 @@ describe('GET /a/:id/export?slide=N', () => {
 describe('the cache key names the renderer', () => {
   it('carries a generation, so changing what a shot covers cannot serve stale pictures', () => {
     expect(EXPORT_RENDER_GENERATION).toBeGreaterThanOrEqual(2);
-    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'full', 0))
-      .toBe(`exports/abc123/3.full-g${EXPORT_RENDER_GENERATION}.png`);
+    expect(exportCacheKey({ id: 'abc123', version: 3 }, 'png', 'full', 0))
+      .toBe(`abc123:full-g${EXPORT_RENDER_GENERATION}:png`);
     // A slice and a card are their own pictures, and say so.
-    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'full', 2)).toContain('slide-2');
-    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'card', 0)).toContain('card-1600x840-r2-');
-    expect(exportStoreKey({ id: 'abc123', version: 3 }, 'png', 'preview', 0)).toContain('preview-v2-');
+    expect(exportCacheKey({ id: 'abc123', version: 3 }, 'png', 'full', 2)).toContain('slide-2');
+    expect(exportCacheKey({ id: 'abc123', version: 3 }, 'png', 'card', 0)).toContain('card-1600x840-r3-');
+    expect(exportCacheKey({ id: 'abc123', version: 3 }, 'png', 'preview', 0)).toContain('preview-v2-');
   });
 });
 

@@ -11,10 +11,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from '@artifactbin/utils';
 import type { RenderRequest, RenderResult } from '@artifactbin/contracts';
-import { GET as exportImage } from '@/app/a/[id]/export/route';
+import {exportImage,EXPORT_PNG} from './export-helpers';
 import { createArtifact } from '@/lib/artifacts';
+import {getDb} from '@/lib/db';
 import { objectStore } from '@/lib/object-store';
-import { resetExportRenderer, renderArtifactImage, exportStoreKey } from '@/lib/export';
+import { resetExportRenderer, renderArtifactImage } from '@/lib/export';
 import { setServices } from '@/lib/services';
 import { mintToken } from '@/lib/tokens';
 import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
@@ -24,10 +25,10 @@ useAppHarness();
 
 const BASE = 'http://localhost:3000';
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
-const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+const PNG = EXPORT_PNG;
 type Fake = ReturnType<typeof fakeBrowser> & { calls: unknown[] };
 let fake: Fake;
-const browser = (result?: RenderResult) => { fake = fakeBrowser(result) as Fake; setServices({ browser: fake }); return fake; };
+const browser = (result: RenderResult = {ok:true,mime:'image/png',bytes:PNG}) => { fake = fakeBrowser(result) as Fake; setServices({ browser: fake }); return fake; };
 const lastRequest = () => fake.calls.at(-1) as RenderRequest;
 
 beforeEach(async () => {
@@ -59,7 +60,7 @@ describe('the export route through the browser seam', () => {
   });
 
   it('a card capture forwards capture=card; jpg forwards format=jpg and answers image/jpeg', async () => {
-    browser({ ok: true, mime: 'image/jpeg', bytes: new Uint8Array([0xff, 0xd8, 0xff]) });
+    browser({ ok: true, mime: 'image/jpeg', bytes: PNG });
     const id = await doc();
     const res = await exportImage(new Request(`${BASE}/a/${id}/export?mode=card&format=jpg`), params(id));
     expect(res.status).toBe(200);
@@ -170,13 +171,13 @@ describe('stored export admission before screenshot work', () => {
     const repaired = { ...original, edit_id: 'after' };
     const options = { pageUrl: () => BASE, target: 'body' };
     await renderArtifactImage(original, 'png', options);
-    await renderArtifactImage(repaired, 'png', options);
+    await renderArtifactImage(repaired, 'png', {...options,refresh:true});
     expect(render).toHaveBeenCalledTimes(2);
     await resetExportRenderer();
     await renderArtifactImage(repaired, 'png', options);
     expect(render).toHaveBeenCalledTimes(2);
     const laterRepair = { ...repaired, edit_id: 'later' };
-    await renderArtifactImage(laterRepair, 'png', options);
+    await renderArtifactImage(laterRepair, 'png', {...options,refresh:true});
     expect(render).toHaveBeenCalledTimes(3);
   });
 
@@ -184,10 +185,11 @@ describe('stored export admission before screenshot work', () => {
     let release!: () => void, entered!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
     const started = new Promise<void>(resolve => { entered = resolve; });
-    setServices({ browser: { render: async () => { entered(); await gate; return { ok: true, mime: 'image/png', bytes: PNG }; } } });
     const stored = { id: 'stored-hit', version: 1 };
-    await objectStore().put(exportStoreKey(stored, 'png', 'full'), Buffer.from(PNG), 'image/png');
     const options = { pageUrl: () => BASE, target: 'body' };
+    setServices({browser:{render:async()=>({ok:true,mime:'image/png',bytes:PNG})}});
+    await renderArtifactImage(stored,'png',options);await resetExportRenderer();
+    setServices({ browser: { render: async () => { entered(); await gate; return { ok: true, mime: 'image/png', bytes: PNG }; } } });
     const cold = renderArtifactImage({ id: 'cold-miss', version: 1 }, 'png', options);
     await started;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -207,7 +209,7 @@ describe('stored export admission before screenshot work', () => {
     try {
       const results = await Promise.all(Array.from({ length: 5 }, () => renderArtifactImage(artifact, 'png', options)));
       expect(results.every(result => result.ok)).toBe(true);
-      expect(get).toHaveBeenCalledOnce(); expect(render).toHaveBeenCalledOnce();
+      expect(get).not.toHaveBeenCalled(); expect(render).toHaveBeenCalledOnce();
     } finally { get.mockRestore(); }
   });
 
@@ -218,6 +220,7 @@ describe('stored export admission before screenshot work', () => {
     setServices({ browser: { render } });
     const artifact = { id: 'retry-after-unavailable', version: 1 }, options = { pageUrl: () => BASE, target: 'body' };
     expect(await renderArtifactImage(artifact, 'png', options)).toMatchObject({ ok: false });
+    await (await getDb()).query('UPDATE export_image_cache SET retry_after=NULL');
     expect(await renderArtifactImage(artifact, 'png', options)).toMatchObject({ ok: true });
     expect(render).toHaveBeenCalledTimes(2);
   });

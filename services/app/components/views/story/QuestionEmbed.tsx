@@ -37,7 +37,7 @@ import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
  * so it also works on the canvas, which carries no embed CSS.
  */
 const waiting = (label: string) => (
-  <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 p-4" aria-label="Chart placeholder">
+  <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 p-4" aria-label="Chart placeholder" data-mx-chart-state="pending">
     <span aria-hidden="true" className="size-[22px] animate-spin rounded-full border-2 border-border border-t-primary motion-reduce:animate-none" />
     <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{label}</span>
   </div>
@@ -117,7 +117,7 @@ export default function QuestionEmbed({ data, viz, title, colorMode, tables, tab
     // A KPI tile takes the same d3-format spec <Number> does; the Intl default otherwise.
     const shown = !Number.isFinite(value) ? '—' : cfg.format ? safeFormat(cfg.format, value) : fmt(value);
     return (
-      <div className="flex h-full w-full flex-col items-start justify-center gap-1 p-4" aria-label="Single value">
+      <div className="flex h-full w-full flex-col items-start justify-center gap-1 p-4" aria-label="Single value" data-mx-chart-state={name && isPending(pendingTables,name) ? 'pending' : undefined}>
         {(cfg.label ?? title) && <div className="text-sm text-muted-foreground">{cfg.label ?? title}</div>}
         <div className="text-4xl font-semibold tracking-tight tabular-nums">
           {cfg.prefix ?? ''}{shown}{cfg.suffix ?? ''}
@@ -129,7 +129,7 @@ export default function QuestionEmbed({ data, viz, title, colorMode, tables, tab
 
   if (kind === 'table') {
     return (
-      <div className="flex h-full w-full flex-col">
+      <div className="flex h-full w-full flex-col" data-mx-chart-state={name && isPending(pendingTables,name) ? 'pending' : undefined}>
       <div className="min-h-0 w-full flex-1 overflow-auto p-2" aria-label="Data table">
         <table className="w-full text-sm">
           <thead>
@@ -198,7 +198,7 @@ export default function QuestionEmbed({ data, viz, title, colorMode, tables, tab
   if (!envelope) return empty(`unknown viz kind "${kind}"`);
 
   return (
-    <div className="flex h-full w-full flex-col" aria-label="Question embed body">
+    <div className="flex h-full w-full flex-col" aria-label="Question embed body" data-mx-chart-state={name && isPending(pendingTables,name) ? 'pending' : undefined}>
       {/* Mono like the chart below it — the title is chart chrome, not body prose,
           and the axes/labels already speak JetBrains Mono. */}
       {title && <div className="border-b border-border px-3 py-2 font-mono text-sm font-medium">{title}</div>}

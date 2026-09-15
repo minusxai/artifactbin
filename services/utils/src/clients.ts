@@ -9,6 +9,7 @@ import type {
   QueryFailure,
   QueryOutcome,
   RenderRequest,
+  RenderUploadResult,
   RenderResult,
   SqlService,
 } from '@artifactbin/contracts';
@@ -56,6 +57,13 @@ export function browserClient(url: string, opts: { deadlineMs?: number; serviceS
         return (await response.json()) as BrowserSessionResult;
       },
       async close() {},
+    },
+    async renderAndUpload(input){
+      try{
+        const response=await fetch(`${url}${BROWSER_ROUTES.renderUpload}`,{method:'POST',headers:{'content-type':'application/json',...(opts.serviceSecret?{[SERVICE_AUTH_HEADER]:opts.serviceSecret}:{})},body:JSON.stringify(input),signal:AbortSignal.timeout(Math.max(deadline,45_000))});
+        if(!response.ok)return {ok:false,reason:'unavailable',detail:`${response.status}`};
+        return await response.json() as RenderUploadResult;
+      }catch{return {ok:false,reason:'unavailable',detail:'Export upload service unavailable'};}
     },
     async render(req: RenderRequest): Promise<RenderResult> {
       try {

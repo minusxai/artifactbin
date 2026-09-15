@@ -50,11 +50,18 @@ export type RenderResult =
   | { ok: false; reason: 'unavailable' | 'navigation' | 'failed'; detail?: string }
   | { ok: false; reason: 'no_slide'; slides: number };
 
+/** A narrowly scoped signed PUT URL; never exposed to the rendered page. */
+export interface RenderUploadRequest { render:RenderRequest; upload:{url:string;contentType:'image/png'|'image/jpeg'} }
+export type RenderUploadResult =
+ | {ok:true;mime:'image/png'|'image/jpeg';bytes:number;width:number;height:number}
+ | Exclude<RenderResult,{ok:true}>;
+
 export interface BrowserService {
   render(request: RenderRequest): Promise<RenderResult>;
+  renderAndUpload?(request:RenderUploadRequest):Promise<RenderUploadResult>;
   sessions?: BrowserSessions;
   /** Release the browser (a local implementation holds one); a client has nothing to release. */
   close?(): Promise<void>;
 }
 
-export const BROWSER_ROUTES = { render: '/render', sessions: '/sessions' } as const;
+export const BROWSER_ROUTES = { render: '/render', renderUpload:'/render-upload', sessions: '/sessions' } as const;

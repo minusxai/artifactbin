@@ -1,15 +1,5 @@
-/**
- * GET /a/:id/export?format=png|jpg — the artifact as image bytes, rendered
- * on demand server-side (nothing persisted). Curlable, subject to the same
- * read access as the page it shoots. The render/response core is shared with
- * the `export_artifact` MCP operation (lib/export exportImageResponse); this
- * route owns only the transport half — resolving the caller's credential.
- *
- * A sub-path rather than a query on the page, for the same reason as ./raw:
- * a page cannot return bytes. The render target is `/a/<id>` — the one
- * shareable URL — so this keeps working whether that URL renders the document
- * itself or redirects to it.
- */
+/** Authorize and resolve an image, then redirect to a scoped persistent asset.
+ * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/analytics';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { requestOrSessionActor, roleFor } from '@/lib/viewer';
@@ -47,11 +37,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // this shoots (lib/story/url-values) — the raw route is the one door that
   // validates them, so an export cannot disagree with what it photographs.
   return exportImageResponse(artifact, {
+    refresh: q.get('refresh'),
     format: q.get('format'),
     mode: q.get('mode'),
     slide: q.get('slide'),
     crop: q.get('crop'),
     image: q.get('image'),
     search: new URL(request.url).search,
-  }, baseUrl(request));
+  }, baseUrl(request), 'redirect');
 }

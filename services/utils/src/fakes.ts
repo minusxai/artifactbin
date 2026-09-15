@@ -32,7 +32,7 @@ export function fakeSql(fixtures: Record<string, TableResult>): FakeSql {
     dryRunMutations: rec('dryRunMutations', async () => ({ errors: [] })),
   };
 }
-export function fakeBrowser(result: RenderResult = { ok: true, mime: 'image/png', bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }): BrowserService & { calls: unknown[] } {
+export function fakeBrowser(result: RenderResult = { ok: true, mime: 'image/png', bytes: new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0R8AAAAASUVORK5CYII=','base64')) }): BrowserService & { calls: unknown[] } {
   const calls: unknown[] = [];
   return { calls, render: async (r) => { calls.push(r); return result; } };
 }

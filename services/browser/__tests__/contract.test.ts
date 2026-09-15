@@ -22,6 +22,8 @@ const PAGE = `<html><head><style>
 const READY_PAGE = `<html><body style="margin:0"><main style="width:100px;height:100px;background:#c33"><div data-mx-managed-frame><iframe></iframe></div></main><script>setTimeout(()=>{document.querySelector('iframe').setAttribute('data-mx-author-ready','');document.querySelector('main').style.background='#3c3'},300)</script></body></html>`;
 const NEVER_READY_PAGE = `<html><body><main><div data-mx-managed-frame><iframe></iframe></div></main></body></html>`;
 const DIAGRAM_PAGE = `<html><body style="margin:0"><main data-mx-mermaid-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{document.querySelector('main').dataset.mxMermaidState='ready';document.querySelector('main').style.background='#3c3'},400)</script></body></html>`;
+const CHART_PAGE = `<html><body style="margin:0"><main data-mx-chart-state="pending" style="width:100px;height:100px;background:#c33"></main><script>setTimeout(()=>{const m=document.querySelector('main');m.innerHTML='<div data-mx-chart-state="pending"></div>';m.removeAttribute('data-mx-chart-state');setTimeout(()=>{m.firstChild.dataset.mxChartState='ready';m.style.background='#3c3'},300)},300)</script></body></html>`;
+const STUCK_CHART_PAGE = `<html><body><main data-mx-chart-state="pending" style="width:100px;height:100px">Loading chart</main></body></html>`;
 let pages: RunningServer;
 let url: string;
 
@@ -30,7 +32,7 @@ const server = serveBrowser(local);
 const listening = server.listen(0);
 const remote = browserClient(listening.url, { deadlineMs: 20_000 });
 beforeAll(async () => {
-  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
+  pages = await withHttpServer((q, s) => { s.writeHead(200, { 'content-type': 'text/html' }); s.end(q.url==='/chart'?CHART_PAGE:q.url==='/stuck-chart'?STUCK_CHART_PAGE:q.url==='/diagram'?DIAGRAM_PAGE:q.url==='/ready'?READY_PAGE:q.url==='/never-ready'?NEVER_READY_PAGE:PAGE); });
   url = `${pages.base}/a/x`;
 });
 afterAll(async () => { await local.close?.(); await server.close(); await pages.close(); });
@@ -45,6 +47,16 @@ it('matches allowed request origins exactly, never by prefix',()=>{
 });
 
 describe.each<[string, BrowserService]>([['in-process', local], ['over HTTP', remote]])('%s', (_name, svc) => {
+  it('waits across lazy chart loading and asynchronous chart rendering', async () => {
+    const r=await svc.render({...base(),url:`${pages.base}/chart`,settleMs:0});
+    if(!r.ok)throw new Error(JSON.stringify(r));
+    const {data,info}=await sharp(Buffer.from(r.bytes)).raw().toBuffer({resolveWithObject:true});
+    const at=(50*info.width+50)*info.channels;expect([...data.subarray(at,at+3)]).toEqual([51,204,51]);
+  });
+  it('returns failure when a chart never finishes, instead of cacheable loading pixels',async()=>{
+    const r=await svc.render({...base(),url:`${pages.base}/stuck-chart`,settleMs:0,timeoutMs:250});
+    expect(!r.ok&&r.reason).toBe('failed');
+  });
   it('waits for a lazy diagram before capturing export pixels', async () => {
     const r = await svc.render({ ...base(), url: `${pages.base}/diagram`, settleMs: 0 });
     if (!r.ok) throw new Error(JSON.stringify(r));
@@ -166,4 +178,17 @@ describe('serveBrowser service authentication', () => {
       expect((await client.render(base())).ok).toBe(true);
     } finally { await protectedServer.close(); }
   });
+});
+
+it('renders a ready chart and uploads its pixels while the HTTP result contains metadata only',async()=>{
+ let uploaded=Buffer.alloc(0);
+ const sink=await withHttpServer(async(req,res)=>{const chunks:Buffer[]=[];for await(const part of req)chunks.push(Buffer.from(part));uploaded=Buffer.concat(chunks);res.end();});
+ const renderer=createBrowser({upload:{origin:sink.base,prefix:'/exports/objects/'}}),shell=serveBrowser(renderer),listener=shell.listen(0);
+ try{
+  const client=browserClient(listener.url,{deadlineMs:35_000});
+  const result=await client.renderAndUpload!({render:{...base(),url:`${pages.base}/chart`,settleMs:0},upload:{url:`${sink.base}/exports/objects/test.png?signature=test`,contentType:'image/png'}});
+  expect(result).toEqual({ok:true,mime:'image/png',bytes:uploaded.length,width:100,height:100});
+  const {data,info}=await sharp(uploaded).raw().toBuffer({resolveWithObject:true});
+  expect([...data.subarray((50*info.width+50)*info.channels,(50*info.width+50)*info.channels+3)]).toEqual([51,204,51]);
+ }finally{await renderer.close();await shell.close();await sink.close();}
 });

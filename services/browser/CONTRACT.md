@@ -50,3 +50,35 @@ minute idle, renders serialised.
 Conformance: `__tests__/contract.test.ts` and `__tests__/internal-assets.test.ts` run over `createBrowser()`
 and `browserClient(serveBrowser(createBrowser()))`, with real Chromium. `internal-assets-boundary.test.ts`
 checks transport refusal/cancellation; the app's `public-assets-host.test.ts` exercises its real HTTP middleware.
+
+`POST /render-upload` accepts `{render:RenderRequest,upload:{url,contentType}}`
+and returns image metadata (mime, byte count, width, height) or the usual failure
+verdict. The signed upload URL never enters the page, logs, or database. Uploads
+are bounded, do not follow redirects, and may travel through a configured gateway
+that admits only the configured storage origin and export prefix. `/render`
+continues returning bytes for callers and local object stores.
+
+Both methods wait until chart elements marked `data-mx-chart-state="pending"`
+settle. This covers the lazy chart module and asynchronous chart rendering;
+readiness timeouts return failure, never cacheable image bytes.
+
+### S3 upload deployment
+
+Use `docker-compose.export-s3.yml` over the lean composition when the app uses
+S3. Set `BROWSER__UPLOAD_ORIGIN` to the exact HTTPS origin emitted by its signer
+and `BROWSER__UPLOAD_PREFIX` to the absolute path ending in `/exports/objects/`.
+For virtual-hosted S3 these might be `https://bucket.s3.us-west-1.amazonaws.com`
+and `/artifacts/exports/objects/`; path-style storage also includes the bucket
+in the path. The gateway receives the same origin/prefix and no S3 credentials.
+
+`BROWSER__UPLOAD_PROXY_URL` points the browser at the internal gateway. The
+browser has no egress network. The gateway joins compute and egress with no
+published ports. Its handler permits only bounded PNG/JPEG PUTs to the configured
+origin/prefix, streams bytes, strips other headers, and never follows redirects.
+Destination restriction lives in the gateway; this does not configure a VPC
+firewall. Hosts with an S3 endpoint policy can additionally enforce it there.
+
+The 30-second export budget covers the rendering queue, startup, readiness,
+capture and upload. The app's 60-second database lease leaves time for cleanup;
+waiting callers stop after 35 seconds. A failed refresh preserves the prior
+successful object. Signed grants are ephemeral and must not be logged.

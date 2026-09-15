@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,writeFile,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {HttpClient} from '../src/http';
+import {serverRenderer} from '../src/export';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {cliHarness} from './harness';
@@ -124,4 +126,19 @@ describe('comment, status and list over explicit refs', () => {
     assert.equal(h.last().results.length,2);
    }finally{await h.cleanup();}
   });
+});
+
+test('image exports select OG/refresh and follow only image grants without forwarding credentials',async()=>{
+ const seen:{url:string;headers:Headers}[]=[];
+ const grant='https://assets.example.com/assets/export/11111111-1111-4111-8111-111111111111?key=1234567890123.'+'a'.repeat(64);
+ const client=new HttpClient({connection:{server:'https://example.com',token:'test-only'},fetch:async(input,init)=>{
+  seen.push({url:String(input),headers:new Headers(init?.headers)});
+  return seen.length===1?new Response(null,{status:302,headers:{location:grant}}):new Response('pixels',{headers:{'content-type':'image/png'}});
+ }});
+ const result=await serverRenderer('https://example.com',client).image('abc123',{format:'png',og:true,refresh:true});
+ assert.equal(result.bytes.toString(),'pixels');
+ assert.match(seen[0].url,/mode=card/);assert.match(seen[0].url,/refresh=1/);
+ assert.equal(seen[1].url,grant);assert.equal(seen[1].headers.get('authorization'),null);
+ const refused=new HttpClient({connection:{server:'https://example.com',token:'test-only'},fetch:async()=>new Response(null,{status:302,headers:{location:'https://elsewhere.example/private'}})});
+ await assert.rejects(refused.view('/a/abc123/export'),/redirect/i);
 });

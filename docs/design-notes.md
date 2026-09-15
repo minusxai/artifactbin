@@ -292,3 +292,24 @@ only after locking the reviewed database snapshot, then updates catalog metadata
 content and version numbers remain intact. Invalid/missing bytes remain explicit conflicts.
 The complete-input dataflow path also recognizes these inline sources, so dependent aggregates
 never silently use the displayed 1,000-row sample.
+
+## Export images and refresh coordination
+
+`/a/:id/export` remains the image front door; `mode=card` selects the saved OG
+cover/framing and the default photographs the document. `refresh=1` waits for a
+new result. Completed images are immutable objects, served through scoped asset
+URLs with streaming reads. No completed export bytes live in app RAM caches.
+
+The app's export cache owns one row per artifact/variant and an immutable image
+record per successful render. A conditional claim grants a 60-second lease;
+rendering/upload happen outside transactions. Cached images remain readable
+while refreshing after one hour or a source-revision change. Cold/explicit
+refresh callers wait up to 35 seconds with jittered 1/2/4/8-second polling.
+Publishing checks the claim token and lease; failures retain the old image and
+back off. The browser has a 30-second render budget and waits for pending chart
+markers to clear, including lazy loading and Vega work. A timeout is not an image.
+
+S3 production renders use an object-scoped signed PUT; browser returns only
+image metadata. Local stores keep the same cache/asset contracts through the
+existing byte renderer. A restricted upload gateway can stream PUTs to the
+configured S3 export prefix while the browser stays on its internal network.
