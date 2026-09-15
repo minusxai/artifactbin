@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   act,
   fireEvent,
@@ -19,6 +19,7 @@ const scene = vi.hoisted(() => ({
 const createScene = vi.hoisted(() => vi.fn());
 vi.mock("../workshop-renderer", () => ({ createWorkshopScene: createScene }));
 const clipboard = vi.fn();
+afterEach(() => vi.unstubAllGlobals());
 beforeEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
@@ -110,6 +111,27 @@ it("keeps the sample conversations together in a single comments rail", () => {
   expect(within(rail).getByText("Is this an artifact?")).toBeVisible();
   expect(within(rail).getByText("Is it easy to support other agents?")).toBeVisible();
   expect(within(rail).getAllByRole("button", { name: /Open sample comment by/ })).toHaveLength(8);
+});
+
+it("opens mobile conversations without focusing the reply keyboard and restores the pin on dismissal", () => {
+  vi.stubGlobal("innerWidth", 390);
+  mount();
+  const pin = screen.getByRole("button", { name: "Open sample comment by Maya" });
+  fireEvent.click(pin);
+  const conversation = screen.getByRole("dialog", { name: "Sample conversation with Maya" });
+  expect(conversation).toHaveFocus();
+  expect(screen.getByRole("textbox", { name: "Reply to Maya" })).not.toHaveFocus();
+  fireEvent.keyDown(conversation, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(pin).toHaveFocus();
+  expect(document.querySelector("[data-comment-highlight]")).toBeNull();
+  expect(pin).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(pin);
+  fireEvent.click(screen.getByRole("button", { name: "Close sample conversation" }));
+  expect(document.querySelector("[data-comment-highlight]")).toBeNull();
+  fireEvent.click(pin);
+  fireEvent.click(pin);
+  expect(document.querySelector("[data-comment-highlight]")).toBeNull();
 });
 
 it("highlights the corresponding scene region on hover, focus, and open", () => {

@@ -52,6 +52,13 @@ export default function WorkshopComments() {
     const hero = railElement?.closest(".workshop-hero");
     if (!panel || !pin || !railElement || !hero) return;
     const position = () => {
+      // Mobile uses a viewport sheet; desktop keeps its pin-adjacent popover.
+      if (window.innerWidth <= 800) {
+        panel.style.visibility = "";
+        panel.style.maxHeight = "";
+        panel.style.top = "";
+        return;
+      }
       const bounds = hero.getBoundingClientRect();
       const bubble = pin.getBoundingClientRect();
       const top = Math.max(66, bounds.top + 12);
@@ -63,13 +70,27 @@ export default function WorkshopComments() {
       panel.style.top = `${Math.max(top, Math.min(preferred, bottom - height)) - railElement.getBoundingClientRect().top}px`;
     };
     position();
-    panel.querySelector("textarea")?.focus({ preventScroll: true });
+    if (window.innerWidth <= 800) panel.focus({ preventScroll: true });
+    else panel.querySelector("textarea")?.focus({ preventScroll: true });
+    const reveal = window.requestAnimationFrame(() => {
+      if (window.innerWidth > 800) return;
+      const region = samples[active]?.region;
+      const target = hero.querySelector(region === "install" ? ".workshop-pitch-command"
+        : region === "open-source" ? ".workshop-open-source" : ".workshop-comment-highlight");
+      if (!target) return;
+      const bounds = target.getBoundingClientRect();
+      const availableBottom = panel.getBoundingClientRect().top;
+      if (bounds.top < 60 || bounds.bottom > availableBottom - 12) {
+        window.scrollBy({ top: (bounds.top + bounds.bottom) / 2 - (60 + availableBottom) / 2, behavior: "instant" });
+      }
+    });
     const observer = new ResizeObserver(position);
     observer.observe(panel);
     observer.observe(hero);
     window.addEventListener("resize", position);
     window.addEventListener("scroll", position, { passive: true });
     return () => {
+      window.cancelAnimationFrame(reveal);
       observer.disconnect();
       window.removeEventListener("resize", position);
       window.removeEventListener("scroll", position);
@@ -77,13 +98,16 @@ export default function WorkshopComments() {
   }, [active]);
   const close = (index: number) => {
     setActive(null);
-    pins.current[index]?.focus();
+    pins.current[index]?.focus({ preventScroll: true });
+    // Restore keyboard position without retaining the dismissed target selection.
+    setHovered(null);
+    setFocused(null);
   };
   const highlighted = active ?? hovered ?? focused;
   const region = highlighted === null ? null : samples[highlighted]?.region;
   return (
     <>
-    {region && <div className="workshop-comment-highlight" data-comment-highlight={region} aria-hidden="true" />}
+    {region && <div className="workshop-comment-highlight-frame" aria-hidden="true"><div className="workshop-comment-highlight" data-comment-highlight={region} /></div>}
     <aside ref={rail} className="workshop-comments" aria-label="Sample artifact comments" tabIndex={-1}>
       {samples.map((sample, index) => {
         if (resolved[index]) return null;
@@ -104,7 +128,8 @@ export default function WorkshopComments() {
               aria-expanded={open}
               aria-controls={`workshop-thread-${index}`}
               onClick={() => {
-                setActive(open ? null : index);
+                if (open) close(index);
+                else setActive(index);
               }}
               type="button"
             >
@@ -116,7 +141,7 @@ export default function WorkshopComments() {
               </span>
             </button>
             {open && (
-              <section ref={thread} id={`workshop-thread-${index}`} className="workshop-comment-thread" aria-label={`Sample conversation with ${sample.author}`}
+              <section ref={thread} id={`workshop-thread-${index}`} className="workshop-comment-thread" role="dialog" tabIndex={-1} aria-label={`Sample conversation with ${sample.author}`}
                 onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(index); } }}>
                 <header>
                   <span><MessageSquare size={13} /> Comments</span>
