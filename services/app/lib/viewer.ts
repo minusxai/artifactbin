@@ -66,7 +66,7 @@ function attachedActor(request: Request | undefined): RequestActor | null {
   const actor = carrying ? actorOf(carrying) : null;
   if (!actor) return null;
   return {
-    viewer: actor.userId ? { userId: actor.userId, email: actor.email ?? null, ...(actor.credential === 'session' && !carrying?.headers.has(BROWSER_SESSION_HEADER) ? {emailVerified:actor.emailVerified === true} : {}) } : null,
+    viewer: actor.userId ? { userId: actor.userId, email: actor.email ?? null, ...((actor.credential === 'session' || actor.credential === 'bearer') && !carrying?.headers.has(BROWSER_SESSION_HEADER) ? {emailVerified:actor.emailVerified === true} : {}) } : null,
     tokenId: actor.tokenId ?? null,
     credential: actor.credential,
     ...(actor.heldTokenIds ? { heldTokenIds: actor.heldTokenIds } : {}),
@@ -146,9 +146,10 @@ export async function requestOrSessionActor(request: Request): Promise<RequestAc
   const token = offered ? await resolveToken(offered) : null;
   if (token) {
     await touchToken(token.id);
-    return { viewer: token.userId ? { userId: token.userId, email: null } : null, tokenId: token.id, credential: 'bearer' };
+    const {tokenId, ...viewer} = tokenActorForRequest(request, {userId: token.userId, tokenId: token.id});
+    return { viewer: token.userId ? {...viewer, userId: token.userId, email: viewer.email ?? null} : null, tokenId, credential: 'bearer' };
   }
-  return sessionActor(request);
+  return offered ? NO_ACTOR : sessionActor(request);
 }
 
 /**
@@ -201,4 +202,12 @@ export async function browserSessionKind(request?: Request, admitted?: RequestAc
   if (await sessionViewer()) return 'account';
   const actor = await sessionActor(request);
   return actor.tokenId ? 'anon' : 'none';
+}
+
+/** Enrich an authenticated token scope only from matching proxy claims. */
+export function tokenActorForRequest(request: Request, scope: TokenActor): TokenActor {
+  const actor = actorOf(request);
+  if (request.headers.has(BROWSER_SESSION_HEADER) || actor?.credential !== 'bearer'
+    || !scope.userId || actor.userId !== scope.userId || actor.tokenId !== scope.tokenId) return scope;
+  return {...scope, email: actor.email ?? null, emailVerified: actor.emailVerified === true};
 }

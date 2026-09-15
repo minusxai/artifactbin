@@ -323,7 +323,7 @@ export const EVENTS_SERVICE_URL = env('EVENTS', 'SERVICE_URL');
  */
 export const EVENTS_SCHEMA = env('EVENTS', 'SCHEMA') ?? 'events';
 
-/** Verified browser account emails granted document editor access. Empty disables it. */
+/** Verified account emails granted document editor access through sessions and tokens. Empty disables it. */
 export const adminEmails = (): ReadonlySet<string> => new Set((env('ADMIN', 'EMAILS') ?? '').split(',').map(email => email.trim().toLowerCase()).filter(Boolean));
 // Register this request-time setting with the startup environment audit too.
 adminEmails();

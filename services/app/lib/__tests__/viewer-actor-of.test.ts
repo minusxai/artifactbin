@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
 import { ACTOR_HEADER, BROWSER_SESSION_HEADER } from '@artifactbin/contracts';
-import { sessionActor } from '@/lib/viewer';
+import { sessionActor, tokenActorForRequest } from '@/lib/viewer';
 import { mintToken, revokeToken } from '@/lib/tokens';
 
 describe('sessionActor', () => {
@@ -51,3 +51,16 @@ describe('sessionActor', () => {
 });
 
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
+
+ describe('verified token scope',()=>{
+   it('accepts claims only for the resolved token and account, and excludes document automation',()=>{
+     const scope={userId:'usr_admin',tokenId:'tok_admin'};
+     const req=new Request('http://x/api/artifacts/abc123');
+     attachActor(req,{credential:'bearer',...scope,email:'admin@example.com',emailVerified:true});
+     expect(tokenActorForRequest(req,scope)).toMatchObject({email:'admin@example.com',emailVerified:true});
+     expect(tokenActorForRequest(req,{...scope,tokenId:'tok_other'}).emailVerified).toBeUndefined();
+     expect(tokenActorForRequest(req,{...scope,userId:'usr_other'}).emailVerified).toBeUndefined();
+     req.headers.set(BROWSER_SESSION_HEADER,'1');
+     expect(tokenActorForRequest(req,scope).emailVerified).toBeUndefined();
+   });
+ });

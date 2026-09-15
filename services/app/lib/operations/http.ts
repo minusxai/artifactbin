@@ -1,3 +1,4 @@
+import {tokenActorForRequest} from '@/lib/viewer';
 import {readableArtifact} from '@/lib/artifact-read';
 import {canAnnotate} from '@/lib/share-roles';
 import {durableMutation} from '@/lib/mutation-receipt';
@@ -74,6 +75,7 @@ export async function runOperation(
   input: Record<string, unknown>,
   author: AnnotationAuthor = { kind: 'agent', label: null, transport: 'http' },
 ): Promise<Response> {
+  actor = tokenActorForRequest(request, actor);
   const ctx: OpContext = { actor, base: baseUrl(request), request, author };
   const key=request.headers.get('Idempotency-Key');
   const authorize=AUTHORIZED[name];

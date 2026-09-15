@@ -152,6 +152,8 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const auth = request.headers.get('authorization') ?? '';
     const presented = auth.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : '';
     const resolved = presented ? await resolveToken(presented) : null;
+    // An explicit bearer failure cannot fall back to a cached proxy or cookie identity.
+    if (presented && !resolved) return unauthorized(request);
     let actor: { id: string; userId: string | null; clientHarness: Harness | null } | null = resolved;
     let credential: Credential = 'bearer';
     if (!actor) {

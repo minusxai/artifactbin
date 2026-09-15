@@ -46,6 +46,8 @@ export interface SessionInfo { userId: string; email?: string; emailVerified?: b
  * under `/api/auth/*`. `handler` absent = no login surface on this proxy.
  */
 export interface SessionStore {
+  /** Current account claims for a claimed bearer token; absent means no email-based grant. */
+  identity?(userId: string): Promise<SessionInfo | null>;
   resolve(request: Request): Promise<SessionInfo | null>;
   handler?: (request: Request) => Promise<Response>;
 }
@@ -442,7 +444,13 @@ async function resolveActor(request: Request, o: ProxyOptions): Promise<Actor> {
   const presented = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (presented) {
     const token = await o.tokens.byToken(presented);
-    if (token && tokenFitsRequest(token, request, o)) return { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
+    if (token && tokenFitsRequest(token, request, o)) {
+      const actor: Actor = { credential: 'bearer', tokenId: token.id, ...(token.userId ? { userId: token.userId } : {}) };
+      const identity = token.userId ? await o.sessions.identity?.(token.userId).catch(() => null) : null;
+      return identity?.userId === token.userId && identity
+        ? {...actor, email: identity.email, emailVerified: identity.emailVerified}
+        : actor;
+    }
     return ANONYMOUS;
   }
   const secure = o.secure ?? false;

@@ -295,9 +295,9 @@ never silently use the displayed 1,000-row sample.
 
 ## Administrative document access
 
-`ADMIN__EMAILS` grants verified browser accounts editor access to markup documents
+`ADMIN__EMAILS` grants verified accounts editor access to markup documents
 through the existing role and SQL scope checks. `lib/viewer.ts` carries verified
-session claims; `lib/admin-access.ts` checks the deployment allowlist. Ownership
+session or matching bearer-token claims; `lib/admin-access.ts` checks the deployment allowlist. Ownership
 and dataset permissions remain separate. See [admin access](admin-document-repair.md).
 
 ## Export images and refresh coordination

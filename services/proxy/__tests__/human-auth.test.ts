@@ -204,3 +204,12 @@ describe('the options object', () => {
     });
   });
 });
+
+it('looks up the current verified account for a claimed token',async()=>{
+ const cookie=await signInByOtp('mxmx_test_operator@example.com');
+ const session=await auth.sessions.resolve(new Request('http://x',{headers:{cookie}}));
+ expect(await auth.sessions.identity!(session!.userId)).toMatchObject({email:'mxmx_test_operator@example.com',emailVerified:true});
+ await pg.query('UPDATE auth."user" SET "emailVerified"=false WHERE id=$1',[session!.userId]);
+ expect(await auth.sessions.identity!(session!.userId)).toMatchObject({emailVerified:false});
+ expect(await auth.sessions.identity!('missing')).toBeNull();
+});
