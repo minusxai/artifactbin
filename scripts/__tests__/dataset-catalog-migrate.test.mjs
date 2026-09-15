@@ -56,3 +56,27 @@ it('audits every exception-only page and reports completion with preserved histo
  expect(lines.join('\n')).toContain('2 preserved historical exceptions');
  expect(lines.join('\n')).not.toContain('secret');
 });
+
+it('requires an explicit partial flag and still reports a blocked preview as incomplete',async()=>{
+ expect(parseMigrationArgs(['--allow-partial','--apply','--batch-size','2'])).toMatchObject({allowPartial:true,dryRun:false,batchSize:2});
+ const fetch=vi.fn(async()=>new Response(JSON.stringify({plans:[],conflicts:[{artifactId:'broken',reason:'missing'}],nextCursor:null}),{status:409}));
+ const result=await runMigrationCli({url:'https://artifact.test',dryRun:true,allowPartial:true,batchSize:2,retries:0,secret:'secret',fetch,saveReport:async()=>{},write:()=>{}});
+ expect(result).toMatchObject({ok:false,reason:'conflict'});expect(fetch).toHaveBeenCalledTimes(1);
+});
+it('partially applies only backed-up valid plans and audits every remaining conflict page',async()=>{
+ const calls=[],saved=[];const hash='a'.repeat(64);const conflict={artifactId:'broken',reason:'missing'};
+ const report=(extra={})=>({plans:[],conflicts:[],processed:1,changed:0,done:false,nextCursor:null,...extra});
+ const replies=[report({plans:[{artifactId:'valid1',fingerprint:hash,before:{source:'old'}}],changed:1,conflicts:[conflict],nextCursor:'broken'}),report({plans:[{artifactId:'valid2',fingerprint:hash,before:{source:'old2'}}],changed:1}),report({changed:1}),report({changed:1}),report({conflicts:[conflict],nextCursor:'broken'}),report({conflicts:[{artifactId:'later',reason:'missing'}]})];
+ const result=await runMigrationCli({url:'https://artifact.test',dryRun:false,allowPartial:true,batchSize:2,retries:0,secret:'secret',write:()=>{},saveReport:async r=>saved.push(r),fetch:async(_url,request)=>{
+  const body=JSON.parse(request.body);calls.push(body);if(!body.dryRun)expect(saved.slice(0,2).flatMap(r=>r.plans).map(p=>p.artifactId)).toEqual(['valid1','valid2']);
+  const r=replies.shift();return new Response(JSON.stringify(r),{status:r.conflicts.length?409:200});
+ }});
+ expect(calls.filter(c=>!c.dryRun).map(c=>c.expected)).toEqual([{valid1:hash},{valid2:hash}]);
+ expect(calls).toHaveLength(6);expect(saved).toHaveLength(6);
+ expect(result).toMatchObject({ok:false,reason:'remaining',completion:'partial',report:{conflicts:[conflict,{artifactId:'later',reason:'missing'}]}});
+});
+it('stops partial apply on a changed fingerprint instead of skipping it',async()=>{
+ const calls=[];const reports=[{plans:[{artifactId:'valid1',fingerprint:'a'.repeat(64)}],conflicts:[],nextCursor:null},{plans:[],conflicts:[{artifactId:'valid1',reason:'reviewed_snapshot_changed'}]}];
+ const result=await runMigrationCli({url:'https://artifact.test',dryRun:false,allowPartial:true,batchSize:1,retries:0,secret:'secret',write:()=>{},saveReport:async()=>{},fetch:async(_url,request)=>{calls.push(JSON.parse(request.body));const r=reports.shift();return new Response(JSON.stringify(r),{status:r.conflicts.length?409:200});}});
+ expect(calls).toHaveLength(2);expect(result).toMatchObject({ok:false,reason:'conflict'});
+});

@@ -20,7 +20,9 @@ import { migrationRequest, parseMigrationArgs as parseShared, redactingWriter, r
 
 const BACKUP_DIR_FLAG = { '--backup-dir': (out, value) => { out.backupDir = value ?? ''; } };
 
-export const parseMigrationArgs = (argv, environment = process.env) => parseShared(argv, environment, BACKUP_DIR_FLAG);
+export const parseMigrationArgs = (argv, environment = process.env) => parseShared(argv, environment, BACKUP_DIR_FLAG, {
+  '--allow-partial': (out) => { out.allowPartial = true; },
+});
 
 /** Inventory and persist every page before the first write. The server compares each reviewed snapshot. */
 export async function runMigrationCli(options) {
@@ -64,12 +66,14 @@ export async function runMigrationCli(options) {
     cursors.add(after);
   }
   write(`migration preview and backups: ${backupDir}`);
-  if (blocked) return { ok: false, reason: 'conflict', report: pages.at(-1) };
+  if (blocked && (options.dryRun || !options.allowPartial)) return { ok: false, reason: 'conflict', report: summarize(pages) };
   if (options.dryRun) return { ok: true, report: summarize(pages) };
+  if (blocked) write(`partial migration: applying only reviewed plans; leaving ${new Set(pages.flatMap(page=>page.conflicts??[]).map(conflict=>conflict.artifactId)).size} blocked artifacts unchanged`);
   for (const preview of pages) {
     const expected = Object.fromEntries((preview.plans ?? []).map((plan) => [plan.artifactId, plan.fingerprint]));
     if (!Object.keys(expected).length) continue;
     const result = await request({ dryRun: false, expected });
+    if (result.report) await saveReport(result.report);
     if (!result.ok) { write('migration stopped; keep backups and preview again before retrying'); return result; }
     logExceptions(result.report);
     write(`apply: processed=${result.report.processed} changed=${result.report.changed} done=${result.report.done}`);
@@ -80,7 +84,7 @@ export async function runMigrationCli(options) {
   for(;;){
     const audit=await request({dryRun:true,...(auditAfter?{after:auditAfter}:{})});
     if(audit.report){await saveReport(audit.report);logExceptions(audit.report);audits.push(audit.report);}
-    if(!audit.ok)return audit;
+    if(!audit.ok && audit.reason!=='conflict')return audit;
     auditAfter=audit.report.nextCursor;
     if(!auditAfter)break;
     if(auditCursors.has(auditAfter))return {ok:false,reason:'no_progress'};
@@ -89,7 +93,7 @@ export async function runMigrationCli(options) {
   const report=summarize(audits);
   if (audits.some(audit=>!audit.done || audit.changed || audit.conflicts?.length)) {
     write('migration incomplete: the final audit found remaining work; keep backups and review a fresh preview');
-    return { ok: false, reason: 'remaining', report };
+    return { ok: false, reason: 'remaining', ...(options.allowPartial ? {completion:'partial'} : {}), report };
   }
   const exceptions=report.historicalExceptions.length;
   write(exceptions?`migration complete with ${exceptions} preserved historical exceptions; inspect the saved reports`:'migration complete: final audit found no remaining reference or catalog changes');

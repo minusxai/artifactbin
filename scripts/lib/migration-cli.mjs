@@ -30,8 +30,9 @@ const integer = (name, value, min, max) => {
  * @param {readonly string[]} argv
  * @param {Record<string, string | undefined>} [environment]
  * @param {Record<string, (out: Record<string, unknown>, value: string | undefined) => void>} [extraFlags]
+ * @param {Record<string, (out: Record<string, unknown>) => void>} [booleanFlags]
  */
-export function parseMigrationArgs(argv, environment = process.env, extraFlags = {}) {
+export function parseMigrationArgs(argv, environment = process.env, extraFlags = {}, booleanFlags = {}) {
   const out = { url: environment.APP__PUBLIC_BASE_URL || 'http://127.0.0.1:3000', dryRun: true, batchSize: 25, historyLimit: 1000, retries: 3 };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -40,6 +41,7 @@ export function parseMigrationArgs(argv, environment = process.env, extraFlags =
     else if (arg === '--batch-size') out.batchSize = integer('batch size', argv[++i], 1, 100);
     else if (arg === '--history-limit') out.historyLimit = integer('history limit', argv[++i], 0, 10_000);
     else if (arg === '--retries') out.retries = integer('retries', argv[++i], 0, 5);
+    else if (booleanFlags[arg]) booleanFlags[arg](out);
     else if (extraFlags[arg]) extraFlags[arg](out, argv[++i]);
     else throw new Error(`unknown argument: ${arg}`);
   }

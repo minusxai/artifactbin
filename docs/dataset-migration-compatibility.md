@@ -121,3 +121,25 @@ Next milestones remain separate:
 3. Retain durable private backups and define partial-apply recovery before applying
    reviewed current fingerprints. Verify public reader charts and all eight Show
    HN queries afterward. No rollout or new production preview is part of this change.
+
+### Explicit partial apply
+
+The operator CLI accepts `--apply --allow-partial` to apply only conflict-free
+plans from a fresh, fully saved preview. The default still refuses every apply
+when preview finds any conflict. `--allow-partial` does not make a dry run succeed
+with conflicts and does not skip apply-time conflicts or stale fingerprints.
+The existing endpoint already selects the exact `expected` artifact IDs; no
+server changes or access-policy exceptions are involved.
+
+Preview, apply responses and every final-audit page are saved privately. The
+final audit continues through conflicting pages, reports all residual blockers,
+and returns `completion: partial`, `ok: false` and process exit 1 when work remains.
+This is an incomplete site migration, even when all selected plans were applied.
+
+Recovery after interruption starts with the saved apply reports and a fresh
+preview. Each artifact remains transactional, and a changed fingerprint stops the
+run. Do not replay old fingerprints or restore snapshots over concurrent edits.
+Snapshots retain the pre-write head/history, but there is no automatic restore
+command; a rollback requires comparing current records with the applied state
+before restoring a selected record. Retain these private files outside temporary
+storage through rollout and verification.
