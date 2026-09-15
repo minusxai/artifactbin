@@ -16,3 +16,7 @@ Keep cohesive source modules during extraction; introduce only the interfaces ne
 - [ ] M3: production consumes packed public libraries, no sibling-source imports, no native engines in app; current/extracted CLI versus current/extracted host matrix and production image/compose gates.
 
 Product source copying starts only after the baseline gate passes. Required heavy builds, Chromium, Docker and broad suites run in CI. No release/deploy workflows are dispatched by this work. Each implementation milestone has its own reviewed commit and recorded result.
+
+## Baseline compatibility repair
+
+The real CLI/host gate exposed image exports failing when the local host advertises a different HTTP asset origin. Keep the CLI redirect restrictions; the server streams authorized image bytes in this case. HTTPS and same-origin asset redirects remain unchanged. This is a small repair on the isolated baseline branch; the existing deployment remains untouched. A real-handler regression first failed (302 instead of 200), then passed after the delivery fix.

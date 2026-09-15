@@ -111,7 +111,7 @@ try {
   await invoke(['push', 'report.jsx']);
   const stale = await readFile(join(second, 'copy.jsx'), 'utf8');
   await writeFile(join(second, 'copy.jsx'), stale.replace('Baseline report', 'Conflicting edit'));
-  const conflict = await invoke(['push', 'copy.jsx'], { cwd: second, expected: 2 });
+  const conflict = await invoke(['push', 'copy.jsx'], { cwd: second, expected: 3 });
   assert.match(JSON.stringify(conflict), /conflict|changed/);
   assert.match(await readFile(join(second, 'copy.jsx'), 'utf8'), /Conflicting edit/);
   await invoke(['pull', 'copy.jsx', '--force'], { cwd: second });

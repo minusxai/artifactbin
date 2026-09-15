@@ -269,7 +269,13 @@ export async function renderArtifactImage(artifact:ExportIdentity,format:ExportF
  }catch{return {ok:false,reason:'failed'};}
 }
 async function imageResponse(image:ExportImage,base:string,delivery:'bytes'|'redirect'):Promise<Response>{
- if(delivery==='redirect')return new Response(null,{status:302,headers:{location:exportAssetUrl(image.id,base),'cache-control':'no-store'}});
+ if(delivery==='redirect'){
+  const asset=new URL(exportAssetUrl(image.id,base));
+  // The CLI deliberately refuses cross-origin HTTP grants. Local hosts with
+  // an isolated asset hostname deliver bytes through the authorized origin.
+  if(asset.protocol==='https:'||asset.origin===new URL(base).origin)
+   return new Response(null,{status:302,headers:{location:asset.toString(),'cache-control':'no-store'}});
+ }
  const stream=await objectStore().getStream(image.object_key);
  return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>,{headers:{'content-type':image.mime,'cache-control':'no-store','x-content-type-options':'nosniff'}});
 }
