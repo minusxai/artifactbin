@@ -12,13 +12,10 @@ export function captureInitialStory(): void {
 export function clearInitialStoryOnRoute(pathname: string): void {
   if (pathname !== initialPath) { initialHome = false; clearInitialStory(); }
 }
-/** Only the first home mount may use the server's public eligibility verdict. */
-export function takeInitialHome(): boolean {
-  const value = initialHome;
-  initialHome = false;
-  return value;
-}
+/** Render may restart before commit; reading eligibility must not consume it. */
+export function hasInitialHome(): boolean { return initialHome; }
 export function clearInitialStory(): void {
+  initialHome = false;
   initialStory?.remove();
   initialStory = null;
 }

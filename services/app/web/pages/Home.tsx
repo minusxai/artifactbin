@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useState } from 'react';
-import { clearInitialStory, takeInitialHome } from '@/web/initial-story';
+import { clearInitialStory, hasInitialHome } from '@/web/initial-story';
 import { usePageData } from '@/web/use-page-data';
 import type { HomeCore, HomeInsights } from '@/web/home-resource';
 import { ActivityFeed } from '@/components/ActivityFeed';
@@ -52,7 +52,7 @@ function FirstArtifact() {
 }
 
 export function HomePage() {
-  const [publicInitial, setPublicInitial] = useState(takeInitialHome);
+  const [publicInitial, setPublicInitial] = useState(hasInitialHome);
   const { session, reload } = useSession();
   const core = usePageData<HomeCore>('/api/page/home?part=core');
   const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: !!core.data?.signedIn });

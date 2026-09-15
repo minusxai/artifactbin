@@ -339,6 +339,7 @@
 
 /* Mobile composition: introduction, uncropped scene, then sample conversations. */
 .workshop-nav-desktop { display: flex; align-items: center; gap: inherit; }
+.workshop-nav nav > [data-mx-github-star] { display: inline-flex; }
 .workshop-nav nav .workshop-nav-mobile { display: none; }
 @media (max-width: 800px) {
   .workshop-nav-desktop { display: none; }

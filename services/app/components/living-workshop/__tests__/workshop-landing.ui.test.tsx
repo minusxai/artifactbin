@@ -49,6 +49,15 @@ it("prints the homepage artifacts on the board by default", async () => {
   ));
 });
 
+it("keeps the Star link before the collapsible desktop links", () => {
+  mount();
+  const navigation = screen.getByRole("navigation", { name: "Main navigation" });
+  const star = within(navigation).getByRole("link", { name: "Star artifactbin on GitHub" });
+  const gallery = within(navigation).getByRole("link", { name: "Gallery" });
+  expect(star.compareDocumentPosition(gallery) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(star.closest(".workshop-nav-desktop")).toBeNull();
+});
+
 it("keeps real canonical links usable without interacting with the canvas", () => {
   mount();
   for (const paper of WORKSHOP_PAPERS)

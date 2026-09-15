@@ -32,10 +32,10 @@ export default function WorkshopNav({ solid = false }: { solid?: boolean }) {
           </span>
         </a>
         <nav aria-label="Main navigation">
+          <GitHubStar placement="desktop-bar" />
           <div className="workshop-nav-desktop">
           <a href="/examples">Gallery</a>
           <a href="/docs-human">Docs</a>
-          <GitHubStar placement="desktop-bar" />
           <Tooltip content="Page controls">
             <button
               type="button"
