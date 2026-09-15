@@ -44,6 +44,9 @@ check(retired.status === 400 && /<Query name="rows"[^>]*source="ref:/.test(retir
 // ── 2 + 3. inline document and scoped authenticated transport ──────────────
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 1000 } });
+// Internal HTTP export pages lack this secure-context-only API. Exercise the
+// real runtime and managed-frame initialization under that browser constraint.
+await p.addInitScript(() => Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true }));
 const pageErrors = [];
 p.on('pageerror', (e) => pageErrors.push(e.message));
 const relayCalls = [];

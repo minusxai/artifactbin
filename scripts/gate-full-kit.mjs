@@ -195,7 +195,7 @@ check(await frame.locator('[data-mx-inline-story] iframe').count() === 1
 const csp = await frame.evaluate('window.__csp || []');
 await Promise.all(requestChecks);
 check(csp.length === 0, `no CSP violations${csp.length ? `: ${csp.join(', ')}` : ''}`);
-check(external.length === 0, `no external requests${external.length ? `: ${external.slice(0, 3).join(', ')}` : ''}`);
+check(external.length === 0, `no external requests${external.length ? `: ${external.slice(0, 3).map(value => { const url = new URL(value); return url.origin + url.pathname; }).join(', ')}` : ''}`);
 check(pageErrors.length === 0, `no page errors${pageErrors.length ? `: ${pageErrors[0]}` : ''}`);
 
 // 3b. the chart module is LAZY: a prose document must not download it
