@@ -44,6 +44,7 @@ try {
   await githubWidgetFixture(context);
   const page = await context.newPage();
   page.setDefaultTimeout(10_000);
+  page.on('pageerror', error => console.error('public home page error:', error.message));
   // One deliberately slow poster must not delay ready robots or the live canvas.
   let releasePoster;
   const poster = new Promise(resolve => { releasePoster = resolve; });
@@ -79,7 +80,21 @@ try {
   });
   releaseScripts();
   await page.locator('[data-mx-initial-home]').waitFor({ state: 'detached' });
-  assert(await createAction(page).isEnabled(), 'interactive Create becomes enabled at handoff');
+  try {
+    assert(await createAction(page).isEnabled(), 'interactive Create becomes enabled at handoff');
+  } catch (error) {
+    console.error('handoff state:', await page.evaluate(() => ({
+      url: location.pathname,
+      text: document.body.innerText.slice(0, 1200),
+      initial: !!document.querySelector('[data-mx-initial-home]'),
+      roots: document.querySelectorAll('#root').length,
+      regions: [...document.querySelectorAll('[aria-label="The artifactbin workshop"]')].map(el => ({
+        text: el.textContent.slice(0, 200), display: getComputedStyle(el).display,
+        hidden: el.closest('[aria-hidden="true"], [hidden], [inert]')?.outerHTML.slice(0, 300),
+      })),
+    })));
+    throw error;
+  }
   await page.locator('.workshop-canvas[data-ready="true"]').waitFor();
   releasePoster();
   console.log('ok live scene appears while a poster request is still held');
@@ -110,7 +125,9 @@ try {
   console.log('ok uninterrupted landing through slow JS/session/home; asynchronous count in app topbar');
   await appStar.locator('a').evaluate(link => { window.__starBeforeControls = link; });
   for (let i = 0; i < 4; i++) {
-    await page.getByRole('button', { name: i % 2 === 0 ? 'Open page controls' : 'Dismiss page controls', exact: true }).click();
+    const action = i % 2 === 0 ? 'Open page controls' : 'Dismiss page controls';
+    console.log(`page controls: ${action}`);
+    await page.getByRole('button', { name: action, exact: true }).click();
     assert(await appStar.locator('a').evaluate(link => link === window.__starBeforeControls), 'Page Controls preserves the permanent link');
     await readyStar(appStar);
   }
