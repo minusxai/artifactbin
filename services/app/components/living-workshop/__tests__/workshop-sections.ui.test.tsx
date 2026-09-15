@@ -14,7 +14,7 @@ it("filters the artifact wall without changing canonical destinations", () => {
     );
   fireEvent.click(screen.getByRole("button", { name: "Dashboards" }));
   expect(
-    screen.getByRole("link", { name: "San Francisco City Payroll" }),
+    screen.getByRole("link", { name: "SF City Payroll" }),
   ).toBeInTheDocument();
   expect(
     screen.queryByRole("link", { name: "The OpenAI-Hugging Face incident" }),

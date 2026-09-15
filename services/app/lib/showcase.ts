@@ -63,7 +63,7 @@ interface ShowcaseDoc {
 const ENTRIES: readonly ShowcaseDoc[] = [
   {
     order: 5,
-    id: '5fN6kY',
+    id: 'iTlSrH',
     title: 'artifactbin · 90-Day Product Plan',
     blurb: 'A product plan connecting target outcomes, roadmap, milestones and architecture.',
     kind: 'product plan',
@@ -87,16 +87,16 @@ const ENTRIES: readonly ShowcaseDoc[] = [
   },
   {
     order: 6,
-    id: 'EN6QaQ',
-    title: 'What is Artifactbin?',
-    blurb: 'A deck on artifactbin itself: publishing from any agent, then editing it by hand.',
-    kind: 'deck',
-    use: 'design polished presentations',
+    id: 'Pej96A',
+    title: 'SF road network',
+    blurb: 'Arteries of SF',
+    kind: 'data story',
+    use: 'share what you discover',
   },
   {
     order: 1,
     id: 'OewuPR',
-    title: 'San Francisco City Payroll',
+    title: 'SF City Payroll',
     blurb: 'A payroll dashboard whose tiles query the data in your own browser.',
     kind: 'dashboard',
     use: 'build interactive dashboards',

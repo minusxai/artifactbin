@@ -105,10 +105,10 @@ export const APP_CSP = [
   // <video> and <audio> on an app page is refused by `default-src 'none'`.
   // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
   // upload page previewing a file BEFORE it is sent (web/pages/FileUpload).
-  // Media only — `frame-src`, `connect-src` and `worker-src` stay `'self'`,
-  // because a blob: there is a document, a request or a script from a string.
+  // GLTFLoader also fetches embedded textures through local blob URLs.
+  // Frame and worker policies stay same-origin; blobs are data here.
   "media-src 'self' blob:",
-  "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
+  "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com blob:",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
   // The source editor wires a Monaco worker (components/SourceEditor). It is
   // LAZY — measured: with only the HTML tokenizer loaded, nothing has yet asked
@@ -123,6 +123,13 @@ export const APP_CSP = [
   "worker-src 'self'",
   "form-action 'self'", "object-src 'none'", "base-uri 'self'",
 ].join('; ');
+/** Only the development socket joins connect-src; production uses APP_CSP unchanged. */
+function developmentAppCsp(pageUrl: string, port: number): string {
+  const socket = new URL(pageUrl);
+  socket.protocol = socket.protocol === 'https:' ? 'wss:' : 'ws:';
+  socket.port = String(port);
+  return APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${socket.origin}`);
+}
 const APP_SECURITY_HEADERS = {
   'content-security-policy': APP_CSP,
   'x-content-type-options': 'nosniff',
@@ -142,6 +149,8 @@ interface AppServerOptions {
   indexHtml?: (url: string) => Promise<string>;
   /** Dev: Vite's connect middleware, mounted before everything else for its own assets. */
   devMiddleware?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void;
+  /** Dev only: the Vite socket port resolved by the server composition. */
+  devHmrPort?: number;
   publicDir?: string;
   /** Where `npm run build:binary -w services/cli` leaves a CLI build (services/cli/dist). When its version is the
    * one the served installer pins, this server serves that build and the installer installs it from here. */
@@ -273,6 +282,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
+      ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
       ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
     } });
   };

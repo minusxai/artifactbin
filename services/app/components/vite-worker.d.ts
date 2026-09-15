@@ -8,3 +8,8 @@ declare module '*?worker' {
   const WorkerFactory: new () => Worker;
   export default WorkerFactory;
 }
+
+// Vite replaces this build-time flag; server-side imports have no env object.
+interface ImportMeta {
+  readonly env?: { readonly DEV?: boolean };
+}

@@ -59,7 +59,7 @@ export function createWorkshopScene(
 ): WorkshopScene | null {
   delete canvas.dataset.ready;
   // The HTML painting stays visible until the first complete composition.
-  const readyPosters = new Set<string>();
+  const settledPosters = new Set<string>();
   let backgroundReady = false;
   let renderer: WebGLRenderer;
   try {
@@ -183,14 +183,23 @@ export function createWorkshopScene(
     image.onload = () => {
       if (!disposed) {
         paintPoster(sheet, index);
-        readyPosters.add(paper.id);
+        settledPosters.add(paper.id);
         schedule();
       }
     };
     image.onerror = () => {
-      if (!disposed) schedule();
+      if (!disposed) {
+        // Keep the paper placeholder: one failed export must not block the scene.
+        settledPosters.add(paper.id);
+        schedule();
+      }
     };
-    image.src = `/api/showcase/${paper.id}`;
+    // Vite alone provides this local cross-origin bridge. Production loads
+    // the existing export URL directly from the canonical app origin.
+    const preview = new URL(paper.image);
+    image.src = import.meta.env?.DEV
+      ? `/__dev/showcase${preview.pathname}${preview.search}`
+      : paper.image;
     return sheet;
   });
   function paintPoster(sheet: Sheet, index: number) {
@@ -410,7 +419,7 @@ export function createWorkshopScene(
     base.width = front.width = width;
     base.height = front.height = height;
     const b = base.getContext("2d"),
-      f = front.getContext("2d");
+      f = front.getContext("2d", { willReadFrequently: true });
     if (!b || !f) return;
     b.drawImage(background, 0, 0, width, height);
     bt.needsUpdate = true;
@@ -537,7 +546,7 @@ export function createWorkshopScene(
   function draw(time: number) {
     frame = 0;
     if (disposed) return;
-    if (!backgroundReady || readyPosters.size !== papers.length) return;
+    if (!backgroundReady || settledPosters.size !== papers.length) return;
     const dt = Math.min(0.05, (time - (last || time)) / 1000);
     last = time;
     accumulator += dt;

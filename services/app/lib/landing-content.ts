@@ -46,7 +46,7 @@ export const REASONS: readonly Reason[] = [
     title: "Make work you're proud to share",
     image: 'beautiful',
     alt: 'A crate filled with beautifully finished documents, charts and presentations',
-    body: "You shouldn't have to settle for slop-looking artifacts. Start with thoughtfully designed themes, templates and visualizations, then make every detail your own.",
+    body: "Don't settle for slop-looking artifacts. Start with thoughtfully designed themes, templates and visualizations, then make every detail your own.",
   },
   {
     title: 'Change it with your own hands',

@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { resolveHmrPort } from '@/lib/config';
-import { developmentViteOptions } from '../dev-vite';
+import { developmentShowcaseProxy, developmentViteOptions } from '../dev-vite';
 import { resolvePort, DEFAULT_DEV_PORT } from '../../../../scripts/lib/dev-env.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -62,5 +62,16 @@ describe('developmentViteOptions', () => {
   });
   it('keeps separate dev servers from replacing each other’s optimized dependencies', () => {
     expect(developmentViteOptions(appRoot, 7242).cacheDir).not.toBe(developmentViteOptions(appRoot, 7284).cacheDir);
+  });
+});
+
+describe('development showcase proxy', () => {
+  it('proxies only curated export paths to the canonical origin', () => {
+    const [pattern, config] = Object.entries(developmentShowcaseProxy())[0]!;
+    const accepts = new RegExp(pattern);
+    expect(accepts.test('/__dev/showcase/a/7KRGdj/export?format=jpg&mode=card')).toBe(true);
+    for (const url of ['/__dev/showcase/a/secret/export', '/__dev/showcase/api/account', '/__dev/showcase/a/7KRGdj/raw']) expect(accepts.test(url)).toBe(false);
+    expect(config.target).toBe('https://artifactbin.dev');
+    expect(config.rewrite!('/__dev/showcase/a/7KRGdj/export?format=jpg&mode=card')).toBe('/a/7KRGdj/export?format=jpg&mode=card');
   });
 });
