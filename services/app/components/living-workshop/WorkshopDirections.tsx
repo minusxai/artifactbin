@@ -5,38 +5,36 @@ import { artSrc, REASONS } from "@/lib/landing-content";
 
 export function ArtifactPrint({
   index,
-  caption = true,
+  placement = "gallery",
 }: {
   index: number;
-  caption?: boolean;
+  placement?: string;
 }) {
   const doc = SHOWCASE[index % SHOWCASE.length]!;
+  // Seed the visual mix by placement so rerenders and hydration keep it steady.
+  const seed = `${placement}:${doc.id}`.split("").reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0);
+  const mount = ["tape", "pin", "corners", "corner-pins"][seed % 4];
+  const kind = doc.kind === "eda" ? "EDA" : doc.kind.charAt(0).toUpperCase() + doc.kind.slice(1);
   return (
-    <a className="studio-print" href={showcaseHref(doc)} aria-label={doc.title}>
+    <a className="studio-print" data-mount={mount} href={showcaseHref(doc)} aria-label={doc.title}>
       <div className="studio-print-sheet">
         <img src={showcaseCardUrl(doc)} alt="" loading="lazy" />
-        <span className="studio-print-number">
-          {String(index + 1).padStart(2, "0")} / ARTIFACTBIN
-        </span>
-      </div>
-      {caption && (
-        <div className="studio-print-caption">
-          <span>{doc.kind}</span>
-          <h3>
-            {doc.title} <ArrowUpRight size={16} />
-          </h3>
+        <div className="studio-print-label">
+          <span>{kind} / </span>
+          <h3>{doc.title}</h3>
+          <ArrowUpRight size={14} aria-hidden="true" />
         </div>
-      )}
+      </div>
     </a>
   );
 }
-// Each spread pairs two canonical examples; the gallery shares ArtifactPrint.
-const BOOKS = [
+// Each theme pairs two canonical examples using the gallery’s mounted prints.
+const THEMES = [
   { title: "follow the evidence", pages: [0, 2] },
   { title: "tell compelling data stories", pages: [1, 3] },
-  { title: "put ideas into motion", pages: [4, 5] },
-  { title: "turn data into decisions", pages: [0, 3] },
-  { title: "share what you discover", pages: [2, 1] },
+  { title: "put ideas into action", pages: [4, 5] },
+  { title: "build micro-apps with friends", pages: [0, 3] },
+  { title: "create beautiful visuals", pages: [4, 5] },
 ];
 
 export default function WorkshopDirections() {
@@ -54,40 +52,22 @@ export default function WorkshopDirections() {
           </span>
         </div>
         <div className="blue-library">
-          {BOOKS.map((book, index) => (
+          {THEMES.map((theme, index) => (
             <article
-              className="library-volume"
-              key={book.title}
-              aria-label={book.title}
+              className="workshop-theme"
+              key={theme.title}
+              aria-label={theme.title}
             >
-              <div className="library-spread">
-                {book.pages.map((page) => (
-                  <div className="library-leaf" key={page}>
-                    <ArtifactPrint index={page} />
+              <div className="workshop-print-pair">
+                {theme.pages.map((page) => (
+                  <div className="workshop-mounted-print" key={page}>
+                    <ArtifactPrint index={page} placement={theme.title} />
                   </div>
                 ))}
-                <svg className="library-book-paper" viewBox="0 0 600 360" preserveAspectRatio="none" aria-hidden="true">
-                  <defs>
-                    <path id={`book-leaf-${index}`} d="M5 10Q155 -7 300 14V348Q155 328 5 342Q0 342 0 337V15Q0 10 5 10Z" />
-                    <linearGradient id={`book-ink-${index}`}>
-                      <stop offset="0" stopColor="#fffaf0" />
-                      <stop offset=".87" stopColor="#faf4e5" />
-                      <stop offset="1" stopColor="#e5dac3" />
-                    </linearGradient>
-                  </defs>
-                  {[false, true].map((right) => (
-                    <g key={String(right)} transform={right ? "translate(600 0) scale(-1 1)" : undefined}>
-                      <use href={`#book-leaf-${index}`} y="5" fill="#bcae91" />
-                      <use href={`#book-leaf-${index}`} y="3" fill="#f4ead6" />
-                      <use href={`#book-leaf-${index}`} y="1.5" fill="#d8ccb2" />
-                      <use href={`#book-leaf-${index}`} fill={`url(#book-ink-${index})`} />
-                    </g>
-                  ))}
-                </svg>
               </div>
               <p className="library-caption">
                 <span>0{index + 1}</span>
-                {book.title}
+                {theme.title}
               </p>
             </article>
           ))}

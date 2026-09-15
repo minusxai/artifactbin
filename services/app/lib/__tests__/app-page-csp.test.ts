@@ -102,6 +102,8 @@ describe('the app CSP', () => {
   it('admits the canonical showcase export images', () => {
     expect(showcaseCardUrl(SHOWCASE[0]).startsWith(SHOWCASE_ORIGIN)).toBe(true);
     expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toContain(SHOWCASE_ORIGIN);
+    // Card exports redirect to the canonical instance's separate asset host.
+    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))?.split(' ')).toContain('https://a.artifactbin.dev');
   });
 
   it('never lands on an artifact address or a machine surface', async () => {

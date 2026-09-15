@@ -13,47 +13,23 @@
  *
  * A document earns a place here by being worth OPENING — the wall is a row of
  * links, not decoration, so every entry needs a title a stranger can act on
- * and a blurb that says what they are about to read.
+ * and a kind that says what they are about to open.
  */
 
 /** Where the featured documents actually live. */
 export const SHOWCASE_ORIGIN = 'https://artifactbin.dev';
+/** Canonical card exports redirect here for image delivery. */
+export const SHOWCASE_ASSETS_ORIGIN = 'https://a.artifactbin.dev';
 
 /** The shape a reader is about to open. Sets expectations before the click. */
-export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'product plan' | 'eda';
+export type ShowcaseKind = 'report' | 'deck' | 'dashboard' | 'data story' | 'product plan' | 'eda' | 'animation' | 'maps';
 
 interface ShowcaseDoc {
-  /**
-   * WHERE IT SITS IN THE WHEEL. Ordering by a key rather than by position in
-   * the array means reordering is editing one number, not moving a block of
-   * text past three others and hoping nothing was dropped. Unique, and the
-   * gaps do not matter — 10/20/30 leaves room to slot one in between.
-   */
   order: number;
-  /** The artifact id — its address on the canonical instance. */
   id: string;
-  /**
-   * The document is a STAND-IN: the use case is real and the picture is not
-   * of it. Here so a phrase can be laid out before its document exists —
-   * every one of these is visible on the live landing page until it is
-   * replaced, so they are marked rather than silently blended in.
-   */
   placeholder?: true;
   title: string;
-  /** One line, sentence case, saying what the document is. */
-  blurb: string;
   kind: ShowcaseKind;
-  /**
-   * What this document is an example of, phrased to complete the sentence
-   * "You can use artifactbin to …". A use case with a real published
-   * document under it is an argument; one without is a claim, which is why
-   * this rides the showcase entry rather than living in its own list.
-   *
-   * KEEP IT SHORT. The wheel gives each phrase ONE line beside the stem and
-   * truncates what does not fit — and a use case the reader cannot finish
-   * reading is the one thing the wheel exists to say.
-   */
-  use: string;
 }
 
 /**
@@ -64,50 +40,38 @@ const ENTRIES: readonly ShowcaseDoc[] = [
   {
     order: 5,
     id: 'iTlSrH',
-    title: 'artifactbin · 90-Day Product Plan',
-    blurb: 'A product plan connecting target outcomes, roadmap, milestones and architecture.',
-    kind: 'product plan',
-    use: 'create product plans teams align on',
+    title: 'A little way from home',
+    kind: 'animation',
   },
   {
     order: 2,
     id: 'YPLu0U',
     title: 'The OpenAI-Hugging Face incident',
-    blurb: 'A reported piece with its own tables, published by an agent in one pass.',
     kind: 'report',
-    use: 'write detailed incident reports',
   },
   {
     order: 4,
     id: 'wxeC8G',
     title: 'Vol 1: Built something cool? Show HN.',
-    blurb: 'Fifteen years of Show HN: nine times the crowd, the same door.',
     kind: 'data story',
-    use: 'tell compelling data stories',
   },
   {
     order: 6,
     id: 'Pej96A',
     title: 'SF road network',
-    blurb: 'Arteries of SF',
-    kind: 'data story',
-    use: 'share what you discover',
+    kind: 'maps',
   },
   {
     order: 1,
     id: 'OewuPR',
     title: 'SF City Payroll',
-    blurb: 'A payroll dashboard whose tiles query the data in your own browser.',
     kind: 'dashboard',
-    use: 'build interactive dashboards',
   },
   {
     order: 3,
-    id: 'yKcybb',
+    id: 'HrjNbY',
     title: 'The best language for coding agents',
-    blurb: 'Verifying claims on what language is best for coding agents.',
     kind: 'eda',
-    use: 'perform exploratory data analysis',
   },
 ];
 
@@ -126,7 +90,9 @@ const KIND_LABELS: Record<ShowcaseKind, string> = {
   'data story': 'data stories',
   'product plan': 'product plans',
   deck: 'slides',
-  eda: 'EDA'
+  eda: 'EDA',
+  animation: 'animations',
+  maps: 'maps'
 };
 
 /**

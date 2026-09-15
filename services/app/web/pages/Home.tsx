@@ -11,7 +11,6 @@ import { ShellFrame } from '@/web/Shell';
 import LoginForm from '@/components/LoginForm';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
-import UseCarousel from '@/components/UseCarousel';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '@/components/WorkspaceLayout';
 import { PAGE_COLUMN } from '@/components/ui';
 import { useSession } from '@/web/session';
@@ -22,8 +21,7 @@ import { useSession } from '@/web/session';
  * Signed in with nothing published, the dashboard used to be one closed strip
  * on an empty column — the page was literally blank under it. It leads with
  * the act instead, keeps the same panel every other surface shows, and then
- * borrows other people's documents as the proof of what to ask for, since
- * there is nothing of the reader's own to look at yet.
+ * keeps dataset creation and recovery links available.
  */
 function FirstArtifact() {
   // The greeting rides the session the chrome already read — a name is worth
@@ -110,15 +108,7 @@ export function HomePage() {
       <ClaimBanner />
       {state.error && <div role="alert">Could not refresh your workspace. <button aria-label="Retry workspace" onClick={load}>Try again</button></div>}
       {empty && <div className="mb-4 flex justify-end"><a href="/datasets/new" aria-label="Create dataset" className="inline-flex items-center gap-1.5 rounded border border-edge-bright px-3 py-1.5 font-mono text-xs text-accent hover:border-accent"><DatabasePlus aria-hidden="true" size={13} strokeWidth={1.75} />Create dataset</a></div>}
-      {empty ? (
-        /* Inspiration, not decoration: an empty library has no examples of its
-         * own, so these are the real published documents from the landing —
-         * under this page's own name, and without the landing's wheel of use
-         * phrases, which sells a product this reader has already signed into. */
-        <div className="mt-10 sm:mt-12">
-          <UseCarousel label="Inspiration Zone" wheel={false} />
-        </div>
-      ) : (
+      {!empty && (
         <WorkspaceLayout workspace={home} insights={state.insights} insightsError={state.insightsError} onCreated={load}>
           {home.artifacts.length > 0 && <Shelf actions="full" assets={false} scopeParentId={null} rows={home.artifacts.map((row) => ({ ...row, views: state.insights?.views?.[row.id], sparkline: state.insights?.sparklines[row.id] ?? null })) as never} />}
           <SharedWithYou items={home.shared} />

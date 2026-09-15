@@ -26,14 +26,6 @@
 .wall-artifact:nth-child(3n + 1) { transform: rotate(-2deg); }
 .wall-artifact:nth-child(3n + 2) { transform: rotate(2deg); margin-top: 42px; }
 .wall-artifact:nth-child(3n) { transform: rotate(-1deg); margin-top: 12px; }
-.wall-artifact .studio-print-sheet:before {
-  content: ""; position: absolute; height: 18px; width: 58px; left: calc(50% - 29px); top: -9px; background: #e9dcafbb;
-  transform: rotate(-5deg); box-shadow: 0 1px 1px #9f8b6233;
-}
-.wall-artifact:nth-child(even) .studio-print-sheet:before {
-  width: 9px; height: 9px; left: 50%; top: -4px; border-radius: 50%; background: #2456a1; box-shadow: 2px 2px 3px #53401f66;
-}
-.wall-artifact .studio-print-caption h3 { font-size: 23px; }
 .wall-artifact > p { font-size: 12px; line-height: 1.75; color: #787568; margin: 0 3px; }
 .gallery-footer { padding: 70px 9% 85px; background: #194ca4; color: #fff8e8; text-align: center; }
 .gallery-footer > span { font: 10px var(--font-mono), monospace; letter-spacing: 0.15em; color: #c4d5f5; }

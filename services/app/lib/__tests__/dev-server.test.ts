@@ -4,11 +4,14 @@
  * port beside it, and the Vite options that must not share a cache directory.
  */
 import { existsSync } from 'node:fs';
+import { createServer, type Server } from 'node:http';
+import { createServer as createViteServer } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { resolveHmrPort } from '@/lib/config';
 import { developmentShowcaseProxy, developmentViteOptions } from '../dev-vite';
+import { SHOWCASE } from '../showcase';
 import { resolvePort, DEFAULT_DEV_PORT } from '../../../../scripts/lib/dev-env.mjs';
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -66,12 +69,54 @@ describe('developmentViteOptions', () => {
 });
 
 describe('development showcase proxy', () => {
+  it('serves redirected image bytes without forwarding viewer credentials or crashing', async () => {
+    const seen: { cookie?: string; authorization?: string }[] = [];
+    const upstream = createServer((req, res) => {
+      seen.push({ cookie: req.headers.cookie, authorization: req.headers.authorization });
+      if (req.url?.startsWith('/a/')) {
+        res.writeHead(302, { location: '/image.jpg' });
+        res.end();
+      } else {
+        res.writeHead(200, { 'content-type': 'image/jpeg' });
+        res.end('fixture-image');
+      }
+    });
+    const listen = async (server: Server) => {
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
+      return `http://127.0.0.1:${address.port}`;
+    };
+    const close = (server: Server) => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    const target = await listen(upstream);
+    const proxy = developmentShowcaseProxy();
+    Object.values(proxy)[0]!.target = target;
+    const vite = await createViteServer({ configFile: false, server: { middlewareMode: true, hmr: false, proxy } });
+    const local = createServer(vite.middlewares);
+    try {
+      const origin = await listen(local);
+      const response = await fetch(`${origin}/__dev/showcase/a/${SHOWCASE[0]!.id}/export?format=jpg&mode=card`, {
+        redirect: 'manual', headers: { cookie: 'session=test-only', authorization: 'Bearer test-only' },
+      });
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toBe('image/jpeg');
+      expect(await response.text()).toBe('fixture-image');
+      expect(seen).toEqual([{}, {}]);
+    } finally {
+      await close(local);
+      await vite.close();
+      await close(upstream);
+    }
+  });
   it('proxies only curated export paths to the canonical origin', () => {
     const [pattern, config] = Object.entries(developmentShowcaseProxy())[0]!;
     const accepts = new RegExp(pattern);
-    expect(accepts.test('/__dev/showcase/a/7KRGdj/export?format=jpg&mode=card')).toBe(true);
+    for (const doc of SHOWCASE) expect(accepts.test(`/__dev/showcase/a/${doc.id}/export?format=jpg&mode=card`)).toBe(true);
     for (const url of ['/__dev/showcase/a/secret/export', '/__dev/showcase/api/account', '/__dev/showcase/a/7KRGdj/raw']) expect(accepts.test(url)).toBe(false);
     expect(config.target).toBe('https://artifactbin.dev');
+    // Asset-host redirects must resolve inside the proxy so CSP and WebGL
+    // still receive a same-origin image response.
+    expect(config.followRedirects).toBe(true);
     expect(config.rewrite!('/__dev/showcase/a/7KRGdj/export?format=jpg&mode=card')).toBe('/a/7KRGdj/export?format=jpg&mode=card');
   });
 });

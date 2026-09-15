@@ -42,7 +42,7 @@ const PLACEMENTS = [
     angle: 0.075,
   },
   {
-    id: "yKcybb",
+    id: "HrjNbY",
     x: 915,
     y: 276,
     width: 205,

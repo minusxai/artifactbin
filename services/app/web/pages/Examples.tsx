@@ -66,7 +66,6 @@ export default function Examples() {
             className={`wall-artifact wall-artifact-${index}`}
           >
             <ArtifactPrint index={index} />
-            <p>{doc.blurb}</p>
           </article>
         ))}
       </section>

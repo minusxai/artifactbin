@@ -30,7 +30,7 @@ import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
 import { runWithRequest } from '@/lib/request-context';
-import { SHOWCASE_ORIGIN } from '@/lib/showcase';
+import { SHOWCASE_ORIGIN, SHOWCASE_ASSETS_ORIGIN } from '@/lib/showcase';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
 import { canEdit } from '@/lib/share-roles';
@@ -100,7 +100,8 @@ export const APP_CSP = [
   // absolutely because a local or self-hosted install does not have those ids
   // (lib/showcase). `'self'` admits them only when the app IS that origin, so
   // the landing page's pictures worked on the deployment and nowhere else.
-  `img-src 'self' ${SHOWCASE_ORIGIN} data: blob:`, "font-src 'self' data:",
+  // Both the export endpoint and its image-delivery redirect must be admitted.
+  `img-src 'self' ${SHOWCASE_ORIGIN} ${SHOWCASE_ASSETS_ORIGIN} data: blob:`, "font-src 'self' data:",
   // `media-src` has no default of its own either, so without this line every
   // <video> and <audio> on an app page is refused by `default-src 'none'`.
   // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the

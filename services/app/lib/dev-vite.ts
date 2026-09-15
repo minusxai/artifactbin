@@ -13,11 +13,16 @@ export function developmentShowcaseProxy(): Record<string, ProxyOptions> {
     [`^/__dev/showcase/a/(${SHOWCASE.map(doc => doc.id).join('|')})/export(?:\\?|$)`]: {
       target: SHOWCASE_ORIGIN,
       changeOrigin: true,
+      // Export responses redirect to the asset host. Resolve them here so
+      // the browser receives same-origin bytes for CSP and WebGL textures.
+      followRedirects: true,
       rewrite: url => url.replace('/__dev/showcase', ''),
       configure: proxy => {
-        proxy.on('proxyReq', request => {
-          request.removeHeader('cookie');
-          request.removeHeader('authorization');
+        // Strip credentials before outgoing headers are assembled. With
+        // redirects, proxyReq can fire after the request has already sent them.
+        proxy.on('start', request => {
+          delete request.headers.cookie;
+          delete request.headers.authorization;
         });
       },
     },

@@ -20,19 +20,13 @@
 }
 .studio-print:hover .studio-print-sheet img { filter: none; }
 .studio-print:hover { transform: translateY(-6px) rotate(0) !important; }
-.studio-print-number { display: block; font: 8px var(--font-mono), monospace; letter-spacing: 0.16em; margin-top: 17px; color: #7c796d; }
-.studio-print-caption { padding: 17px 3px; }
-.studio-print-caption > span { font: 9px var(--font-mono), monospace; letter-spacing: 0.14em; text-transform: uppercase; color: #797665; }
-.studio-print-caption h3 { font: 18px/1.3 Georgia, serif; font-weight: 400; margin: 8px 0; }
-.studio-print-caption h3 svg { display: inline; vertical-align: middle; }
+.studio-print-label { margin-top: 17px; color: #7c796d; font: 8px/1.5 var(--font-mono), monospace; letter-spacing: 0.16em; text-transform: uppercase; overflow-wrap: anywhere; }
+.studio-print-label > span { color: #797665; }
+.studio-print-label h3 { display: inline; font: inherit; margin: 0; }
+.studio-print-label svg { display: inline; vertical-align: middle; margin-left: 4px; }
 .blue-gallery { background: #154aa5; color: #fff9e8; padding: 42px 2.5% 40px; overflow: hidden; }
 .blue-gallery-heading { position: relative; }
-.blue-library { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 34px 3%; padding: 20px 0 0; align-items: center; }
-.library-volume { transform: rotate(-2deg); }
-.library-volume:nth-child(2) { transform: rotate(2deg); }
-.library-volume:nth-child(3) { transform: rotate(-1deg); }
-.library-volume:nth-child(4) { transform: rotate(1deg); }
-.library-volume:nth-child(5) { transform: rotate(-1.5deg); }
+.blue-library { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 44px 3%; padding: 38px 0 0; align-items: center; }
 .library-gallery-link {
   container-type: inline-size; color: inherit; text-decoration: none; padding: 24px 6%; display: flex; flex-direction: column;
   align-items: center; justify-content: center; text-align: center; gap: 18px;
@@ -44,26 +38,34 @@
 .library-gallery-link strong svg { width: 0.8em; height: 0.8em; flex-shrink: 0; }
 .library-gallery-link > span:last-child { font-size: 14px; color: #dce7fb; }
 .library-gallery-link:hover strong { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 7px; }
-.library-spread {
-  position: relative; display: grid; grid-template-columns: 1fr 1fr; color: var(--studio-ink); isolation: isolate;
-  filter: drop-shadow(0 9px 9px #041c572b);
-}
-.library-book-paper { position: absolute; inset: 0; z-index: -1; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.library-spread:after {
-  content: ""; position: absolute; inset: 4% auto 4% 50%; width: 12px; transform: translateX(-50%);
-  background: linear-gradient( 90deg, transparent, #776c4c1a 42%, #6b593d33 50%, #fff9e944 58%, transparent );
+/* Mounted prints share the tape/pin material with the Examples wall. */
+.studio-print-sheet:before, .studio-print:is([data-mount="corners"], [data-mount="corner-pins"]) .studio-print-sheet:after {
+  content: ""; position: absolute; height: 18px; width: 58px; left: calc(50% - 29px); top: -9px;
+  background: #e9dcafbb; transform: rotate(-5deg); box-shadow: 0 1px 1px #9f8b6233; z-index: 1;
   pointer-events: none;
 }
-.library-leaf { min-width: 0; overflow: hidden; }
-.library-leaf .studio-print-sheet {
-  margin: 20px 12px 0; padding: 0; border: 1px solid #d5cbb3; border-radius: 6px; box-shadow: none; background: none;
-  overflow: hidden;
+.studio-print:is([data-mount="pin"], [data-mount="corner-pins"]) .studio-print-sheet:before,
+.studio-print[data-mount="corner-pins"] .studio-print-sheet:after {
+  width: 9px; height: 9px; left: 50%; top: -4px; border-radius: 50%; background: #2456a1;
+  box-shadow: 2px 2px 3px #53401f66;
 }
-.library-leaf .studio-print-sheet img { aspect-ratio: auto; height: auto; filter: none; }
-.library-leaf .studio-print-number { display: none; }
-.library-leaf .studio-print-caption { padding: 14px 13px 26px; }
-.library-leaf .studio-print-caption h3 { font-size: clamp(14px, 1.15vw, 20px); }
-.library-leaf .studio-print:hover { transform: none !important; }
+.studio-print[data-mount="corners"] .studio-print-sheet:before {
+  left: -12px; top: 4px; width: 46px; transform: rotate(-42deg);
+}
+.studio-print[data-mount="corners"] .studio-print-sheet:after {
+  left: auto; right: -12px; top: 4px; width: 46px; transform: rotate(38deg);
+}
+.studio-print[data-mount="corner-pins"] .studio-print-sheet:before { left: 8px; top: 5px; }
+.studio-print[data-mount="corner-pins"] .studio-print-sheet:after { left: auto; right: 8px; top: 5px; }
+.workshop-print-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.workshop-mounted-print { min-width: 0; transform: rotate(-2deg); }
+.workshop-mounted-print:nth-child(even) { transform: rotate(2deg); padding-top: 16px; }
+.workshop-theme:nth-child(even) .workshop-mounted-print { transform: rotate(1.5deg); }
+.workshop-theme:nth-child(even) .workshop-mounted-print:nth-child(even) { transform: rotate(-2deg); }
+.workshop-mounted-print .studio-print-sheet { padding: 12px 12px 10px; }
+.workshop-mounted-print .studio-print-sheet img { filter: none; }
+.workshop-mounted-print .studio-print-label { font-size: 7px; margin-top: 12px; }
+.blue-gallery a:focus-visible { outline-color: #fff9e8; }
 .library-caption { display: flex; align-items: baseline; gap: 15px; margin: 12px 8px 0; font: italic 20px Georgia, serif; color: #fff9e8; }
 .library-caption span { font: 10px var(--font-mono), monospace; color: #bdcff0; }
 .blue-capabilities { display: grid; grid-template-columns: 1fr 1.1fr; }
@@ -101,10 +103,7 @@
 @media (max-width: 800px) {
   .blue-gallery { padding: 60px 7% 45px; }
   .blue-library { grid-template-columns: minmax(0, 1fr); gap: 30px; padding-top: 20px; }
-  .library-volume, .library-volume:nth-child(3) { grid-column: 1; }
-  .library-volume:nth-child(2), .library-volume:nth-child(3) { margin-top: 0; }
-  .library-leaf .studio-print-caption { padding: 17px 13px; }
-  .library-leaf .studio-print-caption h3 { font-size: 16px; }
+  .workshop-mounted-print .studio-print-sheet { padding: 9px 9px 8px; }
   .blue-capabilities { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .blue-capabilities figure { position: static; margin: 10px auto 0; max-width: 440px; }
 }
@@ -118,7 +117,7 @@
 .outcome-thumbnails button[aria-pressed="true"] { border-color: var(--studio-blue); opacity: 1; }
 .outcome-thumbnails button:hover { opacity: 1; }
 .outcome-thumbnails img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; mix-blend-mode: multiply; }
-/* Let the books use the available width inside the gallery's narrow gutters. */
+/* The gallery uses the available width inside its narrow gutters. */
 .blue-gallery-heading, .blue-library { max-width: none; margin-inline: auto; }
 .blue-capabilities { max-width: 1110px; margin-inline: auto; padding: 65px 35px; gap: 7%; }
 @media (max-width: 800px) {

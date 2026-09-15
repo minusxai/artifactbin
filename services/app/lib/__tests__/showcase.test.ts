@@ -4,7 +4,7 @@
  * Every rule here is a way the wall breaks without anyone noticing: a
  * relative address that 404s on a self-hosted instance, an id typo that
  * serves a grey box, a duplicate that shows the same document twice in one
- * row, a blurb someone left as a placeholder. None of them throw — the page
+ * row, a missing title. None of them throw — the page
  * renders, just wrong — so they are pinned rather than trusted.
  */
 import { describe, expect, it } from 'vitest';
@@ -28,25 +28,8 @@ describe('the showcase list', () => {
     expect(orders).toEqual([...orders].sort((a, b) => a - b));
   });
 
-  it('keeps every use phrase inside the one line the wheel gives it', () => {
-    for (const doc of SHOWCASE) {
-      expect(doc.use.trim().length).toBeGreaterThan(0);
-      // Measured against the narrowest column the wheel runs in: past this
-      // the phrase truncates mid-word beside its stem.
-      expect(doc.use.length, doc.use).toBeLessThanOrEqual(48);
-      expect(doc.use.endsWith('.')).toBe(false);
-    }
-  });
-
-  it('carries a title and a one-sentence blurb for every entry', () => {
-    for (const doc of SHOWCASE) {
-      expect(doc.title.trim().length).toBeGreaterThan(0);
-      expect(doc.blurb.trim().length).toBeGreaterThan(0);
-      // One sentence: a card has one line of room, and a paragraph in it
-      // truncates mid-word.
-      expect(doc.blurb.length).toBeLessThanOrEqual(90);
-      expect(doc.blurb.endsWith('.')).toBe(true);
-    }
+  it('carries a title for every entry', () => {
+    for (const doc of SHOWCASE) expect(doc.title.trim().length).toBeGreaterThan(0);
   });
 
   it('addresses the canonical instance ABSOLUTELY — a local instance has no such id', () => {
