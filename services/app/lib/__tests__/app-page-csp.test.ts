@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SHOWCASE_ORIGIN, showcaseCardUrl, SHOWCASE } from '@/lib/showcase';
+import { showcaseCardUrl, SHOWCASE } from '@/lib/showcase';
 import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
@@ -56,19 +56,27 @@ describe('the app CSP', () => {
     expect(workerSrc).toBe("worker-src 'self'");
   });
 
-  /*
-   * MEDIA, AND ONLY MEDIA, MAY COME FROM A LOCAL BLOB. The upload page shows a
-   * video or audio file before it is sent, from an object URL over the picked
-   * bytes; a stored one plays back from /a/<id>/raw. Neither relaxes the
-   * document, request or script directives, which is what a blob: elsewhere
-   * would do.
-   */
-  it('admits the app’s own media and local previews, and nothing else from a blob', () => {
-    const directives = APP_CSP.split('; ');
-    expect(directives.find((d) => d.startsWith('media-src'))).toBe("media-src 'self' blob:");
-    for (const directive of ['frame-src', 'connect-src', 'worker-src', 'script-src']) {
-      expect(directives.find((d) => d.startsWith(directive))).not.toContain('blob:');
+  it('admits local media previews and GLTF texture fetches without admitting blob scripts or frames', async () => {
+    const response = await app.request('/');
+    const directives = response.headers.get('content-security-policy')!.split('; ');
+    expect(directives.find(d => d.startsWith('media-src'))).toBe("media-src 'self' blob:");
+    expect(directives.find(d => d.startsWith('connect-src'))?.split(' ')).toContain('blob:');
+    for (const directive of ['frame-src', 'worker-src', 'script-src']) {
+      expect(directives.find(d => d.startsWith(directive))).not.toContain('blob:');
     }
+  });
+
+  it('admits only the configured development socket on the page host', async () => {
+    const dev = createAppServer({ indexHtml: async () => '<html></html>', devHmrPort: 3041 });
+    for (const [origin, socket] of [
+      ['http://localhost:3040', 'ws://localhost:3041'],
+      ['https://dev.example:3040', 'wss://dev.example:3041'],
+    ]) {
+      const response = await dev.request(origin + '/');
+      const connections = response.headers.get('content-security-policy')!.split('; ').find(d => d.startsWith('connect-src'))!.split(' ');
+      expect(connections.filter(source => /^wss?:/.test(source))).toEqual([socket]);
+    }
+    expect((await app.request('/')).headers.get('content-security-policy')).not.toMatch(/wss?:/);
   });
 
   it('allows only the known app and development bootstrap scripts inline', () => {
@@ -91,17 +99,9 @@ describe('the app CSP', () => {
     expect(APP_INLINE_SCRIPT_HASHES).toContain(`'sha256-${hash}'`);
   });
 
-  /*
-   * THE SHOWCASE CARDS ARE OFF-ORIGIN ON PURPOSE (lib/showcase): they are the
-   * canonical instance's own captures, because a local or self-hosted install
-   * does not have those ids. `img-src 'self'` therefore admits them ONLY when
-   * the app IS artifactbin.dev — which is exactly how the landing page came to
-   * work on the deployment and show six blocked pictures everywhere else.
-   */
-  it("admits the showcase origin, which the landing page's cards are addressed to", () => {
-    expect(showcaseCardUrl(SHOWCASE[0]).startsWith(SHOWCASE_ORIGIN)).toBe(true);
-    const imgSrc = APP_CSP.split('; ').find((d) => d.startsWith('img-src'))!;
-    expect(imgSrc).toContain(SHOWCASE_ORIGIN);
+  it('serves homepage posters under the same-origin image policy', () => {
+    expect(showcaseCardUrl(SHOWCASE[0])).toMatch(/^\/landing\/posters\//);
+    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toBe("img-src 'self' data: blob:");
   });
 
   it('never lands on an artifact address or a machine surface', async () => {

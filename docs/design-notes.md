@@ -198,6 +198,19 @@ builds remain available on every Node shard because `evals/__tests__/cli-kit.tes
 
 ### First useful content and workspace performance
 
+The public homepage links its shared stylesheet from HTML so server-rendered
+content is styled before JavaScript. Its anonymous response preloads the lazy
+workshop renderer's static dependencies, scene mask, robot assets and poster
+images using the same URLs and CORS modes as their consumers. Home and Examples
+share bundled WebP screenshots in `public/landing/posters`; the catalog retains
+canonical document links but never requests remote exports for thumbnails.
+Every catalog entry includes a local screenshot. There is no development image proxy
+or poster request queue. The renderer reveals the canvas
+when its background is ready and updates posters and robots independently.
+Pending posters show a loading ring on the paper texture; image load or failure
+removes it. Reduced motion keeps the ring static, and only pending textures
+are repainted during animation.
+
 Initial Home navigation overlaps its core JSON request with its lazy route code.
 The session-owned page store holds startup results until identity resolves; the
 first scope adopts the startup marker and subsequent account changes revoke it.

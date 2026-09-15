@@ -1,8 +1,8 @@
 /**
  * Gate: the one-line handoff, end to end, the way it is actually used.
  *
- * A human clicks "create" and copies ONE LINE that names the document and the
- * afbin CLI — and nothing else. There is no credential in the paste, none in
+ * The workshop copies setup instructions. The guide creates a document and
+ * copies one line naming the document and the afbin CLI. There is no credential in the paste, none in
  * the response, and no second door that hands one out: the CLI's browser
  * approval is the only way a client is connected. This gate drives that in a
  * real browser + real HTTP, and the negative space too: the start-link
@@ -19,31 +19,28 @@ import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('simpler-start');
 
-// ── 1. the human's leg: create from the home page, read the copied prompt ──
+// ── 1. the human's leg: workshop instructions → setup guide → document ──
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 await page.goto(`${B}/`, { waitUntil: 'load' });
-// The home page has two shapes and the create button sits at a different depth
-// in each: a stranger gets the LANDING page, which offers it outright, while a
-// browser already holding drafts gets the shelf, where it is folded behind the
-// "connect an agent" card. Wait for either, and open the card only when that
-// is the one on screen.
-await page.waitForSelector(
-  '[aria-label="Create a live document for my agent"], [aria-label="Connect an agent"]',
-  { timeout: 30_000 },
-);
-if (!(await page.locator('[aria-label="Create a live document for my agent"]').count())) {
-  await page.click('[aria-label="Connect an agent"]', { timeout: 30_000 });
-}
+const workshop = page.getByRole('region', { name: 'The artifactbin workshop', exact: true });
+await workshop.getByRole('button', { name: 'Create Artifact — copy agent instructions', exact: true }).click();
+const setupPrompt = `Help me create an artifact with artifactbin. Read ${new URL(B).origin}/docs-human for setup, then ask me what I want to make.`;
+await page.waitForFunction(expected => navigator.clipboard.readText().then(text => text === expected), setupPrompt);
+check(await page.evaluate(() => navigator.clipboard.readText()) === setupPrompt, 'the workshop copies deployment-aware setup instructions');
+await workshop.getByRole('link', { name: 'Setup guide ↗', exact: true }).click();
+await page.waitForURL(`${B}/docs-human`);
+const create = page.getByRole('button', { name: 'Create a live document for my agent', exact: true });
+await create.waitFor();
 const startRespP = page.waitForResponse(
   (r) => r.url().includes('/api/start') && r.request().method() === 'POST',
   { timeout: 30_000 },
 );
-await page.click('[aria-label="Create a live document for my agent"]', { timeout: 30_000 });
+await create.click();
 const startRes = await startRespP;
 const started = await startRes.json();
-await page.waitForTimeout(1500);
+await page.waitForFunction(id => navigator.clipboard.readText().then(text => text.includes(`/a/${id}`)), started.id);
 const prompt = await page.evaluate(() => navigator.clipboard.readText()).catch(() => '');
 
 const id = started.id;

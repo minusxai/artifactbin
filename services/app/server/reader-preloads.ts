@@ -8,7 +8,7 @@ type ReaderPreloader = (html: string) => string;
 const READER_ENTRIES = ['pages/Profile.tsx', 'pages/Artifact.tsx', '../lib/story-runtime/InlineStoryRuntime.tsx'];
 interface Hint { href: string; style: boolean }
 
-function readHints(webDir: string): Hint[] {
+function readHints(webDir: string, entries: readonly string[]): Hint[] {
   const manifest: Manifest = JSON.parse(readFileSync(path.join(webDir, '.vite/manifest.json'), 'utf8'));
   const visited = new Set<string>(), hints = new Map<string, Hint>();
   const add = (file: string, style = false) => {
@@ -26,16 +26,21 @@ function readHints(webDir: string): Hint[] {
     // chart/editor code must not become a prerequisite of reader startup.
     for (const dependency of chunk.imports ?? []) visit(dependency);
   };
-  READER_ENTRIES.forEach(visit);
+  entries.forEach(visit);
   return [...hints.values()];
 }
 
 /** Cache the production manifest per server; dev supplies its own HTML. */
 export function createReaderPreloader(webDir: string): ReaderPreloader {
+  return createEntryPreloader(webDir, READER_ENTRIES);
+}
+
+/** Preload only a page’s selected entries and their static dependencies. */
+export function createEntryPreloader(webDir: string, entries: readonly string[]): ReaderPreloader {
   let cached: Hint[] | undefined;
   return html => {
     if (!cached) {
-      try { cached = readHints(webDir); }
+      try { cached = readHints(webDir, entries); }
       catch {
         // A missing build hint must not take a readable document down. The
         // production browser gate verifies that the shipped manifest exists.

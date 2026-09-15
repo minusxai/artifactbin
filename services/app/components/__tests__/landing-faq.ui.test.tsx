@@ -1,22 +1,7 @@
-/**
- * CLOSED, BUT NEVER ABSENT.
- *
- * The four questions start shut, so the section reads as a short list rather
- * than a page of prose. The risk that buys is what these tests pin: two of the
- * four answers ARE the page's positioning (why not a chat app's artifacts
- * panel, why not just write the HTML), and an accordion that MOUNTS an answer
- * only once it is opened spends them — the text is then absent for
- * find-in-page, for a crawler, and for anyone reading the page as text.
- *
- * Native <details> is what avoids that, and the assertions are written so a
- * later "improvement" to a JS accordion fails loudly: every answer is IN the
- * document while every disclosure is SHUT.
- */
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import Landing from '@/components/Landing';
+/** Native disclosures keep answers available to readers and crawlers while closed. */
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import LandingFaq from '@/components/LandingFaq';
-import LandingFooter from '@/components/LandingFooter';
 import { QUESTIONS } from '@/lib/landing-content';
 
 const disclosures = (container: HTMLElement) => Array.from(container.querySelectorAll('details'));
@@ -58,51 +43,5 @@ describe('the landing FAQ', () => {
       expect(entry.question.endsWith('?')).toBe(true);
       expect(entry.answer.length).toBeGreaterThan(40);
     }
-  });
-});
-
-/**
- * WHERE IT SITS IS PART OF THE ARGUMENT. The questions answer the claims band
- * directly above them ("why not a chat app's artifacts", after six reasons to
- * use this one), so the order is the reasoning and a later layout edit must not
- * quietly float the section somewhere else on the page.
- */
-describe('the FAQ on the landing page', () => {
-  it('follows the claims band and precedes the footer', () => {
-    render(<Landing />);
-    const why = screen.getByLabelText('Why artifactbin');
-    const faq = screen.getByLabelText('FAQs');
-    const footer = screen.getByLabelText('About artifactbin');
-
-    expect(why.compareDocumentPosition(faq) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(faq.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-});
-
-/**
- * THE FOOTER'S CALL TO ACTION IS THE DOOR, not a scroll back to it. It was
- * `<a href="#top">create an artifact</a>` — a reader who got all the way to
- * the bottom, decided, and clicked, was sent back to the top of the page to
- * find the real button. It now opens the SAME create dialog the workspace's
- * Create menu opens, and the mint-and-copy button lives inside that dialog:
- * one implementation of "new artifact", wherever it is asked for.
- */
-describe('the landing footer', () => {
-  afterEach(cleanup);
-
-  it('opens the create dialog rather than scrolling back to the top', () => {
-    const { container } = render(<LandingFooter column="" />);
-    expect(container.querySelector('a[href="#top"]')).toBeNull();
-    expect(screen.queryByRole('dialog')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'new artifact' }));
-
-    expect(screen.getByRole('dialog', { name: 'Create new artifact' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Create a live document for my agent')).toBeInTheDocument();
-  });
-
-  it('keeps the demo link beside it', () => {
-    render(<LandingFooter column="" />);
-    expect(screen.getByText('book a demo')).toBeInTheDocument();
   });
 });

@@ -88,8 +88,8 @@ describe('what the dashboard leads with', () => {
   it('SIGNED OUT: shows the landing, not a login form and not the token browser', async () => {
     home = { signedIn: false };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByLabelText('Get started')).toBeInTheDocument());
-    expect(screen.getByLabelText('What you can use it for')).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'The artifactbin workshop' });
+    expect(screen.getByRole('region', { name: 'The blue room' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Log in with email')).toBeNull();
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
@@ -194,11 +194,11 @@ describe('what the dashboard leads with', () => {
     cleanup();
     home = { signedIn: false };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await waitFor(() => expect(screen.getByLabelText('Get started')).toBeInTheDocument());
+    await screen.findByRole('region', { name: 'The artifactbin workshop' });
     expect(screen.queryByLabelText('Trash')).toBeNull();
   });
 
-  it('EMPTY: names the first artifact, then the panel, then other people\u2019s work', async () => {
+  it('EMPTY: names the first artifact and shows the setup panel without a carousel', async () => {
     home = { signedIn: true, artifacts: [], shared: [] };
     render(<MemoryRouter><HomePage /></MemoryRouter>);
     // Greeted by name, from the session the page chrome already reads — the
@@ -206,16 +206,12 @@ describe('what the dashboard leads with', () => {
     const heading = await screen.findByLabelText(/create your first artifact/i);
     expect(heading).toHaveTextContent("hi c, let\u2019s create your first artifact!");
     const panel = screen.getByLabelText('Get started');
-    const examples = screen.getByLabelText('What you can use it for');
-    // Its own name here, and the documents WITHOUT the landing's wheel of
-    // use-phrases: this reader has already bought the pitch.
-    expect(examples).toHaveTextContent('Inspiration Zone');
-    expect(examples.querySelector('[data-use-row]')).toBeNull();
+    expect(screen.queryByLabelText('What you can use it for')).toBeNull();
+    expect(screen.queryByText('Inspiration Zone')).toBeNull();
     // The SAME door, open, with both paths on the page: an empty library must
     // not be a page whose only content is a closed strip.
     expect(screen.getByLabelText('Copy the CLI install command')).toBeInTheDocument();
     expect(heading.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(panel.compareDocumentPosition(examples) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('WITHOUT owned artifacts: shared work remains primary and the zero-state dashboard is secondary', async () => {

@@ -97,7 +97,7 @@ it('drops retained private rows when the core endpoint reports an expired sessio
       : { signedIn: true, accountId: 'one', sparklines: {}, feed: { mine: [], following: [] } }))));
   const view = render(tree(true)); await screen.findByLabelText('Open Private document');
   view.rerender(tree(false)); signedIn = false; view.rerender(tree(true));
-  await screen.findByLabelText('Get started');
+  await screen.findByRole('region', { name: 'The artifactbin workshop' });
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
 });
 

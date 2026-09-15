@@ -1,11 +1,23 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { StaticRouter } from 'react-router';
 import Landing from '@/components/Landing';
-import PageChrome from '@/components/PageChrome';
+import { WORKSHOP_PAPERS, WORKSHOP_SETTINGS } from '@/components/living-workshop/scene-manifest';
+import { WORKSHOP_ROBOTS, WORKSHOP_ARM_URL, workshopRobotUrl, workshopBadgeUrl } from '@/components/living-workshop/workshop-assets';
+import { escapeHtml } from '@/lib/story/reader-chrome';
 
 /** The same public content and chrome as React, retained until Home commits. */
 export function withInitialHome(html: string): string {
-  const body = renderToStaticMarkup(<StaticRouter location="/"><PageChrome authed={false} /><Landing /></StaticRouter>);
+  const preload = (href: string, as: "image" | "fetch", cors = false) => `<link rel="preload" href="${escapeHtml(href)}" as="${as}"${cors ? ' crossorigin="anonymous"' : ''} fetchpriority="low">`;
+  // All scene assets and posters are static files on this deployment.
+  const assets = [
+    preload(WORKSHOP_SETTINGS.indoor.mask, "image"),
+    ...WORKSHOP_ROBOTS.map(robot => preload(workshopBadgeUrl(robot.agent), "image", true)),
+    ...WORKSHOP_ROBOTS.map(robot => preload(workshopRobotUrl(robot.role), "fetch", true)),
+    preload(WORKSHOP_ARM_URL, "fetch", true),
+    ...WORKSHOP_PAPERS.map(paper => preload(paper.image, "image", true)),
+  ].join('');
+  html = html.replace('</head>', () => assets + '</head>');
+  const body = renderToStaticMarkup(<StaticRouter location="/"><Landing /></StaticRouter>);
   // A static button cannot honor a gesture. Native disabled inheritance keeps
   // every shared form control unavailable until React replaces the sibling,
   // while ordinary links and readable content remain useful without scripts.

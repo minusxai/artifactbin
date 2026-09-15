@@ -201,6 +201,7 @@ async function main(): Promise<void> {
 
   const app = createAppServer({
     webDir: path.resolve('dist/web'),
+    ...(hmrPort !== null ? { devHmrPort: hmrPort } : {}),
     // The separate proxy transports identity in a signed header, rather than on the Request object.
     ...(appOnly ? { actorSecret: readEnv(env, 'CONTRACT__ACTOR_SECRET') || readEnv(env, 'AUTH__SECRET') } : {}),
     ...(reader ? { onTokenRevoked: (id) => reader.invalidate(id) } : {}),

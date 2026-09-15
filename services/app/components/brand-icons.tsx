@@ -73,12 +73,14 @@ export function CodexIcon(props: IconProps) {
   );
 }
 
-/** Pi's pixel P+i mark. Monochrome by brand; the upstream SVG is white for
- * a dark ground, so it takes currentColor here and follows the theme. */
+/** pi's pixel glyph. Monochrome by brand; inherits the surrounding ink. */
 export function PiIcon(props: IconProps) {
   return (
-    <svg {...svgProps(props)} viewBox="0 0 800 800" fill="currentColor" fillRule="evenodd">
-      <path d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z" />
+    <svg {...svgProps(props)} viewBox="150 150 500 500" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M165.29 165.29H517.36V400H400V517.36H282.65V634.72H165.29ZM282.65 282.65V400H400V282.65Z"
+      />
       <path d="M517.36 400H634.72V634.72H517.36Z" />
     </svg>
   );
@@ -104,3 +106,4 @@ export function GitHubIcon(props: IconProps) {
     </svg>
   );
 }
+

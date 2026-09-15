@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
-import { createReaderPreloader } from '../reader-preloads';
+import { createReaderPreloader, createEntryPreloader } from '../reader-preloads';
 
 const dirs: string[] = [];
 const shell = '<html><head><link rel="modulepreload" href="/assets/shared-abc.js"></head><body></body></html>';
@@ -50,4 +50,15 @@ it('keeps readable HTML when the manifest is missing or contains unsafe asset pa
   expect(createReaderPreloader(dir)(shell)).toBe(shell);
   rmSync(path.join(dir, '.vite/manifest.json'));
   expect(createReaderPreloader(dir)(shell)).toBe(shell);
+});
+
+it('can warm the workshop entry and its static renderer dependencies without running them', () => {
+  const html = createEntryPreloader(fixture({
+    '../components/living-workshop/workshop-renderer.ts': { file: 'assets/workshop-abc.js', imports: ['three'] },
+    three: { file: 'assets/three-abc.js' },
+  }), ['../components/living-workshop/workshop-renderer.ts'])(shell);
+  expect(html).toContain('rel="modulepreload" href="/assets/workshop-abc.js"');
+  expect(html).toContain('rel="modulepreload" href="/assets/three-abc.js"');
+  expect(html).not.toContain('ArtifactEditor');
+  expect(html).not.toContain('<script');
 });

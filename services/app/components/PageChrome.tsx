@@ -166,6 +166,7 @@ export function PageMenu({
         </a>
 
         {link('/', 'Artifacts', <FileText size={15} strokeWidth={1.5} />, pathname === '/')}
+        {link('/examples', 'Gallery', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/examples')}
         {link('/chat', 'Remote sessions', <User size={15} strokeWidth={1.5} />, pathname === '/chat')}
         {link('/account', 'Account', <User size={15} strokeWidth={1.5} />, pathname === '/account')}
         {link('/docs-human', 'Human Docs', <BookOpen size={15} strokeWidth={1.5} />, pathname === '/docs-human')}

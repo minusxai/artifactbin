@@ -30,7 +30,6 @@ import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
 import { runWithRequest } from '@/lib/request-context';
-import { SHOWCASE_ORIGIN } from '@/lib/showcase';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
 import { canEdit } from '@/lib/share-roles';
@@ -47,7 +46,7 @@ import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createReaderPreloader } from './reader-preloads';
+import { createReaderPreloader, createEntryPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
 
 /** The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's base. */
@@ -100,15 +99,16 @@ export const APP_CSP = [
   // absolutely because a local or self-hosted install does not have those ids
   // (lib/showcase). `'self'` admits them only when the app IS that origin, so
   // the landing page's pictures worked on the deployment and nowhere else.
-  `img-src 'self' ${SHOWCASE_ORIGIN} data: blob:`, "font-src 'self' data:",
+  // Both the export endpoint and its image-delivery redirect must be admitted.
+  "img-src 'self' data: blob:", "font-src 'self' data:",
   // `media-src` has no default of its own either, so without this line every
   // <video> and <audio> on an app page is refused by `default-src 'none'`.
   // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
   // upload page previewing a file BEFORE it is sent (web/pages/FileUpload).
-  // Media only — `frame-src`, `connect-src` and `worker-src` stay `'self'`,
-  // because a blob: there is a document, a request or a script from a string.
+  // GLTFLoader also fetches embedded textures through local blob URLs.
+  // Frame and worker policies stay same-origin; blobs are data here.
   "media-src 'self' blob:",
-  "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com",
+  "connect-src 'self' https://api-js.mixpanel.com https://api.mixpanel.com blob:",
   "manifest-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
   // The source editor wires a Monaco worker (components/SourceEditor). It is
   // LAZY — measured: with only the HTML tokenizer loaded, nothing has yet asked
@@ -123,6 +123,13 @@ export const APP_CSP = [
   "worker-src 'self'",
   "form-action 'self'", "object-src 'none'", "base-uri 'self'",
 ].join('; ');
+/** Only the development socket joins connect-src; production uses APP_CSP unchanged. */
+function developmentAppCsp(pageUrl: string, port: number): string {
+  const socket = new URL(pageUrl);
+  socket.protocol = socket.protocol === 'https:' ? 'wss:' : 'ws:';
+  socket.port = String(port);
+  return APP_CSP.replace("connect-src 'self'", `connect-src 'self' ${socket.origin}`);
+}
 const APP_SECURITY_HEADERS = {
   'content-security-policy': APP_CSP,
   'x-content-type-options': 'nosniff',
@@ -142,6 +149,8 @@ interface AppServerOptions {
   indexHtml?: (url: string) => Promise<string>;
   /** Dev: Vite's connect middleware, mounted before everything else for its own assets. */
   devMiddleware?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse, next: () => void) => void;
+  /** Dev only: the Vite socket port resolved by the server composition. */
+  devHmrPort?: number;
   publicDir?: string;
   /** Where `npm run build:binary -w services/cli` leaves a CLI build (services/cli/dist). When its version is the
    * one the served installer pins, this server serves that build and the installer installs it from here. */
@@ -172,7 +181,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
 }
 
 
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new)$/;
+const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/examples|\/datasets\/new)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. `/docs`
@@ -230,6 +239,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const webDir = opts.webDir ?? path.resolve('dist/web');
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
+  const workshopEntry = '../components/living-workshop/workshop-renderer.ts';
+  const workshopDevUrl = '/@fs/' + path.resolve(import.meta.dirname, workshopEntry).split(path.sep).join('/').replace(/^\/+/, '');
+  const preloadWorkshop = opts.indexHtml
+    ? (html: string) => opts.devHmrPort === undefined ? html : html.replace('</head>', () => `<link rel="modulepreload" href="${escapeHtml(workshopDevUrl)}" crossorigin></head>`)
+    : createEntryPreloader(webDir, [workshopEntry]);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
@@ -269,10 +283,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : publicHome ? withInitialHome(discovered) : discovered;
+      : publicHome ? withInitialHome(preloadWorkshop(discovered)) : discovered;
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
+      ...(opts.devHmrPort !== undefined ? { 'content-security-policy': developmentAppCsp(c.req.url, opts.devHmrPort) } : {}),
       ...(surface?.surface?.runtime ? { Link: `<${baseUrl(c.req.raw)}/llms.txt>; rel="help"` } : {}),
     } });
   };
