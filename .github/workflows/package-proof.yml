@@ -1,0 +1,30 @@
+name: Cross-repository package proof
+on:
+  pull_request:
+    paths:
+      - 'scripts/probes/packages/**'
+      - '.github/workflows/package-proof.yml'
+permissions:
+  contents: read
+concurrency:
+  group: package-proof-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  proof:
+    name: isolated package consumers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+          cache: npm
+      - run: npm ci
+      - run: node scripts/probes/packages/check.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: package-boundary-evidence
+          path: node_modules/.cache/package-proof/evidence.json
+          if-no-files-found: warn
