@@ -18,8 +18,7 @@ const reply = (value:unknown, status=200) => json(value,status,{'Cache-Control':
 export function documentAdministrator(request:Request): Administrator | null {
   if(request.headers.has(BROWSER_SESSION_HEADER))return null;
   const actor=actorOf(request);
-  if(actor?.credential==='bearer' && !actor.tokenId)return null;
-  if(!actor?.userId || !actor.email || actor.emailVerified!==true || !['session','bearer'].includes(actor.credential))return null;
+  if(!actor?.userId || !actor.email || actor.emailVerified!==true || actor.credential!=='session')return null;
   return adminEmails().has(actor.email.trim().toLowerCase()) ? actor as Administrator : null;
 }
 

@@ -29,10 +29,11 @@ describe('explicit email-authorized admin repairs',()=>{
     expect((await (await harness.db()).query('SELECT actor_user_id,action,artifact_id FROM admin_document_audit')).rows).toEqual([{actor_user_id:'usr_admin',action:'read',artifact_id:'abc123'}]);
     expect(await getArtifactFor({userId:'usr_admin',tokenId:''},'abc123')).toBeNull();
   });
-  it('accepts current verified bearer identity and rechecks the allowlist each request',async()=>{
+  it('rejects bearer credentials and rechecks the session allowlist each request',async()=>{
     const actor={...admin,credential:'bearer' as const,tokenId:'tok_admin'};
-    expect((await GET(request(documentPath,{...adminOptions,actor}),context)).status).toBe(200);
-    vi.stubEnv('ADMIN__EMAILS','someone@example.com');expect((await GET(request(documentPath,{...adminOptions,actor}),context)).status).toBe(404);
+    expect((await GET(request(documentPath,{...adminOptions,actor}),context)).status).toBe(404);
+    expect((await GET(request(documentPath,adminOptions),context)).status).toBe(200);
+    vi.stubEnv('ADMIN__EMAILS','someone@example.com');expect((await GET(request(documentPath,adminOptions),context)).status).toBe(404);
   });
   it('rejects cross-origin cookies, forged headers and browser-session elevation',async()=>{
     const cross=request('/api/admin/documents/abc123',{actor:admin,origin:'https://evil.test',headers:{'X-Artifactbin-Admin':'1'}});

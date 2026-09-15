@@ -204,12 +204,3 @@ describe('the options object', () => {
     });
   });
 });
-
- it('reads current verified identity for administrative token requests',async()=>{
-   const cookie=await signInByOtp('operator@example.com');
-   const session=await auth.sessions.resolve(new Request('http://x',{headers:{cookie}}));
-   expect(await auth.sessions.identity!(session!.userId)).toMatchObject({email:'operator@example.com',emailVerified:true});
-   await pg.query('UPDATE auth."user" SET "emailVerified"=false WHERE id=$1',[session!.userId]);
-   expect(await auth.sessions.identity!(session!.userId)).toMatchObject({emailVerified:false});
-   expect(await auth.sessions.identity!('missing')).toBeNull();
- });

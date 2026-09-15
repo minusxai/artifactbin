@@ -1,4 +1,3 @@
-import {adminCommand} from './admin';
 import { browserSessionCommand } from './browser-sessions';
 import {scheduleBackgroundUpdate} from './background-update';
 import {compareVersions,validVersion} from './version-order';
@@ -179,7 +178,6 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // login JavaScript (eval run local17). Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
-  if(command==='admin'){emit(await adminCommand(client,workspace,positionals,{output:typeof flags.output==='string'?flags.output:undefined,reason:typeof flags.reason==='string'?flags.reason:undefined,cursor:typeof flags.cursor==='string'?flags.cursor:undefined}));return 0;}
   if(command==='sessions'){
    const code=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
    const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,progress:stderr});
