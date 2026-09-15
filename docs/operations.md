@@ -6,7 +6,9 @@
   embedded [PGLite](https://pglite.dev) in `./data/pglite` (no database
   server); `pglite://<path>` ⇒ PGLite there (`pglite://memory` for RAM);
   a `postgresql://…` URL ⇒ external Postgres — your database, your schema.
-  Schema applies additively on boot; there are no migration scripts, ever.
+  Schema applies additively on boot. Manual data migrations require server shell access
+  (SSH or equivalent); migration HTTP endpoints and remote clients are not available.
+  No standalone migration command is shipped; see [design notes](design-notes.md) for the retained functions.
 - **Exactly one server process may own the PGLite directory.** CLI tools go
   through HTTP for this reason; horizontal scaling requires `DATABASE_URL`.
 - **Two health URLs, answering two different questions.** `/health` on any

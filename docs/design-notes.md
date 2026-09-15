@@ -274,12 +274,17 @@ checks, permitted-column registration, lazy model views and typed parameter cast
 SQL executes without a JSON AST round trip (which would round exact integers through JavaScript).
 `lib/datasets/sql.ts` remains the PostgreSQL compiler. Computed row sources use the stored path too.
 
+Manual data migrations require server shell access (SSH or equivalent infrastructure access).
+There are no migration HTTP endpoints or remote migration clients. The database-level functions
+in `lib/node-identity-migration.ts` and `lib/datasets/migrate.ts` remain available for reviewed
+on-server maintenance code; no standalone migration command is shipped. Stop the app before
+opening its PGLite directory from a maintenance process, and use the deployment's database and
+object-store configuration. Back up and preview changes before applying them.
+
 The dataset-catalog migration retains invalid historical versions as explicit exceptions while
-repairing validated heads and history. Operators may use
-`scripts/dataset-catalog-migrate.mjs --allow-partial --apply` to apply valid artifact plans even
-when other current heads have blocking conflicts. Unresolved heads remain in every report and
-produce an incomplete result. Preview backups precede all writes, complete artifact/history
-fingerprints guard each transaction, and the final audit follows all pages.
+repairing validated heads and history. Callers must validate document data, preserve preview
+snapshots before writes, pass reviewed fingerprints to apply, and audit every page afterward.
+Unresolved heads remain conflicts; complete artifact/history fingerprints guard each transaction.
 
 Legacy datasets with surviving flat JSON in `content` receive a read-time catalog adapter.
 Migration plans a content-addressed object key without writing; apply uploads the original bytes

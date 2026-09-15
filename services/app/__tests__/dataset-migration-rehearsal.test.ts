@@ -3,7 +3,9 @@ import { expect, it } from 'vitest';
 import { request, useAppHarness } from './harness';
 import { mintToken } from '@/lib/tokens';
 import { POST as create } from '@/app/api/artifacts/route';
-import { POST as migrate } from '@/app/api/admin/dataset-catalog/route';
+import { runDatasetCatalogMigrationBatch } from '@/lib/datasets/migrate';
+import { refLoaderForActor, writerFor, type ArtifactRow } from '@/lib/artifacts';
+import { checkDocumentData } from '@/lib/story/data-checks';
 import { POST as addComment, GET as listComments } from '@/app/api/artifacts/[id]/annotations/route';
 import { POST as query } from '@/app/a/[id]/query/route';
 import { POST as revert } from '@/app/api/artifacts/[id]/revert/route';
@@ -11,7 +13,7 @@ import { POST as revert } from '@/app/api/artifacts/[id]/revert/route';
 const harness = useAppHarness();
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
-it('rehearses dry-run, apply, joined query execution and reverting migrated history through real routes', async () => {
+it('rehearses dry-run, apply, joined query execution and reverting migrated history after an in-process migration', async () => {
   const owner = await mintToken('migration-rehearsal');
   const publish = async (body: Record<string, unknown>) => {
     const response = await create(request('/api/artifacts', { method: 'POST', token: owner.token, json: body }));
@@ -40,11 +42,15 @@ it('rehearses dry-run, apply, joined query execution and reverting migrated hist
   };
   const expected = [{ amount: 12, label: 'first' }, { amount: 8, label: 'second' }];
   const migration = async (dryRun: boolean) => {
-    const preview=await migrate(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10,dryRun:true}}));
-    const expected=Object.fromEntries((await preview.json()).plans.map((plan:{artifactId:string;fingerprint:string})=>[plan.artifactId,plan.fingerprint]));
-    const response = await migrate(request('/api/admin/dataset-catalog', { method: 'POST', headers: { 'x-shared-secret': 'test-secret' }, json: { batchSize: 10, dryRun,...(dryRun?{}:{expected}) } }));
-    expect(response.status, await response.clone().text()).toBe(200);
-    return response.json();
+    const validate: NonNullable<Parameters<typeof runDatasetCatalogMigrationBatch>[1]['validate']> = async (source, row) => {
+      const checked = await checkDocumentData(source, refLoaderForActor(writerFor(row as unknown as ArtifactRow)));
+      return checked.ok ? [] : checked.details;
+    };
+    const preview = await runDatasetCatalogMigrationBatch(db, { batchSize: 10, dryRun: true, validate });
+    const expected = Object.fromEntries(preview.plans.map(plan => [plan.artifactId, plan.fingerprint]));
+    const report = await runDatasetCatalogMigrationBatch(db, { batchSize: 10, dryRun, validate, ...(dryRun ? {} : { expected }) });
+    expect(report.conflicts).toEqual([]);
+    return report;
   };
   expect(await migration(true)).toMatchObject({ changed: 3, versions: 1, dryRun: true });
   expect((await db.query('SELECT source,edit_id FROM artifacts WHERE id=$1', [doc.id])).rows[0]).toEqual(before);
