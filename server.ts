@@ -39,7 +39,7 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
-import { developmentShowcaseProxy, developmentViteOptions } from './services/app/lib/dev-vite';
+import { developmentViteOptions } from './services/app/lib/dev-vite';
 import { getRequestListener } from '@hono/node-server';
 import { assemble, createTokenReader, inProcess } from '@artifactbin/utils';
 import { ensureProxySchema, proxyEnvNamesRead, proxyParts, readEnv, resolvePolicyFilePath, mailerForRuntime, createHumanAuth, loginProvidersOf, sessionStoreOf } from '@artifactbin/proxy';
@@ -147,7 +147,7 @@ async function main(): Promise<void> {
       configFile: path.resolve(import.meta.dirname, 'vite.config.mts'),
       // Vite's HMR socket defaults to 24678 for every project on the machine;
       // derive it from our own port so two checkouts never fight over it.
-      server: { middlewareMode: true, ws: { port: hmrPort }, proxy: developmentShowcaseProxy() },
+      server: { middlewareMode: true, ws: { port: hmrPort } },
       appType: 'custom',
       // Vite pre-bundles what the SPA imports; the server-only trees (vega, duckdb,
       // playwright, PGLite) are the app's, never the browser's.

@@ -30,7 +30,6 @@ import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
 import { ID_RE } from '@/lib/ids';
 import { runWithRequest } from '@/lib/request-context';
-import { SHOWCASE_ORIGIN, SHOWCASE_ASSETS_ORIGIN } from '@/lib/showcase';
 import { artifactViewPath, canonicalArtifactPath, parsePrettyPath } from '@/lib/urls';
 import { ownerUsername } from '@/lib/users';
 import { canEdit } from '@/lib/share-roles';
@@ -101,7 +100,7 @@ export const APP_CSP = [
   // (lib/showcase). `'self'` admits them only when the app IS that origin, so
   // the landing page's pictures worked on the deployment and nowhere else.
   // Both the export endpoint and its image-delivery redirect must be admitted.
-  `img-src 'self' ${SHOWCASE_ORIGIN} ${SHOWCASE_ASSETS_ORIGIN} data: blob:`, "font-src 'self' data:",
+  "img-src 'self' data: blob:", "font-src 'self' data:",
   // `media-src` has no default of its own either, so without this line every
   // <video> and <audio> on an app page is refused by `default-src 'none'`.
   // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
@@ -284,7 +283,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : publicHome ? withInitialHome(preloadWorkshop(discovered), opts.devHmrPort !== undefined) : discovered;
+      : publicHome ? withInitialHome(preloadWorkshop(discovered)) : discovered;
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,

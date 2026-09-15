@@ -62,3 +62,15 @@ it("offers every catalog category and filters to that exact kind", () => {
   fireEvent.click(filters.getByRole("button", { name: "All artifacts" }));
   expect(wall.getAllByRole("link")).toHaveLength(SHOWCASE.length);
 });
+
+
+it("uses local screenshots for every example", () => {
+  render(<Examples />);
+  expect(screen.getByRole("link", { name: "SF City Payroll" }).querySelector("img"))
+    .toHaveAttribute("src", "/landing/posters/OewuPR.webp");
+  for (const doc of SHOWCASE) {
+    const link = screen.getByRole("link", { name: doc.title });
+    expect(link).toHaveAttribute("href", showcaseHref(doc));
+    expect(link.querySelector("img")).toHaveAttribute("src", `/landing/posters/${doc.id}.webp`);
+  }
+});

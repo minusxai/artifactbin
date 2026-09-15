@@ -201,9 +201,11 @@ builds remain available on every Node shard because `evals/__tests__/cli-kit.tes
 The public homepage links its shared stylesheet from HTML so server-rendered
 content is styled before JavaScript. Its anonymous response preloads the lazy
 workshop renderer's static dependencies, scene mask, robot assets and poster
-images using the same URLs and CORS modes as their consumers. Development leaves proxied posters to a two-request renderer queue with a 50-second
-deadline per active request, excluding queued time, to keep HTTP/1 connections available for JavaScript
-and scene assets; production poster preloads use the canonical origin. The renderer reveals the canvas
+images using the same URLs and CORS modes as their consumers. Home and Examples
+share bundled WebP screenshots in `public/landing/posters`; the catalog retains
+canonical document links but never requests remote exports for thumbnails.
+Every catalog entry includes a local screenshot. There is no development image proxy
+or poster request queue. The renderer reveals the canvas
 when its background is ready and updates posters and robots independently.
 Pending posters show a loading ring on the paper texture; image load or failure
 removes it. Reduced motion keeps the ring static, and only pending textures

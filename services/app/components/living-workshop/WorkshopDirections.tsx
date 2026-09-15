@@ -11,6 +11,7 @@ export function ArtifactPrint({
   placement?: string;
 }) {
   const doc = SHOWCASE[index % SHOWCASE.length]!;
+  const image = showcaseCardUrl(doc);
   // Seed the visual mix by placement so rerenders and hydration keep it steady.
   const seed = `${placement}:${doc.id}`.split("").reduce((hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0, 0);
   const mount = ["tape", "pin", "corners", "corner-pins"][seed % 4];
@@ -18,7 +19,7 @@ export function ArtifactPrint({
   return (
     <a className="studio-print" data-mount={mount} href={showcaseHref(doc)} aria-label={doc.title}>
       <div className="studio-print-sheet">
-        <img src={showcaseCardUrl(doc)} alt="" loading="lazy" />
+        <img src={image} alt="" loading="lazy" decoding="async" />
         <div className="studio-print-label">
           <span>{kind} / </span>
           <h3>{doc.title}</h3>

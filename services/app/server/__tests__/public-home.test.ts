@@ -38,12 +38,13 @@ describe('public homepage first response', () => {
     expect(head).toContain('/landing/workshop/robots/workshop-arm.glb');
     for (const agent of ['opencode', 'claude', 'codex', 'pi']) expect(head).toContain(`/landing/workshop/robots/badge-${agent}.png`);
     expect(head).toContain('as="fetch" crossorigin="anonymous"');
-    expect(head).toContain('https://artifactbin.dev/a/YPLu0U/export?format=jpg&amp;mode=card');
+    expect(head).toContain('/landing/posters/YPLu0U.webp');
   });
-  it('leaves development poster requests to the bounded renderer loader', async () => {
+  it('preloads local posters in development too', async () => {
     const dev = createAppServer({ indexHtml: async () => indexHtml, devHmrPort: 3041 });
     const head = (await (await dev.request('/')).text()).split('</head>')[0]!;
     expect(head).not.toContain('/__dev/showcase/');
+    expect(head).toContain('/landing/posters/YPLu0U.webp');
     expect(head).toContain('workshop-renderer.ts');
     expect(head).not.toContain('/@fs//');
   });

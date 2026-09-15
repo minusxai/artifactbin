@@ -10,7 +10,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { SHOWCASE_ORIGIN, showcaseCardUrl, SHOWCASE } from '@/lib/showcase';
+import { showcaseCardUrl, SHOWCASE } from '@/lib/showcase';
 import { APP_CSP, APP_INLINE_SCRIPT_HASHES, createAppServer } from '@/server/app';
 
 const app = createAppServer({ indexHtml: async () => '<!doctype html><div id="root">SPA</div>' });
@@ -99,11 +99,9 @@ describe('the app CSP', () => {
     expect(APP_INLINE_SCRIPT_HASHES).toContain(`'sha256-${hash}'`);
   });
 
-  it('admits the canonical showcase export images', () => {
-    expect(showcaseCardUrl(SHOWCASE[0]).startsWith(SHOWCASE_ORIGIN)).toBe(true);
-    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toContain(SHOWCASE_ORIGIN);
-    // Card exports redirect to the canonical instance's separate asset host.
-    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))?.split(' ')).toContain('https://a.artifactbin.dev');
+  it('serves homepage posters under the same-origin image policy', () => {
+    expect(showcaseCardUrl(SHOWCASE[0])).toMatch(/^\/landing\/posters\//);
+    expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toBe("img-src 'self' data: blob:");
   });
 
   it('never lands on an artifact address or a machine surface', async () => {

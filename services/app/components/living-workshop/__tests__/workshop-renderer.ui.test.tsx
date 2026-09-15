@@ -26,9 +26,8 @@ it.each([false, true])("requests canvas posters in anonymous CORS mode before lo
   });
   const paper = WORKSHOP_PAPERS[0]!;
   expect(() => createWorkshopScene(document.createElement("canvas"), [paper], WORKSHOP_SETTINGS.indoor)).toThrow(stop);
-  const preview = new URL(paper.image);
   expect(requests).toEqual([{
-    src: dev ? `/__dev/showcase${preview.pathname}${preview.search}` : paper.image,
+    src: paper.image,
     crossOrigin: "anonymous",
   }]);
 });

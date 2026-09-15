@@ -3,10 +3,6 @@ const ROOT = "/landing/workshop/robots/";
 export const workshopRobotUrl = (role: string) => `${ROOT}workshop-bot-${role}.glb?pose=close-inspection-2`;
 export const workshopBadgeUrl = (agent: string) => `${ROOT}badge-${agent}.png`;
 export const WORKSHOP_ARM_URL = `${ROOT}workshop-arm.glb`;
-export function workshopPosterUrl(image: string, development: boolean) {
-  const preview = new URL(image);
-  return development ? `/__dev/showcase${preview.pathname}${preview.search}` : image;
-}
 export const WORKSHOP_ROBOTS = [
     {
       x: 910,

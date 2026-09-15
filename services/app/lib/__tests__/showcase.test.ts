@@ -7,6 +7,8 @@
  * row, a missing title. None of them throw — the page
  * renders, just wrong — so they are pinned rather than trusted.
  */
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { ID_RE } from '@/lib/ids-shape';
@@ -39,13 +41,11 @@ describe('the showcase list', () => {
     }
   });
 
-  it('pictures a document with the document — its own public card capture', () => {
+  it('serves an existing bundled poster for every example', () => {
     for (const doc of SHOWCASE) {
       const url = showcaseCardUrl(doc);
-      expect(url.startsWith(`${SHOWCASE_ORIGIN}/a/${doc.id}/export`)).toBe(true);
-      expect(url).toContain('mode=card');
-      // A 1600×840 PNG is ~800 KB for a picture drawn at 380px wide.
-      expect(url).toContain('format=jpg');
+      expect(url).toBe(`/landing/posters/${doc.id}.webp`);
+      expect(existsSync(path.resolve(import.meta.dirname, '../../public', url.slice(1)))).toBe(true);
     }
   });
 });

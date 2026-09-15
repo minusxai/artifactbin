@@ -1,5 +1,3 @@
-import { createPosterLoader } from "./poster-loader";
-import { workshopPosterUrl } from "./workshop-assets";
 import { WORKSHOP_IMAGE_WIDTHS, workshopImageAt } from "./scene-manifest";
 import { addWorkshopHelpers } from "./workshop-helpers";
 import { separatePapers, floorClearance, PAPER_FLOOR } from "./paper-contact";
@@ -102,7 +100,6 @@ export function createWorkshopScene(
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
   const images: HTMLImageElement[] = [],
     extras: Array<Mesh<BufferGeometry, MeshBasicMaterial>> = [];
-  const posterLoader = createPosterLoader();
   const sheets: Sheet[] = papers.map((paper, index) => {
     const cloth = makeCloth(
       paper.x,
@@ -201,13 +198,9 @@ export function createWorkshopScene(
         schedule();
       }
     };
-    // Vite alone provides this local cross-origin bridge. Production loads
-    // the existing export URL directly from the canonical app origin.
-    // Set CORS mode before src: exports can redirect to a separate asset host.
-    // Without it, pixel reads and WebGL uploads throw after an otherwise successful load.
-    // A host without CORS follows onerror and keeps the existing paper placeholder.
+    // Match the local poster preload request mode.
     image.crossOrigin = "anonymous";
-    posterLoader.load(image, workshopPosterUrl(paper.image, !!import.meta.env?.DEV));
+    image.src = paper.image;
     return sheet;
   });
   function paintPoster(sheet: Sheet, index: number) {
@@ -836,7 +829,6 @@ export function createWorkshopScene(
       disposed = true;
       delete canvas.dataset.ready;
       helpers?.dispose();
-      posterLoader.dispose();
       cancelAnimationFrame(frame);
       observer.disconnect();
       visibility.disconnect();
