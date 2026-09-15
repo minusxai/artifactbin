@@ -2,13 +2,13 @@
   min-height: 100vh; background-color: #f5eedf; background-image: radial-gradient(#baa98b22 0.6px, transparent 0.6px);
   background-size: 7px 7px; overflow: hidden;
 }
-.gallery-intro { padding: 55px 9% 40px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 0 8%; align-items: center; }
+.gallery-intro { padding: 32px 4% 24px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 0 8%; align-items: center; }
 .gallery-intro > .studio-eyebrow { grid-column: 1/3; }
-.gallery-intro h1 { font-size: clamp(58px, 6vw, 96px); margin-bottom: 10px; }
+.gallery-intro h1 { font-size: clamp(44px, 4.5vw, 70px); margin-bottom: 10px; }
 .gallery-intro p { font: 19px/1.8 Georgia, serif; color: #727165; }
 .gallery-signature { display: block; font: italic 22px Georgia, serif; color: #245aa5; transform: rotate(-4deg); margin-top: 30px; }
 .gallery-filter-row {
-  display: flex; align-items: center; justify-content: space-between; margin: 0 9%; padding: 20px 0; border-top: 1px solid #c8bda6;
+  display: flex; align-items: center; justify-content: space-between; margin: 0 4%; padding: 12px 0; border-top: 1px solid #c8bda6;
   border-bottom: 1px solid #c8bda6;
 }
 .gallery-filter-row > div { display: flex; gap: 25px; flex-wrap: wrap; }
@@ -19,13 +19,13 @@
 .gallery-filter-row button[aria-pressed="true"] { color: #194dac; border-color: #194dac; }
 .gallery-filter-row > span { font: 10px var(--font-mono), monospace; color: #8b8475; }
 .artifact-wall {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 55px 45px; padding: 85px 9% 100px; align-items: start;
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 30px 26px; padding: 32px 4% 60px; align-items: start;
   min-height: 450px; background: radial-gradient(ellipse at 50% 50%, #d8c7a333, transparent 70%);
 }
-.wall-artifact .studio-print-sheet { padding: 20px 18px 15px; }
+.wall-artifact .studio-print-sheet { padding: 10px 10px 9px; }
 .wall-artifact:nth-child(3n + 1) { transform: rotate(-2deg); }
-.wall-artifact:nth-child(3n + 2) { transform: rotate(2deg); margin-top: 42px; }
-.wall-artifact:nth-child(3n) { transform: rotate(-1deg); margin-top: 12px; }
+.wall-artifact:nth-child(3n + 2) { transform: rotate(2deg); margin-top: 12px; }
+.wall-artifact:nth-child(3n) { transform: rotate(-1deg); margin-top: 4px; }
 .wall-artifact > p { font-size: 12px; line-height: 1.75; color: #787568; margin: 0 3px; }
 .gallery-footer { padding: 70px 9% 85px; background: #194ca4; color: #fff8e8; text-align: center; }
 .gallery-footer > span { font: 10px var(--font-mono), monospace; letter-spacing: 0.15em; color: #c4d5f5; }
@@ -34,21 +34,23 @@
   display: inline-flex; align-items: center; gap: 15px; color: inherit; text-decoration: none; border-bottom: 1px solid #b6cbee;
   padding-bottom: 10px; font: 18px Georgia, serif;
 }
-@media (max-width: 1000px) {
-  .artifact-wall { gap: 45px 30px; padding-inline: 7%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .wall-artifact:nth-child(3n + 2) { margin-top: 0; }
-  .wall-artifact:nth-child(even) { margin-top: 35px; }
-  .gallery-intro { padding-top: 60px; gap: 0 7%; }
+@media (max-width: 1500px) {
+  .artifact-wall { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-@media (max-width: 600px) {
-  .gallery-intro { grid-template-columns: 1fr; padding: 55px 7% 35px; }
+@media (max-width: 1100px) {
+  .artifact-wall { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 700px) {
+  .gallery-intro { grid-template-columns: 1fr; padding: 28px 5% 20px; }
   .gallery-intro > .studio-eyebrow { grid-column: auto; }
-  .gallery-intro h1 { font-size: 65px; }
-  .gallery-intro p { font-size: 16px; }
-  .gallery-filter-row { margin-inline: 7%; gap: 12px; align-items: start; }
-  .gallery-filter-row > div { gap: 8px 16px; }
+  .gallery-intro h1 { font-size: 48px; }
+  .gallery-intro p { font-size: 15px; line-height: 1.6; }
+  .gallery-signature { font-size: 18px; margin-top: 14px; }
+  .gallery-filter-row { margin-inline: 5%; gap: 12px; align-items: start; }
+  .gallery-filter-row > div { gap: 4px 12px; }
   .gallery-filter-row > span { white-space: nowrap; padding-top: 10px; }
-  .artifact-wall { grid-template-columns: 1fr; padding: 55px 11%; gap: 42px; }
+  .artifact-wall { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 28px 5% 40px; gap: 24px 18px; }
   .wall-artifact:nth-child(n) { margin-top: 0; }
-  .gallery-footer { padding-inline: 7%; }
+  .wall-artifact .studio-print-sheet { padding: 8px; }
+  .gallery-footer { padding-inline: 5%; }
 }

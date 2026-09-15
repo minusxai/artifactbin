@@ -15,10 +15,8 @@
   border: 1px solid #d5cbb3;
 }
 .studio-print-sheet img {
-  width: 100%; display: block; aspect-ratio: 1600/840; object-fit: cover; filter: sepia(0.16) saturate(0.67);
-  transition: filter 0.3s;
+  width: 100%; display: block; aspect-ratio: 1600/840; object-fit: cover;
 }
-.studio-print:hover .studio-print-sheet img { filter: none; }
 .studio-print:hover { transform: translateY(-6px) rotate(0) !important; }
 .studio-print-label { margin-top: 17px; color: #7c796d; font: 8px/1.5 var(--font-mono), monospace; letter-spacing: 0.16em; text-transform: uppercase; overflow-wrap: anywhere; }
 .studio-print-label > span { color: #797665; }
@@ -63,7 +61,6 @@
 .workshop-theme:nth-child(even) .workshop-mounted-print { transform: rotate(1.5deg); }
 .workshop-theme:nth-child(even) .workshop-mounted-print:nth-child(even) { transform: rotate(-2deg); }
 .workshop-mounted-print .studio-print-sheet { padding: 12px 12px 10px; }
-.workshop-mounted-print .studio-print-sheet img { filter: none; }
 .workshop-mounted-print .studio-print-label { font-size: 7px; margin-top: 12px; }
 .blue-gallery a:focus-visible { outline-color: #fff9e8; }
 .library-caption { display: flex; align-items: baseline; gap: 15px; margin: 12px 8px 0; font: italic 20px Georgia, serif; color: #fff9e8; }

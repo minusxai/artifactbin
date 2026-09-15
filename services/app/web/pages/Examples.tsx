@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { ArrowUpRight } from "lucide-react";
-import { SHOWCASE, type ShowcaseKind } from "@/lib/showcase";
+import { SHOWCASE, SHOWCASE_FORMATS, type ShowcaseKind } from "@/lib/showcase";
 import { ArtifactPrint } from "@/components/living-workshop/WorkshopDirections";
 import "./examples.css";
 import WorkshopNav from "@/components/living-workshop/WorkshopNav";
 
 const FILTERS: { label: string; kinds: ShowcaseKind[] }[] = [
-  { label: "All work", kinds: [] },
-  { label: "Stories & reports", kinds: ["report", "data story"] },
-  { label: "Dashboards", kinds: ["dashboard", "eda"] },
-  { label: "Plans & presentations", kinds: ["product plan", "deck"] },
+  { label: "All artifacts", kinds: [] },
+  ...SHOWCASE_FORMATS.map(({ kind, label }) => ({
+    label: label.charAt(0).toUpperCase() + label.slice(1),
+    kinds: [kind],
+  })),
 ];
 export default function Examples() {
   const [filter, setFilter] = useState(0);
@@ -36,13 +37,13 @@ export default function Examples() {
         </h1>
         <div>
           <p>
-            Some start with a question.
+            A few useful things.
             <br />
-            Some start with a spreadsheet.
+            A few unexpected things.
             <br />
-            All of them are worth a closer look.
+            See what catches your eye.
           </p>
-          <span className="gallery-signature">Pick a page. Stay curious.</span>
+          <span className="gallery-signature">Have a rummage. Find a gem.</span>
         </div>
       </header>
       <div className="gallery-filter-row">

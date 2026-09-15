@@ -50,7 +50,7 @@ interface Sheet {
   lastTorn: number;
 }
 /** Loaded lazily by the public homepage.
- * Same-origin textures are required by WebGL. Physics stays renderer-independent.
+ * Canvas textures must be origin-clean. Physics stays renderer-independent.
  */
 export function createWorkshopScene(
   canvas: HTMLCanvasElement,
@@ -196,6 +196,10 @@ export function createWorkshopScene(
     };
     // Vite alone provides this local cross-origin bridge. Production loads
     // the existing export URL directly from the canonical app origin.
+    // Set CORS mode before src: exports can redirect to a separate asset host.
+    // Without it, pixel reads and WebGL uploads throw after an otherwise successful load.
+    // A host without CORS follows onerror and keeps the existing paper placeholder.
+    image.crossOrigin = "anonymous";
     const preview = new URL(paper.image);
     image.src = import.meta.env?.DEV
       ? `/__dev/showcase${preview.pathname}${preview.search}`

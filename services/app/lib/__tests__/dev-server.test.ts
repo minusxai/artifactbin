@@ -4,7 +4,7 @@
  * port beside it, and the Vite options that must not share a cache directory.
  */
 import { existsSync } from 'node:fs';
-import { createServer, type Server } from 'node:http';
+import { withHttpServer } from '@artifactbin/test-support/net';
 import { createServer as createViteServer } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,7 +71,7 @@ describe('developmentViteOptions', () => {
 describe('development showcase proxy', () => {
   it('serves redirected image bytes without forwarding viewer credentials or crashing', async () => {
     const seen: { cookie?: string; authorization?: string }[] = [];
-    const upstream = createServer((req, res) => {
+    const upstream = await withHttpServer((req, res) => {
       seen.push({ cookie: req.headers.cookie, authorization: req.headers.authorization });
       if (req.url?.startsWith('/a/')) {
         res.writeHead(302, { location: '/image.jpg' });
@@ -81,31 +81,28 @@ describe('development showcase proxy', () => {
         res.end('fixture-image');
       }
     });
-    const listen = async (server: Server) => {
-      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-      const address = server.address();
-      if (!address || typeof address === 'string') throw new Error('Expected TCP listener');
-      return `http://127.0.0.1:${address.port}`;
-    };
-    const close = (server: Server) => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
-    const target = await listen(upstream);
     const proxy = developmentShowcaseProxy();
-    Object.values(proxy)[0]!.target = target;
-    const vite = await createViteServer({ configFile: false, server: { middlewareMode: true, hmr: false, proxy } });
-    const local = createServer(vite.middlewares);
+    Object.values(proxy)[0]!.target = upstream.base;
     try {
-      const origin = await listen(local);
-      const response = await fetch(`${origin}/__dev/showcase/a/${SHOWCASE[0]!.id}/export?format=jpg&mode=card`, {
-        redirect: 'manual', headers: { cookie: 'session=test-only', authorization: 'Bearer test-only' },
-      });
-      expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toBe('image/jpeg');
-      expect(await response.text()).toBe('fixture-image');
-      expect(seen).toEqual([{}, {}]);
+      const vite = await createViteServer({ configFile: false, server: { middlewareMode: true, hmr: false, proxy } });
+      try {
+        const local = await withHttpServer(vite.middlewares);
+        try {
+          const response = await fetch(`${local.base}/__dev/showcase/a/${SHOWCASE[0]!.id}/export?format=jpg&mode=card`, {
+            redirect: 'manual', headers: { cookie: 'session=test-only', authorization: 'Bearer test-only' },
+          });
+          expect(response.status).toBe(200);
+          expect(response.headers.get('content-type')).toBe('image/jpeg');
+          expect(await response.text()).toBe('fixture-image');
+          expect(seen).toEqual([{}, {}]);
+        } finally {
+          await local.close();
+        }
+      } finally {
+        await vite.close();
+      }
     } finally {
-      await close(local);
-      await vite.close();
-      await close(upstream);
+      await upstream.close();
     }
   });
   it('proxies only curated export paths to the canonical origin', () => {
