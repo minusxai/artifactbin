@@ -222,7 +222,9 @@ and initializing; coverage settings and identity ordering remain unchanged.
 
 Export cache lookup precedes screenshot queue admission. Per-key in-flight work
 coalesces storage lookup and rendering; only misses serialize, and failed keys
-are released. Access checks still precede this module, keys remain versioned,
+are released. Access checks still precede this module. Both cache layers include
+the version and edit identity, so migrations that preserve versions invalidate
+pre-repair screenshots without deleting immutable objects,
 and volatile previews never enter durable storage.
 
 The paired-performance workflow builds the production reference and candidate

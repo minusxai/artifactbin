@@ -163,6 +163,23 @@ describe('the export route through the browser seam', () => {
 
 
 describe('stored export admission before screenshot work', () => {
+  it('refreshes both cache layers when a repair changes edit identity without changing version', async () => {
+    const render = vi.fn(async (): Promise<RenderResult> => ({ ok: true, mime: 'image/png', bytes: PNG }));
+    setServices({ browser: { render } });
+    const original = { id: 'repaired-export', version: 3, edit_id: 'before' };
+    const repaired = { ...original, edit_id: 'after' };
+    const options = { pageUrl: () => BASE, target: 'body' };
+    await renderArtifactImage(original, 'png', options);
+    await renderArtifactImage(repaired, 'png', options);
+    expect(render).toHaveBeenCalledTimes(2);
+    await resetExportRenderer();
+    await renderArtifactImage(repaired, 'png', options);
+    expect(render).toHaveBeenCalledTimes(2);
+    const laterRepair = { ...repaired, edit_id: 'later' };
+    await renderArtifactImage(laterRepair, 'png', options);
+    expect(render).toHaveBeenCalledTimes(3);
+  });
+
   it('returns a stored image while an unrelated cold render is still blocked', async () => {
     let release!: () => void, entered!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });

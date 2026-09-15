@@ -17,6 +17,7 @@ import teaching from '../../cli/src/generated/teaching.json';
 import { createAppServer } from '@/server/app';
 import { POST as mintTokenRoute } from '@/app/api/tokens/route';
 import { EXPORT_RENDER_GENERATION, exportStoreKey, parseExportCapture, parseExportFormat, parseExportSlide, resetExportRenderer } from '@/lib/export';
+import { getArtifactById } from '@/lib/artifacts';
 import { objectStore } from '@/lib/object-store';
 import { setServices } from '@/lib/services';
 import { CARD_HEIGHT, CARD_WIDTH } from '@/lib/export-card';
@@ -131,11 +132,12 @@ describe('GET /a/:id/export', () => {
       // Seed the store BEFORE this artifact's first-ever shot: the memory
       // layer is necessarily cold, so verbatim bytes prove the store answered
       // and no browser was involved.
-      const { id, version } = await create(WITH_HEAD);
+      const { id } = await create(WITH_HEAD);
+      const artifact = (await getArtifactById(id))!;
       const fake = Buffer.from('89504e47deadbeef', 'hex');
       // Addressed through the same helper the renderer uses, so a change to the
       // key (a new renderer generation) cannot leave this test seeding a stale one.
-      await objectStore().put(exportStoreKey({ id, version }, 'png', 'full'), fake, 'image/png');
+      await objectStore().put(exportStoreKey(artifact, 'png', 'full'), fake, 'image/png');
       const res = await shot(id, 'png');
       expect(res.status).toBe(200);
       expect(Buffer.from(await res.arrayBuffer()).equals(fake)).toBe(true);
