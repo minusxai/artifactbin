@@ -7,8 +7,59 @@ import {POST as tableQuery} from '@/app/a/[id]/tables/route';
 import {GET as getArtifact} from '@/app/api/artifacts/[id]/route';
 import {POST as mutateRows} from '@/app/api/artifacts/[id]/mutate/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
+import {migrateMarkupSource} from '@/lib/datasets/migrate';
+import {runQueries} from '@/lib/sql/engine';
+import {runDocumentDataflow} from '@/lib/artifacts';
 useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
+
+it('preserves legacy DuckDB computations, types and parameters through migration', async () => {
+ const token=await mintToken('migration owner');
+ const rows=[{hours:1,day:'2026-01-01'},{hours:5,day:'2026-01-03'},{hours:null,day:'2026-01-05'}];
+ const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:rows}}));
+ expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
+ const sql=`select median(hours)::double as hours, min(day) as first_day, strftime(strptime(min(day)::varchar, '%Y-%m-%d'), '%Y-%m') as month, chr(65) as letter from ref_${id} where hours >= $minimum`;
+ const legacy=`<Helmet><Value name="minimum" type="number" default={0} /><Query name="stats">{\`${sql}\`}</Query></Helmet><DataTable data="$stats" />`;
+ const migrated=migrateMarkupSource(legacy);
+ expect(migrated.diagnostics).toEqual([]);
+ expect(migrateMarkupSource(migrated.source).changed).toBe(false);
+ const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:migrated.source}}));
+ expect(doc.status,await doc.clone().text()).toBe(201);const docId=(await doc.json()).id;
+ for(const minimum of [0,4,10]) {
+  const expected=await runQueries({tables:{[`ref_${id}`]:{rows,columns:[{name:'hours',type:'number'},{name:'day',type:'date'}]}},queries:[{name:'stats',sql}],params:{minimum}});
+  const response=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{values:{minimum},only:['stats']}}),ctx(docId));
+  expect(response.status,await response.clone().text()).toBe(200);
+  const state=await response.json();expect(state.errors).toEqual({});expect(state.tables.stats).toEqual(expected.stats);
+ }
+});
+
+it('aggregates complete stored source inputs beyond both source page limits while bounding displayed rows', async () => {
+ const token=await mintToken('large migration owner');
+ const rows=Array.from({length:10005},(_,i)=>({n:i+1}));
+ const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:rows}}));
+ expect(ds.status,await ds.clone().text()).toBe(201);const id=(await ds.json()).id;
+ const markup=`<Helmet><Query name="upstream" source="ref:${id}">{\`select * from public.rows\`}</Query><Query name="filtered" source="ref:${id}">{\`select * from public.rows where n > 10000\`}</Query><Query name="stats">{\`select count(*) as n, median(n) as middle, sum(n) as total from upstream\`}</Query><Query name="tail">{\`select sum(n) as total from filtered\`}</Query></Helmet><DataTable data="$stats" />`;
+ const doc=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{markup}}));
+ expect(doc.status,await doc.clone().text()).toBe(201);const docId=(await doc.json()).id;
+ const response=await query(request(`/a/${docId}/query`,{method:'POST',token:token.token,json:{}}),ctx(docId));
+ expect(response.status,await response.clone().text()).toBe(200);const state=await response.json();
+ expect(state.errors).toEqual({});
+ expect(state.tables.stats.rows).toEqual([{n:10005,middle:5003,total:50055015}]);
+ expect(state.tables.upstream.rows).toHaveLength(1000);
+ expect(state.tables.upstream.truncated).toBe(true);
+ expect(state.tables.tail.rows).toEqual([{total:50015}]);
+});
+
+it('does not return complete source inputs after document authorization is revoked', async () => {
+ const source='<Helmet><Query name="upstream" source="ref:abc123">{`select * from public.rows`}</Query><Query name="stats">{`select median(n) as n from upstream`}</Query></Helmet>';
+ const table={rows:[{n:1},{n:3}],columns:[{name:'n',type:'number' as const}]};
+ await expect(runDocumentDataflow(source,async()=>table,{authorize:async()=>{throw new Error('revoked');}})).rejects.toThrow('revoked');
+ let reads=0;
+ await expect(runDocumentDataflow(source,async()=>++reads===1?table:null)).rejects.toThrow('Dataset source is unavailable');
+ const missing=await runDocumentDataflow(source,async()=>null);
+ expect(missing?.state.tables.stats).toBeUndefined();
+ expect(missing?.state.errors.upstream).toContain('unavailable');
+});
 it('publishes a multi-schema dataset and queries it through source, including a dependent local query',async()=>{
  const token=await mintToken('owner');
  const ds=await create(request('/api/artifacts',{method:'POST',token:token.token,json:{dataset:{kind:'stored',defaultSchema:'sales',tables:[{schema:'sales',name:'orders',rows:[{id:1,total:12},{id:2,total:8}]},{schema:'support',name:'tickets',rows:[{order_id:1,subject:'Help'}]}]}}}));

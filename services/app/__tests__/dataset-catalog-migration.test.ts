@@ -6,6 +6,8 @@ import {POST as query} from '@/app/a/[id]/query/route';
 import {mintToken} from '@/lib/tokens';
 import {prepareCatalog,catalogOf} from '@/lib/datasets/catalog';
 import {POST as adminCatalogRoute} from '@/app/api/admin/dataset-catalog/route';
+import {storeDatasetRows} from '@/lib/story/dataset-store';
+import {revertArtifactFor,isVersionNotArchived} from '@/lib/artifacts';
 
 const harness = useAppHarness();
 const ctx=(id:string)=>({params:Promise.resolve({id})});
@@ -14,7 +16,147 @@ async function seed(id: string, format: 'dataset'|'markup'|'folder'|'image', sou
   await db.query(`INSERT INTO artifacts (id,token_id,content,source,format,version,edit_id,meta) VALUES ($1,'tok_migration','',$2,$3,$4,'head',$5::jsonb)`, [id, source, format, version, JSON.stringify(meta)]);
 }
 
+it('previews and applies valid history while preserving invalid JSX bytes and refusing their restore',async()=>{
+  const stored=await storeDatasetRows([{n:7}]);
+  const meta={objectKey:stored.objectKey,columns:[{name:'n',type:'number'}]};
+  await seed('abc123','dataset',null,{...meta,catalog:catalogOf({meta})});
+  const source='<Helmet><Query name="q">{`select sum(n) as n from ref_abc123`}</Query></Helmet><p id="stable">Keep</p>';
+  await seed('zzzzzz','markup',source,{},3);
+  const db=await harness.db();const invalid='<Helmet><Query name="broken">{';
+  for(const [version,markup] of [[1,invalid],[2,source]])await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('zzzzzz',$1,'preserve',$2,'markup','{}')",[version,markup]);
+  const before=(await db.query("SELECT * FROM artifact_versions WHERE artifact_id='zzzzzz' ORDER BY version")).rows;
+  const call=(body:Record<string,unknown>)=>adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10,...body}}));
+  const preview=await call({});expect(preview.status).toBe(200);const report=await preview.json();
+  expect(report).toMatchObject({changed:1,versions:1,conflicts:[],done:false,historicalExceptions:[{artifactId:'zzzzzz',version:1,reason:expect.stringMatching(/invalid JSX/)}]});
+  expect((await db.query("SELECT * FROM artifact_versions WHERE artifact_id='zzzzzz' ORDER BY version")).rows).toEqual(before);
+  const applied=await call({dryRun:false,expected:{zzzzzz:report.plans[0].fingerprint}});
+  expect(applied.status).toBe(200);expect(await applied.json()).toMatchObject({changed:1,versions:1,done:true,historicalExceptions:report.historicalExceptions});
+  expect((await db.query("SELECT * FROM artifact_versions WHERE artifact_id='zzzzzz' AND version=1")).rows[0]).toEqual(before[0]);
+  expect(await (await call({})).json()).toMatchObject({changed:0,done:true,historicalExceptions:report.historicalExceptions});
+  const head=(await db.query("SELECT * FROM artifacts WHERE id='zzzzzz'")).rows;
+  const restored=await revertArtifactFor({tokenId:'tok_migration',userId:null},'zzzzzz',1);
+  expect(restored).toMatchObject({notArchived:true});
+  if(!restored||!isVersionNotArchived(restored))throw new Error('Expected restore refusal');
+  expect(restored.refusal?.status).toBe(400);
+  expect((await db.query("SELECT * FROM artifacts WHERE id='zzzzzz'")).rows).toEqual(head);
+});
+
+it('keeps invalid heads and history resource limits blocking even when history is skippable',async()=>{
+  await seed('aaaaaa','markup','<p>Current</p>',{});
+  const db=await harness.db();
+  await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('aaaaaa',1,'','<p>{','markup','{}')");
+  expect(await runDatasetCatalogMigrationBatch(db,{batchSize:10,validate:async()=>['head validation failed']})).toMatchObject({done:false,conflicts:[{artifactId:'aaaaaa',reason:'head validation failed'}]});
+  expect(await runDatasetCatalogMigrationBatch(db,{batchSize:10,maxHistoricalVersionsPerArtifact:0})).toMatchObject({done:false,conflicts:[{artifactId:'aaaaaa',reason:'history_limit'}]});
+  await db.query("UPDATE artifacts SET source='<p>{' WHERE id='aaaaaa'");
+  expect(await runDatasetCatalogMigrationBatch(db,{batchSize:10})).toMatchObject({done:false,conflicts:[{artifactId:'aaaaaa',reason:expect.stringMatching(/invalid JSX/)}]});
+});
+
+it('paginates exception-only artifacts and reconsiders repaired history without bypassing fingerprints',async()=>{
+  const db=await harness.db();
+  for(const id of ['aaaaaa','zzzzzz']){
+    await seed(id,'markup','<p>Current</p>',{});
+    await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ($1,1,'','<p>{','markup','{}')",[id]);
+  }
+  const first=await runDatasetCatalogMigrationBatch(db,{batchSize:1});
+  expect(first).toMatchObject({processed:1,changed:0,done:true,nextCursor:'aaaaaa',historicalExceptions:[{artifactId:'aaaaaa',version:1}]});
+  const second=await runDatasetCatalogMigrationBatch(db,{batchSize:1,after:first.nextCursor!});
+  expect(second).toMatchObject({processed:1,changed:0,done:true,nextCursor:null,historicalExceptions:[{artifactId:'zzzzzz',version:1}]});
+  await seed('folder1','folder',null,{});
+  const repaired='<Helmet><Query name="q" source="folder1">{`select * from public.rows`}</Query></Helmet>';
+  await db.query("UPDATE artifact_versions SET source=$1 WHERE artifact_id='aaaaaa'",[repaired]);
+  const review=await runDatasetCatalogMigrationBatch(db,{batchSize:10});
+  expect(review).toMatchObject({changed:1,versions:1,done:false});
+  expect(review.historicalExceptions.map(exception=>exception.artifactId)).toEqual(['zzzzzz']);
+  const expected={aaaaaa:review.plans[0].fingerprint};
+  await db.query("UPDATE artifact_versions SET source=$1 WHERE artifact_id='aaaaaa'",[repaired+'<p>Concurrent</p>']);
+  const refused=await runDatasetCatalogMigrationBatch(db,{batchSize:1,dryRun:false,expected});
+  expect(refused).toMatchObject({changed:0,conflicts:[{artifactId:'aaaaaa',reason:'reviewed_snapshot_changed'}]});
+});
+
+it('does not turn a thrown historical validator failure into an exception',async()=>{
+  await seed('folder1','folder',null,{});await seed('aaaaaa','markup','<p>Current</p>',{});
+  const db=await harness.db();
+  await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('aaaaaa',1,'',$1,'markup','{}')",['<Helmet><Query name="q" source="folder1">{`select * from public.rows`}</Query></Helmet>']);
+  const before=(await db.query("SELECT * FROM artifacts WHERE id='aaaaaa'")).rows;
+  await expect(runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false,validate:async()=>{throw new Error('validator unavailable');}})).rejects.toThrow('validator unavailable');
+  expect((await db.query("SELECT * FROM artifacts WHERE id='aaaaaa'")).rows).toEqual(before);
+});
+
 describe('dataset catalog migration transaction', () => {
+  it.each([
+    ['aaaaaa','zzzzzz',false], ['zzzzzz','aaaaaa',false],
+    ['aaaaaa','zzzzzz',true], ['zzzzzz','aaaaaa',true],
+  ] as const)('validates legacy catalog state independently of ID order (%s, %s, null=%s)', async(datasetId,documentId,nullCatalog)=>{
+    const stored=await storeDatasetRows([{n:42}]);
+    const meta={objectKey:stored.objectKey,columns:[{name:'n',type:'number'}],...(nullCatalog?{catalog:null}:{})};
+    await seed(datasetId,'dataset',null,meta);
+    const source=`<Helmet><Query name="q">{\`select sum(n) as n from ref_${datasetId}\`}</Query></Helmet>`;
+    await seed(documentId,'markup',source,{});
+    const db=await harness.db();
+    const before=(await db.query('SELECT * FROM artifacts ORDER BY id')).rows;
+    const preview=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10}}));
+    expect(preview.status,await preview.clone().text()).toBe(200);
+    const report=await preview.json();
+    expect(report).toMatchObject({changed:2,datasets:1,documents:1,conflicts:[],dryRun:true,done:false});
+    expect((await db.query('SELECT * FROM artifacts ORDER BY id')).rows).toEqual(before);
+    const expected=Object.fromEntries(report.plans.map((plan:{artifactId:string;fingerprint:string})=>[plan.artifactId,plan.fingerprint]));
+    const apply=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10,dryRun:false,expected}}));
+    expect(apply.status,await apply.clone().text()).toBe(200);
+    expect(await apply.json()).toMatchObject({changed:2,conflicts:[],done:true});
+    const migrated=(await db.query<{meta:Record<string,unknown>}>('SELECT meta FROM artifacts WHERE id=$1',[datasetId])).rows[0];
+    expect(migrated.meta.catalog).toMatchObject({kind:'stored',tables:[{objectKey:stored.objectKey}]});
+    const result=await query(request(`/a/${documentId}/query`,{method:'POST',json:{}}),ctx(documentId));
+    expect(result.status,await result.clone().text()).toBe(200);
+    expect((await result.json()).tables.q.rows).toEqual([{n:42}]);
+  });
+
+  it.each([{}, {catalog:null}, null, {objectKey:''}, {objectKey:12}, {columns:[{name:'n',type:'number'}]}])('reports unrecoverable dataset metadata instead of a null exception or false completion (%j)', async(meta)=>{
+    await seed('abc123','dataset',null,{});
+    await seed('zzzzzz','markup','<Helmet><Query name="q">{`select * from ref_abc123`}</Query></Helmet>',{});
+    const db=await harness.db();
+    await db.query('UPDATE artifacts SET meta=$2::jsonb WHERE id=$1',['abc123',JSON.stringify(meta)]);
+    const before=(await db.query('SELECT * FROM artifacts ORDER BY id')).rows;
+    const preview=await adminCatalogRoute(request('/api/admin/dataset-catalog',{method:'POST',headers:{'x-shared-secret':'test-secret'},json:{batchSize:10}}));
+    expect(preview.status).toBe(409);const report=await preview.json();
+    expect(report).toMatchObject({changed:0,done:false,plans:[]});
+    expect(report.conflicts).toEqual(expect.arrayContaining([
+      expect.objectContaining({artifactId:'abc123',reason:expect.stringMatching(/no catalog or stored object key/)}),
+      expect.objectContaining({artifactId:'zzzzzz',reason:expect.stringMatching(/ref:abc123.*no catalog or stored object key/)}),
+    ]));
+    expect(JSON.stringify(report.conflicts)).not.toContain('Cannot read properties');
+    expect((await db.query('SELECT * FROM artifacts ORDER BY id')).rows).toEqual(before);
+    await db.query('UPDATE artifacts SET source=$2 WHERE id=$1',['zzzzzz','<Helmet><Query name="q" source="ref:abc123">{`select count(*) as n from public.rows`}</Query></Helmet>']);
+    const runtime=await query(request('/a/zzzzzz/query',{method:'POST',json:{}}),ctx('zzzzzz'));
+    expect(runtime.status).toBe(200);const state=await runtime.json();
+    expect(state.tables.q).toBeUndefined();
+    expect(state.errors.q).toMatch(/unavailable/);
+    // Invalid metadata alone must keep the final audit incomplete as well.
+    await db.query('DELETE FROM artifacts WHERE id=$1',['zzzzzz']);
+    const apply=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false});
+    expect(apply).toMatchObject({changed:0,done:false,plans:[],conflicts:[{artifactId:'abc123',reason:expect.stringMatching(/no catalog or stored object key/)}]});
+  });
+
+  it('includes null catalogs in retained dataset inventory and preserves invalid history as an exception',async()=>{
+    const stored=await storeDatasetRows([{n:42}]);
+    const meta={objectKey:stored.objectKey,columns:[{name:'n',type:'number'}]};
+    await seed('abc123','dataset',null,{...meta,catalog:catalogOf({meta})});
+    const db=await harness.db();
+    await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('abc123',1,'',NULL,'dataset',$1::jsonb)",[JSON.stringify({...meta,catalog:null})]);
+    const preview=await runDatasetCatalogMigrationBatch(db,{batchSize:10});
+    expect(preview).toMatchObject({changed:1,versions:1,conflicts:[],done:false});
+    const applied=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false,expected:{abc123:preview.plans[0].fingerprint}});
+    expect(applied).toMatchObject({changed:1,versions:1,conflicts:[],done:true});
+    await db.query("UPDATE artifact_versions SET meta='{}'::jsonb WHERE artifact_id='abc123'");
+    const invalid=await runDatasetCatalogMigrationBatch(db,{batchSize:10,dryRun:false});
+    expect(invalid).toMatchObject({changed:0,done:true,conflicts:[],historicalExceptions:[{artifactId:'abc123',version:1,reason:expect.stringMatching(/no catalog or stored object key/)}]});
+    const before=(await db.query("SELECT * FROM artifacts WHERE id='abc123'")).rows;
+    const restored=await revertArtifactFor({tokenId:'tok_migration',userId:null},'abc123',1);
+    expect(restored).toMatchObject({notArchived:true});
+    if(!restored||!isVersionNotArchived(restored))throw new Error('Expected restore refusal');
+    expect(restored.refusal?.status).toBe(400);
+    expect((await db.query("SELECT * FROM artifacts WHERE id='abc123'")).rows).toEqual(before);
+  });
+
   it('migrates live and retained dataset metadata without changing object identity or document version', async () => {
     const meta={objectKey:'datasets/key.json',columns:[{name:'id',type:'number'}],rowCount:1};
     await seed('aaaaaa','dataset',null,meta);
@@ -53,16 +195,19 @@ describe('dataset catalog migration transaction', () => {
     expect((await db.query<{meta:{objectKey:string}}>('SELECT meta FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0].meta.objectKey).toBe('new');
   });
 
-  it('preflights transformed head and history before writing either',async()=>{
+  it('migrates a valid head while preserving history rejected by data validation',async()=>{
     const source='<Helmet><Query name="q">{`select * from ref_abc123`}</Query></Helmet>';
     await seed('abc123','dataset',null,{catalog:{kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns:[],objectKey:'x'}]}});
     await seed('aaaaaa','markup',source,{}); const db=await harness.db();
     await db.query(`INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('aaaaaa',1,'',$1,'markup','{}')`,[source]);
     const seen:number[]=[];
     const report=await runDatasetCatalogMigrationBatch(db,{batchSize:1,dryRun:false,validate:async(_source,_row,version)=>{seen.push(version ?? 2);return version===1?['historical shape mismatch']:[];}});
-    expect(report.conflicts).toEqual([{artifactId:'aaaaaa',version:1,reason:'historical shape mismatch'}]);
+    expect(report).toMatchObject({conflicts:[],changed:1,versions:0,done:true,historicalExceptions:[{artifactId:'aaaaaa',version:1,reason:'historical shape mismatch'}]});
     expect(seen).toContain(1);
-    expect((await db.query<{source:string}>('SELECT source FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0].source).toBe(source);
+    expect((await db.query<{source:string}>('SELECT source FROM artifacts WHERE id=$1',['aaaaaa'])).rows[0].source).not.toBe(source);
+    expect((await db.query<{source:string}>('SELECT source FROM artifact_versions WHERE artifact_id=$1',['aaaaaa'])).rows[0].source).toBe(source);
+    const audit=await runDatasetCatalogMigrationBatch(db,{batchSize:10,validate:async(_source,_row,version)=>version===1?['historical shape mismatch']:[]});
+    expect(audit).toMatchObject({changed:0,done:true,historicalExceptions:report.historicalExceptions});
   });
 
   it('migrates legacy history when the live head is already canonical',async()=>{
@@ -165,7 +310,7 @@ it('validates retained markup when the current head has another format', async (
   const db=await harness.db();
   await db.query("INSERT INTO artifact_versions (artifact_id,version,content,source,format,meta) VALUES ('aaaaaa',1,'',$1,'markup','{}')",['<Helmet><Query name="q" source="abc123">{`select * from public.rows`}</Query></Helmet>']);
   const report=await runDatasetCatalogMigrationBatch(db,{batchSize:1,dryRun:false,validate:async(_source,_row,version)=>version===1?['history rejected']:[]});
-  expect(report).toMatchObject({changed:0,conflicts:[{artifactId:'aaaaaa',version:1,reason:'history rejected'}]});
+  expect(report).toMatchObject({changed:1,versions:0,conflicts:[],historicalExceptions:[{artifactId:'aaaaaa',version:1,reason:'history rejected'}]});
 });
 
 it('finishes a history-only migration under a non-markup head and reports exactly the committed snapshot',async()=>{
