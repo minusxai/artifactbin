@@ -1,10 +1,13 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createAppServer } from '../app';
 import { request, useAppHarness } from '@/__tests__/harness';
 import { AGENT_COOKIE } from '@/lib/agent-session';
 
 useAppHarness();
-const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>artifactbin</title></head><body><div id="root"></div></body></html>' });
+const indexHtml = readFileSync(path.resolve(import.meta.dirname, '../../web/index.html'), 'utf8');
+const app = createAppServer({ indexHtml: async () => indexHtml });
 
 describe('public homepage first response', () => {
   it('contains the landing content and topbar without executing JavaScript', async () => {
@@ -18,6 +21,12 @@ describe('public homepage first response', () => {
     expect(html).not.toContain('aria-label="Loading workspace"');
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(html).toContain('data-mx-initial-home');
+  });
+  it('makes the landing stylesheet render-blocking before any initial content', async () => {
+    const html = await (await app.request('/')).text();
+    const head = html.split('</head>')[0]!;
+    expect(head).toMatch(/<link\s+rel="stylesheet"\s+href="\/shell\.css"\s*\/>/);
+    expect(html.indexOf('/shell.css')).toBeLessThan(html.indexOf('data-mx-initial-home'));
   });
   it('treats an invalid cookie as a public visitor', async () => {
     expect(await (await app.request(request('/', { cookie: `session=expired; ${AGENT_COOKIE}=invalid` }))).text()).toContain('aria-label="The artifactbin workshop"');

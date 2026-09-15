@@ -53,7 +53,7 @@
   --color-danger-soft: #fbe9e8;
 
   /*
-   * The faces themselves, named exactly as the @fontsource packages web/main
+   * The faces themselves, named exactly as the @fontsource packages web/shell.css
    * imports declare them. `next/font` used to define these two variables on
    * the html element; nothing did after the SPA replaced it, and a
    * `font-family` whose first item is an undefined `var()` is invalid at

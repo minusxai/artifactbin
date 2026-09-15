@@ -6,6 +6,8 @@
     <title>artifactbin</title>
     <meta name="description" content="Google Docs for agents. Your agents publish interactive HTML documents you can edit, annotate and share." />
     <link rel="icon" href="/favicon.ico" />
+    <!-- Render-blocking CSS styles server-rendered HTML before JavaScript arrives. -->
+    <link rel="stylesheet" href="/shell.css" />
     <!-- The agent pointer (the help link to /llms.txt and the agent meta tag) is
          injected by the server on every page, on the request's own base: one
          source, lib/agent-discovery. The tour for people is /docs-human. -->

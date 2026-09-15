@@ -25,6 +25,14 @@ try {
   const heading = workshop(plain).getByRole('heading', { level: 1 });
   await heading.waitFor();
   assert((await heading.innerText()).trim().length > 0, 'public hero has a readable heading');
+  const firstPaint = await plain.locator('.workshop-page').evaluate(el => ({
+    background: getComputedStyle(el).backgroundColor,
+    headingSize: parseFloat(getComputedStyle(el.querySelector('h1')).fontSize),
+    stylesheets: document.head.querySelectorAll('link[rel="stylesheet"]').length,
+  }));
+  assert(firstPaint.stylesheets > 0, 'initial HTML discovers render-blocking CSS without JavaScript');
+  assert.equal(firstPaint.background, 'rgb(250, 247, 240)', 'landing has its paper background before JavaScript');
+  assert(firstPaint.headingSize > 40, 'hero typography is applied before JavaScript');
   assert(await plain.locator('header').getByRole('link', { name: 'artifactbin home', exact: true }).isVisible());
   const plainStar = plain.locator('header [data-mx-github-star]:visible');
   assert(await plainStar.locator('a svg').isVisible(), 'GitHub icon works without JavaScript');
@@ -54,6 +62,8 @@ try {
       if (!window.__watchHome) return;
       const visible = [...document.querySelectorAll('[aria-label="The artifactbin workshop"] h1')].some(el => el.textContent === heading && el.getBoundingClientRect().height > 0);
       if (!visible) window.__homeFailures.push('heading disappeared');
+      const landing = document.querySelector('.workshop-page');
+      if (landing && getComputedStyle(landing).backgroundColor !== 'rgb(250, 247, 240)') window.__homeFailures.push('landing lost its styles');
       requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
