@@ -28,6 +28,26 @@ describe('public homepage first response', () => {
     expect(head).toMatch(/<link\s+rel="stylesheet"\s+href="\/shell\.css"\s*\/>/);
     expect(html.indexOf('/shell.css')).toBeLessThan(html.indexOf('data-mx-initial-home'));
   });
+  it('discovers the scene mask, robot models, badges and posters before JavaScript', async () => {
+    const html = await (await app.request('/')).text();
+    const head = html.split('</head>')[0]!;
+    expect(head).toContain('/landing/workshop/foreground-mask-gray.png');
+    for (const role of ['inspector', 'standing', 'pencil', 'paper']) {
+      expect(head).toContain(`/landing/workshop/robots/workshop-bot-${role}.glb?pose=close-inspection-2`);
+    }
+    expect(head).toContain('/landing/workshop/robots/workshop-arm.glb');
+    for (const agent of ['opencode', 'claude', 'codex', 'pi']) expect(head).toContain(`/landing/workshop/robots/badge-${agent}.png`);
+    expect(head).toContain('as="fetch" crossorigin="anonymous"');
+    expect(head).toContain('https://artifactbin.dev/a/YPLu0U/export?format=jpg&amp;mode=card');
+  });
+  it('uses the same local poster URL as the renderer in development', async () => {
+    const dev = createAppServer({ indexHtml: async () => indexHtml, devHmrPort: 3041 });
+    const head = (await (await dev.request('/')).text()).split('</head>')[0]!;
+    expect(head).toContain('/__dev/showcase/a/YPLu0U/export?format=jpg&amp;mode=card');
+    expect(head).toContain('workshop-renderer.ts');
+    expect(head).not.toContain('/@fs//');
+    expect(head.match(/href="\/__dev\/showcase\//g)).toHaveLength(2);
+  });
   it('treats an invalid cookie as a public visitor', async () => {
     expect(await (await app.request(request('/', { cookie: `session=expired; ${AGENT_COOKIE}=invalid` }))).text()).toContain('aria-label="The artifactbin workshop"');
   });
@@ -48,6 +68,7 @@ describe('public homepage first response', () => {
     const html = await response.text();
     expect(html).not.toContain('aria-label="The artifactbin workshop"');
     expect(html).not.toContain('private@example.com');
+    expect(html).not.toContain('workshop-bot-inspector.glb');
     expect(response.headers.get('cache-control')).toBe('no-store');
   });
 });

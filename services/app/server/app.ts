@@ -47,7 +47,7 @@ import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
-import { createReaderPreloader } from './reader-preloads';
+import { createReaderPreloader, createEntryPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
 
 /** The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's base. */
@@ -240,6 +240,11 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   const webDir = opts.webDir ?? path.resolve('dist/web');
   if (!opts.indexHtml) mountBuildAssets(app, webDir);
   const preloadReader = opts.indexHtml ? (html: string) => html : createReaderPreloader(webDir);
+  const workshopEntry = '../components/living-workshop/workshop-renderer.ts';
+  const workshopDevUrl = '/@fs/' + path.resolve(import.meta.dirname, workshopEntry).split(path.sep).join('/').replace(/^\/+/, '');
+  const preloadWorkshop = opts.indexHtml
+    ? (html: string) => opts.devHmrPort === undefined ? html : html.replace('</head>', () => `<link rel="modulepreload" href="${escapeHtml(workshopDevUrl)}" crossorigin></head>`)
+    : createEntryPreloader(webDir, [workshopEntry]);
   app.get(GITHUB_EXTERNAL_URL, createGithubResponse());
   const publicDir = opts.publicDir ?? path.resolve('public');
   const cliReleaseDir = opts.cliReleaseDir ?? path.resolve(publicDir, '..', '..', 'cli', 'dist');
@@ -279,7 +284,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : publicHome ? withInitialHome(discovered) : discovered;
+      : publicHome ? withInitialHome(preloadWorkshop(discovered), opts.devHmrPort !== undefined) : discovered;
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,

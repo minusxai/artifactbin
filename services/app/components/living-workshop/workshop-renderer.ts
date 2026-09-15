@@ -1,3 +1,4 @@
+import { workshopPosterUrl } from "./workshop-assets";
 import { WORKSHOP_IMAGE_WIDTHS, workshopImageAt } from "./scene-manifest";
 import { addWorkshopHelpers } from "./workshop-helpers";
 import { separatePapers, floorClearance, PAPER_FLOOR } from "./paper-contact";
@@ -59,7 +60,6 @@ export function createWorkshopScene(
 ): WorkshopScene | null {
   delete canvas.dataset.ready;
   // The HTML painting stays visible until the first complete composition.
-  const settledPosters = new Set<string>();
   let backgroundReady = false;
   let renderer: WebGLRenderer;
   try {
@@ -183,14 +183,12 @@ export function createWorkshopScene(
     image.onload = () => {
       if (!disposed) {
         paintPoster(sheet, index);
-        settledPosters.add(paper.id);
         schedule();
       }
     };
     image.onerror = () => {
       if (!disposed) {
         // Keep the paper placeholder: one failed export must not block the scene.
-        settledPosters.add(paper.id);
         schedule();
       }
     };
@@ -200,10 +198,7 @@ export function createWorkshopScene(
     // Without it, pixel reads and WebGL uploads throw after an otherwise successful load.
     // A host without CORS follows onerror and keeps the existing paper placeholder.
     image.crossOrigin = "anonymous";
-    const preview = new URL(paper.image);
-    image.src = import.meta.env?.DEV
-      ? `/__dev/showcase${preview.pathname}${preview.search}`
-      : paper.image;
+    image.src = workshopPosterUrl(paper.image, !!import.meta.env?.DEV);
     return sheet;
   });
   function paintPoster(sheet: Sheet, index: number) {
@@ -550,7 +545,9 @@ export function createWorkshopScene(
   function draw(time: number) {
     frame = 0;
     if (disposed) return;
-    if (!backgroundReady || settledPosters.size !== papers.length) return;
+    // Show the live scene as soon as its background is ready. Each poster
+    // repaints independently; a slow export must not hold the robots hostage.
+    if (!backgroundReady) return;
     const dt = Math.min(0.05, (time - (last || time)) / 1000);
     last = time;
     accumulator += dt;

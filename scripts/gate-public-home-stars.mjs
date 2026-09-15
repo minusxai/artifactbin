@@ -43,6 +43,14 @@ try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, colorScheme: null });
   await githubWidgetFixture(context);
   const page = await context.newPage();
+  // One deliberately slow poster must not delay ready robots or the live canvas.
+  let releasePoster;
+  const poster = new Promise(resolve => { releasePoster = resolve; });
+  const posterPixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j4GQAAAAASUVORK5CYII=', 'base64');
+  await page.route('**/a/*/export?*', async route => {
+    if (route.request().url().includes('/YPLu0U/')) await poster;
+    await route.fulfill({ contentType: 'image/png', headers: { 'access-control-allow-origin': '*' }, body: posterPixel });
+  });
   let releaseScripts;
   const scripts = new Promise(resolve => { releaseScripts = resolve; });
   let releaseData;
@@ -71,6 +79,9 @@ try {
   releaseScripts();
   await page.locator('[data-mx-initial-home]').waitFor({ state: 'detached' });
   assert(await createAction(page).isEnabled(), 'interactive Create becomes enabled at handoff');
+  await page.locator('.workshop-canvas[data-ready="true"]').waitFor();
+  releasePoster();
+  console.log('ok live scene appears while a poster request is still held');
   assert(await page.locator('h1').isVisible());
   assert.equal(await page.getByLabel('Loading workspace', { exact: true }).count(), 0);
   releaseData();

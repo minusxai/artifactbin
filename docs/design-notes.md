@@ -198,6 +198,14 @@ builds remain available on every Node shard because `evals/__tests__/cli-kit.tes
 
 ### First useful content and workspace performance
 
+The public homepage links its shared stylesheet from HTML so server-rendered
+content is styled before JavaScript. Its anonymous response preloads the lazy
+workshop renderer's static dependencies, scene mask, robot assets and poster
+images using the same URLs and CORS modes as their consumers. Development warms
+only two proxied posters to leave HTTP/1 connections available for JavaScript;
+production posters use the canonical origin. The renderer reveals the canvas
+when its background is ready and updates posters and robots independently.
+
 Initial Home navigation overlaps its core JSON request with its lazy route code.
 The session-owned page store holds startup results until identity resolves; the
 first scope adopts the startup marker and subsequent account changes revoke it.

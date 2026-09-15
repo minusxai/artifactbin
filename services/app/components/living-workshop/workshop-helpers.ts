@@ -31,7 +31,7 @@ import {
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const ROOT = "/landing/workshop/robots/";
+import { WORKSHOP_ROBOTS, workshopRobotUrl, workshopBadgeUrl, WORKSHOP_ARM_URL } from "./workshop-assets";
 export function addWorkshopHelpers(
   renderer: WebGLRenderer,
   wake: () => void,
@@ -152,44 +152,6 @@ export function addWorkshopHelpers(
   contactShadow(1357, 514, 62, 10);
   const loader = new GLTFLoader();
   const textureLoader = new TextureLoader();
-  const placements = [
-    {
-      x: 910,
-      y: 727,
-      size: 57,
-      turn: 0.824,
-      agent: "opencode",
-      role: "inspector",
-      offset: 1.3,
-    },
-    {
-      x: 675,
-      y: 483,
-      size: 60,
-      turn: 0.42,
-      agent: "claude",
-      role: "standing",
-      offset: 0,
-    },
-    {
-      x: 565,
-      y: 664,
-      size: 64,
-      turn: 0.34,
-      agent: "codex",
-      role: "pencil",
-      offset: 2.2,
-    },
-    {
-      x: 1036,
-      y: 705,
-      size: 56,
-      turn: 0.4,
-      agent: "pi",
-      role: "paper",
-      offset: 4.1,
-    },
-  ];
   function remember(root: Object3D) {
     root.traverse((o) => {
       if (!(o instanceof Mesh)) return;
@@ -217,14 +179,12 @@ export function addWorkshopHelpers(
     });
   }
   void Promise.all(
-    placements.map(async (p) => {
-      const gltf = await loader.loadAsync(
-        ROOT + `workshop-bot-${p.role}.glb?pose=close-inspection-2`,
-      );
+    WORKSHOP_ROBOTS.map(async (p) => {
+      const [gltf, texture] = await Promise.all([
+        loader.loadAsync(workshopRobotUrl(p.role)),
+        textureLoader.loadAsync(workshopBadgeUrl(p.agent)),
+      ]);
       remember(gltf.scene);
-      const texture = await textureLoader.loadAsync(
-        ROOT + `badge-${p.agent}.png`,
-      );
       if (disposed) {
         texture.dispose();
         return;
@@ -362,6 +322,7 @@ export function addWorkshopHelpers(
       for (const clip of gltf.animations) mixer.clipAction(clip).play();
       mixer.update(p.offset);
       mixers.push(mixer);
+      wake();
     }),
   )
     .then(wake)
@@ -369,7 +330,7 @@ export function addWorkshopHelpers(
       /* The painting remains usable if robot assets fail. */
     });
   void loader
-    .loadAsync(ROOT + "workshop-arm.glb")
+    .loadAsync(WORKSHOP_ARM_URL)
     .then((gltf) => {
       remember(gltf.scene);
       if (disposed) return;
