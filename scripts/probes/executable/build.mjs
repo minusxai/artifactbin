@@ -78,7 +78,8 @@ await writeFile(join(output, 'manifest.json'), JSON.stringify(manifest));
 const config = join(output, 'sea.json'), blob = join(output, 'sea.blob');
 await writeFile(config, JSON.stringify({main: resolve('scripts/probes/executable/entry.cjs'), output: blob,
   disableExperimentalSEAWarning: true, useCodeCache: false, useSnapshot: false,
-  assets: {drivers: join(output, 'drivers.gz'), duckdb: join(output, 'duckdb.cjs'), manifest: join(output, 'manifest.json')}}));
+  assets: {drivers: join(output, 'drivers.gz'), duckdb: join(output, 'duckdb.cjs'), manifest: join(output, 'manifest.json'),
+    daemon: resolve('scripts/probes/executable/daemon.cjs')}}));
 execFileSync(runtime, ['--experimental-sea-config', config], {stdio: 'inherit'});
 const binary = join(output, 'afbin-proof');
 await copyFile(runtime, binary); await chmod(binary, 0o755);

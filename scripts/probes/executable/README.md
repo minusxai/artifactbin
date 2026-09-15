@@ -23,6 +23,16 @@ CI runs all four currently supported CLI targets. It checks idle/no download, re
 concurrent first installation, real SQL plus browser screenshot, offline reuse, and damaged-cache repair.
 An additional child disables native installation to prove that the work assertion actually fails.
 Linux browser system libraries are runner prerequisites; this does not prove arbitrary Linux distros,
-Windows, musl, managed `self` lifecycle, or the eventual artifact server bundle.
+Windows, musl, or the eventual artifact server bundle.
+
+`check-daemon.mjs` exercises the additional `daemon.cjs` lifecycle experiment embedded in the SEA.
+It uses the CLI's existing SQLite exclusive-transaction locking pattern, with separate startup and
+server-lifetime locks. Only the lifetime lock holder opens PGLite. Discovery verifies a challenge
+before sending owner credentials; shutdown uses authenticated HTTP, never a persisted PID as authority.
+The checks cover concurrent launch, survival after launcher exit/death, isolated instances, graceful
+stop/restart, stale PIDs, foreign listeners, occupied ports, and SIGKILL with an uncommitted transaction.
+This validates the process/ownership mechanism using probe routes; actual artifact host integration,
+browser session bootstrap, upgrades and full workload draining remain implementation acceptance checks.
 
 Run in CI: `node scripts/probes/executable/build.mjs`, then `node scripts/probes/executable/check.mjs`.
+Then run `node scripts/probes/executable/check-daemon.mjs` against that same executable.

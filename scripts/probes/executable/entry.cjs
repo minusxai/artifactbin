@@ -77,6 +77,15 @@ async function drivers() {
 async function main() {
   if (mode === 'idle') { console.log(JSON.stringify({ready: true})); return; }
   await fs.mkdir(root, {recursive: true, mode: 0o700});
+  if (mode.startsWith('daemon-')) {
+    const daemon = {exports: {}};
+    compileFunction(getAsset('daemon', 'utf8'), ['require', 'module', 'exports'])(require, daemon, daemon.exports);
+    await daemon.exports.run({mode, root, getPGlite: async () => {
+      const directory = await drivers();
+      return createRequire(join(root, 'loader.cjs'))(join(directory, 'pglite')).PGlite;
+    }});
+    return;
+  }
   if (mode === 'storage') {
     const driverRoot = await drivers();
     const {PGlite} = createRequire(join(root, 'loader.cjs'))(join(driverRoot, 'pglite'));

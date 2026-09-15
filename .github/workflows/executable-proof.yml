@@ -32,6 +32,8 @@ jobs:
         run: node scripts/probes/executable/build.mjs
       - name: Run actual executable outside checkout with no Node or npm on PATH
         run: node scripts/probes/executable/check.mjs
+      - name: Exercise detached lifecycle, authenticated discovery and PGLite crash recovery
+        run: node scripts/probes/executable/check-daemon.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
@@ -39,4 +41,5 @@ jobs:
           path: |
             node_modules/.cache/executable-proof/evidence.json
             node_modules/.cache/executable-proof/result.png
+            node_modules/.cache/executable-proof/daemon-evidence.json
           if-no-files-found: warn
