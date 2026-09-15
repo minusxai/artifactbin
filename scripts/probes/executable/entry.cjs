@@ -9,6 +9,7 @@ const {gunzipSync} = require('node:zlib');
 const {Readable, Transform} = require('node:stream');
 const {pipeline} = require('node:stream/promises');
 const {createWriteStream} = require('node:fs');
+const {DatabaseSync} = require('node:sqlite');
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const [mode, root, endpoint] = process.argv.slice(2);
 const manifest = JSON.parse(getAsset('manifest', 'utf8'));
@@ -76,6 +77,20 @@ async function drivers() {
 async function main() {
   if (mode === 'idle') { console.log(JSON.stringify({ready: true})); return; }
   await fs.mkdir(root, {recursive: true, mode: 0o700});
+  if (mode === 'storage') {
+    const driverRoot = await drivers();
+    const {PGlite} = createRequire(join(root, 'loader.cjs'))(join(driverRoot, 'pglite'));
+    const db = new PGlite(join(root, 'pglite'));
+    const client = new DatabaseSync(join(root, 'state.sqlite'));
+    try {
+      await db.exec('create table if not exists probe (id integer primary key, runs integer)');
+      const {rows} = await db.query('insert into probe values (1, 1) on conflict (id) do update set runs = probe.runs + 1 returning runs');
+      client.exec('create table if not exists probe (id integer primary key, runs integer)');
+      const local = client.prepare('insert into probe values (1, 1) on conflict (id) do update set runs = probe.runs + 1 returning runs').get();
+      console.log(JSON.stringify({pgliteRuns: rows[0].runs, sqliteRuns: local.runs}));
+    } finally { client.close(); await db.close(); }
+    return;
+  }
   const sql = mode === 'without-install' ? join(root, 'missing') : await install('sql');
   const nativeRequire = createRequire(join(root, 'loader.cjs'));
   // Intentional engine boundary: evaluate the embedded JS only after native installation.

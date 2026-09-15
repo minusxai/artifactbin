@@ -30,6 +30,10 @@ try {
   assert.deepEqual(JSON.parse((await invoke('idle')).stdout), {ready: true});
   assert.equal(requests, 0, 'idle must not download');
   assert.ok(!(await readdir(home)).includes('cache'), 'idle must not extract drivers');
+  for (const count of [1, 2]) {
+    assert.deepEqual(JSON.parse((await invoke('storage')).stdout), {pgliteRuns: count, sqliteRuns: count});
+  }
+  assert.equal(requests, 0, 'PGLite and SQLite must persist without downloading anything');
 
   // Negative control: removing the lazy-install step must break real execution.
   await assert.rejects(invoke('without-install', join(home, 'negative')),
@@ -63,6 +67,7 @@ try {
     versions: manifest.versions, embeddedDriverBytes: manifest.driverBytes,
     nativeDownloadBytes: manifest.downloads.reduce((n, file) => n + file.size, 0),
     checks: ['real SEA', 'no external Node/npm', 'idle without download or extraction',
+      'embedded PGLite and SQLite persistence across processes without downloads',
       'negative control fails without native install', 'corrupt download rejected',
       'concurrent first use', 'DuckDB SQL', 'Chromium DOM and PNG',
       'offline reuse', 'damaged cache rejected offline and repaired online'],

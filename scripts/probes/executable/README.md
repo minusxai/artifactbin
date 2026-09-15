@@ -15,6 +15,9 @@ The embedded manifest pins every downloaded file by SHA-256. It retains executab
 symlinks; staging/rename prevents consumers observing partial installs. Playwright's JS/support files
 are extracted from the executable, never fetched from npm. DuckDB's JS API is an embedded CJS bundle,
 with the native binding resolved only after installation.
+PGLite and its WASM/data assets are also embedded and extracted. A separate storage command checks
+PGLite server data and Node's SQLite client state survive closing and reopening in another process,
+without a download. The probe never gives two processes ownership of one PGLite directory.
 
 CI runs all four currently supported CLI targets. It checks idle/no download, rejected corrupt download,
 concurrent first installation, real SQL plus browser screenshot, offline reuse, and damaged-cache repair.

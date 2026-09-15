@@ -53,14 +53,19 @@ const chromiumRoot = join(browserCache, distribution);
 manifest.chromiumExecutable = relative(chromiumRoot, executable);
 await collect(chromiumRoot, '', (path, link) => payload('chromium', chromiumRoot, path, link));
 
-const driverRoot = dirname(require.resolve('playwright-core/package.json'));
 const files = {};
-await collect(driverRoot, '', async (path, link) => {
-  if (link) throw Error('Unexpected driver symlink');
-  if (/\.(node|dylib|so|dll)$/.test(path)) throw Error('Native binary in driver payload');
-  const source = join(driverRoot, path);
-  files[join('playwright-core', path)] = {data: (await readFile(source)).toString('base64'), mode: (await stat(source)).mode & 0o777};
-});
+async function embedPackage(name, root) {
+  await collect(root, '', async (path, link) => {
+    if (link) throw Error('Unexpected driver symlink');
+    if (/\.(node|dylib|so|dll)$/.test(path)) throw Error('Native binary in driver payload');
+    const source = join(root, path);
+    files[join(name, path)] = {data: (await readFile(source)).toString('base64'), mode: (await stat(source)).mode & 0o777};
+  });
+}
+await embedPackage('playwright-core', dirname(require.resolve('playwright-core/package.json')));
+const pgliteRoot = dirname(dirname(require.resolve('@electric-sql/pglite')));
+await embedPackage('pglite', pgliteRoot);
+manifest.versions.pglite = JSON.parse(await readFile(join(pgliteRoot, 'package.json'), 'utf8')).version;
 const drivers = gzipSync(JSON.stringify(files));
 manifest.driverBytes = drivers.length;
 await writeFile(join(output, 'drivers.gz'), drivers);
