@@ -10,6 +10,7 @@
  * Both directions live here so no caller has to know where a given
  * artifact's rows are.
  */
+import {legacyDatasetRows} from '@/lib/datasets/catalog-metadata';
 import { objectKey, objectStore } from '@/lib/object-store';
 
 /** Where a dataset's rows are, if not inline. */
@@ -34,13 +35,12 @@ export async function storeDatasetRows(rows: unknown[], store: Pick<import('@/li
 }
 
 /**
- * Read rows back, from wherever they are. Returns [] rather than throwing when
- * an object has gone missing: a chart degrading to empty is better than a page
- * that will not render, and the embed already has a no-data fallback.
+ * Read object-backed rows or validated surviving legacy inline bytes. An unreadable
+ * referenced object throws; it must never masquerade as an empty table.
  */
 export async function loadDatasetRows(row: { content: string; meta: unknown }): Promise<Record<string, unknown>[]> {
   const key = (row.meta as { objectKey?: unknown } | null)?.objectKey;
-  if (typeof key !== 'string' || !key) return [];
+  if (typeof key !== 'string' || !key) return legacyDatasetRows(row.content) ?? [];
   // A row that names a key promises rows; a store that cannot produce them
   // is an ERROR (ObjectUnavailable) the caller surfaces — never `[]`, which
   // would draw an empty chart over a broken bucket. Repeat reads cost one

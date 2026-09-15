@@ -1,3 +1,4 @@
+import { tableQueryInput } from '@artifactbin/utils';
 import type { DatasetColumn, QueryPage, Row, Scalar, TableResult } from '@artifactbin/contracts';
 import { isQueryFailure, runQueries } from '@/lib/sql/engine';
 
@@ -8,12 +9,7 @@ export async function queryRows(
   params: Record<string, Scalar>,
   page?: QueryPage,
 ): Promise<TableResult> {
-  const result = (await runQueries({
-    tables: {source_rows: table},
-    catalog: {defaultSchema:'public',tables:[{schema:'public',name:'rows',columns:table.columns,source:'source_rows'}]},
-    queries: [{name:'result',sql}], params,
-    ...(page ? {page: {...page, name: 'result'}} : {}),
-  })).result;
+  const result = (await runQueries(tableQueryInput(table, sql, params, page))).result;
   if (!result || isQueryFailure(result)) throw new Error(result?.error ?? 'Source query failed');
   return result;
 }

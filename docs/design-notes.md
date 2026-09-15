@@ -278,3 +278,10 @@ repairing validated heads and history. Operators may use
 when other current heads have blocking conflicts. Unresolved heads remain in every report and
 produce an incomplete result. Preview backups precede all writes, complete artifact/history
 fingerprints guard each transaction, and the final audit follows all pages.
+
+Legacy datasets with surviving flat JSON in `content` receive a read-time catalog adapter.
+Migration plans a content-addressed object key without writing; apply uploads the original bytes
+only after locking the reviewed database snapshot, then updates catalog metadata. Original inline
+content and version numbers remain intact. Invalid/missing bytes remain explicit conflicts.
+The complete-input dataflow path also recognizes these inline sources, so dependent aggregates
+never silently use the displayed 1,000-row sample.

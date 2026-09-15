@@ -23,3 +23,4 @@ export {artifactIdFromSegment,artifactIdFromPath} from './artifact-reference';
 
 export { isBuildAssetPath, buildAssetRequest, buildAssetResponse } from './build-assets';
 export { renderConnectionPage } from './connection-page';
+export { tableQueryInput } from './table-query';

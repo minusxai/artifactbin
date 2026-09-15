@@ -46,10 +46,10 @@ function catalogSql(sql: string, types: SqlReadCatalog['paramTypes'], params: Re
         const token = /^\$([A-Za-z_][A-Za-z_0-9]*|[0-9]+)/.exec(sql.slice(i));
         if (!token) { i++; }
         else {
-          if (!types) { out += token[0]; i += token[0].length; continue; }
           const name = token[1]!;
+          if (!Object.hasOwn(params, name)) fail(`undeclared parameter $${name}`);
+          if (!types) { out += token[0]; i += token[0].length; continue; }
           if (!Object.hasOwn(types, name) || !Object.hasOwn(COLUMN_SQL_TYPES, types[name]!)) fail(`missing parameter type for $${name}`);
-          if (!Object.hasOwn(params, name)) fail(`missing parameter $${name}`);
           const type = types[name]!, value = params[name];
           const expected = type === 'number' ? 'number' : type === 'boolean' ? 'boolean' : 'string';
           if (value !== null && (typeof value !== expected || (typeof value === 'number' && !Number.isFinite(value)))) fail(`parameter $${name} does not match its declared type`);
@@ -100,7 +100,10 @@ export async function prepareReadCatalog(
     if (typeof sql !== 'string' || sql.length > 100_000 || (totalSql += sql.length) > 2_000_000) fail('query is too large');
     const rows = (await conn.runAndReadAll('SELECT json_serialize_sql($sql::VARCHAR) AS ast', {sql})).getRowObjects();
     const parsed = JSON.parse(String(rows[0]?.ast)) as {error?:boolean;error_message?:string;statements?:Array<{node:Node}>};
-    if (parsed.error) fail(`unsupported or invalid DuckDB syntax (${parsed.error_message ?? 'parse failed'})`);
+    if (parsed.error) {
+      if (parsed.error_message?.includes('Only SELECT statements')) fail('only read statements are allowed');
+      fail(`unsupported or invalid DuckDB syntax (${parsed.error_message ?? 'parse failed'})`);
+    }
     if (parsed.statements?.length !== 1) fail('exactly one read statement is required');
     const refs = new Set<string>();
     function walk(value: unknown, scope: Set<string>, depth = 0): void {
