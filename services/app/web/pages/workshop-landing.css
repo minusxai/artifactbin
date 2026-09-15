@@ -340,6 +340,11 @@
 /* Mobile composition: introduction, uncropped scene, then sample conversations. */
 .workshop-nav-desktop { display: flex; align-items: center; gap: inherit; }
 .workshop-nav nav > [data-mx-github-star] { display: inline-flex; }
+@media (max-width: 360px) {
+  .workshop-nav { padding-inline: 12px; }
+  .workshop-nav nav { gap: 4px; }
+  .workshop-nav [data-mx-github-count] { display: none; }
+}
 .workshop-nav nav .workshop-nav-mobile { display: none; }
 @media (max-width: 800px) {
   .workshop-nav-desktop { display: none; }
