@@ -15,6 +15,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string;
   const row = await getVersionFor(scoped, id, v);
   if (!row) return json({ error: 'not_found' }, 404);
   // Same wire as the token route: `content` under its own name, `markup` for
-  // the source. Echoing it as `html` named a tier that no longer exists.
+  // the source.
   return json({ ...row, markup: row.source, source: undefined });
 }

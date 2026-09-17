@@ -1,9 +1,9 @@
 /**
- * THE APP'S ROUTES ON HONO. Every handler keeps the signature it had —
- * `(request: Request, ctx: { params: Promise<...> })` → `Response` — so the
- * suite that calls handlers directly is unchanged, and Hono only translates:
- * its params become the promise the handler awaits, its raw Request is the
- * request. The table is generated from the filesystem (scripts/generate-routes).
+ * THE APP'S ROUTES ON HONO. Every handler has the signature
+ * `(request: Request, ctx: { params: Promise<...> })` → `Response`, so the
+ * suite can call one directly; Hono only translates: its params become the
+ * promise the handler awaits, its raw Request is the request. The table is
+ * generated from the filesystem (scripts/generate-routes).
  */
 import type { Hono } from 'hono';
 import { emit } from '@/lib/events';
@@ -46,7 +46,7 @@ export function mountRoutes(app: Hono, routes: RouteEntry[] = ROUTES): void {
   }
 }
 
-/** Hono hands params raw; Next decoded them. `[...rest]` arrives as one string, split like Next's array. */
+/** Hono hands params raw; every handler is given them percent-decoded. */
 function decodeParams(params: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(params)) out[k] = safeDecode(v);

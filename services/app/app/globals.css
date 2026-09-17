@@ -29,10 +29,10 @@
  * palette to graphite. The toggle writes localStorage('mx_theme') and the
  * pre-paint script in web/index.html stamps the attribute FOUC-free.
  *
- * The default used to be the other way round. Whichever mode is default must be
- * the one on bare `:root`, because that is what a reader gets before any script
- * runs and if none ever does — so flipping the default means moving the
- * palettes, never just changing what the bootstrap stamps.
+ * Whichever mode is default must be the one on bare `:root`, because that is
+ * what a reader gets before any script runs and if none ever does — so flipping
+ * the default means moving the palettes, never just changing what the bootstrap
+ * stamps.
  */
 @theme {
   --color-bg: #f6f7f8;
@@ -54,11 +54,10 @@
 
   /*
    * The faces themselves, named exactly as the @fontsource packages web/shell.css
-   * imports declare them. `next/font` used to define these two variables on
-   * the html element; nothing did after the SPA replaced it, and a
-   * `font-family` whose first item is an undefined `var()` is invalid at
-   * computed-value time — so the app lost its typeface entirely rather than
-   * falling through to `ui-monospace`. Guarded by lib/__tests__/app-fonts.
+   * imports declare them. They MUST be defined here: a `font-family` whose first
+   * item is an undefined `var()` is invalid at computed-value time, so the app
+   * loses its typeface entirely rather than falling through to `ui-monospace`.
+   * Guarded by lib/__tests__/app-fonts.test.ts.
    */
   --font-jb-mono: 'JetBrains Mono Variable';
   --font-plex-sans: 'IBM Plex Sans';
@@ -148,7 +147,7 @@ body {
 }
 
 /* A tint, and the text keeps its own color: the solid accent+bg pair measured
- * 3.3:1 in light mode (WCAG AA needs 4.5) — __tests__/selection-contrast.test.ts. */
+ * 3.3:1 in light mode, where WCAG AA needs 4.5. */
 ::selection {
   background: color-mix(in srgb, var(--color-accent) 30%, transparent);
 }

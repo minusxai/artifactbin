@@ -1,7 +1,7 @@
 /**
- * `/docs` and `/docs/*` belong to agents; people get `/docs-human`. Decision 2026-09-03 after production eval run
- * 33702277600, where a fetch tool asking for HTML was bounced from `/docs` to the human tour mid-discovery, and
- * where guessed API paths answered the SPA's HTML 404 with no pointer home. Seeded RED by the orchestrator.
+ * The docs addresses. `/docs` and everything under it is retired and answers 404 to machines and browsers
+ * alike; people get `/docs-human`, and an agent gets the CLI pointer (`/llms.txt`, `afbin help`). A guessed
+ * API path answers that pointer as JSON rather than the SPA's HTML 404, which tells a fetch tool nothing.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -44,11 +44,10 @@ describe('docs addresses', () => {
   });
 
   /**
-   * Every dead end names `/docs`, not only the ones under `/api/`. Measured on
-   * production 2026-09-03: `/.well-known/deepseek` and `/help` both answered
-   * the 891-byte SPA shell — HTML, with no pointer — to a caller that never
-   * asked for HTML. The split is what the caller ASKED FOR: no `text/html` in
-   * Accept ⇒ the JSON refusal; a browser keeps its own 404 page.
+   * Every dead end names the way on, not only the ones under `/api/`:
+   * `/.well-known/deepseek` and `/help` must not hand a caller that never asked
+   * for HTML the SPA shell. The split is what the caller ASKED FOR: no
+   * `text/html` in Accept ⇒ the JSON refusal; a browser keeps its own 404 page.
    */
   it('answers a guessed path in the caller\'s own language', async () => {
     for (const p of ['/.well-known/deepseek', '/help']) {

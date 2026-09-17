@@ -1,9 +1,9 @@
 /**
- * The app server's own decisions: a READER is served the document itself at
- * /a/<id> and at the pretty URL (the per-row CSP proves it is `raw`'s
- * response), an OWNER gets the app page, a private document's stranger gets
- * the uniform 404 page, the app's paths get the SPA under the app CSP, and
- * anything else is a plain 404.
+ * The app server's own decisions: every viewer of a readable document gets the
+ * app page at the canonical address, under the app CSP, with the document's own
+ * markup already in it (only /raw keeps the standalone sandbox); a private
+ * document's stranger gets the uniform 404 page; the app's paths get the SPA
+ * under the app CSP; and anything else is a plain 404.
  */
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
@@ -126,8 +126,8 @@ describe('the app\'s paths', () => {
    * addresses miss three different ways and must answer identically: a root
    * typo (no route), a handle nobody holds, and a handle that exists (which is
    * the 200 that proves the 404s above are decisions, not accidents). A caller
-   * that never asked for HTML gets the JSON refusal naming `/docs` instead —
-   * `server/__tests__/docs-human.test.ts` owns that half.
+   * that never asked for HTML gets the JSON refusal naming `afbin help`
+   * instead — `server/__tests__/docs-human.test.ts` owns that half.
    */
   it('a miss is the 404 STATUS carrying the SPA, wherever it happens', async () => {
     const w = await world();

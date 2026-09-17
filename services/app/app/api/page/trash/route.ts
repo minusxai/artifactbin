@@ -1,5 +1,5 @@
 /**
- * The trash page's data: the rows this account has deleted and not yet lost.
+ * The trash page's data: the rows this account has deleted.
  *
  * Its own page endpoint rather than a flag on /api/page/home, because every
  * other read in this product goes through the trash gate and returns nothing

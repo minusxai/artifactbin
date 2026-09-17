@@ -1,11 +1,10 @@
 /**
  * A 500 THAT SAYS NOTHING IS AN OUTAGE WITH NO HANDLE.
  *
- * A route that throws became `500 {}` with nothing in the server's log: the
- * framework's default handler answers and swallows. That is what a container
- * looked like when `/api/start` failed inside the image — the gate could say
- * "500", the container's own log said only that it had booted, and there was
- * no way in from either end.
+ * Left to the framework's default handler, a route that throws answers
+ * `500 {}` and puts nothing in the server's log: the gate can say "500", the
+ * container's own log says only that it booted, and there is no way in from
+ * either end.
  *
  * The caller still learns nothing (an error's text is ours, not theirs); the
  * OPERATOR learns the method, the path and the error.
