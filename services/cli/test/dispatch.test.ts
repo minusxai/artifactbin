@@ -110,12 +110,12 @@ test('a directory tracked against one server refuses another by name, before any
   assert.notEqual(refused.code,0);assert.equal(refused.result.error.code,'wrong_server',JSON.stringify(refused.result));
   assert.match(refused.result.error.message,/tracked against https:\/\/one\.example; the command selected https:\/\/two\.example/);
   assert.match(refused.result.error.fix,/another directory, or pass --server https:\/\/one\.example/);
-  // The selected server is asked exactly ONE question before the refusal, and it is the public,
-  // credential-free one this CLI now asks any selected origin: which addresses do you answer at?
-  // (services/cli/src/server-identity — two names of one deployment are not two servers.) Nothing
-  // else reaches it: no artifact, no account header and, above all, no token.
+  // Nothing of this command reaches the other server: no artifact request, no account header and
+  // above all no token. Whether the two origins are one deployment is settled first
+  // (services/cli/src/server-identity); this fixture's hosts have already answered that they are
+  // not, so the refusal is reached without a single request leaving for two.example.
   const other=sent.filter(call=>call.host==='two.example');
-  assert.deepEqual(other.map(call=>call.path),['/api/server'],`only the identity document may reach the other server: ${JSON.stringify(sent)}`);
+  assert.deepEqual(other.map(call=>call.path),[],`no request reached the other server: ${JSON.stringify(sent)}`);
   for(const call of other)assert.equal(call.authorization,null,'no credential reaches a server the workspace is not tracked against');
  }finally{await rm(root,{recursive:true,force:true});}
 });

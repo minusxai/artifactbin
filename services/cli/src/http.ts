@@ -1,4 +1,4 @@
-import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH,CLI_PROTOCOL_VERSION,normalizeOrigin} from '@artifactbin/contracts';
 import {homedir} from 'node:os';
 import {CliError} from './commands';
 import {CLI_VERSION} from './version';
@@ -15,6 +15,12 @@ export class HttpClient {
   */
  readonly aliases:readonly string[];
  constructor(private options:HttpOptions){this.connection={...options.connection,server:normalizeServer(options.connection.server)};this.account=options.account;this.aliases=options.aliases??[];}
+ /**
+  * Does `origin` name the server this client talks to? Records written before a deployment
+  * published its second address carry whichever name was used then, so every comparison
+  * against a STORED origin asks this rather than comparing strings.
+  */
+ sameServer(origin:string):boolean{const value=normalizeOrigin(origin);return !!value&&(value===this.connection.server||this.aliases.includes(value));}
  async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number;readOnly?:boolean;signal?:AbortSignal}={}):Promise<T>{
   return this.perform(path,method,body,headers,false,options.timeoutMs,options.readOnly,apiUrl,options.signal) as Promise<T>;
  }

@@ -10,6 +10,7 @@
 import { tempWorkspace } from '@artifactbin/test-support';
 import { runCli } from '../src/dispatch';
 import { saveConnection } from '../src/config';
+import { settleIdentity } from './connection';
 
 export interface RecordedCall {
   method: string;
@@ -59,6 +60,8 @@ export async function cliHarness(prefix: string, options: HarnessOptions = {}): 
   const root = workspace.root;
   const token = options.token === undefined ? 'test-token' : options.token;
   if (token !== null) await saveConnection({ server, token }, root);
+  // The harness IS the server: it has already said it answers at one address (see settleIdentity).
+  await settleIdentity(server, root);
   const flags = options.flags ?? ['--server', server];
   const account = options.account === undefined ? 'usr_seed' : options.account;
 
