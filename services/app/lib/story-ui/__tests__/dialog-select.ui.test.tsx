@@ -5,7 +5,7 @@
  */
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
-import {ArtifactDialogScope, Dialog, DialogContent, DialogTrigger} from '@/components/kit/dialog';
+import {ArtifactDialogScope, Dialog, DialogClose, DialogContent, DialogTrigger} from '@/components/kit/dialog';
 import {SelectControl} from '@/components/kit/controls';
 
 beforeEach(() => {
@@ -89,5 +89,17 @@ describe('Dialog defaults', () => {
   it('draws the trigger as a button by default, and leaves a wrapped control alone', () => {
     render(<Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Editor"><p>Body</p></DialogContent></Dialog>);
     expect(screen.getByText('Open').className).toMatch(/\bbg-primary\b|\bborder\b/);
+  });
+  it('centres the dialog on a raw or exported page too, where no scoped style does it', () => {
+    render(<Dialog><DialogTrigger>Open</DialogTrigger><DialogContent aria-label="Editor"><p>Body</p></DialogContent></Dialog>);
+    fireEvent.click(screen.getByText('Open'));
+    expect(screen.getByRole('dialog', {name: 'Editor'}).className.split(/\s+/)).toContain('m-auto');
+  });
+
+  it('draws Cancel as a quiet button by default, and leaves an author’s own class alone', () => {
+    render(<Dialog defaultOpen><DialogContent aria-label="Editor"><DialogClose>Cancel</DialogClose><DialogClose className="mine">Dismiss</DialogClose></DialogContent></Dialog>);
+    expect(screen.getByText('Cancel').className).toMatch(/\bborder\b/);
+    expect(screen.getByText('Cancel').className).not.toMatch(/\bbg-primary\b/);
+    expect(screen.getByText('Dismiss').className).toBe('mine');
   });
 });

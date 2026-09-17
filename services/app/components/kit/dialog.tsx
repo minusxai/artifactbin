@@ -8,10 +8,11 @@ import {cn} from './cn';
  * Tailwind's preflight strips the UA's dialog padding and border, so an
  * unstyled dialog is a square white box flush against its own text. These are
  * the kit's own chrome, merged so an author `className` wins on conflict:
- * `p-0` replaces the padding rather than fighting it. The scoped inline
- * `style` (position/inset/margin/zIndex) is separate and untouched.
+ * `p-0` replaces the padding rather than fighting it. `m-auto` centres it on the
+ * unscoped `showModal()` path, where preflight has zeroed the UA margin; the
+ * scoped inline `style` (position/inset/margin/zIndex) is separate and untouched.
  */
-const DIALOG_CONTENT_CLASS = 'max-h-[calc(100svh-4rem)] w-fit max-w-[min(32rem,calc(100vw-2rem))] overflow-auto rounded-lg border border-border bg-background p-6 text-foreground shadow-lg';
+const DIALOG_CONTENT_CLASS = 'm-auto max-h-[calc(100svh-4rem)] w-fit max-w-[min(32rem,calc(100vw-2rem))] overflow-auto rounded-lg border border-border bg-background p-6 text-foreground shadow-lg';
 
 interface DialogState {
   open: boolean;
@@ -91,7 +92,8 @@ export function DialogTrigger({children, wrapsControl, ...props}: TriggerProps) 
 export function DialogClose({children, wrapsControl, ...props}: TriggerProps) {
   const context = useContext(Context);
   if (wrapsControl) return <ControlDelegate {...props} act={() => {if (!context?.busy) context?.setOpen(false);}}>{children}</ControlDelegate>;
-  return <button {...props} type="button" disabled={props.disabled || !context || context.busy} onClick={() => context?.setOpen(false)}>{children}</button>;
+  // The same rule as the trigger: a drawn Close is a button, quieter than the action beside it.
+  return <button {...props} type="button" className={props.className || buttonVariants({variant: 'outline'})} disabled={props.disabled || !context || context.busy} onClick={() => context?.setOpen(false)}>{children}</button>;
 }
 
 interface DialogContentProps extends React.DialogHTMLAttributes<HTMLDialogElement> {
