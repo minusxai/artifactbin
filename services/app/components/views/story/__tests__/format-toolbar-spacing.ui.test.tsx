@@ -1,6 +1,6 @@
 /**
  * StoryFormatToolbar — the spacing row (margins above/below, padding
- * left/right, width). The toolbar holds no element — it derives everything
+ * left/right). The toolbar holds no element — it derives everything
  * from the selection DESCRIPTION and reports one class string per change —
  * so these tests are pure props-in / onApply-out, over the same class
  * algebra the document applies (lib/data/story/typography).
@@ -69,7 +69,7 @@ describe('StoryFormatToolbar spacing row', () => {
     expect(lastClass(onApply)).toBe('mt-4 pr-1');
   });
 
-  it('shows the readouts (px for edges, the max-w tail or full for width)', () => {
+  it('shows a px readout for each edge, and offers no width control', () => {
     renderToolbar('mt-4 pl-2 max-w-prose');
     showMore();
     expect(screen.getByLabelText('Spacing controls').textContent).toContain('16px'); // mt-4

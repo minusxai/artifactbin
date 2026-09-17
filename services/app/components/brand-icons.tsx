@@ -1,5 +1,6 @@
 /**
- * Brand marks for the get-started card, in their PROPER colors, inlined
+ * Brand marks for the agents and repository the app names — the get-started
+ * card, a comment's agent identity, the top bar — in their PROPER colors, inlined
  * (from lobehub's lobe-icons; GitHub's trademark
  * comes from its official brand toolkit, attributed in lib/github-mark)
  * so the strict no-external-request posture holds and, crucially, so the

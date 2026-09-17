@@ -18,7 +18,7 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
  * and Monaco, and a reader of a shared document must never pay for that.
  */
 import dynamic from '@/lib/dynamic';
-import { FolderPlus, MessageSquare, Pencil } from 'lucide-react';
+import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
@@ -127,54 +127,6 @@ export interface ArtifactSurfaceProps {
 }
 
 /**
- * NAMING A FOLDER MADE INSIDE ANOTHER — the shell's half of `New folder`.
- *
- * Inline and nothing else: Enter creates, Escape discards, and NOTHING
- * navigates. The row it makes arrives in the listing on its own, because a
- * folder's source names its own id as a table and a write to a child NOTIFYs
- * that channel (lib/folders notifyParent) — the same live path an agent's
- * publish already travels. So this closes and says nothing more.
- */
-function NewFolderPrompt({ parentId, onClose }: { parentId: string; onClose: () => void }) {
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const create = async () => {
-    const title = name.trim();
-    if (!title || busy) return;
-    setBusy(true);
-    const res = await fetch('/api/my/artifacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
-    }).catch(() => null);
-    setBusy(false);
-    if (res?.ok) onClose();
-  };
-  return (
-    <div className="fixed inset-x-0 top-16 z-50 flex justify-center px-4">
-      <div className="flex items-center gap-2 rounded-[6px] border border-edge bg-surface px-2 py-1.5 shadow-lg">
-        <FolderPlus size={13} className="shrink-0 text-faint" />
-        <input
-          aria-label="Folder name"
-          placeholder="folder name"
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); void create(); }
-            if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-          }}
-          className="w-44 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-xs text-fg focus:border-edge-bright focus:outline-none"
-        />
-        <span className="font-mono text-[10px] text-faint">enter</span>
-      </div>
-    </div>
-  );
-}
-
-
-
-/**
  * Neutral fallback ground while the mounted runtime applies the document's
  * compiled and author styles. It is selected by reading mode so a slow runtime
  * does not reveal a contrasting blank surface.
@@ -233,8 +185,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [railOpen, setRailOpen] = useState(false);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
-  /** Naming a new folder under THIS one — the shell's only folder-specific act. */
-  const [namingFolder, setNamingFolder] = useState(false);
   const [sharingOpen, setSharingOpen] = useState(false);
   const [sharingVerdict, setSharingVerdict] = useState<(SharingVerdict & { id: string }) | null>(null);
   const onSharingChange = useCallback((verdict: SharingVerdict) => setSharingVerdict({ id: props.id, ...verdict }), [props.id]);
@@ -248,13 +198,17 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   /** The latest full open-annotation list from the live stream (owner connections only). */
   const [liveAnnotations, setLiveAnnotations] = useState<AnnotationWire[] | null>(null);
   /**
-   * The document's session nonce (lib/story-runtime/pristine), learned the
-   * moment it announces itself.
+   * The document's session secret. It is NOT announced: the mounted runtime
+   * mints it (lib/story-runtime/runtime-id) and hands it over by calling
+   * `onController` below with its private controller — never posted and never
+   * on `window`. The author's script cannot reach it: the runtime starts it
+   * only after that hand-off, and in a sandboxed child realm of its own
+   * (lib/story-runtime/author-script). Every message the page signs or checks
+   * carries it.
    *
-   * Held HERE, not in the editor: the runtime announces once, at hydration,
-   * and it announces EARLY on purpose — before the author's script exists,
-   * which is the whole reason the nonce means anything. The editor mounts long
-   * after that, so an editor-held listener hears nothing at all.
+   * Held HERE, not in the editor: the hand-off happens when the runtime mounts
+   * and the editor mounts long afterwards, so an editor-held copy would arrive
+   * after the messages that need it.
    */
   const [sessionNonce, setSessionNonce] = useState<string | null>(null);
   // The shell's role signal: the owner's affordances (share, dataset ref
@@ -285,19 +239,21 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    *  - the ALLOWLIST is the whole parser (lib/intent). This rides on a link
    *    anyone may hand over and anyone may append to, so an unknown value is
    *    silence, and `fork` ASKS before it copies anything.
-   *  - it runs from a ref, ONCE, rather than from a `search`-keyed effect: the
-   *    effect re-runs whenever the query string or a capability changes, and
-   *    without the guard the page would prompt again each time.
+   *  - it runs from a ref, ONCE. The strip below is itself a reason this effect
+   *    re-runs: `search` is the ROUTER's query string (web/pages/Artifact reads
+   *    it from useLocation and passes it down), so navigating to the stripped
+   *    address re-renders this component with a new `search`. The ref is what
+   *    keeps one instruction from being carried out twice.
    *  - the strip is against the LIVE address and keeps everything else byte for
    *    byte — the reader's `$` values are in this same query string, and
    *    their place in the document is in the hash.
    */
   /**
-   * Markup uses the document runtime and live stream. A folder's page data goes
-   * straight to FolderPage (web/pages/Artifact), never through this surface.
+   * Markup is the only format with a document runtime and a live stream. A
+   * folder never reaches this surface: the page endpoint answers it with a
+   * listing and web/pages/Artifact hands that to FolderPage.
    */
-  const isDocumentFormat = format === 'markup' || format === 'folder';
-  const isFolder = format === 'folder';
+  const isDocumentFormat = format === 'markup';
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -308,10 +264,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // Exactly the comments row's effect, and gated by exactly its capability:
     // opening a rail for someone who may not comment is an empty panel.
     else if (intent === 'comment' && canAnnotate) setRailOpen(true);
-    // The document's own control can only ASK (opaque origin, no session); the
-    // shell holds the credential, so this is where the field opens. Gated by
-    // the same capability the bar's row is, for the same reason.
-    else if (intent === 'new-folder' && isFolder && canEdit) setNamingFolder(true);
     // The document's heart and pill can only ASK; a reader who pressed one
     // arrives here (via login, or straight back) and the shell performs it.
     else if (intent === 'like') void toggleLike(true);
@@ -320,7 +272,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     if (next !== window.location.search) {
       void navigate(window.location.pathname + next + window.location.hash, {replace:true, state:route.state});
     }
-  }, [search, canAnnotate, canEdit, isFolder]);
+  }, [search, canAnnotate]);
 
   // The authorized page — never the sandbox — decides which selection actions
   // exist. Whoever may edit gets Edit; whoever may annotate — owner, editor
@@ -718,22 +670,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {canEdit && !owner && (
           <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
-        {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the
-            document because the document is sandboxed at an opaque origin and
-            holds no credential. Renaming is not here: the editor's own Title
-            field is the rename, and a second door would be a second way for the
-            two to disagree. */}
-        {canEdit && isFolder && (
-          <button
-            type="button"
-            aria-label="New folder"
-            onClick={() => { close(); setNamingFolder(true); }}
-            className={CONTROL_ROW}
-          >
-            <FolderPlus size={14} strokeWidth={1.75} />
-            new folder
-          </button>
-        )}
       </section>}
 
       {owner && (
@@ -743,7 +679,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               bytes that every reader of every document naming those URLs is
               then served. Only for a markup document — it is the only format
               that can name an external url at all. */}
-          {format === 'markup' && <RefreshAssets id={id} variant="menu" />}
+          {format === 'markup' && <RefreshAssets id={id} />}
           {format === 'dataset' && (
             <button
               type="button"
@@ -870,9 +806,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
-        {namingFolder && canEdit && isFolder && (
-          <NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} />
-        )}
         {socialPreviewOpen && shownSource !== null && (
           <SocialPreviewDialog
             id={id}

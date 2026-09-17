@@ -2,8 +2,8 @@
  * A shipped registry recipe (`recipe: "minusx/trend@1"` — no `ref:`) renders
  * through the SAME envelope path as everything else: QuestionEmbed hands
  * VegaChart a recipe source and resolveEnvelopeSpec materializes it from the
- * registry. Before this existed, a shipped id fell into the `ref:`-only
- * branch and every trend card rendered "recipe unavailable".
+ * registry. A shipped id must never fall into the `ref:`-only branch, which
+ * renders "recipe unavailable" for every trend card.
  */
 import { describe, it, expect } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';

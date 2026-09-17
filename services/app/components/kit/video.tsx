@@ -9,7 +9,7 @@ import { videoWatchUrl } from "@/lib/story-ui/video-embed"
  * The sanctioned video component — a click-to-open CARD, not an embedded
  * player. The served document's sandbox propagates to every nested browsing
  * context, so a third-party player iframe inherits the opaque origin and
- * refuses to run; readers saw a dead black frame. The card renders the poster
+ * refuses to run, leaving the reader a dead black frame. The card renders the poster
  * (an author-hosted image ref, or the CSS slab) under a play badge, and links
  * to the video's own page in a new tab — the sandbox's allow-popups flags
  * exist for exactly this. videoWatchUrl (lib/story-ui/video-embed, the whole

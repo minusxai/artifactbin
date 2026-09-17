@@ -97,9 +97,9 @@ describe('DataTable', () => {
     const html = renderToString(<DataTable rows={ROWS} columns={COLUMNS} height={200} />);
     expect(html).toContain('APAC');
     expect(html).toContain('1,200');
-    // A bounded, scrollable box — the iframe never scrolls itself — but bounded from ABOVE:
-    // a table with three rows must not reserve 200px (production run 33702277600 showed every
-    // report with ~250px of empty box under a 3-row table).
+    // A bounded, scrollable box — the table scrolls, never the document around
+    // it — but bounded from ABOVE: a table with three rows must not reserve
+    // 200px and leave a quarter-screen of empty box under itself.
     expect(html).toMatch(/max-height:\s*200px/);
     expect(html).not.toMatch(/[^-]height:\s*200px/);
   });
