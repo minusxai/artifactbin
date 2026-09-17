@@ -2083,7 +2083,14 @@ export async function runDocumentMutation(
     })) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
     if (mutationUsesValue(decl.sql)) {
       if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
-      bound._value = values._value;
+      // `$_value` is typed by the column its editor sits in, like a declared Value: an empty
+      // string is "no value" for anything but text, and a value the column cannot hold is a
+      // caller error named here, never a statement for the engine to make sense of.
+      const valueType = checked.valueTypes[name];
+      const cell = valueType && values._value === '' && valueType !== 'string' ? null : values._value;
+      if (valueType && !scalarMatches(cell as Scalar, valueType)) return { ok: false, reason: 'invalid_row', detail: 'parameter $_value does not match the edited column\'s type' };
+      bound._value = cell;
+      if (valueType) paramTypes._value = valueType;
     } else if (Object.hasOwn(values, '_value')) {
       return { ok: false, reason: 'invalid_row', detail: 'this row action does not accept _value' };
     }

@@ -507,7 +507,7 @@ export async function dryRunMutations(input: DryRunMutationsInput, extensions:Sq
       if (target) await registerTable(conn, tableName, { rows: [], columns: target.columns });
       const guarded = await prepareGuarded(conn, m.sql, 'write');
       if (guarded.error !== undefined) { errors.push({ name: m.name, error: guarded.error }); continue; }
-      await bindMutationParams(conn, guarded.prepared, params, m.row, input.paramTypes);
+      await bindMutationParams(conn, guarded.prepared, params, m.row, {...input.paramTypes, ...m.paramTypes});
       // Execute against the EMPTY table: binding alone leaves runtime casts
       // unchecked, and a write that fails on its first real click is the
       // failure an author cannot see coming.

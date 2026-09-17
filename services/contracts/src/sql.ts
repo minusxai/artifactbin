@@ -127,6 +127,8 @@ export interface DryRunMutationsInput {
     tableName?: string;
     /** Shape of `$_row`; dry runs bind a typed STRUCT whose fields are NULL. */
     row?: { columns: DatasetColumn[] };
+    /** Types that hold for this mutation alone (`_value` is typed by the cell it edits); merged over the shared `paramTypes`. */
+    paramTypes?: Record<string, ColumnType>;
   }>;
   paramNames: string[];
   /** Declared types of scalar params; a dry run binds typed NULLs for these. */

@@ -184,6 +184,33 @@ it('names an unplaced row action once, without the engine\'s internal error besi
  expect(text).not.toMatch(/unique_ptr|dereference|cannot be safely analyzed/);
 });
 
+/*
+ * THE LAST UNTYPED PARAMETER. A cell editor's `$_value` was still planned from the JavaScript
+ * value: a date column's edit travels as text, so `greatest($_value, due)` was refused for every
+ * viewer while publish, binding NULLs, saw nothing. The editor's Column names the column; that
+ * column's declared type is `_value`'s type, at publish and at the click.
+ */
+it('types $_value from the column its editor sits in, at publish and at the click',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
+ const page=(sql:string)=>`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="set_due" source="ref:${ds}" expectedAffected={1}>{\`${sql}\`}</Mutation></Helmet><DataTable data="$rows" rowKey="id"><Column col="id" /><Column col="due"><input type="text" value="$_row.due" run="$set_due" /></Column></DataTable>`;
+ const doc=await f.publish({markup:page('update public.rows set due = greatest($_value, due) where id = $_row.id')});
+ await f.share(ds,'viewer');
+ await f.grantFor(ds);
+ const edit=(value:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'set_due',values:{_value:value},row:{id:1,due:'2026-01-01'}}}),ctx(doc));
+ const later=await edit('2026-03-03');
+ expect(later.status,await later.clone().text()).toBe(200);
+ expect((await loadDatasetRows((await getArtifactById(ds))!))[0]).toMatchObject({due:'2026-03-03'});
+ // A value the column cannot hold is refused by name, before any statement runs.
+ const bad=await edit('not a date');
+ expect(bad.status).toBe(400);
+ expect(JSON.stringify(await bad.json())).toMatch(/_value/);
+ // And a statement that uses a date cell's value as text fails the PUSH, naming the mutation.
+ const text=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:page('update public.rows set due = trim($_value) where id = $_row.id')}}));
+ expect(text.status).toBe(400);
+ expect(JSON.stringify(await text.json())).toMatch(/set_due/);
+});
+
 /* `$_me` is the caller. A value sent under that name is not a Value the document declares, so it is ignored. */
 it('never lets a caller choose who $_me is',async()=>{
  const f=await fixture();

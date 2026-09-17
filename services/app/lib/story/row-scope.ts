@@ -79,10 +79,12 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
   const errors: string[] = [];
   const mutationTables: Record<string, string[]> = {};
   const actionMutations = new Set<string>();
+  /** The `Column col=` each cell editor's mutation writes through — what types its `$_value`. */
+  const cellColumns: Record<string, string> = {};
   const attr = (n: Extract<JsxNode, {type:'element'}>, name: string): unknown => { const a = n.attributes.find((a) => a.name === name); return a?.value.static ? a.value.json : undefined; };
   const ref = (v: unknown) => typeof v === 'string' ? /^\$([A-Za-z_]\w*)$/.exec(v)?.[1] : undefined;
   type Scope = { table: string; key: unknown; repeat?: boolean };
-  const visit = (node: JsxNode, scope?: Scope, inColumn = false, parent?: string) => {
+  const visit = (node: JsxNode, scope?: Scope, inColumn = false, parent?: string, column?: string) => {
     if (node.type !== 'element') {
       if (!inColumn && rowRefsIn([node]).length) errors.push('$_row references belong inside a DataTable Column or For');
       if (inColumn && scope && columns?.[scope.table]) for (const field of rowRefsIn([node])) {
@@ -116,6 +118,8 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
     if (node.tag === 'Column') {
       if (parent !== 'DataTable' || !scope) errors.push('Column must be a direct child of a DataTable bound to a declared table');
       inColumn = parent === 'DataTable' && !!scope;
+      const col = attr(node, 'col');
+      column = typeof col === 'string' ? col : undefined;
     }
     const fields = rowRefsIn([{ ...node, children: [] }]);
     if (fields.length && !inColumn) errors.push('$_row references belong inside a DataTable Column or For');
@@ -135,9 +139,10 @@ export function analyzeRowScopes(nodes: JsxNode[], columns?: Record<string, impo
       if (typeof scope.key !== 'string' || !scope.key) errors.push(scope.repeat ? 'For actions require keyBy=' : 'editable DataTable requires rowKey=');
       else if (columns && !columns[scope.table]?.some((c) => c.name === scope.key)) errors.push(`rowKey "${scope.key}" is absent from $${scope.table}`);
       if (!(mutationTables[run] ??= []).includes(scope.table)) mutationTables[run].push(scope.table);
+      if (node.tag !== 'Button' && column) cellColumns[run] = column;
     }
-    for (const child of node.children) visit(child, scope, inColumn, node.tag);
+    for (const child of node.children) visit(child, scope, inColumn, node.tag, column);
   };
   nodes.forEach((n) => visit(n));
-  return { errors, mutationTables, actionMutations };
+  return { errors, mutationTables, actionMutations, cellColumns };
 }
