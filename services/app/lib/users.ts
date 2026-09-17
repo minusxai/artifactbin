@@ -129,8 +129,9 @@ export async function getUserByUsername(username: string): Promise<UserRow | nul
 
 /**
  * An account is an email address and nothing else. There is no password to set:
- * possession of the inbox IS the credential (see lib/codes.ts), so the
- * account is created the first time a code from that address checks out.
+ * possession of the inbox IS the credential (the identity service owns the
+ * login code), so the account is created the first time a code from that
+ * address checks out.
  */
 export async function createUser(input: { email: string; name?: string }): Promise<UserRow> {
   const db = await getDb();

@@ -1,12 +1,12 @@
 import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 /**
- * Route auth wrappers. (Shape from minusx lib/http/with-remote-session-auth.ts;
- * admin-secret discipline from minusx-gateway admin_api.py.)
+ * The bearer/cookie route wrapper, and the two in-memory web-ingest allowances
+ * it owns.
  *
  * All bearer failures — missing, malformed, unknown, revoked — are a uniform
- * 401 so a token guesser learns nothing. Admin-secret failures are a uniform
- * 404: for anyone without the secret, the endpoint does not exist. Both fail
- * closed when their configuration is unset.
+ * 401 so a token guesser learns nothing, and an explicit bearer that does not
+ * resolve never falls back to a cookie identity. The operator's secret is
+ * lib/admin-auth's, with its own uniform 404.
  */
 import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR } from './config';
 import { ARTIFACTBIN_AGENT_HEADER, forwardedFor, identifyClient } from './client-identity';

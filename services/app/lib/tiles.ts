@@ -5,10 +5,9 @@
  * `/tiles/<style>/{z}/{x}/{y}.png` on the document's own origin instead, and
  * this module is the one mapping from that path onto the Carto upstream.
  *
- * Two things answer the path: in production, nginx intercepts `/tiles/` before
- * the app ever sees it (same allowlist, plus an on-disk cache); `app/tiles` is
- * the identical mapping for dev/CI so every environment serves tiles the same
- * way and the nginx block is a cache in front, never required for correctness.
+ * `app/tiles` answers the path, so every environment serves tiles without any
+ * help. A fronting proxy may serve `/tiles/` itself as a cache — it never has
+ * to, and this route stays the whole of the behaviour.
  *
  * The allowlist is the security boundary: only the two Carto basemap styles the
  * theme swap uses, numeric slippy coordinates, `.png` (optional `@2x`). This is
@@ -27,7 +26,7 @@ export const TILE_UPSTREAM_ORIGIN = 'https://basemaps.cartocdn.com';
 
 /**
  * The browser-facing `{z}/{x}/{y}` template for a style — root-relative, so it
- * resolves against whatever origin serves the document (prod nginx, dev server).
+ * resolves against whatever origin serves the document.
  */
 export function tileUrlTemplate(style: TileStyle): string {
   return `/tiles/${style}/{z}/{x}/{y}.png`;
@@ -35,8 +34,7 @@ export function tileUrlTemplate(style: TileStyle): string {
 
 // Slippy coordinates: z is 0–19 in practice (the vega signal clamps there), x/y
 // grow with zoom. Two digits of z and seven of x/y comfortably cover z=19's
-// 2^19 tiles per axis; anything longer is not a tile ask. Mirrors the nginx
-// location regex — keep the two in step.
+// 2^19 tiles per axis; anything longer is not a tile ask.
 const Z_RE = /^\d{1,2}$/;
 const XY_RE = /^\d{1,7}$/;
 const Y_FILE_RE = /^(\d{1,7})(@2x)?\.png$/;

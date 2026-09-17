@@ -75,7 +75,7 @@ describe('token management', () => {
 });
 
 describe('artifact deletion', () => {
-  it('trashes an artifact — the public link dies at once, the version history goes at the purge', async () => {
+  it('trashes an artifact — the public link dies at once, the version history stays', async () => {
     const t = await mintToken('t');
     const art = await create(t.token, '<h1 id="head">v1</h1>');
     await put(t.token, art.id, '<h1 id="head">v2</h1>');

@@ -275,10 +275,10 @@ describe('the cache key names the renderer', () => {
  * A folder has no document. Its listing is app data — answered by the page
  * endpoint, inlined into the HTML, drawn by web/pages/Folder — so the camera is
  * sent to `/a/<id>?key=` with `main` as its target, exactly the path the data
- * tiers already take. The `?key=` is what keeps that address on the SPA
- * (server/app `servesDocumentDirectly` bows out for a key), and the page
- * endpoint honours the same signed key, so the shot carries the OWNER's shelf
- * without the headless browser holding a session.
+ * tiers already take. A valid `?key=` skips canonical healing (server/app
+ * `documentPreparation`), so the camera stays at the address it was handed, and
+ * the page endpoint honours the same signed key — the shot carries the OWNER's
+ * shelf without the headless browser holding a session.
  *
  * WHAT IS ASSERTED, and why it is not a PNG: this suite has no browser (the
  * BrowserService is faked), so the picture cannot be taken here. The two halves

@@ -60,8 +60,9 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
   // is not a page. Its name is the whole trail.
   if (path.startsWith('/a/')) return [{ label: named ?? 'artifact' }];
 
-  // Every docs address is the same destination as far as the bar cares.
-  if (path === '/docs' || path === '/docs-human' || path.startsWith('/docs/')) return [{ label: 'docs' }];
+  // `/docs-human` is the one docs page the app serves; every `/docs…` address
+  // is a 404 the shell never mounts under.
+  if (path === '/docs-human') return [{ label: 'docs' }];
 
   const name = PAGE_NAMES[path] ?? named;
   return name ? [{ label: name }] : [];

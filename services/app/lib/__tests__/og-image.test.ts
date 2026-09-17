@@ -4,8 +4,12 @@
  *
  * A checked-in binary rots silently — nothing fails when it is the wrong size
  * or was never regenerated — so its dimensions are read out of the PNG header
- * here. An artifact never uses this card: server/app.ts stamps that document's
- * own og:image at its export address (`withInitialStory`).
+ * here, together with the SPA shell's own head.
+ *
+ * WHO STAMPS THE TAG is server/app.ts, not the shell: `withGenericSocial` puts
+ * an absolute `og:image` on every page with no document of its own, and
+ * `withInitialStory` puts an artifact's own export address on the ones that
+ * have. Both are asserted in server/__tests__/app.test.ts and not repeated here.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
@@ -27,12 +31,12 @@ describe('generic og image for non-artifact pages', () => {
     expect(png.readUInt32BE(20)).toBe(OG_HEIGHT);
   });
 
-  it('the SPA\'s document head names it, absolute, with the title and description', () => {
+  it('the SPA shell carries the title and description, and leaves og:image to the server', () => {
     const html = readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
     expect(html).toContain('<title>artifactbin</title>');
     expect(html).toContain('name="description"');
-    // The absolute og:image is stamped by the server from the request's own
-    // origin (lib/http publicOrigin), so the page itself carries the file name.
-    expect(readFileSync(path.join(ROOT, 'server', 'app.ts'), 'utf8')).toContain('APP_CSP');
+    // A shell-side og:image would be relative and would collide with the tag
+    // the server stamps from the request's own origin.
+    expect(html).not.toContain('og:image');
   });
 });

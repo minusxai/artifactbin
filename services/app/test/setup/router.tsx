@@ -1,8 +1,8 @@
 /**
  * The app's components navigate (lib/navigation over react-router), so a test
  * that renders one needs a router in scope. Rather than wrap every render,
- * the ui project stubs the three hooks the components use — the same three
- * `next/navigation` gave them — with a recording double a test can read.
+ * the ui project stubs the three hooks the components use (`useRouter`,
+ * `usePathname`, `useSearchParams`) with a recording double a test can read.
  */
 import { vi } from 'vitest';
 

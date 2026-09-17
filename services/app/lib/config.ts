@@ -3,8 +3,8 @@ import {isIP} from 'node:net';
 import { parseAssetsOrigin } from '@artifactbin/utils';
 
 /**
- * The ONLY file that reads process.env (minusx convention — keeps runtime
- * configuration auditable in one place).
+ * The ONLY file that reads process.env, which keeps runtime configuration
+ * auditable in one place.
  *
  * NAMES ARE NAMESPACED BY MODULE: `MODULE__NAME` (two underscores), and there
  * is exactly ONE spelling of each setting. There is no unnamespaced fallback:
@@ -143,11 +143,6 @@ export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TO
 export const TRUSTED_PROXY_HOPS = Math.max(1, Math.trunc(Number(env('HTTP', 'TRUSTED_PROXY_HOPS') ?? '1')) || 1);
 
 /**
- * Public deployments require Resend credentials for login-code email. A
- * loopback development origin instead uses the protected local outbox owned by
- * the proxy composition; the application itself never exposes a live code.
- */
-/**
  * Object storage as ONE connection string (see lib/object-store/url.ts):
  *   s3://KEY:SECRET@s3.us-west-1.amazonaws.com/bucket/artifacts?region=us-west-1
  * Unset, the app falls back to the local filesystem so a laptop and CI need no
@@ -229,6 +224,11 @@ export const MAX_IMAGE_BYTES = Number(env('IMAGES', 'MAX_BYTES') ?? '5000000');
 export const MAX_PDF_BYTES = Number(env('PDF', 'MAX_BYTES') ?? '25000000');
 export const MAX_FILE_BYTES = Number(env('FILES', 'MAX_BYTES') ?? '50000000');
 
+/**
+ * Public deployments require Resend credentials for login-code email. A
+ * loopback development origin instead uses the protected local outbox owned by
+ * the identity composition; the application itself never exposes a live code.
+ */
 export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 
 /**

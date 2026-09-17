@@ -19,13 +19,12 @@ describe('crumbsFor — the app pages', () => {
     expect(crumbsFor('/login')).toEqual([{ label: 'log in' }]);
   });
 
-  it('collapses every docs address to one crumb', () => {
-    // The human tour and the agent protocol doc are two readings of one thing,
-    // and a bar 44px tall is not where that distinction earns its keep.
-    expect(crumbsFor('/docs')).toEqual([{ label: 'docs' }]);
+  it('names the docs page for people', () => {
     expect(crumbsFor('/docs-human')).toEqual([{ label: 'docs' }]);
-    expect(crumbsFor('/docs/human')).toEqual([{ label: 'docs' }]);
-    expect(crumbsFor('/docs/llm')).toEqual([{ label: 'docs' }]);
+    // The retired `/docs…` addresses answer 404, so the shell never mounts
+    // under them and the bar has nothing to draw.
+    expect(crumbsFor('/docs')).toEqual([]);
+    expect(crumbsFor('/docs/llm')).toEqual([]);
   });
 });
 

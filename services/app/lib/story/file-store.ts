@@ -37,7 +37,7 @@ interface FileMeta {
  */
 export const uploadedSha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
-/** JSON/MCP transport; raw-body uploads avoid base64 overhead for larger files. */
+/** The JSON body form; raw-body uploads avoid base64 overhead for larger files. */
 export async function publishFile(input: unknown, objects?: ContentObjects): Promise<StoredContent | Response> {
   const file = input as { filename?: unknown; contentType?: unknown; base64?: unknown } | null;
   if (!file || typeof file.filename !== 'string' || typeof file.contentType !== 'string' || typeof file.base64 !== 'string') {

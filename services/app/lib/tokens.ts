@@ -1,8 +1,7 @@
 /**
- * Agent bearer tokens. (Pattern from minusx-gateway gateway/ledger.py:
- * prefix + 256 random bits, shown exactly once, only sha256 stored in a
- * unique-indexed column, soft revoke via deleted_at — unknown and revoked are
- * indistinguishable to callers.)
+ * Agent bearer tokens: prefix + 256 random bits, shown exactly once, only the
+ * sha256 stored in a unique-indexed column, soft revoke via deleted_at —
+ * unknown and revoked are indistinguishable to callers.
  *
  * A token may be anonymous (user_id NULL) or bound to a user; artifacts it
  * creates inherit that owner at publish time.

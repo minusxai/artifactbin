@@ -67,10 +67,6 @@ export const capRole = (role: ArtifactRole, ceiling: ArtifactRole): ArtifactRole
  * the live frame; an author label snapshot on every comment. A write with
  * nobody behind it has no place to record.
  *
- * It pays for itself twice: because anonymous never rises above `viewer`, the
- * crawler and the logged-out reader keep the direct-document fast path
- * (server/app servesDocumentDirectly) even on a link-commentable document.
- *
  * An anonymous TOKEN is not an account: it can be attributed to a token, but it
  * has no handle to show beside a comment, so it sits under the ceiling too.
  */

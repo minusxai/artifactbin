@@ -8,15 +8,15 @@
  * simply forgotten what they pressed has been made to do the work twice.
  *
  * Three rules, and they are the whole module:
- *  - a STRICT ALLOWLIST. `fork | comment | new-folder` and nothing else; an unknown value
+ *  - a STRICT ALLOWLIST (`INTENTS` below) and nothing else; an unknown value
  *    is not an error, it is silence — this parameter is on a SHARED link, so
  *    anyone may append anything to it, and the page must never do something it
  *    was not designed to be asked for.
  *  - it is an INSTRUCTION, not state. It is consumed once, on mount, and
  *    stripped from the address with replaceState, so a refresh does not
  *    re-prompt and a copied link is the document rather than the prompt.
- *  - stripping it keeps EVERY other parameter byte for byte — F2's `$` values
- *    are in this same query string and are the reader's document, not ours.
+ *  - stripping it keeps EVERY other parameter byte for byte — a document's own
+ *    `$` selections are in this same query string and are the reader's, not ours.
  *    So the pairs are re-emitted exactly as they arrived rather than round
  *    tripped through URLSearchParams, which re-encodes what it did not have to
  *    (`lib/story/url-values` learned this first and for the same reason).
