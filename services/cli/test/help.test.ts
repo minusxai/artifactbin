@@ -482,6 +482,44 @@ test('every recovery fix is actionable with afbin alone — no routes, methods o
  assert.ok(!diagnosticCatalog['image_fetch_failed']!.fix.includes('upload the image as a file'));
 });
 
+/**
+ * THE SERVER CODES A DATASET PUSH CAN ACTUALLY HIT.
+ *
+ * Measured on production: an agent publishing a writable dataset met `invalid_policy`, a bare
+ * `not_found` and `combined_policy_write` in one session, and the catalogue had an entry for none of
+ * them — so `afbin help errors` and the installed skill had nothing to say about the refusal the
+ * agent was holding. A code with no entry also means `CliError` raises it with NO fix at all.
+ */
+test('the recovery catalogue covers the refusals a dataset push meets',async()=>{
+ const {diagnosticCatalog}=await import('../src/diagnostics');
+ for(const code of ['invalid_policy','not_found','policy_locked','policy_mismatch','combined_policy_write','policy_changed','dataset_error']){
+  const entry=diagnosticCatalog[code];
+  assert.ok(entry,`${code} has no diagnostic entry`);
+  assert.ok(entry!.meaning.length>20&&entry!.fix.length>20,`${code} needs a meaning and a fix`);
+  assert.match(entry!.fix,/afbin /,`${code} fix names no afbin command`);
+ }
+ // Only the OWNER may republish a dataset under a policy, and the fix has to say so rather than
+ // sending an editor round a loop of retries.
+ assert.match(diagnosticCatalog['policy_locked']!.fix,/owner|fork/i);
+});
+
+/**
+ * A VERSION IS NOT EXPORTABLE AS HTML — the `duplicate_identity` fix used to send an agent to
+ * `afbin export <id> --format html`, which refuses a historical version, so the one route it named
+ * was the one that could not work. Name the three that do.
+ */
+test('the duplicate_identity fix names routes that work for a version',async()=>{
+ const {diagnosticCatalog}=await import('../src/diagnostics');
+ const {fix}=diagnosticCatalog['duplicate_identity']!;
+ assert.match(fix,/afbin pull <id>@<v> --output -/);
+ assert.match(fix,/afbin export <id>@<v> --format original/);
+ assert.match(fix,/afbin fork <id>@<v>/);
+ assert.ok(!/--format html/.test(fix),'html is exactly what a version cannot be exported as');
+ const {readFile}=await import('node:fs/promises');
+ const pull=await readFile(new URL('../src/pull.ts',import.meta.url),'utf8');
+ assert.ok(!/export <id> --format html/.test(pull),'the inline duplicate_identity fix says it too');
+});
+
 test('user authoring help includes the actual typed-resource publish path',()=>{
  const users=helpDocument('users');
  assert.match(users,/source: people\.jsx/);

@@ -134,7 +134,7 @@ describe('document editing', () => {
     const parsed = await parseContentInput({ markup: '<h1>Edited</h1>', theme: 'organic' });
     if (parsed instanceof Response) throw new Error('parse failed');
     const row = await replaceArtifactFor({ tokenId: '', userId: user.id }, created.id, parsed);
-    if (row === null || 'conflict' in row) throw new Error('replace failed');
+    if (row === null || row instanceof Response || 'conflict' in row) throw new Error('replace failed');
     expect(row?.version).toBe(2);
     expect(row?.source).toContain('Edited');
     expect(row?.source).toMatch(/<h1\s[^>]*id="[^"]+"[^>]*>/);

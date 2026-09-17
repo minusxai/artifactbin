@@ -919,6 +919,14 @@ export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived)
 }
 
 /**
+ * The refusal a dataset's WRITE POLICY answers — 409, by name, never the
+ * uniform 404. One spelling for every door that has to say it, because a
+ * caller learning "policy_locked" once should not meet a second code for the
+ * same fact on the next door.
+ */
+const policyLocked = (detail: string): Response => json({error:'policy_locked',detail},409);
+
+/**
  * Revert to an archived version — as a NEW version (the current state is
  * archived first), so a revert is itself revertible and the URL never moves.
  * Null when the artifact or the requested version doesn't exist.
@@ -927,7 +935,12 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
   const db = await getDb();
   const scope = editorScope(actor);
   const initial = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
-  if (!initial || initial.dataset_policy) return null;
+  if (!initial) return null;
+  // A governed dataset is not revertible: restoring an archived table would
+  // drop the rows viewers have written under the policy since. The GUARD is
+  // unchanged — what changed is that it now says so instead of answering the
+  // uniform 404 for a dataset the caller is looking straight at.
+  if (initial.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
   const condition = (row: ArtifactRow): Response | null => {
     if (opts.expectedVersion !== undefined && row.version !== opts.expectedVersion) return json({error:'version_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
     if (opts.expectedState !== undefined && artifactState(row) !== opts.expectedState) return json({error:'state_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
@@ -944,7 +957,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
-    if (!current || current.dataset_policy) return null;
+    if (!current) return null;
+    if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
@@ -991,7 +1005,7 @@ interface VersionConflict {
   conflict: true;
   currentVersion: number;
 }
-export function isVersionConflict(r: ArtifactRow | null | VersionConflict): r is VersionConflict {
+export function isVersionConflict(r: ArtifactRow | null | VersionConflict | Response): r is VersionConflict {
   return r !== null && 'conflict' in r;
 }
 
@@ -1014,22 +1028,52 @@ async function replaceScoped(
   id: string,
   input: ArtifactInput,
   opts: ReplaceOpts = {},
-): Promise<ArtifactRow | null | VersionConflict> {
+): Promise<ArtifactRow | null | VersionConflict | Response> {
   const db = await getDb();
   const scope = editorScope(actor);
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
-  const result: ArtifactRow | null | VersionConflict = await db.transaction(async (tx) => {
+  const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
-    if (!current || current.dataset_policy) return null;
+    if (!current) return null;
+    /*
+     * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
+     *
+     * This guard used to be `|| current.dataset_policy` on the line above, so
+     * every re-push of a dataset carrying a write policy came back as the
+     * uniform `not_found` — including the owner's, including one that only
+     * added a column. `--policy viewers-write` is the documented way to make a
+     * writable dataset, so the shorthand made the dataset permanently
+     * unmaintainable and said nothing about why.
+     *
+     * Who: the ONE ownership rule, asked in SQL (ownerScope), never mirrored
+     * in JS here. A named editor was invited to write the document, not to
+     * replace the rows other people are writing under the owner's policy, and
+     * they are told so BY NAME (`policy_locked`) rather than by a 404.
+     */
+    if (current.dataset_policy && !(await tx.query('SELECT 1 FROM artifacts WHERE id=$1 AND '+ownerScope(actor).where('$2'), [id, ownerScope(actor).val])).rows.length) {
+      return policyLocked('this dataset carries a write policy; only its owner may replace its content');
+    }
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
     input=retainUserScope(input,current);
+    /*
+     * The policy is re-validated against the REPLACEMENT's catalog, inside this
+     * transaction, by the same function that validated it when it was set — so
+     * a replacement that drops a table or a permission column is refused
+     * (`policy_mismatch`, naming what is missing) instead of leaving a policy
+     * pointing at columns that no longer exist. The policy row and its revision
+     * are untouched by a replace: what was granted stays granted.
+     */
+    if (current.dataset_policy) {
+      try { validateDatasetPolicyForRow({format:input.format,meta:input.meta,content:input.content}, current.dataset_policy); }
+      catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
+    }
     await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
     const replacementCatalog=catalogOf(input);
     if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
@@ -1115,10 +1159,11 @@ async function replaceScoped(
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
   });
-  if (result && !isVersionConflict(result)) void trackEvent('update', result.id, { userId: result.user_id });
+  const written = result && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
+  if (written) void trackEvent('update', written.id, { userId: written.user_id });
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
-  if (result && !isVersionConflict(result)) sayMoved(actor, result.id, moved);
+  if (written) sayMoved(actor, written.id, moved);
   return result;
 }
 
@@ -1796,7 +1841,7 @@ export function listArtifactsFor(actor: TokenActor): Promise<ArtifactSummary[]> 
   return listArtifactsScoped(ownerScope(actor));
 }
 
-export function replaceArtifactFor(actor: TokenActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | null> {
+export function replaceArtifactFor(actor: TokenActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Response | null> {
   return replaceScoped(actor, id, input, opts);
 }
 

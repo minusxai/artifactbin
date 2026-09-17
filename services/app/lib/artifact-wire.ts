@@ -503,6 +503,11 @@ export async function replaceArtifactWithBody(
     }, expected)
     : await replaceArtifactFor(actor, id, input, {...expected,annotationOps,shares});
   } catch(error) {if(error instanceof DatasetError)return json({error:"dataset_error",details:[error.message]},error.status);throw error;}
+  // A refusal the replace composed for itself — `policy_locked` (409) or
+  // `policy_mismatch` (400). It exists so this door stops answering the
+  // uniform 404 below for a governed dataset the caller is looking straight
+  // at; it is already the answer, and is not re-worded here.
+  if (row instanceof Response) return row;
   if (isVersionConflict(row)) return json({ error: row.reason ?? 'version_conflict', currentVersion: row.currentVersion, ...(row.currentState ? {currentState:row.currentState} : {}) }, 409);
   if (!row) return json({ error: 'not_found' }, 404);
 
