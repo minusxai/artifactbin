@@ -1,6 +1,6 @@
 /**
- * Static-JSX-as-data engine (File Architecture v2) — parse → static-validate → serialize,
- * shared by server (validate-on-save) and the content⇄jsx converter. Defining "what `jsx`
+ * Static-JSX-as-data engine — parse → static-validate → serialize, shared by the server's
+ * validate-on-save and every editing path that works on the parsed AST. Defining "what `jsx`
  * means" once keeps save-validation and the agent's markup surface from drifting.
  */
 import { syntaxErrorDetail } from './syntax-error';

@@ -1,11 +1,10 @@
 /**
  * One connection string for object storage, parsed here.
  *
- * minusx spreads this across five variables (OBJECT_STORE_BUCKET / REGION /
- * ACCESS_KEY_ID / SECRET_ACCESS_KEY / ENDPOINT). Five secrets to set correctly
- * is five chances to set one wrong, and the failure is silent until an upload
- * fails. This repo already treats a connection as ONE string (`DATABASE_URL`),
- * so object storage follows suit.
+ * Spreading it across five variables (bucket, region, key id, secret,
+ * endpoint) is five chances to set one wrong, and the failure is silent until
+ * an upload fails. This repo already treats a connection as ONE string
+ * (`DATABASE_URL`), so object storage follows suit.
  *
  * Neither client library parses a URL — `@aws-sdk/client-s3` and `minio` both
  * take discrete fields — so the parsing is ours. It is a pure function, which
@@ -95,9 +94,8 @@ export function parseS3Url(raw: string): S3Config {
  *
  * Pure and exported ON PURPOSE. The prefix is the ONLY thing keeping a dev
  * machine from writing over production objects — one bucket serves both,
- * separated by `artifacts` vs `artifacts-dev` — and while the rule lived
- * inline in the S3 store it could only be checked against a real server, so
- * CI never checked it at all: deleting it broke no test.
+ * separated by `artifacts` vs `artifacts-dev` — and the same rule inline in the
+ * S3 store could only ever be checked against a real server.
  */
 export function storageKeyFor(config: Pick<S3Config, 'prefix'>, key: string): string {
   return config.prefix ? `${config.prefix}/${key}` : key;

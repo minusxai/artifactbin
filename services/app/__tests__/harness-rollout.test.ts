@@ -1,5 +1,5 @@
 /**
- * testmig-4 seed — the harness is the ONLY place a test file builds a request, encodes an agent cookie, wipes
+ * The harness is the ONLY place a test file builds a request, encodes an agent cookie, wipes
  * tables, or resets the database. Every copy of those four mechanisms outside `harness.ts` is a pin failure.
  *
  * Escape hatch, deliberately narrow: a file whose copy is the SUBJECT of its tests (the cookie codec's own
@@ -58,7 +58,7 @@ const hookBodies = (text: string): string => {
 const offenders = (mechanism: Mechanism, test: (text: string) => boolean): string[] =>
   files.filter(({ text }) => !exemptions(text).has(mechanism) && test(text)).map(({ rel }) => rel);
 
-describe('the harness owns the four mechanisms (testmig-4 rollout)', () => {
+describe('the harness owns the four mechanisms', () => {
   it('1. no test file resets the database itself — one PGLite per file is the harness\'s job', () => {
     expect(offenders('reset', (t) => /\bresetDb\(/.test(t) || /new PGlite\(/.test(t))).toEqual([]);
   });

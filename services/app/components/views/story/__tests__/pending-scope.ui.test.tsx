@@ -1,8 +1,8 @@
 /**
  * "Loading" is a claim about ONE chart's table, not the document's.
  *
- * The flag started life document-wide, which was right when the only pending
- * state was the initial resolve of everything the document declared. A value
+ * A document-wide flag would only ever be right for the initial resolve of
+ * everything the document declares. A value
  * change re-runs only the queries that bind it: one re-run is in flight, and
  * every OTHER unresolved chart on the page must not announce itself as loading
  * — including charts whose query genuinely failed, which would then read

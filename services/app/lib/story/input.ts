@@ -31,8 +31,8 @@ import { publishFile } from './file-store';
 export const MAX_CONTENT_BYTES = 2_000_000;
 
 /**
- * THE format vocabulary — the wire, the DB, the pages and MCP all speak the
- * same values; `markup` is THE document format and the rest are data tiers.
+ * THE format vocabulary — the wire, the DB and the pages all speak the same
+ * values; `markup` is THE document format and the rest are data tiers.
  *
  * The runtime list and the type are ONE declaration, so a reader that has to
  * ask "is this a format we serve?" (the page, the raw route) cannot drift from

@@ -5,9 +5,9 @@
  * useful: the toolbar renders for EVERY selection, and three of its controls
  * are UNCONDITIONAL — the breadcrumb naming the element, the comment door,
  * and delete (ALWAYS_OFFERED; the toolbar renders them unguarded, so a rule
- * about them belongs here, not in a render branch). Selecting a <GridItem>
- * tile used to land in silence: an outline, no controls, nothing to do with
- * what was just selected.
+ * about them belongs here, not in a render branch). Nothing selectable lands
+ * in silence — an outline with no controls beside it says nothing about what
+ * was just selected.
  *
  * What VARIES is the format vocabulary, and it varies here and nowhere else:
  *  - `format` (alignment, color, spacing, width — the class algebra of

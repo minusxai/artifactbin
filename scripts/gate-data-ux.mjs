@@ -7,8 +7,8 @@
  * empty table, an "edit" button on a file you cannot edit, a blank cell
  * indistinguishable from an empty string.
  *
- * The upload FORM is signed-in-only now (the anonymous next-steps rail
- * deliberately offers browse/log-in instead — components/NextSteps.tsx), and
+ * The upload FORM is signed-in-only (a signed-out visitor is offered
+ * browse/log-in instead), and
  * the form itself is unit-tested in dataset-upload.ui.test.tsx. So the dataset
  * here is created over the API: the same ingest pipeline the form posts to,
  * which keeps every rendering check below honest.
@@ -173,8 +173,7 @@ await openArtifactControls(p);
 check((await p.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) >= 1, 'a document still offers edit to its owner');
 
 // (The upload form's error paths — bad URL, private sheet — are exercised at
-// the API level in gate-data-ingest and at the component level in
-// dataset-upload.ui.test.tsx; the form no longer exists signed-out.)
+// the component level in dataset-upload.ui.test.tsx; the form is signed-in-only.)
 
 await b.close();
 check.done();

@@ -1,7 +1,7 @@
 import { currentHeaders } from './request-context';
 import { PUBLIC_BASE_URL } from '@/lib/config';
 
-/** Absolute origin as the client sees it — honors reverse-proxy forwarding headers. Accepts a plain Request too (the MCP handler), falling back to its url. */
+/** Absolute origin as the client sees it — honors reverse-proxy forwarding headers, falling back to the request's own url. */
 export function baseUrl(request: Request): string {
   const url = new URL(request.url);
   const proto = (request.headers.get('x-forwarded-proto') || url.protocol.replace(':', ''))

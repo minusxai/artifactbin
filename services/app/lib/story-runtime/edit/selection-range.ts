@@ -2,11 +2,10 @@ import { COMMENT_TARGET_ATTR } from '@/lib/story/comment-target';
 /**
  * THE SELECTION, DESCRIBED FROM ITS ANCHOR — the frame half of a comment's quote.
  *
- * A comment used to keep one node and nothing else: a selection that started
- * inside a `<strong>` and ran into its paragraph collapsed to the `<strong>`,
- * and the rest was lost in this realm before anything was sent. This module
- * keeps the words — as a HINT beside the durable anchor, never a second
- * identity.
+ * Keeping one node and nothing else loses the selection: one that starts inside
+ * a `<strong>` and runs into its paragraph collapses to the `<strong>`, and the
+ * rest is gone in this realm before anything is sent. This module keeps the
+ * words — as a HINT beside the durable anchor, never a second identity.
  *
  * Three verbs, one coordinate system:
  *   `anchorFor`     — the BLOCK that contains the selection (the `<p>`, not the
@@ -30,8 +29,8 @@ import {
 /**
  * The text-holding elements. A selection anchors on one of these and never on
  * an inline inside it — `<strong>`, `<em>`, `<a>`, `<code>` and friends are
- * where a selection commonly STARTS, and anchoring there is how the rest of
- * the sentence used to be thrown away.
+ * where a selection commonly STARTS, and anchoring there throws the rest of
+ * the sentence away.
  */
 const BLOCK_TAGS = new Set([
   'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote',
@@ -222,7 +221,7 @@ export function describeRange(range: Range, anchor: Element): { quote: string; r
   for (let i = 0; i < runs.length;) {
     const parent = runs[i].node.parentElement;
     // Consecutive runs under the SAME element are one part; a nested inline
-    // starts its own, which is exactly what the old collapse threw away.
+    // starts its own, so nothing collapses into the element it began in.
     let j = i;
     while (j < runs.length && runs[j].node.parentElement === parent) j++;
     const group = runs.slice(i, j);

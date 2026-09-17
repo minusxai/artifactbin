@@ -3,17 +3,15 @@
 /**
  * A command or URL the reader is meant to take with them: mono block, one
  * copy button. Wraps rather than scrolls — in a narrow panel a command that
- * runs off the edge is a command the reader never sees. Shared by the
- * get-started cards and the pro-tip deck, so the two can't drift apart in
- * chrome.
+ * runs off the edge is a command the reader never sees. One block for every
+ * host, so no two can drift apart in chrome.
  */
 import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
 import { Tooltip } from '@/components/Tooltip';
 
 /** Two sizes, one block. `lg` is for a block that IS the point of its
- * section — the landing hero's whole integration is this one line, and 11px
- * there reads as a footnote to the headline above it. */
+ * section, where 11px would read as a footnote to the headline above it. */
 const SIZES = {
   sm: { box: 'px-2.5 py-2', text: 'text-[11px]', icon: 12 },
   lg: { box: 'px-3.5 py-3', text: 'text-[13px] sm:text-[15px]', icon: 15 },

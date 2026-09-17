@@ -1,7 +1,7 @@
 /**
  * THE PUBLISH DOOR AND A BOUND IMAGE SOURCE.
  *
- * A URL written literally is fetched at publish (milestone 1). A source the
+ * A URL written literally is fetched at publish. A source the
  * browser only computes cannot be — so the door's job here is to stop calling
  * a BINDING an external URL, to import nothing it cannot see, and to keep
  * reporting an undeclared name by name. The served document then carries its
@@ -66,8 +66,8 @@ describe('a bound src is a binding, not an external URL', () => {
     const { res, body } = await publish(`${HELMET}<div><img src="${web}/{$pick}.png" alt="a" /></div>`);
     expect(res.status).toBe(201);
     expect(hits).toEqual([]);
-    // Key-agnostic: milestone 1's review may move asset warnings to their own
-    // key; either way, a template must produce none, because nothing was fetched.
+    // Key-agnostic: asset warnings may move to their own key; either way, a
+    // template must produce none, because nothing was fetched.
     expect([...(body.warnings as unknown[] ?? []), ...(body.asset_warnings as unknown[] ?? [])]).toEqual([]);
     expect((await getArtifactById(body.id as string))!.source).toContain('{$pick}');
     const db = await getDb();

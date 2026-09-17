@@ -1,7 +1,7 @@
 /**
- * THE TYPED REQUEST SEAM (testmig-3), seeded RED by the orchestrator. One builder for what a route test sends —
- * bearer, proxy-attached actor, cookie, origin — so the identity/CSRF distinctions the 65 local builders encode
- * survive the rollout: a bearer is not an actor, a cookie is not a session, and naming two credentials at once is
+ * THE TYPED REQUEST SEAM. One builder for what a route test sends —
+ * bearer, proxy-attached actor, cookie, origin — so the identity/CSRF distinctions a hand-written builder
+ * blurs stay explicit: a bearer is not an actor, a cookie is not a session, and naming two credentials at once is
  * refused rather than silently merged.
  */
 import { describe, expect, it } from 'vitest';

@@ -1,11 +1,11 @@
 /**
  * Where dataset ROWS actually live.
  *
- * They used to sit in `artifacts.content` as JSON. That is fine for the twenty
- * rows an agent hand-writes and wrong for a file: a real Google Sheet arrived
- * at 27 MB, and every render and every /edits write reads and parses the whole
- * column — with PGLite holding it in one process. So the rows go to the object
- * store and the row keeps a reference.
+ * Not in `artifacts.content` as JSON. That is fine for the twenty rows an agent
+ * hand-writes and wrong for a file: a real Google Sheet arrives at 27 MB, and
+ * every render and every /edits write would read and parse the whole column —
+ * with PGLite holding it in one process. So the rows go to the object store and
+ * the row keeps a reference.
  *
  * Both directions live here so no caller has to know where a given
  * artifact's rows are.

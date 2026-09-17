@@ -195,7 +195,7 @@ describe('image tier', () => {
 
   it('rejects an image over the size cap (413)', async () => {
     const t = await mintToken('t');
-    // Vitest env sets MAX_IMAGE_BYTES=5000; 6 KB of bytes trips it.
+    // Vitest env sets IMAGES__MAX_BYTES=5000; 6 KB of bytes trips it.
     const big = 'data:image/png;base64,' + Buffer.alloc(6000, 1).toString('base64');
     const { status, body } = await create(t.token, { title: 'big', image: big });
     expect(status).toBe(413);

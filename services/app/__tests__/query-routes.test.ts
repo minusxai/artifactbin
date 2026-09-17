@@ -85,7 +85,7 @@ describe('POST /a/<id>/query (reader path)', () => {
      * is the agent-session cookie naming a CLAIMED token is an owner
      * everywhere else — the proxy hands it the shell, /raw serves it the
      * document — because those resolve `sessionActor`. This route resolved
-     * only the NextAuth session, so the document painted and then every bound
+     * only the account session, so the document painted and then every bound
      * control died against a 404 on the first change.
      */
     const t = await mintToken('t');

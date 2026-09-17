@@ -1,19 +1,20 @@
 /**
  * Resolving a document's `<Icon>` glyphs — the SERVER half of the icon kit.
  *
- * `<Icon name>` may name any of lucide's ~1600 glyphs, so the kit imported the whole
- * map: 517 KB raw / 148 KB gz, in the entry every document downloads, to serve the
- * 2-in-155 that draw an icon — and paid on EVERY visit, because the served document
- * runs at an opaque origin and cannot reuse its cache across navigations.
+ * `<Icon name>` may name any of lucide's ~1600 glyphs, so importing the whole map
+ * into the kit costs 517 KB raw / 148 KB gz, in the entry every document downloads,
+ * to serve the 2-in-155 that draw an icon — and paid on EVERY visit, because the
+ * served document runs at an opaque origin and cannot reuse its cache across
+ * navigations.
  *
  * So the set is resolved HERE, where its weight is free, down to the handful of
  * glyphs a document actually uses; those travel in the island beside `refData` and
  * the client renders them from data (components/kit/icon).
  *
  * This module is reached only through the SSR bundle (lib/story-runtime/ssr-entry),
- * which is loaded with createRequire OUTSIDE the Next graph — route handlers compile
- * under the react-server condition, which forbids rendering the client components
- * this imports.
+ * which lib/story/ssr.server loads with createRequire from a prebuilt file OUTSIDE
+ * the app's module graph — so the client components it renders never enter the
+ * server's own graph.
  *
  * The glyph is extracted by RENDERING lucide's own component and keeping what is
  * inside its <svg>, rather than reaching for the `__iconNode` data: that data is not
@@ -35,8 +36,8 @@ const CLASS_ATTR = /\bclass="([^"]*)"/;
 
 /**
  * Render one lucide glyph and split it into the parts the client re-assembles.
- * Unknown names resolve to the fallback glyph — and take ITS class, which is what
- * the old lookup did by rendering the fallback COMPONENT.
+ * Unknown names resolve to the fallback glyph — and take ITS class, exactly as
+ * rendering the fallback COMPONENT would.
  */
 const resolved = new Map<string, IconGlyph>();
 

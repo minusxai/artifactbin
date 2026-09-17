@@ -1,36 +1,30 @@
 /**
- * The story MOTION KIT — the one contract behind every moving pixel in the
- * markup tier.
+ * The story MOTION KIT — the kit's animation and reveal vocabulary, as CSS.
  *
- * The tier bans `<style>` and story-side JS, so motion can only come from two
- * platform pieces that this module keeps in one place:
+ * `storyMotionKitCss()` returns Tailwind INPUT (an `@theme` keyframe block +
+ * `@utility` reveal rules) interpolated into the per-story compile
+ * (story-css.server.ts). Keyframes ride `@theme`, so Tailwind emits them only
+ * for documents that actually use the utility.
  *
- *  1. `storyMotionKitCss()` — Tailwind INPUT (an `@theme` keyframe block +
- *     `@utility` reveal rules) interpolated into the per-story compile
- *     (story-css.server.ts). Keyframes ride `@theme`, so Tailwind emits them
- *     only for documents that actually use the utility.
- *  2. The reveal OBSERVER (lib/story-ui/use-reveal-motion.ts) — trusted
- *     parent-side code, never story code. The story iframe is CONTENT-SIZED
- *     (the parent scrolls), so CSS scroll-driven timelines can never fire
- *     inside it; instead the observer watches reveal elements against the real
- *     viewport and stamps them seen.
- *
- * The CSS contract between the two is fail-open by construction:
- *  - `.reveal-*` elements are hidden ONLY under `:root[data-mx-motion]` — the
- *    flag the observer stamps on the iframe's <html>, which sits OUTSIDE the
- *    `<svg><foreignObject>` capture subtree. Captures, exports, edit mode, and
- *    any context without the observer render everything visible.
- *  - `data-mx-seen` (stamped per element on first intersection) is a render
- *    artifact like every `data-mx-*` attr: the editor's write-back strip
- *    already removes it by prefix, so it can never leak into stored markup.
+ * This module emits CSS and nothing else. The reveal utilities KEY ON two
+ * attributes they never set — `data-mx-motion` on the document element and
+ * `data-mx-seen` per element — which makes them fail open by construction:
+ *  - `.reveal-*` elements are hidden ONLY under `:root[data-mx-motion]`, and
+ *    only while they lack `data-mx-seen`. Wherever nothing stamps those
+ *    attributes — captures, exports, edit mode — every element renders
+ *    visible. The flag belongs on the document element, which sits OUTSIDE the
+ *    `<svg><foreignObject>` capture subtree.
+ *  - `data-mx-seen` is a render artifact like every `data-mx-*` attr: the
+ *    editor's write-back strip removes it by prefix, so it can never leak into
+ *    stored markup.
  *  - Both the hidden state and the `animate-*` loops are neutralized under
  *    `prefers-reduced-motion: reduce`.
  */
 
-/** Root flag (iframe `<html>`) that arms reveal hiding — live read-only view only. */
+/** Root flag the reveal rules require before they hide anything. Set elsewhere, never here. */
 const STORY_MOTION_FLAG_ATTR = 'data-mx-motion';
 
-/** Per-element stamp: this reveal element has entered the viewport (one-way). */
+/** Per-element stamp that releases a reveal. Set elsewhere, never here. */
 const STORY_REVEAL_SEEN_ATTR = 'data-mx-seen';
 
 /** The reveal utilities: hidden until seen, then transition to natural state. */

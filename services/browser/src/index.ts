@@ -6,6 +6,11 @@
  * The wire: `POST /render` with a RenderRequest; the answer is the image
  * (Content-Type image/*) or a JSON verdict — the verdict is the contract as
  * much as the bytes are, because retry and 503-vs-500 depend on it.
+ * `POST /render-upload` is the same render with the bytes PUT to a signed URL,
+ * and `POST /sessions` is the stateful surface: a BrowserSessionRequest against
+ * a persistent isolated session, served only when the composition supplied a
+ * `sessions` implementation (otherwise 503 `sessions_unavailable`).
+ * See docs/mx-sessions.md.
  */
 import http from 'node:http';
 import type { BrowserService, RenderRequest, RenderUploadRequest, BrowserSessionRequest } from '@artifactbin/contracts';
@@ -14,14 +19,16 @@ import type { JsonServer } from '@artifactbin/utils';
 
 export type * from '@artifactbin/contracts';
 export { BROWSER_ROUTES } from '@artifactbin/contracts';
-// One-wave compatibility re-export while consumers move to @artifactbin/utils.
+// `browserClient` lives in @artifactbin/utils; re-exported here so a caller can take the
+// client from the same package as the shell it speaks to. That is how this package's own
+// contract and internal-assets tests reach it; the app imports utils directly.
 export { browserClient } from '@artifactbin/utils';
 
 export function serveBrowser(svc: BrowserService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
   const maxBody = opts.maxBody ?? 96 * 1024;
   const server = http.createServer(async (req, res) => {
     const json = (status: number, body: unknown) => { res.writeHead(status, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-    // The one GET the shell answers — the Docker HEALTHCHECK and the compose `depends_on` condition.
+    // The one GET the shell answers — the liveness/readiness probe for whatever orchestrates the service.
     if (req.method === 'GET' && req.url === '/health') return json(200, { ok: true });
     if (opts.serviceSecret && req.headers[SERVICE_AUTH_HEADER] !== opts.serviceSecret) return json(401, { error: 'unauthorized' });
     if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });

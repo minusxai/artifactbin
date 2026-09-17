@@ -1,15 +1,15 @@
 /**
- * B1 — WHAT THE FRAME TELLS THE PAGE ABOUT THE READER'S SCROLL.
+ * WHAT THE FRAME TELLS THE PAGE ABOUT THE READER'S SCROLL.
  *
  * A framed document is opaque: the page hosting it cannot read its offsets,
  * its height, or anything else about it, so the only thing the phone bar can
- * act on is what the document says. It said one number — its offset — and the
- * page compared that against its OWN metrics to decide "is the reader at the
- * end of the page", which for a framed document is always the wrong answer
- * (the parent never scrolls). So the end-of-page rule, the one that keeps the
- * bar off the footer, was lost for every framed document.
+ * act on is what the document says. An offset alone is not enough — the page
+ * would have to compare it against its OWN metrics to decide "is the reader at
+ * the end of the page", which for a framed document is always the wrong answer
+ * (the parent never scrolls), and the end-of-page rule that keeps the bar off
+ * the footer would be lost.
  *
- * The sample now carries the answer instead of the ingredients: the document
+ * So the sample carries the answer instead of the ingredients: the document
  * measures its own end, with the same 4px slack the page uses for its own.
  *
  * In jsdom `window.parent === window`, so the module reads as top-level and

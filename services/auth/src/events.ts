@@ -5,7 +5,7 @@ import { envelope, type EventObject, type EventSubject } from '@artifactbin/util
 export type AuthSubject = EventSubject;
 type AuthObject<K extends ObjectKind = ObjectKind> = EventObject<K>;
 
-/** Build the row without sending it — pure, the app's `envelope` with the auth as the source. */
+/** Build the row without sending it — pure, utils' `envelope` with the auth as the source. */
 export function authEnvelope<K extends ObjectKind, V extends EventVerb<K>>(
   subject: AuthSubject | null,
   verb: V,

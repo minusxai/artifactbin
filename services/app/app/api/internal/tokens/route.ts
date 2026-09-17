@@ -13,9 +13,8 @@
  * account, so what the agent publishes lands in their dashboard; no actor is
  * the anonymous approval, which reaches only what it itself creates.
  *
- * NO rate limit here, on purpose (P2 §H: a door is enforced in exactly one
- * place): the proxy counts the OAuth doors in front of the approval that
- * reaches this.
+ * NO rate limit here, on purpose — a door is enforced in exactly one place:
+ * the proxy counts the OAuth doors in front of the approval that reaches this.
  */
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE} from '@artifactbin/contracts';
 import { baseUrl, json } from '@/lib/http';

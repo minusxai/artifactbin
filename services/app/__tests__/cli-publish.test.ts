@@ -130,7 +130,7 @@ describe('cli-export', () => {
   };
   const transportFor=(calls:CliCall[]):typeof fetch=>artifactTransport(calls,viewerRoutes);
 
-  // Unlisted, because `/a/<id>/raw` admits only browser credentials today (see REPORT contract requests).
+  // Unlisted, because `/a/<id>/raw` admits only browser credentials.
   const DECK='---\nvisibility: unlisted\n---\n<Slide><h1>One</h1></Slide><Slide><h1>Two</h1></Slide>';
 
   it('renders explicit published URLs through viewer routes, maps --page to slide, and refuses draft HTML and historical images',async()=>{

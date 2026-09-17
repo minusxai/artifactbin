@@ -36,7 +36,7 @@ beforeAll(async () => {
         // A whole oversized body in ONE chunk — small enough that node hands it
         // over as a single `data` event and the response is COMPLETE by the
         // time the cap trips. /big streams and destroys mid-response, which is
-        // a different path in node and the reason this went unnoticed.
+        // a different path in node — covering one does not cover the other.
         res.writeHead(200, { 'Content-Type': 'application/pdf' });
         res.end(Buffer.alloc(8 * 1024, 0x20));
         return;
@@ -146,12 +146,12 @@ describe('fetchWebResource', () => {
      * chunk. `req.destroy(err)` on a request whose response has already
      * COMPLETED does not emit that error on the request — node raises it, and
      * an uncaught exception in a server is the process — and the early
-     * `return` from the data handler then let `end` fire and RESOLVE the
-     * fetch with the bytes collected so far, so the caller was handed a
-     * truncated body (empty, here) and answered "not a PDF" for a file that
-     * was simply too big. Measured with an 8 KB body against a 1 KB cap:
+     * `return` from the data handler then lets `end` fire and RESOLVE the
+     * fetch with the bytes collected so far, so the caller is handed a
+     * truncated body (empty, here) and answers "not a PDF" for a file that is
+     * simply too big. Measured with an 8 KB body against a 1 KB cap:
      * `-> end, uncaught+1`. The streaming case above destroys mid-response and
-     * was always correct, which is why this went unnoticed. The abort now
+     * is unaffected, so it cannot stand in for this one. The abort therefore
      * destroys WITHOUT an error and rejects by hand.
      */
     lax();
@@ -185,10 +185,10 @@ describe('fetchWebResource', () => {
 
   it('connects through a NAMED host — the guarded lookup path', async () => {
     // A literal 127.0.0.1 skips DNS entirely, so every other case in this file
-    // leaves `guardedLookup` unexercised. That is how a real bug shipped: with
-    // Node's autoSelectFamily the socket calls lookup with `all: true` and
-    // expects the ARRAY back; answering with one address failed every named
-    // host with "Invalid IP address: undefined" while these tests stayed green.
+    // leaves `guardedLookup` unexercised, so a fault there is invisible to
+    // them: with Node's autoSelectFamily the socket calls lookup with
+    // `all: true` and expects the ARRAY back, and answering with one address
+    // fails every named host with "Invalid IP address: undefined".
     lax();
     const named = base.replace('127.0.0.1', 'localhost');
     const got = await fetchWebResource(`${named}/ok.png`, { maxBytes: 1000 });

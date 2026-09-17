@@ -130,7 +130,7 @@ interface VegaViewOptions {
   height?: number;
   /** Container-bounded child sizing for a top-level Vega-Lite facet. */
   facetLayout?: FacetLayoutPlan | null;
-  /** Install the styled HTML tooltip handler (browser only; styled in globals.css). */
+  /** Install the styled HTML tooltip handler (browser only; styled in `tooltip-styles.ts`). */
   tooltipTheme?: 'light' | 'dark';
   /** Vega parser config — used by the native-vega engine (VL bakes theme at compile). */
   parserConfig?: Record<string, unknown>;
@@ -479,7 +479,7 @@ export function compileVegaLite(
   mode: 'light' | 'dark',
   options?: CompileVegaLiteOptions,
 ): VegaSpec {
-  // Ownership boundary: specs arrive from Redux (immer deep-frozen) and vega-lite/vega
+  // Ownership boundary: specs arrive from state the caller still owns, and vega-lite/vega
   // mutate their inputs (normalization, Symbol(vega_id) tagging). Never hand them
   // shared state — deep-clone here (specs are small).
   const prepared = prepareVegaLiteSpec(JSON.parse(JSON.stringify(spec)) as Record<string, unknown>);
@@ -560,8 +560,8 @@ export function compileVegaLite(
 }
 
 /**
- * Bind the query result as the reserved named dataset. Rows arrive from Redux
- * (immer-frozen); vega tags each tuple in place with Symbol(vega_id), so it must
+ * Bind the query result as the reserved named dataset. Rows arrive from state the
+ * caller still owns; vega tags each tuple in place with Symbol(vega_id), so it must
  * own the row objects — shallow-clone each (values are scalars, never mutated).
  */
 export function setMainData(view: View, rows: Record<string, unknown>[]): void {

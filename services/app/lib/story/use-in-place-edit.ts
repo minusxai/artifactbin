@@ -59,8 +59,8 @@ interface InPlaceEditOptions {
   onSourceEdited: (next: string, render?: boolean, group?: string, selection?: EditorSelectionChange) => void;
   /** Delete/Backspace pressed with a selection, or Escape. */
   onEditKey?: (key: 'Delete' | 'Backspace' | 'Escape', selection: StoryEditSelection | null) => void;
-  /** A slide was renamed from the deck's own rail. */
   onHistory?: (direction: 'undo' | 'redo') => void;
+  /** A slide was renamed from the deck's own rail. */
   onSlideTitle?: (path: string, title: string) => void;
   /**
    * An image was pasted or dropped INTO the document. The listeners live in the

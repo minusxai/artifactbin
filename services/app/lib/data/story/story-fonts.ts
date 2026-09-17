@@ -6,20 +6,15 @@
  * static asset URL + optional weight/style descriptors), and `getStoryFontCss` turns the active
  * theme's entries into @font-face CSS.
  *
- * Two forms of the same fonts (self-contained-document rule):
- *  - LIVE view: this CSS is injected inside the story root as a `<style data-mx-fonts>` node with
- *    plain `url()` refs — one shared, cacheable static asset per theme, no data-URI payload on
- *    every story view.
- *  - CAPTURE: the serializer (lib/story-surface/serialize) splices the data-URI form into the
- *    PARSED COPY only — the live DOM always keeps the URL form.
- *
- * Save paths must never persist the injected node: serializeEditedStory strips `[data-mx-fonts]`
- * (see INJECTED_STYLE_SELECTOR in lib/html/serialize-story.ts).
+ * The CSS is emitted into the document <head> as a `<style data-mx-fonts>` node
+ * (`buildStoryDocument`, lib/story/document.ts) with plain `url()` refs — one shared, cacheable
+ * static asset per theme, no data-URI payload on every story view. The node is platform chrome,
+ * never authored source, so it must not reach `content.story` on any save path.
  */
 import { STORY_THEMES } from './story-themes';
 import fontManifest from './story-font-manifest.json';
 
-/** Marker attribute of the in-root font style node (render injects it; save paths strip it). */
+/** Marker attribute of the platform font style node in the document head. */
 export const STORY_FONTS_ATTR = 'data-mx-fonts';
 
 export interface StoryFontAsset {
@@ -100,7 +95,7 @@ export function storyFontFaceCss(assets: readonly StoryFontAsset[]): string {
   return assets.map(fontFaceRule).join('\n');
 }
 
-/** @font-face CSS for a theme's registered assets (URL form — the live view's cacheable shape). */
+/** @font-face CSS for a theme's registered assets — `url()` refs to cacheable static files. */
 export function getStoryFontCss(theme = 'neutral'): string {
   return storyFontFaceCss(STORY_FONT_THEMES[theme] ?? STORY_FONT_THEMES.neutral);
 }
@@ -117,10 +112,9 @@ export function getStoryFontCss(theme = 'neutral'): string {
  * reflows when it arrives late; italic is incidental, and mono only appears
  * where there is code.
  *
- * The preload matters because the @font-face rules themselves are injected
- * CLIENT-side into the story surface (components/views/shared/AgentHtml), so
- * without this the font is not even discovered until React has hydrated and
- * mounted the iframe.
+ * The preload is asked for in the head ahead of the style tags, so the browser
+ * fetches the face alongside the stylesheet rather than only after parsing the
+ * @font-face rule that names it.
  */
 export function criticalStoryFonts(theme = 'neutral'): readonly StoryFontAsset[] {
   const entry = STORY_THEMES.find((t) => t.name === theme);

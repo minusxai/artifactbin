@@ -43,11 +43,11 @@ const TOKENS: Table = {
     { name: 'name', type: 'TEXT' }, // human label ("vivek-laptop")
     { name: 'token_hash', type: 'TEXT', notNull: true }, // sha256 hex of plaintext; the ONLY thing stored
     { name: 'user_id', type: 'TEXT' }, // NULL = anonymous (claimable via /api/tokens/claim)
-    // Last branded MCP initialize for display attribution on later stateless calls.
-    // Self-reported telemetry only — never used for authorization.
+    // The harness last declared on the agent header, for display attribution on
+    // later stateless calls. Self-reported telemetry only — never authorization.
     { name: 'client_harness', type: 'TEXT' },
-    // OAuth-issued MCP access tokens are accepted only at this exact resource.
-    // NULL keeps manual and grandfathered tokens general-purpose.
+    // The exact resource an OAuth-issued access token is restricted to.
+    // NULL keeps manually minted tokens general-purpose.
     { name: 'audience', type: 'TEXT' },
     { name: 'scope', type: 'TEXT' },
     { name: 'created_at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
@@ -78,24 +78,19 @@ const ARTIFACTS: Table = {
     { name: 'id', type: 'TEXT', notNull: true },
     { name: 'token_id', type: 'TEXT', notNull: true }, // creating token (provenance + anon scope)
     { name: 'user_id', type: 'TEXT' }, // owner; NULL until the creating token is claimed
-    // The read ACL: 'public' = anyone with the link (never LISTED anywhere),
-    // 'private' = owner + artifact_shares emails. The column default covers
-    // rows that predate the ACL; createArtifact always sets it explicitly
-    // (user-owned → private, anonymous → public).
+    // The read ACL: 'public' = anyone with the link, and it lists on the
+    // owner's profile; 'unlisted' = anyone with the link, listed nowhere;
+    // 'private' = owner + artifact_shares emails. createArtifact always sets
+    // it explicitly, so the column default is only a floor.
     { name: 'visibility', type: 'TEXT', notNull: true, default: "'public'" },
-    // GENERAL ACCESS, the second half of `visibility`: what the LINK grants
-    // whoever holds the address — 'viewer' | 'commenter' | 'editor'. Visibility
-    // still answers REACH and LISTING ('private' = nobody by link, 'unlisted' =
-    // anyone but shown nowhere, 'public' = anyone and listed on the profile);
-    // this answers what they may DO once they are in.
-    //
-    // NULL means "the pre-roles default", which IS 'viewer' — so every row that
-    // predates this column is already correct and there is nothing to backfill.
-    // A NULL here is a fact about when the row was written, never a missing
-    // value. `linkRoleOf` is the only reader.
     { name: 'dataset_policy', type: 'JSONB' },
     { name: 'sharing_revision', type: 'INTEGER', notNull: true, default: '0' },
     { name: 'policy_revision', type: 'INTEGER', notNull: true, default: '0' },
+    // GENERAL ACCESS, the second half of `visibility`: what the LINK grants
+    // whoever holds the address — 'viewer' | 'commenter' | 'editor'. Visibility
+    // still answers REACH and LISTING; this answers what they may DO once they
+    // are in. NULL means 'viewer', the default — a fact about when the row was
+    // written, never a missing value. `linkRoleOf` is the only reader.
     { name: 'link_role', type: 'TEXT' },
     // The WRITE ACL, the sibling of `visibility` — datasets only: 'read' (the
     // default, every dataset that predates it) or 'readwrite' (documents the
@@ -139,10 +134,9 @@ const ARTIFACTS: Table = {
     { name: 'forked_from', type: 'TEXT' },
     // THE TRASH. NULL = live; a timestamp = deleted, and invisible to every
     // read (lib/trash LIVE_ARTIFACT_SQL, composed into the row-loading seam in
-    // lib/artifacts rather than added by callers). Delete SETS it, restore
-    // clears it, and the purge hard-deletes what has sat here past the
-    // retention. Every row written before the column existed is NULL, which
-    // is exactly "live" — that equivalence is the whole migration.
+    // lib/artifacts rather than added by callers). Delete SETS it and restore
+    // clears it; nothing erases the row (there is no purge or retention sweep —
+    // lib/trash). NULL is exactly "live".
     { name: 'deleted_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
@@ -286,8 +280,7 @@ const ARTIFACT_SHARES: Table = {
  * revert all treat it as the ordinary edit it is). Resolution is a lookup in
  * the CURRENT source: attribute present → anchored, absent → orphaned, and
  * orphaned is re-checked on every read, so a revert that brings the text back
- * re-anchors the thread. No FKs (house rule) — the purge (lib/trash)
- * hand-deletes.
+ * re-anchors the thread. No FKs (house rule).
  */
 const ANNOTATIONS: Table = {
   name: 'annotations',
@@ -302,7 +295,8 @@ const ANNOTATIONS: Table = {
     { name: 'author_token_id', type: 'TEXT' },
     { name: 'author_user_id', type: 'TEXT' },
     { name: 'author_label', type: 'TEXT' }, // display snapshot; survives token revocation
-    // Per-comment provenance: a token may use MCP for one reply and raw HTTP for the next.
+    // Per-comment provenance: a token may use the browser for one reply and raw
+    // HTTP for the next. Stored rows may also carry 'mcp'; nothing writes it now.
     { name: 'author_transport', type: 'TEXT', notNull: true, default: "'unknown'" },
     // Root-only columns (NULL on replies):
     { name: 'status', type: 'TEXT', notNull: true, default: "'open'" }, // 'open' | 'resolved'
@@ -319,11 +313,9 @@ const ANNOTATIONS: Table = {
     { name: 'quote', type: 'TEXT' }, // canonical selected text, capped (lib/story/annotation-range)
     { name: 'range', type: 'TEXT' }, // JSON AnnotationRange: parts addressed RELATIVE to the anchor
     // The same soft-delete stamp `artifacts` carries, and the same gate: a row
-    // with it set is nonexistent to every reader in lib/annotations. Deleting a
-    // comment is still a HARD delete (deleteAnnotationFor) — erasing someone's
-    // words is a deliberate act with no restore door behind it — so nothing
-    // writes this today; it is the column the pattern owes every adopted table,
-    // and the gate that makes adopting it later a one-line change.
+    // with it set is nonexistent to every reader in lib/annotations.
+    // `deleteAnnotationFor` stamps it on a root and its replies together. There
+    // is no restore door — taking your words back is meant to read as final.
     { name: 'deleted_at', type: 'TIMESTAMPTZ' },
   ],
   primaryKey: ['id'],
@@ -362,26 +354,22 @@ const ANALYTICS_EVENTS: Table = {
 };
 
 /**
- * ALL one-time codes, one table (lib/codes.ts is the only writer/reader). A
- * code is a hashed secret that expires and is spent once; the kinds differ only
- * in lookup mode and payload:
- *   login — subject = email, guessable 6-digit → found by subject, attempts-capped
- *   oauth — subject NULL, payload {user_id, redirect_uri, code_challenge} → found by hash
- * Future kinds are a new `kind` string, not a new table.
+ * One-time codes: a hashed secret that expires and is spent once, keyed by
+ * `kind` so several flows share one table.
  *
- * Rows, not a Map, for the same reason oauth_codes learned the hard way: the
- * two legs of a handshake are different route handlers in different bundles
- * (separate instances the moment this scales), and in-memory codes broke OAuth
- * on production for every MCP client at once. Hashed like every credential —
- * a dump must never contain a working code. Near-empty by construction:
- * short TTLs, spent-on-claim, and each issue sweeps its kind's expired rows.
+ * NOTHING IN THE APP READS OR WRITES IT. Login codes belong to the identity
+ * service (`services/auth`, Better Auth's `emailOTP` over `auth.credentials`).
+ * The table is still declared here, so every boot creates it and
+ * lib/__tests__/schema-ownership.test.ts holds it as app-owned;
+ * `createCodeStore` in `@artifactbin/utils` is what an app-side flow would bind
+ * to it.
  */
 const CODES: Table = {
   name: 'codes',
   columns: [
     { name: 'kind', type: 'TEXT', notNull: true },
     { name: 'code_hash', type: 'TEXT', notNull: true }, // sha256 hex; plaintext never stored
-    { name: 'subject', type: 'TEXT' }, // what the code is bound to; NULL = unbound (oauth)
+    { name: 'subject', type: 'TEXT' }, // what the code is bound to; NULL = unbound (found by hash alone)
     { name: 'payload', type: 'JSONB', notNull: true, default: "'{}'" }, // handed back on claim
     { name: 'attempts', type: 'INTEGER', notNull: true, default: '0' }, // guess counter; only subject-lookup kinds use it
     { name: 'expires_at', type: 'TIMESTAMPTZ', notNull: true },
@@ -581,14 +569,6 @@ const ARTIFACT_CREATION_OPERATIONS: Table = {
   primaryKey:['scope','operation_key'],
 };
 
-/**
- * The app's tables, in the order boot applies them — and the shape
- * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
- * renderer with the deployment's schema qualifier rather than by re-writing
- * unqualified text. A statement the renderer emits that a regex cannot
- * re-qualify (a rename's DO block names its own schema twice) is exactly what
- * that indirection could not survive.
- */
 const DATASET_POLICY_AUDIT: Table = {
   name: 'dataset_policy_audit',
   columns: [
@@ -612,6 +592,14 @@ const ARTIFACT_ID_REGISTRY: Table = {
  name:'artifact_id_registry',columns:[{name:'id',type:'TEXT',notNull:true},{name:'owner',type:'TEXT',notNull:true},{name:'batch',type:'TEXT'},{name:'ordinal',type:'INTEGER'},{name:'consumed',type:'BOOLEAN',notNull:true,default:'false'}],primaryKey:['id'],
  indexes:[{name:'idx_reservation_batch_ordinal',columns:['owner','batch','ordinal'],unique:true}],
 };
+/**
+ * The app's tables, in the order boot applies them — and the shape
+ * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
+ * renderer with the deployment's schema qualifier rather than by re-writing
+ * unqualified text. A statement the renderer emits that a regex cannot
+ * re-qualify (a rename's DO block names its own schema twice) is exactly what
+ * such an indirection cannot survive.
+ */
 export const TABLES: Table[] = [EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */

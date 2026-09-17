@@ -1,6 +1,6 @@
 /**
  * DISCOVER: the REAL reader route serves the help pointer — as an HTTP `Link: <…/llms.txt>; rel="help"` header (for
- * agents that read headers or strip HTML) and in <head> — built on the request's own base URL. Seeded RED.
+ * agents that read headers or strip HTML) and in <head> — built on the request's own base URL.
  */
 import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';
@@ -39,17 +39,17 @@ describe('GET /a/:id (the document itself)', () => {
   });
   it('the plain app shell carries the same head pointer, and /llms.txt is the one-pager on the request base', async () => {
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
-    const shell = await app.request(`${BASE}/`, { headers: { accept: 'text/html' } });
+    const shell = await app.request(`${BASE}/login`, { headers: { accept: 'text/html' } });
     expect(shell.status).toBe(200);
     const html = await shell.text();
     expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
     expect(html.match(/name="afbin"/g)).toHaveLength(1);
     // FIRST in the head: a fetch that keeps only the first few kilobytes must still see the pointer
-    // (run 35133663437: it sat after every preload link, one line past where OpenCode's fetch cut).
+    // (it sat after every preload link, one line past where OpenCode's fetch cut).
     expect(html.indexOf('<link rel="help"')).toBeLessThan(html.indexOf('<title>SPA</title>'));
     expect(html.indexOf('<link rel="help"')).toBe(html.indexOf('<head>') + '<head>'.length);
     const attributed = createAppServer({ indexHtml: async () => '<!doctype html><html><head lang="en"><meta charset="utf-8"><link rel="stylesheet" href="/x.css"></head><body></body></html>' });
-    const shell2 = await (await attributed.request(`${BASE}/`, { headers: { accept: 'text/html' } })).text();
+    const shell2 = await (await attributed.request(`${BASE}/login`, { headers: { accept: 'text/html' } })).text();
     expect(shell2.indexOf('<link rel="help"')).toBe(shell2.indexOf('<head lang="en">') + '<head lang="en">'.length);
     expect(shell2.indexOf('<link rel="help"')).toBeLessThan(shell2.indexOf('<link rel="stylesheet"'));
     const llms = await app.request(`${BASE}/llms.txt`);
@@ -94,7 +94,7 @@ describe('GET /a/:id (the document itself)', () => {
     const row = await createArtifact(t.id, owner.id, { format: 'markup', content: '', source: '<div>tail</div>', meta: {}, title: 'Tail', description: null, visibility: 'public' });
     const app = createAppServer({ indexHtml: async () => '<!doctype html><html><head><title>SPA</title></head><body><div id="root">SPA</div></body></html>' });
     const tail = `<!-- Agents: read this to create, edit, or operate artifacts on the CLI using afbin: ${BASE}/llms.txt. afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh --></body>`;
-    for (const path of [`/@${owner.username}/${row.id}-tail`, '/', `/a/${row.id}/raw`]) {
+    for (const path of [`/@${owner.username}/${row.id}-tail`, '/login', `/a/${row.id}/raw`]) {
       const res = await app.request(`${BASE}${path}`, { headers: { accept: 'text/html' } });
       expect(res.status, path).toBe(200);
       const html = await res.text();

@@ -3,10 +3,10 @@
  * markup, JSON/image bytes for the data tiers), a SUB-PATH of the one
  * shareable URL rather than a sibling top-level route.
  *
- * Why a route handler and not a query string on the page: in the App Router
- * the PATH selects the handler before any query is read, and a page can
- * neither return raw bytes nor set the per-row response headers that the
- * document's sandbox is built from. `?raw=true` on a page could do neither.
+ * Why a route handler and not a query string on the page: the PATH selects the
+ * handler before any query is read, and a page can neither return raw bytes nor
+ * set the per-row response headers that the document's sandbox is built from.
+ * `?raw=true` on a page could do neither.
  *
  * For the document THESE HEADERS ARE THE SANDBOX:
  * - `default-src 'none'` blocks the network except the document's own query
@@ -16,7 +16,6 @@
  * - `sandbox allow-scripts` (no allow-same-origin) gives the document an
  *   opaque origin, so author JS cannot read the human UI's localStorage even
  *   though it is same-host. Verified live: reading localStorage throws.
- * Keep the repo middleware-free so nothing rewrites them.
  */
 import {agentDiscovery} from '@/lib/agent-discovery';
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
@@ -90,9 +89,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const key = new URL(request.url).searchParams.get('key');
   // The SAME viewer the proxy and the page decide ownership with: sessionActor
   // uses the proxy-attached actor first, then direct compatibility and the
-  // agent cookie. The former split-viewer bug occurred when a serving surface
-  // used only the account session: a claimed-token browser was an owner in
-  // the shell and a stranger in its own private document.
+  // agent cookie. Resolving it any other way — the account session alone —
+  // makes a claimed-token browser an owner in the shell and a stranger in its
+  // own private document.
   // Bearer first, then the browser credentials, the same order as the export route, so the CLI
   // can fetch the page of an artifact its token owns or may read.
   const actor = await requestOrSessionActor(request);
@@ -156,8 +155,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     /*
      * THE PDF — inline, sandboxed, streamed, seekable.
      *
-     * The shape is the spike's recommendation (S4), and every part of it was
-     * measured rather than chosen:
+     * Every part of this shape was measured rather than chosen:
      *  - `inline` is what makes the browser's own viewer render this instead of
      *    downloading it. `attachment` was measured doing NOTHING when opened
      *    from inside a document's sandbox — no popup, no download — so it is
@@ -223,16 +221,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     }
 
     /*
-     * markup: the SSR'd standalone document — served top-level to readers
-     * (proxy.ts) and as the owner frame's src. Source read-back is the API's
+     * markup: the SSR'd standalone document, sandboxed by the headers above —
+     * the document BY ITSELF, at its own address. The app page renders the same
+     * document inline instead (server/app `withInitialStory`), so what reaches
+     * here is an explicit request for the bytes and the export's own capture
+     * (lib/export shoots `raw?chrome=0&key=`). Source read-back is the API's
      * `markup:`.
      *
      * A FOLDER IS NOT HERE. It has no content, so there is no document to
      * serve: its listing is app data the page endpoint answers and the app
      * server inlines. It falls to the `default` below and gets the SAME uniform
-     * 404 an unknown id gets — which is also what keeps `/a/<folder>` on the
-     * app page for everybody (server/app `servesDocumentDirectly` would
-     * otherwise hand a reader a 404 at the address they were given).
+     * 404 an unknown id gets.
      */
     case 'markup': {
       /*
@@ -391,8 +390,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          *
          * Not a widening: this changes no ACL and buys no runtime. After they
          * sign in, effectiveRole finds the link role by itself and the shell
-         * follows (server/app servesDocumentDirectly) — the path a signed-in
-         * stranger has always taken.
+         * follows — the path a signed-in stranger takes.
          */
         signIn: chrome && !viewer && signInUnlocks
           // Back to the document AND back to what the door offered: someone who

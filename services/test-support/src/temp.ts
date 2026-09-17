@@ -1,6 +1,5 @@
 /**
- * Disposable roots. Forty-odd CLI tests each opened `mkdtemp`, sometimes built a `home` and a `work`
- * beside it, and unwound the whole thing in a `finally`. That is this module.
+ * Disposable roots: one `mkdtemp`, optionally a `home` and a `work` beside it, unwound in a `finally`.
  *
  * Runner-agnostic by construction: no `afterEach` registration, no global state. A caller either
  * disposes in its own `finally`, or hands the body to `withTempWorkspace` and lets it do so.

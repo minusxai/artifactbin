@@ -26,7 +26,7 @@
  * (`EVENT_VERBS_BY_ANALYTICS` in services/app/lib/analytics.ts, which the
  * dual-write uses) and this file says it in SQL, because a service may not
  * import the app. Edit one and edit the other — the app's
- * `__tests__/feed-views.test.ts` is what notices when they disagree.
+ * `__tests__/events-dual-write.test.ts` is what notices when they disagree.
  */
 import type { Queryable } from '@artifactbin/contracts';
 import { IDENTIFIER } from './schema';

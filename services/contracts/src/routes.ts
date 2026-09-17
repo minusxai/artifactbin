@@ -31,7 +31,7 @@ export function isDocumentPath(pathname: string): boolean {
 /**
  * THE INTERNAL SURFACE. Everything under this prefix is the app answering the
  * PROXY, never a client: the proxy refuses the prefix outright (parts
- * `internalBoundary`, which sits in front of `forward`), so the only way in is
+ * `internalBoundary`, which sits in front of `application`), so the only way in is
  * a call the proxy makes on its own upstream seam — a Request the parts never
  * saw. One prefix rather than a list, so the boundary cannot drift from what
  * is behind it.
@@ -50,7 +50,7 @@ export function isInternalApiPath(pathname: string): boolean {
 export const FORWARDED_FOR = 'x-forwarded-for';
 /**
  * WHERE THE CLIENT THINKS IT IS. The app builds absolute URLs from these — a
- * document's `connect-src`, an `og:image`, the links in an MCP tool's answer —
+ * document's `connect-src`, an `og:image`, the links in an operation's answer —
  * and behind a proxy the host it listens on is not the host anyone typed.
  *
  * They are the PROXY's for the same reason `x-forwarded-for` is: inbound, they

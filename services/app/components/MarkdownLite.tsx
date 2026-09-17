@@ -7,10 +7,9 @@
  * app's own origin as characters, and this file is what keeps that true.
  *
  * The typography is the point of the whole feature. The app's body face is
- * MONO (`app/globals.css`), so a comment used to arrive as one undifferentiated
- * block whatever it said — a reply naming files, functions and a regex read
- * exactly like the prose around it. Here prose takes the SANS face and mono is
- * spent on the two things that earn it: inline code and a fenced block.
+ * MONO (`app/globals.css`), which would make a comment one undifferentiated
+ * block whatever it said. Here prose takes the SANS face and mono is spent on
+ * the two things that earn it: inline code and a fenced block.
  *
  * A `<pre>` is the one child that can be wider than the rail it sits in, so it
  * scrolls INSIDE its own box (`overflow-x-auto`, `min-w-0` above it) rather

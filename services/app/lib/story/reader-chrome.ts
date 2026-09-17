@@ -4,32 +4,34 @@
  * the story root. Pure and react-free: it compiles inside the server graph and
  * inlines like the chrome CSS does.
  *
- * Server-rendered HIDDEN. On load the reader sees nothing but the artifact —
- * the document as its author intended — and the every-document entry
- * (lib/story-runtime/reader-chrome-actions) reveals it on a scroll UP and
- * hides it again on a scroll DOWN, the way a phone's own bars behave. A
- * document that cannot scroll, and the end of one that can, show it outright:
+ * Server-rendered SHOWN (`data-mx-reader-state="shown"`, no hidden class): the
+ * visibility policy is the reader's own, so it belongs to the every-document
+ * entry (lib/story-runtime/reader-chrome-actions), which hides it on a scroll
+ * DOWN and reveals it again on a scroll UP, the way a phone's own bars behave.
+ * A document that cannot scroll, and the end of one that can, keep it outright:
  * there is no gesture left that could.
  *
  * What it holds, in DOM order (every name here is pinned by
  * lib/story/__tests__/reader-chrome.test.ts and read by browser gates — rename
  * nothing):
  *
- *  1. the LOGO (`.mx-reader-home`, aria "Home"): a plain link to `/`, and
- *     the only "hosted on artifactbin" mark left;
- *  2. the RAIL: like · comment · share (`data-mx-reader-action`), then two
- *     panel triggers — `controls` ("Open artifact controls": appearance, the
- *     sign-in door, fork, provenance) and `menu` ("Open menu": the app
- *     drawer) — 44px targets with tiny mono labels;
- *  3. the BYLINE: the author's `@handle` (their profile), the title, and the
- *     ⊕ create link;
+ *  1. the LOGO (`.mx-reader-home`, aria "Home"): a plain link to `/`;
+ *  2. the RAIL: the github-star span, then like · comment
+ *     (`data-mx-reader-action`), then fork, edit and share — each only where
+ *     the caller asked for it — then two panel triggers: `controls` ("Open
+ *     artifact controls": appearance, the sign-in door, fork, provenance) and
+ *     `menu` ("Open menu": the app drawer). 44px targets with tiny mono labels;
+ *  3. the BYLINE: the artifactbin home crumb, the author's `@handle` (their
+ *     profile), the title, and the follow pill;
  *  4. the share toast and the copy fallback field;
  *  5. the scrim and the two panels.
  *
- * Like and comment are UI ONLY for now: the entry logs them to the console
- * with the artifact id, and nothing is fetched. Share is real. There is no
- * credits footer: the author is the byline, the host is the logo, and
- * provenance lives in the settings panel.
+ * Like, comment and follow each carry the DOOR the route resolved
+ * (`data-mx-href`): top-level the entry navigates to it, and a framed copy asks
+ * its page to act and repaints from the answer. A rail rendered without
+ * `reactions` has no door and only logs the intent. There is no credits footer:
+ * the author is the byline, the host is the logo, and provenance lives in the
+ * settings panel.
  *
  * A framed copy (the owner's shell) hides all of it by CSS (`:root.mx-framed`)
  * — the parent supplies its own chrome — and a capture render never asks for
@@ -112,10 +114,6 @@ export const READER_CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
 export type ReaderChromeState = 'hidden' | 'shown';
 
 /**
- * Render the reader chrome. Every string that came from a row — the handle,
- * the title, the provenance label, the hrefs — is HTML-escaped on the way out.
- */
-/**
  * THE ONE ESCAPE RULE the served document is assembled with — shared with
  * lib/story/document rather than copied, so the chrome and the head can never
  * disagree about what a hostile handle or title turns into. `<`, `>`, `&` and
@@ -154,8 +152,9 @@ const label = (text: string): string =>
   `<span class="mx-reader-label" data-mobile-label>${text}</span>`;
 
 /**
- * A rail ACTION — like, comment, share. A button, never a link: none of the
- * three navigates, and two of them do not even reach the network yet.
+ * A rail ACTION — like, comment, share. A button, never a link: where it leads
+ * is `data-mx-href`, decided by the route and acted on by the entry, so a
+ * framed copy can hand the press to its page instead of navigating itself.
  */
 const action = (name: 'like' | 'comment' | 'share' | 'edit' | 'fork', aria: string, icon: string, extra = '', inner = ''): string =>
   `<button type="button" class="mx-reader-action" data-mx-reader-action="${name}" aria-label="${aria}" data-mx-tip="${aria}"${extra}>`
@@ -221,8 +220,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
         + ` aria-label="View @${escapeHtml(username)}'s profile">@${escapeHtml(username)}</a>`
       : '')
     // FOLLOW rides right beside the handle it follows, and only when there is
-    // one: an anonymous document has nobody to follow. UI only for now — the
-    // entry logs it with the author, the way like and comment log.
+    // one: an anonymous document has nobody to follow.
     + (title ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
     + (title ? `<span class="mx-reader-title">${escapeHtml(title)}</span>` : '')
     + (username && (!reactions || reactions.follow)

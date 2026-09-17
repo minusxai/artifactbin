@@ -138,7 +138,6 @@ export async function webFontAssets(families: string[]): Promise<WebFontAsset[]>
   return r.rows.flatMap((row) => row.assets);
 }
 
-/** The object key a served `/webfonts/<hash>.woff2` request names, or null. */
 /**
  * THE DB IS THE ONLY INDEX: is this file one some family resolved? Answered
  * from the `webfonts` table before the object store is ever asked, so a
@@ -150,6 +149,7 @@ export async function isKnownWebFontFile(file: string): Promise<boolean> {
   return r.rows.length > 0;
 }
 
+/** The object key a served `/webfonts/<hash>.woff2` request names, or null. */
 export function webFontObjectKey(file: string): string | null {
   const m = /^([0-9a-f]{32})\.woff2$/.exec(file);
   return m ? `webfont/${m[1]}` : null;

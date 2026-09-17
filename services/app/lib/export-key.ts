@@ -5,11 +5,10 @@
  * no session, so a PRIVATE document would 404 on itself. It needs a
  * credential the server can mint and the page can verify.
  *
- * This was `edit_id` once, and that was a hole: the page hands `edit_id` to
- * every viewer (the live stream compares against it), and it rotates only on
- * a WRITE — so one reader of a finished private document walked away with a
- * permanent, unrevocable public link. The key must therefore be something
- * NO reader ever sees.
+ * The key must be something NO reader ever sees. `edit_id` is the trap: the
+ * page hands it to every viewer (the live stream compares against it) and it
+ * rotates only on a WRITE, so one reader of a finished private document would
+ * walk away with a permanent, unrevocable public link.
  *
  * So: an HMAC over `<id>.<expiry>` under AUTH_SECRET. Stateless (no store to
  * keep, nothing to lose on restart), scoped to ONE artifact, and valid for

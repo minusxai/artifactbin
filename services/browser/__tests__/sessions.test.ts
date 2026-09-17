@@ -44,6 +44,15 @@ it('never starts a script after closing a session whose worker is still starting
   } finally { await sessions.close(); }
 });
 
+it('reports artifact identity for a page inside an artifact, not only its canonical address', async () => {
+  const sessions=createBrowserSessions(async()=>({run:async()=>({pages:[{page_id:'page',url:'http://app/@owner/abc123-report/edit'}],attachments:[]}),close:async()=>{}}));
+  const actor={credential:'bearer' as const,tokenId:'owner'};
+  try{
+    await sessions.request({actor,op:'script',session_id:'nested',execution_id:'open',create:true,code:'return 1'});
+    await vi.waitFor(async()=>expect((await sessions.request({actor,op:'status',session_id:'nested',execution_id:'open'})).pages).toEqual([{page_id:'page',url:'http://app/@owner/abc123-report/edit',artifact_id:'abc123'}]));
+  }finally{await sessions.close();}
+});
+
 it('reports artifact identity for canonical page addresses', async () => {
   const sessions=createBrowserSessions(async()=>({run:async()=>({pages:[{page_id:'page',url:'http://app/@owner/abc123-report?$region=South'}],attachments:[]}),close:async()=>{}}));
   const actor={credential:'bearer' as const,tokenId:'owner'};

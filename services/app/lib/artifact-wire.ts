@@ -211,10 +211,9 @@ export async function artifactToWire(row: ArtifactRow, base: string) {
           rowCount: (meta as { rowCount?: unknown }).rowCount ?? 0,
           ...(meta as { totalRows?: number; truncated?: boolean }).truncated
             ? { totalRows: (meta as { totalRows?: number }).totalRows, truncated: true } : {},
-          // The rows themselves, from wherever they live. The editor resolves
-          // refs client-side through this endpoint, and reading them out of
-          // `content` stopped working when rows moved to the object store —
-          // every chart in edit mode said "data unavailable".
+          // The rows themselves, from wherever they live (the object store, a
+          // catalog). The editor resolves refs client-side through this
+          // endpoint, so a chart in edit mode has nowhere else to read them.
           rows: await loadDatasetRows(row),
         }
       : {}),
@@ -536,8 +535,8 @@ export async function replaceArtifactWithBody(
 }
 
 /**
- * The JSON create pipeline — one implementation for the bearer route, the MCP
- * tool and the operations registry (lib/operations). The HTTP route keeps one
+ * The JSON create pipeline — one implementation for the bearer route and the
+ * operations registry (lib/operations). The HTTP route keeps one
  * transport-only branch of its own: a raw `Content-Type: image/*` body, which
  * has no JSON envelope for this function to read.
  */
@@ -679,9 +678,8 @@ function parseEditBody(body: Record<string, unknown>): EditInput | null {
 
 /**
  * One edit against a claimed base (the concurrent-edit protocol on the wire).
- * Shared by the bearer route, the session-authed twin under /api/my, and the
- * MCP tool — same protocol, different ownership scope, which is what `apply`
- * carries in.
+ * Shared by the bearer route and the session-authed twin under /api/my — same
+ * protocol, different ownership scope, which is what `apply` carries in.
  */
 export async function respondToEdit(
   base: string,
@@ -750,15 +748,6 @@ export async function respondToAnnotationAction(
 const isScalar = (v: unknown): v is Scalar =>
   v === null || typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v));
 
-/**
- * The owner's dataset write door: one INSERT/UPDATE/DELETE against a dataset
- * they own, with no document in the picture — appending today's rows must not
- * cost re-sending the whole table. The caller writes the SQL, which is safe
- * for the same reason `POST /api/query` is: it is their own dataset, the
- * statement is guarded by TYPE in a throwaway instance holding only that
- * table, and `access` still governs (`readwrite` required even for the owner —
- * the toggle is the one place that says a dataset is writable).
- */
 /** A document's declared mutation, run by name with bound values — the bearer twin of the page door. */
 async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Record<string, unknown>, receipt?: MutationReceipt): Promise<Response> {
   const row = await getArtifactById(id);
@@ -787,6 +776,17 @@ async function respondToDeclaredMutation(actor: TokenActor, id: string, body: Re
   if ('local' in result) return json({ ok: true, local: result.local });
   return json({ id: result.dataset.id, version: result.dataset.version, affected: result.affected, rowCount: result.rowCount });
 }
+/**
+ * The owner's dataset write door: one INSERT/UPDATE/DELETE against a dataset
+ * they own, with no document in the picture — appending today's rows must not
+ * cost re-sending the whole table. The caller writes the SQL, which is safe
+ * for the same reason `POST /api/query` is: it is their own dataset, the
+ * statement is guarded by TYPE in a throwaway instance holding only that
+ * table, and `access` still governs (`readwrite` required even for the owner —
+ * the toggle is the one place that says a dataset is writable).
+ *
+ * A body naming a `name` is the document's declared mutation instead.
+ */
 export async function respondToMutate(
   actor: TokenActor,
   id: string,

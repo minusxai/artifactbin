@@ -1,10 +1,9 @@
 /**
  * A `'use client'` file must not import a VALUE from a server module.
  *
- * Types erase; values do not. The share menu once imported one constant from
- * lib/artifacts and Turbopack answered by pulling lib/db and lib/analytics
- * (`next/headers`) into the client bundle — a build error the unit suite
- * cannot see, because vitest resolves the import happily. This reads the
+ * Types erase; values do not. One constant imported from lib/artifacts pulls
+ * lib/db and lib/analytics into the client bundle behind it — a build error
+ * the unit suite cannot see, because vitest resolves the import happily. This reads the
  * sources and refuses the shape itself: from these modules a client file may
  * import `type`s and nothing else. The pure homes (lib/share-roles,
  * lib/story-runtime/contract, …) exist precisely so it never has to.

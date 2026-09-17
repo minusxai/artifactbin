@@ -9,16 +9,16 @@ import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
  * The client half of /a/<id>: what the artifact LOOKS like, and whether we
  * are viewing or editing it.
  *
- * Edit is a mode here, not a route — the artifact has exactly one URL. The
- * mode is mirrored in the `#edit` fragment so the dashboard can deep-link to
- * it and so refresh/back behave, while the canonical shared link stays
- * `/a/<id>` (a fragment never reaches the server).
+ * Edit is a mode, not a separate page. It is mirrored in the `#edit` fragment
+ * so refresh/back behave and the canonical shared link stays `/a/<id>` (a
+ * fragment never reaches the server); `/a/<id>/edit` is accepted as a
+ * deep-link into the same mode.
  *
  * The editor is loaded ON DEMAND: it pulls in the WYSIWYG, the AST write-back
  * and Monaco, and a reader of a shared document must never pay for that.
  */
 import dynamic from '@/lib/dynamic';
-import { FolderPlus, MessageSquare, Pencil } from 'lucide-react';
+import { MessageSquare, Pencil } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { InlineStoryController } from '@/lib/story-runtime/InlineStoryRuntime';
 import { createAuthenticatedTransport } from '@/lib/story-runtime/authenticated-transport';
@@ -127,54 +127,6 @@ export interface ArtifactSurfaceProps {
 }
 
 /**
- * NAMING A FOLDER MADE INSIDE ANOTHER — the shell's half of `New folder`.
- *
- * Inline and nothing else: Enter creates, Escape discards, and NOTHING
- * navigates. The row it makes arrives in the listing on its own, because a
- * folder's source names its own id as a table and a write to a child NOTIFYs
- * that channel (lib/folders notifyParent) — the same live path an agent's
- * publish already travels. So this closes and says nothing more.
- */
-function NewFolderPrompt({ parentId, onClose }: { parentId: string; onClose: () => void }) {
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const create = async () => {
-    const title = name.trim();
-    if (!title || busy) return;
-    setBusy(true);
-    const res = await fetch('/api/my/artifacts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ format: 'folder', title, parent_id: parentId }),
-    }).catch(() => null);
-    setBusy(false);
-    if (res?.ok) onClose();
-  };
-  return (
-    <div className="fixed inset-x-0 top-16 z-50 flex justify-center px-4">
-      <div className="flex items-center gap-2 rounded-[6px] border border-edge bg-surface px-2 py-1.5 shadow-lg">
-        <FolderPlus size={13} className="shrink-0 text-faint" />
-        <input
-          aria-label="Folder name"
-          placeholder="folder name"
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); void create(); }
-            if (e.key === 'Escape') { e.preventDefault(); onClose(); }
-          }}
-          className="w-44 rounded-[4px] border border-edge bg-transparent px-1.5 py-0.5 font-mono text-xs text-fg focus:border-edge-bright focus:outline-none"
-        />
-        <span className="font-mono text-[10px] text-faint">enter</span>
-      </div>
-    </div>
-  );
-}
-
-
-
-/**
  * Neutral fallback ground while the mounted runtime applies the document's
  * compiled and author styles. It is selected by reading mode so a slow runtime
  * does not reveal a contrasting blank surface.
@@ -199,11 +151,10 @@ const safeRows = (content: string): Array<Record<string, unknown>> => {
  * what it sends back — the mounted runtime and any author child realm are
  * never an authority.
  *
- * `inViewMode` is now only about EDIT MODE, because annotate is not a mode any
- * more. It still gates BOTH actions: inside the editor the document's own
- * selection bubble would fight the caret and the format toolbar, so the
- * editor offers Comment from its toolbar instead. Same capability, different
- * surface — which is the whole shape of this change.
+ * `inViewMode` means "not in edit mode", and it gates BOTH actions: inside the
+ * editor the document's own selection bubble would fight the caret and the
+ * format toolbar, so the editor offers Comment from its toolbar instead — the
+ * same capability on a different surface.
  *
  * `annotate` follows `canAnnotate` rather than ownership: a document two people
  * may write should not be a document only one may discuss, and a COMMENTER is
@@ -234,8 +185,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [railOpen, setRailOpen] = useState(false);
   /** `?intent=fork` asked for a copy; the dialog asks the person (lib/intent). */
   const [forkAsked, setForkAsked] = useState(false);
-  /** Naming a new folder under THIS one — the shell's only folder-specific act. */
-  const [namingFolder, setNamingFolder] = useState(false);
   const [sharingOpen, setSharingOpen] = useState(false);
   const [sharingVerdict, setSharingVerdict] = useState<(SharingVerdict & { id: string }) | null>(null);
   const onSharingChange = useCallback((verdict: SharingVerdict) => setSharingVerdict({ id: props.id, ...verdict }), [props.id]);
@@ -249,28 +198,19 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   /** The latest full open-annotation list from the live stream (owner connections only). */
   const [liveAnnotations, setLiveAnnotations] = useState<AnnotationWire[] | null>(null);
   /**
-   * The document's session nonce (lib/story-runtime/pristine), learned the
-   * moment it announces itself.
+   * The document's session secret. It is NOT announced: the mounted runtime
+   * mints it (lib/story-runtime/runtime-id) and hands it over by calling
+   * `onController` below with its private controller — never posted and never
+   * on `window`. The author's script cannot reach it: the runtime starts it
+   * only after that hand-off, and in a sandboxed child realm of its own
+   * (lib/story-runtime/author-script). Every message the page signs or checks
+   * carries it.
    *
-   * Held HERE, not in the editor: the runtime announces once, at hydration,
-   * and it announces EARLY on purpose — before the author's script exists,
-   * which is the whole reason the nonce means anything. The editor mounts long
-   * after that, so an editor-held listener hears nothing at all.
+   * Held HERE, not in the editor: the hand-off happens when the runtime mounts
+   * and the editor mounts long afterwards, so an editor-held copy would arrive
+   * after the messages that need it.
    */
   const [sessionNonce, setSessionNonce] = useState<string | null>(null);
-  /**
-   * Learned the moment the document announces itself — which it does before
-   * its author's script exists, and that ordering is the whole reason the
-   * nonce means anything (lib/story-runtime/pristine).
-   *
-   * Held HERE rather than in the editor because the announcement comes at the
-   * document's hydration and the editor mounts long afterwards: a listener
-   * that attaches with the editor hears nothing, and then every edit the
-   * document sends is dropped as unsigned.
-   *
-   * FIRST announcement wins. A later one is author code trying to be the
-   * runtime, and it is already too late.
-   */
   // The shell's role signal: the owner's affordances (share, dataset ref
   // copy) and the writer's (edit — an owner or a named editor) hang off it.
   const owner = useArtifactOwner();
@@ -281,10 +221,9 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [layerAnnotations, setLayerAnnotations] = useState<AnnotationWire[] | null>(null);
   const openAnnotationCount = (layerAnnotations ?? liveAnnotations)?.filter((a) => a.status === 'open').length ?? openAnnotations;
   /*
-   * The floating identity markers are ambient chrome for anyone who may comment, in EVERY
-   * mode. The two gates that used to be here — `!editing` and `!annotating` —
-   * were the feature: dropping them is what lets someone comment on the
-   * paragraph they are editing without leaving to do it.
+   * The floating identity markers are ambient chrome for anyone who may
+   * comment, in EVERY mode — including while editing, so commenting on the
+   * paragraph under the caret needs no detour.
    */
   const showViewComments = canAnnotate && openAnnotationCount > 0;
 
@@ -299,21 +238,22 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * Three things make it safe to act on a URL:
    *  - the ALLOWLIST is the whole parser (lib/intent). This rides on a link
    *    anyone may hand over and anyone may append to, so an unknown value is
-   *    silence, and `fork` — the one that writes — ASKS before it does.
-   *  - it runs from a ref, ONCE, rather than from a `search`-keyed effect. A
-   *    bare replaceState does not move react-router's location, so the `search`
-   *    prop still names the intent afterwards; without the ref the page would
-   *    re-prompt on every render that reads it.
+   *    silence, and `fork` ASKS before it copies anything.
+   *  - it runs from a ref, ONCE. The strip below is itself a reason this effect
+   *    re-runs: `search` is the ROUTER's query string (web/pages/Artifact reads
+   *    it from useLocation and passes it down), so navigating to the stripped
+   *    address re-renders this component with a new `search`. The ref is what
+   *    keeps one instruction from being carried out twice.
    *  - the strip is against the LIVE address and keeps everything else byte for
-   *    byte — the reader's `$` values (F2) are in this same query string, and
+   *    byte — the reader's `$` values are in this same query string, and
    *    their place in the document is in the hash.
    */
   /**
-   * Markup and legacy folder surfaces use the document runtime and live stream.
-   * Current folder page data goes directly to FolderPage without this surface.
+   * Markup is the only format with a document runtime and a live stream. A
+   * folder never reaches this surface: the page endpoint answers it with a
+   * listing and web/pages/Artifact hands that to FolderPage.
    */
-  const isDocumentFormat = format === 'markup' || format === 'folder';
-  const isFolder = format === 'folder';
+  const isDocumentFormat = format === 'markup';
 
   const intentDone = useRef(false);
   useEffect(() => {
@@ -324,10 +264,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     // Exactly the comments row's effect, and gated by exactly its capability:
     // opening a rail for someone who may not comment is an empty panel.
     else if (intent === 'comment' && canAnnotate) setRailOpen(true);
-    // The document's own control can only ASK (opaque origin, no session); the
-    // shell holds the credential, so this is where the field opens. Gated by
-    // the same capability the bar's row is, for the same reason.
-    else if (intent === 'new-folder' && isFolder && canEdit) setNamingFolder(true);
     // The document's heart and pill can only ASK; a reader who pressed one
     // arrives here (via login, or straight back) and the shell performs it.
     else if (intent === 'like') void toggleLike(true);
@@ -336,7 +272,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     if (next !== window.location.search) {
       void navigate(window.location.pathname + next + window.location.hash, {replace:true, state:route.state});
     }
-  }, [search, canAnnotate, canEdit, isFolder]);
+  }, [search, canAnnotate]);
 
   // The authorized page — never the sandbox — decides which selection actions
   // exist. Whoever may edit gets Edit; whoever may annotate — owner, editor
@@ -397,7 +333,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   // What every reader-facing surface says: the stored name, else the document's
   // own first heading (lib/story/title.ts).
   const shownTitle = displayTitle({ title: storedTitle, source: shownSource });
-  // Only EDIT is a mode now, so only edit has a title to announce. A rail that
+  // Edit is the only mode, so only edit has a title to announce. A rail that
   // is open is not a different state of the document.
   const titleMode = editing ? '[edit mode]' : null;
   const pageTitle = titleMode ? `${shownTitle} ${titleMode}` : shownTitle;
@@ -508,8 +444,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
    * A prefetch owes the page two things. It must be CANCELLED with the component:
    * an uncancelled timer fires into a page that is gone, which in the ui suite is
    * an EnvironmentTeardownError naming whichever module of the editor's graph was
-   * still loading (it failed `ui tests (2/2)` on three master runs). And it must
-   * SWALLOW its own failure: the import can fail honestly — the reader is offline,
+   * still loading. And it must SWALLOW its own failure: the import can fail honestly — the reader is offline,
    * or a redeploy replaced the content-addressed chunk this page's build names —
    * and an unhandled rejection is the wrong way to say "the prefetch missed". The
    * real import, when the reader presses edit, is what gets to report.
@@ -714,12 +649,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             {openAnnotationCount > 0 && <span className="text-accent">{openAnnotationCount}</span>}
           </button>
         )}
-        {/* EDIT IS ALSO RENAME, which is why a folder is offered it: the
-            editor's Title field writes `title` through the edit protocol like
-            any other change, so a folder needs no rename door of its own — and
-            a second one would be a second thing to keep in step. Its BODY is
-            editable for the same reason the plan gives: a folder is a document,
-            and customising one is editing it. */}
+        {/* EDIT IS ALSO RENAME: the editor's Title field writes `title` through
+            the edit protocol like any other change, so there is no separate
+            rename door — a second one would be a second thing to keep in
+            step. */}
         {canEdit && isDocumentFormat && (
           <>
             <button
@@ -737,23 +670,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {canEdit && !owner && (
           <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} editable format={format} datasetKind={shownCatalog?.kind} variant="menu" className="" onSocialPreview={shownSource !== null && format === 'markup' ? () => { close(); setSocialPreviewOpen(true); } : undefined} />
         )}
-        {/* A FOLDER'S ONE EXTRA VERB. It lives in the chrome rather than in the
-            document because the document is sandboxed at an opaque origin and
-            holds no credential — the price of a folder being a document, and
-            the trade the plan states. Renaming is not here: the editor's own
-            Title field is the rename, and a second door would be a second
-            way for the two to disagree. */}
-        {canEdit && isFolder && (
-          <button
-            type="button"
-            aria-label="New folder"
-            onClick={() => { close(); setNamingFolder(true); }}
-            className={CONTROL_ROW}
-          >
-            <FolderPlus size={14} strokeWidth={1.75} />
-            new folder
-          </button>
-        )}
       </section>}
 
       {owner && (
@@ -763,7 +679,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               bytes that every reader of every document naming those URLs is
               then served. Only for a markup document — it is the only format
               that can name an external url at all. */}
-          {format === 'markup' && <RefreshAssets id={id} variant="menu" />}
+          {format === 'markup' && <RefreshAssets id={id} />}
           {format === 'dataset' && (
             <button
               type="button"
@@ -781,12 +697,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   );
 
   /** A document is full-bleed. Reading chrome floats over its safe corners;
-   * only the contextual editing toolbar reserves any document space.
-   *
-   * A FOLDER TAKES THIS BRANCH TOO, because a folder IS a document: its
-   * scaffold is ordinary markup, it is served through `raw` like any other
-   * (server/app admits it beside markup), and the alternative below is the
-   * DATA-TIER view, which has nothing to draw for one. */
+   * only the contextual editing toolbar reserves any document space. The
+   * alternative below is the DATA-TIER view. */
   if (isDocumentFormat) {
     return (
       <>
@@ -861,8 +773,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         </div>
         {/* Annotations are chrome too: pins live IN the document runtime, markers and
             threads on the page (which holds the content and the session).
-            Mounted in EVERY mode — the `!editing` gate that used to be here is
-            exactly what made commenting mid-edit a four-navigation detour. */}
+            Mounted in EVERY mode, so commenting mid-edit needs no detour. */}
         <TrustedUi overlay>
         {canAnnotate && (
           <AnnotationLayer
@@ -895,9 +806,6 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}
-        {namingFolder && canEdit && isFolder && (
-          <NewFolderPrompt parentId={id} onClose={() => setNamingFolder(false)} />
-        )}
         {socialPreviewOpen && shownSource !== null && (
           <SocialPreviewDialog
             id={id}

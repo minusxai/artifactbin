@@ -96,7 +96,7 @@ describe('the first local command', () => {
   });
 });
 
-test('eager init leaves a skill addressed to another server alone — every command used to rewrite it (127 "Skill updated" lines in one local task)',async()=>{
+test('eager init leaves a skill addressed to another server alone — only setup adopts a new origin',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-init-origin-'));const bin=join(home,'bin');const err:string[]=[];
  try{
   await mkdir(bin);await writeFile(join(bin,'pi'),'#!/bin/sh\nexit 0\n',{mode:0o755});
@@ -126,7 +126,7 @@ test('setup --server records a self-hosted origin as the default, once, and neve
   assert.equal(await runCli(['help','--json'],context),0,'no --server: the recorded origin is the one afbin names');
   assert.match(out.join(''),/self\.example\/chat\/install\.sh/,out.join('').slice(0,300));
   assert.doesNotMatch(out.join(''),/artifactbin\.dev/,'the public server is no longer this afbin\'s default');
-  // A link on the recorded origin is this afbin's own server: no --server, no wrong_server (codex, eval run local17).
+  // A link on the recorded origin is this afbin's own server: no --server, no wrong_server.
   const hosts:string[]=[];const head={id:'abc123',version:1,edit_id:'edit1',state:digest('s1'),markup:'<p id="p001">Head</p>',format:'markup',title:'T',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
   const request:typeof fetch=async(input)=>{const url=new URL(String(input));hosts.push(url.host);if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${url}`);};
   await saveConnection({server:'https://self.example',token:'mx_self'},home);

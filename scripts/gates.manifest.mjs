@@ -7,10 +7,8 @@
  * the rows here at startup and refuses to run otherwise — a new gate without a row, or a row without a
  * file, is a failure, not a silent skip.
  *
- * EVERY FIELD IS READ BY THE RUNNER. The shape used to carry `start`, `why` and `needsClipboard` as well,
- * and nothing ever read any of them: `start` drifted until nine `shared` rows never called the shared
- * helper at all, and `needsClipboard` was one-to-one with `serialGroup: 'clipboard'` on all 55 rows. A
- * field no code consults is a second source of truth that cannot be wrong loudly.
+ * EVERY FIELD IS READ BY THE RUNNER. A field no code consults is a second source of truth that cannot
+ * be wrong loudly — which is why the rows carry nothing the runner does not read.
  *
  * TIMEOUTS ARE A MEASUREMENT, not a guess: `timeoutMs = max(60_000, 3 × measured seconds)`, rounded up to
  * the next ten seconds. Three times, because a gate sharing a machine with five others is slower than one

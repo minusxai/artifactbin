@@ -1,10 +1,10 @@
 /**
  * CSV parsing and type coercion.
  *
- * Coercion is the part that carries real risk. Measured before writing any of
- * this (data-artifacts-v2.md §2): all-string rows make `inferColumns` type every
- * column `string`, so a Vega `"type":"quantitative"` encoding on a CSV-sourced
- * column renders a broken chart unless ingest decides types itself.
+ * Coercion is the part that carries real risk: all-string rows make
+ * `inferColumns` type every column `string`, so a Vega `"type":"quantitative"`
+ * encoding on a CSV-sourced column renders a broken chart unless ingest
+ * decides types itself.
  *
  * The rule is per COLUMN, never per cell — a column that is half number and
  * half text is worse than a column of text, because it breaks silently at
@@ -127,10 +127,10 @@ describe('coerceRows — types decided per column', () => {
 describe('coerceRows — a DECLARED type wins over the sniffer', () => {
   /**
    * The sniffer is a guess, and the uploader often knows better: an ID column
-   * of `120, 150` is text, not a quantity. Before this, declaring it collided
-   * with coercion — the value was converted to a number and then rejected by
-   * publishDataset's own validation ("120 is not a string"), so the documented
-   * escape hatch actually made the request FAIL.
+   * of `120, 150` is text, not a quantity. Without the override, declaring it
+   * collides with coercion — the value is converted to a number and then
+   * rejected by publishDataset's own validation ("120 is not a string"), so the
+   * documented escape hatch would make the request FAIL.
    */
   const col = (name: string, type: string) => [{ name, type }];
 

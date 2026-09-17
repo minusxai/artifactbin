@@ -7,13 +7,13 @@
  *    were already stored, and the upstream host is not asked twice.
  *  - The box travels. `width`/`height`/`placeholder` are recorded at import,
  *    because a URL-kept `<img>` that carries none is a layout-shift regression
- *    against the `ref:` path (R2).
+ *    against the `ref:` path.
  *  - SVG is not re-encoded — text that scales, byte-identical through the store.
  *  - A refusal has a NAME. The publish door turns it into a warning naming the
  *    URL, so an agent can act on it.
  *  - A FONT is not an image: sniffed as a font, stored untouched, and never put
  *    through the WebP optimiser.
- *  - `refreshWebAsset` re-fetches and REPOINTS the row (R13) — first-cached
+ *  - `refreshWebAsset` re-fetches and REPOINTS the row — first-cached
  *    wins until someone asks for it again.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -237,7 +237,7 @@ describe('refreshWebAsset', () => {
   });
 
   /*
-   * R19 — the half a repointed row cannot do on its own. `/assets/<hash>` is
+   * The half a repointed row cannot do on its own. `/assets/<hash>` is
    * served `immutable` for a year, so a reader who already fetched the old
    * bytes never asks again; what a refresh changes is the URL the next RENDER
    * emits, and the change has to come from the row, since nothing else about
@@ -270,7 +270,7 @@ describe('refreshWebAsset', () => {
 });
 
 /**
- * S1 — REFRESH IS A DOOR THAT STORES BYTES, so it asks the cap exactly as
+ * REFRESH IS A DOOR THAT STORES BYTES, so it asks the cap exactly as
  * import does, and the bytes it stores are charged to whoever asked for them.
  *
  * The review measured the hole: `refreshWebAsset` stored a new object without
@@ -322,7 +322,7 @@ describe('a refresh is charged', () => {
 });
 
 /**
- * S2 — the hourly web-import allowance is per ATTEMPT, and a refresh of N urls
+ * The hourly web-import allowance is per ATTEMPT, and a refresh of N urls
  * is N attempts. One call was buying N fetches for one slot, which is the
  * publish door's rule inverted at the door publish shares a bucket with.
  */

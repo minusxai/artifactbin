@@ -6,8 +6,8 @@ import { pageDataChanged } from '@/web/page-data-events';
  * `ancestor_ids`, root first, the current location marked, a filter input, and
  * the moved folder's own subtree disabled (the cycle rule, DRAWN).
  *
- * It replaced a text field that took a folder id, and the difference is not
- * decoration: an id is not something a person holds, and the ways a move can be
+ * A picker rather than a folder-id field, and the difference is not decoration:
+ * an id is not something a person holds, and the ways a move can be
  * refused (`invalid_parent` covers unknown, not-yours, cycle and too deep — one
  * answer, deliberately, because naming them apart is an existence oracle) are
  * all invisible until the server says no. Here the only things offered ARE the
@@ -19,7 +19,7 @@ import { pageDataChanged } from '@/web/page-data-events';
  * draws — this is chrome, never an authority.
  *
  * aria-labels are the contract: "Filter folders", "Move to root",
- * "Move to <title>". Plan: ~/projects/artifactbin-folders.md.
+ * "Move to <title>".
  */
 import * as React from 'react';
 import { createPortal } from 'react-dom';
@@ -175,10 +175,9 @@ interface MoveTarget {
  * THE PICKER PLUS THE ONE WIRE IT DRIVES — `PATCH {parent_id}`, metadata-only,
  * never the content PUT.
  *
- * Two surfaces move a row (the shelf's cards and its dense tier) and they each
- * had their own copy of this fetch when the control was a text field. One
- * implementation, so the ROOT keeps meaning `null` on both — absent would mean
- * "leave it where it is", and the two must stay distinguishable.
+ * Two surfaces move a row (the shelf's cards and its dense tier) and they share
+ * this one implementation, so the ROOT keeps meaning `null` on both — absent
+ * would mean "leave it where it is", and the two must stay distinguishable.
  */
 export function MoveMenu({ row, folders, onMoved, onClose }: {
   row: MoveTarget;

@@ -1,6 +1,7 @@
 /**
  * Display attribution for an annotation reply. This is descriptive, never an
- * authorization signal: both MCP clientInfo and User-Agent are self-reported.
+ * authorization signal: both the agent header and the User-Agent are
+ * self-reported.
  */
 import { ARTIFACTBIN_AGENT_HEADER, identifyClient, type Harness } from './client-identity';
 import type { AnnotationAuthor } from './annotations';

@@ -88,7 +88,7 @@ describe('token routes served by the app', () => {
     expect((list.tokens as unknown[]).length).toBe(1);
   });
   /*
-   * What the Account page's tokens panel is fed, from my-tokens-shape.test.ts:
+   * What the Account page's tokens panel is fed:
    * `status` is computed server-side (web code may not import lib/tokens), and the
    * order is most-recently-used first, then newest minted.
    */

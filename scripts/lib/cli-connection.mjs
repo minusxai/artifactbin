@@ -1,7 +1,7 @@
 /**
  * A CREDENTIAL FOR A GATE — through the one door the product has.
  *
- * There is no mint endpoint any more: the ONLY way any client obtains a
+ * No client mints its own token: the ONLY way a client obtains a
  * credential is the afbin CLI's OAuth device approval, approved in the
  * browser. A gate is a test driving the product, so it walks exactly that
  * flow over HTTP — begin the pairing, approve it anonymously (the

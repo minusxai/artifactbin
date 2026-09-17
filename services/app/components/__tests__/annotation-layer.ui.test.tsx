@@ -287,8 +287,8 @@ describe('AnnotationLayer', () => {
   });
 
   it('names the agent an MCP reply came from, with its own glyph and the MCP chip', async () => {
-    // The byline the /mcp route reads back off the token: a named harness must
-    // reach the rail as ITS name and ITS mark, never the anonymous 'Agent'.
+    // The byline an MCP-transport reply carries: a named harness must reach
+    // the rail as ITS name and ITS mark, never the anonymous 'Agent'.
     const { frame, contentWindow } = makeFrame();
     const { rerender } = render(layer(frame, { showViewComments: true }));
     await flush();

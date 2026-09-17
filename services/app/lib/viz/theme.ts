@@ -1,5 +1,5 @@
 /**
- * MinusX Vega-Lite theme configs (Mechanism A).
+ * MinusX Vega-Lite theme configs.
  *
  * One token source generates the light and dark VL `config` objects: the chart constants
  * in lib/chart/chart-theme.ts (palette + JetBrains Mono), shared with the native-Vega
@@ -21,8 +21,8 @@ export function getSurfaceColor(mode: 'light' | 'dark'): string {
 export function getVegaLiteConfig(mode: 'light' | 'dark'): VegaLiteConfig {
   const colors = mode === 'light' ? LIGHT_THEME : DARK_THEME;
   return {
-    // getChartFontFamily resolves the ACTUAL loaded font family (next/font registers
-    // JetBrains Mono under a hashed name, exposed via --font-jetbrains-mono). Using the
+    // getChartFontFamily resolves the ACTUAL loaded font family (the document's
+    // --font-jetbrains-mono override when one is set, else the shipped stack). Using a
     // literal name makes canvas measureText and SVG rendering fall back to DIFFERENT
     // fonts — vega then under-reserves every label and titles overlap ticks.
     font: getChartFontFamily(),

@@ -86,10 +86,9 @@ describe('validateJsx — no-inline-style policy', () => {
   };
 
   /**
-   * Authored CSS is still in-distribution vocabulary — custom keyframes and all
-   * — it just has ONE home now. This used to assert the body spelling; the
-   * document-level door (see below) is what replaced it, and `/docs/llm` had
-   * already been telling agents `<Helmet><style>` for a while.
+   * Authored CSS is in-distribution vocabulary — custom keyframes and all — and
+   * it has exactly ONE home: `<Helmet><style>`, which is what the agent docs
+   * teach and what the document-level door (see below) enforces.
    */
   it('sends an authored <style> block to the Helmet rather than the body', () => {
     const errs = errors('<div><style>{`@keyframes rise { from { opacity: 0 } }`}</style></div>', noInlineStyle);
@@ -229,12 +228,11 @@ describe('validateJsx — <style> belongs to the Helmet', () => {
 });
 
 /**
- * `<form>` is denied on purpose, and the purpose is NOT the reader's document —
- * there `form-action 'none'` already makes it inert. It is the edit canvas:
- * same-origin by design (the WYSIWYG needs contentDocument), with no sandbox
- * and no CSP, so a stored `<form action="/api/…" method="post">` would render
- * in the owner's canvas as a live cookie-carrying submit, in a document an
- * agent may have written. See lib/jsx/dangerous-tags.ts.
+ * `<form>` is denied at SAVE, so no stored document carries one whatever renders
+ * it later; the served document's CSP independently sets `form-action 'none'`,
+ * so it would be inert there too. The controls a form would group are each
+ * allowed on their own and are driven from the `<Helmet>` script — which is what
+ * the rejection tells the author. See lib/jsx/dangerous-tags.ts.
  */
 describe('validateJsx — <form> stays denied', () => {
   it('refuses it even where every control it would group is allowed', () => {

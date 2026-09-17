@@ -52,10 +52,10 @@ describe('the history prelude', () => {
 });
 
 /*
- * SPIKE S2 (F2 — `<Value>` selections in the URL, risk R5).
+ * THE ONE WINDOW IN THE FREEZE — `<Value>` selections in the URL.
  *
  * The freeze above is what makes a served document's URL bar trustworthy, and
- * F2 needs the URL to change anyway: a reader who picks "west" should be able
+ * reader selections need the URL to change anyway: someone who picks "west" should be able
  * to copy the address bar and hand someone that document. So the prelude keeps
  * every door shut and opens ONE window: a function bound to the NATIVE
  * `replaceState` before the overwrite, exposed as a frozen, non-writable own
@@ -82,7 +82,7 @@ const realm = (url = START) => {
   };
 };
 
-describe('the narrow URL capability the prelude exposes (spike S2)', () => {
+describe('the narrow URL capability the prelude exposes', () => {
   it('still leaves history.replaceState inert — the freeze is unchanged', () => {
     const w = realm();
     w.eval('history.replaceState(null,"","/evil")');
@@ -191,7 +191,7 @@ describe('the narrow URL capability the prelude exposes (spike S2)', () => {
  * fully writable History API and nobody told. Only the `bind` has to precede
  * the overwrite; everything else follows the freeze.
  */
-describe('the freeze is never behind the capability (spike S2)', () => {
+describe('the freeze is never behind the capability', () => {
   it('shuts every door even when defining the capability throws', () => {
     const dom = new JSDOM('<!doctype html><body><p>doc</p></body>', { url: START, runScripts: 'dangerously' });
     // Something already owns the name, non-configurably: the prelude's own

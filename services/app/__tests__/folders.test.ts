@@ -1,7 +1,6 @@
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
- * P1 (seeded RED by the orchestrator) — folders are artifacts: the doors.
- * Over the real routes in-process. Plan: ~/projects/artifactbin-folders.md.
+ * Folders are artifacts: the doors, over the real routes in-process.
  */
 import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';
@@ -138,11 +137,9 @@ describe('moving', () => {
 
 describe('deleting and forking a folder', () => {
   /*
-   * `folder_not_empty` and its `?force` are GONE. They existed because a
-   * delete was permanent and a folder full of documents was a decision nobody
-   * should discover afterwards; a trash is not that decision, so the refusal
-   * asked someone to confirm something that is no longer being done. What is
-   * left is the act itself: one statement takes the subtree (lib/trash), and
+   * DELETING A FOLDER TAKES ITS SUBTREE, with no refusal and no `?force` to
+   * push past. A trash is not a permanent decision, so there is nothing for a
+   * confirmation to protect: one statement takes the subtree (lib/trash), and
    * restore reverses it (trash.test.ts).
    */
   it('deleting a folder takes its subtree into the trash, with no refusal and no force', async () => {
@@ -197,9 +194,8 @@ describe('a folder is not a document', () => {
   /**
    * NOTHING SERVES A FOLDER'S CONTENT, because it has none. `raw` is the
    * uniform 404 for one — the same answer an unknown id gets — for its owner as
-   * much as for a stranger, and that is what keeps `/a/<folder>` on the app
-   * page for everybody: `servesDocumentDirectly` would otherwise hand a reader
-   * a 404 at the address they were given.
+   * much as for a stranger. `/a/<folder>` stays the app page for everybody,
+   * where the listing is app data rather than a document.
    */
   it('raw answers the uniform 404 for a folder, to its owner and to a stranger alike', async () => {
     const o = await owner();

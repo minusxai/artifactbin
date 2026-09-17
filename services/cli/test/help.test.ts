@@ -2,10 +2,8 @@
  * WHAT THE CLI TELLS YOU ABOUT ITSELF — the command registry, the screens rendered from it, the colour
  * that may only be added on top, the generated manual and the bundled teaching.
  *
- * This was four files (help-screen, commands, style, teaching) that all asserted the same thing from
- * different angles, plus two seeded cases about `--format man`. The invariant the whole surface rests on
- * is one line in what used to be teaching.test.ts: help formats, destinations and the manual come from
- * ONE command registry. So the registry is asserted once and every screen is checked by generating from
+ * The invariant the whole surface rests on: help formats, destinations and the manual come from ONE
+ * command registry. So the registry is asserted once and every screen is checked by generating from
  * it — no case pins a rendered string that the registry already decides.
  */
 import {test,describe} from 'node:test';
@@ -96,7 +94,7 @@ test('a command screen carries usage, every flag the parser accepts, and the exa
  assert.throws(()=>commandScreen('nope',plain),/unknown_help_topic|Unknown command/);
 });
 
-test('an unknown help topic names its nearest topics — `publish` (asked seven times in eval run 34694871143) points at the publishing set',()=>{
+test('an unknown help topic names its nearest topics — `publish` (asked seven times) points at the publishing set',()=>{
  assert.throws(()=>helpDocument('publish'),(error:unknown)=>{
   const e=error as {code:string;fix?:string};
   assert.equal(e.code,'unknown_help_topic');
@@ -370,15 +368,15 @@ describe('the bundled teaching and the manual', () => {
   });
 
 
-  test('help themes and help templates print the overview that describes each choice, so the agent picks one instead of opening several guides (eval run 34696655937)',()=>{
+  test('help themes and help templates print the overview that describes each choice, so the agent picks one instead of opening several guides',()=>{
    const themes=helpDocument('themes');
    assert.match(themes,/Pick ONE by the subject's mood/);
    for(const name of ['modernist','organic','industry','terminal','manuscript','pop'])assert.match(themes,new RegExp('`'+name+'` — .+ → '),name);
    assert.match(themes,/Available themes: .*modernist/);
    const templates=helpDocument('templates');
    assert.match(templates,/Pick ONE by the content's shape/);
-   // The bundle no longer ends with the starter — `afbin pull` and `afbin help <topic>` give it, and
-   // there was no starter for `plan` at all — so the overview must not promise one.
+   // The bundle does not end with the starter — `afbin pull` and `afbin help <topic>` give it, and
+   // `plan` has none at all — so the overview must not promise one.
    assert.match(templates,/Run afbin help <template> for everything that kind of document needs, in one call/);
    assert.doesNotMatch(helpDocument('templates')+briefDocument(),/starter last/,'nothing still promises a starter the bundle dropped');
   });
@@ -434,7 +432,7 @@ test('afbin help --for <template> prints every reference a document of that kind
   assert.ok(text.includes('Available themes:'),'the themes overview names the choices');
   assert.ok(!text.includes('templates-editorial'),'only the chosen template');
   // THE SHELL'S INLINE LIMIT. At 40 KB Claude Code spilled every bundle to a file and read it back in
-  // three or four `sed` windows (production run 15) — the one-call reference became five calls. Claude
+  // three or four `sed` windows — the one-call reference became five calls. Claude
   // Code keeps tool output inline up to ~30,000 characters; 28,000 BYTES holds under that with a 2 KB
   // margin, and bytes are the conservative measure (UTF-8 punctuation costs more bytes than characters).
   for(const template of ['deck','dashboard','editorial','plan','scrolly']){
@@ -465,7 +463,7 @@ test('the datasets topic names the push flag that publishes a writable dataset',
 });
 
 /**
- * THE RECOVERY CATALOGUE SPEAKS afbin, NOT HTTP (workstream F).
+ * THE RECOVERY CATALOGUE SPEAKS afbin, NOT HTTP.
  *
  * Every fix here is printed by `afbin help errors`, compiled into the installed
  * skill AND used as the fix of any CliError raised with that code — so it is the

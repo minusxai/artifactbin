@@ -14,7 +14,7 @@ beforeEach(installAnnotateSession);
 afterEach(disposeAnnotateSession);
 
 /*
- * ADDED: PICKING A BLOCK TO COMMENT ON. The rail's pick tool puts the layer
+ * PICKING A BLOCK TO COMMENT ON. The rail's pick tool puts the layer
  * into a one-shot pick — the edit-mode move, for a comment: whatever
  * selectable node is under the pointer carries an outline, and a click on it
  * IS the selection, reported as `mx:selection` so the page opens its composer
@@ -145,7 +145,7 @@ describe('picking a block to comment on', () => {
 });
 
 /*
- * ADDED: A DRAWN AREA. The rail's second tool: a rubber band over the
+ * A DRAWN AREA. The rail's second tool: a rubber band over the
  * document, whose anchor is the lowest common ancestor of the blocks it
  * touched and whose box rides the selection as an area range — the same
  * `mx:selection` answer as a block pick, with a range instead of a quote. A

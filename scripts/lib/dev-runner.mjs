@@ -31,7 +31,7 @@ export async function runDev({ appOnly, args = [] }) {
 
   const declared = declaredPort();
   if (declared && declared !== port) {
-    console.warn(`⚠ binding :${port} but PUBLIC_BASE_URL says :${declared} — links the app emits will point at :${declared}`);
+    console.warn(`⚠ binding :${port} but APP__PUBLIC_BASE_URL says :${declared} — links the app emits will point at :${declared}`);
   }
 
   const env = {

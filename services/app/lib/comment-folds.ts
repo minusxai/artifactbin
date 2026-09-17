@@ -12,8 +12,8 @@
  *     and never on the row: a shared link must not carry someone else's folds.
  *   · MEASURE — whether a body is longer than the ten lines the rail spends on
  *     it, decided from what the browser actually laid out (`scrollHeight`
- *     against the computed line height), never from a character count. F5
- *     markdown, a phone width and a fenced block all make the same character
+ *     against the computed line height), never from a character count.
+ *     Markdown, a phone width and a fenced block all make the same character
  *     count a different number of lines.
  *
  * Everything here tolerates having no storage at all: a private window, a

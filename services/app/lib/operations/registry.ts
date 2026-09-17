@@ -9,7 +9,7 @@ import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
 import {ACCOUNT_OPERATIONS} from './account';
 import {SESSION_OPERATIONS} from './sessions';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
-/** Shared HTTP operations and schemas, projected into the CLI's bundled API reference.
+/** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
 import { z } from 'zod';
@@ -65,12 +65,12 @@ export interface Operation {
   http: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string };
   /** ONE model-facing paragraph: what it does, when to use it, what comes back. */
   description: string;
-  /** Zod field shape used by validation and the bundled API reference. */
+  /** Zod field shape used by validation. */
   input: z.ZodRawShape;
   annotations: { readOnly?: boolean; destructive?: boolean; idempotent?: boolean };
-  /** One worked example, rendered as curl or as a tool call by the docs. */
+  /** One worked example, which must parse against `input`. */
   example: { input: Record<string, unknown>; note?: string };
-  /** The refusals this operation can answer — the docs' error table rows. */
+  /** The refusals this operation can answer, each with the fix for it. */
   errors: OperationError[];
   run(ctx: OpContext, input: Record<string, unknown>): Promise<OpReply>;
 }
@@ -327,9 +327,7 @@ const getVersionOp: Operation = {
     if (!Number.isInteger(v) || v < 1) return reply({ error: 'not_found' }, 404);
     const row = await getVersionFor(ctx.actor, String(input.id), v);
     if (!row) return reply({ error: 'not_found' }, 404);
-    // `content` under its own name: `markup` carries the source; the raw
-    // `source` field stays off the wire (it was echoed as `html` once, naming
-    // a tier that no longer exists).
+    // `markup` carries the source; the raw `source` field stays off the wire.
     return reply({ ...row, markup: row.source, source: undefined } as unknown as Record<string, unknown>);
   },
 };
@@ -399,9 +397,9 @@ const deleteArtifactOp: Operation = {
         return reply({ error: 'has_dependents', dependents: dependents.map((d) => ({ id: d.id, title: d.title })) }, 409);
       }
     }
-    // A FOLDER takes its subtree, in the one statement lib/trash runs. There
-    // is no second refusal to force past: `folder_not_empty` asked an agent to
-    // confirm a permanent act, and this one is not permanent.
+    // A FOLDER takes its subtree, in the one statement lib/trash runs. There is
+    // no second refusal to force past: the trash is not permanent, so nothing
+    // here asks an agent to confirm a permanent act.
     const deleted = await trashArtifactFor(ctx.actor, String(input.id));
     if (!deleted) return reply({ error: 'not_found' }, 404);
     return reply({ ok: true, deleted_ids:deleted });

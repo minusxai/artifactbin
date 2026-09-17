@@ -73,8 +73,8 @@ export async function checkWebImport(B, browser, WEB, ok) {
         const frame = page.mainFrame();
         inserted = frame
           ? await frame.evaluate(() => {
-              // NOT `querySelector('img')`: every served document carries the
-              // credits-footer logo, and matching that reports success for an
+              // NOT `querySelector('img')`: a served document also carries the
+              // reader chrome's logo, and matching that reports success for an
               // image this gate never inserted. An IMPORTED image resolves to
               // its own artifact's bytes — /a/<id>/raw — so match that shape.
               const img = [...document.querySelectorAll('img')]

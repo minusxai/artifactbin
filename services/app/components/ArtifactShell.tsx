@@ -3,7 +3,7 @@
 /**
  * Who this viewer IS to /a/<id>, for the chrome above it.
  *
- * ONE signal, decided on the server (components/ArtifactDocument →
+ * ONE signal, decided on the server (the page endpoint →
  * lib/viewer's `roleFor`): an owner (an account session, or an anonymous
  * browser holding the agent-session cookie), a named EDITOR
  * (artifact_shares.role — they edit, but never share, move or delete), or a
@@ -20,10 +20,10 @@ const RoleContext = createContext<ArtifactRole>('viewer');
 const useArtifactRole = () => useContext(RoleContext);
 /*
  * The three capability questions, answered by the SAME lattice predicates the
- * server door uses (lib/share-roles). They were hand-written comparisons once,
- * and the first shell derived "can edit" as "is not a reader" — which handed a
- * commenter the edit button the moment that role existed. A hook that spells
- * out its own rule is a hook that can disagree with the door it guards.
+ * server door uses (lib/share-roles). Never hand-written comparisons: a hook
+ * that spells out its own rule is a hook that can disagree with the door it
+ * guards — "can edit" as "is not a reader" would hand a commenter the edit
+ * button.
  */
 /** The owner's affordances: share, delete, move, dataset reference. */
 export const useArtifactOwner = () => canGovern(useArtifactRole());

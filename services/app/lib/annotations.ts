@@ -56,7 +56,11 @@ export interface AnnotationAuthor {
   kind: 'human' | 'agent';
   /** Display snapshot (username, token name…); stored beside the row so reads never join. */
   label: string | null;
-  /** How this individual comment arrived; stored per comment because one token can use several transports. */
+  /**
+   * How this individual comment arrived; stored per comment because one token
+   * can use several transports. Nothing writes `'mcp'` any more — it is a value
+   * stored rows still carry, and the rail renders its own chip for it.
+   */
   transport: 'browser' | 'http' | 'mcp' | 'unknown';
 }
 
@@ -363,8 +367,7 @@ export async function createAnnotationFor(
  * `deleteAnnotationFor` WRITES the column: a comment is soft-deleted like
  * everything else here, root and replies together, and nothing in this product
  * erases a row. What makes a deleted thread gone is these readers, not a
- * missing row — which is exactly what the column was added for, so adopting it
- * was one statement rather than an audit of every reader.
+ * missing row.
  *
  * There is deliberately no restore door for a thread. Taking your words back is
  * meant to read as final to the person who did it; the row is kept because the
@@ -519,8 +522,8 @@ export async function actOnAnnotationFor(
       resolved = true;
     }
     const fresh = await tx.query<AnnotationRowDb>('SELECT * FROM annotations WHERE id = $1', [root.id]);
-    // The old shape returned the row itself, so a vanished one WAS the null;
-    // wrapping it in an object would have made every miss truthy.
+    // A vanished row stays the null: wrapping it in the result object would
+    // make every miss truthy.
     if (!fresh.rows[0]) return null;
     await notify(tx, artifactId, root.id);
     const wire=receipt?(await wireFor(tx,row,[fresh.rows[0]]))[0]:undefined;
@@ -549,8 +552,8 @@ export async function actOnAnnotationFor(
  * DELETING IS NARROWER THAN COMMENTING. Reaching the document is the editor
  * scope like every other annotation verb, but taking words away is then
  * checked again: the document's OWNER may remove any thread, and a named
- * editor only one they wrote themselves (`author_user_id`, already on the row —
- * this needed no schema change). The refusal is the same uniform false as an
+ * editor only one they wrote themselves (`author_user_id` on the row). The
+ * refusal is the same uniform false as an
  * unknown id, so the door says nothing about whose comment it was.
  *
  * When the last thread on a node goes, its annotation-anchor attribute is

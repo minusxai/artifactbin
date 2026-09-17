@@ -89,7 +89,7 @@ describe('residual-name guard', () => {
 });
 
 /**
- * The token-only model (#94–#111) left no public mint and no token page: the CLI's OAuth approval is
+ * The token-only model left no public mint and no token page: the CLI's OAuth approval is
  * the one thing that issues a credential. These strings named the surfaces that used to do it. Nothing
  * the product ships or documents may name them again — an agent that reads one sends a user to a 404.
  *
@@ -164,7 +164,7 @@ describe('retired surfaces', () => {
   });
 });
 
-/** THE README IS A FRONT DOOR (node S3): six sections in order, the two one-liners, no retired env name. */
+/** THE README IS A FRONT DOOR: four sections in order, the two one-liners, no retired env name. */
 const readme = () => read('README.md');
 // The flat settings this product retired; the boot-time alias map is gone (no backward compatibility), so the
 // list lives in the guards that keep the names from coming back (see services/app/lib/__tests__/retired-names.test.ts).
@@ -210,7 +210,7 @@ describe('license', () => {
   });
 });
 
-/** THE ONBOARDING DEFECTS (node S4): one port story, no stale text, a generator hint for every secret. */
+/** THE ONBOARDING DEFECTS: one port story, no stale text, a generator hint for every secret. */
 describe('one port story', () => {
   it('docker-compose.yml publishes and mints links on the same port (3030 by default)', () => {
     const web = yaml.parse(read('docker-compose.yml')).services.web;

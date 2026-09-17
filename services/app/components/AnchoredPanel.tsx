@@ -10,17 +10,14 @@
  * left group is a scroller so the controls can slide on a phone while `done`
  * stays put (InPlaceEditor), and `overflow-x: auto` makes the OTHER axis `auto`
  * with it — turning that group into a ~26px-tall clip box in both directions.
- * The theme grid and the mode list opened `absolute top-full`, straight into
- * it: a real bounding box, two grid columns, no page overflow, nothing painted,
- * and every click falling through to the document iframe underneath. Every
- * geometry check the mobile gate already ran passed throughout, which is why
- * the hit test now sits beside them.
+ * A theme grid or mode list opened `absolute top-full` lands straight in it:
+ * a real bounding box, two grid columns, no page overflow, nothing painted,
+ * and every click falling through to the document iframe underneath. Geometry
+ * checks pass throughout, which is why the mobile gate hit-tests as well.
  *
- * The phone decision lives HERE, not in the caller. It was duplicated state in
- * both of ThemePicker's popovers (`sheet`, re-seeded from `isPhoneViewport()`
- * on every click) — a detail neither of them exists to know. A caller now owns
- * exactly one thing, `open`; this owns where the panel goes, how it is placed
- * and how it is dismissed.
+ * The phone decision lives HERE, not in the caller: it is a detail no caller
+ * exists to know. A caller owns exactly one thing, `open`; this owns where the
+ * panel goes, how it is placed and how it is dismissed.
  *
  * Deliberately NOT a listbox: SelectMenu keeps that (option roles, arrow keys,
  * the check mark), because it always models "one value out of a closed set".
@@ -91,7 +88,7 @@ export default function AnchoredPanel({
             sideOffset={4}
             collisionPadding={8}
             // The panel is chrome over a document someone is reading, and the
-            // trigger keeps the keyboard — as it did before it was portalled.
+            // trigger keeps the keyboard.
             onOpenAutoFocus={(e) => e.preventDefault()}
             // Above every app layer: portalled to <body> it inherits no stacking
             // context, so it has to outrank the highest surface that can hold a

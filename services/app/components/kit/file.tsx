@@ -97,7 +97,7 @@ function FileCard({
  * same rule the <Video> play badge follows. Deliberately not an <Icon> — the
  * icon map is resolved by the SERVER per document (lib/story/icon-glyphs) and a
  * component that quietly needed one would draw nothing in the paths that do not
- * provide glyphs (the deck rail learned this the hard way).
+ * provide glyphs.
  */
 function FileGlyph() {
   return (

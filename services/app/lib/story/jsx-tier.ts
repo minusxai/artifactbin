@@ -110,8 +110,8 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
    * alone, so a document naming a dozen `@font-face` urls caused a dozen
    * outbound fetches that nothing bounded — the count was the author's to set.
    * Over the cap the excess is NAMED and not fetched, rather than refused:
-   * losing a whole document to a thirteenth font is the failure this milestone
-   * exists to stop, and an author who is told which urls were skipped can act.
+   * losing a whole document to a thirteenth font is the failure this cap exists
+   * to stop, and an author who is told which urls were skipped can act.
    * Counted hook-or-no-hook, so /api/preview agrees with publish.
    */
   const wanted = [
@@ -165,9 +165,9 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
 
   // Belt to the validator's no-inline-style gate: strip banned CSS declarations
   // (fixed/sticky positioning, external url()/@import) from authored style
-  // content, then remap viewport-height units in it — authored `<style>` renders
-  // straight through the interpreter, so the compiled-sheet injection remap
-  // never sees it (lib/story-surface/viewport-units.ts).
+  // content, then remap viewport-height units in it. Authored `<style>` renders
+  // straight through the interpreter, and this save-side pass is the only place
+  // its `vh` lengths are rewritten (lib/story-surface/viewport-units.ts).
   const normalized = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
   const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(normalized, sanitizeStoryMarkupCss)));
   if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);

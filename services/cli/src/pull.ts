@@ -167,7 +167,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
    const backup=wantsBackup?await localBackup(workspace.home,path,before!):undefined;
    // A starter (untitled, no template yet) names the agent's next call at the moment it decides what to read
    // AND how to work, so it orders the same progressive flow the brief does: a first push at once, then pushes
-   // that fill the sections. Its previous "write the whole file" ending was the instruction agents followed.
+   // that fill the sections.
    const starter=snapshot.format==='markup'&&!snapshot.template&&(!snapshot.title||snapshot.title==='Untitled');
    operations.push({path,...(backup?{backup}:{}),...(sourceBackups.length?{source_backups:sourceBackups}:{}),id:head.id,version:snapshot.version,head_version:head.version,status:'pulled',...(starter?{next:'A starter: pick its kind, then afbin help <template> (dashboard, deck, editorial, plan, scrolly) prints everything it needs in one call; push a FIRST version at once — the title and the section headings, one line each — then fill the sections in further pushes.'}:{})});
    if(target.previousPath)untracked.push(target.previousPath);

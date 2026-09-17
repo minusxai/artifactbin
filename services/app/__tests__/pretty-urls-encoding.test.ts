@@ -1,5 +1,5 @@
 /**
- * Route params arrive PERCENT-ENCODED from the Next router — '@' is '%40' —
+ * Route params arrive PERCENT-ENCODED from the router — '@' is '%40' —
  * while a direct call in a test passes them decoded. That difference shipped
  * a real bug: every pretty URL 404'd on the running server while every unit
  * test passed, because the tests were the only caller handing over a decoded
@@ -84,7 +84,7 @@ describe('percent-encoded route params (what the router really sends)', () => {
     });
   });
 
-  it('generateMetadata resolves the encoded form as well', async () => {
+  it('the unfurl metadata resolves the encoded form as well', async () => {
     const { doc } = await fixtures();
     const meta = await artifactMetadata(doc.id);
     expect(meta.title).toBe('Eating Healthy');

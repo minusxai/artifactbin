@@ -1,11 +1,8 @@
 /**
- * ONE 404, EVERYWHERE. The glitch page (the big "404" graphic that was
- * app/not-found.tsx before the SPA split) is the ONLY not-found body the app
- * shows: the SPA's own catch-all, an artifact the viewer may not read, and a
- * profile that resolves to nothing must all render the same page — the split
- * left three different shapes behind (a bare "not found" line on two pages,
- * Hono's plain-text default on root typos), and a miss stopped looking like
- * the product.
+ * ONE 404, EVERYWHERE. The glitch page (the big "404" graphic) is the ONLY
+ * not-found body the app shows: the SPA's own catch-all, an artifact the
+ * viewer may not read, and a profile that resolves to nothing must all render
+ * the same page, so a miss always looks like the product.
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

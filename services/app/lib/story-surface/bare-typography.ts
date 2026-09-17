@@ -3,8 +3,8 @@
  *
  * Tailwind's preflight flattens `h1`, `p`, `ul` to unstyled text, which is right
  * for a document whose every element carries utilities and wrong for one whose
- * elements carry none. ChatGPT published exactly the latter through the MCP
- * connector — bare <section>/<h1>/<ul> — and it rendered as a wall of text.
+ * elements carry none. An agent published exactly the latter — bare
+ * <section>/<h1>/<ul> — and it rendered as a wall of text.
  * The schema now tells agents to style everything (lib/agent-guidance.ts), but
  * you cannot control what someone else's agent reads, so the floor matters too.
  *

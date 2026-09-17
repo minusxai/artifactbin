@@ -144,7 +144,7 @@ export const EMPTY_STATE: DataflowState = { values: {}, tables: {}, errors: {} }
 
 export function createDataflowStore(
   /*
-   * SPIKE S1 (F2): `values` is the THIRD island field — values WITHOUT rows.
+   * `values` is the THIRD island field — values WITHOUT rows.
    * The reader's URL carries their `<Value>` choices, and they must be the
    * store's starting point before its first run. Seeding them through `state`
    * cannot work: `state` present is how a capture and the editor's canvas say

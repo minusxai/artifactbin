@@ -20,14 +20,14 @@ export { EVENTS_ROUTES, EVENT_VERBS, eventName } from '@artifactbin/contracts';
 export { eventsClient, type EventsClientOptions } from '@artifactbin/utils';
 export { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLE, EVENTS_TABLES } from './schema';
 
-/** The one GET a shell answers — the Docker HEALTHCHECK and the compose `depends_on` condition. */
+/** The one GET a shell answers — the liveness/readiness probe for whatever orchestrates the service. */
 const HEALTH = '/health';
 
 /**
  * One POST (`/emit`, a JSON array of envelopes → `{ accepted: n }`) plus
- * `GET /health`, answered BEFORE the secret check so the Docker HEALTHCHECK
- * works with a secret set. Mirrors services/sql's shell line for line: the
- * secret guard, the method guard, the body cap, the name-only error.
+ * `GET /health`, answered BEFORE the secret check so the probe works with a
+ * secret set. Mirrors services/sql's shell line for line: the secret guard,
+ * the method guard, the body cap, the name-only error.
  */
 export function serveEvents(svc: EventsService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
   const routes: Record<string, (body: unknown) => Promise<unknown>> = {
@@ -142,7 +142,7 @@ export interface RunningEvents {
   close(): Promise<void>;
 }
 
-/** A pg Pool as the one database interface every package speaks (proxy standalone.ts's, verbatim). */
+/** A pg Pool behind the one database interface every package speaks. */
 const poolQueryable = (pool: Pool): Queryable => ({
   query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
     const result = await pool.query(sql, params as never[]);
@@ -151,8 +151,8 @@ const poolQueryable = (pool: Pool): Queryable => ({
 });
 
 /**
- * Boot: config → writer (schema ensured) → shell → listening socket. Logs the
- * unknown-name warnings the way the proxy's runStandalone does, under `events`.
+ * Boot: config → writer (schema ensured) → shell → listening socket. The
+ * unknown-name warnings are logged under `events`.
  * The schema is ensured HERE, at boot, so a service that cannot reach its
  * database dies loudly instead of dropping the first hour of the log.
  */

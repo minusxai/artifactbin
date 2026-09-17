@@ -187,10 +187,10 @@ if (island?.textContent && root) {
 
     /*
      * THE AUTHOR'S SCRIPT RUNS AT THE FIRST COMMIT, and paint-first changes
-     * what it finds there: the rows are no longer inlined, so `mx.read()`
-     * is empty for the moment it takes the document to fetch them. A script
-     * that needs its rows subscribes (`mx.subscribe`), which skills/markup
-     * now teaches.
+     * what it finds there: the rows are not inlined, so `mx.read()` is empty
+     * for the moment it takes the document to fetch them. A script that needs
+     * its rows subscribes (`mx.subscribe`), which the artifactbin skill's
+     * markup-scripts reference teaches.
      *
      * It was worth trying the other way — hold the script until the first run
      * settles, so nothing an author already wrote would notice. That coupling
@@ -207,11 +207,11 @@ if (island?.textContent && root) {
      * ADOPTING A NEW VERSION OF THIS DOCUMENT.
      *
      * The page above holds the live stream — an opaque frame cannot open an
-     * EventSource against the app's origin — and used to deliver what it heard
-     * by replacing this frame outright: the document re-fetched, re-parsed and
-     * re-hydrated, every chart rebuilt, the reader's place on the page and
-     * their own selections gone, once per agent write. This document is a
-     * React tree, so a newer version of it is a render.
+     * EventSource against the app's origin. Delivering what it hears by
+     * replacing this frame outright costs the reader everything: the document
+     * re-fetched, re-parsed and re-hydrated, every chart rebuilt, their place
+     * on the page and their own selections gone, once per agent write. This
+     * document is a React tree, so a newer version of it is a render.
      *
      * Only from our PARENT: any window can post here, and this decides what
      * the reader sees. `data` is carried forward so refData, chrome and the
@@ -398,7 +398,7 @@ if (island?.textContent && root) {
        *
        * It must be a REAL event — a synthetic MessageEvent can spoof `source`,
        * so the author's script would otherwise be able to hand itself the
-       * parent's authority (measured — seamless-editing-v2.md §3b).
+       * parent's authority.
        *
        * It must come from the window that FRAMES us, and from the app's own
        * ORIGIN. Whoever frames a document is its `window.parent`, and the

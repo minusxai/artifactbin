@@ -1,5 +1,5 @@
 /**
- * composeSource — the no-clobber invariant, one process away from where it used to live.
+ * composeSource — the no-clobber invariant.
  *
  * The frame stages edits and the parent folds them in. The rule that matters:
  * a commit re-applies the WHOLE pending set against the current source, so a

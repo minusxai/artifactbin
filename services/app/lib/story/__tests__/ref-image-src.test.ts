@@ -36,11 +36,12 @@ describe('resolveRefImageSrc', () => {
 });
 
 describe('resolveRefProps — the one ref-patch for both render paths', () => {
-  // Every position where markup carries `ref:<id>` that must become a URL at
-  // render time, as ONE table: <img src> and <Video poster>. Both the WYSIWYG
-  // canvas and the runtime call this from their decorateElement seam, so a
-  // position resolving in one and not the other is exactly the drift this
-  // prevents.
+  // Every position where markup carries an IMAGE `ref:<id>` that must become a
+  // URL at render time, as ONE table: <img src> and <Video poster>. (A PDF
+  // `<File src>` and the generic media positions ride the same resolver —
+  // reference-media.test.ts covers those.) Both the WYSIWYG canvas and the
+  // runtime call this from their decorateElement seam, so a position resolving
+  // in one and not the other is exactly the drift this prevents.
   it('patches an <img src="ref:…">', () => {
     expect(resolveRefProps({ isComponent: false, tag: 'img' }, { src: 'ref:img123' }, REF_DATA))
       .toEqual({ src: '/a/img123/raw?v=3' });

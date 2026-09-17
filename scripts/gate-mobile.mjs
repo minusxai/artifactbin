@@ -4,11 +4,11 @@ import { artifactDocument } from './lib/artifact-document.mjs';
 /**
  * Gate: the document chrome has to fit on a phone.
  *
- * Three faults this pins, all found by looking at a 390px window:
+ * Four faults this pins, all found by looking at a 390px window:
  *
  *  1. The story editor's bar is one non-wrapping flex row, so on a narrow
  *     screen it ran past the viewport and `done` — the only way out of edit
- *     mode, and the thing that saves your work on the way (gate-editor-exit)
+ *     mode, and the thing that saves your work on the way (gate-editor-v2 §5)
  *     — sat off-screen where no thumb can reach it.
  *  2. The theme popover is a fixed `w-[26rem]` two-column grid, wider than the
  *     screen it opens on: half the themes clipped, and the page grew a
@@ -22,8 +22,8 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *     by touch now carries a close button and goes away on a scroll; a card
  *     opened by a mouse still carries none.
  *
- * Both are checked as GEOMETRY, not as classes — an element's own rect against
- * the viewport is the only thing that survives a refactor of the styling.
+ * All of them are checked as GEOMETRY, not as classes — an element's own rect
+ * against the viewport is the only thing that survives a refactor of the styling.
  *
  *   usage: node scripts/gate-mobile.mjs [base]
  */
@@ -225,15 +225,16 @@ await wide.close();
 
 // ── 5. a chart tooltip must be dismissable with a finger ───────────────────
 /*
- * MEASURED FIRST, then written (the event log is in .agent/REPORT.md): headless
+ * MEASURED FIRST, then written: headless
  * Chromium's touch emulation sends a stationary tap as pointerdown → pointerup →
  * pointerleave with NO pointermove, and Vega opens a tooltip on a MOVE — so an
  * emulated tap opens no card at all and cannot exercise this. A real finger is
  * never stationary; the touch legs therefore drive the mark with a synthetic
  * touch pointer sequence (the product's own handler, hit test and policy all
  * run for real, only the input is synthesised — the same compromise
- * gate-image-upload makes, with gate-real-paste beside it). The MOUSE leg below
- * uses a real pointer, because that is the behaviour that must not change.
+ * gate-image-upload's dispatch legs make, beside its real-keystroke one). The
+ * MOUSE leg below uses a real pointer, because that is the behaviour that must
+ * not change.
  */
 const cardState = (page) => page.evaluate(() => {
   const el = document.getElementById('vg-tooltip-element');

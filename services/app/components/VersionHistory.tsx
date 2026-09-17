@@ -36,7 +36,7 @@ interface VersionHistoryProps {
 /**
  * Selected rows use the sidebar's active treatment — one "you are here" in the app.
  * Padding is on the shared helper so the current-version row and the history rows
- * keep the same rhythm; now that rows are a single line, they can afford the air.
+ * keep the same rhythm.
  */
 const ROW = (selected: boolean) =>
   `border-b border-edge px-3 py-2.5 transition-colors ${

@@ -1,10 +1,10 @@
 /**
  * The served document's <DataTable> height is a CEILING, on the SAME path a reader
- * gets: StoryRuntimeApp's DataTableAdapter. Phase 1 made the kit's scroll box
- * `max-height`, but the adapter still wrapped it in a div with a definite height
- * (`questionEmbedHeightPx`, floored at MIN_CHART_H), so a three-row table kept
- * reserving 420px — production eval run 33702277600. The wrapper must carry no
- * height outside a grid cell, and the cap must be the TABLE parser's (no chart floor).
+ * gets: StoryRuntimeApp's DataTableAdapter. The kit's scroll box caps itself with
+ * `max-height`; a wrapper with a definite height on top of that
+ * (`questionEmbedHeightPx`, floored at MIN_CHART_H) makes a three-row table
+ * reserve 420px. The wrapper must carry no height outside a grid cell, and the
+ * cap must be the TABLE parser's (no chart floor).
  */
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';

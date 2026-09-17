@@ -7,7 +7,8 @@
  * bundler inlined that had to stay external, an entry that resolves `.ts` only
  * under a loader — is a green suite and a container that exits at line one.
  *
- * So this builds the bundle the Dockerfile's `sql` target ships and runs THAT.
+ * So this builds the bundle the Dockerfile ships (`scripts/build-server.mjs` →
+ * `dist/sql-server.mjs`) and runs THAT.
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { rmSync, existsSync } from 'node:fs';

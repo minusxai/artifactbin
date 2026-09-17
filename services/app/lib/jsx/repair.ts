@@ -8,7 +8,7 @@
  *
  *     <Query name="q">{\`select …\`}</Query>
  *
- * Measured on the CI agent eval (run 33868825276's `data` task): the publish was
+ * Measured on the CI agent eval's `data` task: the publish was
  * refused with `Expecting Unicode escape sequence \uXXXX (1:311)`, and the agent
  * spent 171s composing that document and another 90s working out what to change
  * — 39% of a 673-second task, over two backslashes, against 226ms of server time
@@ -96,8 +96,8 @@ function siteIndex(source: string, extra: { attr: string; line: number }): numbe
 }
 
 /**
- * THE BRACE COUNT, the second fault worth repairing: 15 tasks and 82 model calls in eval runs
- * 34740707220–34741910427 went to a `viz={{…}}` with one `}` too many or too few, or a `{{{`
+ * THE BRACE COUNT, the second fault worth repairing: 15 tasks and 82 model calls went to a
+ * `viz={{…}}` with one `}` too many or too few, or a `{{{`
  * opening from wrapping an already-wrapped object. The two unambiguous shapes are repaired — stray
  * `}`s after a closed expression, and `{{{` — found by the same scanners that name them in the
  * refusal, and kept only if the result parses. A missing brace is named, never guessed (see below).

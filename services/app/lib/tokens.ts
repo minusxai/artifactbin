@@ -1,8 +1,7 @@
 /**
- * Agent bearer tokens. (Pattern from minusx-gateway gateway/ledger.py:
- * prefix + 256 random bits, shown exactly once, only sha256 stored in a
- * unique-indexed column, soft revoke via deleted_at — unknown and revoked are
- * indistinguishable to callers.)
+ * Agent bearer tokens: prefix + 256 random bits, shown exactly once, only the
+ * sha256 stored in a unique-indexed column, soft revoke via deleted_at —
+ * unknown and revoked are indistinguishable to callers.
  *
  * A token may be anonymous (user_id NULL) or bound to a user; artifacts it
  * creates inherit that owner at publish time.
@@ -48,7 +47,7 @@ interface MintedToken {
   expiresAt: string | null;
 }
 
-/** Default lifetime of a minted token: six hours (tok-p1). */
+/** Default lifetime of a minted token: six hours. */
 export const DEFAULT_TOKEN_TTL_MS = 6 * 60 * 60 * 1000;
 /** Longest explicit bearer lifetime: 365 days, independent of browser session expiry. */
 export const MAX_TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000;
@@ -68,7 +67,7 @@ interface MintOptions {
   scope?: string | null;
 }
 
-/** Derived, never stored twice: revoked wins over expired; NULL expires_at never expires (grandfathered rows). */
+/** Derived, never stored twice: revoked wins over expired; NULL expires_at never expires (the account's 'web' token). */
 type TokenStatus = 'active' | 'expired' | 'revoked';
 export function tokenStatus(
   row: { deleted_at: string | Date | null; expires_at: string | Date | null },
@@ -205,7 +204,7 @@ export async function revokeToken(id: string): Promise<boolean> {
 }
 
 /**
- * Stamp `last_used_at` for a token the app just trusted (tok-p1). SAMPLED: the row is written only when the
+ * Stamp `last_used_at` for a token the app just trusted. SAMPLED: the row is written only when the
  * stamp is NULL or older than TOUCH_INTERVAL_MS, so a busy agent costs one UPDATE a minute, not one per
  * request. Never throws to the caller — attribution, not authorization. Called once per request from the
  * place the app first trusts a token-bearing actor (lib/viewer), in BOTH shapes: the in-process resolvers
@@ -225,7 +224,7 @@ export async function touchToken(id: string): Promise<void> {
 }
 
 /**
- * REJECT (tok-p1): revoke a token the browser holds in its signed cookie. The capability is the cookie naming
+ * REJECT: revoke a token the browser holds in its signed cookie. The capability is the cookie naming
  * the id (the claim-by-id precedent), so the caller passes only ids the cookie verifiably carries. Revokes
  * when the token is live AND (unclaimed OR owned by `userId`); a token claimed by someone else is not
  * touched. Returns false when nothing was revoked (unknown, already dead, or someone else's).

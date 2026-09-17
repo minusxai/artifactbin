@@ -1,11 +1,11 @@
 /**
  * `SQL__SERVICE_URL` MUST MOVE EVERY ENGINE CALL, NOT MOST OF THEM.
  *
- * `dryRunQueries` had no remote branch, and it runs on every write that can
- * resolve its refs — so an app pointed at a service still opened a local DuckDB
- * instance on the most ordinary request it serves. In-process that is invisible
- * (it works, on a module the deployment believed it had moved); on an image built
- * without the engine it is `ERR_MODULE_NOT_FOUND` on `POST /api/artifacts`.
+ * `dryRunQueries` runs on every write that can resolve its refs, so an entry
+ * point without a remote branch opens a local DuckDB instance on the most
+ * ordinary request the app serves. In-process that is invisible (it works, on a
+ * module the deployment believes it has moved); on an image built without the
+ * engine it is `ERR_MODULE_NOT_FOUND` on `POST /api/artifacts`.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,11 +52,11 @@ describe('dryRunQueries with a service configured', () => {
 
 describe('every engine entry point, not most of them', () => {
   /*
-   * The miss that produced this file was ONE function without a remote branch,
-   * and finding it cost a full gate run against an image built without DuckDB.
-   * `dryRunMutations` was the second. This case fails if a third appears: with a
-   * service configured, no entry point may reach the native module — proven by
-   * behaviour (every call goes out over fetch), not by reading the source.
+   * One entry point without a remote branch only shows up as a full gate run
+   * against an image built without DuckDB. This case fails when one appears:
+   * with a service configured, no entry point may reach the native module —
+   * proven by behaviour (every call goes out over fetch), not by reading the
+   * source.
    */
   const CALLS: Array<[string, (m: any) => Promise<unknown>]> = [
     ['runQueries', (m) => m.runQueries({ tables: {}, queries: [{ name: 'q', sql: 'select 1' }], params: {} })],

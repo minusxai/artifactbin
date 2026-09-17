@@ -1,16 +1,14 @@
 // The <Question> sizing contract — ONE for every renderer.
 //
 // The inline editor and view both render StoryRuntimeApp from the same stored
-// source through this shared contract. Before it was shared, the two paths had
-// their own defaults (430 vs 320), and only one renderer parsed string heights,
-// so a chart without an authored height changed size between editing and
-// reading. The skill documents "Missing height defaults to 430px" — this is
-// that number.
+// source through this shared contract. Two renderers with their own defaults,
+// or only one of them parsing string heights, make a chart without an authored
+// height change size between editing and reading.
 //
 // It lives in its OWN leaf module, importing nothing, because the served
 // document's runtime needs exactly this and nothing else from the <Question>
 // editing modules. Those import the editor's AST write-back (jsx-edit →
-// lib/jsx → acorn), so a runtime asking for one number downloaded a 250 KB JSX
+// lib/jsx → acorn), so a runtime asking for one number would pull a 250 KB JSX
 // parser it can never use — the island carries parsed NODES, not source.
 // Guarded by lib/__tests__/reader-bundle-hygiene.test.ts; keep this file
 // dependency-free.

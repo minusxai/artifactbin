@@ -10,8 +10,6 @@
  * hard as the happy path: a second login must not re-offer what was already
  * claimed, and an unticked draft must stay behind.
  *
- * The dev server must point its mail at this gate's sink:
- *
  * Local dev writes login mail to `.artifactbin/dev-mail.jsonl`; use `npm run dev:otp -- <email>`.
 
  *
@@ -58,8 +56,8 @@ await becomeOwner(p, B, anon.token);
 // ── they log in ─────────────────────────────────────────────────────────────
 const email = `mxmx_test_claim_${Date.now().toString(36)}@example.com`;
 await loginViaEmail(p, B, sink, email);
-// The masthead's identity line is the HANDLE now, not the address, so being
-// signed in is that link existing (components/HeaderBar).
+// The page chrome names the account by HANDLE, not by address, so being signed
+// in is asked of the session endpoint rather than read off the page.
 check(await isSignedInAs(p, email), 'logging in with an emailed code signs you in');
 
 // ── the banner names the drafts, without being asked for a token ────────────

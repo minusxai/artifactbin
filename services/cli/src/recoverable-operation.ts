@@ -46,9 +46,9 @@ export async function recoverableOperation(workspace:Workspace,client:HttpClient
 }
 
 /**
- * Is a durable operation already journalled here? Every pre-read in this
- * workstream is skipped while one is, because the state a pre-read inspects is
- * exactly the state the pending operation has already changed.
+ * Is a durable operation already journalled here? Every pre-read is skipped
+ * while one is, because the state a pre-read inspects is exactly the state the
+ * pending operation has already changed.
  */
 export async function pendingOperation(workspace:Workspace):Promise<Operation|null>{
  return (await readState(workspace.home))?.get<Operation>(workspace.root,'pending-operation',CURRENT)?.value??null;

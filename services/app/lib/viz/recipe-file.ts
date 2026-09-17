@@ -7,11 +7,11 @@
  *
  * File recipes are LIVE references: a chart stores `{kind:'recipe', recipe, bindings}`
  * and materialization substitutes the template at read time (the file loader on the
- * server, the Redux catalog in the browser), attaching the spec as computed fields the
+ * server, the client catalog in the browser), attaching the spec as computed fields the
  * save gate strips. Editing a recipe therefore restyles every referencing chart on its
  * next load; deleting one degrades those charts to a table fallback until it is
- * restored. `freezeFileRecipe` remains for the explicit DETACH flow, which stores the
- * substituted spec with the recipe's address in `detachedFrom.recipe`.
+ * restored. The explicit DETACH flow is the opt-out: it stores the substituted spec
+ * with the recipe's address in `detachedFrom.recipe`.
  *
  * Token rules (the whole substitution language — no structural branching):
  *  - `"{{slot}}"` as a WHOLE string value → replaced with the bound value verbatim

@@ -2,7 +2,7 @@
 
 A Chromium that renders a URL to an image. `@artifactbin/contracts` `BrowserService` is the interface; this file is the wire.
 
-`GET /health` answers `200 {"ok":true}` — the Docker HEALTHCHECK and the compose `depends_on` condition; the one GET, every other route POST-only.
+`GET /health` answers `200 {"ok":true}` — the liveness/readiness probe for whatever orchestrates the service; the one GET, every other route POST-only.
 
 `POST /render` with a `RenderRequest`:
 `url` (the page, carrying its own short-lived key — the service holds no credentials and sets no cookies) ·
@@ -39,9 +39,14 @@ the clip is not truncated, then measured again. `{ card }` instead captures a lo
 scales it to the requested viewport without relayout. `preview` captures a bounded low-density overview. `card` is
 a named MODE and not a client recipe because that dance happens inside one page load.
 
-Stateless: one page per request, closed after. Renders are serialised inside the service. The URL must be reachable
-FROM THE SERVICE'S NETWORK — behind compose that is the app's service name, not 127.0.0.1, and never a bare host
+Renders are stateless: one page per request, closed after, and serialised inside the service. The URL must be reachable
+FROM THE SERVICE'S NETWORK — a host that network resolves to the app, not 127.0.0.1, and never a bare host
 that Chrome canonicalises into a real TLD (`app` → `.app`, HSTS-preloaded). Private network only.
+
+`POST /sessions` is the one STATEFUL surface: a `BrowserSessionRequest` (`script | status | close`) against a
+persistent isolated session whose worker keeps its browser, context and pages across calls. `503
+{error:"sessions_unavailable"}` when the composition supplied no `sessions` implementation. Leases, execution
+receipts and script serialisation live in `src/sessions.ts`; see [docs/mx-sessions.md](../../docs/mx-sessions.md).
 
 Entry points: `@artifactbin/browser` is the contract, the client and the server shell (no Playwright); `./local`
 is the Chromium and the ONLY entry that loads Playwright — one browser, launched on first use, closed after a
@@ -67,9 +72,9 @@ readiness timeouts return failure, never cacheable image bytes.
 
 ### S3 upload deployment
 
-Use `docker-compose.export-s3.yml` over the lean composition when the app uses
-S3. Set `BROWSER__UPLOAD_ORIGIN` to the exact HTTPS origin emitted by its signer
-and `BROWSER__UPLOAD_PREFIX` to the absolute path ending in `/exports/objects/`.
+When the app stores exports in S3, set `BROWSER__UPLOAD_ORIGIN` to the exact
+HTTPS origin emitted by its signer and `BROWSER__UPLOAD_PREFIX` to the absolute
+path ending in `/exports/objects/`.
 For virtual-hosted S3 these might be `https://bucket.s3.us-west-1.amazonaws.com`
 and `/artifacts/exports/objects/`; path-style storage also includes the bucket
 in the path. The gateway receives the same origin/prefix and no S3 credentials.

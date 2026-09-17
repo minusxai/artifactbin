@@ -135,8 +135,8 @@ describe('withCompiledStoryCss', () => {
 
 // Hardening: a malformed class token must never fail the compile —
 // bad candidates are bisected out and the survivors' CSS is returned. A build() that rejects a
-// token like `w-[calc(100%` (unbalanced bracket) used to throw all the way up and fail the whole
-// save; the salvage guard itself is covered by the `buildSalvaging` block below.
+// token like `w-[calc(100%` (unbalanced bracket) would otherwise throw all the way up and fail
+// the whole save; the salvage guard itself is covered by the `buildSalvaging` block below.
 describe('compileStoryCss hardening — malformed candidates never throw', () => {
   const BROKEN_STORY =
     '<div class="mx-story" data-design="tw">' +
@@ -207,14 +207,14 @@ describe('jsx-format stories — className candidates + always-compile', () => {
   // resolve. Legacy stories keep skipping the banned-candidate guard (frozen semantics).
   it('marked LEGACY stories get the recipe union + token layer (embeds keep their chrome)', async () => {
     const css = await compileStoryCss('<div data-design="tw" class="p-4">legacy with embeds</div>');
-    // ADAPTED: 'animate-spin' would enter the union through embed chrome files
-    // this repo does not carry, so assert a kit-sourced union class instead.
+    // Asserted on a kit-sourced union class rather than one of the embed
+    // chrome utilities, so the case does not move when embed chrome is reskinned.
     expect(css).toContain('.rounded-xl');    // kit chrome class, NOT in the story markup
     expect(css).toContain('--background');   // token layer present so token utilities resolve
   });
 
-  // Same visual bar as the app build (buildAppThemeCss): the stock shadcn --chart-1..5 would
-  // silently recolor embedded charts in unthemed/legacy stories (VegaChart reads those tokens).
+  // The stock shadcn --chart-1..5 would silently recolor embedded charts in
+  // unthemed/legacy stories (VegaChart reads those tokens wherever they resolve).
   // The NEUTRAL story bodies carry the app palette; [data-theme] blocks still override.
   it('story neutral bodies keep the APP chart palette (no silent embed recolor)', async () => {
     const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;
@@ -241,7 +241,7 @@ describe('jsx-format stories — className candidates + always-compile', () => {
   });
 });
 
-// §3 token layer: jsx stories compile against the shadcn preamble (token utilities like
+// Token layer: jsx stories compile against the shadcn preamble (token utilities like
 // bg-card resolve via @theme inline) UNIONED with the registry recipe classes — the shadcn
 // component sources use classes (rounded-xl, border, shadow-sm, …) that never appear in the
 // story's own markup, so without the base sheet a <Card> renders unstyled.

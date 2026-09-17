@@ -44,7 +44,7 @@ describe('renderReaderChrome', () => {
     expect(html).toContain('Report &lt;2026&gt;');
     expect(chrome()).not.toContain('data-mx-owner-breadcrumb');
   });
-  it('renders HIDDEN, stamped with the artifact id', () => {
+  it('renders SHOWN, stamped with the artifact id', () => {
     const html = chrome();
     expect(html).toContain('<div class="mx-reader-chrome" data-mx-reader-chrome data-mx-reader-state="shown" data-mx-artifact-id="ab12cd">');
     expect(chrome({ artifactId: null })).not.toContain('data-mx-artifact-id');

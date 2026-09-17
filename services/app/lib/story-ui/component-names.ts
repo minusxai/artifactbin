@@ -55,7 +55,7 @@ export const STORY_SVG_TAGS = [
 ] as const;
 
 /**
- * The explicit HTML tag allowlist for new-format stories (§2): content/document tags only,
+ * The explicit HTML tag allowlist for new-format stories: content/document tags only,
  * plus the SVG drawing subset above.
  * `script`/`iframe`/`object`/`embed`/`base`/`form`/`meta`/`link` are excluded (the validator
  * additionally hard-denies them for every story format).

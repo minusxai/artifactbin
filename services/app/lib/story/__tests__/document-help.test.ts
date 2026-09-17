@@ -1,8 +1,8 @@
 /**
- * DISCOVER (cleanup/discover): a served artifact tells an agent how to operate it. An agent given a pasted link
+ * DISCOVER: a served artifact tells an agent how to operate it. An agent given a pasted link
  * fetches the document and finds, in <head>, a `<link rel="help">` to the one-pager and a one-line
  * `<meta name="afbin">` naming the CLI and its install one-liner. Measured motivation: the docs route records
- * an agent spending seven 4xx probes guessing endpoints when given a bare link. Seeded RED by the orchestrator.
+ * an agent spending seven 4xx probes guessing endpoints when given a bare link.
  */
 import { describe, expect, it } from 'vitest';
 import { AGENT_HELP_TITLE } from '@/lib/agent-discovery';

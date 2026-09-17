@@ -10,8 +10,6 @@
  * The last describe is the pair of dashboard aggregate cases that lived in
  * analytics.test.ts before the queries moved here — the same assertions, over
  * the same analytics_events rows, now reached through the backfill.
- *
- * Seeded RED by the orchestrator.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Queryable } from '@artifactbin/contracts';
@@ -31,7 +29,7 @@ vi.mock('@/lib/request-context', async (importOriginal) => ({
   currentHeaders: async () => (requestHeaders.size === 0 ? null : { get: (k: string) => requestHeaders.get(k.toLowerCase()) ?? null }),
 }));
 
-/* ───────── THE ORACLE: lib/analytics.ts's two queries before P2, verbatim ───────── */
+/* ───────── THE ORACLE: the two queries lib/analytics.ts replaced, verbatim ───────── */
 async function oracleSeries(db: Queryable, userId: string, days: number): Promise<Map<string, number[]>> {
   const r = await db.query<{ artifact_id: string; day: string; n: number }>(
     `SELECT e.artifact_id, to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,

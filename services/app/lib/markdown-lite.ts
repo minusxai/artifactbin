@@ -2,7 +2,7 @@
  * MARKDOWN-LITE — a STRICT, owned subset of markdown for comment bodies.
  *
  * A comment body is plain TEXT on every wire (the `annotations.body` column,
- * `GET /api/artifacts/<id>`, the MCP `annotate` tool). Nothing here changes
+ * `GET /api/artifacts/<id>`, the `annotate` operation). Nothing here changes
  * that: this module is the READING half — the page parses the text it was
  * given and renders React elements from the result. The wire never carries
  * markup, so an agent keeps writing exactly what it already writes.
@@ -155,10 +155,10 @@ function indexBacktickRuns(src: string): BacktickRuns {
  *
  * A run of n backticks asks n questions — the fence at its first position is n
  * long, at its second n-1, and so on down to 1 — and every one of them searches
- * from the SAME place: just past the run. Answering them one at a time is what
- * made this quadratic: the old code rebuilt an n, n-1, n-2 … character needle
- * at every position (a 3,000-backtick run constructed 4.5 million characters
- * and retained them all in the Scanner's cache), then re-scanned for each.
+ * from the SAME place: just past the run. Answering them one at a time is
+ * quadratic: it rebuilds an n, n-1, n-2 … character needle at every position (a
+ * 3,000-backtick run constructs 4.5 million characters and retains them all in
+ * the Scanner's cache), then re-scans for each.
  *
  * So the run is measured ONCE and answered as a table: `closers[len]` is the
  * first index at or after the run holding `len` consecutive backticks, or -1.

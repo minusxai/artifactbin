@@ -10,9 +10,9 @@
  * Escape, the slide-up, the grab handle, the scroll cap.
  *
  * It PORTALS to <body>: these panels live inside the top bar, whose
- * `backdrop-blur` makes it the containing block for fixed descendants (the
- * documented menu bug) — rendered in place, `bottom-0` would anchor the sheet
- * to the BAR's bottom edge, hanging it just under the chrome.
+ * `backdrop-blur` makes it the containing block for fixed descendants —
+ * rendered in place, `bottom-0` would anchor the sheet to the BAR's bottom
+ * edge, hanging it just under the chrome.
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';

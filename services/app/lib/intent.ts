@@ -2,33 +2,27 @@
  * `?intent=` — ONE instruction carried on the artifact's own address, consumed
  * on mount and then removed.
  *
- * It exists because two doors lead AWAY from a document and have to lead back
- * INTO it doing the thing that was asked: "fork this" and "log in to comment"
- * both go through /login, and a person who comes back to a document that has
- * simply forgotten what they pressed has been made to do the work twice.
+ * It exists because the doors that lead AWAY from a document have to lead back
+ * INTO it doing the thing that was asked: fork, comment, like and follow all go
+ * through /login, and a person who comes back to a document that has simply
+ * forgotten what they pressed has been made to do the work twice.
  *
  * Three rules, and they are the whole module:
- *  - a STRICT ALLOWLIST. `fork | comment | new-folder` and nothing else; an unknown value
+ *  - a STRICT ALLOWLIST (`INTENTS` below) and nothing else; an unknown value
  *    is not an error, it is silence — this parameter is on a SHARED link, so
  *    anyone may append anything to it, and the page must never do something it
  *    was not designed to be asked for.
  *  - it is an INSTRUCTION, not state. It is consumed once, on mount, and
  *    stripped from the address with replaceState, so a refresh does not
  *    re-prompt and a copied link is the document rather than the prompt.
- *  - stripping it keeps EVERY other parameter byte for byte — F2's `$` values
- *    are in this same query string and are the reader's document, not ours.
+ *  - stripping it keeps EVERY other parameter byte for byte — a document's own
+ *    `$` selections are in this same query string and are the reader's, not ours.
  *    So the pairs are re-emitted exactly as they arrived rather than round
  *    tripped through URLSearchParams, which re-encodes what it did not have to
  *    (`lib/story/url-values` learned this first and for the same reason).
  */
 
-/*
- * `new-folder` is the folder's own version of the same problem: the served
- * document is sandboxed at an opaque origin with no session, so its "new
- * folder" control can only be an anchor with target="_top" that ASKS — the
- * SHELL, which holds the credential, is what can actually create one.
- */
-const INTENTS = ['fork', 'comment', 'new-folder', 'like', 'follow'] as const;
+const INTENTS = ['fork', 'comment', 'like', 'follow'] as const;
 export type Intent = (typeof INTENTS)[number];
 
 /** The parameter's name, in one place: the reader, the stripper and the writer. */

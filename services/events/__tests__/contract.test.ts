@@ -3,9 +3,6 @@
  * and the same writer behind `serveEvents` reached through `eventsClient`.
  * One suite, two shapes — in-process and remote can never disagree. Then the
  * shell's own guards, the client's batching, and the boot.
- *
- * Seeded RED by the orchestrator: every implementation below is a skeleton
- * that throws `events-svc: implement …`.
  */
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -95,7 +92,7 @@ describe('serveEvents (the shell)', () => {
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
     fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
-  it('answers GET /health without the secret — before the guard, so the HEALTHCHECK works', async () => {
+  it('answers GET /health without the secret — before the guard, so the probe works', async () => {
     const r = await fetch(`${url}/health`);
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ ok: true });

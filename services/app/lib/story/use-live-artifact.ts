@@ -11,12 +11,10 @@
  * The hook returns null until a frame arrives that differs from what the page
  * was server-rendered with, so the first paint is never disturbed.
  *
- * Two things are tracked per CONNECTION rather than per accepted frame — the
- * highest version seen and the last stylesheet seen. Both are properties of
- * what the server has already sent (it omits an unchanged stylesheet, and it
- * builds frames asynchronously so they can overtake each other), so they must
- * keep counting even for frames this hook decides not to surface. See
- * `isOwnFrame`.
+ * The highest version seen is tracked per CONNECTION rather than per accepted
+ * frame: the server builds frames asynchronously, so they can overtake each
+ * other, and the floor must keep counting even for frames this hook decides not
+ * to surface. See `isOwnFrame`.
  */
 import {readAnnotationPages} from '@/lib/annotation-pages';
 import { useEffect, useRef, useState } from 'react';

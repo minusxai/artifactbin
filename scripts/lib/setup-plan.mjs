@@ -3,7 +3,7 @@
  * environment file. The runner owns every side effect.
  *
  * The example is snapshotted because the runtime image deliberately contains
- * only the two setup modules; decoding this constant is deterministic and
+ * only the setup modules; decoding this constant is deterministic and
  * keeps this module free of filesystem I/O. The snapshot is GENERATED —
  * `npm run generate:env-snapshot` writes it from `.env.example`, and
  * `scripts/__tests__/setup-plan.test.mjs` fails when the two have drifted.

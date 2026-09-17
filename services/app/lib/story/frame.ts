@@ -10,7 +10,7 @@
  * carry pings only, and lets a relay blind to content deliver them.
  *
  * Cached by (id, edit_id): a document with two hundred readers costs one
- * build per version, not two hundred (it used to be built per connection).
+ * build per version, not one per connection.
  */
 import type { ArtifactRow } from '@/lib/artifacts';
 import { datasetsForDocument } from '@/lib/artifacts';
@@ -97,5 +97,3 @@ export function liveFrameFor(row: ArtifactRow): Promise<LiveFrame> {
   }
   return hit;
 }
-
-/** Kept importable for callers that still want the SERVER-run state (the page's island). */

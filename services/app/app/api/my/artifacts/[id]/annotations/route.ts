@@ -1,6 +1,7 @@
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 /**
- * The BROWSER's annotation door — the only place annotations are CREATED.
+ * The BROWSER's annotation door — where a person's selection becomes a thread
+ * (the bearer twin creates from a node id or a quote instead).
  * POST { path, edit_id, body }: `path` is the BODY path the frame reported
  * for the selected node, `edit_id` the head the page believed in (staleness
  * is resolved server-side; an uncarryable base answers 409 with head so the

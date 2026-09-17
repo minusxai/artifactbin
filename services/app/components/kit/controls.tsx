@@ -535,10 +535,10 @@ export function DateControl({ label, className, min, max, value, nullable, disab
     <ControlShell label={label} bound={bound} className={className} rest={rest}>
       {/* The calendar is OUR popover, in the document's own tokens — the
           native <input type="date"> popup is browser chrome no CSS reaches
-          (a white light-mode sheet over a nocturne dashboard). Same inline,
-          portal-free pattern as SelectControl: closed in the SSR string, no
-          useId, outside-click on the control's OWN document (the canvas
-          renders into another realm). */}
+          (a white light-mode sheet over a nocturne dashboard). Inline rather
+          than portaled, and otherwise the SelectControl pattern: closed in the
+          SSR string, no useId, outside-click on the control's OWN document
+          (the canvas renders into another realm). */}
       <div ref={rootRef} className="relative">
         <button
           type="button"

@@ -44,13 +44,13 @@ describe('ShareLink', () => {
   it.each(['owner','editor'] as const)('opens the sharing controls for %s: copy link, visibility and invitations', async role => {
     render(<ShareLink className="x" artifactId="Ab3xK9" owner={role === 'owner'} editable={role === 'editor'} />);
 
-    // The old second button is gone — Share itself opens the dialog.
+    // There is no second button: Share itself opens the dialog.
     expect(screen.queryByLabelText('Sharing options')).toBeNull();
     fireEvent.click(screen.getByLabelText('Share'));
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Sharing' })).toHaveClass('max-w-2xl');
 
-    // Copy link lives INSIDE the dialog now.
+    // Copy link lives INSIDE the dialog.
     fireEvent.click(screen.getByLabelText('Copy link'));
     expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
 
@@ -117,7 +117,7 @@ describe('ShareLink', () => {
   });
 
   it('keeps the visibility toggles on one line each', async () => {
-    // "anyone with link" wrapped to two lines in the w-64 panel — the labels
+    // "anyone with link" wraps to two lines in a narrow panel — the labels
     // must never break internally, whatever width the panel settles at.
     render(<ShareLink className="x" artifactId="Ab3xK9" owner />);
     fireEvent.click(screen.getByLabelText('Share'));

@@ -2,9 +2,6 @@
  * The agent cookie: a browser holding token IDS (never the secret), signed.
  * The LAST id is the primary — the token a write acts as; earlier ids are
  * still held (what a sign-up may claim) but do not authorize.
- *
- * Moved from packages/proxy/src/agent-cookie.ts (behaviour byte-for-byte);
- * the app's lib/agent-session and the proxy both bind it now.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { AgentSession } from '@artifactbin/contracts';
@@ -44,7 +41,7 @@ export function withToken(session: AgentSession | null, tokenId: string): AgentS
 }
 
 /**
- * The inverse of withToken (tok-p1, reject): drop ONE held id, preserving the order of the rest — the last
+ * The inverse of withToken: drop ONE held id, preserving the order of the rest — the last
  * entry stays the primary. Returns null when nothing remains, which the caller turns into a cleared cookie.
  */
 export function withoutToken(session: AgentSession | null, tokenId: string): AgentSession | null {

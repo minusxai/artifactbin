@@ -129,7 +129,7 @@ describe('inlined page data', () => {
 
   it('carries the owner\'s document page: the surface props and the canonical address', async () => {
     const w = await world();
-    // At the canonical address — /a/<id> heals there first (server/app healTo).
+    // At the canonical address — /a/<id> heals there first (server/app documentPreparation).
     const owner = as({ credential: 'session', userId: w.owner.id, email: w.owner.email });
     const path = (await app.request(`/a/${w.pub.id}`, { headers: owner })).headers.get('location')!;
     const res = await app.request(path, { headers: owner });

@@ -6,9 +6,9 @@
  * fonts, images and embeds each move everything below them as they land. So
  * the position is re-applied for a few seconds.
  *
- * Those seconds used to be seconds in which the document fought its reader.
- * The outline gate found it: clicking a table-of-contents row scrolled the
- * page and the loop pulled it straight back, every time, with nothing on
+ * Those seconds are seconds in which the document can fight its reader. The
+ * outline gate found it: clicking a table-of-contents row scrolls the page and
+ * an unyielding loop pulls it straight back, every time, with nothing on
  * screen to explain why. The restore exists to spare the reader a jump they
  * did not ask for — so the instant they ask for one, it has done its job and
  * must stop. A wheel, a touch, a paging key or a mouse press ends it.

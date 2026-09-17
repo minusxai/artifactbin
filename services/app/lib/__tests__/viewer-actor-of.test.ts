@@ -1,6 +1,6 @@
 /**
- * THE HANDOFF, wave 1: the app reads the actor the proxy ATTACHED to the Request (utils actorOf) first;
- * the signed header stays as a fallback until wave 3 deletes it. A forged header cannot outrank an attached actor.
+ * THE HANDOFF: the app reads the actor the proxy ATTACHED to the Request (utils actorOf), and only
+ * that. There is no signed-header fallback, so no header — forged or correctly signed — is anybody.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { attachActor, signActor } from '@artifactbin/utils';
@@ -34,8 +34,8 @@ describe('sessionActor', () => {
   });
 
   /*
-   * From viewer-no-fallback.test.ts: wave 3 deleted the header fallback, so a
-   * header signed with the REAL secret — not merely a forged one — is nobody too.
+   * There is no header fallback, so a header signed with the REAL secret — not
+   * merely a forged one — is nobody too.
    */
   it('a correctly signed header alone is nobody: the fallback is gone', async () => {
     const secret = 's'.repeat(32);

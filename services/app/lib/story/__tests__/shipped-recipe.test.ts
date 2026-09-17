@@ -36,7 +36,7 @@ const doc = (viz: string) =>
   `<Question data="$trend" viz={${viz}} height="300px" />`;
 
 describe('shipped registry recipes at the publish door', () => {
-  it('refuses an array on a single-column slot at publish, not at render — agents write "value":["col"] for single-value (run 34740707220 deck; a local pi deck published a console error)', async () => {
+  it('refuses an array on a single-column slot at publish, not at render — agents write "value":["col"] for single-value', async () => {
     const bad = await checkDocumentData(doc('{"kind":"recipe","recipe":"minusx/single-value@1","bindings":{"value":["revenue"]}}'), load);
     expect(bad.ok).toBe(false);
     if (!bad.ok) expect(bad.details.join('\n')).toMatch(/slot "value" takes a single column, not an array — write "value": "revenue"/);

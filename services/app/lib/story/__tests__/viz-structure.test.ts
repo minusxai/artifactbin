@@ -17,7 +17,7 @@ const doc = (viz: string) =>
   '</Helmet>' +
   `<Question data="$june" viz={${viz}} height="300px" />`;
 
-// The spec pi published in eval run 34703431814: a top-level facet beside mark/encoding.
+// The shape an agent publishes: a top-level facet beside mark/encoding.
 const FACET_BESIDE_MARK = '{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"team","type":"nominal"},"y":{"field":"median_resolution_hours","type":"quantitative"}},"facet":{"column":{"field":"channel","type":"nominal"}}}}';
 const FACET_AS_ENCODING = '{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"team","type":"nominal"},"y":{"field":"median_resolution_hours","type":"quantitative"},"column":{"field":"channel","type":"nominal"}}}}';
 

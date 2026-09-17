@@ -13,9 +13,9 @@
  * The DOOR (jsx-tier) collects these and IMPORTS them (lib/web-assets) before
  * validation. It does NOT rewrite the source: the URL an author wrote stays in
  * the stored document, and the serve-time mapping (lib/story/asset-url) points
- * the served copy at ours. That replaced a rewrite to `ref:<id>`, which created
- * an image artifact the agent never asked for and made the document's own
- * markup unrecognisable to whoever wrote it.
+ * the served copy at ours. Rewriting to `ref:<id>` instead would create an
+ * image artifact the agent never asked for and make the document's own markup
+ * unrecognisable to whoever wrote it.
  */
 import { parseJsx, type JsxElement, type JsxNode } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
@@ -71,9 +71,9 @@ export function collectExternalAssetUrls(source: string): { images: string[]; fo
       /*
        * A URL carrying a REFERENCE is not a URL publish can fetch:
        * `https://cdn.x.com/{$pick}.png` names a FAMILY of images, one of which
-       * exists once a reader has picked something. Fetching it literally is
-       * what happened before this line — a request for `/%7B$pick%7D.png`, a
-       * 404, and a warning about a URL nobody wrote. Those are imported on
+       * exists once a reader has picked something. Fetching it literally would
+       * be a request for `/%7B$pick%7D.png`, a 404, and a warning about a URL
+       * nobody wrote. Those are imported on
        * first view by the document's own asset endpoint instead
        * (app/a/[id]/assets); the whole-attribute form (`src="$pick"`) is not a
        * web URL at all and never reached here.

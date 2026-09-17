@@ -1,13 +1,13 @@
 /**
- * The page scan is BOUNDED — the finding that sent milestone 3 back.
+ * The page scan is BOUNDED.
  *
  * This runs on the publish path, in the one event loop, over a 25 MB file a
- * stranger chose. The first implementation read the whole buffer into a latin1
- * string and then called `match(/…/g)`, which materialises every hit: measured
- * on a 25 MB file made of nothing but the token, 2,083,333 matches at 1.5 s of
- * blocking CPU and +210 MB RSS in review (109 ms / +87 MB on this machine with
- * a forced collection). Both numbers sit badly beside this milestone's own
- * thesis that a 25 MB PDF is never held whole.
+ * stranger chose. Reading the whole buffer into a latin1 string and calling
+ * `match(/…/g)` materialises every hit: measured on a 25 MB file made of
+ * nothing but the token, 2,083,333 matches at 1.5 s of blocking CPU and
+ * +210 MB RSS in review (109 ms / +87 MB on this machine with a forced
+ * collection). Both numbers sit badly beside the tier's own thesis that a
+ * 25 MB PDF is never held whole.
  */
 import { describe, expect, it } from 'vitest';
 import { samplePdf } from '../../../../../scripts/lib/sample-pdf.mjs';

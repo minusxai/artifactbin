@@ -1,11 +1,11 @@
 /**
- * SPIKE S5 — BYTES PER TOKEN, charged at IMPORT.
+ * BYTES PER TOKEN, charged at IMPORT.
  *
- * Today's quota counts artifact ROWS (`artifactQuotaExceeded`: COUNT(*) per
- * token). Nothing anywhere counts bytes, so one token can hold a thousand
- * 5 MB images and be inside its quota. Under the new design the expensive
- * thing is BYTES — an imported URL, a PDF, an uploaded image — so the cap has
- * to be a byte cap, charged once, by the importer.
+ * The row quota (`artifactQuotaExceeded`: COUNT(*) per token) cannot bound
+ * cost on its own — one token can hold a thousand 5 MB images and stay inside
+ * it. The expensive thing is BYTES — an imported URL, a PDF, an uploaded
+ * image — so there is a byte cap beside it (`lib/asset-quota`), charged once,
+ * by the importer.
  *
  * The rule this pins: a token whose stored bytes are already at or over
  * ASSETS__MAX_BYTES_PER_TOKEN gets `quota_exceeded` on its NEXT import, and
@@ -77,7 +77,7 @@ describe('asset byte quota', () => {
 });
 
 /**
- * R9 — a per-TOKEN cap is bypassed by minting a second token, because a claimed
+ * A per-TOKEN cap is bypassed by minting a second token, because a claimed
  * token already acts account-wide everywhere else. So the cap follows the
  * ACCOUNT when there is one, and the token only when there is not (an anonymous
  * token has no account to key on).
@@ -111,11 +111,11 @@ describe('who the cap belongs to', () => {
 
 
 /**
- * …AND THE DOORS ACTUALLY ASK IT (R9).
+ * …AND THE DOORS ACTUALLY ASK IT.
  *
- * M1 built the cap and charged web imports with it. An UPLOAD records its bytes
- * the same way and nothing asked the question, so the one tier a person can
- * point at a five-gigabyte folder was the one tier with no byte cap — on both
+ * Web imports were charged against the cap while an UPLOAD, which records its
+ * bytes the same way, asked nothing — so the one tier a person can point at a
+ * five-gigabyte folder was the one tier with no byte cap, on both
  * of its shapes, the JSON `image:` body and the raw `Content-Type: image/*`
  * one, which do not share a code path.
  */

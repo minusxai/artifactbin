@@ -9,11 +9,10 @@
  * governing rights, the same ACL as the browser door; an anonymous token is
  * refused with account_required.
  *
- * There is deliberately no bearer CREATE: an annotation is made from the
- * owner's selection in the browser; the agent's side of the loop is read
- * (inlined on the artifact GET), reply, resolve. Only the ATTRIBUTION is
- * decided here — a cookie caller is the human, a bearer caller the agent it
- * declares itself to be.
+ * Creation is its own door (../annotations POST), because a new thread needs an
+ * anchor and this address already names one. Only the ATTRIBUTION is decided
+ * here — a cookie caller is the human, a bearer caller the agent it declares
+ * itself to be.
  */
 import { withTokenAuth } from '@/lib/auth';
 import { runOperation } from '@/lib/operations/http';

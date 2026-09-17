@@ -7,8 +7,8 @@
  * instruction carries no credential: the agent reaches the server through the
  * afbin CLI, which authenticates itself in the browser.
  *
- * ONE BEHAVIOUR, EVERY SURFACE — landing hero, landing footer, docs page and
- * signed-in home. There is no prop to opt out of the navigation: create,
+ * ONE BEHAVIOUR, EVERY SURFACE — wherever `GetStarted` is drawn: the signed-in
+ * home, the docs page and the create dialog. There is no prop to opt out of the navigation: create,
  * copy, say so, count the reader down, go. The instruction is on the document
  * page too (`CopyAgentPrompt`), so arriving there loses nothing.
  *
@@ -46,11 +46,10 @@ export default function AgentLink({
   docsLink?: boolean;
   /**
    * HOW BIG THE BUTTON IS, and nothing else. `panel` fills the getting-started
-   * card, which is the page's primary action; `inline` matches the footer's
-   * own row of small controls, where the same act is offered again to a reader
-   * who has finished reading. The BEHAVIOUR is deliberately not a prop — the
-   * two surfaces mint the same way, or they will drift into meaning different
-   * things.
+   * card, which is the page's primary action; `inline` is the compact size for
+   * a host with its own row of small controls. The BEHAVIOUR is deliberately
+   * not a prop — every surface mints the same way, or they will drift into
+   * meaning different things.
    */
   size?: 'panel' | 'inline';
   /** false = just the button and its status line, for hosts with their own chrome. */

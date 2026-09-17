@@ -32,8 +32,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   if (!initial) return new Response('not found', { status: 404 });
   // Same uniform 404 as ./raw — and the same VIEWER as ./raw and the proxy
   // (sessionActor uses the proxy-attached actor first, then direct compatibility
-  // and the agent cookie). This shared resolution prevents the former bug where
-  // an anonymous owner's live stream dropped when their document went private.
+  // and the agent cookie). Resolving it any other way drops an anonymous
+  // owner's live stream the moment their document goes private.
   const actor = await sessionActor(request);
   const viewer = actor.viewer;
   if (!(await canReadArtifact(initial, viewer))) return new Response('not found', { status: 404 });
@@ -143,14 +143,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * Follow exactly the datasets this version of the row depends on.
    *
    * A FOLDER DEPENDS ON ITSELF, and that rule is stated here rather than
-   * inferred from its stored source. It used to be inferred: a folder's source
-   * was a scaffold naming `ref_<own id>`, so `datasetsForDocument` returned its
-   * own id and a child write — which NOTIFYs the parent's channel (lib/folders
-   * notifyParent) — arrived as an ordinary `data` frame. A folder has no source
-   * now, so nothing would name it, and an open listing would sit stale until
-   * someone reloaded. The wire is unchanged: the same `event: data` frame
-   * naming the same id, so the folder page and an authored `<Files>` document
-   * both re-read on exactly the ping they already read on.
+   * inferred from its stored source: a folder HAS no source, so nothing would
+   * name it and an open listing would sit stale until someone reloaded. A child
+   * write NOTIFYs the parent's channel (lib/folders notifyParent) and travels
+   * as an ordinary `event: data` frame naming the folder's id, so the folder
+   * page and an authored `<Files>` document both re-read on the same ping.
    */
   const followDatasets = async (row: { format: string; id: string; source: string | null }) => {
     if (closed) return;
@@ -187,7 +184,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * once per (id, edit_id) and cached (lib/story/frame), fetched by whoever
    * wants it under the same ACL. This stream therefore carries nothing a relay
    * would have to understand, which is what lets a proxy blind to content
-   * hold it (plan §3).
+   * hold it.
    */
   const frameFor = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>): Promise<ArtifactVersionPing> => ({
     editId: row.edit_id,

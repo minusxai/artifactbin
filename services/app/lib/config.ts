@@ -3,16 +3,14 @@ import {isIP} from 'node:net';
 import { parseAssetsOrigin } from '@artifactbin/utils';
 
 /**
- * The ONLY file that reads process.env (minusx convention — keeps runtime
- * configuration auditable in one place).
+ * The ONLY file that reads process.env, which keeps runtime configuration
+ * auditable in one place.
  *
  * NAMES ARE NAMESPACED BY MODULE: `MODULE__NAME` (two underscores), and there
- * is exactly ONE spelling of each setting. `env()` briefly accepted a legacy
- * flat name as a fallback, with a warning — two spellings for one setting is a
- * trap, and it sprang: a file carrying both, where the namespaced one silently
- * wins and the other reads as live. Both the fallback and the migration map
- * that replaced it are gone: this project ships no deployment that predates
- * the namespaced spelling, so an unnamespaced name is simply not a setting.
+ * is exactly ONE spelling of each setting. There is no unnamespaced fallback:
+ * two spellings for one setting is a trap — a file carrying both, where the
+ * namespaced one silently wins and the other reads as live — so an
+ * unnamespaced name is simply not a setting.
  * Production hard-fails only when
  * AUTH__SECRET or APP__PUBLIC_BASE_URL is absent (see the composition root).
  * Two deliberate exceptions, because they are conventions every host and
@@ -145,11 +143,6 @@ export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TO
 export const TRUSTED_PROXY_HOPS = Math.max(1, Math.trunc(Number(env('HTTP', 'TRUSTED_PROXY_HOPS') ?? '1')) || 1);
 
 /**
- * Public deployments require Resend credentials for login-code email. A
- * loopback development origin instead uses the protected local outbox owned by
- * the proxy composition; the application itself never exposes a live code.
- */
-/**
  * Object storage as ONE connection string (see lib/object-store/url.ts):
  *   s3://KEY:SECRET@s3.us-west-1.amazonaws.com/bucket/artifacts?region=us-west-1
  * Unset, the app falls back to the local filesystem so a laptop and CI need no
@@ -172,10 +165,9 @@ export const MAX_ROWS_LIMIT = Number(env('SQL', 'MAX_ROWS') ?? '10000');
  * exists to prevent — but a cut result is RECORDED (`truncated`, `totalRows`),
  * never silent, because a chart built from a sample believing it is the set is
  * the failure that matters. Defaults to the INGEST cap, deliberately: every
- * dataset already fits under it, so `select * from ref_<id>` is never cut and
- * nothing that rendered whole before the dataflow renders as a sample now (a
- * 7,361-point scatter did, at 5,000). Only a query that GROWS its input past
- * the cap — a join, a range() — meets it.
+ * dataset already fits under it, so `select * from ref_<id>` is never cut.
+ * Only a query that GROWS its input past the cap — a join, a range() — meets
+ * it.
  */
 export const MAX_QUERY_ROWS = Number(env('SQL', 'MAX_QUERY_ROWS') ?? String(MAX_ROWS_LIMIT));
 
@@ -232,11 +224,16 @@ export const MAX_IMAGE_BYTES = Number(env('IMAGES', 'MAX_BYTES') ?? '5000000');
 export const MAX_PDF_BYTES = Number(env('PDF', 'MAX_BYTES') ?? '25000000');
 export const MAX_FILE_BYTES = Number(env('FILES', 'MAX_BYTES') ?? '50000000');
 
+/**
+ * Public deployments require Resend credentials for login-code email. A
+ * loopback development origin instead uses the protected local outbox owned by
+ * the identity composition; the application itself never exposes a live code.
+ */
 export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 
 /**
  * The externally-visible origin, for absolute URLs built OUTSIDE a request
- * scope (the MCP tools' url echoes). HTTP routes derive it from the request.
+ * scope (`publicOrigin()`'s fallback). HTTP routes derive it from the request.
  */
 export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
 const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');

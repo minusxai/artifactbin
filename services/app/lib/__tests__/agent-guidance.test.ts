@@ -1,8 +1,9 @@
 /**
- * What an MCP client is told before it authors.
+ * What an agent is told before it authors.
  *
- * An MCP client never fetches /docs/llm — it connects over the protocol, and
- * the tool schema is its ONLY instruction surface. ChatGPT proved this on
+ * The operation schema (lib/operations/registry) carries this guidance on the
+ * field itself, which is the one instruction surface an agent has at the
+ * moment it writes, whatever else it did or did not read. ChatGPT proved this on
  * production: told merely "Tailwind classes via className", it fell back to its
  * own built-in slide skill and published a deck of bare <section>/<h1>/<ul>
  * with zero className attributes, which rendered as a wall of text.
@@ -74,7 +75,7 @@ describe('figures must be computed, not typed', () => {
     expect(COMPUTED_FIGURE_RULE).toMatch(/prose/i);
   });
 
-  it('rides in the SCHEMA, the only surface an MCP client reads', () => {
+  it('rides in the SCHEMA, the surface an agent reads without fetching a doc', () => {
     expect(MARKUP_FIELD_GUIDANCE).toContain(COMPUTED_FIGURE_RULE);
   });
 

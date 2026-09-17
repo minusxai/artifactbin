@@ -6,7 +6,7 @@
  * The vega stack (vega + vega-lite + vega-interpreter + vega-tooltip) is
  * ~500 KB gzipped — two thirds of the whole route — and a plain-text story
  * must never download it. It may only enter through a dynamic import
- * (next/dynamic), the same boundary that already keeps Monaco out.
+ * (lib/dynamic), the same boundary that already keeps Monaco out.
  *
  * This walks the import graph the way the bundler does: follow value imports,
  * skip `import type` (erased at compile time) and dynamic `import()` (its own
@@ -19,7 +19,7 @@ import path from 'path';
 
 const ROOT = path.resolve(__dirname, '..', '..');
 
-/** The client components app/a/[id]/page.tsx ships to every reader. */
+/** The client components web/pages/Artifact.tsx ships to every reader. */
 const READER_ENTRIES = [
   'components/ArtifactShell.tsx',
   'components/ArtifactSurface.tsx',

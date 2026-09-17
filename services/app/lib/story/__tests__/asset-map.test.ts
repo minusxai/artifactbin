@@ -1,8 +1,8 @@
 /**
- * SPIKE (S2) — the serve-time asset mapping must reach ALL THREE renderings of
- * one document: the SSR string, the island the client hydrates from, and the
- * live frame an open reader adopts. Those disagreeing is the whole risk, and
- * they are built by two different functions today.
+ * The serve-time asset mapping must reach ALL THREE renderings of one document:
+ * the SSR string, the island the client hydrates from, and the live frame an
+ * open reader adopts. Those disagreeing is the whole risk, and the two callers
+ * that build them go through one `storyBodyFor` (lib/story/body).
  *
  * The renderings are compared with a ROW MAP rather than a predicate, and that
  * is not cosmetic: everything a row carries — the versioned address, the box,
@@ -28,7 +28,7 @@ const rows = new Map([[URL_A, ROW]]);
 const held = assetLookupFrom(rows);
 const known = (u: string) => u === URL_A;
 
-// `assetUrlFor` itself — the bare address, the `?v=` (R19) and the canonical URL —
+// `assetUrlFor` itself — the bare address, the `?v=` and the canonical URL —
 // is asset-url.test.ts's subject. This file is about the three renderings agreeing.
 
 describe('mapExternalImageSources', () => {

@@ -3,7 +3,7 @@
  *
  * The address is derived from the URL, not from the bytes, so `immutable` is
  * what the cache header says and `refresh_asset` is how a changed source is
- * taken up. Everything else here is R15, the hole the spike measured: a stored
+ * taken up. Everything else here is one measured hole: a stored
  * SVG is a DOCUMENT the moment someone navigates to it, and served plainly it
  * ran with this app's origin — reachable storage, reachable cookies. Three
  * headers close it (`Content-Security-Policy: sandbox`, `Content-Disposition:
@@ -62,7 +62,7 @@ describe('GET /assets/<hash>', () => {
   });
 
   /*
-   * `?v=` IS A CACHE KEY AND NOTHING ELSE (R19). The address is served
+   * `?v=` IS A CACHE KEY AND NOTHING ELSE. The address is served
    * `immutable` and cannot move — a stored document names the URL and every
    * rendering derives the address from it — so a refresh changes what the
    * mapping EMITS, and the route must answer the current bytes at every
@@ -128,13 +128,13 @@ describe('GET /assets/<hash>', () => {
 /*
  * THE ONE EXCEPTION TO `attachment`, and it is not a widening.
  *
- * `attachment` exists here because a stored SVG is markup (R15). A PDF is not:
+ * `attachment` exists here because a stored SVG is markup. A PDF is not:
  * it cannot script, `nosniff` holds the browser to the type we sniffed from the
  * bytes, and `Content-Security-Policy: sandbox` — which stays — was measured
  * putting the response at an OPAQUE origin where storage and cookies throw.
  * What `attachment` DOES cost here is the whole feature: opened from inside a
- * document's sandbox it was measured producing neither a popup nor a download
- * (spike S4), so a <File> card linking an imported PDF would simply do nothing.
+ * document's sandbox it was measured producing neither a popup nor a download,
+ * so a <File> card linking an imported PDF would simply do nothing.
  */
 describe('a PDF among the assets', () => {
   it('is served inline, named after its source URL, with the sandbox and nosniff kept', async () => {

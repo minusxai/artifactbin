@@ -105,10 +105,10 @@ let warned = false;
  * document over a build artifact.
  *
  * A route that let this throw would answer 500 for EVERY document, prose
- * included, when prose needs no runtime at all. lib/story/document.ts states
- * the invariant plainly a few functions apart ("a missing/broken runtime bundle
- * must never take the page down with it"): without a runtime the document is
- * still server-rendered, readable and indexable — it simply does not hydrate.
+ * included, when prose needs no runtime at all. A missing or broken runtime
+ * bundle must never take the page down with it: without a runtime the document
+ * is still server-rendered, readable and indexable — it simply does not
+ * hydrate.
  *
  * The loud failure belongs earlier, where it can stop a deploy instead of a
  * reader: the build asserts the files it names exist

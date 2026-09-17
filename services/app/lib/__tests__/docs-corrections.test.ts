@@ -1,6 +1,6 @@
 /**
  * The docs say what the code does — pinned by NAME, one assertion per error
- * the docs audit (~/projects/docs-improvement.md §1, §8, §9) reproduced live.
+ * a docs audit reproduced live.
  *
  * Every line here was a wrong claim an agent acted on: `data="ref:<id>"` is
  * refused at the door but taught as a rule; `PATCH /api/my/...` under a bearer
@@ -24,19 +24,19 @@ const BASE = 'https://example.test';
 
 describe('the publishing skill', () => {
   const doc = buildSkillDoc(BASE);
-  it('§1.4 does not send a bearer agent to /api/my (a browser-only surface, 401 for tokens)', () => {
+  it('does not send a bearer agent to /api/my (a browser-only surface, 401 for tokens)', () => {
     expect(doc).not.toMatch(/PATCH[^\n]*\/api\/my\//);
   });
-  it('§1.5 the script sandbox names all four connect-src endpoints, not "no network" / "the one URL"', () => {
+  it('the script sandbox names all four connect-src endpoints, not "no network" / "the one URL"', () => {
     expect(doc).not.toMatch(/the one URL its CSP admits/);
     expect(doc).not.toMatch(/no network\./);
     for (const p of ['/query', '/events', '/mutate', '/geojson/']) expect(doc).toContain(p);
   });
-  it('§1.6 the comment command teaches reopening through --state open', () => {
+  it('the comment command teaches reopening through --state open', () => {
     expect(doc).toContain('--state');
     expect(doc).toContain('open or resolved');
   });
-  it('§1.6b the annotation markdown subset says what an image DOES — it is a link, not a picture', () => {
+  it('the annotation markdown subset says what an image DOES — it is a link, not a picture', () => {
     // `![alt](url)` parses as a literal "!" plus a link (lib/markdown-lite has
     // no image node at all), so "images are shown as the characters you typed"
     // was a claim the parser does not honour.
@@ -48,16 +48,16 @@ describe('the publishing skill', () => {
     expect(doc).toContain('canonical source and identity in the same response');
     expect(doc).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
   });
-  it('§2.1 one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
+  it('one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
     expect(doc).not.toContain('for the full reference before authoring');
   });
   /*
-   * ADDED (F3). `snippet` is the ANNOTATED NODE's text, recomputed on every
+   * `snippet` is the ANNOTATED NODE's text, recomputed on every
    * read; the words the person selected are `quote`, stored once and never
    * recomputed. The doc called the snippet "the text they selected", which sent
    * an agent looking for a sentence in a paragraph's worth of text.
    */
-  it('§1.8 snippet is the node\'s text; the SELECTION is `quote`', () => {
+  it('snippet is the node\'s text; the SELECTION is `quote`', () => {
     const snippet = doc.split('\n').find((l: string) => l.includes('"snippet"'))!;
     expect(snippet).not.toContain('the text they selected');
     expect(snippet).toContain('node');
@@ -65,7 +65,7 @@ describe('the publishing skill', () => {
     expect(quote).toContain('selected');
     expect(doc).toContain('quote_found');
   });
-  it('§1.9 current comments use persistent IDs and legacy anchors are preservation-only', () => {
+  it('current comments use persistent IDs and legacy anchors are preservation-only', () => {
     const text = doc.replace(/\s+/g, ' ');
     expect(text).toContain("sidecar relations to the node's persistent BODY `id`");
     expect(text).toContain('preserve an existing value with its element');
@@ -73,34 +73,33 @@ describe('the publishing skill', () => {
     expect(text).toContain('New comments do not add it');
   });
   /*
-   * ADDED (F8). Forking became an AGENT verb, and the thing an agent needs is
+   * Forking is an AGENT verb, and the thing an agent needs is
    * not the address — the registry renders that — but WHEN to reach for it:
    * the create/edit loop is where a document that already exists gets adapted.
    */
-  it('§F8 teaches forking as the way to adapt a document you can read', () => {
+  it('teaches forking as the way to adapt a document you can read', () => {
     expect(doc).toContain('afbin fork <ref>');
     expect(doc).toContain('forked_from');
     expect(doc).not.toContain('afbin api');
   });
   /*
-   * ADDED (workstream F, round 2). The social preview's mechanism lives here,
-   * beside export, where markup.md's link has pointed all along.
+   * The social preview's mechanism lives here,
+   * beside export, where markup.md's link points.
    *
-   * And the screenshot copy this file used to carry taught the two loops the
-   * progressive-publish brief exists to stop: "only export if you can view
+   * The screenshot copy it replaced taught two loops: "only export if you can view
    * images; otherwise read the stored markup" sent an agent back to re-read
    * what it had just written, and `--page 2` "for one deck slide" turned a
    * five-slide deck into five exports. The push receipt is the check; one
    * whole-document image is the look.
    */
-  it('§F2 the social preview mechanism is documented where the link points', () => {
+  it('the social preview mechanism is documented where the link points', () => {
     const versions = renderDoc('artifactbin/references/publishing-versions.md', BASE);
     expect(versions).toContain('artifactbin:og-image');
     expect(versions).toContain('artifactbin:og-crop');
     expect(versions).toContain('artifactbin:og-image-crop');
     expect(versions).toContain('<Helmet>');
   });
-  it('§F2 export teaches the whole document in one image, never a slide at a time', () => {
+  it('export teaches the whole document in one image, never a slide at a time', () => {
     const flat = doc.replace(/\s+/g, ' ');
     for (const gone of ['read the stored markup', 'one deck slide', '--page 2', 'if you can view images']) {
       expect(flat, gone).not.toContain(gone);
@@ -109,7 +108,7 @@ describe('the publishing skill', () => {
     expect(flat).toContain('shows the whole document, every slide, in one image');
     expect(flat).toContain('never one slide at a time');
   });
-  it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
+  it('error table carries image_fetch_failed and dataset_read_only', () => {
     const errors = renderDoc('artifactbin/references/errors.md', BASE);
     expect(errors).toContain('image_fetch_failed');
     expect(errors).toContain('dataset_read_only');
@@ -132,9 +131,9 @@ describe('the publishing skill', () => {
     expect(renderDoc('artifactbin/references/errors.md', BASE)).toContain('--access readwrite');
   });
   /*
-   * The tracker leg (pi, 14 Sep): the brief asked for a page "anyone opening the link" can update,
-   * the catalogs doc named a data policy with no CLI path to it, and the agent spent 24 messages
-   * reverse-engineering the YAML field and fighting a pull before it could set one. One command.
+   * Measured on a tracker task: asked for a page "anyone opening the link" can update, an agent
+   * spent 24 messages reverse-engineering the YAML field and fighting a pull, because the catalogs
+   * doc named a data policy with no CLI path to it. One command sets it.
    */
   it('the catalogs doc names the one command that publishes a dataset viewers can write', () => {
     const databases = renderDoc('artifactbin/references/databases.md', BASE);
@@ -149,7 +148,7 @@ describe('the publishing skill', () => {
 });
 
 /*
- * ADDED (folders, P4). Three claims the folders work made load-bearing, each
+ * Three claims folders make load-bearing, each
  * one an agent acts on rather than reads past.
  *
  * `unlisted` promises the document is listed NOWHERE, and a folder's page IS a
@@ -168,36 +167,35 @@ describe('the publishing skill', () => {
 describe('folders and the trash', () => {
   const doc = buildSkillDoc(BASE);
   const flat = (t: string) => t.replace(/\s+/g, ' ');
-  it('§P4.1 unlisted is listed nowhere — a folder page included', () => {
+  it('unlisted is listed nowhere — a folder page included', () => {
     expect(flat(doc)).toContain('unlisted artifact is excluded from public listings, a folder page included');
   });
-  it('§P4.2 delete is a trash, and restore is named', () => {
+  it('delete is a trash, and restore is named', () => {
     expect(doc).toContain('Delete is a trash');
     expect(doc).toContain('push --restore');
     expect(flat(doc)).toContain('restorable with no deadline');
   });
   /*
    * THE THREE CONSEQUENCES OF HAVING NO PURGE. Each is a promise an agent may
-   * repeat to its user, and each was previously the opposite: there is no
-   * retention, deleting frees no quota, and the only real erasure is an
-   * operator's, outside this API. A doc that stops saying one of them is a doc
-   * that lets an agent promise something untrue.
+   * repeat to its user: there is no retention, deleting frees no quota, and the
+   * only real erasure is an operator's, outside this API. A doc that stops
+   * saying one of them is a doc that lets an agent promise something untrue.
    */
-  it('§P5.2 a deleted COMMENT is not erased either — and an agent cannot undo one', () => {
+  it('a deleted COMMENT is not erased either — and an agent cannot undo one', () => {
     expect(flat(doc)).toContain('A deleted thread is not erased');
     expect(flat(doc)).toContain('there is no undo for it here');
   });
-  it('§P5.1 nothing is ever erased, and the docs say so three ways', () => {
+  it('nothing is ever erased, and the docs say so three ways', () => {
     expect(flat(doc)).toContain('Actual erasure is an administrative act');
     expect(flat(doc)).toContain('still counts against your quota');
     expect(flat(doc)).toContain('an administrative act on the database, outside this API');
     expect(flat(doc), 'no retention survives anywhere in the docs').not.toContain('30 days');
   });
-  it('§P4.3 the two limits are stated, not implied away', () => {
+  it('the two limits are stated, not implied away', () => {
     expect(flat(doc)).toContain('A restore can land a row deeper than the 6-level cap');
   });
   /*
-   * ADDED (the folder page). A folder was a DOCUMENT — created with a two-line
+   * A folder was once a DOCUMENT — created with a two-line
    * scaffold as its stored source — and the docs said so: "A folder's page is
    * its own stored markup … so you edit one like any document." It carries no
    * content now, and its page is rendered by the app. That sentence is the
@@ -206,7 +204,7 @@ describe('folders and the trash', () => {
    * it could edit. So the replacement is pinned by NAME, both halves — what a
    * folder has (nothing) and what its PUT will take.
    */
-  it('§FP.1 a folder has NO content, and the page is not something you edit', () => {
+  it('a folder has NO content, and the page is not something you edit', () => {
     expect(flat(doc)).toContain('A folder has no content');
     expect(flat(doc)).toContain('Only title, visibility and folder are editable');
     expect(flat(doc), 'the scaffold is gone').not.toContain('its own stored markup');
@@ -216,44 +214,41 @@ describe('folders and the trash', () => {
 
 describe('the markup skill', () => {
   const doc = buildMarkupDoc(BASE);
-  it('§1.2 markdown is refused, never "auto-converted"', () => {
+  it('markdown is refused, never "auto-converted"', () => {
     expect(doc).not.toContain('auto-converted');
   });
-  it('§1.3 a <Video poster> web URL is imported, not rejected', () => {
+  it('a <Video poster> web URL is imported, not rejected', () => {
     expect(doc).not.toContain('thumbnail URLs are rejected');
   });
-  it('§1.8 <Number> documents suffix and that agg defaults to first', () => {
+  it('<Number> documents suffix and that agg defaults to first', () => {
     expect(doc).toMatch(/suffix/);
     expect(doc).toMatch(/agg[^\n]*(defaults? to|default[^\n]*)`first`/);
   });
-  it('§1 omissions: all 8 shipped recipes are named', () => {
+  it('omissions: all 8 shipped recipes are named', () => {
     for (const r of ['trend', 'funnel', 'waterfall', 'radar', 'combo', 'single-value', 'choropleth', 'point-map']) {
       expect(doc, `minusx/${r}@1`).toContain(`minusx/${r}@1`);
     }
   });
-  it('§1 props are not validated — the allowlist section says so', () => {
+  it('props are not validated — the allowlist section says so', () => {
     expect(doc).toMatch(/props are not validated|unknown props? (are|is) (ignored|not validated)/i);
   });
-  it('§1.5 the CSP paragraph names the four endpoints', () => {
+  it('the CSP paragraph names the four endpoints', () => {
     expect(doc).not.toContain('the one URL its CSP admits');
   });
   /*
-   * ADDED (F8 round 2). The JSX MICRO-RULES — a tag closes, a comment is
-   * `{/* … *\/}`, and there is no document shell — were carried by
-   * publishing.md's orientation bullet and were DELETED with it rather than
-   * folded into their owner. They are the two mistakes an HTML-habit model
-   * makes on its first write (`<br>`, `<!-- -->`), and the only thing left to
-   * catch them was a 400 round trip. They live in markup.md, which owns the
-   * vocabulary.
+   * The JSX MICRO-RULES — a tag closes, a comment is
+   * `{/* … *\/}`, and there is no document shell — are the two mistakes an
+   * HTML-habit model makes on its first write (`<br>`, `<!-- -->`), and without
+   * them the only thing that catches one is a 400 round trip. They live in
+   * markup.md, which owns the vocabulary.
    */
-  it('§F8 the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
+  it('the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
     expect(doc).toContain('every tag closes (`<br />`)');
     expect(doc).toContain('{/* … */}');
     expect(doc).toContain('`<html>`');
   });
   /*
-   * ADDED (workstream F — the agent-actionability audit). Two sentences an
-   * afbin agent could not act on.
+   * Two sentences an afbin agent could not act on.
    *
    * "top-level fields of the publish call" is the HTTP body's name for them.
    * The agent writes theme/template/colorMode in the file's YAML fence and
@@ -265,16 +260,16 @@ describe('the markup skill', () => {
    * source), documented nowhere. A pointer to a doc that does not answer costs
    * the turns of reading it and still leaves the agent without the mechanism.
    *
-   * The explanation now lives WHERE THE OLD LINK POINTED — the generated
+   * The explanation lives WHERE THAT LINK POINTS — the generated
    * publishing-versions.md, beside export — because markup.md is at its 8 KB
    * reading budget and this is publication, not authoring grammar. markup.md
    * keeps a pointer that still names the metas, so an agent grepping the
    * authoring reference for `og-image` finds the thread rather than nothing.
    */
-  it('§F the publish-time fields are named where the agent writes them: the YAML fence', () => {
+  it('the publish-time fields are named where the agent writes them: the YAML fence', () => {
     expect(doc.replace(/\s+/g, ' ')).toContain('`theme`, `template` and `colorMode` are top-level fields of the YAML fence');
   });
-  it('§F markup.md points at the social-preview metas and at the doc that explains them', () => {
+  it('markup.md points at the social-preview metas and at the doc that explains them', () => {
     expect(doc).toContain('artifactbin:og-image');
     expect(doc).toContain('artifactbin:og-image-crop');
     expect(doc).toContain('publishing-versions.md');
@@ -283,12 +278,11 @@ describe('the markup skill', () => {
 });
 
 /*
- * ADDED (the external-assets batch, milestone 5). A web URL in an image
- * position is no longer REWRITTEN to `ref:<id>` — publish stores a copy and
- * the author's URL stays in the source, byte for byte, because an agent reads
- * back what it wrote. Three files promised the rewrite in three wordings
- * (markup.md, markup-video.md, publishing-datasets.md) and the MCP schema
- * promised it in a fourth; a doc that teaches a retired mechanic is worse than
+ * A web URL in an image position is never REWRITTEN to `ref:<id>` — publish
+ * stores a copy and the author's URL stays in the source, byte for byte,
+ * because an agent reads back what it wrote. Four surfaces promised the
+ * rewrite in four wordings (markup.md, markup-video.md, publishing-datasets.md
+ * and the tool schema); a doc that teaches a retired mechanic is worse than
  * none, and this one an agent would act on by hunting for an id that is never
  * echoed.
  */
@@ -336,7 +330,7 @@ describe('URL-kept external assets', () => {
     expect(flat(publishing)).toContain('count against your ACCOUNT\'s byte quota');
     expect(flat(publishing)).toContain('charged once, to whoever first named the URL');
   });
-  it('the MCP image-url field no longer promises the rewrite either', () => {
+  it('the imageUrl field guidance keeps the URL rather than promising a ref: rewrite', () => {
     expect(IMAGE_URL_FIELD_GUIDANCE).not.toContain('rewritten to ref:<id>');
     expect(IMAGE_URL_FIELD_GUIDANCE).toContain('LEAVES YOUR URL in the document');
   });
@@ -351,27 +345,26 @@ describe('URL-kept external assets', () => {
 });
 
 /*
- * ADDED (milestone 5). An agent answering a comment reads
- * publishing-annotations.md and nothing else — measured in the eval spike,
- * where every MCP reply signed itself "Agent". The auth reference owns the
- * header; the file an agent is actually in has to NAME it.
+ * An agent answering a comment reads publishing-annotations.md and nothing
+ * else — measured, on a run where every reply signed itself "Agent". The auth
+ * reference owns the header; the file an agent is actually in has to NAME it.
  */
 describe('the design skill', () => {
   const doc = buildDesignDoc(BASE);
-  it('§1.1 numbers bind through <Query> → data="$name", never a `ref:` dataset', () => {
+  it('numbers bind through <Query> → data="$name", never a `ref:` dataset', () => {
     expect(doc).not.toContain('binds to a real `ref:` dataset');
     expect(doc).toContain('<Query');
   });
-  it('§2.4 / §8.4 the web-font route is the Helmet meta, not a data: URI', () => {
+  it('the web-font route is the Helmet meta, not a data: URI', () => {
     expect(doc).toContain('name="font-display"');
   });
-  it('§8.3 color mode is the root class, not prefers-color-scheme', () => {
+  it('color mode is the root class, not prefers-color-scheme', () => {
     expect(doc).not.toContain('prefers-color-scheme');
   });
 });
 
 describe('template pages', () => {
-  it('§8.1 every skeleton PUBLISHES — run through the validator the door uses', async () => {
+  it('every skeleton PUBLISHES — run through the validator the door uses', async () => {
     for (const name of ['deck', 'editorial', 'dashboard', 'scrolly']) {
       const doc = buildTemplateDoc(BASE, name)!;
       const lines = doc.split('\n');
@@ -385,7 +378,7 @@ describe('template pages', () => {
       expect(refused, `${name} skeleton refused: ${refused}`).toBeNull();
     }
   });
-  it('§8.2 editorial no longer says remote image URLs are rejected', () => {
+  it('editorial no longer says remote image URLs are rejected', () => {
     // Whitespace-collapsed: the YAML wraps prose, and the first version of this
     // assertion passed against the WRONG page because the phrase broke across a line.
     expect(buildTemplateDoc(BASE, 'editorial')!.replace(/\s+/g, ' ')).not.toContain('remote URLs are rejected');
@@ -394,19 +387,19 @@ describe('template pages', () => {
 
 describe('the quick sheet', () => {
   const sheet = buildQuickSheet(BASE);
-  it('§9.a says a dangerous tag (form/iframe/meta…) is refused WITHOUT the allowlist', () => {
+  it('says a dangerous tag (form/iframe/meta…) is refused WITHOUT the allowlist', () => {
     expect(sheet).toMatch(/<form>|form,? iframe|iframe, ?meta|form\/iframe/i);
   });
-  it('§9.b a CDN script or external stylesheet is a 400, not a silent failure', () => {
+  it('a CDN script or external stylesheet is a 400, not a silent failure', () => {
     expect(sheet).not.toMatch(/silently fail/);
   });
-  it('§9.3 the sheet teaches the second write as /edits, not a whole-document PUT', () => {
+  it('the sheet teaches the second write as /edits, not a whole-document PUT', () => {
     expect(sheet).not.toContain('simply replace');
   });
 });
 
 /**
- * F2 — the docs teach the reader's link, because it is the whole point of the
+ * The docs teach the reader's link, because it is the whole point of the
  * feature: an agent that knows `?$name=value` can hand its user a document
  * already narrowed to what they asked about, instead of one they must narrow
  * themselves.

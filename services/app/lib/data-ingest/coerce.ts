@@ -58,10 +58,10 @@ function convert(value: string, type: ColumnType): unknown {
  * `declared` WINS over the sniffer.
  *
  * The sniffer is a guess and the uploader often knows better — an ID column of
- * `120, 150` is text, not a quantity. Without this, declaring it collided with
- * coercion instead of overriding it: the value became a number and was then
- * rejected by publishDataset's own check ("120 is not a string"), so the
- * documented escape hatch made the request fail outright.
+ * `120, 150` is text, not a quantity. Without this, declaring it would collide
+ * with coercion instead of overriding it: the value becomes a number and is
+ * then rejected by publishDataset's own check ("120 is not a string"), so the
+ * documented escape hatch would make the request fail outright.
  */
 export function coerceRows(
   headers: string[],

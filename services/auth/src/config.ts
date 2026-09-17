@@ -20,7 +20,7 @@ export interface LoginProviders {
  * THE one reader of the login-provider names: `AUTH__GOOGLE_CLIENT_ID` + `AUTH__GOOGLE_CLIENT_SECRET` (both, or no
  * Google), and `AUTH__OIDC_PROVIDER_ID` with `AUTH__OIDC_{CLIENT_ID,CLIENT_SECRET,AUTHORIZATION_URL,TOKEN_URL,USERINFO_URL,
  * DISCOVERY_URL}` (the id, or no OIDC). Reads through the env audit (`readEnv`) so nothing lands in `unknownNames`. Used
- * by `loadConfig` (standalone) and by the co-hosted `server.ts` — the literal reads live nowhere else.
+ * by every composition root that stands identity up — the literal reads live nowhere else.
  */
 export function loginProvidersOf(source: Record<string, string | undefined>): LoginProviders {
   const googleClientId = readEnv(source, LOGIN_PROVIDER_ENV_NAMES.googleClientId);

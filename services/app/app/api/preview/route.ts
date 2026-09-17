@@ -4,10 +4,10 @@ import { parseContentInput } from '@/lib/story/input';
 import { resolveToken } from '@/lib/tokens';
 
 /**
- * POST /api/preview { markup, theme?, title? } → { css }: the compiled
- * per-document stylesheet. Pure render, nothing persisted — powers the
- * editor's draft-CSS compile. Requires a session OR a bearer token (it's
- * compute, not data).
+ * POST /api/preview { markup, theme?, title? } → { html, format, css? }: the
+ * parsed content and, for markup, its compiled per-document stylesheet. Pure
+ * render, nothing persisted — powers the editor's draft-CSS compile. Requires
+ * a session OR a bearer token (it's compute, not data).
  */
 export async function POST(request: Request) {
   // Any credential: an agent's bearer, an account session, or the browser's

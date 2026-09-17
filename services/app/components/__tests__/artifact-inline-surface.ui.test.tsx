@@ -1,8 +1,8 @@
 /**
  * One seam: `ArtifactSurface` renders the authored document inline, in the
  * parent page, with no full-document `/raw` frame. Liveness, first paint,
- * the no-frame contract, live adoption and the viewport boundary were five
- * files sharing one `test/helpers/{surface-ui,inline-surface}` setup.
+ * the no-frame contract, live adoption and the viewport boundary all share one
+ * `test/helpers/{surface-ui,inline-surface}` setup.
  */
 import { beforeEach,afterEach,describe,it,expect,vi } from 'vitest';
 import { act,screen,fireEvent,waitFor } from '@testing-library/react';
@@ -137,9 +137,8 @@ describe('adopting a new version into the live surface', () => {
 
 /**
  * The frame gets the whole artifact viewport, and the PARENT page carries no
- * credit bar of its own. It never should have: the reader's attribution lives
- * inside the served document (lib/story/reader-chrome), where the author's
- * handle is the byline — and the strip this test was written for is retired.
+ * credit bar of its own: the reader's attribution lives inside the served
+ * document (lib/story/reader-chrome), where the author's handle is the byline.
  */
 describe('the artifact viewport boundary', () => {
  /** A bare stream stub: this block only mounts, it never emits. */

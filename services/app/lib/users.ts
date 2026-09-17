@@ -129,8 +129,9 @@ export async function getUserByUsername(username: string): Promise<UserRow | nul
 
 /**
  * An account is an email address and nothing else. There is no password to set:
- * possession of the inbox IS the credential (see lib/login-codes.ts), so the
- * account is created the first time a code from that address checks out.
+ * possession of the inbox IS the credential (the identity service owns the
+ * login code), so the account is created the first time a code from that
+ * address checks out.
  */
 export async function createUser(input: { email: string; name?: string }): Promise<UserRow> {
   const db = await getDb();
@@ -339,9 +340,7 @@ export async function authorHandle(row: { actor_user_id: string | null }): Promi
 
 /**
  * The recipient's side of `artifact_shares`: everything shared to this email,
- * newest first, with the owner's handle so a row can say who shared it. A
- * share used to grant direct-link access ONLY — lose the link and the document
- * was unfindable, because nothing but canReadArtifact ever read the table.
+ * newest first, with the owner's handle so a row can say who shared it.
  *
  * Keyed by EMAIL (shares are, so an invite can predate the account), matched
  * lowercased exactly as canReadArtifact matches the viewer. `excludeUserId`
@@ -363,9 +362,8 @@ export async function listSharedWithEmail(email: string, excludeUserId?: string)
   return r.rows;
 }
 
-/** Everything the user owns, across all their claimed tokens. */
 /**
- * The drafts a browser holds (tok-p2): artifacts created by these LIVE tokens that NOBODY has claimed,
+ * The drafts a browser holds: artifacts created by these LIVE tokens that NOBODY has claimed,
  * newest first, in the summary shape the signed-in home list uses. Revoked or expired credentials are
  * nothing even when a stale cookie still names them. Empty ids ⇒ empty list, no query.
  */

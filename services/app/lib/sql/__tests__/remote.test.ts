@@ -2,7 +2,7 @@
  * REMOTE DUCKDB. `SQL__SERVICE_URL` moves the engine out of this process:
  * the same `runQueries`/`runMutation` inputs travel as JSON to a service that
  * runs them under the SAME guards and answers the same outcomes. Unset — the
- * self-host default — the native engine runs in-process exactly as before.
+ * self-host default — the native engine runs in-process.
  *
  * The seam matters for two reasons: the native module is the heaviest thing
  * in the image, and it is the one piece that keeps the app off a FaaS. What

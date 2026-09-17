@@ -1,9 +1,7 @@
 /**
  * THE HOMEPAGE WORKSPACE AND PUBLIC PROFILE: EACH HAS ONE PRIMARY SURFACE.
  *
- * Ported from master's `page-column`, `dashboard-shape` and `profile-shelf`
- * tests, which rendered the Next pages this branch replaced. The RULES are
- * master's and unchanged — only the thing being rendered moved:
+ * The rules:
  *
  *  - A populated homepage widens for a primary shelf plus a narrow dashboard
  *    rail; the public profile remains a calm single-column shelf.
@@ -170,8 +168,8 @@ describe('what the dashboard leads with', () => {
 
   it('offers ONE way to the trash, and only to an account', async () => {
     /*
-     * P3 made delete a trash: a deleted row is recoverable for ever, which
-     * is worth nothing if there is no way to reach it. One link in the
+     * Delete is a trash: a deleted row is recoverable for ever, which is
+     * worth nothing if there is no way to reach it. One link in the
      * dashboard's chrome, and nothing else — an anonymous browser has no
      * account to hold a trash, so it is not offered one.
      */

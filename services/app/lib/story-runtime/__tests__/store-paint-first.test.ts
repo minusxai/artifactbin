@@ -152,7 +152,7 @@ describe('a store built with declarations but no rows', () => {
 });
 
 /*
- * SPIKE S1 (F2 — `<Value>` selections in the URL, risk R3).
+ * `<Value>` SELECTIONS CARRIED IN THE URL.
  *
  * A URL-carried `<Value>` has to reach the store BEFORE its first run, or the
  * reader's link shows the document's defaults and then flips. The obvious
@@ -165,7 +165,7 @@ describe('a store built with declarations but no rows', () => {
  * values without rows. It folds into the initial values and leaves the
  * `!input.state` rule — the whole of paint-first — untouched.
  */
-describe('URL-carried values (spike S1)', () => {
+describe('URL-carried values', () => {
   /** A transport that records the VALUES it was run with, as well as the names. */
   function recordingValues() {
     const calls: { values: Record<string, unknown>; only: string[] }[] = [];

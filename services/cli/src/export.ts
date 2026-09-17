@@ -182,7 +182,7 @@ async function plan(workspace:Workspace,targets:ExportTarget[],options:ExportOpt
  for(const target of targets)if(target.format==='html'&&target.path!==undefined)await unchangedHead(workspace,target.path);
  if(options.output==='-')return targets.map(()=>undefined);
  const outputPath=options.output?await confinedPath(workspace.root,resolve(workspace.cwd,options.output)).catch(error=>{
-  // `--output /tmp/x.png` from a workspace elsewhere: an agent tried it in three tasks of run 34740707220 and got a generic failure.
+  // `--output /tmp/x.png` from a workspace elsewhere: an agent tried it in three tasks and got a generic failure.
   if(error instanceof Error&&/outside the workspace/.test(error.message))throw new CliError('outside_workspace',`${options.output} is outside the workspace.`);
   throw error;
  }):undefined;

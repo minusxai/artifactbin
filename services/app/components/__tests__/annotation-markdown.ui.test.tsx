@@ -1,13 +1,14 @@
 /**
  * A COMMENT BODY IS MARKDOWN TO READ AND TEXT TO SEND.
  *
- * The wire is unchanged — the body is plain text in the column, on
- * `GET /api/artifacts/<id>` and in the MCP `annotate` tool — so everything
- * here is about the two READING surfaces and the one WRITING surface:
+ * The wire carries plain text — the body is plain text in the column and on
+ * `GET /api/artifacts/<id>` — so everything here is about the two READING
+ * surfaces and the one WRITING surface:
  *
  *   · the RAIL, which renders the whole thing: an agent's reply naming files,
- *     functions and a regex was one mono block, and a fenced block has to come
- *     out as a `<pre>` that scrolls INSIDE the rail rather than widening it.
+ *     functions and a regex is otherwise one mono block, and a fenced block
+ *     has to come out as a `<pre>` that scrolls INSIDE the rail rather than
+ *     widening it.
  *   · the COMPACT card and the collapsed thread, clamped to two lines, which
  *     show the PLAIN text: two lines of "```ts" is a preview of the syntax.
  *   · the COMPOSER (and every reply box), whose toolbar edits the draft TEXT at

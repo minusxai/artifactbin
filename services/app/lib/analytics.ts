@@ -15,7 +15,7 @@
  * from the request's User-Agent via the request context — so lib callers need
  * no signature change to carry it. Outside a request scope (tests calling
  * helpers directly) the column stays NULL.
- * MCP callers are stateless per request, so they are identified by UA only —
+ * Bearer callers are stateless per request, so they are identified by UA only —
  * Claude Code's bare `node` UA lands as 'script'. Telemetry only: nothing may
  * ever gate on this value.
  *

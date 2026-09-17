@@ -12,9 +12,9 @@ import { useConfirmation } from './ConfirmDialog';
  * needs an account to anchor its ACL and is hidden from them; someone who
  * owns nothing here gets a plain one-click copy.
  *
- * The URL is location minus the fragment on purpose: #edit is a MODE, never
- * part of the link you hand someone. Shelf menus pass the selected artifact's
- * address explicitly. The ACL
+ * The URL copied is origin + pathname: neither the fragment (#edit is a MODE,
+ * never part of the link you hand someone) nor the query travels with it.
+ * Shelf menus pass the selected artifact's address explicitly. The ACL
  * surface is session-only (/api/my/artifacts/<id>/sharing).
  */
 import { artifactEditPath } from '@/lib/urls';

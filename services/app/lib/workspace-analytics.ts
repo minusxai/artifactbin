@@ -46,14 +46,6 @@ interface DailyViews {
   views: number;
 }
 
-/**
- * Daily view counts per artifact across everything the user owns, zero-filled
- * to exactly `days` buckets (oldest → newest, last bucket = today UTC), read
- * from the log: one row per open, deduped per UTC day on the subject (the
- * daily visitor hash; a NULL subject counts once). Artifacts with no views in
- * the window are absent from the map. While `analytics_events` still exists
- * and the log's table does not, the legacy table answers instead.
- */
 /*
  * THE TWO VIEW QUERIES, AND THEIR TWO SOURCES. Both read the same shape — one
  * row per (artifact, UTC day) with the unique-visitor count — so the zero-fill
@@ -90,10 +82,10 @@ const LOG_DAILY = `SELECT to_char(date_trunc('day', e.at AT TIME ZONE 'UTC'), 'Y
   ORDER BY day`;
 
 /*
- * THE FALLBACK, for this release only. A split self-host that runs no events
- * service has no `events.events` to read, and its dashboard must not go blank
- * while `analytics_events` is still being written (the dual-write). These two
- * are the pre-log queries verbatim; they go when the legacy table does.
+ * THE FALLBACK. A split self-host that runs no events service has no
+ * `events.events` to read, and its dashboard must not go blank while
+ * `analytics_events` is still being written (the dual-write). These two mirror
+ * the log queries above against that table.
  */
 const LEGACY_SERIES = `SELECT e.artifact_id, to_char(date_trunc('day', e.created_at AT TIME ZONE 'UTC'), 'YYYY-MM-DD') AS day,
      COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS n

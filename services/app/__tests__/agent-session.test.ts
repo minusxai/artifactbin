@@ -305,7 +305,7 @@ describe('the cookie is production-shaped wherever it is SERVED over https', () 
    * The posture follows the SCHEME, not the environment: `__Host-` requires
    * Secure, and a browser rejects it over plain http — which is why the app
    * and the proxy that sets this cookie must ask the same question (see
-   * __tests__/agent-cookie-name.test.ts, where they once did not).
+   * lib/__tests__/agent-cookie-name.test.ts, where they once did not).
    */
   it('is __Host- prefixed, Secure, httpOnly, SameSite=Lax, Path=/', async () => {
     vi.resetModules();

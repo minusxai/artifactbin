@@ -1,7 +1,7 @@
 /**
  * GET /health — is this process able to serve?
  *
- * Found on production the day #157 deployed: the container was reported
+ * Found on production: the container was reported
  * UNHEALTHY, failing streak 7, while serving every page correctly. Its probe
  * fetched `/docs/llm`, an address the docs tree had retired — so a content
  * change turned the deployment red, and a permanently-red check is one nobody

@@ -11,7 +11,7 @@ import {sessionOwnedBy} from '@/lib/remote/resource';
  * flag), builds the transport context, and maps the operation's reply back
  * to a Response. No route holds protocol semantics of its own; those live in
  * the operation's `run` (which is itself the shared lib/artifact-wire
- * pipeline both transports call).
+ * pipeline).
  */
 import { json, baseUrl } from '@/lib/http';
 import type { TokenActor } from '@/lib/artifacts';

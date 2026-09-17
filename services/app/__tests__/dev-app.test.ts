@@ -112,7 +112,7 @@ describe('server.ts --app-only', () => {
     expect((await fetchChecked(`${base}/oauth/authorize`)).status).toBe(404);
   });
 
-  it('owns the anonymous mint (the app\'s since P2) and the token publishes', async () => {
+  it('owns the anonymous mint and the token publishes', async () => {
     expect(await publishDocument()).toBeTruthy();
   });
 

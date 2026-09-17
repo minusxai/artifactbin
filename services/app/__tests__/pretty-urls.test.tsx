@@ -33,7 +33,7 @@ const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.re
 
 /**
  * The pretty URL's RESOLUTION is now an endpoint (/api/page/profile): the same
- * three outcomes the page used to express as Next control flow — render the
+ * three outcomes the page used to express as control flow — render the
  * document, heal the address, or the uniform 404 — come back as JSON. `UserPage`
  * asks it and reports them in the old vocabulary, so every case below reads as
  * it did.

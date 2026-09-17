@@ -2,12 +2,12 @@ import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmar
 import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 /**
  * The react-free contract between the document builder (server), the SSR
- * bundle, and the in-iframe hydration runtime. This file is importable from
- * the Next server graph (route handlers compile under the react-server
- * condition, where client-React APIs are forbidden) — so it carries ONLY types
- * and ids. The React composition lives in StoryRuntimeApp.tsx, which reaches
- * the server exclusively as a prebuilt esbuild bundle (story-ssr.cjs) loaded
- * outside the module graph — see scripts/build-story-runtime.mjs.
+ * bundle, and the in-iframe hydration runtime. BOTH sides import it, so it
+ * carries ONLY types and ids: a value here would drag one side's graph into
+ * the other's bundle. The React composition lives in StoryRuntimeApp.tsx,
+ * which reaches the server exclusively as a prebuilt esbuild bundle
+ * (story-ssr.cjs) loaded outside the module graph — see
+ * scripts/build-story-runtime.mjs.
  */
 import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
@@ -29,8 +29,8 @@ export interface StoryIslandDataflow {
    */
   state?: DataflowState;
   /**
-   * SPIKE S1 (F2): the reader's own `<Value>` choices, carried in the URL
-   * (`?$region=west`) and parsed server-side. Values WITHOUT rows — which is
+   * The reader's own `<Value>` choices, carried in the URL (`?$region=west`)
+   * and parsed server-side. Values WITHOUT rows — which is
    * exactly why they are their own field rather than a synthetic `state`:
    * `state` present means "somebody already ran the queries", so seeding
    * through it would cancel the document's first run and leave every chart on
@@ -169,9 +169,9 @@ export const STORY_HELLO_MESSAGE = 'mx:hello';
  * A NEW VERSION OF THIS DOCUMENT, posted in by the parent page.
  *
  * The page holds the live stream (an opaque frame cannot open an EventSource
- * against our origin), and used to deliver what it heard by REPLACING the
- * frame: the document re-fetched, re-parsed and re-hydrated, every chart
- * rebuilt, the reader's scroll position and their `<Value>` choices gone —
+ * against our origin). Delivering what it hears by REPLACING the frame costs
+ * the reader everything: the document re-fetched, re-parsed and re-hydrated,
+ * every chart rebuilt, their scroll position and their `<Value>` choices gone,
  * once per agent write. The document is a React tree, so a new version of it
  * is a re-render, and this message is that version.
  *
@@ -184,11 +184,6 @@ export const STORY_DOCUMENT_MESSAGE = 'mx:document';
 export interface StoryDocumentUpdate {
   type: typeof STORY_DOCUMENT_MESSAGE;
   nodes: JsxNode[];
-  /**
-   * The declarations as a flow. `state` is OPTIONAL: a live frame carries the
-   * flow and no rows (the store re-runs every query through its transport);
-   * the page's own island carries both.
-   */
   /**
    * Refs the document did not have when it was served — MERGED, not replaced.
    * An image inserted while editing is a brand-new artifact, so the island's
@@ -312,11 +307,11 @@ export interface StoryScrollMessage {
   gutter?: number;
   /**
    * "I have nothing further to scroll to" — the ANSWER, not the ingredients.
-   * The parent cannot measure an opaque frame's height, so it used to compare
-   * this offset against its OWN metrics; on the artifact page those never move,
-   * so the end-of-page rule (the bar stays up where the footer is) was lost for
-   * every framed document. The document measures its own end instead, with the
-   * same 4px slack the page uses for its own.
+   * The parent cannot measure an opaque frame's height, and comparing this
+   * offset against its OWN metrics gives the wrong answer on the artifact page,
+   * where those never move: the end-of-page rule (the bar stays up where the
+   * footer is) would be lost for every framed document. The document measures
+   * its own end instead, with the same 4px slack the page uses for its own.
    */
   atBottom: boolean;
 }
@@ -414,30 +409,6 @@ export type StoryMutateResult =
 export const STORY_DATA_MESSAGE = 'mx:data';
 
 /**
- * The SSE event name a DATA wakeup carries on `/a/<id>/events` (the default,
- * unnamed frame stays the document). It lives HERE rather than beside the
- * route because both ends need it and only one of them is a server: a client
- * module importing a VALUE from a route handler pulls that route — and
- * `next/headers` with it — into the browser bundle, which is a build failure,
- * not a size regression.
- */
-/**
- * FRAME → PAGE: the reader changed a `<Value>`, and this is the document's
- * whole scalar state after the change.
- *
- * A document served TOP-LEVEL writes its own address through the one narrow
- * capability its history prelude leaves open (`__mxValues`). A FRAMED one
- * cannot: `location` inside the frame is the frame's, so writing there moves
- * `/a/<id>/raw?edit=1`, which nobody can see or copy — measured on the spike,
- * and the reason this message exists at all.
- *
- * Signed like every other frame → page message, because the author's script
- * shares this realm. And the page does not simply write what arrives: it
- * re-derives the address through `writeUrlValues` against the flow IT holds,
- * so a frame can never put a name the document does not declare into the
- * address bar.
- */
-/**
  * The TOP-LEVEL document's own narrow URL capability, installed by the history
  * prelude (lib/story/document HISTORY_PRELUDE) — the one window left open in
  * an otherwise frozen History API. It takes `{name: string | null}`: a string
@@ -450,6 +421,22 @@ export const STORY_DATA_MESSAGE = 'mx:data';
  */
 export const STORY_VALUES_HOOK = '__mxValues';
 
+/**
+ * FRAME → PAGE: the reader changed a `<Value>`, and this is the document's
+ * whole scalar state after the change.
+ *
+ * A document served TOP-LEVEL writes its own address through the one narrow
+ * capability its history prelude leaves open (`__mxValues`). A FRAMED one
+ * cannot: `location` inside the frame is the frame's, so writing there moves
+ * `/a/<id>/raw?edit=1`, which nobody can see or copy — which is the reason
+ * this message exists at all.
+ *
+ * Signed like every other frame → page message, because the author's script
+ * shares this realm. And the page does not simply write what arrives: it
+ * re-derives the address through `writeUrlValues` against the flow IT holds,
+ * so a frame can never put a name the document does not declare into the
+ * address bar.
+ */
 export const STORY_VALUES_MESSAGE = 'mx:values';
 
 export interface StoryValuesMessage {
@@ -467,6 +454,14 @@ export function isValuesMessage(data: unknown, nonce: string): data is StoryValu
     && !!d.values && typeof d.values === 'object' && !Array.isArray(d.values);
 }
 
+/**
+ * The SSE event name a DATA wakeup carries on `/a/<id>/events` (the default,
+ * unnamed frame stays the document). It lives HERE rather than beside the
+ * route because both ends need it and only one of them is a server: a client
+ * module importing a VALUE from a route handler pulls that route's whole
+ * server graph (lib/db, lib/analytics, …) into the browser bundle, which is a
+ * build failure, not a size regression.
+ */
 export const STORY_DATA_EVENT = 'data';
 
 export interface StoryDataUpdate {

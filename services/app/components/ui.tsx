@@ -68,8 +68,9 @@ export function formatLabel(format: string): string {
 }
 
 export function FormatBadge({ format }: { format?: string }) {
-  // No fallback tier: an artifact HAS a format. Defaulting to a retired tier
-  // name is how one keeps appearing on profiles after it is deleted.
+  // `format` is optional on the wire, so an absent one falls back to the LIVE
+  // document tier. Never to a retired tier name: that is how a tier nobody
+  // publishes any more keeps appearing on profiles.
   const key = format ?? 'markup';
   const color = FORMAT_COLORS[key] ?? '#95a5a6';
   return (

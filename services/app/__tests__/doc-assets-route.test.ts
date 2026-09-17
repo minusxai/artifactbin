@@ -17,7 +17,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * And it never returns the upstream body: the answer is a redirect to
  * `/assets/<hash>`, so only sniffer-approved bytes are ever served.
  *
- * WHO PAYS (R10): the DOCUMENT'S OWNER. They named the source; a reader who
+ * WHO PAYS: the DOCUMENT'S OWNER. They named the source; a reader who
  * merely opens a page — possibly an anonymous stranger — spends no storage.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -149,7 +149,7 @@ describe('the happy path', () => {
   });
 });
 
-describe('who pays (R10): the document owner, never the reader', () => {
+describe('who pays: the document owner, never the reader', () => {
   it('charges the OWNER for a URL a stranger caused us to fetch', async () => {
     const owner = await createUser({ email: `mxmx_test_payer_${Math.random().toString(36).slice(2, 8)}@example.com` });
     const t = await mintToken('payer', owner.id);

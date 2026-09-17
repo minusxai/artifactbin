@@ -1,7 +1,6 @@
 /**
  * Database adapter: PGLite (embedded, default) or Postgres — selected by ONE
- * env, `DATABASE_URL`, via scheme dispatch (see parseDatabaseUrl below).
- * Distilled from minusx lib/database/adapter/{pglite-adapter,postgres-adapter,factory}.ts.
+ * env, `DATABASE_URL`, via scheme dispatch (lib/database-url parseDatabaseUrl).
  *
  * This is the only file that imports @electric-sql/pglite or pg.
  */
@@ -60,7 +59,7 @@ export interface Db extends Queryable {
   transaction<T>(fn: (tx: Queryable) => Promise<T>): Promise<T>;
   /**
    * Subscribe to Postgres NOTIFYs on `channel`; resolves to an async
-   * unsubscribe. NOTIFY is only a wakeup pointer (minusx chat-stream pattern):
+   * unsubscribe. NOTIFY is only a wakeup pointer:
    * a missed delivery is harmless because subscribers catch-up SELECT.
    * Emitting needs no API — writes chain `pg_notify` into their own statement.
    */
@@ -68,7 +67,7 @@ export interface Db extends Queryable {
   close(): Promise<void>;
   /**
    * The driver handle, for the ONE other owner of this database in the
-   * process: the co-hosted proxy (packages/proxy), whose identity tables share
+   * process: the co-hosted proxy, whose identity tables share
    * a PGLite instance (single-owner) or a pool with the app. Nothing else
    * should reach for it.
    */
@@ -143,7 +142,7 @@ class PgliteDb implements Db {
 
   // PGLite delivers notifications through its single embedded connection, so
   // the LISTEN statement is serialized with every other op (the callback fires
-  // later, off-queue). Ported from minusx pglite-adapter.
+  // later, off-queue).
   raw() { return { kind: 'pglite' as const, instance: this.db }; }
 
   async listen(channel: string, onNotify: (payload: string) => void): Promise<() => Promise<void>> {
@@ -180,7 +179,7 @@ class PostgresDb implements Db {
 
   // ONE dedicated client holds every LISTEN for this process and fans NOTIFYs
   // out in memory to per-channel handler sets — one connection, not one per
-  // subscriber, so the pool stays free. Ported from minusx postgres-adapter.
+  // subscriber, so the pool stays free.
   private listenClient: Awaited<ReturnType<PostgresDb['pool']['connect']>> | null = null;
   private listenSetup: Promise<Awaited<ReturnType<PostgresDb['pool']['connect']>>> | null = null;
   private channelHandlers = new Map<string, Set<(payload: string) => void>>();

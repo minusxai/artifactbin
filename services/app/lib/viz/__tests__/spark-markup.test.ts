@@ -1,10 +1,10 @@
 /**
- * The sparkline's DRAWING RULES, extracted from components/ui's `Spark` so the
- * document kit can draw the same mark (components/kit/files) without importing
- * app chrome — which lib/__tests__/reader-bundle-hygiene forbids.
+ * The sparkline's DRAWING RULES. Both callers inject the answer — app chrome
+ * (components/ui's `Spark`) and the document kit (components/kit/files) — and
+ * the kit may not reach into app chrome, which
+ * lib/__tests__/reader-bundle-hygiene enforces, so the rules live here.
  *
- * Every rule here was already in `Spark`; this pins them where both callers can
- * see them. The one addition is the `data-sparkline` stamp and what it implies:
+ * The `data-sparkline` stamp is what the rules add beyond the drawing itself:
  * the answer is ALWAYS one `<svg>` element, so a caller can find the picture it
  * drew without knowing what the server put inside it.
  */

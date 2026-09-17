@@ -11,8 +11,7 @@
  *    `mx-reader-chrome--hidden` class and `data-mx-reader-state`. Never move
  *    while a panel is open; opening a panel reveals the chrome.
  *  - PANELS: the two triggers, the scrim, Escape, and the light/dark choice
- *    (lib/story-runtime/reader-mode + the runtime's private mode hook) — moved
- *    here from anchor-entry, unchanged in behaviour.
+ *    (lib/story-runtime/reader-mode + the runtime's private mode hook).
  *  - LIKE / COMMENT / FOLLOW: relay to the parent when framed, otherwise
  *    navigate through the supplied action URL. Fixtures without a URL only log.
  *  - SHARE: `navigator.share({ title, url })` when the platform has a sheet;
@@ -246,9 +245,8 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
         // at, and the browser's scroll anchoring would answer it by moving
         // scrollY the same amount — which is the reader "moving" as far as
         // the page can tell (gate-inplace-edit). Hold the scroll position
-        // through the change instead: the content slides under the bars, the
-        // reader's place is unchanged, the way it was when the frame itself
-        // used to move.
+        // through the change instead: the content slides under the bars and
+        // the reader's place is unchanged.
         const html = doc.documentElement;
         html.style.overflowAnchor = 'none';
         html.style.setProperty('--mx-chrome-inset', pinned ? `${bar + (data.inset ?? 0)}px` : '0px');

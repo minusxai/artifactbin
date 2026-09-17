@@ -2,8 +2,8 @@
  * ONE CACHE, AT THE LAYER THE BYTES COME FROM.
  *
  * Every key this app reads is IMMUTABLE — content-addressed (`dataset/`,
- * `image/`, `webfont/` are `kind/sha256`) or version-addressed
- * (`exports/<id>/<version>…`). So the store itself is where a read cache
+ * `image/`, `webfont/` are `kind/sha256`) or addressed by an allocated
+ * immutable id (`exports/objects/<id>.<ext>`). So the store itself is where a read cache
  * belongs: one place, serving datasets, ref images, webfonts and export bytes
  * alike, rather than a separate cache per caller (which is how a dataset-only
  * cache would have grown into four).

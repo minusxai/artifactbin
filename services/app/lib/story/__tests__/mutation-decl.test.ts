@@ -1,7 +1,7 @@
 /**
  * `<Mutation>` — a `<Query>` that writes. The pure contract: how the Helmet
- * child parses (one DML statement, exactly one `ref_<id>` target, `$params`),
- * how it joins the document's namespace (`run="$add"` on a Button names it;
+ * child parses (one DML statement, exactly one `source="ref:<id>"` or local
+ * target, `$params`), how it joins the document's namespace (`run="$add"` on a Button names it;
  * nothing else may), and what a write to a dataset invalidates (every query
  * reading that dataset, and everything downstream of those).
  */
@@ -34,7 +34,7 @@ describe('parseMutationDecl', () => {
     expect(r.decl.sql).toContain('insert into public.rows');
   });
 
-  it('parses a syntactic local target, and refuses a mutation naming two datasets', () => {
+  it('parses a syntactic local target, and refuses a dataset named implicitly in the SQL', () => {
     const local = parseMutationDecl(element('<Mutation name="add">{`insert into sales values (1)`}</Mutation>'));
     expect(local.ok).toBe(true);
     if (local.ok) expect(local.decl).toMatchObject({ target: 'sales', scope: 'local' });

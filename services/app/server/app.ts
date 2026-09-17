@@ -7,8 +7,8 @@
  *    explicit raw/export responses retain their document sandbox policy;
  *  - the app's pages: one SPA (web/, built by Vite) served for the app's
  *    paths under the app CSP;
- *  - the static tree under public/ with the cache rules next.config used to
- *    carry (content-addressed → immutable; /geojson a day).
+ *  - the static tree under public/, with its cache rules set here
+ *    (content-addressed → immutable; /geojson a day).
  *
  * The request is held in AsyncLocalStorage for the duration of each handler
  * (lib/request-context), which is how `publicOrigin()` and analytics see it.
@@ -50,15 +50,26 @@ import { mountBuildAssets } from './build-assets';
 
 /**
  * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
- * base — FIRST in the head. They used to go last, after every preload and stylesheet link Vite stamps
- * into the shell, and a shell tool that keeps the first few kilobytes of a page cut the line before them
- * every time (run 35133663437: OpenCode's fetch, six legs). The first ~300 bytes of the page now carry
- * the pointer; a page with no `<head>` at all gets it before `</head>` as before.
+ * base — FIRST in the head, ahead of every preload and stylesheet link Vite stamps into the shell, so a
+ * shell tool that keeps only the first few kilobytes of a page still sees them. A page with no `<head>`
+ * at all gets them before `</head>`.
  */
 function withAgentDiscovery(html: string, origin: string): string {
   const tags = agentDiscoveryHead(agentDiscovery(origin));
   const open = /<head(?:\s[^>]*)?>/i.exec(html);
   if (open) return `${html.slice(0, open.index + open[0].length)}${tags}${html.slice(open.index + open[0].length)}`;
+  return html.replace('</head>', () => `${tags}</head>`);
+}
+
+/**
+ * The generic unfurl card, for an address with no document of its own to
+ * photograph — the home page, login, a profile. Absolute against the request's
+ * origin for the same reason the artifact tag below is: a relative og:image is
+ * resolved by some scrapers against the page URL and by others not at all.
+ * `public/og.png` is written by `npm run generate:og`.
+ */
+function withGenericSocial(html: string, origin: string): string {
+  const tags = `<meta property="og:image" content="${escapeHtml(origin)}/og.png"><meta name="twitter:card" content="summary_large_image">`;
   return html.replace('</head>', () => `${tags}</head>`);
 }
 
@@ -186,23 +197,21 @@ export function candidateDocument(pathname: string): { id: string } | null {
 }
 
 
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new)$/;
+/** Every static address web/App.tsx routes: a direct load or a reload of one missing here is a 404. */
+const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new)$/;
 
 /**
- * A guessed machine address is answered in the machine's language. `/docs`
- * and `/docs/*` are the agent surface; everything an agent GUESSES on the way
- * there — a path under `/api/` nobody serves, `/openapi.json`,
- * `/.well-known/ai-plugin.json` — used to fall through to the SPA and answer
- * a page of HTML, which tells a fetch tool nothing. It now answers the same
- * shape `unauthorized()` does: the error, and the one address that fixes it.
+ * A guessed machine address is answered in the machine's language. A path
+ * under `/api/` nobody serves, `/openapi.json` and `/.well-known/ai-plugin.json`
+ * answer the same shape `unauthorized()` does: the error, and the one way on —
+ * `afbin help`. A page of HTML tells a fetch tool nothing.
  *
  * Mounted AFTER the real routes (an earlier match wins) and BEFORE the SPA
  * fallback, by EXACT path under `/.well-known/` — a prefix mount there would
  * swallow `/.well-known/oauth-protected-resource`, which is the proxy's.
  *
  * Every OTHER miss answers this too when the caller never asked for HTML
- * (`page()` below): measured on production, `/.well-known/deepseek` and
- * `/help` handed a fetch tool the 891-byte SPA shell and no way on.
+ * (`page()` below).
  */
 const apiNotFound = (c: { req: { raw: Request } }) => {
   const guessedQuery = /^\/api\/artifacts\/[^/]+\/query\/?$/.test(new URL(c.req.raw.url).pathname);
@@ -279,7 +288,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : discovered;
+      : withGenericSocial(discovered, baseUrl(c.req.raw));
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
@@ -328,11 +337,10 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    * all read). The SPA renders its own 404 body inside it.
    */
   /**
-   * The canonical address for a document the viewer gets the PAGE for, when
-   * the one they asked for is not it — a redirect, exactly as the page used to
-   * throw. It runs AFTER the ACL, so a private document never leaks its owner
-   * through a redirect target; and only for the page, since a READER is served
-   * the document AT the address they were given (the shared link is canonical).
+   * The canonical address for a document, when the one the viewer asked for is
+   * not it — a redirect. It runs AFTER the ACL, so a private document never
+   * leaks its owner through a redirect target; a valid export key skips the
+   * healing, because a capture must stay at the address it was handed.
    */
   const documentPreparation = async (request: Request): Promise<{ status: 200 | 404; redirect?: string }> => {
     const url = new URL(request.url);
@@ -398,10 +406,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     c.header('Cache-Control', 'no-store');
     return c.redirect('/login', 302);
   });
-  // The tour for people, registered AHEAD of the API mount: `/docs/*` is one
-  // catch-all route (the skills tree), and it would otherwise swallow the old
-  // address's redirect. `/docs-human` is outside that catch-all by shape, and
-  // sits here beside the address it replaced.
+  // The tour for people.
   app.get('/docs-human', (c) => page(c));
   // The app's API and document handlers.
   mountRoutes(app);
@@ -438,8 +443,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   // A handle is `@name` in ONE segment — Hono's params are whole segments, so the shape is a regex param.
   app.get('/:user{@[a-z0-9_]+}/*', documentAddress);
   app.get('/:user{@[a-z0-9_]+}', (c) => page(c));
-  // A root typo gets the SPA too — its 404 page, under the 404 STATUS — where
-  // Hono's own notFound() answered bare text that looked like a different app.
+  // A root typo gets the SPA too — its 404 page, under the 404 STATUS.
   app.get('*', async (c) => (SPA_PATHS.test(new URL(c.req.url).pathname) ? page(c) : page(c, 404)));
   return app;
 }

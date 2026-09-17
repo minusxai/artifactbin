@@ -1,7 +1,7 @@
 
 /**
- * MinusX BI chart theme constants — palettes, fonts, light/dark tokens. Engine-free
- * (deleted ECharts): consumed by the Vega theme (lib/viz/theme.ts) and the
+ * MinusX BI chart theme constants — palettes, fonts, light/dark tokens.
+ * Engine-free: consumed by the Vega theme (lib/viz/theme.ts) and the
  * story CSS builder (lib/data/story/story-css.server.ts).
  */
 

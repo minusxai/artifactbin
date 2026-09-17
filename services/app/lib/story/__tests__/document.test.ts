@@ -45,9 +45,9 @@ describe('buildStoryDocument', () => {
 
   /**
    * THE AUTHOR AND THE PROVENANCE RIDE THE READER CHROME (lib/story/reader-chrome),
-   * never a footer: the credits strip is retired. The builder's job is only to
-   * hand the chrome what the route resolved — the author's handle, the fork
-   * source, where ⊕ goes — and to render none of it on a capture.
+   * never a footer — there is no credits strip. The builder's job is only to
+   * hand the chrome what the route resolved — the author's handle and the fork
+   * source — and to render none of it on a capture.
    */
   it('names the author in the reader chrome and carries no credits footer', async () => {
     const html = await doc({ author: { username: 'ada' } });
@@ -83,8 +83,7 @@ describe('buildStoryDocument', () => {
     expect(html).toContain('href="/@grace/ab12cd-first-draft" target="_top"');
     expect(html).toContain('forked from');
     expect(html).toContain('@grace/ab12cd-first-draft');
-    // INSIDE the settings panel — between its opening tag and its closing one —
-    // where the retired footer used to sit after everything.
+    // INSIDE the settings panel — between its opening tag and its closing one.
     const panelStart = html.indexOf('data-mx-reader-panel="controls"');
     const panelEnd = html.indexOf('</section>', panelStart);
     const line = html.indexOf('class="mx-reader-forked" data-mx-forked-from');
@@ -164,7 +163,7 @@ describe('buildStoryDocument', () => {
 
   it('escapes `<` in the island JSON so row content cannot close the script element', async () => {
     const html = await doc({
-      // A query RESULT carries reader-visible strings into the island now.
+      // A query RESULT carries reader-visible strings into the island.
       dataflow: {
         flow: { values: [], queries: [{ name: 'q', sql: 'select 1', params: [], refs: [], start: 0, end: 0 }] },
         state: { values: {}, tables: { q: { rows: [{ note: '</script><script>alert(1)</script>' }], columns: [{ name: 'note', type: 'string' }] } }, errors: {} },
@@ -178,15 +177,16 @@ describe('buildStoryDocument', () => {
     expect(islandBody).toContain('\\u003c');
   });
 
-  it('drops (never emits) an author script carrying `</script`', async () => {
+  it('keeps a concat-spelled author script, and emits the token `undefined` nowhere', async () => {
     // Stored rows are validated at the door, but render must not trust that —
-    // the interpreter-style second gate.
+    // the interpreter-style second gate. The RAW `</script` sequence cannot be
+    // written into a fixture (the Helmet grammar refuses it at parse time), so
+    // the builder's own `safeScript` guard has no case here; what is pinned is
+    // that the legal, concat-spelled form survives.
     const html = await doc({ source: '<Helmet><script>{`var s = "</scr" + "ipt>";`}</script></Helmet><p>x</p>' });
     expect(html).toContain('var s =');
     const smuggled = await doc({ source: '<p>x</p>' });
-    // Build a forged input by bypassing parse-time checks: parseable script text
-    // with the sequence spelled via concat is FINE (above); the raw sequence is
-    // exercised through the builder's own guard below.
+    // The history prelude writes `x==null` rather than spelling `undefined`.
     expect(smuggled).not.toContain('undefined');
   });
 
@@ -194,7 +194,7 @@ describe('buildStoryDocument', () => {
     expect(await doc({ runtimeSrc: null })).not.toContain('story-runtime.js');
   });
 
-  it('stamps theme and mode like the engine: html class + body data-theme + --mx-vh', async () => {
+  it('stamps theme and mode like the engine: html class + html data-theme + --mx-vh', async () => {
     const html = await doc({ theme: null, colorMode: 'dark' });
     expect(html).toContain('<html class="dark">');
     expect(html).toContain('--mx-vh');
@@ -353,8 +353,8 @@ describe('buildStoryDocument', () => {
   });
 
   it('preloads exactly the theme\'s critical faces, cross-origin (the frame is opaque)', async () => {
-    // Ported from the retired components/StoryFontPreloads: the parent cannot
-    // preload for an opaque-origin frame, so the document does it itself.
+    // The parent cannot preload for an opaque-origin frame, so the document
+    // does it itself.
     // `crossorigin` is load-bearing — fonts fetch in CORS mode, and a preload
     // without it warms an entry the real request can never use.
     const html = await doc({ theme: 'manuscript' as never });

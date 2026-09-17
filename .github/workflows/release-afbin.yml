@@ -1,6 +1,7 @@
 name: Release afbin
 
-# Bumps the CLI version and opens the release PR. Nothing is built or published here: the PR's CI
+# Bumps the CLI version and pushes the release branch, opening its PR where the token allows (see
+# below). Nothing is built or published here: the PR's CI
 # builds the four platform binaries and runs the Intel render proofs and the distributions
 # conformance job (selected because the version changed, scripts/lib/ci-plan.mjs), and once the PR
 # is merged and main's CI passes, `release-cli.yml` uploads the tested assets to GitHub Releases.
@@ -28,7 +29,7 @@ permissions:
 
 jobs:
   release-pr:
-    name: Bump and open the release PR
+    name: Bump the CLI and push the release branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

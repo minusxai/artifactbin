@@ -1,7 +1,7 @@
 /**
  * The server renders the story to HTML and the browser parses it before React hydrates. A `<For>`
  * wrapper `<div>` inside `<tbody>` is not valid there: the HTML parser hoists it out of the table,
- * React hydrates against a different DOM and throws error 418 (eval run 34741910427, pi deck).
+ * React hydrates against a different DOM and throws error 418.
  * parse5 follows the same parsing algorithm as the browser, so this proves the served HTML keeps its
  * rows where React expects them, without a browser.
  */

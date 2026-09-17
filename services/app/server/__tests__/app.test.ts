@@ -1,9 +1,9 @@
 /**
- * The app server's own decisions: a READER is served the document itself at
- * /a/<id> and at the pretty URL (the per-row CSP proves it is `raw`'s
- * response), an OWNER gets the app page, a private document's stranger gets
- * the uniform 404 page, the app's paths get the SPA under the app CSP, and
- * anything else is a plain 404.
+ * The app server's own decisions: every viewer of a readable document gets the
+ * app page at the canonical address, under the app CSP, with the document's own
+ * markup already in it (only /raw keeps the standalone sandbox); a private
+ * document's stranger gets the uniform 404 page; the app's paths get the SPA
+ * under the app CSP; and anything else is a plain 404.
  */
 import { ACTOR_HEADER, type Actor } from '@artifactbin/contracts';
 import { signActor } from '@artifactbin/utils';
@@ -34,7 +34,7 @@ async function world() {
   return { owner, t, pub: await mk({ title: 'Pub', markup: '<div><p>public words</p></div>', visibility: 'public' }), priv: await mk({ title: 'Priv', markup: '<div><p>secret words</p></div>', visibility: 'private' }) };
 }
 
-describe('reader or owner', () => {
+describe('a document address', () => {
   it('serves readable initial markup under app CSP at the canonical address', async () => {
     const w = await world();
     for (const path of [`/a/${w.pub.id}`, `/@${w.owner.username}/${w.pub.id}-pub`]) {
@@ -45,7 +45,7 @@ describe('reader or owner', () => {
       expect(await res.text()).toContain('public words');
     }
   });
-  it('serves the owner the app page instead (at the canonical address)', async () => {
+  it('serves the owner the same app page under the same CSP (at the canonical address)', async () => {
     const w = await world();
     const res = await app.request(`/@${w.owner.username}/${w.pub.id}-pub`, { headers: as({ credential: 'session', userId: w.owner.id, email: w.owner.email }) });
     expect(res.headers.get('content-security-policy')).toBe(APP_CSP);
@@ -112,8 +112,12 @@ describe('the address heals after checking read access', () => {
 });
 
 describe('the app\'s paths', () => {
+  // Every static address web/App.tsx routes is here: one the server does not
+  // know answers 404 on a direct load or a reload — the SPA still paints it,
+  // but a crawler and a `curl` read the status, and a caller that never asked
+  // for HTML gets the JSON refusal instead of the page.
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
-    for (const p of ['/login', '/account', '/assets', '/trash', '/docs-human']) {
+    for (const p of ['/login', '/account', '/chat', '/assets', '/trash', '/tokens', '/docs-human', '/datasets/new', '/files/new']) {
       const res = await app.request(p);
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');
@@ -126,8 +130,8 @@ describe('the app\'s paths', () => {
    * addresses miss three different ways and must answer identically: a root
    * typo (no route), a handle nobody holds, and a handle that exists (which is
    * the 200 that proves the 404s above are decisions, not accidents). A caller
-   * that never asked for HTML gets the JSON refusal naming `/docs` instead —
-   * `server/__tests__/docs-human.test.ts` owns that half.
+   * that never asked for HTML gets the JSON refusal naming `afbin help`
+   * instead — `server/__tests__/docs-human.test.ts` owns that half.
    */
   it('a miss is the 404 STATUS carrying the SPA, wherever it happens', async () => {
     const w = await world();
@@ -138,6 +142,29 @@ describe('the app\'s paths', () => {
       expect(await res.text(), p).toContain('SPA');
     }
     expect((await app.request(`/@${w.owner.username}`, { headers: { accept: 'text/html' } })).status).toBe(200);
+  });
+  /**
+   * A LINK TO A NON-ARTIFACT PAGE STILL UNFURLS. An artifact carries its own
+   * card (its on-demand export, stamped by `withInitialStory`); every other
+   * address — the home page, login, a profile — has no document to photograph,
+   * so it gets the one generic card `npm run generate:og` writes to
+   * public/og.png. Absolute, from the request's own forwarded origin, for the
+   * same reason the artifact tag is: a relative og:image is resolved by some
+   * scrapers against the page URL and by others not at all.
+   */
+  it('names the generic unfurl card on a non-artifact page, absolute, and never beside an artifact\'s own', async () => {
+    const forwarded = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifactbin.test' };
+    for (const p of ['/account', '/login']) {
+      const html = await (await app.request(p, { headers: forwarded })).text();
+      expect(html, p).toContain('<meta property="og:image" content="https://artifactbin.test/og.png">');
+      expect(html, p).toContain('<meta name="twitter:card" content="summary_large_image">');
+    }
+    // A document's page keeps its own card, and only one.
+    const w = await world();
+    const canonical = (await app.request(`/a/${w.pub.id}`, { headers: as({ credential: 'none' }) })).headers.get('location')!;
+    const document = await (await app.request(canonical, { headers: { ...forwarded, ...as({ credential: 'none' }) } })).text();
+    expect(document).not.toContain('/og.png');
+    expect(document.match(/property="og:image"/g)).toHaveLength(1);
   });
   it('mounts the API: an unauthenticated write is the handler\'s own 401', async () => {
     const res = await app.request('/api/artifacts', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', ...as({ credential: 'none' }) } });

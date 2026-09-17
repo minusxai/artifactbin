@@ -146,8 +146,8 @@ const run = async () => {
     check((await viewComments.textContent())?.includes('Q3 sheet'), 'hover reveals the conversation preview');
     const anchorBox = await frame.locator('#figure').boundingBox();
     const commentBox = expandedBox;
-    // The marker follows the WORDS now (F3: a comment keeps its selection, and
-    // its rect is the union of the highlighted ranges), so it sits on the text
+    // The marker follows the WORDS (a comment keeps its selection, and its
+    // rect is the union of the highlighted ranges), so it sits on the text
     // LINE rather than on the paragraph box — half-leading apart, a handful of
     // pixels. It is still the annotated content it follows.
     check(!!anchorBox && !!commentBox && Math.abs(anchorBox.y - commentBox.y) <= 12,
@@ -323,7 +323,7 @@ const run = async () => {
 };
 
 /**
- * A COMMENT KEEPS THE WORDS, NOT JUST THE NODE (F3).
+ * A COMMENT KEEPS THE WORDS, NOT JUST THE NODE.
  *
  * Every seam here is browser fact and nothing below the browser can see it: a
  * REAL drag from the middle of one paragraph into the next (a Selection inside
@@ -461,7 +461,7 @@ async function quoteLeg(browser) {
 }
 
 /**
- * AN AGENT'S REPLY IS PROSE WITH CODE IN IT (F5).
+ * AN AGENT'S REPLY IS PROSE WITH CODE IN IT.
  *
  * The body is plain TEXT on the wire and stays that way — what changed is the
  * READING. Only a browser can show that: the rail renders a real `<pre>` for a
@@ -566,8 +566,8 @@ async function markdownLeg(browser) {
 }
 
 /**
- * A LONG REPLY MUST NOT PUSH THE SHORT ONE OFF THE RAIL (F6) — and a resolved
- * card must READ as resolved (F7).
+ * A LONG REPLY MUST NOT PUSH THE SHORT ONE OFF THE RAIL — and a resolved
+ * card must READ as resolved.
  *
  * The failure this exists for is a LAYOUT fact and nothing below a browser can
  * see it: sixty lines of agent answer, a phone whose comment sheet is half the
@@ -720,7 +720,7 @@ async function foldLeg(browser) {
   const refolded = await until(read, (s) => s?.clamped === true, 5000);
   check(!!refolded?.reply && refolded.reply.bottom <= refolded.sheet.bottom + 1, 'folding it back brings the reply home');
 
-  // ── F7: a resolved card reads as resolved ─────────────────────────────
+  // ── a resolved card reads as resolved ──────────────────────────────────
   const resolvedRes = await fetch(`${BASE}/api/artifacts/${id}/annotations/${ann.id}`, {
     method: 'POST', headers: auth, body: JSON.stringify({ resolve: true }),
   });

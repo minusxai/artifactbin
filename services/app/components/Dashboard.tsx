@@ -174,8 +174,8 @@ interface DashboardProps {
 
 /**
  * One dashboard composition at two scales. The expanded form deliberately
- * reuses this component rather than beginning a separate dashboard design;
- * a future route can mount the same content without inheriting modal chrome.
+ * reuses this component rather than a separate dashboard design, so the same
+ * content can be mounted without the modal chrome.
  */
 function DashboardContent({
   rows,

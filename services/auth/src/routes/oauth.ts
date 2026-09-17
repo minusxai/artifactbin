@@ -63,9 +63,8 @@ interface OAuthRoutesOptions {
 
 /**
  * An anonymous grant (no bound account) receives a long-lived, claimable
- * bearer — the same shape the removed manual token page minted — so a single
- * token carries the agent's work until someone signs in and claims it, rather
- * than fragmenting across short-lived rotations.
+ * bearer, so a single token carries the agent's work until someone signs in
+ * and claims it, rather than fragmenting across short-lived rotations.
  */
 const ANON_DEVICE_TOKEN_TTL_SECONDS = 365 * 24 * 60 * 60;
 

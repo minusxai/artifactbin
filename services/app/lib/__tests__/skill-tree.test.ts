@@ -157,7 +157,13 @@ describe('the rules, each seen to fire on a literal tree', () => {
   });
 });
 
-describe('the real tree (skills/) obeys every rule', () => {
+/**
+ * The real tree's SHAPE and BUDGET — not `validateSkillTree`, which is exercised
+ * against literal trees above. The brief links topics that live only in the CLI's
+ * bundled teaching (`renderDoc`'s fallback, lib/skills/index), so the link rule
+ * cannot be run against `skills/` as it stands.
+ */
+describe('the real tree (skills/) keeps its shape and its reading budget', () => {
   const tree = skillTree();
   /**
    * THE byte-cap sweep. It used to be asserted in seven places — the brief, the auth rule, the

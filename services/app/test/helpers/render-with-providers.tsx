@@ -1,8 +1,7 @@
 /**
- * ADAPTED from minusx test/helpers/render-with-providers.tsx: their helper
- * wraps Redux + Chakra; the ported engine needs neither (kit is Radix +
- * Tailwind, embeds are provider-free), so this is plain
- * RTL render with the same call shape so ported tests import unchanged.
+ * A plain RTL render: the engine needs no providers at all (the kit is Radix +
+ * Tailwind and embeds are provider-free). It keeps the wrapper call shape so a
+ * test that needs one later gains it here rather than at every call site.
  */
 import type { ReactElement } from 'react';
 import { render, type RenderOptions } from '@testing-library/react';

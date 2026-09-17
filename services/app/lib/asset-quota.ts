@@ -13,7 +13,7 @@
  * nothing; charging it would bill one object twice and make a popular URL
  * progressively more expensive for everyone. References are free.
  *
- * WHOSE CAP IT IS (R9): the ACCOUNT, whenever the token has one. A cap keyed
+ * WHOSE CAP IT IS: the ACCOUNT, whenever the token has one. A cap keyed
  * on the token alone is bypassed by minting a second token — and a claimed
  * token already acts account-wide everywhere else in this app (lib/artifacts
  * `ownerScope`), so keying the cap on the token would have been the one place

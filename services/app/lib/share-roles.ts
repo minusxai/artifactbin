@@ -9,7 +9,7 @@
  * sibling of `visibility`, and orthogonal to it: visibility is who may read
  * via the LINK, a share is a person by email and their role, under every
  * visibility. That is what lets a public document have editors at all.
- *   'viewer' — may read it when private (every share that predates roles).
+ *   'viewer' — may read it when private.
  *   'commenter' — may also annotate: open threads, reply, resolve. Never edit.
  *   'editor' — may also edit, PUT, revert and read history (and annotate).
  *              May manage sharing and dataset data actions. Deletion and restoration stay the owner's.
@@ -26,11 +26,9 @@ export const SHARE_ROLE_LABEL: Record<ShareRole, string> = { viewer: 'can view',
  * chrome and every SQL scope.
  *
  * `none` is the miss: not "may read but may do nothing", but "may not read at
- * all", which every serving path answers as the uniform 404. It replaced
- * `reader`, a value that meant BOTH "a named viewer" and "a stranger who
- * followed the link" — read-access was decided by one function and role by
- * another, and the two disagreed about what a share was and about how a person
- * matched one. One ordered vocabulary is what removes that seam.
+ * all", which every serving path answers as the uniform 404. One ordered
+ * vocabulary decides read-access and role together, so the two cannot disagree
+ * about what a share is or about how a person matches one.
  */
 export type ArtifactRole = 'none' | ShareRole | 'owner';
 
@@ -68,10 +66,6 @@ export const capRole = (role: ArtifactRole, ceiling: ArtifactRole): ArtifactRole
  * on the head, the edit log and the archived version; `by` in the history and
  * the live frame; an author label snapshot on every comment. A write with
  * nobody behind it has no place to record.
- *
- * It pays for itself twice: because anonymous never rises above `viewer`, the
- * crawler and the logged-out reader keep the direct-document fast path
- * (server/app servesDocumentDirectly) even on a link-commentable document.
  *
  * An anonymous TOKEN is not an account: it can be attributed to a token, but it
  * has no handle to show beside a comment, so it sits under the ceiling too.

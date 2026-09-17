@@ -128,9 +128,9 @@ const oneHop = (
            * `req.destroy(err)` on a request whose response has already
            * COMPLETED does not emit that error on the request: node RAISES it,
            * which in a server is the process. And leaving the rejection to that
-           * error meant `end` — already queued behind this very chunk — fired
-           * first and resolved the fetch with the bytes collected so far, so an
-           * oversized file came back TRUNCATED and was reported as "not an
+           * error lets `end` — already queued behind this very chunk — fire
+           * first and resolve the fetch with the bytes collected so far, so an
+           * oversized file comes back TRUNCATED and is reported as "not an
            * image/not a PDF" rather than as too large. Measured: an 8 KB body
            * against a 1 KB cap resolved and raised an uncaught exception.
            */

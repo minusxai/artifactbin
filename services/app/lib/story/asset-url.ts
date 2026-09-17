@@ -87,7 +87,7 @@ export const urlHash = (url: string): string => sha256Hex(canonicalAssetUrl(url)
  *
  * `/assets/<hash>` is served `immutable` for a year and its address is derived
  * from the URL, so a `refresh_asset` that repoints the row reaches nobody whose
- * browser already has the old bytes (R19). The address cannot move — a stored
+ * browser already has the old bytes. The address cannot move — a stored
  * document names the URL, and every rendering derives the address from it — so
  * the QUERY moves instead: eight hex of the content-addressed object key, which
  * changes exactly when the bytes do and never otherwise. The route ignores it
@@ -359,7 +359,7 @@ export function mapExternalCssUrls(css: string, lookup: AssetLookup): string {
     // The row, kept — not just "do we hold it": a face is served from the same
     // `immutable` address an image is, so a REFRESHED font needs the same
     // content-derived `?v=` or it reaches nobody who already loaded the old one
-    // (R19). `refresh_asset` refreshes fonts exactly as it refreshes pictures.
+    // `refresh_asset` refreshes fonts exactly as it refreshes pictures.
     const held = lookup(url);
     return held ? `url(${quote}${assetUrlFor(url, held)}${quote})` : whole;
   });

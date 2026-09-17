@@ -4,7 +4,7 @@ import { remapViewportHeightUnits, STORY_VH_FALLBACK } from '../viewport-units';
 const VH = `var(--mx-vh,${STORY_VH_FALLBACK})`;
 
 describe('remapViewportHeightUnits — what it rewrites', () => {
-  it('rewrites the exact case that shipped blank: h-screen', () => {
+  it('rewrites the h-screen declaration Tailwind v4 emits', () => {
     // Tailwind v4's actual output for `h-screen`. This is the whole bug.
     expect(remapViewportHeightUnits('.h-screen{height:100vh}')).toBe(`.h-screen{height:${VH}}`);
   });
@@ -76,7 +76,7 @@ describe('remapViewportHeightUnits — what it must NOT touch', () => {
     expect(remapViewportHeightUnits(css)).toBe(css);
   });
 
-  it('leaves viewport-WIDTH units alone — the iframe is already the container width', () => {
+  it('leaves viewport-WIDTH units alone — there is no width counterpart to --mx-vh', () => {
     const css = 'a{width:100vw;height:50vmin;max-width:80vmax}';
     expect(remapViewportHeightUnits(css)).toBe(css);
   });
@@ -105,7 +105,7 @@ describe('remapViewportHeightUnits — what it must NOT touch', () => {
 });
 
 describe('remapViewportHeightUnits — robustness', () => {
-  it('is idempotent (a re-injection must not compound)', () => {
+  it('is idempotent (a repeated save must not compound)', () => {
     const once = remapViewportHeightUnits('a{height:100vh;min-height:50vh}');
     expect(remapViewportHeightUnits(once)).toBe(once);
   });
@@ -121,7 +121,7 @@ describe('remapViewportHeightUnits — robustness', () => {
     expect(remapViewportHeightUnits('}')).toBe('}');
   });
 
-  it('survives a realistic compiled sheet: the deck that shipped blank', () => {
+  it('survives a realistic Tailwind v4 compiled sheet', () => {
     const sheet = [
       '/*! tailwindcss v4.2.1 | MIT License */',
       '.min-h-screen{min-height:100vh}',

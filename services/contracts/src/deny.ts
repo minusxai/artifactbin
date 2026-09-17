@@ -1,11 +1,8 @@
 /**
  * A rate-limit deny — one of only two answers a proxy gives on its own (the other is the proxy's refusal of
  * the start_doc door to a non-browser, which is the proxy's because the app cannot see the hop the browser
- * headers arrived on). Everything else — 401s, 404s, `WWW-Authenticate` on /mcp — is the app's, because the
+ * headers arrived on). Everything else — 401s, 404s, every auth challenge — is the app's, because the
  * app is the one that knows what a route requires.
- *
- * Moved from packages/contract/src/deny.ts (verbatim); that file re-exports
- * this one until the package dissolves.
  */
 export interface Deny {
   error: 'rate_limited';

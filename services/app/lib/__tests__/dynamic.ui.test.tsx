@@ -1,5 +1,5 @@
 /**
- * The dynamic shim keeps `next/dynamic`'s `ssr: false` semantics: on the
+ * The dynamic shim is browser-only by contract: on the
  * SERVER it renders the fallback and never suspends — a boundary the server
  * cannot resolve is React #419, which discards the whole tree and re-renders
  * the root — and in the browser it swaps in the real component after mount.

@@ -1,7 +1,7 @@
 /**
  * StoryRuntimeApp — the served document's <Question> heights must follow the SAME sizing
- * contract as the editor canvas (questionEmbedHeightPx). The runtime adapter used to default
- * to 320px with no floor and ignore string heights, so a chart read shorter than it edited.
+ * contract as the editor canvas (questionEmbedHeightPx): the shared default, the shared
+ * floor, and authored string heights parsed — or a chart reads shorter than it edits.
  */
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 

@@ -4,8 +4,8 @@
  * A recipe instance stores ONLY the reference — {kind: 'recipe', recipe: 'minusx/x@1',
  * bindings} — and the spec is materialized at render time from this registry. Shipped
  * recipes are app code: they can't be deleted or shadowed, so a reference is safe
- * (workspace-authored recipes, when they land, follow the RFC's materialize-always
- * rule instead). The `@1` is a behavior contract: changing a builder's output in a
+ * (workspace-authored `.viz` recipes can be, so they re-materialize on every read —
+ * `recipe-file.ts`). The `@1` is a behavior contract: changing a builder's output in a
  * visually meaningful way means shipping `@2` and keeping `@1` frozen.
  */
 import type { ColumnFormatConfig } from '@/lib/validation/atlas-schemas';
@@ -269,8 +269,7 @@ const waterfall: VizTemplate = {
 // radar example: angular point scale over metrics, linear radial scale, closed
 // series polygons via trig, rule spokes, metric labels. Values SUM-aggregate per
 // metric×series; the radial domain is [0, max] shared across metrics (bind
-// pre-normalized values when metrics use different units — see the RFC on
-// semantic scaling).
+// pre-normalized values when metrics use different units).
 const radar: VizTemplate = {
   id: 'minusx/radar@1',
   vizType: 'radar',
@@ -420,9 +419,10 @@ const radar: VizTemplate = {
                   },
                 },
                 // Invisible hover HALO over each vertex: the visible dot is a ~9px hit
-                // target, so the tooltip felt broken ("hover shows nothing") unless the
-                // cursor landed exactly on it. A large near-zero-opacity symbol is still
-                // painted, so it captures hover and carries the same tooltip.
+                // target, so without this the tooltip reads as broken ("hover shows
+                // nothing") unless the cursor lands exactly on it. A large near-zero-
+                // opacity symbol is still painted, so it captures hover and carries
+                // the same tooltip.
                 {
                   type: 'symbol',
                   from: { data: 'facet' },
@@ -461,9 +461,9 @@ const radar: VizTemplate = {
 };
 
 // ── minusx/trend@1 ──────────────────────────────────────────────────────────────
-// KPI cards on the NATIVE VEGA engine (the spike, recipe-first): one card
-// per bound measure — big value, delta vs the comparison period, period labels,
-// and a sparkline. Comparison semantics mirror computeTrendComparison exactly:
+// KPI cards on the NATIVE VEGA engine: one card per bound measure — big value,
+// delta vs the comparison period, period labels, and a sparkline.
+// Comparison semantics:
 // 'last' = last vs second-to-last (includes the possibly-partial current period);
 // 'previous' = second-to-last vs third-to-last with 3+ points (skips the partial
 // period); exactly 2 points always compare directly. Rows are consumed in QUERY
@@ -471,8 +471,8 @@ const radar: VizTemplate = {
 //
 // Params: compareMode ('last'|'previous'), sparkline (boolean, default true),
 // smooth (boolean, default true — basis spline; false = monotone through points),
-// valueFontSize/deltaFontSize/labelFontSize/dateFontSize (numbers — §17 requires
-// independently adjustable sizes; defaults are responsive signals),
+// valueFontSize/deltaFontSize/labelFontSize/dateFontSize (numbers — each size is
+// independently adjustable; defaults are responsive signals),
 // trendColor/valueColor — either a theme token reference ('var(--foreground)',
 // 'var(--chart-2)': resolved per build from the surrounding theme scope, so it
 // follows theme AND mode switches — see resolveCssVarColors), or a raw CSS
@@ -517,7 +517,7 @@ const trend: VizTemplate = {
     // Ordinal scales pair domain and range by index — one entry per measure.
     const colorRange: string[] | 'category' = trendColor ? values.map(() => trendColor) : 'category';
 
-    // Base row per compareMode (see computeTrendComparison): 'last' bases on the
+    // Base row per compareMode: 'last' bases on the
     // final point; 'previous' on the second-to-last when 3+ points exist (the
     // 2-point case always compares the two directly).
     const baseExpr = compareMode === 'previous'
@@ -1117,7 +1117,7 @@ const combo: VizTemplate = {
 // Region-keyed thematic map: each boundary polygon is filled by a value
 // looked up from the query result by region NAME. The boundary geometry is the
 // primary data (one mark per region) injected from the named-asset registry under
-// GEO_BOUNDARY_DATASET — never fetched from the network (§12); the query result is
+// GEO_BOUNDARY_DATASET — never fetched from the network; the query result is
 // the lookup source under `main`. Two layers: a themed outline of EVERY region
 // (so regions with no data still show) beneath the value-colored regions.
 //
