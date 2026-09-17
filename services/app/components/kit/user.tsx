@@ -23,8 +23,6 @@
  *    "Unknown person", never the raw id and never a hint that the id exists;
  *  - no id at all (a null field) → nothing, or `fallback` when the author gave one.
  */
-import * as React from "react"
-
 import { cn } from "./cn"
 import { Avatar, AvatarFallback } from "./avatar"
 

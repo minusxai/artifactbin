@@ -325,3 +325,76 @@ describe('native user controls',()=>{
   store.dispose();
  });
 });
+
+/**
+ * WHO IS READING, at runtime. `$_me` is the viewer's account id and comes off
+ * the ISLAND, not the store — so a document that declares no data at all still
+ * branches correctly, and it does so on the FIRST paint: a guest must never
+ * flash the signed-in branch, and the server string and the hydrated tree must
+ * be the same tree.
+ */
+describe('the viewer in markup', () => {
+  const bodyOf = (source: string): JsxNode[] => splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]).body;
+  const BRANCH = '<div>{$_me ? <p>in</p> : <SignIn>Join</SignIn>}</div>';
+  const MEL = { id: 'usr_mel', label: 'Mel' };
+
+  it('gives a guest the sign-in door, returning to the address they are on', () => {
+    window.history.pushState({}, '', '/a/abc123?$team=LAL#notes');
+    const view = render(<StoryRuntimeApp nodes={bodyOf(BRANCH)} refData={{}} colorMode="light" />);
+    const link = view.getByRole('link', { name: 'Join' });
+    expect(link.getAttribute('target')).toBe('_top');
+    expect(link.getAttribute('href')).toBe(`/login?callbackUrl=${encodeURIComponent('/a/abc123?$team=LAL#notes')}`);
+    expect(view.queryByText('in')).toBeNull();
+    window.history.pushState({}, '', '/');
+  });
+
+  it('gives a signed-in reader the other branch and no door at all', () => {
+    const view = render(<StoryRuntimeApp nodes={bodyOf(BRANCH)} refData={{}} viewer={MEL} colorMode="light" />);
+    expect(view.getByText('in')).toBeTruthy();
+    expect(view.queryByRole('link', { name: 'Join' })).toBeNull();
+  });
+
+  it('hydrates the signed-in branch against the server string without a mismatch', () => {
+    const props = { nodes: bodyOf(BRANCH), refData: {}, viewer: MEL, colorMode: 'light' as const };
+    const html = renderToString(<StoryRuntimeApp {...props} />);
+    expect(html).toContain('in</p>');
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    const onRecoverableError = vi.fn();
+    act(() => { hydrateRoot(host, <StoryRuntimeApp {...props} />, { onRecoverableError }); });
+    expect(onRecoverableError.mock.calls.map(c => String(c[0]))).toEqual([]);
+    document.body.removeChild(host);
+  });
+
+  it('names a person by literal id, by $_me, and inside a For; nothing for a null id', () => {
+    const source = '<Helmet><Value name="payer" type="user" default="usr_ada" />'
+      + '<Value name="rows" type="table" value={[{"paid_by":"usr_grace"},{"paid_by":"usr_nobody"},{"paid_by":null}]} /></Helmet>'
+      + '<p id="literal"><User id="usr_ada" /></p>'
+      + '<p id="mine"><User id="$_me" /></p>'
+      + '<p id="bound"><User id="$payer" /></p>'
+      + '<For each={$rows}><span><User id="$_row.paid_by" fallback="nobody" /></span></For>';
+    const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
+    const flow = { values: content.values, queries: [] };
+    const state: DataflowState = {
+      values: { payer: 'usr_ada' }, errors: {}, tables: initialTables(flow),
+      userLabels: { usr_ada: 'Ada', usr_grace: 'Grace' },
+    };
+    const view = render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{ flow, state }} viewer={MEL} colorMode="light" />);
+    expect(view.container.querySelector('#literal')!.textContent).toBe('Ada');
+    expect(view.container.querySelector('#mine')!.textContent).toBe('Mel');
+    expect(view.container.querySelector('#bound')!.textContent).toBe('Ada');
+    const cells = [...view.container.querySelectorAll('span')].map(s => s.textContent);
+    expect(cells).toContain('Grace');
+    // An id this viewer cannot name is a neutral person, never the raw id.
+    expect(cells).toContain('Unknown person');
+    expect(view.container.textContent).not.toContain('usr_nobody');
+    expect(cells).toContain('nobody');
+  });
+
+  it('shows the viewer their own name even before any query has answered', () => {
+    const view = render(<StoryRuntimeApp nodes={bodyOf('<p id="mine"><User id="$_me" avatar /></p>')} refData={{}} viewer={MEL} colorMode="light" />);
+    expect(view.container.querySelector('#mine')!.textContent).toContain('Mel');
+    expect(view.container.querySelector('#mine')!.textContent).toContain('M');
+  });
+});

@@ -34,7 +34,9 @@ import { createRowActions } from './row-actions';
 import { createCellSessions, type CellSessions } from './cell-sessions';
 import type { ColumnTemplate } from '@/components/kit/data-table';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
-import { EMPTY_DATAFLOW, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
+import { EMPTY_DATAFLOW, VIEWER_REF, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
+import { User } from '@/components/kit/user';
+import { SignIn } from '@/components/kit/sign-in';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import { Button } from '@/components/kit/button';
 import { cn } from '@/components/kit/cn';
@@ -144,7 +146,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
 }
 
 export type { StoryIslandData } from './contract';
-import type { StoryIslandData } from './contract';
+import type { StoryIslandData, StoryViewer } from './contract';
 
 /**
  * What every embed and bound control reads: the document's data (one store
@@ -176,6 +178,14 @@ interface RuntimeEmbedContextValue {
   chrome: boolean;
   glyphs?: GlyphMap;
   colorMode: 'light' | 'dark';
+  /**
+   * WHO IS READING (StoryIslandData.viewer), null for a guest. `<User>` and
+   * `<SignIn>` are its only consumers: one names a person, the other exists
+   * solely for the absence of one. Read from the island rather than from the
+   * store, so it is already right on the first paint of a document that
+   * declares no data at all.
+   */
+  viewer: StoryViewer | null;
   managedAssets?: StoryIslandData['managedAssets'];
   importManagedAsset?: ManagedAssetRelay;
 }
@@ -191,6 +201,7 @@ const RuntimeEmbedContext = createContext<RuntimeEmbedContextValue>({
   chrome: true,
   glyphs: {},
   colorMode: 'light',
+  viewer: null,
 });
 
 /**
@@ -735,9 +746,55 @@ function FilesAdapter(props: Record<string, unknown>) {
   );
 }
 
+/**
+ * `<User id=…>` LIVE: the authored reference resolved, then named.
+ *
+ * Three shapes of `id` reach here, and they are resolved in this order because
+ * only the first two are references at all:
+ *  - `$_me` — the viewer, off the island (right on the first paint, no query);
+ *  - `$name` — a scalar `<Value>`, off the store;
+ *  - anything else — already a literal id, including a `$_row.field` the
+ *    interpreter substituted inside a `<For>` or a `<Column>`.
+ *
+ * The NAME then comes from one map: `state.userLabels`, the same server-computed
+ * labels a DataTable cell reads, plus the viewer's own from the island. Nothing
+ * here can ask the server about an id, which is the point — an id the server did
+ * not already put in front of this viewer stays "Unknown person".
+ */
+function UserAdapter(props: Record<string, unknown>) {
+  const ctx = useContext(RuntimeEmbedContext);
+  const reference = typeof props.id === 'string' ? refName(props.id) : null;
+  const id = reference === VIEWER_REF ? ctx.viewer?.id ?? null
+    : reference !== null ? ctx.state.values[reference] ?? null
+    : props.id ?? null;
+  const key = typeof id === 'string' ? id : null;
+  const label = key === null ? null
+    : key === ctx.viewer?.id ? ctx.viewer.label ?? ctx.state.userLabels?.[key] ?? null
+    : ctx.state.userLabels?.[key] ?? null;
+  const { id: _id, label: _label, ...rest } = props;
+  return <User {...rest} id={key} label={label} />;
+}
+
+/**
+ * `<SignIn>` LIVE: the guest's door, and nothing at all for anyone else.
+ *
+ * A signed-in reader has no use for it and a document that shows it to them is
+ * simply wrong, so the branch is taken HERE rather than left to the author —
+ * `{$_me ? … : <SignIn/>}` is the idiom, but `<SignIn>` alone must also be
+ * honest. Decided from the island, so the server render and the hydration agree.
+ */
+function SignInAdapter(props: Record<string, unknown>) {
+  const { viewer } = useContext(RuntimeEmbedContext);
+  if (viewer) return null;
+  const { children, ...rest } = props;
+  return <SignIn {...rest}>{children as ReactNode}</SignIn>;
+}
+
 const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> = {
   ...STORY_UI_COMPONENTS,
   Dialog: DialogAdapter,
+  User: UserAdapter,
+  SignIn: SignInAdapter,
   DialogContent: DialogContentAdapter,
   Mermaid: props => {
     const { colorMode } = useContext(RuntimeEmbedContext);
@@ -1063,7 +1120,7 @@ const EMPTY_GLYPHS: GlyphMap = {};
 /** A store-less subscribe (a Button rendered outside a document): nothing ever changes. */
 const NO_SUBSCRIBE = () => () => {};
 
-export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
+export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = null, colorMode, template = null, chrome = true, assetsUrl = null, managedAssets, importAsset, store: givenStore, onMounted, editDecorate, editChildren, onSlideRename }: StoryRuntimeAppProps) {
   const [localStore] = useState<DataflowStore>(() => givenStore ?? createDataflowStore(dataflow ?? { flow: EMPTY_DATAFLOW }));
   const store = givenStore ?? localStore;
   const actions = useMemo(() => createRowActions(), [store]);
@@ -1074,6 +1131,15 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
   // same object the island carried, so SSR and hydration read identical state.
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   const pending = store.pending();
+  /*
+   * WHAT A REACTIVE EXPRESSION READS: the declared values, plus the one name
+   * nobody declares. `$_me` is folded in HERE rather than kept in the store,
+   * because it is not the document's data: the store's values are written by
+   * controls, carried in the link, replaced by a new version of the document
+   * and handed to the author script, and the viewer's account id is none of
+   * those things (lib/story/dataflow VIEWER_REF).
+   */
+  const signals = useMemo(() => ({ ...state.values, [VIEWER_REF]: viewer?.id ?? null }), [state.values, viewer?.id]);
   const setValue = useMemo(() => (name: string, value: Scalar) => store.setValue(name, value), [store]);
 
   // Discovery is a pure walk of the nodes we already hold, so the rail is
@@ -1104,9 +1170,9 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
-      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, managedAssets, importManagedAsset: importAsset }}>
+      <RuntimeEmbedContext.Provider value={{ store, flow: store.flow, state, pending, setValue, fetchPage: store.fetchPage, refData, chrome, colorMode, viewer, managedAssets, importManagedAsset: importAsset }}>
         <RowActionsContext.Provider value={actions}>{renderStoryNodes(nodes, {
-          values: state.values,
+          values: signals,
           tables: state.tables,
           // Identity across an adopted document: a live update re-renders this
           // tree, and positional keys would remount everything below the edit.
@@ -1149,7 +1215,7 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, colorMode, t
 
   return withGlyphs(
     <div className="mx-deck">
-      <SlideRail slides={slides} documentNodes={nodes} values={state.values} active={active} onGo={go} onRename={onSlideRename} />
+      <SlideRail slides={slides} documentNodes={nodes} values={signals} active={active} onGo={go} onRename={onSlideRename} />
       <div className="mx-doc">{body}</div>
       <PresentBar active={active} total={slides.length} onGo={go} />
     </div>,

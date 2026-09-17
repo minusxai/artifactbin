@@ -31,6 +31,9 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     nodes: split?.body ?? [], refData: input.refData, colorMode: mode, template: input.template ?? null, chrome,
     ...(Object.keys(glyphs).length ? { glyphs } : {}),
     ...(input.dataflow ? { dataflow: input.dataflow } : {}),
+    // WHO IS READING — carried even when the document declares nothing, because
+    // `{$_me ? … : <SignIn/>}` is exactly such a document.
+    ...(input.viewer ? { viewer: input.viewer } : {}),
     ...(input.queryUrl ? { queryUrl: input.queryUrl } : {}),
     ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}),
     ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}),

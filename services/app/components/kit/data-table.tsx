@@ -20,6 +20,9 @@ import * as React from "react"
 import { useVirtualizer } from "@tanstack/react-virtual"
 
 import { cn } from "./cn"
+// A `user` cell is a person, and there is ONE renderer for a person
+// (components/kit/user.tsx) — the labels are the same map either way.
+import { User } from "./user"
 import {
   barFraction, cellTint, formatCell, gridGeometry, parseColumnSpecs, parseTableHeight, resolveColumns, sortRows,
   type DataTableColumnSpec, type ResolvedColumn, type SortSpec,
@@ -283,7 +286,7 @@ function DataRow({ userLabels, commentOwner, commentRowKey, row, columns, style,
                 style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
               />
             )}
-            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? (c.type==='user'&&typeof value==='string'?userLabels[value]??value:formatCell(value, c)); })()}</span>
+            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? (c.type==='user'&&typeof value==='string'?<User id={value} label={userLabels[value] ?? null} />:formatCell(value, c)); })()}</span>
           </td>
         )
       })}

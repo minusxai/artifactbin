@@ -64,7 +64,7 @@ import { runMutation } from '@/lib/sql/engine';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
 import { localTableOverrides } from '@/lib/story/local-tables';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
-import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
 import type { DatasetColumn } from '@/lib/story/data-tiers';
 import { checkDocumentData } from '@/lib/story/data-checks';
@@ -2189,6 +2189,40 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
     const { flow } = readParsedArtifactMetadata(row.meta, row.source);
     return isEmptyDataflow(flow) ? null : { flow };
   } catch { return null; }
+}
+
+/**
+ * A document DRAWS A PERSON — a conservative hint, not a parse.
+ *
+ * `<User …>` is the only spelling the markup validator admits for the
+ * component, so a document that draws one always matches; a match inside a
+ * string or a comment costs exactly one indexed lookup and nothing else. It is
+ * deliberately a hint rather than a parse because the answer is only used to
+ * decide whether to SPEND a query, never to decide what a viewer may see.
+ */
+const drawsPeople = (source: string | null | undefined): boolean => /<User[\s/>]/.test(source ?? '');
+
+/**
+ * WHO IS READING, as the document may show them (lib/story-runtime/contract
+ * StoryViewer): the viewer's own account id — `$_me` — and, only for a document
+ * that draws a `<User>`, their display name.
+ *
+ * The name comes from the SAME `userLabels` lookup a DataTable cell has always
+ * used, so nothing new about anyone is exposed: one row, by id, for the person
+ * who is already logged in and asking. A guest gets null and no query at all,
+ * and a document that never names a person pays nothing beyond the id it
+ * already had in hand.
+ */
+export async function viewerIdentityFor(
+  row: Pick<ArtifactRow, 'source'>,
+  userId: string | null | undefined,
+): Promise<StoryViewer | null> {
+  if (!userId) return null;
+  if (!drawsPeople(row.source)) return { id: userId };
+  try {
+    const labels = await userLabels(await getDb(), [userId]);
+    return { id: userId, label: labels[userId] ?? null };
+  } catch { return { id: userId }; }
 }
 
 interface DataflowRunOptions {

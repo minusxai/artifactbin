@@ -18,7 +18,7 @@
  *   though it is same-host. Verified live: reading localStorage throws.
  */
 import {agentDiscovery} from '@/lib/agent-discovery';
-import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow } from '@/lib/artifacts';
+import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
 import { countOpenAnnotations } from '@/lib/annotations';
@@ -313,7 +313,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;
-      const [assetUrls, refData, dataflow, creatorUsername, forkedFrom] = await Promise.all([
+      const [assetUrls, refData, dataflow, creatorUsername, forkedFrom, readerIdentity] = await Promise.all([
         // Our copies of the web URLs this document names (lib/web-assets): the
         // served <img> points at them, with the box and the blur the row
         // recorded, and the reader's browser reaches no third party.
@@ -333,6 +333,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           : dataflowForRow(artifact, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
+        /*
+         * WHO IS READING — `$_me` in markup, and the name a <User> shows.
+         *
+         * A CAPTURE deliberately asks for nobody. The exporter photographs this
+         * page in a browser with no session, so a capture is a guest render
+         * already; pinning that here as well is what keeps `/export`'s
+         * viewer-independent cache key honest — one reader's document can never
+         * be photographed into an image another reader is served.
+         */
+        chrome ? viewerIdentityFor(artifact, viewer?.userId ?? null) : Promise.resolve(null),
       ]);
       const runtime = storyRuntimeAssets();
       /*
@@ -457,6 +467,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // A capture gets none: it has no reader, and a document that adopted an
         // edit mid-shot would be photographed halfway between two versions.
         live: chrome ? { id: artifact.id, editId: artifact.edit_id } : null,
+        viewer: readerIdentity,
       });
       return new Response(html, {
         status: 200,
