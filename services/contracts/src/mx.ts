@@ -12,8 +12,10 @@ export interface MxRevision { instanceEpoch: string; revision: number }
 export interface MxSnapshot extends MxRevision { signals: Record<string, MxSignal> }
 export interface MxDescription {
   instanceEpoch: string;
-  signals: Array<{ name: string; kind: 'scalar' | 'table' | 'query'; writable: boolean; type?: ColumnType; columns?: DatasetColumn[] }>;
-  mutations: Array<{ name: string; scope: 'local' | 'dataset'; args: string[]; available: boolean; unavailableReason: string | null }>;
+  /** `url: false` — the document keeps this signal out of its address (`<Value url={false}>`); absent means it travels in the link. */
+  signals: Array<{ name: string; kind: 'scalar' | 'table' | 'query'; writable: boolean; type?: ColumnType; columns?: DatasetColumn[]; url?: false }>;
+  /** `reset` — the scalar signals this mutation returns to their defaults once it commits (`<Mutation reset="…">`). */
+  mutations: Array<{ name: string; scope: 'local' | 'dataset'; args: string[]; available: boolean; unavailableReason: string | null; reset?: string[] }>;
 }
 export interface MxReadOptions { wait?: boolean; refresh?: boolean; timeoutMs?: number }
 export interface MxMutationReceipt { operationId: string; scope: 'local' | 'dataset'; status: 'committed' }

@@ -68,9 +68,13 @@ export function createMx(store: DataflowStore): MxApi {
       return structuredClone({ instanceEpoch,
         signals: declarations.map(d => ({ name: d.name, kind: 'kind' in d ? d.kind : 'query', writable: 'kind' in d && d.kind === 'scalar',
           ...('type' in d ? { type: d.type } : {}), ...('columns' in d ? { columns: d.columns } : store.getTable(d.name) ? { columns: store.getTable(d.name)!.columns } : {}),
+          // Reported only where the declaration carries it, so a document that
+          // asked for neither describes itself exactly as it did before.
+          ...('url' in d && d.url === false ? { url: false as const } : {}),
         })),
         mutations: (flow.mutations ?? []).map(d => ({ name: d.name, scope: d.scope ?? 'dataset', args: d.params,
-          available: store.canMutate(d.name), unavailableReason: store.mutationUnavailable(d.name) })),
+          available: store.canMutate(d.name), unavailableReason: store.mutationUnavailable(d.name),
+          ...(d.reset?.length ? { reset: d.reset } : {}) })),
       });
     },
     async read(names, options: MxReadOptions = {}) {
