@@ -358,7 +358,7 @@ check(mm.overflow === 0, `mismatch: the document still does not scroll sideways 
   const capture = await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`, {
     headers: { Authorization: `Bearer ${navDeck.token}` },
   });
-  check(capture.status === 200, 'the owner can read the private capture render');
+  check(capture.status === 200, 'the owner can read the capture render');
   const bare = await capture.text();
   check(!bare.includes('Slide controls') && !bare.includes('mx-rail'), 'the capture render (?chrome=0) has no chrome');
   check(bare.includes('The Cover Slide'), 'and still carries the document');

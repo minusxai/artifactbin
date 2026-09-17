@@ -413,6 +413,9 @@ export async function createArtifact(
         await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
         const catalog=catalogOf(input);
         if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
+        const guestDefault = input.visibility === undefined && userId
+          ? (await tx.query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [userId])).rows.length > 0
+          : false;
         const created = await tx.query<ArtifactRow>(
         // The genesis edit row makes the creation's edit_id resolvable like any
         // other: an agent that creates and then edits against that id is on an
@@ -439,13 +442,13 @@ export async function createArtifact(
           input.content,
           input.source,
           JSON.stringify(input.meta),
-          // Born private when someone owns it, public when nobody could ever
-          // manage an ACL for it — except assets (images/datasets), born
+          // Guest identities retain anonymous public defaults. Registered
+          // accounts create private documents, except assets, born
           // unlisted: a public document reaches them at read time, and a
           // born-private ref bakes a 404 into every shared document that uses
           // it. Routes validate an explicit ask upstream.
           input.visibility ??
-            (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
+            (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
               : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
           // NULL reads as 'viewer' (linkRoleOf), which is what every ordinary
           // creation grants whoever holds the link.

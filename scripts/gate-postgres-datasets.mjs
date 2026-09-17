@@ -78,7 +78,7 @@ try {
   const guest = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   await becomeOwner(owner, base, start.token);
   await loginViaEmail(owner, base, sink, `mxmx_test_postgres_${Date.now()}@example.com`);
-  assert.equal((await ownerApi(owner, '/api/tokens/claim', 'POST', { token: start.token })).status, 200);
+  assert.equal((await ownerApi(owner, '/api/page/session', 'GET')).status, 200);
   // Default schema, result cache and source markup live under the editor's
   // collapsed "Advanced" disclosure (web/pages/DatasetEditor); a hidden
   // control cannot be selected, so open it before reaching for them.

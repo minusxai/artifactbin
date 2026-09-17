@@ -76,6 +76,17 @@ export async function becomeOwner(page, base, token) {
   if (status !== 204) throw new Error(`could not adopt the token into a session (${status})`);
 }
 
+/** Adopt a guest connection into an already verified browser account. The
+ * held cookie proves guest ownership; the account session performs the merge. */
+export async function mergeGuestIntoAccount(page, base, token) {
+  await becomeOwner(page, base, token);
+  const response = await page.request.get(`${base}/api/page/session`);
+  if (!response.ok() || (await response.json()).kind !== 'account') {
+    throw new Error(`guest merge requires a verified account (${response.status()})`);
+  }
+  return response.status();
+}
+
 /**
  * An ACCOUNT that owns what this browser publishes — logged in through the
  * real email-code door, and nothing else.

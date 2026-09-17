@@ -27,6 +27,7 @@
 
  *   node scripts/gate-secure-arch.mjs [base]
  */
+import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -58,10 +59,8 @@ check(
 );
 
 const anon = await connectAgent(BASE);
-const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
-})).status, anon.token);
-check(claimed === 200, 'owner A claimed a token');
+const claimed = await mergeGuestIntoAccount(owner, BASE, anon.token);
+check(claimed === 200, 'owner A adopted a guest connection');
 
 const api = async (path, body) => {
   const res = await fetch(`${BASE}${path}`, {
