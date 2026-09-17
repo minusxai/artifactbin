@@ -168,6 +168,27 @@ describe('dataflow at the publish door', () => {
     expect(res.status).toBe(201);
   });
 
+  /**
+   * The skill's own Dialog example declares a temporary table that starts EMPTY and is
+   * filled by a local Mutation. With declared columns there is nothing to infer, so the
+   * door takes it; with no columns an empty table still has no shape and is refused.
+   */
+  it('accepts an empty table Value that declares its columns, exactly as the skill teaches it', async () => {
+    const t = await mintToken('t');
+    const res = await create(t.token, {
+      markup: '<Helmet><Value name="title" type="string" default="Untitled" />'
+        + '<Value name="drafts" type="table" value={[]} columns={[{"name":"title","type":"string"}]} />'
+        + '<Query name="summary">{`select count(*) count from drafts`}</Query>'
+        + '<Mutation name="add">{`insert into drafts (title) values ($title)`}</Mutation></Helmet>'
+        + '<div><input aria-label="Title" value="$title" /><Button run="$add">Add draft</Button>'
+        + '<Number data="$summary" col="count" /></div>',
+    });
+    expect(res.status, await res.clone().text()).toBe(201);
+    const bare = await create(t.token, { markup: '<Helmet><Value name="drafts" type="table" value={[]} /></Helmet><p>x</p>' });
+    expect(bare.status).toBe(400);
+    expect(await details(bare)).toMatch(/columns/);
+  });
+
   it('refuses url= on a table Value, and a url= that is not a boolean', async () => {
     const t = await mintToken('t');
     const table = await create(t.token, { markup: '<Helmet><Value name="tiny" type="table" value={[{"a":1}]} url={false} /></Helmet><p>x</p>' });

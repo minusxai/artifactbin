@@ -438,8 +438,10 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
     if (def) errors.push(err(`<Value name="${name}" type="table"> holds its rows in value=, not default=`, def.attr, tag, 'default'));
     if (!val) return { ok: false, errors: [...errors, err(`<Value name="${name}" type="table"> needs value={[{…}, …]} — a non-empty array of flat objects`, el, tag, 'value')] };
     const rows = val.json;
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return { ok: false, errors: [...errors, err(`<Value name="${name}"> value must be a non-empty array of flat objects`, val.attr, tag, 'value')] };
+    // Rows are where a table's columns are inferred from, so an empty one has no shape —
+    // unless the author declared the columns: a temporary table a local Mutation fills starts empty.
+    if (!Array.isArray(rows) || (rows.length === 0 && !cols)) {
+      return { ok: false, errors: [...errors, err(`<Value name="${name}"> value must be a non-empty array of flat objects, or value={[]} with columns={[{name, type}]}`, val.attr, tag, 'value')] };
     }
     for (const [i, row] of rows.entries()) {
       if (row === null || typeof row !== 'object' || Array.isArray(row)) {
