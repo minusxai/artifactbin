@@ -2,13 +2,13 @@
  * Env plumbing shared by the node-side dev scripts (scripts/dev.mjs, gates.mjs).
  *
  * The dev server's port is DERIVED, not hard-coded, so two checkouts of this
- * repo can run side by side: `PORT` wins, else the port in `PUBLIC_BASE_URL`
- * (the one URL a second checkout must change anyway — every absolute link the
- * app emits comes from it), else 3030.
+ * repo can run side by side: `APP__PORT` wins, else the port in
+ * `APP__PUBLIC_BASE_URL` (the one URL a second checkout must change anyway —
+ * every absolute link the app emits comes from it), else 3030.
  *
  * This derivation lives HERE and never in lib/config.ts: it turns an
  * externally-visible ORIGIN into a local BIND port, which is only ever true in
- * dev. In production PUBLIC_BASE_URL has no port at all.
+ * dev. In production the public base URL has no port at all.
  */
 import { readFileSync } from 'node:fs';
 
@@ -28,7 +28,7 @@ export function loadDotEnv() {
 }
 
 /**
- * The port `next dev` should bind, given an env-shaped object.
+ * The port the dev server should bind, given an env-shaped object.
  * @param {Record<string, string | undefined>} [env]
  */
 export function resolvePort(env = process.env) {
@@ -44,8 +44,8 @@ export function resolveHmrPort(appPort, env = process.env) {
 }
 
 /**
- * The port PUBLIC_BASE_URL spells out, or null. Only an EXPLICIT port counts:
- * URL.port is '' for a scheme's default, and a production PUBLIC_BASE_URL
+ * The port APP__PUBLIC_BASE_URL spells out, or null. Only an EXPLICIT port counts:
+ * URL.port is '' for a scheme's default, and a production APP__PUBLIC_BASE_URL
  * (https://artifactbin.dev) must never mean "bind 443".
  * @param {Record<string, string | undefined>} [env]
  */

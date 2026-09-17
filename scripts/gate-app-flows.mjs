@@ -5,8 +5,10 @@
  *
  * Everything a user or agent actually does, checked in one pass and seeded by
  * the script itself:
- *   API      — content-tier pages, missing-reference reads and MCP create/get
- *   AUTH     — signup, duplicate refusal, claim, revoke, login/logout, nav
+ *   API      — content-tier pages, missing-reference reads, HTTP create/get and
+ *              the retired MCP transport's absence
+ *   AUTH     — login (which creates the account), CLI connection approval,
+ *              revoke, logout and logging back in
  *   VIEWER   — themes flip live, a bound select re-runs queries, deck rail + present
  *   EDITOR   — toolbar, title/theme/colorMode, grid drag, slide rename
  *   MOBILE   — no horizontal overflow on the pages people open on a phone
@@ -232,8 +234,8 @@ const themeOf = async () => surface()?.locator('[data-mx-inline-story]:not([data
 check((await themeOf()) === 'modernist', 'the served document carries the authored theme');
 const before = (await surface().getByText('Total:').first().textContent()).trim();
 await surface().locator('select').first().selectOption('EU');
-// Wait for the CHANGE, not a fixed time: the relay's first hop compiles the
-// query route under `next dev`, and a cold hit lands just past a 2.5 s wait.
+// Wait for the CHANGE, not a fixed time: the relay's first hop pays for the
+// query route's cold start, which lands just past a 2.5 s wait.
 let after = before;
 for (let i = 0; i < 32 && after === before; i++) { await p.waitForTimeout(250); after = (await surface().getByText('Total:').first().textContent()).trim(); }
 check(before !== after, 'a bound select re-runs the query and the live Number follows');

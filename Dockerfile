@@ -29,8 +29,8 @@ COPY services/cli/scripts/prepare-pty.mjs ./services/cli/scripts/prepare-pty.mjs
 #
 # `--no-audit` ON EVERY INSTALL: `npm ci` otherwise blocks on npm's advisory
 # endpoint and retries twice when it fails. That endpoint degraded on
-# 2026-09-04 and this repo's install went 15s → 421s, ten times over across the
-# five Dockerfiles, cancelling the `image` job at its 30-minute cap. The
+# 2026-09-04 and this repo's install went 15s → 421s, cancelling the `image`
+# job at its 30-minute cap. The
 # lockfile is pinned, so the verdict cannot change what is installed. The repo
 # `.npmrc` says the same for every install outside a build context; a Dockerfile
 # gets the flag on the command, where it cannot be half-applied per stage.

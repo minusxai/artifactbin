@@ -82,7 +82,7 @@ interface CredentialOptions {
  *
  * A LOCAL server comes first, before the shared inbox: it is the only account that is genuinely this
  * run's own — a fresh database, an address nobody else uses, and no five-an-hour login door shared
- * with every other run. It is what CI's `agent smoke` has, and it needs no inbox and no key.
+ * with every other run. It needs no inbox and no key.
  */
 export function credentialSourceFor(mode: EvalMode, env: CredentialEnv, opts: CredentialOptions = {}): CredentialSource {
   if (opts.localOutbox) return 'outbox-oauth';
@@ -153,7 +153,7 @@ export function pickLoginMail(mails: InboundMail[], opts: { to: string; since: n
 }
 
 /**
- * A line of the dev outbox, as `services/proxy/src/mail.ts devOutboxMailer` writes it: one JSON object
+ * A line of the dev outbox, as `services/auth/src/mail.ts devOutboxMailer` writes it: one JSON object
  * per line, the whole outgoing mail plus `createdAt` (`at` is accepted too, for a hand-written fixture).
  */
 interface OutboxMail {
@@ -196,12 +196,6 @@ export function callbackCode(location: string): string | null {
   }
 }
 
-/**
- * The skill's own contract (`~/.artifactbin.env`, `ARTIFACTBIN_URL` / `ARTIFACTBIN_TOKEN`), written into
- * the harness's home before its turn — exactly what a person's machine looks like after they connected
- * once. 0600: the run's transcript and the report are artifacts a CI job uploads.
- */
-
 interface AcquireOptions {
   /** Where the product is, from the DRIVER's side. */
   base: string;
@@ -212,7 +206,7 @@ interface AcquireOptions {
   email?: string;
   /**
    * The origin the product TRUSTS, when that is not the address the driver dials. Better Auth trusts
-   * exactly the public base URL (`services/proxy/src/standalone.ts` → `baseURL`), and a server this
+   * exactly the public base URL (`services/auth/src/auth/human.ts` → `baseURL`), and a server this
    * driver boots publishes the leg's PROXY as that URL while the driver talks to the server port
    * behind it — measured: every login write answered `403 INVALID_ORIGIN` until this was stated.
    */

@@ -2,8 +2,9 @@
  * HOW MANY SERVERS A GATE RUN BOOTS — the pure half, so it can be tested without booting one.
  *
  * The runner has always been able to boot its own servers (`--servers=N`), and that is what CI does:
- * `npm run build`, then `node scripts/gates.mjs --servers=4`. Locally the default was the opposite —
- * one dev server, discovered at `http://localhost:3040` — and the two runs did not mean the same thing:
+ * `npm run build`, then `node scripts/gates.mjs --servers=2 --shard=<i>/4`. Locally the default was
+ * the opposite — one dev server, discovered at `http://localhost:3040` — and the two runs did not
+ * mean the same thing:
  *
  *  - A DEV server serves the SPA through Vite, whose HMR websocket lives on a second port. The app's CSP is
  *    a fixed `connect-src 'self'` (services/app/server/app.ts), so the browser refuses that socket, the SPA

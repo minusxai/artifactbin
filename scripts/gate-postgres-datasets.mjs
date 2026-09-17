@@ -2,7 +2,7 @@
  * Requires a running feature build with DATASET__ALLOW_PRIVATE_NETWORKS=true,
  * the normal gate development outbox, Docker, and postgres:17-alpine.
  * Usage: node scripts/gate-postgres-datasets.mjs [base]
- * Gate manifest: needsMail:true; budget 120 seconds. Own fixture always removed.
+ * Gate manifest: needsMail:true; budget 60 seconds. Own fixture always removed.
  */
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import assert from 'node:assert/strict';

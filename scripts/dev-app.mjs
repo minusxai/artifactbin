@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `npm run dev:app` — the APP-ONLY dev server: `tsx server.ts --app-only`
-// (no proxy composition; human login and OAuth are deliberately absent — run
+// (no authentication composition; human login and OAuth are deliberately absent — run
 // `npm run dev` for the whole thing in one process, or point a proxy of your
 // own at this port). Mirrors scripts/dev.mjs: .env → derived port → the
 // story-runtime prebuild → the spawned entry, with the app's package dir as

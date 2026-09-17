@@ -112,7 +112,7 @@ describe('docker-build-inputs', () => {
       // This used to be satisfied by `COPY services ./services` sitting above the
       // install, which copied the whole repo to get one file — and made every
       // source edit rebuild the install and re-upload its ~518 MB layer
-      // (docker-install-layer.test.ts). The tree now lands AFTER the install, so
+      // (the `docker-install-layer` rules below). The tree now lands AFTER the install, so
       // the postinstall script is named on its own. Its requirement really is
       // just the file: it chdirs to its own package dir and reads node_modules.
       const scriptRunningInstall = dockerfile

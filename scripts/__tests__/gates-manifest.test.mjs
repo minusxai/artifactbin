@@ -97,7 +97,7 @@ describe('the rows tell the truth about their sources', () => {
 });
 
 /**
- * SHARDING reads the same rows: `timeoutMs` is the weight CI's three shards are
+ * SHARDING reads the same rows: `timeoutMs` is the weight CI's shards are
  * balanced on, so the split lives or dies by the measurements above.
  */
 describe('the shards are cut from those rows', () => {
