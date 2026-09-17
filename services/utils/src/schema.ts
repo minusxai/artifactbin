@@ -2,8 +2,8 @@
  * Schema as data → idempotent DDL: CREATE TABLE IF NOT EXISTS + per-column ADD COLUMN IF NOT EXISTS
  * (so a database built from an older declaration gains new columns) + DROP NOT NULL for retired
  * columns + DROP COLUMN IF EXISTS for dropped ones + CREATE [UNIQUE] INDEX IF NOT EXISTS (with an
- * optional access method and expression columns). Moved from lib/schema.ts renderTable, logic
- * verbatim, plus an optional schema qualifier. Every statement individually executable, in order.
+ * optional access method and expression columns), optionally schema-qualified. Every statement
+ * individually executable, in order.
  */
 import type { Column, Queryable, Table } from '@artifactbin/contracts';
 

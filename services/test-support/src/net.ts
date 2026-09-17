@@ -1,13 +1,12 @@
 /**
  * THE real-socket fixture — the one way a test stands up an HTTP endpoint on a real port.
  *
- * Every test that needs a real socket (web-ingest fetching a page, an OIDC issuer, a CSV URL, a font host) used to
- * hand-roll `createServer` + `listen(0)` + `address()` + teardown; three tests bound FIXED ports (4863, 4869, 5221)
- * that collide the moment two worktrees run at once (research risk row 6, MEASURED). This module owns all of it:
- * ephemeral ports only, IPv4 loopback, honest teardown.
+ * Every test that needs a real socket (web-ingest fetching a page, an OIDC issuer, a CSV URL, a font host) comes
+ * through here rather than hand-rolling `createServer` + `listen(0)` + `address()` + teardown: ephemeral ports
+ * only, IPv4 loopback, honest teardown. A fixed port collides the moment two worktrees run at once.
  *
- * It lived in `services/app/__tests__/net` until `services/browser` had to reach across a package boundary to
- * import it. Nothing here imports a test runner, so the CLI's `node:test` suite can use it too.
+ * It lives in this package because tests in several packages need it. Nothing here imports a test runner, so
+ * the CLI's `node:test` suite can use it too.
  */
 import http, { createServer, type RequestListener } from 'node:http';
 

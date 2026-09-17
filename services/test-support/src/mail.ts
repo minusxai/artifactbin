@@ -1,7 +1,7 @@
 /**
- * The mail sink half a dozen proxy tests wrote inline: a mailer that records instead of sending, so a
- * test can read back the login code it was supposed to receive. Structurally typed against the mail
- * seam rather than importing it, which keeps this package free of a dependency on any service.
+ * A mailer that records instead of sending, so a test can read back the login code it was supposed to
+ * receive. Structurally typed against the mail seam rather than importing it, which keeps this package
+ * free of a dependency on any service.
  */
 
 export interface SentMail {

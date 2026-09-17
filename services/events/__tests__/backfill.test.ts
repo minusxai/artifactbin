@@ -1,8 +1,6 @@
 /**
  * The legacy analytics rows, copied into the log once: the mapping, the
  * identity, the count, and that a second run copies nothing.
- *
- * Seeded RED by the orchestrator.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PGlite } from '@electric-sql/pglite';

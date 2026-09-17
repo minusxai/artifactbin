@@ -67,9 +67,9 @@ readiness timeouts return failure, never cacheable image bytes.
 
 ### S3 upload deployment
 
-Use `docker-compose.export-s3.yml` over the lean composition when the app uses
-S3. Set `BROWSER__UPLOAD_ORIGIN` to the exact HTTPS origin emitted by its signer
-and `BROWSER__UPLOAD_PREFIX` to the absolute path ending in `/exports/objects/`.
+When the app stores exports in S3, set `BROWSER__UPLOAD_ORIGIN` to the exact
+HTTPS origin emitted by its signer and `BROWSER__UPLOAD_PREFIX` to the absolute
+path ending in `/exports/objects/`.
 For virtual-hosted S3 these might be `https://bucket.s3.us-west-1.amazonaws.com`
 and `/artifacts/exports/objects/`; path-style storage also includes the bucket
 in the path. The gateway receives the same origin/prefix and no S3 credentials.
