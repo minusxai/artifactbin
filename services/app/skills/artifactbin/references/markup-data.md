@@ -36,9 +36,9 @@ Editable cells: [editing](markup-editing.md).
 - `<Value name type default />` — a scalar the reader can change.
   `type`: `string | number | boolean | date | user` (default `string`); `default`
   must match it (dates `YYYY-MM-DD`); no default = `null`, which is how
-  "$region is null" in SQL means "all".<!--bundle:skip--> A scalar also travels in the LINK:
-  the document accepts `?$region=EU` (empty = "all"), so you can hand your
-  user a pre-filtered link — and a reader's own picks rewrite the address.<!--/bundle:skip-->
+  "$region is null" in SQL means "all". A scalar TRAVELS IN THE LINK: `?$region=EU`
+  seeds it (empty = "all"), a reader's picks rewrite it, so a pre-filtered link
+  is yours. `url={false}` keeps one out both ways: a draft box or script flag.
 - `<Value name="tiny" type="table" value={[{…}, …]} />` — an inline table (flat
   objects; `columns={[{name,type}]}` optional). Read it in SQL by its bare
   name (`from tiny`) or bind it directly (`data="$tiny"`).
@@ -65,14 +65,13 @@ Editable cells: [editing](markup-editing.md).
   naming one shared dataset. Runs on demand, never at render:
   `<Button run="$name">` in the body, or `mx.mutate("name")` from your
   `<script>`; dry-run at publish, so a button that could not work is a `400`
-  naming the fix.<!--bundle:skip--> Data policies permit viewer actions; without a policy only editors write. Callers supply VALUES only.
+  naming the fix. `reset="desc amount"` clears those scalars on SUCCESS only.<!--bundle:skip--> Data policies permit viewer actions; without a policy only editors write. Callers supply VALUES only.
   Bound write controls disable automatically; filters and live reads still work. DuckDB's `uuid()` and `now()` give a
   row its own id and timestamp.<!--/bundle:skip-->
 
 <!--bundle:skip-->
-A Mutation targeting `_signals` or an inline table is local; it never changes
-datasets or permissions. Dataset Mutations need `--access readwrite`. See
-[composable state](markup-state.md).
+A Mutation on `_signals` or an inline table is local: no dataset, no permission
+change. See [composable state](markup-state.md).
 
 <!--/bundle:skip-->
 First read [chart authoring](markup-data-authoring.md).
