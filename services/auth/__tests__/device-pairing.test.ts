@@ -83,3 +83,32 @@ describe('anonymous browser approval', () => {
     expect(await store.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'invalid' });
   });
 });
+
+describe('an approval that lands in the middle of a poll', () => {
+  // `consume` asks two questions in turn: is it approved (and claim it), else is it still pending.
+  // An approval between the two made the first say "not yet" and the second say "no longer", and the
+  // poll answered `invalid` — which the CLI reports as an expired approval and gives up on.
+  const approvingBetween = (approve: () => Promise<boolean>) => {
+    let claims = 0;
+    const racing = { query: async (sql: string, params?: unknown[]) => {
+      const result = await pg.query(sql, params as never[]);
+      if (/SET consumed_at/.test(sql) && ++claims === 1) expect(await approve()).toBe(true);
+      return result;
+    } };
+    return createDevicePairing(racing as never);
+  };
+
+  it('answers pending, and the next poll claims the account approval', async () => {
+    const pair = await store.begin('https://example.com');
+    const racing = approvingBetween(() => store.approve(pair.userCode, 'https://example.com', 'usr_race'));
+    expect(await racing.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'pending' });
+    expect(await racing.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: 'usr_race' });
+  });
+
+  it('answers pending, and the next poll claims the anonymous approval', async () => {
+    const pair = await store.begin('https://example.com');
+    const racing = approvingBetween(() => store.approveAnonymously(pair.userCode, 'https://example.com'));
+    expect(await racing.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'pending' });
+    expect(await racing.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: null });
+  });
+});
