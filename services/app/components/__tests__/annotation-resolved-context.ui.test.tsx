@@ -6,8 +6,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { STORY_ANNOTATIONS_MESSAGE } from '@/lib/story-runtime/contract';
-import { RESOLVED, flush, installAnnotationFetch, layer, makeFrame } from '@/test/helpers/annotation-layer';
+import { STORY_ANNOTATIONS_MESSAGE, STORY_ANNOTATION_PIN_MESSAGE } from '@/lib/story-runtime/contract';
+import { ANN, NONCE, RESOLVED, flush, fromFrame, installAnnotationFetch, layer, makeFrame } from '@/test/helpers/annotation-layer';
 
 beforeEach(installAnnotationFetch);
 afterEach(() => vi.unstubAllGlobals());
@@ -84,5 +84,22 @@ describe('selecting a resolved thread', () => {
     fireEvent.click(await screen.findByLabelText('Show resolved conversation'));
     await flush();
     expect(screen.queryByText('an older figure')).toBeNull();
+  });
+  /**
+   * Expanding a resolved thread is a choice the reader makes. A thread that was open and is
+   * resolved by SOMEONE ELSE, live, is not that choice: its highlight lifts, as it always did.
+   */
+  it('lifts the highlight when the open thread is resolved from elsewhere', async () => {
+    const { frame, postMessage, contentWindow } = makeFrame();
+    const view = render(layer(frame, { railOpen: true }));
+    await flush(); await flush();
+    fromFrame(contentWindow, { type: STORY_ANNOTATION_PIN_MESSAGE, nonce: NONCE, id: ANN.id });
+    await flush();
+    expect(posts(postMessage).at(-1)).toMatchObject({ openId: ANN.id });
+
+    serveResolved({ ...ANN, status: 'resolved', resolved_at: '2026-08-28T00:00:00Z' });
+    view.rerender(layer(frame, { railOpen: true, liveAnnotations: [] }));
+    await flush(); await flush();
+    expect(posts(postMessage).at(-1)).toMatchObject({ openId: null, pins: [] });
   });
 });

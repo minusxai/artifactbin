@@ -930,6 +930,18 @@ export default function AnnotationLayer({
   useEffect(() => {
     if (liveAnnotations) setAnnotations(liveAnnotations);
   }, [liveAnnotations]);
+  /*
+   * A thread that was OPEN and has left the open list — resolved or deleted by
+   * someone else, live — stops being the open thread, so its highlight lifts as
+   * it always did. Expanding a resolved row is the reader's own choice and is
+   * untouched: that thread was never in the open list to leave it.
+   */
+  const openListIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const was = openListIds.current;
+    openListIds.current = new Set(annotations.map((a) => a.id));
+    setOpenId((cur) => (cur && was.has(cur) && !openListIds.current.has(cur) ? null : cur));
+  }, [annotations]);
 
   // The resolved index is read only while the rail is open: its rows stay
   // collapsed until one is clicked, so history does not compete with open work.
