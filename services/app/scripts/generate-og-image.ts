@@ -2,8 +2,8 @@
  * Regenerate the generic og:image every NON-artifact page unfurls with
  * (public/og.png, 1200×630 — the card size scrapers want; anything else is
  * cropped unpredictably). Artifact pages keep their own on-demand export;
- * this card is for the home page, profiles, docs, login — URLs that used to
- * unfurl text-only because the root layout carried no `openGraph` at all.
+ * this card is for the home page, profiles, docs and login, which have no
+ * document of their own to photograph.
  *
  * Same rig as generate-theme-previews: the card is a self-contained HTML page
  * shot through headless Chromium, with its subresources (fonts, logo) served

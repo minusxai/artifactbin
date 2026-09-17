@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The route table, GENERATED from the filesystem the way Next derived it:
+ * The route table, GENERATED from the filesystem:
  * every `app/**\/route.ts` is one entry, its exported HTTP methods its
  * handlers, its directory its path — `[id]` → `:id`, `[...rest]` → `:rest{.+}`,
  * `[[...rest]]` → an optional tail. Written to server/routes.generated.ts so

@@ -1,7 +1,7 @@
 /**
  * The generated route table is CURRENT (a new route.ts regenerates it, or
- * this fails), maps Next's segment syntax to Hono's, and every handler answers
- * through Hono exactly as it does when called directly.
+ * this fails), maps the directory segment syntax to Hono's, and every handler
+ * answers through Hono exactly as it does when called directly.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -34,7 +34,7 @@ describe('the route table', () => {
     const byDir = new Map(ROUTES.map((r) => [r.dir, r.methods]));
     expect(byDir.get('/llms.txt')).toEqual(['GET']);
     expect(byDir.get('/api/artifacts')).toEqual(expect.arrayContaining(['GET', 'POST']));
-    expect(byDir.get('/oauth/register') ?? null).toBeNull(); // the proxy's now
+    expect(byDir.get('/oauth/register') ?? null).toBeNull(); // the proxy's
   });
 });
 

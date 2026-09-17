@@ -61,9 +61,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const artifact = await getArtifactById(id);
   if (!artifact) return json({ error: 'not_found' }, 404);
   // The SAME viewer as the page, raw and the proxy (proxy-attached actor first,
-  // then direct compatibility and the agent cookie). The former split-viewer
-  // bug used only the account session, so a claimed-token browser owned the
-  // shell but its private document's queries 404ed.
+  // then direct compatibility and the agent cookie). The account session alone
+  // would leave a claimed-token browser owning the shell while its private
+  // document's queries 404.
   const actor = await sessionActor(request);
   if (!(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404);
 

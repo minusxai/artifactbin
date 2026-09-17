@@ -22,8 +22,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 }
 
 /**
- * DELETE — erase a thread (root + replies). The OWNER's verb, deliberately
- * absent from the bearer door: an agent may answer feedback, never erase it.
+ * DELETE — erase a thread (root + replies), under the same governing-rights ACL
+ * as the bearer twin.
  */
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string; annId: string }> }) {
   const actor = await browserActor(request);

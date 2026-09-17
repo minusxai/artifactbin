@@ -12,7 +12,7 @@ import { readFileUpload } from '@/lib/story/file-store';
  * is transport-only and stays here. `?format=file&filename=...` opts any MIME
  * type into the generic byte-preserving file tier. Other requests use the JSON content
  * body (markup | dataset | …), which is the `create_artifact` OPERATION
- * (lib/operations — the same pipeline the MCP tool runs).
+ * (lib/operations — the same pipeline every other create door runs).
  */
 export async function createArtifactFromRequest(
   request: Request,

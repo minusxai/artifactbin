@@ -1,7 +1,6 @@
 /**
- * POST /api/artifacts/:id/edits — one edit against a claimed base version
- * (concurrent-artifacts-edits.md); the `edit_artifact` OPERATION. Body is
- * exactly one of:
+ * POST /api/artifacts/:id/edits — one edit against a claimed base version; the
+ * `edit_artifact` OPERATION. Body is exactly one of:
  *   { edit_id, old_string, new_string }   — agent diff (Edit-tool shape)
  *   { edit_id, source }                   — editor whole-doc (splice derived server-side)
  *

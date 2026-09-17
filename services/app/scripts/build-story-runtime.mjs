@@ -3,9 +3,8 @@
  * to public/story/ — code-split ES modules the document loads under
  * `script-src 'self'`, at content-addressed URLs the build records in
  * public/story/manifest.json (lib/story/runtime-asset.ts). Build artifact,
- * gitignored;
- * `npm run build:runtime`, and run by dev.mjs/prebuild so the asset always
- * matches the source.
+ * gitignored; produced by `npm run build:runtime`, by the app's own `build`,
+ * and by the dev runner, so the asset always matches the source.
  */
 import esbuild from 'esbuild';
 import crypto from 'node:crypto';
@@ -221,9 +220,8 @@ const manifest = {
 /*
  * The manifest is only useful if the files it names are really there, and the
  * serving path deliberately degrades rather than throwing over a missing one —
- * so this is where it has to be loud. Same shape as the Dockerfile's
- * `test -f libduckdb.so`, which exists because a partially traced package took
- * every route down once already.
+ * so this is where it has to be loud. The image re-checks the same thing after
+ * the copy (Dockerfile).
  */
 for (const url of [manifest.entry, manifest.anchor, manifest.comment, ...manifest.lazy]) {
   const file = path.join(root, 'public', url.replace(/^\//, ''));

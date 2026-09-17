@@ -3,7 +3,7 @@
  * (public/story-themes/<name>.png light, <name>-dark.png dark — 12 files).
  *
  * Drives lib/data/story/theme-preview through headless Chromium (playwright,
- * already a dependency via lib/export): each document is served from a fake
+ * from the workspace install): each document is served from a fake
  * origin via page.route — page.setContent alone cannot resolve the /fonts/**
  * URLs the document preloads, and a dev server must not be a prerequisite for
  * regenerating design assets. Run after any registry change:

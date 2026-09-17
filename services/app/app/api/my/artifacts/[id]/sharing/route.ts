@@ -34,11 +34,10 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
 
-  // The SAME parsers every other door runs (lib/artifact-wire). Written out
-  // separately here once, they had already drifted: this door accepted
-  // `access` on a document and answered 200 for a write the SQL then dropped,
-  // where the others answer 400 — and the two preview refusals read
-  // differently for one error code.
+  // The SAME parsers every other door runs (lib/artifact-wire), never a copy:
+  // a door with its own parsing accepts `access` on a document and answers 200
+  // for a write the SQL then drops, where the others answer 400, and one error
+  // code ends up with two different refusals.
   const current = await getArtifactFor(scoped, id);
   if (!current) return json({ error: 'not_found' }, 404);
 

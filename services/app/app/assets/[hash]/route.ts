@@ -4,10 +4,9 @@
  *
  * Content-addressed BY THE URL that produced it, so `immutable` is honest: the
  * address never moves, and `refresh_asset` repointing the row is the one way
- * the bytes behind it change. That used to be a real cost — a reader who had
- * already cached this kept the old picture (R19) — and is not any more: the
- * mapping puts a content-derived `?v=` on the url it emits
- * (lib/story/asset-url), so a refreshed asset is asked for at an address no
+ * the bytes behind it change. A reader who already cached the old picture is
+ * still reached, because the mapping puts a content-derived `?v=` on the url it
+ * emits (lib/story/asset-url): a refreshed asset is asked for at an address no
  * browser has seen before, while the bytes are still served here, from the
  * hash alone, whatever query anyone arrives with.
  *

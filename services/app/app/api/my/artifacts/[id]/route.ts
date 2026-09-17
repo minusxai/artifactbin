@@ -58,12 +58,10 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 /**
  * DELETE /api/my/artifacts/:id — put an artifact you own in the trash.
  *
- * A FOLDER TAKES ITS SUBTREE, in the one statement lib/trash runs, and there
- * is no refusal and no `?force` here any more: `folder_not_empty` existed
- * because a delete was permanent and a folder full of documents was a decision
- * nobody should discover afterwards. A trash is not that decision — the rows
- * are listed, restorable, and gone only after the retention — so the refusal
- * asked someone to confirm something that is no longer being done.
+ * A FOLDER TAKES ITS SUBTREE, in the one statement lib/trash runs, and there is
+ * no refusal and no `?force` here: nothing is erased, so there is no decision to
+ * confirm. The rows are listed and restorable, and stay so — lib/trash keeps no
+ * retention and runs no sweep.
  */
 export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const scoped = await scopeFor(request);

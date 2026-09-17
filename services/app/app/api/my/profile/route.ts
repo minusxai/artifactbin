@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   if (!session?.user?.id) return unauthorized(request);
   const user = await getUserById(session.user.id);
   if (!user) return unauthorized(request);
-  // Sessions minted before usernames existed reach here without one.
+  // An account that has no handle yet is given one on sight.
   const withName = await ensureUsername(user);
   return json({ email: withName.email, username: withName.username, name: withName.name });
 }
