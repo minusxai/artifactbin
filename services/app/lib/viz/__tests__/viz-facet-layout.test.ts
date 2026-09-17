@@ -121,9 +121,9 @@ describe('computeFacetLayoutPlan', () => {
   });
 
   it('reserves legend chrome only when the child actually carries a legend', () => {
-    // HBAR_FACET_SPEC has no legend (its opacity legend is disabled); FACET_SPEC
-    // has a color legend. A legendless facet must hand the reclaimed chrome to
-    // its panels instead of leaving a dead band under the chart.
+    // HBAR_FACET_SPEC encodes no legend channel at all; FACET_SPEC has a color
+    // legend. A legendless facet must hand the reclaimed chrome to its panels
+    // instead of leaving a dead band under the chart.
     const withoutLegend = computeFacetLayoutPlan(HBAR_FACET_SPEC, HBAR_ROWS, 900, 380)!;
     const withLegend = computeFacetLayoutPlan(
       { ...HBAR_FACET_SPEC, spec: FACET_SPEC.spec } as Record<string, unknown>,

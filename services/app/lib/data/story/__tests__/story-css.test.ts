@@ -207,14 +207,14 @@ describe('jsx-format stories — className candidates + always-compile', () => {
   // resolve. Legacy stories keep skipping the banned-candidate guard (frozen semantics).
   it('marked LEGACY stories get the recipe union + token layer (embeds keep their chrome)', async () => {
     const css = await compileStoryCss('<div data-design="tw" class="p-4">legacy with embeds</div>');
-    // ADAPTED: 'animate-spin' would enter the union through embed chrome files
-    // this repo does not carry, so assert a kit-sourced union class instead.
+    // Asserted on a kit-sourced union class rather than one of the embed
+    // chrome utilities, so the case does not move when embed chrome is reskinned.
     expect(css).toContain('.rounded-xl');    // kit chrome class, NOT in the story markup
     expect(css).toContain('--background');   // token layer present so token utilities resolve
   });
 
-  // Same visual bar as the app build (buildAppThemeCss): the stock shadcn --chart-1..5 would
-  // silently recolor embedded charts in unthemed/legacy stories (VegaChart reads those tokens).
+  // The stock shadcn --chart-1..5 would silently recolor embedded charts in
+  // unthemed/legacy stories (VegaChart reads those tokens wherever they resolve).
   // The NEUTRAL story bodies carry the app palette; [data-theme] blocks still override.
   it('story neutral bodies keep the APP chart palette (no silent embed recolor)', async () => {
     const css = (await compileStoryCss('<div data-design="tw" class="p-2">x</div>'))!;

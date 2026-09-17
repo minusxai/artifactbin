@@ -25,7 +25,7 @@ const WATERFALL_ROWS = [
 ];
 
 describe('registry', () => {
-  it('ships funnel@1 and waterfall@1 with typed bindings', () => {
+  it('ships the eight recipes in registry order, with typed bindings', () => {
     expect(Object.keys(VIZ_TEMPLATES)).toEqual(['minusx/funnel@1', 'minusx/waterfall@1', 'minusx/radar@1', 'minusx/trend@1', 'minusx/single-value@1', 'minusx/combo@1', 'minusx/choropleth@1', 'minusx/point-map@1']);
     expect(getTemplate('minusx/funnel@1')!.bindings.map(b => b.name)).toEqual(['stage', 'value']);
   });
