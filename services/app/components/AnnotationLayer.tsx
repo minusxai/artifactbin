@@ -1128,7 +1128,8 @@ export default function AnnotationLayer({
       });
       if (wire.status === 'resolved') setOpenId((cur) => (cur === annId ? null : cur));
       else if (body.reopen) {
-        setOpenResolvedId(null);
+        // It was the open thread while it was resolved history; it stays the
+        // open thread now that the list it lives in has changed underneath it.
         setOpenId(annId);
         setJustOpenedId(annId);
       }
@@ -1143,7 +1144,6 @@ export default function AnnotationLayer({
       setAnnotations((prev) => prev.filter((a) => a.id !== annId));
       setResolvedList((prev) => (prev ? prev.filter((a) => a.id !== annId) : prev));
       setOpenId((cur) => (cur === annId ? null : cur));
-      setOpenResolvedId((cur) => (cur === annId ? null : cur));
     } finally { setBusy(false); }
   }, [id]);
 
