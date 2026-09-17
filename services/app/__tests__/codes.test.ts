@@ -1,8 +1,8 @@
 /**
- * lib/codes — the ONE implementation of hash/TTL/single-use every code flow
- * shares. These tests are the module's contract; login and oauth then become
- * thin callers whose own suites (login-codes.test.ts, oauth.test.ts) stay
- * untouched through the port — they are the behavior lock.
+ * lib/codes — the app's binding over the app-owned `codes` table, on the shared
+ * hash/TTL/single-use store (`createCodeStore` in @artifactbin/utils). These
+ * tests are that binding's contract: the two lookup modes and what each one
+ * promises. Why the modes are irreducibly different is in lib/codes.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { claimByHash, claimBySubject, issueCode, peekByHash } from '@/lib/codes';

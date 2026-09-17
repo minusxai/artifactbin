@@ -1,9 +1,8 @@
 /**
- * testmig-5 seed — processes and sockets in tests: one owner each.
+ * Processes and sockets in tests: one owner each.
  *
- * Fixed ports collide across worktrees (MEASURED: 4863, 4869, 5221 are literals in three tests); six tests hand-roll the
- * same http server dance; two suites each spawn the schema generator. After this phase `net.ts` owns sockets,
- * `rendered-schema.ts` owns the schema render.
+ * Fixed ports collide across worktrees and a hand-rolled http server dance drifts between copies, so
+ * `@artifactbin/test-support/net` owns sockets and `rendered-schema.ts` owns the schema render.
  * Escape hatch as in the harness rollout: `// socket-exempt: <reason>` for a file whose socket handling IS the subject;
  * pin 1 caps them at 3.
  */

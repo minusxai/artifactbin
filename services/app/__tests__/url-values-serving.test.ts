@@ -1,5 +1,5 @@
 /**
- * F2 — the SERVING half: a shared link's `?$name=value` reaches the document.
+ * THE SERVING HALF: a shared link's `?$name=value` reaches the document.
  *
  * Three doors, one grammar (lib/story/url-values):
  *  - the READER's document (`/a/<id>/raw`) is seeded through the island's
@@ -132,7 +132,7 @@ describe('GET /a/<id>/export with a selection', () => {
 });
 
 /**
- * F2 ROUND 2 — THE SHOT'S IDENTITY IS THE SELECTION THE DOCUMENT ACTUALLY HAS,
+ * THE SHOT'S IDENTITY IS THE SELECTION THE DOCUMENT ACTUALLY HAS,
  * not the `$` params somebody typed.
  *
  * Making the selection part of the render cache key is what stopped `?$region=NA`

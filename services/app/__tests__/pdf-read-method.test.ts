@@ -1,6 +1,6 @@
 /**
- * WHICH READ THE ROUTE CHOOSES — the seam this milestone's whole memory
- * argument rests on, and the one nothing was watching.
+ * WHICH READ THE ROUTE CHOOSES — the seam the whole memory argument for this
+ * tier rests on, and the one nothing was watching.
  *
  * The store's streaming contract is covered by lib/object-store's own suite: an
  * implementation of `getStream` that buffers goes red there. What that cannot

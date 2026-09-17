@@ -1,5 +1,5 @@
 /**
- * refresh_asset — the answer to "the source image changed" (R13).
+ * refresh_asset — the answer to "the source image changed".
  *
  * The URL cache is GLOBAL and first-cached wins, which is the right trade for
  * bytes that almost never change and the wrong one the day they do. This is the

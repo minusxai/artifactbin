@@ -4,8 +4,6 @@
  * of every object kind builds a valid envelope from a typed fixture (a verb
  * without a fixture is a compile error), and none of them carries an email
  * outside the identity verbs or anything that looks like content or a secret.
- *
- * Seeded RED by the orchestrator.
  */
 import { describe, expect, it } from 'vitest';
 import type { EventPayload, EventVerb, ObjectKind } from '@artifactbin/contracts';

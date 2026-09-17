@@ -1,5 +1,5 @@
 /**
- * THE TOKEN LIFECYCLE (tok-p1) — through the REAL handlers and the real module, no proxy, no mocks.
+ * THE TOKEN LIFECYCLE — through the REAL handlers and the real module, no proxy, no mocks.
  *
  *   mint      → expires_at = now + 6 h by default; the mint answers expiresAt; a caller may ask for 1–8760 h
  *   status    → derived from the row, never stored twice: revoked > expired > active; NULL expires_at never expires
@@ -7,8 +7,6 @@
  *   claim     → an expired token's artifacts transfer; the token is NOT reactivated (a test, not an implication)
  *   touch     → last_used_at is stamped where the app first trusts a token-bearing actor, sampled per minute
  *   reject    → POST /api/tokens/reject revokes a cookie-held token and rewrites the cookie without it
- *
- * Seeded RED by the orchestrator. The agent makes it green without changing a single expectation.
  */
 import { describe, expect, it } from 'vitest';
 import { claimTokenById, createUser } from '@/lib/users';
@@ -104,8 +102,7 @@ describe('status: derived, never stored twice', () => {
   });
 
   /*
-   * From tokens-deleted-at.test.ts, whose status assertions this describe already
-   * made: the soft state is `deleted_at` — the verb stays revoke — and it is read
+   * The soft state is `deleted_at` — the verb stays revoke — and it is read
    * by the live clause, by resolve, and by the table itself.
    */
   it('the live clause, resolve and the table all say deleted_at, never revoked_at', async () => {

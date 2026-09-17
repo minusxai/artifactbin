@@ -1,5 +1,5 @@
 /**
- * Raw-body image upload (P2): an image can be POSTed as its own bytes with a
+ * Raw-body image upload: an image can be POSTed as its own bytes with a
  * `Content-Type: image/*` header, on both the bearer route (agents) and its
  * session twin (the browser editor). No base64, no JSON envelope. The session
  * twin creates a genuinely user-owned artifact, so it needs a token to hang it
@@ -85,7 +85,7 @@ describe('bearer raw-body image upload', () => {
 
   it('rejects an image over the size cap', async () => {
     const t = await mintToken('t');
-    // vitest env caps MAX_IMAGE_BYTES at 5000.
+    // vitest env caps IMAGES__MAX_BYTES at 5000.
     const res = await bearerCreate(imgReq('/api/artifacts', { token: t.token, bytes: Buffer.alloc(6000, 1) }));
     expect(res.status).toBe(413);
     expect((await res.json()).error).toBe('image_too_large');
@@ -212,9 +212,8 @@ describe('session raw-body image upload', () => {
  * publishing an image is, though, so previewing one PUT an object with no
  * artifact row to reference it — and THE DB IS THE ONLY INDEX, so that object
  * could never be found again, billed, or deleted. Any credential could have
- * filled the disk a few megabytes at a time. Found by milestone 3, which fixed
- * the same shape in the PDF tier (`pdf_not_previewable`) and booked this one
- * here.
+ * filled the disk a few megabytes at a time. The PDF tier refuses the same
+ * shape by name (`pdf_not_previewable`).
  *
  * The refusal is by NAME, and it costs the product nothing: the only caller of
  * /api/preview in this app is the in-place editor's draft CSS compile, which

@@ -1,8 +1,6 @@
 /**
  * lib/shutdown.ts: the steps run in order on the first signal, exit is called
  * once, a second signal is ignored, a throwing step does not stop the rest.
- *
- * Seeded RED by the orchestrator.
  */
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';

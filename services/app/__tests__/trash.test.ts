@@ -1,5 +1,5 @@
 /**
- * P3 (seeded RED) — delete is a trash: gone everywhere, restorable, and now
+ * Delete is a trash: gone everywhere, restorable, and
  * TERMINAL. Nothing in this product erases a row, so there is no retention and
  * no purge: `deleted_at` set is the end state, and restore is the only thing
  * that clears it.

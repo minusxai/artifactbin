@@ -1,5 +1,5 @@
 /**
- * testmig-4 seed — the harness is the ONLY place a test file builds a request, encodes an agent cookie, wipes
+ * The harness is the ONLY place a test file builds a request, encodes an agent cookie, wipes
  * tables, or resets the database. Every copy of those four mechanisms outside `harness.ts` is a pin failure.
  *
  * Escape hatch, deliberately narrow: a file whose copy is the SUBJECT of its tests (the cookie codec's own

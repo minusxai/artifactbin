@@ -1,7 +1,7 @@
 /**
- * `withoutToken` — the inverse of `withToken` (tok-p1, reject).
+ * `withoutToken` — the inverse of `withToken`, behind the reject route.
  *
- * The list is ordered and the LAST entry is the primary (see agent-session-shape.test.ts). Dropping one id
+ * The list is ordered and the LAST entry is the primary (pinned below). Dropping one id
  * must keep the order of the rest, so the browser's primary changes only when the primary itself is dropped.
  * Nothing left ⇒ null, which the route turns into a cleared cookie.
  *
@@ -46,8 +46,7 @@ describe('the app module', () => {
   });
 
   /*
-   * The ordering contract, from agent-session-shape.test.ts, which pinned it for the
-   * app module alone: the list is not a set. The LAST entry is the primary — the one a
+   * The ordering contract: the list is not a set. The LAST entry is the primary — the one a
    * write acts as — so re-presenting a held token PROMOTES it rather than being ignored.
    * A set-like implementation passes a happy-path route test while silently changing
    * which token writes.

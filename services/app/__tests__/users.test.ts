@@ -63,7 +63,7 @@ describe('anonymous connections + claiming', () => {
   });
 
   it('carries no in-process valve — the proxy\'s OAuth doors are the only count', async () => {
-    // P2 §H: a door is enforced in exactly one place. The app route serves the
+    // A door is enforced in exactly one place. The app route serves the
     // mint; the proxy counts the approval doors in front of it, so a caller
     // reaching this handler directly is never refused here.
     for (let i = 0; i < 12; i++) {

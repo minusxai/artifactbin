@@ -2,7 +2,7 @@
  * A SHARE CARRIES A ROLE — and the third role is COMMENTER: a named person who
  * may read the document and annotate it (open threads, reply, resolve), and
  * may NOT edit, PUT, revert, delete, share or move. "Read / write / comment"
- * was the ask from the start; annotations (#121) arrived without the role.
+ * was the ask from the start; annotations arrived without the role.
  *
  * Editors may annotate too — a person who may change the text may certainly
  * comment on it — and a plain viewer may not: "anyone may read this" has never

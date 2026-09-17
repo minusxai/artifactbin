@@ -13,8 +13,8 @@ import {randomUUID} from 'node:crypto';
  * CLI actually made so a test can assert the wire traffic it expected — including the traffic it
  * expected NOT to happen.
  *
- * Sits beside `harness.ts` (the app/database harness), `net.ts` (real sockets) and
- * `operation-http.ts`. Use with `useAppHarness()`, which owns the database.
+ * Sits beside `harness.ts` (the app/database harness) and `operation-http.ts`; real sockets come
+ * from `@artifactbin/test-support/net`. Use with `useAppHarness()`, which owns the database.
  */
 import { expect } from 'vitest';
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';

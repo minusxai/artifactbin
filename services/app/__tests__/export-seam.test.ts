@@ -1,12 +1,12 @@
 /**
- * THE BROWSER SEAM, pinned (cleanup/testmig-1, milestone 1 of the test redesign). Route-level export tests must not
+ * THE BROWSER SEAM, pinned. Route-level export tests must not
  * launch Chromium: the app reaches its BrowserService through lib/services (`setServices`/`services()`), so a route
  * test injects utils' `fakeBrowser` and asserts the REQUEST the route builds and the VERDICT it maps — every field
  * of RenderRequest the route decides, every RenderResult branch the route answers. Real bytes stay with the browser
  * contract suite and the gates (`gate-full-kit`, `gate-export-slice`).
  *
- * Seeded by the orchestrator. Blue → red → blue: break the forwarding of `capture`/`format` in lib/export and this
- * file must go red; restore and it is blue again.
+ * Falsifiable: break the forwarding of `capture`/`format` in lib/export and this
+ * file must go red; restore and it is green again.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from '@artifactbin/utils';

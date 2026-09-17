@@ -1,6 +1,6 @@
 /**
  * DISCOVER: the REAL reader route serves the help pointer — as an HTTP `Link: <…/llms.txt>; rel="help"` header (for
- * agents that read headers or strip HTML) and in <head> — built on the request's own base URL. Seeded RED.
+ * agents that read headers or strip HTML) and in <head> — built on the request's own base URL.
  */
 import { describe, expect, it } from 'vitest';
 import { GET as rawRoute } from '@/app/a/[id]/raw/route';

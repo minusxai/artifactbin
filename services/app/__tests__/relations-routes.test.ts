@@ -2,8 +2,6 @@
  * The two doors onto relations: like an artifact you can read, follow a user
  * who exists — as a signed-in account only, same-site, with the count in the
  * answer so the button can render without a second call.
- *
- * Seeded RED by the orchestrator (the route files do not exist yet).
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeEvents } from '@artifactbin/utils';

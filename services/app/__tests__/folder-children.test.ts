@@ -17,7 +17,7 @@
  * subject, and driving four of them through a document's query endpoint would
  * be testing the transport four times and the ACL once. ONE end-to-end leg
  * below proves the wiring — a real document, a real `<Query>`, the real
- * endpoint. Plan: ~/projects/artifactbin-folders.md.
+ * endpoint.
  */
 import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';

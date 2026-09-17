@@ -1,7 +1,7 @@
 /**
  * RETIRED VOCABULARY, SCOPED PER SURFACE — the one guard over the teaching corpus.
  *
- * `agent-starter-consistency.test.ts` owns the nine agent-facing STARTERS, where the full retired
+ * `agent-starter-consistency.test.ts` owns the agent-facing STARTERS, where the full retired
  * vocabulary is banned outright. This file owns everything else an agent reads: the rendered skill
  * tree, the brief, the tool-schema guidance, the one-pager and the CLI's shipped teaching bundle.
  * Those bans used to be one `not.toContain` line at a time, scattered across eight files, each

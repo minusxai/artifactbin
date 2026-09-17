@@ -1,5 +1,5 @@
 /**
- * P3 (seeded RED) — THE GATE. A trashed row is nonexistent to every public read path. Table-driven,
+ * THE GATE. A trashed row is nonexistent to every public read path. Table-driven,
  * so a new reader is one line here; if a reader bypasses the row-loading seam this goes red.
  */
 import { describe, expect, it } from 'vitest';

@@ -27,8 +27,7 @@ describe('services()', () => {
    * to pick `chromium.connect()` over `chromium.launch()` — a choice that
    * could not remove Playwright from the image, because the connect client IS
    * Playwright. It is an HTTP service now, so the app holds a client that
-   * imports nothing. (This case is what `lib/__tests__/export-browser.test.ts`
-   * guarded before the seam changed shape.)
+   * imports nothing.
    */
   it('is an HTTP client to the browser service when BROWSER__SERVICE_URL is set', async () => {
     vi.stubEnv('BROWSER__SERVICE_URL', 'http://browser.internal:8080');

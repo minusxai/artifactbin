@@ -1,8 +1,9 @@
 /**
- * F8 — agents can fork: `fork_artifact` on the operations registry (SEEDED RED by the orchestrator).
+ * Agents can fork: `fork_artifact` on the operations registry.
  *
  * The registry entry IS the surface: the bearer route is a translation layer over
- * it and the MCP tool renders from it. An agent may fork what its token can READ;
+ * it and the installed operation reference (lib/skills/render) is rendered from it.
+ * An agent may fork what its token can READ;
  * the copy is the token's own (account-wide for a claimed token), with three
  * optional overrides applied after the copy; the reply is create-shaped plus
  * `forked_from`; every refusal is the existing vocabulary.
@@ -174,7 +175,7 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
   });
 
   /*
-   * ADDED (round 3). A fork's body is OPTIONAL — it holds nothing but the
+   * A fork's body is OPTIONAL — it holds nothing but the
    * three overrides — so an ABSENT body means "keep everything". A body that
    * was SENT and does not parse is a different fact and must not collapse
    * into the same answer: the JSON the caller meant may have been
