@@ -254,7 +254,8 @@ production rollout results. Raw JSON includes resource timing and payload sizes.
 The dedicated `cli-runtime.yml` workflow builds pinned Node source with `small-icu` (English/root
 locale data) only when a maintainer requests a new runtime revision. Prepared executables and
 upstream notices are versioned release assets; `runtime-lock.json` pins compressed and decoded
-hashes. Ordinary CLI builds verify/download that dependency through `scripts/runtime.mjs`, then
+hashes. Ordinary CLI builds verify/download that dependency through
+`services/cli/scripts/runtime.mjs`, then
 use the same runtime for SEA generation. Missing or corrupt release bytes fail promptly, never
 trigger source compilation. The Actions cache is an optional accelerator and may be evicted. Linux uses a digest-pinned manylinux 2.28 toolchain with
 static C++ support and the official Node ET_EXEC layout;

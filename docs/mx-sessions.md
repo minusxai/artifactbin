@@ -52,33 +52,10 @@ script deadline. A hard deadline destroys the instance. Script errors preserve
 pages; committed mutations are never rolled back or automatically replayed.
 Page objects are retained in memory; arbitrary JS heaps are not serialized to disk.
 
-## Verification
+## Hosting requirements
 
-- Shared facade: focused behavioral tests cover detached reads, atomic validation,
-  selected/coalesced subscriptions, stale lifetimes, pending/error/timeout reads,
-  and mutation concurrency. These passed locally.
-- Managed adapter: host backpressure and shipped/minified bootstrap tests passed;
-  the subsequent bridge prototype-key test correction also passed.
-- Session registry: owner separation, ID conflicts, receipt recovery, serialized
-  execution, and close semantics passed a focused test.
-- The Linux browser gate exercises multi-artifact Playwright execution, the real
-  CLI, iframe interactions, screenshots, receipt recovery, owner separation,
-  filesystem/network isolation, and hard termination. These core flows passed
-  in CI; the subsequent agent-fixture assertions exposed test defects, now fixed.
-- The same gate replays saved pi/Fireworks iframe and session submissions against
-  the shipped runtime. Replay is separate from a fresh model trial; prior design
-  trials used local pi with Fireworks DeepSeek, not local model inference.
-- Focused regressions cover token revocation, bounded asset-request queueing, and
-  closing a session during worker startup. Each exposed its defect before the fix.
-- Signed-in-owner trials exposed canonical redirects escaping Playwright interception.
-  Focused tests first failed, then passed for broker redirect resolution, external-origin
-  rejection, loops, and redirect method/body handling. The paid session track now
-  requires a real navigation/query preflight before model requests.
-- The PR checks of that change (in the project's earlier private repository) are the
-  authoritative results for the latest revision, including agent-fixture replay.
-  The broad local suite was deferred under the repository test budget.
-- Both browser images include bubblewrap. Hosting must also permit user namespaces
-  and delegate the configured cgroup subtree; an ordinary container without those
-  permissions cannot run sessions. Unsupported deployments fail closed.
+Both browser images include bubblewrap. Hosting must also permit user namespaces
+and delegate the configured cgroup subtree; an ordinary container without those
+permissions cannot run sessions. Unsupported deployments fail closed.
 
 Isolation policy follows the [bubblewrap security guidance](https://github.com/containers/bubblewrap/blob/main/README.md#sandbox-security); namespace configuration and resource cgroups are separate boundaries.

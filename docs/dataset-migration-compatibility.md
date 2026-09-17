@@ -25,24 +25,6 @@ The CLI uses the same evaluator with complete local input files. Its generated
 release pointer and teaching version advance together so local and server
 execution can ship consistently.
 
-## Observed evidence
-
-- Baseline: the planner and dataset-source API files passed, 14 tests total.
-- A new API test observed migration refusing a DuckDB cast at the dataset compiler.
-- A separate API test observed a 10,005-row input returning count 1,000,
-  median 500.5 and sum 500,500 through the proposed upstream-query transformation.
-- With complete internal inputs, that test returns count 10,005, median 5,003
-  and sum 50,055,015. The displayed source remains truncated to 1,000 rows.
-- The migrated computation matches direct document-engine execution, including
-  column types, across three parameter values. It exercises median, strptime,
-  strftime, chr, a DuckDB cast, date columns, nulls and an empty filtered result.
-- Focused planner, migration transaction, dataflow and source API checks passed
-  together (45 tests before additional local-input coverage).
-- The routine broad test command deferred 210 files to CI under the 50-file cap;
-  that is not a passing broad run. Local validation encountered errors in two
-  unrelated ignored scratch files, `tmp/hasura-familiarity/run.ts` and
-  `video/src/ui/Grab.tsx`. Clean-checkout CI is required.
-
 ## Costs and remaining work
 
 ### Metadata investigation
