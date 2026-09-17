@@ -104,12 +104,9 @@ export const APP_INLINE_SCRIPT_HASHES = [
 
 export const APP_CSP = [
   "default-src 'none'", `script-src 'self' ${APP_INLINE_SCRIPT_HASHES}`, "style-src 'self' 'unsafe-inline'",
-  // The showcase cards are the CANONICAL instance's own captures, addressed
-  // absolutely because a local or self-hosted install does not have those ids
-  // (lib/showcase). `'self'` admits them only when the app IS that origin, so
-  // the landing page's pictures worked on the deployment and nowhere else.
-  // Both the export endpoint and its image-delivery redirect must be admitted.
-  "img-src 'self' data: blob:", "font-src 'self' data:",
+  // Listing thumbnails redirect from /a/:id/export to the configured asset
+  // origin. Admit that destination for images; local posters remain same-origin.
+  `img-src 'self' data: blob:${ASSETS_ORIGIN ? ` ${ASSETS_ORIGIN}` : ''}`, "font-src 'self' data:",
   // `media-src` has no default of its own either, so without this line every
   // <video> and <audio> on an app page is refused by `default-src 'none'`.
   // `'self'` is a stored file played back from /a/<id>/raw; `blob:` is the
