@@ -22,9 +22,9 @@ function page(rows:Record<string,unknown>[],flags:ParsedCommand['flags'],fingerp
 }
 /** The connection a discovery or preview runs against: the local definition first, the published one otherwise. */
 async function connectedDataset(workspace:Workspace,input:string,client:HttpClient):Promise<{connection:DatasetConnection;id?:string}>{
- const local=await localDefinition(workspace,input,client.connection.server);
+ const local=await localDefinition(workspace,input,client.connection.server,client.aliases);
  if(local?.definition.connection)return{connection:local.definition.connection,...(local.id?{id:local.id}:{})};
- const ref=await artifactReference(workspace,input,client.connection.server,true);
+ const ref=await artifactReference(workspace,input,client.connection.server,true,client.aliases);
  const head=await client.request<Snapshot>(`/artifacts/${ref.id}`);
  if(head.format!=='dataset')throw new CliError('invalid_container',`${ref.id} is a ${head.format} artifact, not a dataset.`);
  const connection=(head.meta as {catalog?:{connection?:DatasetConnection}}|undefined)?.catalog?.connection;
@@ -50,7 +50,7 @@ async function remoteQueryTarget(workspace:Workspace,parsed:ParsedCommand,sql:st
  {
   // A notebook cell is previewed against the definition's own connection, never the published tables.
   if(typeof flags.name==='string'&&sql===undefined){
-   const local=await localDefinition(workspace,target,client.connection.server);
+   const local=await localDefinition(workspace,target,client.connection.server,client.aliases);
    const cell=local?.definition.notebook?.cells.find(item=>item.name===flags.name||item.id===flags.name);
    if(local&&cell){
     if(!local.definition.connection)throw new CliError('unsupported_source','A notebook cell previews against the dataset connection.');
@@ -58,7 +58,7 @@ async function remoteQueryTarget(workspace:Workspace,parsed:ParsedCommand,sql:st
     return{path:local.path,name:cell.name,execution:'remote',...result};
    }
   }
-  const ref=await artifactReference(workspace,target,client.connection.server);
+  const ref=await artifactReference(workspace,target,client.connection.server,false,client.aliases);
   if(ref.version!==undefined)throw new CliError('historical_query','Remote queries operate on the current resource.','Pull the historical version, then query the local data.');
   const result=await client.request(`/artifacts/${ref.id}/query`,'POST',{
    ...(sql===undefined?{}:{sql}),values:queryParameters(flags.param as string[]|undefined),

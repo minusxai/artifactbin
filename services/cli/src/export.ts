@@ -39,7 +39,7 @@ const rendered=(format:string):format is typeof RENDERED[number]=>RENDERED.inclu
 
 interface ExportOptions {
  localImage?:LocalImageRenderer;type?:string;format?:string;output?:string;name?:string;page?:number;og?:boolean;refresh?:boolean;force?:boolean;dryRun?:boolean;
- server:string;client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
+ server:string;/** Verified other addresses of `server`. */aliases?:readonly string[];client?:HttpClient;emit:(value:unknown)=>void;bytes?:(value:Uint8Array)=>void;
 }
 interface ExportTarget {ref:string;format:string;id?:string;path?:string;version?:number;render:boolean}
 interface ExportResult {path?:string;bytes:Buffer;format:string}
@@ -58,7 +58,7 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
  const localFiles=['png','jpg'].includes(format)?await localIdentities(workspace):{};
  const targets:ExportTarget[]=[];
  for(const input of refs){
-  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server});
+  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server,aliases:[...options.aliases??[]]});
   if(rendered(format)){
    // Historical content is not the current head, and the renderer only ever photographs the head.
    if(ref.version!==undefined)throw new CliError('unsupported_version_export',`${input} names version ${ref.version}; rendering photographs the current head.`,'Export csv, json, yaml or original for a historical version.');

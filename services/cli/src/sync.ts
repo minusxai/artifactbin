@@ -237,7 +237,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
  });
 }
 async function recoverRequest(workspace:Workspace,client:HttpClient,pending:PendingRequest,replaying=false):Promise<Snapshot>{
- if(pending.server!==client.connection.server||pending.account&&client.account&&pending.account!==client.account)throw new CliError('account_mismatch','Pending recovery belongs to another server or account.');
+ if(!client.sameServer(pending.server)||pending.account&&client.account&&pending.account!==client.account)throw new CliError('account_mismatch','Pending recovery belongs to another server or account.');
  if(!pending.account&&pending.credential!==digest(client.connection.token))throw new CliError('recovery_credentials_changed','Restore the credentials that initiated this pending create before retrying.');
  if(replaying&&!pending.response&&pending.request.path!=='/artifacts'){
   const id=pending.file.tracked?.id??parseDocument(Buffer.from(pending.file.bytes,'base64').toString()).metadata.id;

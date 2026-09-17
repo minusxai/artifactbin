@@ -325,7 +325,9 @@ describe('cli-datasets-definition', () => {
     await writeFile(join(root,'orders.yaml'),'type: dataset\nsource: orders.jsx\ntitle: Orders\n');
     // Publication needs a reachable server; the binding that precedes it is what this checks.
     output.push(JSON.stringify((await cli.run(['push','orders.yaml','--secret-env','PGPASSWORD'],transport)).result));
-    expect(calls[0]).toBe('POST /api/secrets');
+    // `GET /api/server` is the first command's public, credential-free question about which
+    // addresses this server answers at (services/cli/src/server-identity); the binding follows it.
+    expect(calls.filter(call=>call!=='GET /api/server')[0]).toBe('POST /api/secrets');
     const written=await readFile(join(root,'orders.jsx'),'utf8');
     const secretId=written.match(/passwordSecretId="([^"]+)"/)?.[1];expect(secretId).toMatch(/^sec_[0-9a-f]{24}$/);
     for(const file of ['orders.jsx','orders.yaml'])expect(await readFile(join(root,file),'utf8')).not.toContain('hunter2');

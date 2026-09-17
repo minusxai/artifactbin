@@ -80,8 +80,8 @@ export async function bindDatasetSecret(workspace:Workspace,paths:string[],clien
 }
 
 /** The local definition a dataset YAML names, when the target is a local dataset at all. */
-export async function localDefinition(workspace:Workspace,input:string,server:string):Promise<{definition:CatalogInput;id?:string;path:string}|undefined>{
- const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server});
+export async function localDefinition(workspace:Workspace,input:string,server:string,aliases:readonly string[]=[]):Promise<{definition:CatalogInput;id?:string;path:string}|undefined>{
+ const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server,aliases:[...aliases]});
  if(ref.kind!=='path'||ref.version!==undefined||!/\.ya?ml$/i.test(ref.path))return undefined;
  const bytes=await readOptional(join(workspace.root,ref.path));if(!bytes)return undefined;
  const resource=parseResourceFile(bytes.toString());

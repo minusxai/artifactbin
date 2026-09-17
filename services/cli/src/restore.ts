@@ -36,7 +36,7 @@ const missing=(error:unknown)=>error instanceof CliError&&(error.details as {htt
  */
 export async function pushRestore(workspace:Workspace,refs:string[],client:HttpClient):Promise<Outcome>{
  return eachTarget(refs,async ref=>{
-  const target=await artifactReference(workspace,ref,client.connection.server,true);
+  const target=await artifactReference(workspace,ref,client.connection.server,true,client.aliases);
   if(!await pendingOperation(workspace)){
    const head=await client.request<Record<string,unknown>>(`/artifacts/${target.id}`).catch(error=>{if(missing(error))return null;throw error;});
    if(head){
@@ -56,7 +56,7 @@ export async function pushRestore(workspace:Workspace,refs:string[],client:HttpC
  */
 export async function pushRefresh(workspace:Workspace,refs:string[],client:HttpClient):Promise<Outcome>{
  return eachTarget(refs,async ref=>{
-  const target=await artifactReference(workspace,ref,client.connection.server,true);
+  const target=await artifactReference(workspace,ref,client.connection.server,true,client.aliases);
   const result=await recoverableOperation(workspace,client,{path:'/artifacts/assets/refresh',method:'POST',body:{id:target.id},identity:{type:'refresh',id:target.id},prepare:async()=>{}});
   const failed=Array.isArray(result.failed)?result.failed:[];
   const refreshed=Array.isArray(result.refreshed)?result.refreshed:[];

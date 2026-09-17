@@ -11,6 +11,7 @@ export * from './agent';
 export * from './deny';
 export * from './routes';
 export { DEFAULT_SERVER } from './default-server';
+export { SERVER_IDENTITY_PATH, normalizeOrigin, parseServerIdentityDocument, type ServerIdentityDocument } from './server-identity';
 export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';

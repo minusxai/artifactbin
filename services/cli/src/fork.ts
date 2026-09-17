@@ -21,7 +21,7 @@ const strippedFields=[...identityFields,'shares','folder','link'] as const;
 /** Folders have no content of their own and a Postgres dataset's secret stays bound to the original. */
 const NOT_FORKABLE_FIX='Fork a document, dataset rows or a file; a folder names its children and a Postgres dataset keeps its bound secret.';
 
-interface ForkOptions {type?:string;output?:string;dryRun?:boolean;server:string;client?:HttpClient}
+interface ForkOptions {type?:string;output?:string;dryRun?:boolean;server:string;/** Verified other addresses of `server`; a URL at one of them names the same artifact. */aliases?:readonly string[];client?:HttpClient}
 interface ForkFile {path:string;bytes:Buffer}
 interface ForkDraft {kind:'artifact'|'dataset'|'file';forkedFrom:string;base:string;extension:string;render:(paths:{draft:string;source?:string})=>Buffer;source?:{extension:string;bytes:Buffer};dependencies:string[]}
 
@@ -38,7 +38,7 @@ function forkMetadata(metadata:DocumentMetadata,forkedFrom:string):DocumentMetad
 export async function forkResources(workspace:Workspace,refs:string[],options:ForkOptions):Promise<{dry_run?:true;operations:Record<string,unknown>[]}|undefined>{
  const resolved=[];
  for(const input of refs){
-  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server});
+  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server,aliases:[...options.aliases??[]]});
   if(ref.kind==='id'&&!options.client)return undefined;
   resolved.push({input,ref});
  }

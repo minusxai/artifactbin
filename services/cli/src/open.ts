@@ -9,14 +9,14 @@ import {serverRenderer} from './export';
 import type {Workspace} from './workspace';
 
 /** Open the published view. Local drafts use the separate foreground preview session. */
-interface OpenOptions {server:string;json?:boolean;launch?:(url:string)=>Promise<void>}
+interface OpenOptions {server:string;/** Verified other addresses of `server`. */aliases?:readonly string[];json?:boolean;launch?:(url:string)=>Promise<void>}
 const DRAFT_FIX='Use afbin preview <path> for local edits, or publish with afbin push before opening the published view.';
 
 export async function openResources(workspace:Workspace,refs:string[],options:OpenOptions):Promise<{operations:Record<string,unknown>[]}>{
  const renderer=serverRenderer(options.server);
  const targets=[];
  for(const input of refs){
-  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server});
+  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server,aliases:[...options.aliases??[]]});
   if(ref.version!==undefined)throw new CliError('unsupported_version_export',`${input} names version ${ref.version}; the viewer shows the current published document.`,'Open the head, or use afbin pull ref@version to read that content.');
   targets.push({ref:input,id:ref.kind==='id'?ref.id:await publishedIdentity(workspace,ref.path)});
  }

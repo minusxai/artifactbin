@@ -39,7 +39,8 @@ import {validateMarkupStructure} from '../../app/lib/story/local-validation';
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnection,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault} from './config';
+import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault} from './config';
+import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
 import {resolveReference} from './reference';
@@ -75,10 +76,15 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
    const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
    const paths=await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path));
-   const server=typeof flags.server==='string'?flags.server:workspace.tracking?.server??defaults.host??DEFAULT_SERVER;
-   if(workspace.tracking&&workspace.tracking.server!==server)throw new CliError('wrong_server','Use the workspace server for preview.');
-   const connection=await loadConnection(server,home,context.env)??(workspace.tracking?{server,token:''}:await browserAuthenticate(server,{...context.auth,home,env:context.env,interactive,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')}));
-   await addFiles(workspace,paths.map(path=>resolve(workspace.root,path)),new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account}));
+   // Preview registers local files against a server, so it crosses the same boundary the rest of the
+   // CLI does: one identity, then the canonical origin for the binding, the credential and approval.
+   const selected=typeof flags.server==='string'?flags.server:workspace.tracking?.server??defaults.host??DEFAULT_SERVER;
+   const previewIdentity=await serverIdentity(selected,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
+   const server=previewIdentity.canonical;const previewAliases=serverAddresses(previewIdentity);
+   if(workspace.tracking&&!sameServer(previewIdentity,workspace.tracking.server))
+    throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; preview selected ${selected}.`,`Run preview from another directory, or pass --server ${workspace.tracking.server}.`);
+   const connection=await loadConnectionFor(previewIdentity,home,context.env)??(workspace.tracking?{server,token:''}:await browserAuthenticate(server,{...context.auth,home,env:context.env,interactive,aliases:previewAliases,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')}));
+   await addFiles(workspace,paths.map(path=>resolve(workspace.root,path)),new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:previewAliases}));
    return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,server});
   }
   if(command==='config'&&!flags.help){
@@ -106,7 +112,9 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='setup'&&!flags.help){
    if(flags.service){if(flags.harness)throw new CliError('invalid_arguments','Use --service separately from --harness.');const result=await setupService(String(flags.service));if(json)emit(result);else stdout(`${String(flags.service)} is ready for offline use.\n`);return 0;}
    // An installer served from a self-hosted origin runs `setup --server <origin>`: that origin becomes the default.
-   if(typeof flags.server==='string')await saveDefaultServer(flags.server,home,context.env);
+   // The default is stored as the deployment's CANONICAL origin when it publishes one, so an
+   // installer served from a second hostname does not pin the folder to a name of the same server.
+   if(typeof flags.server==='string')await saveDefaultServer((await serverIdentity(flags.server,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})})).canonical,home,context.env);
    const result=await setupSkills({home,env:context.env,origin:declaredServer,interactive:interactive&&!json,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    if(json)emit(result);else stdout(setupSummary(result.installations,style));
    return 0;
@@ -136,6 +144,19 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(account){const local=await localAccountCommand(workspace,parsed,account);if(local!==undefined){emit(local);return (local as {valid?:boolean}).valid===false?2:0;}}
   const chosenHost=()=>typeof flags.server==='string'?flags.server:workspace.tracking?.server??account?.manifest?.server??exportedOrigin;
   const serverOrigin=()=>chosenHost();
+  /**
+   * WHO THE SELECTED SERVER IS — resolved at most once per command, and only where it
+   * matters: a comparison that would otherwise refuse, and the remote boundary below,
+   * where the canonical origin becomes the one address this command talks to. Local
+   * commands (help, validate, status, a dry run, an offline recovery) never reach it,
+   * and a server that does not publish an identity leaves every one of them unchanged.
+   */
+  let identityPromise:Promise<ServerIdentity>|undefined;
+  const identity=()=>identityPromise??=serverIdentity(serverOrigin()??declaredServer,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
+  // A pasted URL is the only ARGUMENT whose origin has to be understood before that boundary:
+  // it may be another address of this same server, and it is used for its artifact id alone.
+  const urlArgument=()=>[...positionals,...(typeof flags.in==='string'?[flags.in]:[])].some(ref=>/^https?:\/\//.test(ref));
+  const addresses=async():Promise<string[]>=>urlArgument()?serverAddresses(await identity()):[];
   if(command==='update'){
    const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
    const updated=await updateCli({home,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
@@ -144,7 +165,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    return 0;
   }
   if(workspace.tracking&&typeof flags.server==='string'&&!['auth','update'].includes(command)){
-   const compatible=flags.server===workspace.tracking.server;
+   // Two names of ONE deployment are not two servers. Ask only when the strings differ.
+   const compatible=flags.server===workspace.tracking.server||sameServer(await identity(),workspace.tracking.server);
    if(!compatible)throw new CliError('wrong_server',`This directory is tracked against ${workspace.tracking.server}; the command selected ${flags.server}.`,`Use another directory, or pass --server ${workspace.tracking.server}.`);
   }
   if(['push','pull','delete'].includes(command)&&(!account||command==='pull')&&!flags['dry-run']&&await pendingOperation(workspace))throw new CliError('pending_recovery','Recover the pending operation before changing this workspace.','Repeat the original command and inputs.');
@@ -168,7 +190,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    emit({...localValidation,...(verified?{verified}:{})});return localValidation.valid?0:2;}}
   if(command==='status'&&!account&&!flags.remote){emit(await localStatus(workspace,positionals.length?positionals:undefined,home,context.env));return 0;}
   if(command==='diff'&&!account&&!flags.remote){
-   try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style);if(result)emit(result);return 0;}
+   try{const result=await diffCommand(workspace,parsed,serverOrigin()??declaredServer,false,stdout,undefined,style,await addresses());if(result)emit(result);return 0;}
    catch(error){if(!(error instanceof CliError)||error.code!=='network_required')throw error;}
   }
   if(command==='query'){
@@ -178,32 +200,42 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(inlineSql!==undefined)throw new CliError('sql_in_argument',`sql_in_argument: SQL cannot be an argument: ${inlineSql.trim().slice(0,40)}…`);
    queryParameters(flags.param as string[]|undefined);
    querySql=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
-   const result=await localQuery(workspace,parsed,querySql,workspace.tracking?.server??serverOrigin()??declaredServer);if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout,style);return 0;}
+   const result=await localQuery(workspace,parsed,querySql,workspace.tracking?.server??serverOrigin()??declaredServer,await addresses());if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout,style);return 0;}
   }
   const selectedServer=serverOrigin()??declaredServer;
-  const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer});
-  const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
+  // Resolved once here, and only when a URL argument makes it necessary; the remote boundary below resolves it anyway.
+  const selectedAddresses=await addresses();
+  const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses});
+  const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
   if(command==='open'){
    const launch=context.auth?.open??openBrowser;
-   emit(await openResources(workspace,positionals,{server:selectedServer,json,launch}));return 0;
+   emit(await openResources(workspace,positionals,{server:selectedServer,aliases:selectedAddresses,json,launch}));return 0;
   }
   if(command==='export'&&await exportResources(workspace,positionals,exportOptions()))return 0;
-  if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log');
-  if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,writable:true});
+  if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log',selectedAddresses);
+  if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,aliases:selectedAddresses,writable:true});
   if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
   if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
    const result=await finishLocalPush(workspace,positionals,{force:!!flags.force,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(result){emit(result);return 0;}
   }
-  if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined);if(!targets.length){emit({operations:[]});return 0;}}
+  if(command==='pull'&&!account){const targets=await preparePull(workspace,positionals,!!flags.force,serverOrigin(),flags.output as string|undefined,selectedAddresses);if(!targets.length){emit({operations:[]});return 0;}}
   let commentBody=typeof flags.body==='string'?flags.body:undefined;
   if(command==='comment'&&typeof flags.input==='string')commentBody=flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8');
   if(commentBody!==undefined&&(!commentBody.trim()||commentBody.length>100000))throw new CliError('invalid_comment','Comment text must contain 1–100000 characters.');
-  const server=serverOrigin();
+  /*
+   * THE REMOTE BOUNDARY. From here every byte this command sends goes to ONE origin: the
+   * canonical origin of the server the person selected. A second address of that same
+   * deployment is only ever a name a link or a tracking record may carry — never a
+   * destination, and never a place a credential is sent.
+   */
+  const resolved=await identity();
+  const server=serverOrigin()===undefined?undefined:resolved.canonical;
+  const serverAliases=serverAddresses(resolved);
 
-  let connection=await loadConnection(server,home,context.env);
-  const authenticate=()=>browserAuthenticate(connection?.server??server??declaredServer,{...context.auth,home,env:context.env,interactive,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
+  let connection=await loadConnectionFor(resolved,home,context.env);
+  const authenticate=()=>browserAuthenticate(connection?.server??server??declaredServer,{...context.auth,home,env:context.env,interactive,aliases:serverAliases,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
   if(command==='auth'){
    if(positionals[0]) {
     const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd,server:server??declaredServer,writable:true});
@@ -228,8 +260,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // A directory is tracked against ONE server and account. Sending another server this directory's account
   // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
   // login JavaScript. Name both origins and the way out before any request.
-  if(workspace.tracking&&workspace.tracking.server!==connection.server)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
-  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
+  if(workspace.tracking&&workspace.tracking.server!==connection.server&&!sameServer(resolved,workspace.tracking.server))throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
+  const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:serverAliases,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
   if(command==='sessions'){
    const code=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;

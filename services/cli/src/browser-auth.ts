@@ -30,6 +30,13 @@ export interface AuthOptions {
   /** Optional artifact: skip approval if accessible, otherwise connect to its browser owner. */
   artifactId?: string;
   connection?: Connection;
+  /**
+   * Verified other addresses of the selected server (services/cli/src/server-identity).
+   * One deployment may show its approval page on its canonical hostname while the command
+   * selected another of its names; that is the same server saying so about itself, not a
+   * redirection to a stranger. Credentials still travel to the SELECTED origin alone.
+   */
+  aliases?: readonly string[];
   /** A rejected token must not be reused; another process may already have replaced it. */
   rejectedToken?: string;
   fetch?: typeof fetch;
@@ -73,8 +80,11 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   const raw = await readOptional(file);
   if (raw) {
     const value = JSON.parse(raw.toString()) as Pending;
-    if (validPending(value, server) && value.expiresAt > clock() && value.connectionKey === (connection ? digest(connection.token) : undefined)) pending = value;
+    if (validPending(value, server, [server, ...(options.aliases ?? [])]) && value.expiresAt > clock() && value.connectionKey === (connection ? digest(connection.token) : undefined)) pending = value;
   }
+  // Where an approval page may live: the selected origin, and the verified other addresses of
+  // the SAME server. Nothing else, and never an origin the pairing response itself named.
+  const approvalOrigins = [server, ...(options.aliases ?? []).map(alias => {try{return normalizeServer(alias);}catch{return '';}}).filter(Boolean)];
   if (!pending) {
     let result;
     if (options.artifactId && connection) {
@@ -96,9 +106,9 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
     if (!response.ok) throw new CliError('auth_failed',`Could not start browser authentication (HTTP ${response.status}).`);
     pending = {server, ...(connection ? {connectionKey:digest(connection.token)} : {}), deviceCode:data.device_code,userCode:data.user_code,verificationUrl:data.verification_uri_complete,
       expiresAt:clock()+Math.min(300, data.expires_in)*1000,interval:Math.max(5,data.interval)*1000};
-    if (!validPending(pending,server)) {
+    if (!validPending(pending,server,approvalOrigins)) {
       let advertised='';try{advertised=new URL(String(data.verification_uri_complete)).origin;}catch{/* malformed */}
-      if(advertised&&advertised!==server)throw new CliError('approval_origin_mismatch',`The selected server ${server} asks for approval at ${advertised}, a different origin.`,`Run the command with --server ${advertised} if that is the server you meant; credentials are never sent to an origin you did not select.`);
+      if(advertised&&!approvalOrigins.includes(advertised))throw new CliError('approval_origin_mismatch',`The selected server ${server} asks for approval at ${advertised}, a different origin that ${server} has not published as one of its own addresses.`,`Run the command with --server ${advertised} if that is the server you meant; credentials are never sent to an origin you did not select.`);
       throw new CliError('invalid_response','Authentication server returned invalid pairing details.');
     }
     await privateDirectory(configDir(home,options.env));
@@ -132,10 +142,10 @@ export async function deviceAuthenticate(origin: string, options: AuthOptions): 
   await unlink(file);
   throw new CliError('approval_expired','Browser approval expired.','Run afbin auth again.');
 }
-function validPending(value: Pending, server: string): boolean {
+function validPending(value: Pending, server: string, approvalOrigins: readonly string[] = [server]): boolean {
   if (!value || value.server !== server || typeof value.deviceCode !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.deviceCode)
     || typeof value.userCode !== 'string' || !/^[A-Za-z0-9-]{1,40}$/.test(value.userCode)
     || !Number.isFinite(value.expiresAt) || !Number.isFinite(value.interval) || value.interval < 5000 || value.interval > 300000) return false;
-  try { const url = new URL(value.verificationUrl); return url.origin === server && url.pathname === '/oauth/device' && !url.username && !url.password && !url.hash; }
+  try { const url = new URL(value.verificationUrl); return approvalOrigins.includes(url.origin) && url.pathname === '/oauth/device' && !url.username && !url.password && !url.hash; }
   catch {return false;}
 }
