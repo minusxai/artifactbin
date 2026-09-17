@@ -13,6 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { POST as startRoute } from '@/app/api/start/route';
 
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername } from '@/lib/users';
@@ -22,6 +23,17 @@ import { criticalStoryFonts } from '@/lib/data/story/story-fonts';
 import { useAppHarness } from '@/__tests__/harness';
 
 useAppHarness();
+
+it('renders the starter instructions on the first response instead of the old waiting document', async () => {
+  const created = await startRoute(new Request('http://localhost:3000/api/start', { method: 'POST' }));
+  const { id } = await created.json() as { id: string };
+  const response = await app.request(`/a/${id}`);
+  const document = new JSDOM(await response.text()).window.document;
+  const initial = document.querySelector('[data-mx-initial-story]')!;
+  expect(initial.querySelector('textarea')?.value).toContain(`/a/${id}`);
+  expect(initial.textContent).toContain('Your artifact is ready for your agent!');
+  expect(initial.textContent).not.toContain('Paste what you copied into your coding agent.');
+});
 
 const SECRET = 'vitest-actor-secret-0000000000000000';
 const actorHeaders = (actor: Actor, secret: string): Record<string, string> => ({ [ACTOR_HEADER]: signActor(actor, secret) });

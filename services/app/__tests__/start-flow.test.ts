@@ -55,8 +55,8 @@ describe('POST /api/start', () => {
     expect(body.prompt).toContain('afbin help');
     expect(body.prompt).not.toContain('mx_');
     expect(body.prompt).not.toContain('/tokens/new');
-    expect(body.prompt.split('\n')).toHaveLength(1);
-    expect(body.prompt.length).toBeLessThan(600); // a line, not an essay
+    expect(body.prompt).toContain("\n\n---\n\nLet's build an artifact for " );
+    expect(body.prompt.length).toBeLessThan(600); // instructions plus a short editable brief
   });
 
   it('answers a signed-in caller the same body, and stamps the document with the account', async () => {

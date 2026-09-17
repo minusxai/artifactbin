@@ -16,6 +16,10 @@ const WAITING_LINE = 'Waiting for your agent…';
  * head tags and the tail comment): the way on, in the document itself. Screen-reader-only for people. */
 const AGENT_LINE = "Agents: edit this document with the afbin CLI — read /llms.txt on this site, then afbin pull this page's URL.";
 const ACTIONABLE_LINE = 'Paste what you copied into your coding agent.';
+/** Source gains generated node IDs during compilation. Match the fixed starter
+ * text only on its first version; never show setup over an agent's first edit. */
+export const isStartPlaceholder = (source: string | null, version: number): boolean =>
+  version === 1 && !!source?.includes(AGENT_LINE) && source.includes(WAITING_LINE);
 export const START_PLACEHOLDER_MARKUP =
   '<div data-design="tw" className="@container flex min-h-[var(--mx-vh,760px)] flex-col items-center justify-center gap-4 px-6 text-center">' +
   '<h1 className="text-2xl font-semibold tracking-tight">Untitled</h1>' +

@@ -18,6 +18,10 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { createGithubResponse } from './external/github';
 import { loadStorySsr } from '@/lib/story/ssr.server';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import StarterInstructions from '@/components/StarterInstructions';
+import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { PreparedStoryRuntime } from '@/lib/story/prepared-runtime';
 import { isolateStoryCss, isolateStoryNodes } from '@/lib/story/inline-css';
 import { escapeHtml } from '@/lib/story/reader-chrome';
@@ -86,10 +90,12 @@ export const withBootstrap = (html: string, data: unknown): string =>
  * before React mounts and removed when the inline runtime commits. App root
  * and head bootstrap precede ALL author nodes, including colliding ids.
  */
-export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id: string, description?: string | null, origin = ''): string {
+export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id: string, description?: string | null, origin = '', starter = false): string {
   const combined = [runtime.baseCss, runtime.compiledCss ?? '', runtime.authorCss ?? ''].join('\n');
   const css = isolateStoryCss(combined).replace(/<\/style/gi, '');
-  const body = loadStorySsr().renderStoryBody({ ...runtime.data, nodes: isolateStoryNodes(runtime.data.nodes, combined) });
+  const body = starter
+    ? renderToStaticMarkup(createElement(StarterInstructions, { id, initialOrigin: origin }))
+    : loadStorySsr().renderStoryBody({ ...runtime.data, nodes: isolateStoryNodes(runtime.data.nodes, combined) });
   // While lazy app code mounts, it must not push the readable server sibling
   // down by its viewport height. This temporary rule belongs to the captured
   // sibling, so its removal atomically reveals the committed app document.
@@ -101,7 +107,7 @@ export function withInitialStory(html: string, runtime: PreparedStoryRuntime, id
     + `<meta property="og:image" content="${escapeHtml(origin)}/a/${escapeHtml(id)}/export?mode=card&amp;r=${CARD_RENDER_GENERATION}"><meta name="twitter:card" content="summary_large_image">`;
   return html.replace(/<title>[\s\S]*?<\/title>/i, () => `<title>${escapeHtml(runtime.title)}</title>`)
     .replace('</head>', () => `${metadata}</head>`)
-    .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style><div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div></div></body>`);
+    .replace('</body>', () => `<div data-mx-initial-story=""><style>${handoffCss}</style>${starter ? body : `<div data-mx-inline-story="" ${STORY_ROOT_ATTR} class="${runtime.data.colorMode}"${runtime.theme ? ` data-theme="${escapeHtml(runtime.theme)}"` : ''}><style>${css}</style>${body}</div>`}</div></body>`);
 }
 
 // Inline scripts emitted by our source HTML and Vite's development transform.
@@ -198,7 +204,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
 
 
 /** Every static address web/App.tsx routes: a direct load or a reload of one missing here is a 404. */
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new)$/;
+const SPA_PATHS = /^(\/|\/login|\/start|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. A path
@@ -282,12 +288,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the app's own 404 page, anything else (curl's `*/*`, a fetch tool)
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
-    const surface = (data?.artifact as { surface?: { id: string; runtime?: PreparedStoryRuntime }; description?: string | null } | undefined);
+    const surface = (data?.artifact as { surface?: { id: string; source: string | null; version: number; runtime?: PreparedStoryRuntime }; description?: string | null } | undefined);
     // The agent pointer is injected here, on the request base, for EVERY shell
     // — the static index.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
-      ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
+      ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw), isStartPlaceholder(surface.surface.source, surface.surface.version))
       : withGenericSocial(discovered, baseUrl(c.req.raw));
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {

@@ -4,6 +4,11 @@ import {request,useAppHarness} from '@/__tests__/harness';
 useAppHarness();
 const app=createAppServer({indexHtml:async()=>'<html><head></head><body><div id="root"></div></body></html>'});
 describe('application home',()=>{
+ it.each(['GET','HEAD'])('serves /start anonymously on %s without creating an artifact',async method=>{
+  const response=await app.request('/start',{method});
+  expect(response.status).toBe(200);
+  expect(response.headers.get('location')).toBeNull();
+ });
  it.each(['GET','HEAD'])('redirects an unauthenticated %s to login without caching',async method=>{
   const response=await app.request('/',{method});
   expect(response.status).toBe(302);expect(response.headers.get('location')).toBe('/login');
