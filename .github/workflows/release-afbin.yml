@@ -5,8 +5,11 @@ name: Release afbin
 # conformance job (selected because the version changed, scripts/lib/ci-plan.mjs), and once the PR
 # is merged and main's CI passes, `release-cli.yml` uploads the tested assets to GitHub Releases.
 #
-# The PR is opened with the repository token, whose events start no workflow, so CI is dispatched
-# on the branch explicitly; its checks attach to the PR's head commit.
+# Opening the PR needs a token that is allowed to: this organization forbids Actions from creating
+# pull requests with the repository token, so an `AUTOMATION_TOKEN` secret (a PAT, as the server
+# repository uses) is preferred. Without one the branch is still pushed and its CI still started —
+# dispatched explicitly, because the repository token's events start no workflow — and the job
+# summary carries the compare link to open the PR by hand. Nothing here fails for lack of a PAT.
 
 on:
   workflow_dispatch:
@@ -48,9 +51,10 @@ jobs:
           npm run generate:teaching -w services/cli
           version=$(node -p "require('./services/cli/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - name: Open the release PR and start its CI
+      - name: Push the release branch, start its CI, and open the PR where a token allows it
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
+          HAS_PAT: ${{ secrets.AUTOMATION_TOKEN != '' }}
           VERSION: ${{ steps.bump.outputs.version }}
         run: |
           set -euo pipefail
@@ -61,5 +65,10 @@ jobs:
           git add -A
           git commit -m "Release afbin $VERSION"
           git push -u origin "$branch"
-          gh pr create --base main --head "$branch" --title "Release afbin $VERSION" --body ""
-          gh workflow run ci.yml --ref "$branch"
+          # A PAT's pull_request event starts CI itself; the repository token's does not.
+          if [ "$HAS_PAT" != "true" ]; then gh workflow run ci.yml --ref "$branch"; fi
+          if gh pr create --base main --head "$branch" --title "Release afbin $VERSION" --body ""; then
+            echo "Release PR opened for afbin $VERSION." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "The release branch \`$branch\` is pushed and its CI is running, but this token may not open pull requests. Open it here: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1&title=Release+afbin+$VERSION" >> "$GITHUB_STEP_SUMMARY"
+          fi
