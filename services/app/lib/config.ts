@@ -7,12 +7,10 @@ import { parseAssetsOrigin } from '@artifactbin/utils';
  * configuration auditable in one place).
  *
  * NAMES ARE NAMESPACED BY MODULE: `MODULE__NAME` (two underscores), and there
- * is exactly ONE spelling of each setting. `env()` briefly accepted a legacy
- * flat name as a fallback, with a warning — two spellings for one setting is a
- * trap, and it sprang: a file carrying both, where the namespaced one silently
- * wins and the other reads as live. Both the fallback and the migration map
- * that replaced it are gone: this project ships no deployment that predates
- * the namespaced spelling, so an unnamespaced name is simply not a setting.
+ * is exactly ONE spelling of each setting. There is no unnamespaced fallback:
+ * two spellings for one setting is a trap — a file carrying both, where the
+ * namespaced one silently wins and the other reads as live — so an
+ * unnamespaced name is simply not a setting.
  * Production hard-fails only when
  * AUTH__SECRET or APP__PUBLIC_BASE_URL is absent (see the composition root).
  * Two deliberate exceptions, because they are conventions every host and
@@ -172,10 +170,9 @@ export const MAX_ROWS_LIMIT = Number(env('SQL', 'MAX_ROWS') ?? '10000');
  * exists to prevent — but a cut result is RECORDED (`truncated`, `totalRows`),
  * never silent, because a chart built from a sample believing it is the set is
  * the failure that matters. Defaults to the INGEST cap, deliberately: every
- * dataset already fits under it, so `select * from ref_<id>` is never cut and
- * nothing that rendered whole before the dataflow renders as a sample now (a
- * 7,361-point scatter did, at 5,000). Only a query that GROWS its input past
- * the cap — a join, a range() — meets it.
+ * dataset already fits under it, so `select * from ref_<id>` is never cut.
+ * Only a query that GROWS its input past the cap — a join, a range() — meets
+ * it.
  */
 export const MAX_QUERY_ROWS = Number(env('SQL', 'MAX_QUERY_ROWS') ?? String(MAX_ROWS_LIMIT));
 
@@ -236,7 +233,7 @@ export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 
 /**
  * The externally-visible origin, for absolute URLs built OUTSIDE a request
- * scope (the MCP tools' url echoes). HTTP routes derive it from the request.
+ * scope (`publicOrigin()`'s fallback). HTTP routes derive it from the request.
  */
 export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
 const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');

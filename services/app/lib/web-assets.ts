@@ -245,7 +245,7 @@ interface DocumentAssetTarget {
  * — those exist only once someone is reading — so they arrive here instead,
  * once, and are cached globally like every other URL.
  *
- * WHO PAYS is the whole of R10, and the answer is the DOCUMENT'S OWNER: they
+ * WHO PAYS is the whole question, and the answer is the DOCUMENT'S OWNER: they
  * named the source, and a reader who merely opens a page — possibly an
  * anonymous stranger — must not spend storage they do not have. It is charged
  * exactly as a publish charges, through `importWebAsset`, so there is one byte
@@ -273,13 +273,12 @@ export async function importForDocument(doc: DocumentAssetTarget, url: string, k
 
 /**
  * Re-fetch a URL and repoint its row — the answer to "the source image
- * changed" (R13). The ADDRESS never moves (`/assets/<url_hash>` is derived from
+ * changed". The ADDRESS never moves (`/assets/<url_hash>` is derived from
  * the url, not the bytes), which is what lets a stored document keep working
- * without a rewrite. What USED to be its honest limit — the address is served
- * `immutable`, so a reader who already had it kept the old picture (R19) — is
- * closed by the row itself: the mapping cuts a `?v=` from `object_key`
- * (lib/story/asset-url), so repointing the row changes the url every later
- * render emits and every reader asks again exactly once.
+ * without a rewrite. The address is served `immutable`, so a reader who already
+ * had it would keep the old picture; the row closes that: the mapping cuts a
+ * `?v=` from `object_key` (lib/story/asset-url), so repointing the row changes
+ * the url every later render emits and every reader asks again exactly once.
  *
  * A URL nobody holds yet is simply imported, so a caller need not ask first.
  *
@@ -287,9 +286,9 @@ export async function importForDocument(doc: DocumentAssetTarget, url: string, k
  *
  * This is a door that turns a URL into STORED BYTES, so it asks the byte quota
  * exactly as `importWebAsset` does — a refresher already over their cap is
- * refused before anything is fetched. Without that, the cap this milestone
- * exists to add was bypassable through the route this milestone added: repoint,
- * repoint, repoint, and every new object is invisible to a sum over the rows.
+ * refused before anything is fetched. Without that, the byte cap would be
+ * bypassable through this route: repoint, repoint, repoint, and every new
+ * object is invisible to a sum over the rows.
  *
  * When the object MOVES, the row's payer moves with it: the row's `bytes` are
  * now the bytes the REFRESHER caused, so they are the refresher's to answer

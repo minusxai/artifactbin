@@ -35,13 +35,14 @@ import { getDb } from '@/lib/db';
  * overwrite it (cookie tossing) — but a browser rejects it outright over plain
  * http, so the name has to follow the SCHEME, not the environment.
  *
- * It used to follow `NODE_ENV`, while the proxy that SETS this cookie followed
- * the base URL's scheme (services/utils/src/agent-session `cookieName`). Over
- * https they agree; over HTTP IN PRODUCTION — the self-host default this
- * project ships, `http://localhost:3030` — the proxy wrote `mx-agent-session`
- * and the app read `__Host-mx-agent-session`, so the browser held a session
- * neither side could see. It cost the whole claim flow, silently: a person
- * published anonymously, signed up, and was never offered their drafts.
+ * The proxy that SETS this cookie derives the name the same way, from the base
+ * URL's scheme (services/utils/src/agent-session `cookieName`). Keying it on
+ * anything else — `NODE_ENV`, say — makes the two disagree over HTTP IN
+ * PRODUCTION, the self-host default this project ships (`http://localhost:3030`):
+ * the proxy writes `mx-agent-session`, the app reads `__Host-mx-agent-session`,
+ * and the browser holds a session neither side can see. That costs the whole
+ * claim flow silently — a person publishes anonymously, signs up, and is never
+ * offered their drafts.
  *
  * Keep this separate from the account session cookie so the two kinds of
  * authentication retain distinct lifecycles.

@@ -12,7 +12,7 @@ import { dailySeries } from './daily-series';
  * subtree in ONE statement; the level is the length, so the depth cap is a
  * comparison and never a walk; and a folder is an ordinary artifact row, so
  * its children are a TABLE the document's own dataflow reads, computed per
- * viewer on the server. Plan: ~/projects/artifactbin-folders.md.
+ * viewer on the server.
  */
 import { getDb } from '@/lib/db';
 import { canAnnotate, canEdit, canRead } from '@/lib/share-roles';
@@ -70,10 +70,6 @@ export const isParentRefusal = (r: { ancestor_ids: string[] } | ParentRefusal): 
 
 /**
  * WHERE A FOLDER SITS — its ancestors, as the page's trail draws them.
- *
- * It was `lib/story-ui/folder-head` while a folder's listing lived inside a
- * document and had to reach the kit through the island. The listing is app
- * chrome now, so the shape belongs beside the module that computes it.
  */
 interface FolderCrumb {
   id: string;
@@ -88,9 +84,8 @@ interface FolderCrumb {
  *
  * A folder has NO CONTENT: its row carries a title, a placement and an ACL and
  * nothing else, so everything a person sees on the page is on this object.
- * There is no document to render, no source to fetch and no frame to boot —
- * which is the whole point of the change: the listing used to arrive behind a
- * sandboxed runtime an opaque origin cannot cache.
+ * There is no document to render, no source to fetch and no frame to boot, so
+ * the listing never waits on a sandboxed runtime an opaque origin cannot cache.
  */
 export interface FolderPage {
   id: string;
@@ -111,10 +106,10 @@ export interface FolderPage {
  * A folder's page, for ONE viewer. The trail and the shelf, and nothing else.
  *
  * Thumbnails here are the shelf's OWN (`/a/<child>/export?mode=card`), loaded
- * by the app page WITH the session — which is the one thing the old in-document
- * listing could not do, since a sandboxed frame carries no cookie and a private
- * child's card 404s for its own owner. Numbers follow the same rule the virtual
- * table uses: only a viewer who may EDIT the folder gets them.
+ * by the app page WITH the session — which a sandboxed frame cannot do, since
+ * it carries no cookie and a private child's card 404s for its own owner.
+ * Numbers follow the same rule the virtual table uses: only a viewer who may
+ * EDIT the folder gets them.
  */
 export async function folderPageFor(
   folder: ArtifactRow,
@@ -210,7 +205,7 @@ async function selectChildren(
      * or unlisted child, for a viewer with no role on the folder — costs the
      * share lookup that decides whether they were named on it personally. That
      * lookup also STAMPS resolved shares, so asking it per row unconditionally
-     * was up to 500 UPDATEs inside one query response; now it is asked only
+     * would be up to 500 UPDATEs inside one query response; it is asked only
      * for the rows that cannot be settled without it, and never at all for an
      * anonymous viewer (`roleWithoutLink` returns `none` with no query).
      * Measured at 100 children read by a signed-in stranger: 25ms → 1ms.
@@ -352,9 +347,8 @@ interface ChildRow {
  * the numbers. This half owns only the shape a document's SQL reads and the
  * one rule the app page does not share — the thumbnail.
  *
- * It survives the folder page's move into app chrome because it was never the
- * folder page's: a document may list a folder's children with `<Files>`, and
- * that is the feature this table is for.
+ * It is not the folder page's: a document may list a folder's children with
+ * `<Files>`, and that is the feature this table is for.
  */
 export async function childrenTableFor(
   folder: ArtifactRow,
@@ -388,12 +382,12 @@ export async function childrenTableFor(
 
 /**
  * WHERE A FOLDER SITS, for the folder's own page — its name, its id, and the
- * ancestors THIS viewer may read (lib/story-ui/folder-head).
+ * ancestors THIS viewer may read.
  *
  * The trail is the half with a rule in it. `ancestor_ids` on a PUBLIC folder
  * can name a PRIVATE parent, so a page that drew the whole array would publish
- * one folder's existence and NAME to every stranger holding the child's link —
- * and P1 already settled the ids half by keeping the array out of a stranger's
+ * one folder's existence and NAME to every stranger holding the child's link;
+ * the ids half is settled by keeping the array out of a stranger's
  * payload. An ancestor a viewer may not read is simply ABSENT: not redacted,
  * not drawn unnamed, because a crumb saying "a folder you may not see" is the
  * existence oracle the uniform 404 exists to avoid.

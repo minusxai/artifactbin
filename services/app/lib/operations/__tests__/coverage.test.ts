@@ -1,11 +1,10 @@
 /**
  * No operation outside the registry: every bearer route under /api/artifacts
- * maps to a registry operation's HTTP address, and every MCP tool is a
- * registry operation — so a route or tool cannot be added in one transport
- * and forgotten in the other (or in the docs, which render the same list).
+ * maps to a registry operation's HTTP address, and every operation's address
+ * is a real route file — so neither side can gain an entry the other misses.
  *
  * Named exceptions only: the annotations LIST (a history/debug read whose
- * primary form is inlined on get_artifact — deliberately not a tool).
+ * primary form is inlined on get_artifact).
  */
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';

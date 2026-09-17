@@ -2,13 +2,11 @@
  * WHERE YOU ARE, AS A TRAIL — the bar's name for the current page, and the
  * way back up from it.
  *
- * The bar used to print a page NAME, absolutely centered, beside a brand mark
- * that was already a link home. Two pieces of chrome saying two halves of one
- * thing: the mark said where you are hosted, the name said which page, and
- * nothing said how they related or offered the step between them. A trail says
- * both at once and is navigable — `artifactbin › @vivek › My doc` gets you
- * back to the profile in one tap, which on a phone is the difference between
- * navigation and the back button.
+ * A bare page name beside a brand mark says two halves of one thing — where you
+ * are hosted and which page — without saying how they relate or offering the
+ * step between them. A trail says both at once and is navigable:
+ * `artifactbin › @vivek › My doc` gets you back to the profile in one tap,
+ * which on a phone is the difference between navigation and the back button.
  *
  * The ROOT is not in this list. The brand mark IS the root crumb and the bar
  * renders it unconditionally, so this function answers only "what comes after
@@ -17,11 +15,10 @@
  * TWO RULES, both about the 390px screen this is drawn on:
  *
  *  - AT MOST ONE ANCESTOR. The handle is the one crumb worth a tap in a 44px
- *    bar. This survived folders becoming artifacts unchanged: nesting is not in
- *    a URL (lib/urls), so a pretty address is `@handle` and one leaf, and the
- *    trail through a folder is drawn on the folder's own document from
- *    `ancestor_ids`. An OLD link still carrying folder names resolves by its id
- *    and heals, and until it does its extra segments are ignored here.
+ *    bar. Nesting is not in a URL (lib/urls), so a pretty address is `@handle`
+ *    and one leaf, and the trail through a folder is drawn on the folder's own
+ *    document from `ancestor_ids`. A link still carrying folder names resolves
+ *    by its id and heals; until it does, its extra segments are ignored here.
  *  - THE TITLE WINS THE LEAF. A document names itself, and its address
  *    (`/@vivek/notes/ab12-my-doc`) is decoration around an id. Whoever renders
  *    a document passes the name it actually has.
@@ -63,9 +60,7 @@ export function crumbsFor(pathname: string, title?: string | null): Crumb[] {
   // is not a page. Its name is the whole trail.
   if (path.startsWith('/a/')) return [{ label: named ?? 'artifact' }];
 
-  // Every docs address is the same destination as far as the bar cares — the
-  // human tour (`/docs-human`) and the agent tree (`/docs/…`) are two readings
-  // of one thing.
+  // Every docs address is the same destination as far as the bar cares.
   if (path === '/docs' || path === '/docs-human' || path.startsWith('/docs/')) return [{ label: 'docs' }];
 
   const name = PAGE_NAMES[path] ?? named;

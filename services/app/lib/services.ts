@@ -1,10 +1,10 @@
 /**
  * WHERE THE APP GETS ITS SERVICES. The app tree never decides — and never
  * imports — where DuckDB or Chromium run. A URL in config means an HTTP
- * client; otherwise whatever the COMPOSITION ROOT registered (`server.mts`,
- * `app-only.mts`, `test/setup/vitest.setup.ts` — the local implementations,
- * from the `./local` entries only they may reach); otherwise a noop that says
- * so rather than a silent empty result.
+ * client; otherwise whatever the COMPOSITION ROOT registered (`server/host.ts`
+ * from its caller's options, `test/setup/vitest.setup.ts` — the local
+ * implementations, from the `./local` entries only they may reach); otherwise a
+ * noop that says so rather than a silent empty result.
  *
  * A configured URL WINS over a registration, so a root may register
  * unconditionally without having to re-read the deployment's mind — though
@@ -12,7 +12,7 @@
  * image cannot do.
  *
  * Injection happens ONCE, not per call: the call sites are deep in lib/
- * (dataflow, mutate, data-checks, export) and have no request context to
+ * (sql/engine, events, export, operations) and have no request context to
  * carry a service through. The registry lives on `globalThis`, like the
  * export renderer's state — a root registers once per PROCESS, and a module
  * reload in a test must not silently turn the engine back into a noop.

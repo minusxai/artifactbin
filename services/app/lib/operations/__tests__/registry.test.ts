@@ -1,7 +1,7 @@
 /**
  * The operations registry — ONE curated list of what an agent can do, from
- * which the MCP tools, the HTTP artifact routes and the docs' endpoint
- * reference are all rendered. These are the rules that keep it a registry
+ * which the HTTP artifact routes are rendered. These are the rules that keep
+ * it a registry
  * rather than a dump of routes (the pitfall every OpenAPI→MCP generator
  * warns about): model-facing descriptions, one worked example per operation
  * that actually parses, read/write/destructive annotated, and an error
@@ -44,7 +44,7 @@ describe('the registry is curated, not generated', () => {
   it('every description is one model-facing paragraph — present, bounded, saying what comes back', () => {
     for (const op of OPERATIONS) {
       expect(op.description.length, op.name).toBeGreaterThan(40);
-      // Context on every MCP turn: the description must stay a paragraph, not a page.
+      // Context on every agent turn: the description must stay a paragraph, not a page.
       expect(op.description.length, op.name).toBeLessThanOrEqual(1200);
       expect(op.title, op.name).toBeTruthy();
     }

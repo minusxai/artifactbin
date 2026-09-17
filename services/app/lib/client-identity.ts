@@ -81,7 +81,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? 
  * Identify the caller. An explicit supported declaration wins, then
  * UA. A runtime UA cannot distinguish agents sharing it.
  */
-/** The header's name, re-exported under this module's older name — contracts spells it once. */
+/** The header's name, re-exported under this module's own spelling — contracts spells it once. */
 export const ARTIFACTBIN_AGENT_HEADER = AGENT_HEADER;
 
 /** A supported explicit HTTP declaration, or null when the value is absent/unknown. */

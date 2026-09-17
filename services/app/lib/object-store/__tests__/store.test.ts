@@ -103,13 +103,11 @@ contractSuite('local', async () => {
 // so CI needs no external service — but when it does run, both backends are
 // held to the identical contract above, which is the point of the abstraction.
 //
-// Run against the deployment's own credentials, two of these currently FAIL,
-// both on `raises ObjectNotFound for a missing key`: the IAM user has GetObject
-// but not s3:ListBucket, so S3 answers an absent key with 403 AccessDenied
-// instead of 404 NoSuchKey. That is a real defect in the deployment, not in the
-// assertion — it is what made /webfonts/<unknown-hash> a 500 — so the contract
-// stays as written and the fix is the ListBucket grant. The other 22 passing is
-// also the proof that GetObject/PutObject themselves work for this user.
+// `raises ObjectUnavailable for a missing key` needs the IAM user to hold
+// s3:ListBucket: without it S3 answers an absent key with 403 AccessDenied
+// instead of 404 NoSuchKey, which is what makes /webfonts/<unknown-hash> a 500.
+// A failure there is a defect in the deployment rather than in the assertion —
+// the contract stays as written and the fix is the ListBucket grant.
 const MINIO = process.env.TEST_S3_URL;
 if (MINIO) {
   contractSuite('s3', async () => {
@@ -130,13 +128,12 @@ describe('local backend refuses to escape its root', () => {
 
 describe('the prefix is actually applied to stored keys', () => {
   /**
-   * Mutation testing found this hole: deleting the prefix logic broke no test,
-   * yet the prefix is the ONLY thing stopping a dev machine writing over
-   * production objects — both point at the same bucket. It stayed open, because
-   * the only assertion needed a live server and TEST_S3_URL is set neither
-   * locally nor in CI, so the guard skipped on every run that has ever happened.
+   * The prefix is the ONLY thing stopping a dev machine writing over
+   * production objects — both point at the same bucket — and an assertion that
+   * needs a live server skips on every run where TEST_S3_URL is unset, which is
+   * locally and in CI.
    *
-   * The rule is a pure function now (storageKeyFor), so THIS runs always and
+   * The rule is a pure function (storageKeyFor), so THIS runs always and
    * deleting the prefix logic fails it. The round trip below still needs a
    * server and still earns its skip.
    */

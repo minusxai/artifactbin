@@ -39,10 +39,10 @@ export const SKILL_FILE_MAX_BYTES = 8192;
 const SKILL_FILE_MAX_LINES = 500;
 const SKILL_CONTENTS_THRESHOLD_LINES = 100;
 /**
- * The listing's cap. Planned at 5,120 B; raised once, measured: descriptions
- * that say what the BRIEF ALREADY COVERS ("read this only for …") took pi's
- * planned fetches for a deck from 6 to 0 and a dashboard from 8 to 2, and
- * cost ~450 B of listing. Still small enough to fetch twice for nothing.
+ * The listing's cap. Measured: descriptions that say what the BRIEF ALREADY
+ * COVERS ("read this only for …") took pi's planned fetches for a deck from 6
+ * to 0 and a dashboard from 8 to 2, and cost ~450 B of listing. Still small
+ * enough to fetch twice for nothing.
  */
 export const SKILL_LISTING_MAX_BYTES = 6144;
 const SKILL_READ_FIRST_HEADING = '## Read first';
@@ -148,10 +148,10 @@ export function skillLinks(body: string): string[] {
  * Files NAMED in prose — `markup-data.md`, `references/design.md`,
  * `themes-<name>.md`. The tree points at its own files this way far more often
  * than it links them (the dispatch table and the reading path are both lists of
- * backticked names), and `skillLinks` deliberately strips code spans, so none
- * of these were ever checked: five names left over from the six-skill era
- * (`datasets.md`, `motion.md`, `data.md`) survived the port and sent an agent
- * to a file that does not exist. Read from the RENDERED text, so a name built
+ * backticked names), and `skillLinks` deliberately strips code spans, so
+ * nothing else checks them: a leftover name (`datasets.md`, `motion.md`,
+ * `data.md`) sends an agent to a file that does not exist. Read from the
+ * RENDERED text, so a name built
  * from the registries (`themes-[[ t.name ]].md`) is checked as what it becomes.
  */
 export function skillFileMentions(body: string): string[] {
@@ -207,7 +207,7 @@ const THIRD_PERSON_VIOLATION = /(^|\s)(I |I'm |you can |you should )/i;
 /**
  * Every rule the tree obeys, as problems. `rendered` gives a file's final
  * text (the guard renders with a fixed base so a hostname cannot move a
- * byte count); `listingBytes` the rendered `/docs` listing's size.
+ * byte count); `listingBytes` the rendered listing's size, when a caller has one.
  */
 export function validateSkillTree(tree: SkillTree, rendered: (f: SkillFile) => string, listingBytes?: number): string[] {
   const problems: string[] = [];

@@ -1,19 +1,13 @@
-/**
- * The navigation the components use, over react-router — the same three
- * calls `next/navigation` gave them (`useRouter().push/replace/refresh`,
- * `usePathname`, `useSearchParams`), so the components did not have to change
- * shape when the app stopped being a Next app.
- */
+/** The navigation the components use, over react-router. */
 'use client';
 import { useEffect } from 'react';
 import { useLocation, useNavigate, useSearchParams as useRRSearchParams } from 'react-router';
 import { isClientRoute } from '@/web/NavigationBoundary';
 
 /**
- * `refresh()` — "re-read what this page shows", the one call whose Next
- * meaning has no react-router equivalent. Under Next it refetched the server
- * components in place, keeping every piece of local state; the obvious
- * translation (`navigate(0)`) is `history.go(0)`, a FULL RELOAD, which throws
+ * `refresh()` — "re-read what this page shows", the one call with no
+ * react-router equivalent. The obvious translation (`navigate(0)`) is
+ * `history.go(0)`, a FULL RELOAD, which throws
  * away exactly the state the caller had just set (the claim banner's result,
  * measured: it never painted). So it is an event instead: the pages that hold
  * fetched data listen and re-fetch, and nothing else moves.

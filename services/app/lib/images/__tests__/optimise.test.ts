@@ -128,7 +128,7 @@ describe('optimiseImage', () => {
    *
    * The full variant is capped at 2048px and lands in a column about 850px
    * wide, so a 390px phone is handed roughly five times the pixels it can
-   * show. A 640-wide copy is the whole fix, and it is made HERE for the same
+   * show. One narrow copy is the whole fix, and it is made HERE for the same
    * reason everything else here is: at publish, in the one door every upload
    * and every URL import already comes through, so the two cannot disagree.
    *

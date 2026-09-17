@@ -1,3 +1,3 @@
 import type {Operation} from './registry';
-/** Account-scoped bearer operations (tokens, activity, analytics). Owned by the Resources workstream. */
+/** Account-scoped bearer operations; none are registered today. */
 export const ACCOUNT_OPERATIONS: Operation[] = [];
