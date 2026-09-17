@@ -82,15 +82,10 @@ describe('the homepage workspace and profile column', () => {
 });
 
 describe('what the dashboard leads with', () => {
-  // The signed-out door used to BE a login form. A stranger arriving from a
-  // shared link has nothing to log into yet, so the landing proves the
-  // product first and leaves the login to the page menu.
-  it('SIGNED OUT: shows the landing, not a login form and not the token browser', async () => {
+  it('SIGNED OUT: redirects to login instead of rendering a public home', async () => {
     home = { signedIn: false };
-    render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await screen.findByRole('region', { name: 'About Artifactbin' });
-    expect(screen.getByRole('link', { name: 'Sign in to your workspace' })).toHaveAttribute('href', '/login');
-    expect(screen.queryByLabelText('Log in with email')).toBeNull();
+    render(<MemoryRouter><Routes><Route path="/" element={<HomePage />}/><Route path="/login" element={<h1>Log in</h1>}/></Routes></MemoryRouter>);
+    await screen.findByRole('heading', {name:'Log in'});
     expect(screen.queryByLabelText('Browse artifacts by agent token')).toBeNull();
   });
 
@@ -186,8 +181,8 @@ describe('what the dashboard leads with', () => {
     expect(screen.getByLabelText('Trash')).toHaveAttribute('href', '/trash');
     cleanup();
     home = { signedIn: false };
-    render(<MemoryRouter><HomePage /></MemoryRouter>);
-    await screen.findByRole('region', { name: 'About Artifactbin' });
+    render(<MemoryRouter><Routes><Route path="/" element={<HomePage />}/><Route path="/login" element={<h1>Log in</h1>}/></Routes></MemoryRouter>);
+    await screen.findByRole('heading', { name: 'Log in' });
     expect(screen.queryByLabelText('Trash')).toBeNull();
   });
 
@@ -300,23 +295,4 @@ describe('a profile', () => {
     expect(screen.queryByLabelText('Assets')).toBeNull();
   });
 
-});
-
-// Ported here when the manual token page was removed: this covers the
-// HomePage anonymous-draft shelf, not the deleted page, so it belongs with the
-// other HomePage surface tests.
-describe('anonymous home drafts', () => {
-  it('renders the held-browser shelf and login nudge', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.includes('/session') ? { kind: 'anon', user: null } : {
-      signedIn: false,
-      drafts: [{
-        id: 'art_draft', url: '/a/art_draft', title: 'Browser draft', format: 'markup',
-        version: 1, updated_at: '2026-08-31T00:00:00.000Z', visibility: 'unlisted',
-      }],
-    }), { status: 200 })));
-    render(<MemoryRouter><HomePage /></MemoryRouter>);
-    expect(await screen.findByText(/held by this browser/i)).toBeTruthy();
-    expect(screen.getByText('Browser draft')).toBeTruthy();
-    expect(screen.getByRole('link', { name: /log in to keep them/i })).toHaveAttribute('href', '/login');
-  });
 });

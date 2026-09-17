@@ -62,3 +62,7 @@ The local test wrapper runs affected tests within its file budget; broader suite
 [CLI reference](services/cli/README.md) · [Document format](docs/document-format.md) · [Editing](docs/editing.md) · [Operations](docs/operations.md) · [Security](docs/serving-and-security.md) · [Ownership](docs/ownership.md)
 
 [Apache-2.0](LICENSE). Third-party license files remain with their runtime packages; the pinned Node runtime release includes its license.
+
+The app root is the authenticated workspace. Logged-out visits redirect to `/login`.
+Marketing, examples, and hosted-service legal pages belong to the separate
+`artifactbin-web` repository and are not included in this toolkit.

@@ -15,9 +15,9 @@ const deferred=<T,>()=>{let resolve!:(v:T)=>void;const promise=new Promise<T>(r=
 function Account(){const {data}=usePageData<{label:string}>('/api/page/account');return <main aria-label="Account result">{data?.label??'pending'}</main>;}
 function Harness({show=false}:{show?:boolean}){
   const navigate=useNavigate();
-  return <NavigationPreloads><button aria-label="Go account" onClick={()=>void navigate('/account')}/><button aria-label="Go privacy" onClick={()=>void navigate('/privacy')}/>{show&&<Account/>}</NavigationPreloads>;
+  return <NavigationPreloads><button aria-label="Go account" onClick={()=>void navigate('/account')}/><button aria-label="Go login" onClick={()=>void navigate('/login')}/>{show&&<Account/>}</NavigationPreloads>;
 }
-const ui=(show=false)=><MemoryRouter initialEntries={['/privacy']}><Harness show={show}/></MemoryRouter>;
+const ui=(show=false)=><MemoryRouter initialEntries={['/login']}><Harness show={show}/></MemoryRouter>;
 beforeEach(()=>{vi.restoreAllMocks();context.pages=createPageDataStore();context.pages.setScope('A');});
 
 it('starts data while code is pending, adopts a completed preload once, and revalidates a later visit',async()=>{
@@ -34,7 +34,7 @@ it('starts data while code is pending, adopts a completed preload once, and reva
   expect(screen.getByLabelText('Account result')).toHaveTextContent('ready');
   expect(fetcher).toHaveBeenCalledTimes(1);
   await act(async()=>view.rerender(ui(false)));
-  await act(async()=>fireEvent.click(screen.getByLabelText('Go privacy')));
+  await act(async()=>fireEvent.click(screen.getByLabelText('Go login')));
   await act(async()=>fireEvent.click(screen.getByLabelText('Go account')));
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
@@ -58,7 +58,7 @@ it('cancels unadopted data when superseded by a route with no page request',asyn
   vi.stubGlobal('fetch',fetcher);render(ui());
   await act(async()=>fireEvent.click(screen.getByLabelText('Go account')));
   expect(fetcher).toHaveBeenCalledTimes(1);
-  await act(async()=>fireEvent.click(screen.getByLabelText('Go privacy')));
+  await act(async()=>fireEvent.click(screen.getByLabelText('Go login')));
   expect(signal?.aborted).toBe(true);
   await act(async()=>network.resolve(new Response(JSON.stringify({label:'obsolete'}))));
   expect(context.pages!.resource('/api/page/account').snapshot().data).toBeNull();
@@ -71,8 +71,8 @@ it('warm destination mounting in the coordinator commit adopts ownership before 
   vi.stubGlobal('fetch',fetcher);
   let navigationId:string|null=null;
   function Capture(){navigationId=useContext(NavigationPreloadContext);return <Account/>;}
-  function Warm(){const location=useLocation(),navigate=useNavigate();return <NavigationPreloads><button aria-label="Warm account" onClick={()=>void navigate('/account')}/><button aria-label="Warm privacy" onClick={()=>void navigate('/privacy')}/>{location.pathname==='/account'&&<Capture/>}</NavigationPreloads>;}
-  render(<MemoryRouter initialEntries={['/privacy']}><Warm/></MemoryRouter>);
+  function Warm(){const location=useLocation(),navigate=useNavigate();return <NavigationPreloads><button aria-label="Warm account" onClick={()=>void navigate('/account')}/><button aria-label="Warm login" onClick={()=>void navigate('/login')}/>{location.pathname==='/account'&&<Capture/>}</NavigationPreloads>;}
+  render(<MemoryRouter initialEntries={['/login']}><Warm/></MemoryRouter>);
   await act(async()=>fireEvent.click(screen.getByLabelText('Warm account')));
   expect(routePages.AccountPage.preload).toHaveBeenCalledTimes(1);
   expect(fetcher).toHaveBeenCalledTimes(1);
@@ -86,7 +86,7 @@ it('warm destination mounting in the coordinator commit adopts ownership before 
 it('hover/focus preloads code once, never data, and ignores external/download/blank targets',async()=>{
   const code=deferred<void>(),preload=vi.spyOn(routePages.AccountPage,'preload').mockImplementation(()=>code.promise);
   const fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
-  render(<MemoryRouter initialEntries={['/privacy']}><NavigationPreloads><a aria-label="Intent" href="/account">Account</a><a aria-label="External" href="https://example.com/account"/><a aria-label="Download" href="/account" download/><a aria-label="Blank" href="/account" target="_blank"/></NavigationPreloads></MemoryRouter>);
+  render(<MemoryRouter initialEntries={['/login']}><NavigationPreloads><a aria-label="Intent" href="/account">Account</a><a aria-label="External" href="https://example.com/account"/><a aria-label="Download" href="/account" download/><a aria-label="Blank" href="/account" target="_blank"/></NavigationPreloads></MemoryRouter>);
   for(const name of ['External','Download','Blank']) fireEvent.mouseOver(screen.getByLabelText(name));
   expect(preload).not.toHaveBeenCalled();
   fireEvent.mouseOver(screen.getByLabelText('Intent'));fireEvent.focusIn(screen.getByLabelText('Intent'));
@@ -99,7 +99,7 @@ it('a denied dirty-editor navigation starts no destination data or code',async()
   const preload=vi.spyOn(routePages.AccountPage,'preload').mockResolvedValue(),fetcher=vi.fn();vi.stubGlobal('fetch',fetcher);
   const denied=vi.fn(async()=>false);
   function Guard(){useNavigationGuard(denied);return <a aria-label="Denied account" href="/account"/>;}
-  const router=createMemoryRouter([{element:<NavigationBoundary><NavigationPreloads><Outlet/></NavigationPreloads></NavigationBoundary>,children:[{path:'/privacy',element:<Guard/>},{path:'/account',element:<Account/>}]}],{initialEntries:['/privacy']});
+  const router=createMemoryRouter([{element:<NavigationBoundary><NavigationPreloads><Outlet/></NavigationPreloads></NavigationBoundary>,children:[{path:'/login',element:<Guard/>},{path:'/account',element:<Account/>}]}],{initialEntries:['/login']});
   render(<RouterProvider router={router}/>);
   await act(async()=>fireEvent.click(screen.getByLabelText('Denied account')));
   expect(denied).toHaveBeenCalledTimes(1);expect(fetcher).not.toHaveBeenCalled();expect(preload).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ it('canonical alias healing and signal/hash updates retain one artifact request'
   vi.spyOn(routePages.ProfilePage,'preload').mockResolvedValue();vi.spyOn(routePages.ArtifactPage,'preload').mockResolvedValue();
   const fetcher=vi.fn(async(_url:string)=>new Response(JSON.stringify({label:'artifact'})));vi.stubGlobal('fetch',fetcher);
   function Moves(){const navigate=useNavigate();return <NavigationPreloads><button aria-label="Artifact" onClick={()=>void navigate('/a/ABC123?$pick=1')}/><button aria-label="Alias" onClick={()=>void navigate('/@alice/ABC123-title?$pick=2#section',{replace:true})}/></NavigationPreloads>;}
-  render(<MemoryRouter initialEntries={['/privacy']}><Moves/></MemoryRouter>);
+  render(<MemoryRouter initialEntries={['/login']}><Moves/></MemoryRouter>);
   await act(async()=>fireEvent.click(screen.getByLabelText('Artifact')));
   await act(async()=>fireEvent.click(screen.getByLabelText('Alias')));
   expect(fetcher).toHaveBeenCalledTimes(1);expect(fetcher.mock.calls[0]?.[0]).toBe('/api/page/artifact/ABC123?$pick=1');
@@ -137,7 +137,7 @@ it('entering cached editing state does not start a preload that bypasses its pau
   context.pages!.resource('/api/page/artifact/ABC123').seed({label:'cached draft basis'});
   const fetcher=vi.fn(async()=>new Response('{}'));vi.stubGlobal('fetch',fetcher);
   function Editing(){const navigate=useNavigate();return <NavigationPreloads><button aria-label="Enter editing" onClick={()=>void navigate('/a/ABC123#edit')}/></NavigationPreloads>;}
-  render(<MemoryRouter initialEntries={['/privacy']}><Editing/></MemoryRouter>);
+  render(<MemoryRouter initialEntries={['/login']}><Editing/></MemoryRouter>);
   await act(async()=>fireEvent.click(screen.getByLabelText('Enter editing')));
   expect(fetcher).not.toHaveBeenCalled();
 });
@@ -148,7 +148,7 @@ it('route mapping shares artifact/folder keys, keeps static routes data-free, an
   expect(map('/@alice')?.key).toBe('/api/page/profile/%40alice');
   expect(map('/')?.key).toBe('/api/page/home?part=core');
   expect(map('/trash')?.key).toBe('/api/page/trash');
-  for(const path of ['/chat','/assets','/privacy','/login']) expect(map(path)?.key).toBeUndefined();
+  for(const path of ['/chat','/assets','/login','/login']) expect(map(path)?.key).toBeUndefined();
   for(const path of ['/a/ABC123/raw','/api/query','/docs','/api/auth/callback','/not-an-app']) expect(map(path)).toBeNull();
 });
 

@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { HomePage } from '@/web/pages/Home';
 import { SessionProvider, useSession } from '@/web/session';
 import { REFRESH_EVENT } from '@/lib/navigation';
@@ -10,7 +10,7 @@ const session = { kind: 'account', user: { id: 'one', email: 'one@example.com' }
 const core = { signedIn: true, accountId: 'one', artifacts: [{ id: 'ABC123', url: '/a/ABC123', title: 'Private document', format: 'markup', version: 1, visibility: 'private', ancestor_ids: [], updated_at: '2026-09-09', views: 0 }], shared: [] };
 const deferred = () => { let resolve!: (r: Response) => void; const promise = new Promise<Response>((r) => { resolve = r; }); return { promise, resolve }; };
 const response = (value: unknown) => new Response(JSON.stringify(value));
-function Controls() { const { reload } = useSession(); return <button aria-label="Reload identity" onClick={reload}>Reload</button>; }
+function Controls() { const { reload } = useSession(); const location=useLocation(); return <><button aria-label="Reload identity" onClick={reload}>Reload</button><output aria-label="Current path">{location.pathname}</output></>; }
 const tree = (home: boolean) => <MemoryRouter><SessionProvider><Controls />{home && <HomePage />}</SessionProvider></MemoryRouter>;
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
@@ -97,7 +97,7 @@ it('drops retained private rows when the core endpoint reports an expired sessio
       : { signedIn: true, accountId: 'one', sparklines: {} }))));
   const view = render(tree(true)); await screen.findByLabelText('Open Private document');
   view.rerender(tree(false)); signedIn = false; view.rerender(tree(true));
-  await screen.findByRole('region', { name: 'About Artifactbin' });
+  await waitFor(()=>expect(screen.getByLabelText('Current path')).toHaveTextContent('/login'));
   expect(screen.queryByLabelText('Open Private document')).toBeNull();
 });
 

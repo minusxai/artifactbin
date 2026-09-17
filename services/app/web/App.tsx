@@ -4,18 +4,15 @@ import { Shell } from './Shell';
 import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 
-const { ExamplesPage, ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, PrivacyPage, TermsPage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
+const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
 
 export function App() {
   return (
     <SessionProvider>
       <NavigationPreloads>
       <Routes>
-        <Route path="/examples" element={<ExamplesPage />} />
         <Route path="/" element={<HomePage />} />
         <Route element={<Shell />}>
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/account" element={<AccountPage />} />

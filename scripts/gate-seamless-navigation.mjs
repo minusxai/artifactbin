@@ -34,8 +34,8 @@ try {
   assert.equal(await page.getByLabel('Artifact A', { exact: true }).count(), 0, 'old body removed');
   assert.equal(await page.evaluate(() => getComputedStyle(document.body).getPropertyValue('--mx-navigation-probe').trim()), '', 'old author stylesheet removed');
   await page.getByLabel('Go home', { exact: true }).click();
-  await page.waitForURL(`${base}/`);
-  await page.getByRole('region', { name: 'About Artifactbin', exact: true }).waitFor();
+  await page.waitForURL(`${base}/login`);
+  await page.getByRole('textbox', { name: 'Email', exact: true }).waitFor();
   assert.equal(await page.evaluate(() => window.__navigationProbe), 'same-document', 'artifact to app is client navigation');
   const heldArtifact = [];
   const holdArtifact = (route) => { heldArtifact.push(route); };

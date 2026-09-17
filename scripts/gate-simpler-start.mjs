@@ -1,7 +1,7 @@
 /**
  * Gate: the one-line handoff, end to end, the way it is actually used.
  *
- * The homepage links to the setup guide. The guide creates a document and
+ * The setup guide creates a document and
  * copies one line naming the document and the afbin CLI. There is no credential in the paste, none in
  * the response, and no second door that hands one out: the CLI's browser
  * approval is the only way a client is connected. This gate drives that in a
@@ -19,13 +19,11 @@ import { connectAgent } from './lib/cli-connection.mjs';
 const B = process.argv[2] ?? 'http://localhost:3030';
 const check = createChecker('simpler-start');
 
-// ── 1. the human's leg: homepage → setup guide → document ──
+// ── 1. the human's leg: setup guide → document ──
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-await page.goto(`${B}/`, { waitUntil: 'load' });
-await page.getByRole('region', { name: 'About Artifactbin', exact: true }).getByRole('link', { name: 'Setup guide', exact: true }).click();
-await page.waitForURL(`${B}/docs-human`);
+await page.goto(`${B}/docs-human`, { waitUntil: 'load' });
 const create = page.getByRole('button', { name: 'Create a live document for my agent', exact: true });
 await create.waitFor();
 const startRespP = page.waitForResponse(

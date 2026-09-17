@@ -1,13 +1,12 @@
-import { useCallback, useLayoutEffect, useState } from 'react';
-import { clearInitialStory, hasInitialHome } from '@/web/initial-story';
+import { useCallback, useLayoutEffect } from 'react';
+import { clearInitialStory } from '@/web/initial-story';
 import { usePageData } from '@/web/use-page-data';
 import type { HomeCore, HomeInsights } from '@/web/home-resource';
 import ClaimBanner from '@/components/ClaimBanner';
 import { DatabasePlus } from 'lucide-react';
 import GetStarted from '@/components/GetStarted';
-import Landing from '@/components/Landing';
+import { Navigate } from 'react-router';
 import { ShellFrame } from '@/web/Shell';
-import LoginForm from '@/components/LoginForm';
 import SharedWithYou from '@/components/SharedWithYou';
 import Shelf from '@/components/Shelf';
 import WorkspaceLayout, { HOME_WORKSPACE_COLUMN, WorkspaceSkeleton } from '@/components/WorkspaceLayout';
@@ -51,7 +50,6 @@ function FirstArtifact() {
 }
 
 export function HomePage() {
-  const [publicInitial, setPublicInitial] = useState(hasInitialHome);
   const { session, reload } = useSession();
   const core = usePageData<HomeCore>('/api/page/home?part=core');
   const insights = usePageData<HomeInsights>('/api/page/home?part=insights', { enabled: !!core.data?.signedIn });
@@ -61,38 +59,10 @@ export function HomePage() {
   const state = { core: wrongAccount ? null : core.data, insights: wrongAccount ? null : insights.data, error: wrongAccount ? new Error('Account changed') : core.error, insightsError: !!insights.error };
   const home = state.core;
   useLayoutEffect(() => { clearInitialStory(); }, []);
-  useLayoutEffect(() => {
-    if (home || (session && session.kind !== 'none')) setPublicInitial(false);
-  }, [home, session]);
-  // Preserve the server's real landing across startup fetches. Any resolved
-  // account/anonymous identity supersedes that one-use eligibility verdict.
-  if (!home && publicInitial && (!session || session.kind === 'none')) return <Landing />;
+  if ((session && session.kind !== 'account') || (home && !home.signedIn)) return <Navigate to="/login" replace />;
   if (!home) return <ShellFrame><main className={`${HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
     {state.error ? <div role="alert"><p>Could not load your workspace.</p><button aria-label="Retry workspace" onClick={session ? load : reload}>Try again</button></div> : <WorkspaceSkeleton />}
   </main></ShellFrame>;
-  if (!home.signedIn) {
-    if (home.drafts?.length) {
-      return (
-        <ShellFrame><main className={`${PAGE_COLUMN} mt-8 pb-24`}>
-          <div className="mb-6 flex flex-wrap items-baseline justify-start gap-x-4 gap-y-1">
-            <h1 className="font-mono text-sm tracking-[0.14em] text-fg uppercase">Drafts held by this browser · </h1>
-            <a className="font-sans text-sm text-accent underline underline-offset-2" href="/login">Log in to keep them</a>
-          </div>
-          <Shelf actions="full" rows={home.drafts} />
-          <div className="mt-8"><GetStarted /></div>
-          {/* Keeping the drafts is the second act, so it follows the panel
-            * rather than competing with it. */}
-          <div className="reveal mt-3 rounded-[6px] border border-edge bg-surface px-4 pt-4 pb-4">
-            <h2 className="mb-2.5 font-mono text-[11px] tracking-[0.14em] text-muted uppercase">Log in</h2>
-            <LoginForm />
-          </div>
-        </main></ShellFrame>
-      );
-    }
-    // A stranger has nothing to log into yet: the landing proves the product
-    // and hands over the instruction; the page menu keeps the login door.
-    return <Landing />;
-  }
   const empty = home.artifacts.length === 0 && home.shared.length === 0 && !state.insights?.stats?.assets;
   return (
     <ShellFrame><main className={`${empty ? PAGE_COLUMN : HOME_WORKSPACE_COLUMN} mt-8 pb-24`}>
