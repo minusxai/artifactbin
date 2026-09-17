@@ -83,6 +83,50 @@ describe('the reader\'s document, opened at a link that names a selection', () =
   });
 });
 
+/**
+ * A `<Value url={false}>` is not a link's to set.
+ *
+ * The opt-out exists for the two Values that must not be shareable — a form
+ * field someone is still typing into, a flag an author's script sets — and half
+ * an opt-out is worse than none: if a hand-made or stale `?$draft=…` could
+ * still seed the document, the link would carry the state back in anyway.
+ */
+describe('a Value the author kept out of the link', () => {
+  const DRAFT_DOC = (ds: string) =>
+    '<Helmet><Value name="region" type="string" default="EU" />' +
+    '<Value name="draft" type="string" url={false} />' +
+    '<Value name="guest" type="boolean" default={false} url={false} />' +
+    `<Query name="sales" source="ref:${ds}">{\`select region, sum(revenue) revenue from public.rows where $region is null or region = $region group by 1 order by 1\`}</Query>` +
+    '</Helmet><div><input aria-label="Draft" value="$draft" /><Question data="$sales" viz={{"kind":"table"}} /></div>';
+
+  async function publishedWithDraft(): Promise<{ id: string; token: string }> {
+    const t = await mintToken('t');
+    const ds = ((await (await create(t.token, { dataset: ROWS })).json()) as { id: string }).id;
+    const created = await create(t.token, { markup: DRAFT_DOC(ds) });
+    expect(created.status).toBe(201);
+    const doc = ((await created.json()) as { id: string }).id;
+    return { id: doc, token: t.token };
+  }
+
+  it('is not seeded from the address, while the Values that do travel still are', async () => {
+    const { id } = await publishedWithDraft();
+    const data = island(await raw(id, '?$draft=Dinner&$guest=true&$region=NA'));
+    expect(data.dataflow?.values).toEqual({ region: 'NA' });
+  });
+
+  it('leaves a document at rest when the link names only it', async () => {
+    const { id } = await publishedWithDraft();
+    expect(island(await raw(id, '?$draft=Dinner')).dataflow?.values).toBeUndefined();
+  });
+
+  it('is at its declared default in the settled capture too', async () => {
+    const { id } = await publishedWithDraft();
+    const data = island(await raw(id, '?chrome=0&$draft=Dinner&$guest=true'));
+    expect(data.dataflow?.state?.values.draft).toBeNull();
+    expect(data.dataflow?.state?.values.guest).toBe(false);
+  });
+});
+
 describe('the CAPTURE render (chrome=0), which /export photographs', () => {
   it('runs the dataflow WITH the selection, so the photograph is of the selected document', async () => {
     const { id } = await published();
