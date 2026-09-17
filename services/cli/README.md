@@ -167,6 +167,13 @@ The browser retries temporary failures indefinitely with capped backoff and a â€
 The first command that needs the server opens browser authentication automatically, saves the
 connection with owner-only permissions and resumes the command. Run `afbin auth` to sign in
 deliberately; local skills install eagerly on first use and update with `afbin update`.
+
+For an artifact created in the browser, run `afbin auth <artifact-url>` (plus `--server <origin>`
+for another server). A connection that can already edit continues immediately. Otherwise the
+owning browser approves connecting the CLI to its identity; guests can choose **Continue as guest**
+without logging in. Browser and CLI then share existing and future artifacts. Approving a different
+identity replaces the saved CLI connection for that server; denial leaves it unchanged.
+
 `ARTIFACTBIN_URL` and `ARTIFACTBIN_TOKEN` can supply a connection; saved credentials are
 used only for their matching server origin. The installer passes the origin it was served from
 to `afbin setup --server`, which records a self-hosted origin as the client default in

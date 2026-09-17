@@ -1,11 +1,11 @@
 import { renderConnectionPage } from '@artifactbin/utils';
-import {API_RESOURCE_PATH, INTERNAL_MINT_PATH} from '@artifactbin/contracts';
+import {API_RESOURCE_PATH, INTERNAL_MINT_PATH, INTERNAL_ARTIFACT_APPROVAL_PATH, ARTIFACT_APPROVAL_PATH} from '@artifactbin/contracts';
 /**
  * OAuth 2.1 provider for `/api`: discovery, dynamic client registration,
  * authorization-code + PKCE consent, and rotating refresh tokens. Access
  * token minting remains app-owned and runs as the consenting session actor.
  */
-import { ANONYMOUS, type Upstream } from '@artifactbin/contracts';
+import { ANONYMOUS, type Actor, type Upstream } from '@artifactbin/contracts';
 import {
   ACCESS_TOKEN_TTL_SECONDS,
   authServerMetadata,
@@ -91,6 +91,28 @@ async function mintFor(o: OAuthRoutesOptions, request: Request, grant: { userId:
   return { id: body.id, token: body.token, expiresIn };
 }
 
+/** The app remains the sole authority for ownership and per-artifact grants. */
+async function artifactPermission(o: OAuthRoutesOptions, request: Request, actor: Actor, artifactId: string): Promise<{ canApprove?: boolean; canEdit?: boolean; title?: string; approved?: boolean }> {
+  const response = await o.upstream(new Request(new URL(INTERNAL_ARTIFACT_APPROVAL_PATH, request.url), {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ artifactId }),
+  }), actor);
+  return response.ok ? await response.json() : {};
+}
+
+/** Browser approval selects an owner; the app alone creates/claims guest identities. */
+async function browserOwner(o: OAuthRoutesOptions, request: Request, actor: Actor): Promise<{ actor: Actor; cookie?: string }> {
+  const response = await o.upstream(new Request(new URL(INTERNAL_ARTIFACT_APPROVAL_PATH, request.url), {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'connect' }),
+  }), actor);
+  if (!response.ok) throw new Error('Could not establish browser ownership');
+  const body = await response.json() as { userId?: string; tokenId?: string; guest?: boolean };
+  if (actor.credential === 'session' && actor.userId) return { actor };
+  if (!body.userId || !body.tokenId) throw new Error('Missing guest user');
+  const cookie = response.headers.get('set-cookie');
+  return { actor: { credential: 'agent-cookie', userId: body.userId, tokenId: body.tokenId, heldTokenIds: [body.tokenId] }, ...(cookie ? { cookie } : {}) };
+}
+
 export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   const base = (request: Request) => baseUrlOf(request, o.trustedHops, o.publicBaseUrl);
   const resource = (request: Request) => `${base(request)}${API_RESOURCE_PATH}`;
@@ -99,8 +121,15 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   app.get('/.well-known/oauth-protected-resource', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
   app.get('/.well-known/oauth-protected-resource/api', (c) => meta(protectedResourceMetadata(base(c.req.raw))));
 
-  app.post('/oauth/device', async (c) => {
-    const pair = await o.pairing.begin(base(c.req.raw));
+  app.on('POST', ['/oauth/device', ARTIFACT_APPROVAL_PATH], async (c) => {
+    const artifactRequest = c.req.path === ARTIFACT_APPROVAL_PATH;
+    const body = artifactRequest ? await c.req.json().catch(() => null) : null;
+    const actor = c.get('actor') ?? ANONYMOUS;
+    if (artifactRequest && (!body || typeof body.artifactId !== 'string' || !/^[A-Za-z0-9]{6,12}$/.test(body.artifactId))) return c.json({ error: 'invalid_artifact' }, 400);
+    if (artifactRequest && c.req.header('authorization') && actor.credential !== 'bearer') return c.json({ error: 'unauthorized' }, 401);
+    if (artifactRequest && actor.credential === 'bearer' && (await artifactPermission(o, c.req.raw, actor, body.artifactId)).canEdit) return c.json({ authorized: true });
+    const target = artifactRequest ? { artifactId: body.artifactId as string } : undefined;
+    const pair = await o.pairing.begin(base(c.req.raw), target);
     const verificationUri = `${base(c.req.raw)}/oauth/device`;
     return new Response(JSON.stringify({ device_code: pair.deviceCode, user_code: pair.userCode,
       verification_uri: verificationUri, verification_uri_complete: `${verificationUri}?user_code=${pair.userCode}`,
@@ -108,8 +137,16 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
   });
   app.get('/oauth/device', async (c) => {
     const userCode = c.req.query('user_code') ?? '';
-    if (!await o.pairing.inspect(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin auth again.</p>', 400);
+    const pending = await o.pairing.inspect(userCode, base(c.req.raw));
+    if (!pending) return page('Connection expired', '<h1>Connection expired</h1><p>Run afbin auth again.</p>', 400);
     const actor = c.get('actor') ?? ANONYMOUS;
+    if (pending.target) {
+      const permission = await artifactPermission(o, c.req.raw, actor, pending.target.artifactId);
+      const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
+      const login = `<form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${esc(callback)}"><button type="submit">Log in and continue</button></form>`;
+      if (!permission.canApprove) return page('Use the owning browser', `<h1>Open this approval in the browser that created the artifact</h1><p>The artifact link does not grant edit access. Use its owning browser, or log in to the owning account.</p>${login}`, 403);
+      return page('Approve artifact access', `<h1>Connect your agent</h1><p><strong>${esc(permission.title ?? 'Untitled')}</strong> · ${esc(pending.target.artifactId)}</p><p>Approve only if your agent displays <strong>${esc(userCode)}</strong>. This connects the CLI to this browser’s identity, including its existing and future artifacts. It replaces any saved CLI connection to this server.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><button type="submit" name="decision" value="approve">${actor.credential === 'session' ? 'Approve access' : 'Continue as guest'}</button><button type="submit" name="decision" value="deny">Deny</button></form>${actor.credential === 'session' ? '' : login}`);
+    }
     if (actor.credential !== 'session' || !actor.userId) {
       const callback = `/oauth/device?user_code=${encodeURIComponent(userCode)}`;
       return page('Connect artifactbin', `<h1>Connect artifactbin CLI</h1><p>Approve only if your terminal displays <strong>${esc(userCode)}</strong>. Log in to connect this agent to your account, or continue anonymously — an anonymous connection publishes without an account, and you can claim what it creates later by signing in.</p><form method="POST" action="/oauth/device/approve"><input type="hidden" name="user_code" value="${esc(userCode)}"><input type="hidden" name="decision" value="anonymous"><button type="submit">Continue anonymously</button></form><form method="GET" action="/login" class="alt"><input type="hidden" name="callbackUrl" value="${esc(callback)}"><button type="submit">Log in to connect</button></form>`);
@@ -121,13 +158,34 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
     const form = await c.req.formData();
     const userCode = String(form.get('user_code') ?? '');
     const decision = form.get('decision');
+    const pending = await o.pairing.inspect(userCode, base(c.req.raw));
+    if (!pending) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+    if (pending.target) {
+      const owner = c.get('actor') ?? ANONYMOUS;
+      if (!(await artifactPermission(o, c.req.raw, owner, pending.target.artifactId)).canApprove) return page('Approval refused', '<h1>Use the browser that owns this artifact</h1>', 403);
+      if (decision === 'deny') {
+        if (!await o.pairing.deny(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired</h1>', 400);
+        return page('Access denied', '<h1>No access was granted</h1>');
+      }
+      if (decision !== 'approve') return c.json({ error: 'invalid_decision' }, 400);
+      const connection = await browserOwner(o, c.req.raw, owner);
+      const approved = connection.actor.userId
+        ? await o.pairing.approve(userCode, base(c.req.raw), connection.actor.userId, connection.actor)
+        : await o.pairing.approveAnonymously(userCode, base(c.req.raw), connection.actor);
+      const response = approved ? page('Connection approved', '<h1>Access approved</h1><p>Return to your agent. It can now continue with your artifacts.</p>') : page('Connection expired', '<h1>Connection expired</h1>', 400);
+      if (approved && connection.cookie) response.headers.append('set-cookie', connection.cookie);
+      return response;
+    }
     // Anonymous connection: no account, so no session is required — but it is
     // still origin-bound above, and gated on the EXPLICIT choice, never
     // inferred from a missing session (which would silently downgrade a real
     // approval whose session had lapsed).
     if (decision === 'anonymous') {
-      if (!await o.pairing.approveAnonymously(userCode, base(c.req.raw))) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
-      return page('Connection approved', '<h1>Connected anonymously</h1><p>Return to your terminal. You can close this page. Sign in later to claim what this connection publishes.</p>');
+      const connection = await browserOwner(o, c.req.raw, c.get('actor') ?? ANONYMOUS);
+      if (!await o.pairing.approve(userCode, base(c.req.raw), connection.actor.userId!, connection.actor)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+      const response = page('Connection approved', '<h1>Connected anonymously</h1><p>Return to your agent. This browser and CLI now share your guest artifacts.</p>');
+      if (connection.cookie) response.headers.append('set-cookie', connection.cookie);
+      return response;
     }
     const actor = c.get('actor') ?? ANONYMOUS;
     if (actor.credential !== 'session' || !actor.userId) return c.json({ error: 'unauthorized' }, 401);
@@ -135,19 +193,23 @@ export function mountOAuthRoutes(app: App, o: OAuthRoutesOptions): void {
       if (!await o.pairing.deny(userCode, base(c.req.raw))) return page('Connection expired','<h1>Connection expired</h1>',400);
       return page('Connection denied','<h1>Connection denied</h1><p>No access was granted.</p>');
     }
-    if (!await o.pairing.approve(userCode, base(c.req.raw), actor.userId)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
+    const connection = await browserOwner(o, c.req.raw, actor);
+    if (!await o.pairing.approve(userCode, base(c.req.raw), actor.userId, connection.actor)) return page('Connection expired', '<h1>Connection expired or already approved</h1>', 400);
     return page('Connection approved', '<h1>Connection approved</h1><p>Return to your terminal. You can close this page.</p>');
   });
-  app.post('/oauth/device/token', async (c) => {
+  app.on('POST', ['/oauth/device/token', `${ARTIFACT_APPROVAL_PATH}/token`], async (c) => {
     const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...NO_STORE } });
     const body = await c.req.json().catch(() => null);
     if (!body || typeof body.device_code !== 'string') return reply({ error: 'invalid_request' }, 400);
     const result = await o.pairing.consume(body.device_code, base(c.req.raw));
     if (result.status !== 'approved') return reply({ error: result.status === 'pending' ? 'authorization_pending' : result.status === 'denied' ? 'access_denied' : 'expired_token' }, 400);
+    if (result.target && !result.approvedBy) return reply({ error: 'access_denied' }, 400);
     try {
       const client = await o.oauth.register({ client_name: 'artifactbin CLI', redirect_uris: ['http://127.0.0.1/callback'] });
       const clientId = String(client.client_id);
-      const grant = { userId: result.userId, resource: resource(c.req.raw), scope: ARTIFACT_SCOPE };
+      if (result.target && !(await artifactPermission(o, c.req.raw, result.approvedBy!, result.target.artifactId)).canApprove) return reply({ error: 'access_denied' }, 400);
+      const currentOwner = result.approvedBy ? await browserOwner(o, c.req.raw, result.approvedBy) : null;
+      const grant = { userId: currentOwner?.actor.userId ?? result.userId, resource: resource(c.req.raw), scope: ARTIFACT_SCOPE };
       const minted = await mintFor(o, c.req.raw, grant);
       const refreshToken = await o.oauth.issueRefresh({ ...grant, clientId, accessTokenId: minted.id });
       return reply({ access_token: minted.token, refresh_token: refreshToken, client_id: clientId,

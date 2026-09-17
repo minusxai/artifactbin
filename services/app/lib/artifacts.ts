@@ -217,6 +217,7 @@ export async function roleWithoutLink(
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
+  if (await isGuestActor(actor)) return 'none';
   if (row.format === 'markup' && hasDocumentEditorAccess(actor)) return 'editor';
   return namedRoleFor(row, actor);
 }
@@ -241,8 +242,13 @@ export async function effectiveRole(
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
-  const byLink = actor.userId ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
+  const byLink = actor.userId && !await isGuestActor(actor) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
   return maxRole(byLink, held);
+}
+
+async function isGuestActor(actor: RoleActor): Promise<boolean> {
+  if (!actor.userId) return false;
+  return (await (await getDb()).query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [actor.userId])).rows.length > 0;
 }
 
 /**
@@ -732,7 +738,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  */
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})`, val: actor.userId })
+    ? live({ where: (p) => `(user_id = ${p} OR (NOT EXISTS (SELECT 1 FROM users WHERE id = ${p} AND is_guest = true) AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');

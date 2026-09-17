@@ -42,8 +42,13 @@ export function session(o: AuthOptions): Part<AuthEnv> {
     name: 'session',
     mount: (app) => app.use('*', async (c, next) => {
       const admitted=await resolveActor(c.req.raw, o);
+      const heldOwners = admitted.credential === 'session' && admitted.emailVerified
+        ? await Promise.all((admitted.heldTokenIds ?? []).map(id => o.tokens.byId(id))) : [];
       c.set('actor', admitted);
       await next();
+      // The app can merge guest ownership after verified login. Clear cached
+      // CLI identities on this transition; subsequent requests see matching owners.
+      if (heldOwners.some(token => token?.userId && token.userId !== admitted.userId)) o.tokens.invalidate();
       if(c.res.headers.has(REVALIDATE_ACTOR_HEADER)) {
         const headers=new Headers(c.res.headers);headers.delete(REVALIDATE_ACTOR_HEADER);
         c.res=new Response(c.res.body,{status:c.res.status,statusText:c.res.statusText,headers});

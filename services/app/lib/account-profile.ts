@@ -9,7 +9,7 @@ import type {TokenActor} from './artifacts';
 import {completeMutationReceipt,type MutationReceipt,type MutationReply} from './mutation-receipt';
 
 export async function accountProfile(userId:string,query?:Queryable):Promise<ProfileResource|null>{
- const user=await getUserById(userId,query);if(!user)return null;
+ const user=await getUserById(userId,query);if(!user || user.is_guest || !user.email)return null;
  const value={type:'profile' as const,id:user.id,username:user.username,email:user.email,name:user.name,liked:(await linked(userId,'like',query)).sort(),following:(await linked(userId,'follow',query)).sort()};
  return {...value,state:createHash('sha256').update(JSON.stringify(value)).digest('hex')};
 }

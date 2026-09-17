@@ -15,7 +15,8 @@ const USERS: Table = {
   name: 'users',
   columns: [
     { name: 'id', type: 'TEXT', notNull: true }, // 'usr_' + base36
-    { name: 'email', type: 'TEXT', notNull: true },
+    { name: 'email', type: 'TEXT', relaxNotNull: true },
+    { name: 'is_guest', type: 'BOOLEAN', notNull: true, default: 'false' },
     { name: 'name', type: 'TEXT' },
     // Public handle for pretty URLs (/@username/...). Lowercase [a-z0-9_],
     // auto-assigned at login (localpart_xxxx), renameable. Nullable so the

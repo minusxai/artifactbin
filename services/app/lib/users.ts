@@ -16,13 +16,19 @@ import { LIVE_TOKEN_SQL, sha256 } from './tokens';
 export interface UserRow {
   id: string;
   email: string;
+  is_guest: false;
   name: string | null;
   /** Public handle for /@username URLs; null only until first login backfills it. */
   username: string | null;
   created_at: string;
 }
 
-const USER_COLS = 'id, email, name, username, created_at';
+export interface GuestUserRow extends Omit<UserRow, 'email' | 'is_guest'> {
+  email: null;
+  is_guest: true;
+}
+
+const USER_COLS = 'id, email, is_guest, name, username, created_at';
 
 // ── Usernames ────────────────────────────────────────────────────────────────
 
@@ -73,18 +79,18 @@ function randomSuffix(): string {
  * successful login, so existing accounts pick one up with no migration.
  * Retries on the unique index — a suffix collision is possible, just rare.
  */
-export async function ensureUsername(user: UserRow): Promise<UserRow> {
-  if (user.username) return user;
+export async function ensureUsername<T extends UserRow | GuestUserRow>(user: T): Promise<T> {
+  if (user.username || user.is_guest || !user.email) return user;
   const db = await getDb();
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = `${usernameFromEmail(user.email)}_${randomSuffix()}`;
     try {
-      const r = await db.query<UserRow>(
+      const r = await db.query<T>(
         `UPDATE users SET username = $2 WHERE id = $1 AND username IS NULL RETURNING ${USER_COLS}`,
         [user.id, candidate],
       );
       // A concurrent login may have assigned one first — that row wins.
-      return r.rows[0] ?? (await getUserById(user.id))!;
+      return r.rows[0] ?? (await getUserById(user.id))! as T;
     } catch (error) {
       if ((error as { code?: string }).code === '23505') continue;
       throw error;
@@ -154,9 +160,9 @@ export async function getUserByEmail(email: string): Promise<UserRow | null> {
   return r.rows[0] ?? null;
 }
 
-export async function getUserById(id: string,query?:Queryable,lock=false): Promise<UserRow | null> {
+export async function getUserById(id: string,query?:Queryable,lock=false): Promise<UserRow | GuestUserRow | null> {
   const db = query??await getDb();
-  const r = await db.query<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = $1${lock?' FOR UPDATE':''}`, [id]);
+  const r = await db.query<UserRow | GuestUserRow>(`SELECT ${USER_COLS} FROM users WHERE id = $1${lock?' FOR UPDATE':''}`, [id]);
   return r.rows[0] ?? null;
 }
 
@@ -376,8 +382,11 @@ export async function listDraftsByTokenIds(tokenIds: string[]): Promise<OwnedArt
        (SELECT COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int FROM analytics_events e
         WHERE e.artifact_id = artifacts.id AND e.event = 'view') AS views
      FROM artifacts
-     JOIN tokens ON tokens.id = artifacts.token_id
-     WHERE artifacts.token_id = ANY($1) AND artifacts.user_id IS NULL AND artifacts.${LIVE_ARTIFACT_SQL} AND ${LIVE_TOKEN_SQL}
+     WHERE artifacts.${LIVE_ARTIFACT_SQL} AND EXISTS (
+       SELECT 1 FROM tokens LEFT JOIN users ON users.id = tokens.user_id
+       WHERE tokens.id = ANY($1) AND ${LIVE_TOKEN_SQL}
+         AND ((artifacts.user_id = tokens.user_id AND users.is_guest = true)
+           OR (artifacts.token_id = tokens.id AND artifacts.user_id IS NULL)))
      ORDER BY artifacts.updated_at DESC LIMIT 200`,
     [tokenIds],
   );

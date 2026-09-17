@@ -36,6 +36,9 @@ async function main(): Promise<void> {
     console.warn('[boot] AUTH__SECRET unset — generated per boot; sessions and the agent cookie do not survive a restart');
     return randomBytes(32).toString('base64url');
   };
+  // Establish the shared dev secret before app modules capture their config.
+  // Otherwise auth rejects the guest cookie signed with the app's fallback.
+  if (!appOnly && !readEnv(env, 'AUTH__SECRET')) env.AUTH__SECRET = generatedAuthSecret();
 
   const { getDb } = await import('@/lib/db');
   const { createAppServer } = await import('@/server/app');
@@ -134,7 +137,7 @@ async function main(): Promise<void> {
   let reader: ReturnType<typeof createTokenReader> | undefined;
   if (!appOnly) {
     /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
-    authSecret = readEnv(env, 'AUTH__SECRET') ?? generatedAuthSecret();
+    authSecret = readEnv(env, 'AUTH__SECRET')!;
     const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
     await ensureAuthSchema(queryable, authSchema);
     const mailer = mailerForRuntime({

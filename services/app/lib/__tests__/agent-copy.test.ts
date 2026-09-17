@@ -11,7 +11,7 @@ import { DEFAULT_SERVER } from '@artifactbin/contracts';
 const B = 'https://x.test';
 const ID = 'ab3cd9';
 const STARTER =
-  'Edit my artifact at https://x.test/a/ab3cd9 in place, not as a new document. Use the afbin CLI to operate artifactbin, or (curl -fsSL https://x.test/chat/install.sh | sh) if not installed. Run afbin help first. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet\'s build an artifact for ';
+  'Edit my artifact at https://x.test/a/ab3cd9 in place. Install afbin if needed: curl -fsSL https://x.test/chat/install.sh | sh -s -- --yes. Run afbin help first, then afbin auth https://x.test/a/ab3cd9 --server https://x.test. Approve in the browser that created this artifact; guest access is fine. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet\'s build an artifact for ';
 
 describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {
@@ -28,11 +28,11 @@ describe('the tokenless paste', () => {
   });
   it.each([DEFAULT_SERVER, `${DEFAULT_SERVER}/`])('keeps the handoff short on the host a fresh CLI already defaults to: %s', (base) => {
     expect(existingPaste(base, ID)).not.toContain('--server');
-    expect(existingPaste(base, ID)).toContain('Run afbin help first.');
+    expect(existingPaste(base, ID)).toContain(`afbin auth ${DEFAULT_SERVER}/a/${ID}`);
   });
   it('keeps the handoff concise and leaves a separated brief for the user', () => {
     const prompt = existingPaste('http://127.0.0.1:45407', ID);
-    expect(prompt.length).toBeLessThan(400);
+    expect(prompt.length).toBeLessThan(500);
     expect(prompt).toContain("\n\n---\n\nLet's build an artifact for " );
   });
   it('a trailing slash on the base does not double up', () => {
