@@ -298,7 +298,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // and does not go and gather it: pi curled the page for the title, grepped for the chart spec and
    // re-ran its queries for five calls after a successful push (local hardcore report, 14 Sep).
    const verified=published?await verifiedSummary(workspace,positionals):undefined;
-   emit({...result,...(verified?{verified}:{}),...(published?{next:PUBLISHED_NEXT}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
+   emit({...result,...(verified?{verified}:{}),...(published?{next:publishedNext(verified)}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
   }
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');
@@ -370,16 +370,26 @@ function refusalDetails(message:string,details:unknown):string[]{
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
 export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
+/**
+ * A push proves markup and read queries. It never runs a write, so a page that declares one is
+ * told so by name: the measured rule above is for documents, and an untested button is how a
+ * person ends up debugging the page for the agent.
+ */
+function publishedNext(verified:Awaited<ReturnType<typeof verifiedSummary>>):string{
+ const writes=[...new Set((verified??[]).flatMap(file=>file.writes??[]))];
+ return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each once in a live session, as yourself and with --as guest (afbin help live-sessions), fix and push again before handing it over.`:PUBLISHED_NEXT;
+}
 /** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
-async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[]}>|undefined>{
- const out:Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[]}>=[];
+async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>|undefined>{
+ const out:Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>=[];
  for(const file of await inspectWorkspace(workspace,paths)){
   if(!file.document||!file.bytes)continue;
   const {split}=validateMarkupStructure(file.document.body);if(!split)continue;
   let charts=0;const count=(nodes:JsxNode[])=>{for(const n of nodes){if(n.type!=='element')continue;if(n.tag==='Question')charts++;count(n.children);}};count(split.body);
   const queries=split.content.queries.map(query=>query.name);
-  out.push({path:file.path,title:split.content.title??file.document.metadata.title??null,queries,charts,
-   checks:['markup validated',...(queries.length?[`${queries.length} quer${queries.length===1?'y':'ies'} dry-run against the published dataset`]:[]),...(charts?[`${charts} chart${charts===1?'':'s'} checked against query columns`]:[]),'title and metadata accepted']});
+  const writes=(split.content.mutations??[]).map(mutation=>mutation.name);
+  out.push({path:file.path,title:split.content.title??file.document.metadata.title??null,queries,charts,...(writes.length?{writes}:{}),
+   checks:['markup validated',...(queries.length?[`${queries.length} quer${queries.length===1?'y':'ies'} dry-run against the published dataset`]:[]),...(charts?[`${charts} chart${charts===1?'':'s'} checked against query columns`]:[]),...(writes.length?[`${writes.length} write${writes.length===1?'':'s'} declared, not run`]:[]),'title and metadata accepted']});
  }
  return out.length?out:undefined;
 }

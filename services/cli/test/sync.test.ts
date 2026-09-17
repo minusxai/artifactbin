@@ -413,6 +413,25 @@ describe('deleting many typed targets', () => {
   });
 });
 
+test('a published page that declares a write is told the push did not run it',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-published-writes-'));
+ try{
+  const markup='<Helmet><Value name="title" type="string" /><Value name="drafts" type="table" value={[]} columns={[{"name":"title","type":"string"}]} /><Mutation name="add">{`insert into drafts (title) values ($title)`}</Mutation></Helmet><Button run="$add">Add</Button>';
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},root);await seedIdentityPool(root,root,['abc123']);await writeFile(join(root,'app.jsx'),markup);
+  const output:string[]=[];
+  const fetch=async(input:unknown)=>String(input).endsWith('/preflight')?Response.json({valid:true})
+   :Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  assert.equal(await runCli(['push','app.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
+  const result=JSON.parse(output[0]);
+  assert.ok(result.next.startsWith(PUBLISHED_NEXT),'the measured rule for documents is kept verbatim');
+  assert.match(result.next,/add/);
+  assert.match(result.next,/live session/);
+  assert.match(result.next,/--as guest/);
+  assert.match(result.next,/afbin help live-sessions/);
+  assert.ok(result.verified[0].checks.some((c:string)=>/1 write declared, not run/.test(c)),JSON.stringify(result.verified));
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 test('a successful publish says the head is the pushed file, so the agent does not spend turns verifying it; a dry-run says nothing',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-published-next-'));
  try{
