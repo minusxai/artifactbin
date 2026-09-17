@@ -1,0 +1,21 @@
+name: Notify source consumers
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+permissions: {}
+jobs:
+  notify:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && vars.CONSUMER_REPOSITORY != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify the configured consumer of the exact tested revision
+        env:
+          GH_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+          CONSUMER: ${{ vars.CONSUMER_REPOSITORY }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SHA" =~ ^[a-f0-9]{40}$ ]]
+          jq -n --arg sha "$SHA" '{event_type:"toolkit-updated",client_payload:{sha:$sha}}' | gh api "repos/$CONSUMER/dispatches" --input -

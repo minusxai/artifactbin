@@ -1,0 +1,278 @@
+/**
+ * The data file tiers: dataset (one flat table), viz (an
+ * inert recipe template — minusx VizRecipeContent verbatim), image (data-url).
+ * Each publishes through the same parseContentInput seam as the other tiers.
+ *
+ * Datasets: JSON rows, canonical. Declared columns win over inference; rows
+ * are validated against them (422 naming row + column). Types: string |
+ * number | boolean | date.
+ *
+ * Recipes: validated against the VizRecipeContent shape + the template token
+ * rule from minusx lib/viz/recipe-file.ts — every {{token}} / {{token:kind}}
+ * must name a declared binding slot or param; unknown tokens are hard errors
+ * naming the token.
+ */
+import {parseDatasetColumn} from '@artifactbin/utils/shape';
+import type {ContentObjects} from './prepared-objects';
+import { json } from '../http';
+import { MAX_IMAGE_BYTES, MAX_PDF_BYTES } from '@/lib/config';
+import { storeDatasetRows } from './dataset-store';
+import { storeImage, IMAGE_CONTENT_TYPES, type ImageMeta } from './image-store';
+import { uploadedSha256 } from './file-store';
+import { sniffImageType } from '@/lib/web-ingest/sniff';
+import { optimiseImage } from '@/lib/images/optimise';
+import { PDF_CONTENT_TYPE, pdfPageCount, storePdf, type PdfMeta } from './pdf-store';
+import { sniffAssetType } from '@/lib/web-ingest/sniff';
+import type { StoredContent } from './input';
+import type { VizRecipeBinding, VizRecipeParam } from '@/lib/validation/atlas-schemas';
+
+export type { ColumnType, DatasetColumn } from './dataset-shape';
+import { inferColumns } from './dataset-shape';
+import type { ColumnType, DatasetColumn } from './dataset-shape';
+
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}([T ].*)?$/;
+
+function valueMatches(v: unknown, t: ColumnType): boolean {
+  if (v === null || v === undefined) return true; // nulls pass any column type
+  switch (t) {
+    case 'number': return typeof v === 'number' && Number.isFinite(v);
+    case 'boolean': return typeof v === 'boolean';
+    case 'date': return typeof v === 'string' && DATE_RE.test(v);
+    case 'user':
+    case 'string': return typeof v === 'string';
+  }
+}
+
+export async function publishDataset(body: Record<string, unknown>, rows: unknown, objects?: ContentObjects): Promise<StoredContent | Response> {
+  const details: string[] = [];
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return json({ error: 'invalid_dataset', details: ['dataset must be a non-empty JSON array of flat objects'] }, 400);
+  }
+  for (const [i, row] of rows.entries()) {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+      details.push(`row ${i} is not an object`);
+      continue;
+    }
+    for (const [k, v] of Object.entries(row as Record<string, unknown>)) {
+      if (v !== null && typeof v === 'object') details.push(`row ${i} column "${k}" is nested — datasets are one flat table`);
+    }
+  }
+  if (details.length) return json({ error: 'invalid_dataset', details }, 400);
+
+  const flat = rows as Array<Record<string, unknown>>;
+  const declaredRaw = body.columns;
+  let columns: DatasetColumn[];
+  if (declaredRaw !== undefined && declaredRaw !== null) {
+    if (!Array.isArray(declaredRaw)) return json({ error: 'invalid_dataset', details: ['columns must be an array of {name, type}'] }, 400);
+    const declared: DatasetColumn[] = [];
+    for (const c of declaredRaw) {
+      try { declared.push(parseDatasetColumn(c)); }
+      catch (error) { return json({error:'invalid_dataset',details:[error instanceof Error ? error.message : 'Invalid column']},400); }
+    }
+    // Declared wins; rows are validated against it. Inference fills undeclared columns.
+    for (const [i, row] of flat.entries()) {
+      for (const col of declared) {
+        if (col.name in row && !valueMatches(row[col.name], col.type)) {
+          details.push(`row ${i} column "${col.name}": ${JSON.stringify(row[col.name])} is not a ${col.type}`);
+        }
+      }
+    }
+    if (details.length) return json({ error: 'invalid_dataset', details }, 400);
+    const declaredNames = new Set(declared.map((c) => c.name));
+    columns = [...declared, ...inferColumns(flat).filter((c) => !declaredNames.has(c.name))];
+  } else {
+    columns = inferColumns(flat);
+  }
+
+  // The rows go to the object store; the row keeps a reference. See
+  // lib/story/dataset-store.ts for why a 27 MB blob cannot live in a column.
+  const located = await storeDatasetRows(flat, objects);
+  return {
+    format: 'dataset',
+    content: located.content,
+    source: null,
+    meta: {
+      columns,
+      rowCount: flat.length,
+      objectKey: located.objectKey,
+      catalog:{kind:'stored',defaultSchema:'public',refreshSeconds:0,tables:[{schema:'public',name:'rows',columns,objectKey:located.objectKey}]},
+      // Present only when the source had more rows than we kept.
+      ...(body.__truncated ? { totalRows: body.__totalRows, truncated: true } : {}),
+    },
+    derivedTitle: null,
+  };
+}
+
+// ── viz recipes ──────────────────────────────────────────────────────────────
+
+/** The {{token}} / {{token:kind}} form — same token grammar as recipe-file.ts. */
+const TOKEN_RE = /\{\{([a-zA-Z0-9_-]+)(?::kind)?\}\}/g;
+
+function collectTemplateTokens(value: unknown, out: Set<string>): void {
+  if (typeof value === 'string') {
+    for (const m of value.matchAll(TOKEN_RE)) out.add(m[1]);
+  } else if (Array.isArray(value)) {
+    for (const v of value) collectTemplateTokens(v, out);
+  } else if (value && typeof value === 'object') {
+    for (const v of Object.values(value)) collectTemplateTokens(v, out);
+  }
+}
+
+const RECIPE_ACCEPTS = ['nominal', 'quantitative', 'temporal'];
+
+export function publishVizRecipe(_body: Record<string, unknown>, recipe: unknown): StoredContent | Response {
+  const details: string[] = [];
+  const r = recipe as {
+    description?: unknown; engine?: unknown; bindings?: unknown; params?: unknown; template?: unknown;
+  } | null;
+  if (!r || typeof r !== 'object') return json({ error: 'invalid_viz', details: ['viz must be a VizRecipeContent object'] }, 400);
+  if (typeof r.description !== 'string') details.push('description (string) is required');
+  if (r.engine !== 'vega-lite' && r.engine !== 'vega') details.push("engine must be 'vega-lite' | 'vega'");
+  if (!Array.isArray(r.bindings) || r.bindings.length === 0) details.push('bindings (non-empty array) is required');
+  if (!r.template || typeof r.template !== 'object') details.push('template (object) is required');
+  const bindings = (Array.isArray(r.bindings) ? r.bindings : []) as VizRecipeBinding[];
+  for (const b of bindings) {
+    if (typeof b?.name !== 'string' || typeof b?.label !== 'string' || !Array.isArray(b?.accepts)
+      || b.accepts.some((a) => !RECIPE_ACCEPTS.includes(a))) {
+      details.push(`bad binding ${JSON.stringify(b)} — need {name, label, accepts: (${RECIPE_ACCEPTS.join('|')})[]}`);
+    }
+  }
+  const params = (Array.isArray(r.params) ? r.params : []) as VizRecipeParam[];
+  if (details.length) return json({ error: 'invalid_viz', details }, 400);
+
+  // Token rule (recipe-file.ts): every template token names a slot or param.
+  const declared = new Set([...bindings.map((b) => b.name), ...params.map((p) => p.name)]);
+  const used = new Set<string>();
+  collectTemplateTokens(r.template, used);
+  for (const tok of used) {
+    if (!declared.has(tok)) details.push(`template token {{${tok}}} names no declared binding slot or param`);
+  }
+  if (details.length) return json({ error: 'invalid_viz', details }, 400);
+
+  return {
+    format: 'viz',
+    content: JSON.stringify(r),
+    source: JSON.stringify(r, null, 2),
+    meta: { slots: bindings.map((b) => ({ name: b.name, accepts: b.accepts, ...(b.multi ? { multi: true } : {}) })) },
+    derivedTitle: null,
+  };
+}
+
+// ── images ───────────────────────────────────────────────────────────────────
+
+const IMAGE_DATA_URL_RE = /^data:(image\/(?:png|jpeg|webp|gif|svg\+xml));base64,([A-Za-z0-9+/=]+)$/;
+
+/**
+ * Store already-decoded image bytes. The single home for both entry points: a
+ * base64 `data:` URL (publishImage) and a raw-body upload (the route). Bytes go
+ * to the object store; the row keeps `meta.objectKey` and `content` stays empty
+ * (see lib/story/image-store).
+ */
+export async function storeImageContent(buffer: Buffer, contentType: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+  if (!(IMAGE_CONTENT_TYPES as readonly string[]).includes(contentType)) {
+    return json({ error: 'invalid_image', details: [`unsupported image type "${contentType}" (png|jpeg|webp|gif|svg+xml)`] }, 400);
+  }
+  if (buffer.length === 0) return json({ error: 'invalid_image', details: ['image is empty'] }, 400);
+  if (buffer.length > MAX_IMAGE_BYTES) return json({ error: 'image_too_large', maxBytes: MAX_IMAGE_BYTES }, 413);
+  /*
+   * THE TYPE COMES FROM THE BYTES, and the label is only how the caller asked.
+   *
+   * `data:image/png;base64,<a PDF>` used to answer 201 and the document then
+   * served a PDF as `image/png` — under `nosniff`, which is the header that
+   * makes OUR word about the type final in the browser. The URL importer has
+   * sniffed since it existed (lib/web-ingest/sniff), for exactly this reason,
+   * and this is the same question asked of the same bytes at the other door.
+   * The sniff WINS: an SVG sent as `image/png` is text that scales and is
+   * passed through, not rasterised.
+   */
+  const sniffed = sniffImageType(buffer);
+  if (!sniffed) {
+    return json({ error: 'invalid_image', details: ['those bytes are not an image (png|jpeg|webp|gif|svg+xml) — the type is read from the file, never from what it is labelled'] }, 400);
+  }
+  /*
+   * THE ONE DOOR every upload comes through — the picker, a paste, a drop and
+   * the URL importer all land here — so it is where an image is made fit to
+   * read: capped, converted to webp, measured. At PUBLISH rather than on first
+   * read, because the first reader of a document is the person its author just
+   * handed the link to, and they must not be the one paying for an encode.
+   */
+  const fit = await optimiseImage(buffer, sniffed);
+  const located = await storeImage(fit.buffer, fit.contentType, objects);
+  /*
+   * The narrow copy, stored beside the full one and CHARGED WITH IT: `bytes` is
+   * what this upload cost the store, which is both objects, and the byte quota
+   * (lib/asset-quota) sums exactly that column. One upload, one number.
+   */
+  const small = fit.variant ? await storeImage(fit.variant.buffer, fit.variant.contentType, objects) : null;
+  const meta: ImageMeta = {
+      contentType: fit.contentType,
+      objectKey: located.objectKey,
+      bytes: located.bytes + (small?.bytes ?? 0),
+      /*
+       * THE HASH IS OF WHAT ARRIVED, and `buffer` — not `fit.buffer` — is what
+       * arrived. Publication preflight answers "you already own this picture"
+       * by matching a hash the CLI took of a file on someone's disk, and the
+       * bytes we store are that file re-encoded to webp. Hashing the optimised
+       * copy would produce a value no client can ever compute, so every upload
+       * would miss and the dedupe would be a silent no-op.
+       */
+      sha256: uploadedSha256(buffer),
+      ...(small && fit.variant ? { smallObjectKey: small.objectKey, smallWidth: fit.variant.width } : {}),
+      // The box the markup reserves, and the stand-in shown while the real
+      // bytes travel. Absent when the bytes could not be decoded.
+      ...(fit.width && fit.height ? { width: fit.width, height: fit.height } : {}),
+      ...(fit.placeholder ? { placeholder: fit.placeholder } : {}),
+  };
+  return { format: 'image', content: '', source: null, meta: { ...meta }, derivedTitle: null };
+}
+
+export async function publishImage(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+  const m = IMAGE_DATA_URL_RE.exec(dataUrl);
+  if (!m) return json({ error: 'invalid_image', details: ['image must be a base64 data: URL (png|jpeg|webp|gif|svg+xml)'] }, 400);
+  return storeImageContent(Buffer.from(m[2], 'base64'), m[1], objects);
+}
+
+// ── pdf ──────────────────────────────────────────────────────────────────────
+
+const PDF_DATA_URL_RE = /^data:application\/pdf;base64,([A-Za-z0-9+/=]+)$/;
+
+/**
+ * Store already-decoded PDF bytes — THE ONE DOOR, shared by the `pdf` data URL
+ * and the `pdfUrl` importer, so the cap and the type policy cannot fork the way
+ * two doors always eventually do.
+ *
+ * The type comes from the BYTES and nothing else. A `data:application/pdf`
+ * label is caller-supplied and a remote Content-Type is attacker-supplied, and
+ * what this app then serves is `application/pdf` with `nosniff` — so the
+ * sniff is the whole of what stops us handing a browser one type under
+ * another's name.
+ *
+ * Unlike an image, nothing is re-encoded or resized: see lib/story/pdf-store.
+ */
+export async function storePdfContent(buffer: Buffer, objects?: ContentObjects): Promise<StoredContent | Response> {
+  if (buffer.length === 0) return json({ error: 'invalid_pdf', details: ['the pdf is empty'] }, 400);
+  if (buffer.length > MAX_PDF_BYTES) return json({ error: 'pdf_too_large', maxBytes: MAX_PDF_BYTES }, 413);
+  if (sniffAssetType(buffer) !== PDF_CONTENT_TYPE) {
+    return json({ error: 'invalid_pdf', details: ['those bytes are not a PDF — the type comes from the file, never from its name or its Content-Type'] }, 400);
+  }
+  const located = await storePdf(buffer, objects);
+  const meta: PdfMeta = {
+    contentType: PDF_CONTENT_TYPE,
+    objectKey: located.objectKey,
+    bytes: located.bytes,
+    // The hash of the uploaded bytes, the same rule the image and file doors
+    // follow, so publication preflight asks one question of all three tiers.
+    sha256: uploadedSha256(buffer),
+    // Only when the file says so in the clear — a <File> card shows a page
+    // count it was told and never one it invented (lib/story/pdf-store).
+    ...(() => { const pages = pdfPageCount(buffer); return pages ? { pages } : {}; })(),
+  };
+  return { format: 'pdf', content: '', source: null, meta: { ...meta }, derivedTitle: null };
+}
+
+export async function publishPdf(_body: Record<string, unknown>, dataUrl: string, objects?: ContentObjects): Promise<StoredContent | Response> {
+  const m = PDF_DATA_URL_RE.exec(dataUrl);
+  if (!m) return json({ error: 'invalid_pdf', details: ['pdf must be a base64 data: URL — data:application/pdf;base64,<…>. To publish one that is already on the web, send pdfUrl instead.'] }, 400);
+  return storePdfContent(Buffer.from(m[1], 'base64'), objects);
+}

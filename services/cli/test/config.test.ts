@@ -1,0 +1,124 @@
+import {autoUpdatePolicy} from '../src/config';
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, writeFile, stat, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  hostDirectory,
+  loadConnection,
+  saveConnection,
+  normalizeServer,
+  servicePackageUrl,
+} from "../src/config";
+test("reads the single credential directory, scopes to host, saves privately without shell evaluation", async () => {
+  const home = await mkdtemp(join(tmpdir(), "afbin-test-"));
+  try {
+    assert.equal(await loadConnection(undefined, home, {}), null);
+    await saveConnection(
+      { server: "https://artifactbin.dev", token: "mx_test" },
+      home,
+    );
+    assert.deepEqual(await loadConnection(undefined, home, {}), {
+      server: "https://artifactbin.dev",
+      token: "mx_test",
+    });
+    assert.equal(await loadConnection("http://localhost:6400", home, {}), null);
+    assert.equal(
+      await loadConnection(undefined, home, {
+        ARTIFACTBIN_URL: "http://localhost:6400",
+      }),
+      null,
+    );
+    assert.equal(
+      (await stat(join(hostDirectory("https://artifactbin.dev", home, {}), "credentials.env"))).mode & 0o777,
+      0o600,
+    );
+    assert.match(
+      await readFile(join(hostDirectory("https://artifactbin.dev", home, {}), "credentials.env"), "utf8"),
+      /ARTIFACTBIN_TOKEN=mx_test/,
+    );
+    assert.equal(
+      await loadConnection("http://localhost:6400", home, {
+        ARTIFACTBIN_TOKEN: "prod",
+        ARTIFACTBIN_URL: "https://artifactbin.dev",
+      }),
+      null,
+    );
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+test("rejects unsafe server URLs", () => {
+  assert.throws(() => normalizeServer("https://user:secret@example.com"));
+  assert.throws(() => normalizeServer("http://example.com"));
+  assert.throws(() => normalizeServer("https://example.com/path"));
+  assert.equal(
+    normalizeServer("http://127.0.0.1:6400/"),
+    "http://127.0.0.1:6400",
+  );
+});
+
+test("does not load retired config or create state on a read", async () => {
+ const home = await mkdtemp(join(tmpdir(), "afbin-config-"));
+ try {
+  await writeFile(join(home, ".artifactbin.env"), "ARTIFACTBIN_TOKEN=retired\n");
+  assert.equal(await loadConnection(undefined, home, {}), null);
+  await assert.rejects(stat(join(home, ".artifactbin")), {code:"ENOENT"});
+  await saveConnection({server:"https://example.com",token:"saved"}, home);
+  assert.equal((await stat(join(home,".artifactbin"))).mode & 0o777, 0o700);
+  assert.deepEqual(await loadConnection(undefined, home, {ARTIFACTBIN_URL:"https://example.org", ARTIFACTBIN_TOKEN:"explicit"}), {server:"https://example.org",token:"explicit"});
+ } finally { await rm(home,{recursive:true,force:true}); }
+});
+
+test("persists refresh credentials privately but explicit tokens never inherit them", async () => {
+  const home = await mkdtemp(join(tmpdir(), 'afbin-refresh-'));
+  try {
+    const connection = {server:'https://example.com', token:'mx_access', refreshToken:'mxr_refresh', clientId:'afbin_cli', expiresAt:1900000000000};
+    await saveConnection(connection, home);
+    assert.deepEqual(await loadConnection(connection.server, home, {}), connection);
+    assert.deepEqual(await loadConnection(undefined, home, {ARTIFACTBIN_URL:connection.server, ARTIFACTBIN_TOKEN:'mx_explicit'}), {server:connection.server, token:'mx_explicit'});
+  } finally { await rm(home,{recursive:true,force:true}); }
+});
+
+test("keeps one credential per origin, so switching servers never re-prompts or overwrites", async () => {
+  const home = await mkdtemp(join(tmpdir(), "afbin-origins-"));
+  try {
+    await saveConnection({ server: "https://artifactbin.dev", token: "mx_prod" }, home, {});
+    await saveConnection({ server: "http://localhost:3030", token: "mx_local" }, home, {});
+    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://artifactbin.dev", token: "mx_prod" });
+    assert.deepEqual(await loadConnection("http://localhost:3030", home, {}), { server: "http://localhost:3030", token: "mx_local" });
+    assert.deepEqual(await loadConnection(undefined, home, { ARTIFACTBIN_URL: "http://localhost:3030" }), { server: "http://localhost:3030", token: "mx_local" });
+    assert.match(await readFile(join(hostDirectory("https://artifactbin.dev", home, {}), "credentials.env"), "utf8"), /ARTIFACTBIN_TOKEN=mx_prod/);
+    await saveConnection({ server: "http://localhost:3030", token: "mx_local2" }, home, {});
+    assert.deepEqual(await loadConnection("http://localhost:3030", home, {}), { server: "http://localhost:3030", token: "mx_local2" });
+    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://artifactbin.dev", token: "mx_prod" });
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test("ARTIFACTBIN_HOME selects a separate private state directory", async () => {
+  const home = await mkdtemp(join(tmpdir(), "afbin-home-"));
+  try {
+    const env = { ARTIFACTBIN_HOME: join(home, ".artifactbin.local") };
+    await saveConnection({ server: "http://localhost:3030", token: "mx_local" }, home, env);
+    assert.deepEqual(await loadConnection("http://localhost:3030", home, env), { server: "http://localhost:3030", token: "mx_local" });
+    assert.equal(await loadConnection("http://localhost:3030", home, {}), null);
+    assert.equal((await stat(join(home, ".artifactbin.local"))).mode & 0o777, 0o700);
+    await assert.rejects(stat(join(home, ".artifactbin")), { code: "ENOENT" });
+  } finally { await rm(home, { recursive: true, force: true }); }
+});
+
+test("service mirrors preserve release identity under a safe path prefix", () => {
+ const release='https://github.com/minusxai/artifactbin/releases/download/afbin-v0.1.13/afbin-sql-linux-x64.gz';
+ assert.equal(servicePackageUrl(release,{}),release);
+ assert.equal(servicePackageUrl(release,{CLI__SERVICE_BASE_URL:'http://127.0.0.1:6400/chat/releases/'}),'http://127.0.0.1:6400/chat/releases/afbin-v0.1.13/afbin-sql-linux-x64.gz');
+ assert.equal(servicePackageUrl(release,{CLI__SERVICE_BASE_URL:'https://mirror.example/packages'}),'https://mirror.example/packages/afbin-v0.1.13/afbin-sql-linux-x64.gz');
+ for(const base of ['http://mirror.example','https://user:secret@mirror.example','https://mirror.example/?token=secret','https://mirror.example/#secret'])assert.throws(()=>servicePackageUrl(release,{CLI__SERVICE_BASE_URL:base}));
+});
+
+test('automatic update policy is opt-out and a version pin always suppresses background changes',()=>{
+ assert.deepEqual(autoUpdatePolicy({}),{enabled:true});
+ for(const value of ['0','false','off'])assert.equal(autoUpdatePolicy({CLI__AUTO_UPDATE:value}).enabled,false);
+ assert.deepEqual(autoUpdatePolicy({CLI__VERSION_PIN:'1.2.3'}),{enabled:false,pin:'1.2.3'});
+ assert.equal(autoUpdatePolicy({CLI__VERSION_PIN:'bad'}).enabled,false);
+});

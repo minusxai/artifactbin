@@ -1,0 +1,179 @@
+import type * as React from 'react';
+import { createElement } from 'react';
+import { Mermaid } from '@/components/kit/mermaid';
+
+import {
+  Card,
+  CardHeader,
+  CardFooter,
+  CardTitle,
+  CardAction,
+  CardDescription,
+  CardContent,
+} from '@/components/kit/card';
+import { Badge } from '@/components/kit/badge';
+import { Button } from '@/components/kit/button';
+import { Alert, AlertTitle, AlertDescription } from '@/components/kit/alert';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableHead,
+  TableRow,
+  TableCell,
+  TableCaption,
+} from '@/components/kit/table';
+import { Separator } from '@/components/kit/separator';
+import { Skeleton } from '@/components/kit/skeleton';
+import { Progress } from '@/components/kit/progress';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+  BreadcrumbEllipsis,
+} from '@/components/kit/breadcrumb';
+import {
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+  AvatarBadge,
+  AvatarGroup,
+  AvatarGroupCount,
+} from '@/components/kit/avatar';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/kit/tabs';
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from '@/components/kit/accordion';
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from '@/components/kit/collapsible';
+// The one kit component that is app chrome first: it lives beside the app's
+// other primitives so the reader graph never crosses into this layer for it.
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@/components/Tooltip';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverAnchor,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverDescription,
+} from '@/components/kit/popover';
+import { Grid, GridItem } from '@/components/kit/grid';
+import { Select, Slider, DatePicker, Segmented, Switch } from '@/components/kit/controls';
+import { Icon } from '@/components/kit/icon';
+import { SlideDeck, Slide } from '@/components/kit/slides';
+import { Video } from '@/components/kit/video';
+import { File } from '@/components/kit/file';
+import { DataTable } from '@/components/kit/data-table';
+import {Dialog, DialogTrigger, DialogContent, DialogClose} from '@/components/kit/dialog';
+import { Files } from '@/components/kit/files';
+import { managedFrameLayout } from '@/lib/story/managed-frame-layout';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
+  Dialog, DialogTrigger, DialogContent, DialogClose,
+  Iframe: props => {
+    const { label, pixels } = managedFrameLayout(props.title, props.height);
+    return createElement('div', { id: props.id, className: props.className, 'data-mx-ast': props['data-mx-ast'], 'data-mx-managed-frame': '', 'aria-label': label, style: { height: pixels, width: '100%' } }, createElement('div', { style: { height: '100%' } }));
+  },
+  Mermaid,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+  CardAction,
+  Badge,
+  Button,
+  Alert,
+  AlertTitle,
+  AlertDescription,
+  Table,
+  TableHeader,
+  TableBody,
+  TableFooter,
+  TableRow,
+  TableHead,
+  TableCell,
+  TableCaption,
+  Separator,
+  Skeleton,
+  Progress,
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+  BreadcrumbEllipsis,
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+  AvatarBadge,
+  AvatarGroup,
+  AvatarGroupCount,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverAnchor,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverDescription,
+  Grid,
+  GridItem,
+  // The bound-control kit, registered as its STATIC faces (disabled, bindings
+  // stamped); the runtime registry overrides them with live store adapters
+  // (lib/story-runtime/StoryRuntimeApp).
+  Select,
+  Slider,
+  DatePicker,
+  Segmented,
+  Switch,
+  SlideDeck,
+  Slide,
+  Video,
+  File,
+  Icon,
+  // The data-bound table. Registered bare for completeness; StoryRuntimeApp
+  // supplies rows through its store adapter, while preview/inert rendering
+  // uses a placeholder.
+  DataTable: DataTable as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+  For: (() => null) as React.ComponentType<any>, // interpreted template
+  Column: (() => null) as React.ComponentType<any>, // template-only; DataTable's interpreter seam consumes it
+  // A folder's listing. Registered bare, like DataTable, and overridden by the
+  // runtime adapter that supplies its rows from the store.
+  Files: Files as unknown as React.ComponentType<any>, // eslint-disable-line @typescript-eslint/no-explicit-any
+};
+
+export const STORY_UI_COMPONENT_NAMES = Object.keys(STORY_UI_COMPONENTS);

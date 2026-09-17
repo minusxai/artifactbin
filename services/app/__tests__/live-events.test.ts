@@ -1,0 +1,294 @@
+import {observedRequest} from '@/__tests__/conditional-request';
+/**
+ * Live down-sync: the SSE surface at /a/<id>/events and the LISTEN fan-out
+ * behind it. Asserts the properties the design rests on — first frame is
+ * always the head ping (live-frame owns the document frame), every accepted write wakes watchers,
+ * anyone who may read the document may watch it, and subscriptions are
+ * released. The id addressing the stream is the document's one identifier —
+ * an address, not a credential.
+ */
+import { storedMarkup } from '@/test/helpers/echo';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
+import { readFrames, sseStream } from '@/__tests__/sse';
+import { GET as eventsRoute } from '@/app/a/[id]/events/route';
+import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
+import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '@/app/api/my/artifacts/[id]/annotations/route';
+import { STORY_ANNOTATIONS_EVENT } from '@/lib/story-runtime/contract';
+import { GET as frameRoute } from '@/app/a/[id]/events/frame/route';
+import { POST as editRoute } from '@/app/api/artifacts/[id]/edits/route';
+import { PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { POST as mintTokenRoute } from '@/app/api/tokens/route';
+import { mintToken } from '@/lib/tokens';
+import { MAX_LIVE_CHANNELS, liveChannelCount, resetLiveSubscriptions, subscribeToArtifact } from '@/lib/story/live';
+import { GET as rawRoute } from '@/app/a/[id]/raw/route';
+
+const SECRET = 'test-secret';
+useAppHarness();
+
+const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
+
+interface Wire { id: string; edit_id: string; markup: string | null; version: number }
+
+async function setup(): Promise<{ token: string; doc: Wire }> {
+  const mintRes = await mintTokenRoute(request('/api/tokens', { method: 'POST', json: { name: 't' }, headers: { ...(SECRET ? { 'x-shared-secret': SECRET } : {}) } }));
+  const { token } = (await mintRes.json()) as { token: string };
+  const sent = '<section><p>alpha text</p><p>beta text</p></section>';
+  const res = await createArtifactRoute(
+    request('/api/artifacts', { method: 'POST', token: token, json: { title: 'doc', markup: sent } }),
+  );
+  expect(res.status).toBe(201);
+  const wire = (await res.json()) as Wire;
+  return { token, doc: { ...wire, markup: storedMarkup(wire, sent) } };
+}
+
+/** Read SSE `data:` frames until `count` arrive (or the wait budget runs out). */
+
+beforeEach(async () => {
+  await resetLiveSubscriptions();
+});
+
+afterAll(async () => {
+  await resetLiveSubscriptions();
+});
+
+describe('GET /a/<id>/events', () => {
+  // The FIRST frame is a ping — the head's identity, and nothing a relay must
+  // understand — asserted with the stream's own headers in live-frame.test.ts,
+  // which owns the other half of the pair: the document at /events/frame.
+
+  // The start-flow path: a watcher opens a THEMELESS placeholder, then the agent
+  // publishes a themed document. Source alone is not enough — a frame that omits
+  // the design lands the new content in the old (default) theme and color mode,
+  // and the page the user was promised only appears if they reload.
+  it('carries the DESIGN (theme, colorMode, template) in the FRAME, so a themed publish arrives themed', async () => {
+    const { token, doc } = await setup();
+    const before = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
+    expect(before).toMatchObject({ theme: null, colorMode: null });
+    const put = await putArtifact(
+      await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<div data-design="tw"><h1>themed</h1></div>', theme: 'terminal', colorMode: 'dark', template: 'deck' } }),
+      params({ id: doc.id }),
+    );
+    expect(put.status).toBe(200);
+    const after = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
+    expect(after).toMatchObject({ theme: 'terminal', colorMode: 'dark', template: 'deck', version: 2 });
+  });
+
+  it('pings when an edit lands — the new head, by whom', async () => {
+    const { token, doc } = await setup();
+    const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
+    const framesPromise = readFrames(res.body!, 2);
+
+    const edit = await editRoute(
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'ALPHA' } }),
+      params({ id: doc.id }),
+    );
+    expect(edit.status).toBe(200);
+    const frames = await framesPromise;
+    expect(frames.length).toBeGreaterThanOrEqual(2);
+    expect(frames[frames.length - 1]).toMatchObject({ version: 2 });
+    expect((frames[frames.length - 1] as { editId: string }).editId).not.toBe(doc.edit_id);
+    const frame = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
+    expect(String(frame.source)).toContain('ALPHA');
+  });
+
+  it('pings for a whole-document replace too (PUT is not a side door)', async () => {
+    const { token, doc } = await setup();
+    const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
+    const framesPromise = readFrames(res.body!, 2);
+    const put = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: { markup: '<p>replaced</p>' } }), params({ id: doc.id }));
+    expect(put.status).toBe(200);
+    const frames = await framesPromise;
+    expect(frames.length).toBeGreaterThanOrEqual(2);
+    expect(frames[frames.length - 1]).toMatchObject({ version: 2 });
+  });
+
+  it('the frame carries dataset content inline; a document carries its source', async () => {
+    const { token } = await setup();
+    const make = async (body: Record<string, unknown>) => {
+      const r = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+      expect(r.status).toBe(201);
+      return (await r.json()) as Wire;
+    };
+    const ds = await make({ dataset: [{ m: 'Jan', v: 1 }] });
+    const html = await make({ markup: '<p>hi</p>' });
+    const dsFrame = await (await frameRoute(request(`/a/${ds.id}/events/frame`), params({ id: ds.id }))).json();
+    expect(dsFrame).toMatchObject({ format: 'dataset', source: null });
+    expect(JSON.parse(String(dsFrame.content))).toEqual([{ m: 'Jan', v: 1 }]);
+    const htmlFrame = await (await frameRoute(request(`/a/${html.id}/events/frame`), params({ id: html.id }))).json();
+    expect(htmlFrame).toMatchObject({ format: 'markup', content: null });
+    expect(htmlFrame.source).toContain('hi');
+    expect(htmlFrame.editId).toBe(html.edit_id);
+  });
+
+  it('the frame ALWAYS carries the stylesheet — it is stateless, so nothing is "omitted since last time"', async () => {
+    const { token, doc } = await setup();
+    const one = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
+    expect(one).toHaveProperty('compiledCss');
+    const edit = await editRoute(
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'beta text', new_string: 'BETA' } }),
+      params({ id: doc.id }),
+    );
+    expect(edit.status).toBe(200);
+    const two = await (await frameRoute(request(`/a/${doc.id}/events/frame`), params({ id: doc.id }))).json();
+    expect(two).toHaveProperty('compiledCss');
+    expect(two.compiledCss).toBe(one.compiledCss);
+  });
+
+  it('404s an unknown or malformed id, indistinguishably', async () => {
+    // 'zzzzzz' is well-formed and names no row; the rest never pass ID_RE.
+    for (const id of ['zzzzzz', 'nope', 'abc-12', 'NOT-A-SLUG!']) {
+      const res = await eventsRoute(request(`/a/${id}/events`), params({ id }));
+      expect(res.status).toBe(404);
+    }
+  });
+});
+
+describe('capacity', () => {
+  it('refuses new channels past the cap with 503, and never blocks READING the page', async () => {
+    const { doc } = await setup();
+    // Fill the registry with distinct channels, then ask for one more.
+    // channelFor lowercases, so the fillers are lowercase to begin with —
+    // otherwise two ids differing only in case would collapse into one
+    // channel and the cap would never be reached.
+    const holders: Array<() => Promise<void>> = [];
+    for (let i = 0; i < MAX_LIVE_CHANNELS; i++) {
+      holders.push(await subscribeToArtifact(`filler${i}`, () => {}));
+    }
+    expect(liveChannelCount()).toBe(MAX_LIVE_CHANNELS);
+    const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('30');
+
+    // The document itself is unaffected — live updates are an enhancement.
+    const raw = await rawRoute(request(`/a/${doc.id}/raw`), params({ id: doc.id }));
+    expect(raw.status).toBe(200);
+
+    for (const off of holders) await off();
+    // Capacity is reclaimed once watchers leave.
+    const after = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
+    expect(after.status).toBe(200);
+    void after.body?.cancel().catch(() => {});
+  });
+});
+
+describe('subscription lifecycle', () => {
+  it('shares one LISTEN across subscribers and releases it on the last unsubscribe', async () => {
+    const { token, doc } = await setup();
+    const seenA: string[] = [];
+    const seenB: string[] = [];
+    const offA = await subscribeToArtifact(doc.id, (id) => seenA.push(id));
+    const offB = await subscribeToArtifact(doc.id, (id) => seenB.push(id));
+    // Two watchers, ONE database LISTEN.
+    expect(liveChannelCount()).toBe(1);
+
+    const edit = await editRoute(
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'A2' } }),
+      params({ id: doc.id }),
+    );
+    const updated = (await edit.json()) as Wire;
+    await new Promise((r) => setTimeout(r, 150));
+    expect(seenA).toEqual([updated.edit_id]);
+    expect(seenB).toEqual([updated.edit_id]);
+
+    // After both leave, further writes reach nobody.
+    await offA();
+    expect(liveChannelCount()).toBe(1); // still one watcher left
+    await offB();
+    expect(liveChannelCount()).toBe(0); // the LISTEN itself is released, not just the handler
+    await editRoute(
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: updated.edit_id, old_string: 'A2', new_string: 'A3' } }),
+      params({ id: doc.id }),
+    );
+    await new Promise((r) => setTimeout(r, 150));
+    expect(seenA).toHaveLength(1);
+    expect(seenB).toHaveLength(1);
+  });
+
+  it('one subscriber throwing does not starve the others', async () => {
+    const { token, doc } = await setup();
+    const seen: string[] = [];
+    const offBad = await subscribeToArtifact(doc.id, () => { throw new Error('boom'); });
+    const offGood = await subscribeToArtifact(doc.id, (id) => seen.push(id));
+
+    await editRoute(
+      request(`/api/artifacts/${doc.id}/edits`, { method: 'POST', token: token, json: { edit_id: doc.edit_id, old_string: 'beta text', new_string: 'B2' } }),
+      params({ id: doc.id }),
+    );
+    await new Promise((r) => setTimeout(r, 150));
+    expect(seen).toHaveLength(1);
+    await offBad();
+    await offGood();
+  });
+});
+
+/**
+ * ANNOTATIONS ARE LIVE FOR ANNOTATORS. The events stream serves readers too,
+ * and the named `annotations` frame is sent only on connections that can
+ * annotate (owner, editor or commenter; a third subscription beside
+ * the document and its datasets, on the annotations' own NOTIFY channel).
+ * An owner connection gets one at CONNECT (self-syncing stream: the first
+ * frame is current state) and one per change; an anonymous reader of the
+ * same public document NEVER sees the event name at all.
+ */
+describe('GET /a/<id>/events — the annotations frame', () => {
+  /** One persistent reader over the stream; `next(count)` may be called repeatedly. */
+
+  async function annotationSetup() {
+    const t = await mintToken('agent');
+    const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: t.token, json: { markup: '<p>alpha</p><div>beta figure</div>' } }));
+    expect(res.status, await res.clone().text()).toBe(201);
+    const doc = (await res.json()) as { id: string; edit_id: string };
+    const cookie = await agentCookie([t.id]);
+    return { t, doc, cookie };
+  }
+
+  const annotate = (id: string, cookie: string, editId: string) =>
+    myCreateAnnotationRoute(
+      request(`/api/my/artifacts/${id}/annotations`, { method: 'POST', cookie: cookie, json: { path: '1', edit_id: editId, body: 'look here' } }),
+      params({ id }),
+    );
+
+  it('an owner connection gets current annotations at connect, and a fresh frame on create and on resolve', async () => {
+    const { t, doc, cookie } = await annotationSetup();
+    const first = (await (await annotate(doc.id, cookie, doc.edit_id)).json()) as { id: string };
+
+    const res = await eventsRoute(request(`/a/${doc.id}/events`, { cookie: cookie }), params({ id: doc.id }));
+    expect(res.status).toBe(200);
+    const reader = sseStream(res.body!);
+
+    // Frame 1 is the version ping (the stream is self-syncing); an annotations
+    // PING follows. The list itself is fetched — the stream carries nothing a
+    // blind relay would have to understand.
+    const opening = await reader.next(2);
+    const connectFrame = opening.find((e) => e.event === STORY_ANNOTATIONS_EVENT);
+    expect(connectFrame, JSON.stringify(opening.map((e) => e.event))).toBeTruthy();
+    expect(connectFrame!.data).toEqual({});
+    const list = async () => ((await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations?status=all`, { cookie: cookie }), params({ id: doc.id }))).json()) as { annotations: Array<{ id: string; status: string }> }).annotations;
+    expect((await list()).map((a) => a.id)).toEqual([first.id]);
+
+    await actOnAnnotationRoute(
+      request(`/api/artifacts/${doc.id}/annotations/${first.id}`, { method: 'POST', token: t.token, json: { resolve: true } }),
+      params({ id: doc.id, annId: first.id }),
+    );
+    const next = await reader.next(1);
+    expect(next[0].event).toBe(STORY_ANNOTATIONS_EVENT);
+    expect((await list()).filter((a) => a.status === 'open')).toEqual([]);
+    reader.close();
+  });
+
+  it('an anonymous reader of the same public document never sees the event', async () => {
+    const { doc, cookie } = await annotationSetup();
+    const res = await eventsRoute(request(`/a/${doc.id}/events`), params({ id: doc.id }));
+    expect(res.status).toBe(200);
+    const reader = sseStream(res.body!);
+
+    await annotate(doc.id, cookie, doc.edit_id);
+    // Give any (wrong) frame a moment to arrive; only the document frame may exist.
+    const seen = await reader.next(3, 1200);
+    expect(seen.some((e) => e.event === STORY_ANNOTATIONS_EVENT)).toBe(false);
+    expect(seen.length).toBeGreaterThan(0); // the stream itself is alive (opening document frame)
+    reader.close();
+  });
+});

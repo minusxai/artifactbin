@@ -1,0 +1,65 @@
+name: Release afbin
+
+# Bumps the CLI version and opens the release PR. Nothing is built or published here: the PR's CI
+# builds the four platform binaries and runs the Intel render proofs and the distributions
+# conformance job (selected because the version changed, scripts/lib/ci-plan.mjs), and once the PR
+# is merged and main's CI passes, `release-cli.yml` uploads the tested assets to GitHub Releases.
+#
+# The PR is opened with the repository token, whose events start no workflow, so CI is dispatched
+# on the branch explicitly; its checks attach to the PR's head commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      level:
+        description: Which part of the version to bump
+        type: choice
+        required: true
+        default: patch
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  release-pr:
+    name: Bump and open the release PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Bump the CLI, its installer, its release pointer and its teaching
+        id: bump
+        env:
+          LEVEL: ${{ inputs.level }}
+        run: |
+          set -euo pipefail
+          case "$LEVEL" in patch|minor|major) ;; *) echo "::error::unknown level $LEVEL"; exit 1;; esac
+          npm run release:cli -- "$LEVEL"
+          npm run generate:teaching -w services/cli
+          version=$(node -p "require('./services/cli/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Open the release PR and start its CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          branch="release/afbin-v$VERSION"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "Release afbin $VERSION"
+          git push -u origin "$branch"
+          gh pr create --base main --head "$branch" --title "Release afbin $VERSION" --body ""
+          gh workflow run ci.yml --ref "$branch"

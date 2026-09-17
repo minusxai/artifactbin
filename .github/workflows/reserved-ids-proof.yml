@@ -1,0 +1,36 @@
+name: Identity concurrency checks
+on:
+  pull_request:
+    paths:
+      - '**reserved*'
+      - 'services/cli/src/identities.ts'
+      - 'services/app/lib/artifact-identities.ts'
+      - '.github/workflows/reserved-ids-proof.yml'
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: proof
+          POSTGRES_PASSWORD: proof
+          POSTGRES_DB: proof
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: production
+      DATABASE_URL: postgres://proof:proof@localhost:5432/proof
+      APP__PUBLIC_BASE_URL: http://127.0.0.1:7445
+      AUTH__SECRET: reserved-identities-disposable-ci-secret
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - run: npm ci --include=dev
+      - run: node --import tsx scripts/reserved-ids-local-proof.ts
+      - run: node --import tsx -r ./scripts/register-yaml.cjs scripts/reserved-ids-postgres-proof.ts

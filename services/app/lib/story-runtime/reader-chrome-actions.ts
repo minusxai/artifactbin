@@ -1,0 +1,274 @@
+/**
+ * Reader chrome behavior for standalone documents loaded through anchor-entry.
+ * The canonical app page uses InlineReaderChrome around its inline runtime.
+ *
+ * One owner for everything the chrome does, wired once per document. Top-level
+ * documents handle panels locally; framed copies relay actions to the trusted
+ * parent (see anchor-entry):
+ *
+ *  - VISIBILITY: sample `scroll` and `resize` through one animation frame and
+ *    run lib/story-runtime/reader-chrome-policy; write the answer as the
+ *    `mx-reader-chrome--hidden` class and `data-mx-reader-state`. Never move
+ *    while a panel is open; opening a panel reveals the chrome.
+ *  - PANELS: the two triggers, the scrim, Escape, and the light/dark choice
+ *    (lib/story-runtime/reader-mode + the runtime's private mode hook) — moved
+ *    here from anchor-entry, unchanged in behaviour.
+ *  - LIKE / COMMENT / FOLLOW: relay to the parent when framed, otherwise
+ *    navigate through the supplied action URL. Fixtures without a URL only log.
+ *  - SHARE: `navigator.share({ title, url })` when the platform has a sheet;
+ *    else `navigator.clipboard.writeText(url)`; else select the hidden copy
+ *    field and `document.execCommand('copy')`. Then the toast, ~1.5s. `url` is
+ *    `location.href` — framed copies relay the action while top-level documents
+ *    use their own address.
+ *  - LOGO: a plain link home (`href="/"`); nothing to wire.
+ */
+
+import { READER_CHROME_HIDDEN_CLASS, type ReaderChromeState } from '@/lib/story/reader-chrome';
+import { STORY_MODE_HOOK, STORY_READER_ACTION_MESSAGE, STORY_READER_ACTION_RESULT_MESSAGE, STORY_READER_CHROME_MESSAGE, type StoryReaderActionKind, type StoryReaderActionMessage, type StoryReaderActionResultMessage, type StoryReaderChromeMessage } from './contract';
+import { applyReaderMode, persistReaderMode } from './reader-mode';
+import { chromeAfterSample, type ChromeState } from './reader-chrome-policy';
+import { wireReaderSharing } from './reader-share';
+import { wireGithubStar } from '@/lib/github-star';
+
+interface ReaderChromeHandle {
+  /** Remove every listener this wiring installed. */
+  destroy(): void;
+}
+
+/**
+ * Apply a reading choice from the local settings panel or the trusted parent's
+ * reader-mode message. Both update reading state and re-ink hydrated charts
+ * through the runtime's private hook.
+ */
+export function applyReaderChoice(win: Window, doc: Document, mode: 'light' | 'dark'): void {
+  applyReaderMode(doc, mode);
+  persistReaderMode(win, mode);
+  for (const choice of Array.from(doc.querySelectorAll<HTMLElement>('[data-mx-mode-choice]'))) {
+    choice.setAttribute('aria-pressed', String(choice.dataset.mxModeChoice === mode));
+  }
+  const hook = (win as unknown as Record<string, unknown>)[STORY_MODE_HOOK] as
+    | ((mode: 'light' | 'dark') => void)
+    | undefined;
+  hook?.(mode);
+}
+
+/**
+ * Wire the chrome found in `doc` (rendered by lib/story/reader-chrome).
+ * Returns null only when the document carries no chrome (for example a
+ * capture). Framed chrome is still wired so it can relay actions.
+ */
+export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle | null {
+  const root = doc.querySelector<HTMLElement>('[data-mx-reader-chrome]');
+  if (!root) return null;
+
+  const cleanups: Array<() => void> = [wireGithubStar(root)];
+  const on = <T extends EventTarget>(target: T, type: string, handler: EventListener, options?: AddEventListenerOptions) => {
+    target.addEventListener(type, handler, options);
+    cleanups.push(() => target.removeEventListener(type, handler, options));
+  };
+
+  /*
+   * Standalone framed compatibility path. The chrome is drawn here, but
+   * this document holds no session and its panels would be the wrong panels
+   * (the page's carry share, history, the agent prompt). So every control
+   * posts UP, and the page acts: it holds the session and the real panels.
+   */
+  const framed = win.parent !== win;
+  const parent = win.parent;
+  const ask = (kind: StoryReaderActionKind, author?: string | null) =>
+    parent.postMessage({ type: STORY_READER_ACTION_MESSAGE, kind, ...(author ? { author } : {}) } satisfies StoryReaderActionMessage, '*');
+
+  const triggers = Array.from(root.querySelectorAll<HTMLElement>('[data-mx-reader-trigger]'));
+  const panels = Array.from(root.querySelectorAll<HTMLElement>('[data-mx-reader-panel]'));
+  const scrim = root.querySelector<HTMLElement>('[data-mx-reader-scrim]');
+  const artifact = root.getAttribute('data-mx-artifact-id');
+
+  /* ---- VISIBILITY ---------------------------------------------------- */
+
+  let state: ChromeState | null = null;
+  let queued = false;
+  /** Edit mode: held at the top, the policy paused. */
+  let pinned = false;
+
+  const paint = (visible: boolean) => {
+    root.classList.toggle(READER_CHROME_HIDDEN_CLASS, !visible);
+    root.setAttribute('data-mx-reader-state', (visible ? 'shown' : 'hidden') satisfies ReaderChromeState);
+  };
+  const panelOpen = () => triggers.some((t) => t.getAttribute('aria-expanded') === 'true');
+  const sample = () => {
+    queued = false;
+    // An open panel FREEZES the chrome: the reader is inside a control, and a
+    // scroll behind it must not take the control away. Pinned, it never moves.
+    if (panelOpen() || pinned) return;
+    state = chromeAfterSample(state, {
+      scrollY: Math.max(0, win.scrollY),
+      viewportHeight: win.innerHeight,
+      documentHeight: doc.documentElement.scrollHeight,
+    });
+    paint(state.visible);
+  };
+  // One animation frame however noisy touch-scroll events become.
+  const schedule = () => {
+    if (queued) return;
+    queued = true;
+    win.requestAnimationFrame(sample);
+  };
+  const reveal = () => {
+    state = state ? { ...state, visible: true } : { visible: true, lastScrollY: Math.max(0, win.scrollY) };
+    paint(true);
+  };
+
+  on(win, 'scroll', schedule, { passive: true });
+  on(win, 'resize', schedule);
+
+  /* ---- PANELS -------------------------------------------------------- */
+
+  const closePanels = () => {
+    for (const trigger of triggers) {
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.setAttribute('aria-label', trigger.dataset.mxReaderTrigger === 'menu' ? 'Open menu' : 'Open artifact controls');
+    }
+    for (const panel of panels) panel.hidden = true;
+    if (scrim) scrim.hidden = true;
+  };
+  for (const trigger of triggers) {
+    on(trigger, 'click', () => {
+      // Asking for a control is a gesture too: it reveals the chrome the same
+      // way a scroll up does, whichever direction the reader was going.
+      reveal();
+      const name = trigger.dataset.mxReaderTrigger;
+      if (framed) { ask(name === 'menu' ? 'menu' : 'controls'); return; }
+      const opening = trigger.getAttribute('aria-expanded') !== 'true';
+      closePanels();
+      if (!opening) return;
+      const panel = panels.find((candidate) => candidate.dataset.mxReaderPanel === name);
+      if (!panel) return;
+      trigger.setAttribute('aria-expanded', 'true');
+      trigger.setAttribute('aria-label', name === 'menu' ? 'Close menu' : 'Close artifact controls');
+      panel.hidden = false;
+      if (scrim) scrim.hidden = false;
+    });
+  }
+  if (scrim) on(scrim, 'click', closePanels);
+  on(doc, 'keydown', (event) => {
+    if ((event as KeyboardEvent).key === 'Escape') closePanels();
+  });
+
+  /* ---- APPEARANCE ---------------------------------------------------- */
+
+  const choices = Array.from(root.querySelectorAll<HTMLElement>('[data-mx-mode-choice]'));
+  const current = doc.documentElement.classList.contains('dark') ? 'dark' : 'light';
+  for (const choice of choices) {
+    choice.setAttribute('aria-pressed', String(choice.dataset.mxModeChoice === current));
+    on(choice, 'click', () => {
+      const next = choice.dataset.mxModeChoice;
+      if (next === 'light' || next === 'dark') applyReaderChoice(win, doc, next);
+    });
+  }
+
+  /* ---- THE RAIL ------------------------------------------------------ */
+
+  const showCount = (kind: 'like' | 'comment', count: number) => {
+    const counter = root.querySelector<HTMLElement>(`[data-mx-reader-count="${kind}"]`);
+    if (counter) counter.textContent = count > 0 ? String(count) : '';
+  };
+  const showLike = (liked: boolean, count: number | null) => {
+    const heart = root.querySelector<HTMLElement>('[data-mx-reader-action="like"]');
+    if (!heart) return;
+    heart.setAttribute('data-mx-liked', String(liked));
+    heart.setAttribute('aria-label', liked ? 'Unlike' : 'Like');
+    heart.setAttribute('data-mx-tip', liked ? 'Unlike' : 'Like');
+    if (count !== null) showCount('like', count);
+  };
+  const showFollow = (following: boolean) => {
+    const pill = root.querySelector<HTMLElement>('[data-mx-reader-action="follow"]');
+    if (!pill) return;
+    const who = pill.dataset.mxAuthor ?? '';
+    pill.setAttribute('data-mx-following', String(following));
+    pill.setAttribute('aria-label', `${following ? 'Unfollow' : 'Follow'} @${who}`);
+    pill.setAttribute('data-mx-tip', `${following ? 'Unfollow' : 'Follow'} @${who}`);
+    pill.textContent = following ? 'following' : 'follow';
+  };
+
+  const sharing=wireReaderSharing(win,doc,root);
+  const share=sharing.share;
+  cleanups.push(sharing.dispose);
+  for (const button of Array.from(root.querySelectorAll<HTMLElement>('[data-mx-reader-action]'))) {
+    const kind = button.dataset.mxReaderAction;
+    on(button, 'click', () => {
+      if (framed) {
+        if (kind === 'like' || kind === 'comment' || kind === 'share' || kind === 'follow' || kind === 'edit') ask(kind, button.dataset.mxAuthor ?? null);
+        return;
+      }
+      if (kind === 'share') { share(); return; }
+      // Top-level action URLs lead through login or back to the app with the
+      // requested action. A fixture without an action URL only logs the intent.
+      const door = button.dataset.mxHref;
+      if (door) { win.location.assign(door); return; }
+      if (kind === 'like' || kind === 'comment') console.log(`[artifactbin] ${kind}`, { artifact });
+      if (kind === 'follow') console.log('[artifactbin] follow', { artifact, author: button.dataset.mxAuthor ?? null });
+    });
+  }
+
+
+  /*
+   * A CLICK ON THE CHROME IS THE CHROME'S. It floats over the document, and
+   * everything under it that listens for clicks on the document — the annotate
+   * layer focusing a thread, the selection surface dismissing itself — would
+   * otherwise answer a press on a button that is not theirs. One listener at
+   * the root, after every control's own handler has run in the bubble.
+   */
+  on(root, 'click', (event) => event.stopPropagation());
+
+  if (framed) {
+    on(win, 'message', (event) => {
+      const { data, source } = event as MessageEvent<StoryReaderActionResultMessage | StoryReaderChromeMessage>;
+      if (source !== parent || !data || typeof data !== 'object') return;
+      if (data.type === STORY_READER_ACTION_RESULT_MESSAGE) {
+        // The page shared on our behalf; the toast is ours to show.
+        if (data.kind === 'share' && data.ok) sharing.copied();
+        // The page liked or followed for us; the heart and the pill follow suit.
+        if (data.kind === 'like' && data.ok && typeof data.liked === 'boolean') showLike(data.liked, data.count ?? null);
+        if (data.kind === 'follow' && data.ok && typeof data.following === 'boolean') showFollow(data.following);
+        if (data.kind === 'comment' && data.ok && typeof data.count === 'number') showCount('comment', data.count);
+      }
+      if (data.type === STORY_READER_CHROME_MESSAGE) {
+        // `off`: gone. `pinned` (edit mode): held at the top with the page's
+        // editor toolbar under it, and the document inset by both so nothing
+        // it shows is covered. `on`: back to the reveal-on-scroll rule.
+        root.classList.toggle('mx-reader-chrome--off', data.mode === 'off');
+        pinned = data.mode === 'pinned';
+        root.classList.toggle('mx-reader-chrome--pinned', pinned);
+        // The desktop bar is 44px tall; a phone draws no bar (its logo, rail
+        // and byline float), so its inset is the page's toolbar alone.
+        const bar = win.innerWidth >= 640 ? 44 : 0;
+        // The inset is a layout shift above everything the reader is looking
+        // at, and the browser's scroll anchoring would answer it by moving
+        // scrollY the same amount — which is the reader "moving" as far as
+        // the page can tell (gate-inplace-edit). Hold the scroll position
+        // through the change instead: the content slides under the bars, the
+        // reader's place is unchanged, the way it was when the frame itself
+        // used to move.
+        const html = doc.documentElement;
+        html.style.overflowAnchor = 'none';
+        html.style.setProperty('--mx-chrome-inset', pinned ? `${bar + (data.inset ?? 0)}px` : '0px');
+        // The page's comment rail: its width, left free on the right, so the
+        // frame can stay full-width and the bar in it never narrows.
+        html.style.setProperty('--mx-rail-inset', `${data.railInset ?? 0}px`);
+        win.requestAnimationFrame(() => { html.style.overflowAnchor = ''; });
+        if (pinned) paint(true);
+        else sample();
+      }
+    });
+  }
+
+  // The first answer, now: the chrome is server-rendered hidden, and a
+  // document that cannot scroll has to correct that before the reader looks.
+  sample();
+
+  return {
+    destroy() {
+      for (const undo of cleanups.splice(0)) undo();
+    },
+  };
+}

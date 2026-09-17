@@ -1,0 +1,363 @@
+import { createChecker } from './lib/assert.mjs';
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
+import { checkViewportGeometry } from './lib/viewport-geometry.mjs';
+import { artifactDocument } from './lib/artifact-document.mjs';
+/**
+ * Gate: a deck must not shove its own document sideways after it opens.
+ *
+ * The fault this pins: the birds-eye rail is a 190px flex SIBLING of the
+ * canvas, and slides are discovered by polling the built iframe — so the
+ * document painted at the far left, then jumped right a poll tick later, under
+ * the reader's eyes, on every load of every deck (and again on entering edit
+ * mode). Nothing in the unit suite can see it: jsdom has no layout.
+ *
+ * The same instrument answers the SIDEWAYS question (leg 5), which is the same
+ * kind of fault one axis over: a deck built from the guidance we ship must not
+ * be able to scroll horizontally, because the rail is `position: sticky` and
+ * sticky only sticks vertically — a document that overflows by a pixel drags
+ * its own navigation off the screen.
+ *
+ * Leg 7 is a deck's NAVIGATION, absorbed from the deck-chrome gate: the rail
+ * rows, the present bar and the chromeless capture render all live inside the
+ * served document — the parent cannot reach into it — so only a browser can
+ * drive them, and this gate already knows how to build a deck.
+ *
+ * Measured the way a reader experiences it — the canvas's own left edge,
+ * sampled from the first paint through settling. A single moved sample is the
+ * bug. The browser's layout-shift entries are collected too, because that is
+ * the metric this maps onto (CLS) and it catches a jump this poll might blink
+ * past.
+ *
+ *   usage: node scripts/gate-layout-shift.mjs [base]
+ */
+import { chromium } from 'playwright';
+import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+
+const B = process.argv[2] ?? 'http://localhost:3030';
+const check = createChecker('layout-shift');
+
+const slide = (n) => `<Slide title="Slide ${n}"><h1 className="text-5xl font-bold">Heading ${n}</h1>`
+  + `<p className="mt-4 text-lg">Body copy for slide ${n}.</p></Slide>`;
+/*
+ * Leg 7's deck is its own: navigating between slides needs slides a reader can
+ * actually scroll BETWEEN (full-height, centred — the shape a deck is written
+ * in), and the Icon is load-bearing because the rail is a render path of its
+ * own that once shipped with the text present and a hole where the icon goes.
+ */
+const NAV_DECK = `<Helmet><title>Deck gate</title></Helmet>
+<SlideDeck>
+  <Slide title="Cover" className="flex flex-col items-center justify-center gap-4 text-center">
+    <h1 className="text-5xl font-bold">The Cover Slide</h1>
+    <Icon name="chart-column" />
+    <p className="text-muted-foreground">First slide body copy.</p>
+  </Slide>
+  <Slide title="Middle" className="flex flex-col items-center justify-center gap-4 text-center">
+    <h1 className="text-5xl font-bold">The Middle Slide</h1>
+  </Slide>
+  <Slide title="Close" className="flex flex-col items-center justify-center gap-4 text-center">
+    <h1 className="text-5xl font-bold">The Closing Slide</h1>
+  </Slide>
+</SlideDeck>`;
+const DECK = `<SlideDeck>${slide(1)}${slide(2)}${slide(3)}${slide(4)}</SlideDeck>`;
+const PLAIN = '<div data-design="tw" className="p-10"><h1 className="text-4xl font-bold">Ordinary</h1>'
+  + '<p className="mt-4 text-lg">No slides here.</p></div>';
+/*
+ * The FULL-BLEED idiom, copied from what we teach (orchestrator/prompts/
+ * skills/templates, lib/data/story/typography.ts
+ * FULL_BLEED_CLASSES): the page wrapper carries the gutter and a full-bleed
+ * slide cancels it with a negative margin, re-adding it as padding.
+ *
+ * The two halves are container queries, and they only cancel if they resolve
+ * against the SAME container. They did not: `@2xl:-mx-12` on the slide has an
+ * ancestor container (the wrapper), while the wrapper's OWN `@2xl:px-12` looks
+ * for an ancestor container of its own and used to find none — so the slide
+ * cancelled 48px of gutter that was only ever 24px, on every deck, at every
+ * desktop width.
+ */
+const BLEED_DECK = '<div data-design="tw" className="@container px-6 @2xl:px-12"><SlideDeck>'
+  + '<Slide title="Cover" className="border-b border-border py-14"><h1 className="text-6xl font-bold">Cover</h1></Slide>'
+  + '<Slide title="Act one" className="justify-center bg-primary text-primary-foreground -mx-6 @2xl:-mx-12 px-6 @2xl:px-12">'
+  + '<span className="text-9xl font-bold text-primary-foreground/25">01</span>'
+  + '<h2 className="mt-2 text-4xl font-semibold">Act title</h2></Slide>'
+  + '<Slide title="Act two" className="border-b border-border py-14"><h2 className="text-3xl font-semibold">After</h2></Slide>'
+  + '</SlideDeck></div>';
+
+async function mint(markup) {
+  // The token comes from the start LINK now — /api/start hands the browser a
+  // cookie, not a secret (lib/agent-session).
+  const st = await startDocument(B);
+  await fetch(`${B}/api/artifacts/${st.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${st.token}` },
+    body: JSON.stringify({ title: 'layout gate', markup, theme: 'modernist' }),
+  });
+  return st;
+}
+
+const browser = await chromium.launch();
+
+/** Sample the canvas's left edge from first paint until the rail has settled. */
+async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
+  const page = await browser.newPage({ viewport: { width, height: 1000 } });
+  // The shell — and therefore the canvas this measures — belongs to the OWNER;
+  // anyone else is served the document itself, with no parent-side rail to
+  // shift. Ownership is the httpOnly session cookie now, not a localStorage
+  // token, so it is exchanged rather than seeded. Without it, view mode would
+  // measure a bare document and edit mode the unlock card — either way passing
+  // every check below by measuring nothing.
+  await becomeOwner(page, B, token);
+  // The rail is `xl:block` — below that width it never shows and there is
+  // nothing to measure. 1600 is comfortably past it.
+  // Shifts are ATTRIBUTED, not just totalled: this page also moves its footer
+  // as the canvas gets its height (pre-existing, ~0.065, unrelated to the rail),
+  // and a gate that asserted a global CLS number would either fail on that
+  // forever or be loosened until it could no longer see the 0.11 the rail used
+  // to cost.
+  await page.addInitScript(() => {
+    window.__shifts = [];
+    const name = (n) => (n?.getAttribute?.('aria-label') ?? n?.tagName?.toLowerCase?.() ?? '?');
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) {
+        if (e.hadRecentInput) continue;
+        window.__shifts.push({ value: e.value, sources: (e.sources || []).map((s) => name(s.node)) });
+      }
+    }).observe({ type: 'layout-shift', buffered: true });
+  });
+  await page.goto(`${B}/a/${id}${edit ? '#edit' : ''}`, { waitUntil: 'commit', timeout: 60000 });
+  // Edit mode adds a bar around the document; wait for it before taping, so
+  // what is measured is the document settling rather than the bar arriving.
+  // The top bar's edit control becomes the exit while editing (ArtifactSurface).
+  if (edit) await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 90_000 });
+
+
+  /*
+   * Both modes measure the DOCUMENT, because there is only one.
+   *
+   * Edit mode used to measure the page: the 0.11 CLS this gate exists for came
+   * from a second canvas and a parent-side rail appearing there. Neither
+   * exists now — entering edit is a message to the document already on screen
+   * — so what is worth asserting is that the document itself does not move.
+   */
+  const target = await artifactDocument(page, { timeout: 60_000 });
+  // `attached`, not `visible`: the rail's previews are scaled to a few pixels,
+  // so the first matching element is legitimately not "visible" to Playwright.
+  await target.waitForSelector('[data-mx-inline-story]', { state: 'attached', timeout: 60_000 });
+
+  const samples = await target.evaluate(async () => {
+    const seen = [];
+    for (let i = 0; i < 160; i++) { // ~8s, well past any late arrival
+      // Ordered by preference, not by a selector list: a list returns whatever
+      // comes first in the DOM, and the story root (the body) always would.
+      const el = document.querySelector('.mx-doc')
+
+        ?? document.querySelector('[data-mx-inline-story]');
+      if (el) {
+        const x = Math.round(el.getBoundingClientRect().left);
+        if (seen[seen.length - 1] !== x) seen.push(x);
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const moved = (s) => s === 'Slide overview' || s === 'Slides' || s === 'div';
+    const shifts = window.__shifts ?? [];
+    const blamed = shifts.filter((x) => x.sources.some(moved));
+    return {
+      seen,
+      shifts: shifts.reduce((a, b) => a + b.value, 0),
+      railShift: blamed.reduce((a, b) => a + b.value, 0),
+      // Rail rows are plain divs inside the overview; catch them by position
+      // instead — any shift at all after the document has painted.
+      lateShift: shifts.filter((x) => x.value > 0.005).length,
+    };
+  });
+  const railEntries = await target.locator('[aria-label^="Go to slide"]').count();
+  // Below the breakpoint the rail exists in the DOM but is display:none, so ask
+  // the browser whether it actually occupies anything.
+  const railHidden = await target.evaluate(() => {
+    const el = document.querySelector('[aria-label="Slide overview"], .mx-rail');
+    return !el || el.getBoundingClientRect().width === 0;
+  });
+  await page.close();
+  return { ...samples, railEntries, railHidden };
+}
+
+/* Observe the same four cases in pairs. Four cold rendering pages can saturate
+ * a small CI runner before navigation commits; each case still samples every
+ * frame over its original observation window. */
+const deck = await mint(DECK);
+const plain = await mint(PLAIN);
+const [d, e] = await Promise.all([
+  // 1. a deck: the rail is there from the start and nothing moves
+  watchCanvas(deck.id, { token: deck.token }),
+  // 2. entering edit mode is the same page, and must behave the same
+  watchCanvas(deck.id, { edit: true, token: deck.token }),
+]);
+const [p, m] = await Promise.all([
+  // 3. an ordinary document must not pay for the deck's column
+  watchCanvas(plain.id, { token: plain.token }),
+  // 4. mobile: the rail is an xl-and-up affordance, and must stay one
+  watchCanvas(deck.id, { token: deck.token, width: 390 }),
+]);
+
+check(d.railEntries >= 2, `deck: the rail did arrive (${d.railEntries} entries) — otherwise this proves nothing`);
+check(d.seen.length === 1, `deck: the document's left edge never moves (positions seen: ${d.seen.join(' -> ')})`);
+check(d.railShift === 0, `deck: nothing shifts the canvas or the rail (attributed CLS ${d.railShift.toFixed(4)})`);
+console.log(`       (page CLS ${d.shifts.toFixed(4)} — the remainder is the footer settling as the canvas gets its height, which predates this gate)`);
+
+// Without proving the rail actually turned up, "it never moved" is what a page
+// with no rail at all also reports.
+check(e.railEntries >= 2, `edit mode: the rail is there too (${e.railEntries} entries)`);
+check(e.seen.length === 1, `edit mode: the document's left edge never moves (positions seen: ${e.seen.join(' -> ')})`);
+
+check(p.railEntries === 0, 'plain: no rail, as before');
+check(p.seen.length === 1, `plain: and it still does not move (positions seen: ${p.seen.join(' -> ')})`);
+// The reserved column is for DECKS only: an ordinary document that indents
+// itself by 190px for a rail it will never show is a different bug with the
+// same shape.
+check(p.seen[0] < d.seen[0], `plain: and sits further left than a deck (${p.seen[0]}px vs ${d.seen[0]}px)`);
+
+// A reserved column that leaked below the breakpoint would indent every phone
+// reader by 190px for a rail their screen never shows.
+check(m.railEntries === 0 || m.railHidden, 'mobile: no rail column on a phone-width viewport');
+check(m.seen.length === 1, `mobile: and the document never moves (positions seen: ${m.seen.join(' -> ')})`);
+check(m.seen[0] < 40, `mobile: the document uses the full width (left edge ${m.seen[0]}px)`);
+
+// ── 5. a deck built from our own guidance must not scroll sideways ────────
+/*
+ * Measured INSIDE the frame, where the document's own scrollport is: the page
+ * around it has its own width and would answer a different question.
+ */
+async function measureBleed(id, token, width = 1600) {
+  const page = await browser.newPage({ viewport: { width, height: 1000 } });
+  await becomeOwner(page, B, token);
+  await page.goto(`${B}/a/${id}`, { waitUntil: 'commit', timeout: 60000 });
+  const target = await artifactDocument(page, { timeout: 60_000 });
+  await target.waitForSelector('.mx-doc', { state: 'attached', timeout: 60_000 });
+  // Past every late arrival — a font landing can widen a line after first paint.
+  await page.waitForTimeout(2500);
+  const measured = await target.evaluate(() => {
+    const de = document.documentElement;
+    const column = document.querySelector('.mx-doc').getBoundingClientRect();
+    const rail = document.querySelector('.mx-rail');
+    // The bleed slide is the one with a negative inline margin — found by what
+    // it DOES, so the fixture's class names are not a second thing to keep true.
+    const bleed = [...document.querySelectorAll('.mx-doc *')]
+      .find((el) => parseFloat(getComputedStyle(el).marginLeft) < 0);
+    return {
+      overflow: de.scrollWidth - de.clientWidth,
+      railWidth: rail ? Math.round(rail.getBoundingClientRect().width) : 0,
+      columnLeft: Math.round(column.left),
+      columnRight: Math.round(column.right),
+      bleedLeft: bleed ? Math.round(bleed.getBoundingClientRect().left) : null,
+      bleedRight: bleed ? Math.round(bleed.getBoundingClientRect().right) : null,
+    };
+  });
+  await page.close();
+  return measured;
+}
+
+const bleedDeck = await mint(BLEED_DECK);
+
+// ── 6. a bleed the author got WRONG must still not scroll the page ─────────
+/*
+ * Leg 5 proves the taught idiom cancels; this one proves the column survives
+ * an idiom that CANNOT cancel. A real dashboard shipped the standard bleed
+ * classes (`-mx-6 @2xl:-mx-12 px-6 @2xl:px-12`) on a header span inside a
+ * wrapper whose gutter was `px-4 @2xl:px-6` — a 48px pull against a 24px
+ * gutter, so 24px of the document hung past the column and the whole page
+ * scrolled sideways by a sliver. No container resolution fixes a mismatch the
+ * author wrote; the column itself must refuse to let anything past its edge.
+ */
+const MISMATCH = '<div data-design="tw" className="@container min-h-screen bg-background px-4 py-4 @2xl:px-6">'
+  + '<header className="border-b-2 border-foreground pb-3"><div className="flex items-baseline justify-between gap-4">'
+  + '<h1 className="text-3xl font-bold">Payroll</h1>'
+  + '<span className="font-mono text-[11px] uppercase -mx-6 @2xl:-mx-12 px-6 @2xl:px-12">snapshot · aug 2026</span>'
+  + '</div></header><p className="mt-4 text-lg">Tiles below.</p></div>';
+const mismatch = await mint(MISMATCH);
+const [b, mm] = await Promise.all([
+  measureBleed(bleedDeck.id, bleedDeck.token),
+  measureBleed(mismatch.id, mismatch.token),
+]);
+check(b.railWidth > 0 && b.bleedLeft !== null,
+  `bleed: the rail and the full-bleed slide are both there (rail ${b.railWidth}px) — otherwise this proves nothing`);
+check(b.overflow === 0, `bleed: the deck does not scroll sideways (${b.overflow}px of horizontal overflow)`);
+// The point of the idiom is edge-to-edge WITHIN the column. Landing left of it
+// is the same 24px seen from the other end: blue paint on top of the rail.
+check(b.bleedLeft >= b.columnLeft, `bleed: the slide stays out of the rail (slide left ${b.bleedLeft}px vs column ${b.columnLeft}px)`);
+check(b.bleedRight <= b.columnRight, `bleed: and inside the column's right edge (slide right ${b.bleedRight}px vs column ${b.columnRight}px)`);
+check(mm.bleedLeft !== null, 'mismatch: the overshooting element is there — otherwise this proves nothing');
+check(mm.overflow === 0, `mismatch: the document still does not scroll sideways (${mm.overflow}px of horizontal overflow)`);
+
+// ── 7. the deck's navigation chrome, which lives INSIDE the document ───────
+/*
+ * The parent cannot reach into the served document, so the rail and the
+ * present bar are the document's own — and the same deck that proved it never
+ * shifts (leg 1) is the honest place to prove it NAVIGATES. Previews are
+ * checked for their glyphs as well as their text: the rail is a render path of
+ * its own and shipped once with the text present and a hole where the icon
+ * goes, which innerText cannot see.
+ */
+{
+  /*
+   * Published WITHOUT this gate's theme override: the deck-chrome legs measure
+   * scroll positions, and a theme that changes slide heights changes where a
+   * slide can come to rest. The CLS legs above want the theme; these want the
+   * shipped default.
+   */
+  const navDeck = await startDocument(B);
+  await fetch(`${B}/api/artifacts/${navDeck.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${navDeck.token}` },
+    body: JSON.stringify({ markup: NAV_DECK }),
+  });
+  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+  await becomeOwner(page, B, navDeck.token);
+  await page.goto(`${B}/a/${navDeck.id}`, { waitUntil: 'load' });
+  const frame = page.mainFrame();
+  // SCOPED to the document column: the rail's previews are real <Slide>
+  // elements too (that is what makes them faithful), so an unscoped query
+  // measures a miniature.
+  const SLIDES = '.mx-doc [data-mx-slide]';
+  await frame.waitForSelector(SLIDES, { timeout: 20_000 });
+  const slideTop = (index) => frame.evaluate(
+    ([selector, i]) => Math.abs(document.querySelectorAll(selector)[i].getBoundingClientRect().top),
+    [SLIDES, index],
+  );
+
+  check(await frame.evaluate(() => !!document.querySelector('.mx-rail')), 'the rail is in the served document');
+  check(await frame.evaluate(() => document.querySelector('.mx-rail-thumb')?.innerText.includes('The Cover Slide')),
+    'rail previews render the slide content');
+  check(await frame.evaluate(() => !!document.querySelector('.mx-rail-thumb svg')),
+    "rail previews draw the slide's icons too (server-resolved glyphs reach the rail)");
+  check(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row').length === 3), 'one rail row per slide');
+
+  // The rail is SERVER-RENDERED, so every check above holds before hydration —
+  // and clicking a row is the first thing here that needs the handler to exist.
+  // Without this wait the click lands on static markup and scrolls nothing.
+  await page.waitForTimeout(2500);
+  await frame.click('[aria-label="Go to slide 3: Close"]');
+  await page.waitForTimeout(1500);
+  check(await slideTop(2) < 60, 'clicking a rail row scrolls to that slide');
+  await page.waitForTimeout(500);
+  check(await frame.evaluate(() => document.querySelectorAll('.mx-rail-row')[2].getAttribute('aria-current') === 'true'),
+    'the active row follows the reader');
+
+  await frame.click('[aria-label="Go to slide 1: Cover"]');
+  await page.waitForTimeout(1200);
+  await frame.evaluate(() => document.querySelector('.mx-present').scrollIntoView());
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(1500);
+  check(await slideTop(1) < 60, 'ArrowRight pages to the next slide');
+  check(await frame.evaluate(() => document.querySelector('[aria-label="Slide position"]').innerText.trim()) === '2 / 3',
+    'the counter tracks position');
+
+  // The CAPTURE render — what /export screenshots — carries no chrome at all.
+  const bare = await (await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`)).text();
+  check(!bare.includes('Slide controls') && !bare.includes('mx-rail'), 'the capture render (?chrome=0) has no chrome');
+  check(bare.includes('The Cover Slide'), 'and still carries the document');
+  await page.close();
+}
+
+await checkViewportGeometry(B, browser, check);
+await browser.close();
+
+check.done();

@@ -1,0 +1,63 @@
+/**
+ * UI test setup — runs before all *.ui.test.* files (jsdom project).
+ * Trimmed from minusx test/setup/vitest.setup.ui.ts: the polyfills the ported
+ * engine/kit tests need; app-only mocks (Monaco, Chakra, navigation) arrive
+ * with the editor port if their tests need them.
+ */
+import '@testing-library/jest-dom';
+import { vi, beforeAll, afterAll, afterEach } from 'vitest';
+import { cleanup } from '@testing-library/react';
+
+// structuredClone polyfill — jsdom doesn't expose Node's global to the window scope.
+if (typeof structuredClone === 'undefined') {
+  const v8 = require('v8') as typeof import('v8');
+  (global as any).structuredClone = (val: unknown) => v8.deserialize(v8.serialize(val));
+}
+
+// ResizeObserver polyfill (radix + react-grid-layout use it)
+global.ResizeObserver = vi.fn().mockImplementation(function (this: any) {
+  this.observe = vi.fn();
+  this.unobserve = vi.fn();
+  this.disconnect = vi.fn();
+});
+
+// HTMLCanvasElement.getContext stub
+HTMLCanvasElement.prototype.getContext = vi.fn(() => null) as any;
+
+// jsdom has no rendering/top layer. This models lifecycle only; browser gates
+// verify the actual CSS/security boundary using native popovers.
+Object.defineProperties(HTMLElement.prototype, {
+  showPopover: { configurable:true, writable:true, value:function(this:HTMLElement) {
+    if (!this.isConnected || !this.hasAttribute('popover')) throw new DOMException('Invalid popover state', 'InvalidStateError');
+    this.setAttribute('data-test-popover-open','');
+  } },
+  hidePopover: { configurable:true, writable:true, value:function(this:HTMLElement) { this.removeAttribute('data-test-popover-open'); } },
+});
+
+// Let deferred React-root unmounts finish while the jsdom window is alive.
+afterEach(async () => {
+  cleanup();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+});
+
+// Mute known jsdom noise
+const originalError = console.error.bind(console);
+const preventJsdomNavigation = (event: MouseEvent) => {
+  const target = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (target) event.preventDefault();
+};
+beforeAll(() => {
+  // React and the navigation boundary run before this window-level listener,
+  // so link behavior is still exercised; only jsdom's unsupported default
+  // full-document navigation is cancelled afterward.
+  window.addEventListener('click', preventJsdomNavigation);
+  console.error = (...args: any[]) => {
+    const msg = typeof args[0] === 'string' ? args[0] : '';
+    if (msg.includes('Warning: ReactDOM.render') || msg.includes('act(') || msg.includes('Not implemented: navigation')) return;
+    originalError(...args);
+  };
+});
+afterAll(() => {
+  window.removeEventListener('click', preventJsdomNavigation);
+  console.error = originalError;
+});

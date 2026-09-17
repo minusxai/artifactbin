@@ -1,0 +1,53 @@
+import {it,expect} from 'vitest';
+import {readFile,writeFile} from 'node:fs/promises';
+import {join} from 'node:path';
+import {useAppHarness,request} from './harness';
+import {cliWorkspace,artifactTransport} from './cli-harness';
+import {parseDocument,writeDocument} from '../../cli/src/document';
+import {GET as read,PUT as replace} from '@/app/api/artifacts/[id]/route';
+import {GET as content} from '@/app/api/artifacts/[id]/content/route';
+import {startPreview} from '../../cli/src/preview/session';
+import {inferColumns} from '@artifactbin/utils/shape';
+useAppHarness();
+it('previews canonical published references, preserves them on save and respects host permissions',async()=>{
+ const cli=await cliWorkspace('preview-published',{fetch:artifactTransport()});
+ const reader=await cliWorkspace('preview-pulled',{fetch:artifactTransport()});let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ try{
+  const token=await cli.connect('mxmx_test_preview_references');
+  await writeFile(join(cli.root,'sales.csv'),'amount\n42\n');
+  const uploaded=await cli.invoke(['push','sales.csv']);const dataId=uploaded.operations[0].id;
+  await writeFile(join(cli.root,'report.jsx'),`<Helmet><Query name="sales" source="ref:${dataId}">{\`select sum(amount) as total from public.rows\`}</Query></Helmet><p id="text">Published</p>`);
+  const pushed=await cli.invoke(['push','report.jsx']);
+  const ids:Record<string,string>={...Object.fromEntries(pushed.operations.map((operation:{path:string;id:string})=>[operation.path,operation.id])),'sales.csv':dataId};
+  expect(await readFile(join(cli.root,'report.jsx'),'utf8')).toContain(`ref:${ids['sales.csv']}`);
+  const response=await read(request(`/api/artifacts/${ids['report.jsx']}`,{token:token.token}),{params:Promise.resolve({id:ids['report.jsx']})});
+  const head=await response.json();
+  await reader.useToken(token.token);await reader.invoke(['pull',head.id,'--output','downloaded.jsx']);
+  const canonical=await readFile(join(reader.root,'downloaded.jsx'),'utf8');
+  expect(parseDocument(canonical).body).toContain(`ref:${ids['sales.csv']}`);
+  expect(head.markup).toContain(`ref:${ids['sales.csv']}`);
+  let authorized=true;const accesses:string[]=[];
+  session=await startPreview({root:cli.root,files:['report.jsx'],home:join(cli.home,'preview'),dataset:async id=>{
+   accesses.push(id);
+   const result=await content(request(`/api/artifacts/${id}/content`,{...(authorized?{token:token.token}:{})}),{params:Promise.resolve({id})});
+   if(!result.ok)throw Error(`Remote read refused: ${result.status}`);
+   const rows=await result.json();return {rows,columns:inferColumns(rows)};
+  }});
+  const query=()=>fetch(session!.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})});
+  const answer=await(await query()).json();expect(answer.tables?.sales?.rows).toEqual([{total:42}]);expect(accesses).toEqual([ids['sales.csv']]);
+  await writeFile(join(cli.root,'sales.csv'),'amount\n999\n');
+  expect((await(await query()).json()).tables.sales.rows).toEqual([{total:42}]);
+  const datasetId=ids['sales.csv'];const context={params:Promise.resolve({id:datasetId})};
+  const datasetHead=await(await read(request(`/api/artifacts/${datasetId}`,{token:token.token}),context)).json();
+  const changed=await replace(request(`/api/artifacts/${datasetId}`,{method:'PUT',token:token.token,json:{dataset:[{amount:84}],expectedVersion:datasetHead.version,expectedState:datasetHead.state}}),context);
+  expect(changed.status,await changed.clone().text()).toBe(200);
+  expect((await(await query()).json()).tables.sales.rows).toEqual([{total:84}]);
+  const current=await(await fetch(session.url+'/document?file=report.jsx')).json();
+  const save=await fetch(session.url+'/save',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',revision:current.revision,body:current.body.replace('Published','Local draft')})});expect(save.status).toBe(200);
+  const local=parseDocument(await readFile(join(cli.root,'report.jsx'),'utf8'));expect(local.body).toContain(`ref:${ids['sales.csv']}`);expect(local.metadata.head_version).toBe(head.version);
+  authorized=false;expect((await query()).status).toBe(500);
+  authorized=true;const accessCount=accesses.length;
+  await writeFile(join(cli.root,'report.jsx'),writeDocument({...local,body:local.body.replace(`ref:${datasetId}`,'ref:other123')}));
+  expect((await query()).status).toBe(403);expect(accesses).toHaveLength(accessCount);
+ }finally{await session?.close();await cli.cleanup();await reader.cleanup();}
+});

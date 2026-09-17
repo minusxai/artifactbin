@@ -1,0 +1,837 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+  # The "Release afbin" workflow opens its PR with the repository token, whose events start no
+  # workflow; it dispatches this one on the release branch instead, and the checks land on the PR.
+  workflow_dispatch:
+
+# New commits supersede earlier checks on the same PR. Main runs stay independent.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number ||
+    github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Every job here only reads the repo; the GITHUB_TOKEN should be able to do
+# exactly that and nothing else (CodeQL: actions/missing-workflow-permissions).
+permissions:
+  contents: read
+
+# Wall time is the point: the old single job ran everything serially (7m+, of
+# which npm test was 5m — ~330s of aggregate api-suite work meeting 4 shared
+# vCPUs). The suite now fans out: fast checks + the two lighter vitest
+# projects in one job, the production build in another, and the heavy api project
+# SHARDED across the matrix below. Each shard is its own PGLite process, so the
+# no-parallel-projects rule (one embedded connection per process) still holds
+# within every job.
+jobs:
+  plan:
+    name: affected modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.select.outputs.plan }}
+      checks: ${{ steps.select.outputs.checks }}
+      node: ${{ steps.select.outputs.node }}
+      ui: ${{ steps.select.outputs.ui }}
+      build: ${{ steps.select.outputs.build }}
+      api: ${{ steps.select.outputs.api }}
+      gates: ${{ steps.select.outputs.gates }}
+      image: ${{ steps.select.outputs.image }}
+      cli: ${{ steps.select.outputs.cli }}
+      reference-compatibility: ${{ steps.select.outputs.reference-compatibility }}
+      cli-intel-preview: ${{ steps.select.outputs.cli-intel-preview }}
+      # Not a job: whether the node job runs the CLI source suite (every CLI change, not only a release).
+      cli-tests: ${{ steps.select.outputs.cli-tests }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - id: select
+        env:
+          CI__EVENT: ${{ github.event_name }}
+          CI__BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI__BEFORE_SHA: ${{ github.event.before }}
+          CI__HEAD_SHA: ${{ github.sha }}
+        run: node scripts/ci.mjs plan
+
+  # THE TYPE CHECK ANSWERS ON ITS OWN, because it is the fastest signal on the
+  # commonest mistake and it was sharing a job with something 5x its length.
+  checks:
+    needs: [ plan ]
+    if: needs.plan.outputs.checks == 'true'
+    name: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
+      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
+      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
+      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
+      # serves every document with missing fonts. They derive from node_modules alone, so they
+      # belong in the same entry under the same lockfile key; caching node_modules by itself is
+      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
+      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
+      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - run: npm run validate
+
+  # THE NODE PROJECT SHARDS, like api and ui. It is the biggest project in the
+  # repo — 288 files, ~3,060 tests against api's 1,029 — and it was the only one
+  # running whole, which made `validate + node` a 2m16s job of which 103s was
+  # this step alone.
+  #
+  # THREE shards, and not more: the files sum to ~337s of work but the slowest
+  # single file is 36s (services/auth login-routes, then lib/images optimise at
+  # 34s), and vitest shards by FILE COUNT rather than duration — so past three
+  # each extra shard approaches that 36s floor while still paying a runner's
+  # startup. Measured locally, 2026-09-04.
+  node:
+    needs: [ plan ]
+    if: needs.plan.outputs.node == 'true'
+    name: node tests (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [ 1, 2, 3 ]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
+      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
+      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
+      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
+      # serves every document with missing fonts. They derive from node_modules alone, so they
+      # belong in the same entry under the same lockfile key; caching node_modules by itself is
+      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
+      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
+      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # Only shard 1 runs integration tests; the other shards need no browser or Docker.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: matrix.shard == 1
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
+      # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
+      # deps pass is only worth paying for when the browser is actually being downloaded.
+      - if: matrix.shard == 1 && steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: matrix.shard == 1 && steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      - if: matrix.shard == 1
+        run: docker pull postgres:17-alpine
+      - run: npm run build -w services/cli
+      - env:
+          CI__PLAN: ${{ needs.plan.outputs.plan }}
+        run: node scripts/ci.mjs node ${{ matrix.shard }}/3
+      # The heavy tests that `npm test` leaves out — a disposable Dockerised
+      # Postgres and real Chromium — live in the `integration` project and
+      # would otherwise run nowhere in CI. This job already provisions both
+      # (the Playwright install and `docker pull postgres:17-alpine` above), so
+      # coverage rides here rather than in a new top-level job: only jobs listed
+      # in scripts/lib/ci-plan.mjs's CI_JOBS are enforced by the `test` roll-up,
+      # and this one already is. Run once (shard 1, not per shard); no
+      # --passWithNoTests, so a rename that empties the include fails loudly
+      # instead of passing vacuously.
+      - if: matrix.shard == 1
+        run: npm run test:integration
+      - name: CLI source suite on the release runtime
+        if: matrix.shard == 1 && needs.plan.outputs.cli-tests == 'true'
+        run: |
+          node services/cli/scripts/fetch-runtime.mjs
+          PATH="$GITHUB_WORKSPACE/node_modules/.cache/cli-prebuilt-node:$PATH" npm test -w services/cli
+
+  # jsdom setup dominates the ui project (~110s serial on a 4-vCPU runner —
+  # the environment boots per test file), so it shards like api does.
+  ui:
+    needs: [ plan ]
+    if: needs.plan.outputs.ui == 'true'
+    name: ui tests (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [ 1, 2 ]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
+      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
+      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
+      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
+      # serves every document with missing fonts. They derive from node_modules alone, so they
+      # belong in the same entry under the same lockfile key; caching node_modules by itself is
+      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
+      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
+      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - run: npx vitest run --project=ui --shard=${{ matrix.shard }}/2
+
+  # The BUILD catches what tsc and vitest cannot: a route the generated table
+  # has not seen, an import that only resolves under the bundler, a SPA module
+  # that reaches for server config. It builds the story runtime, the route
+  # table, the SPA and the bundled server — everything the image runs. Master
+  # shipped a broken build once because CI never ran it: the image build did,
+  # and deploys silently stopped.
+  build:
+    needs: [ plan ]
+    if: needs.plan.outputs.build == 'true'
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
+      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
+      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
+      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
+      # serves every document with missing fonts. They derive from node_modules alone, so they
+      # belong in the same entry under the same lockfile key; caching node_modules by itself is
+      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
+      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
+      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # Build the Vite SPA, document runtime and bundled Hono server.
+      - run: npm run build
+
+  api:
+    needs: [ plan ]
+    if: needs.plan.outputs.api == 'true'
+    name: api tests (${{ matrix.shard }}/5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [ 1, 2, 3, 4, 5 ]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
+      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
+      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
+      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
+      # serves every document with missing fonts. They derive from node_modules alone, so they
+      # belong in the same entry under the same lockfile key; caching node_modules by itself is
+      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
+      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
+      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # The export tests drive real headless Chromium (lib/export.ts). The
+      # browser download is the slow half of the install; cache it on the lock
+      # file (which pins the playwright version). --with-deps still apt-installs
+      # shared libraries on every run — cheap next to the download.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
+      # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
+      # deps pass is only worth paying for when the browser is actually being downloaded.
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      - run: npx vitest run --project=api --shard=${{ matrix.shard }}/5
+
+  # A real coding agent, end to end: mints a start document, loads local skills,
+  # publishes, and the served document passes the render guards — the manual
+  # pre-merge hole the gates leave. It runs the CI-ONLY tasks (comment, data,
+  gates:
+    needs: [ plan ]
+    if: needs.plan.outputs.gates == 'true'
+    name: browser gates (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [ 1, 2, 3, 4 ]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
+      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
+      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
+      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
+      # serves every document with missing fonts. They derive from node_modules alone, so they
+      # belong in the same entry under the same lockfile key; caching node_modules by itself is
+      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
+      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
+      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
+      # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
+      # deps pass is only worth paying for when the browser is actually being downloaded.
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      # 8s, measured on main runs 34697938970 and 34693741969 — so this stays a BUILD and not a
+      # downloaded artifact. Handing the shards the `build` job's output instead would mean
+      # uploading 40 MB (dist 12 MB, services/app/dist 14 MB, public/story 7.7 MB,
+      # lib/story-runtime/dist 6.3 MB, plus public/libraries) and downloading it three times,
+      # which costs more wall clock than the build it replaces and adds a cross-job dependency.
+      - run: npm run build
+      # The runner boots the servers with one protected per-run mail outbox.
+      # Four servers within the runner, three runners across the set. The
+      # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
+      # balanced by each gate's measured weight, not by count, so no one runner
+      # ends up holding every slow gate (scripts/gates.shard.mjs). THREE shards,
+      # not two: the set ran 213s and ~170s of gate work in two shards on main run
+      # 34697938970, and a third divides that work rather than the machine.
+      #
+      # postgres-datasets drives a real Dockerised Postgres; pulling the image
+      # before the run keeps that cost out of the gate's own timeout budget.
+      - name: pull the Postgres image the datasets gate needs
+        run: docker pull postgres:17-alpine
+      - run: npm run build -w services/cli
+      - name: Prepare isolated browser session workers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
+          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
+          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
+      - name: every gate, two servers
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/4
+        env:
+          AUTH__SECRET: gates-ci-${{ github.run_id }}
+          DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: browser-session-images-${{ matrix.shard }}
+          path: tmp/browser-session-evidence/*.png
+          if-no-files-found: ignore
+
+  # THE IMAGE IS THE ARTIFACT THAT DEPLOYS, and nothing else here proves it
+  # builds or runs. `npm run build` produces the bundle from the FULL
+  # node_modules; the image ships a production install beside it, so a package
+  # the bundle left external and the image no longer carries is invisible to
+  # every other job. That exact drift shipped once: `Cannot find package
+  # 'vega-lite'` at the server's first line, discoverable only by assembling
+  # the image's own layout. Building it here means the publish workflow is
+  # never the first to try.
+  image:
+    needs: [ plan ]
+    if: needs.plan.outputs.image == 'true'
+    name: image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: true
+          tags: artifactbin:ci
+          # THE LAYER CACHE IS AN OPTIMISATION, NOT A BUILD PRODUCT, and
+          # `ignore-error=true` is what says so on both ends. On 2026-09-05 this
+          # job went red on a green commit: the image had already been built and
+          # loaded — `#47 exporting to docker image format ... DONE 73.9s`,
+          # `#48 loading layer ... DONE 19.6s` — and then
+          # `#49 exporting to GitHub Actions Cache` answered
+          # `ERROR: Post ".../CacheService/GetCacheEntryDownloadURL": dial tcp
+          # 140.82.113.22:443: i/o timeout`, which buildx reports as
+          # `failed to build: failed to solve: DeadlineExceeded` (run
+          # 33939641406, job 101234399760; the same commit's `publish` workflow
+          # had pushed all four images minutes earlier). A merge gate must never
+          # depend on a third party being up. With the attribute a cache miss or
+          # a cache-service outage costs a warning and a colder builder next
+          # time, nothing more: measured against an unreachable backend, the
+          # build exits 1 without it and 0 with it, and against a reachable one
+          # it still exports AND restores.
+          cache-from: type=gha,ignore-error=true
+          # mode=min, not max. `max` exports EVERY intermediate layer of both
+          # stages, and this image is large — the export was a big share of the
+          # 339s the build step took, which was itself the whole reason this job
+          # ran 7.6m while nothing else passed 5m. `min` exports only what the
+          # final stage needs, so a rebuild whose dependencies did not change
+          # still restores; a dependency change pays for a colder builder.
+          cache-to: type=gha,mode=max,ignore-error=true
+          # No provenance attestation: it is generated and attached during the
+          # export, and nothing here consumes it.
+          provenance: false
+      # It has to RUN, not merely build: the runner stage's assertions catch a
+      # missing shared library, and this catches a missing package.
+      - name: the image boots and serves
+        run: |
+          docker run -d --name ab -p 3399:3000 \
+            -e DATABASE_URL=pglite://memory -e AUTH__SECRET=$(openssl rand -base64 32) \
+            -e APP__PUBLIC_BASE_URL=http://127.0.0.1:3399 \
+            -e ARTIFACTS__ALLOW_PUBLIC=1 \
+            artifactbin:ci
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3399/health || true)
+            [ "$code" = "200" ] && echo "served after ${i}s" && exit 0
+            sleep 1
+          done
+          echo '--- container log ---'; docker logs ab; exit 1
+      # And it has to LOOK right. The suite runs against the dev server, which
+      # skips the build step where a production-only break lives: the app's
+      # stylesheet once parsed to zero rules in the build alone, and every
+      # page-measuring gate would have caught it while every unit test passed.
+      # One gate that measures the page, against the CONTAINER.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+      # The same two caches every other job here uses (see the `checks` job for what the
+      # install entry holds). This job had neither, and paid `npm ci` plus a full `--with-deps`
+      # Chromium install on every run to execute ONE gate: 47s of a job whose budget is 180s.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: playwright
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+      - if: steps.playwright.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.playwright.outputs.cache-hit == 'true'
+        run: npx playwright install chromium
+      - name: a gate that measures the page, against the container
+        run: node scripts/gate-layout-shift.mjs http://127.0.0.1:3399
+      # What the container itself said — the gate can only report that the
+      # server answered 500, and the reason is in here.
+      - if: failure()
+        run: docker logs ab
+      - if: always()
+        run: docker rm -f ab || true
+
+  # Build each lean image once, check its contents/size/standalone behavior,
+  # then boot those exact images together and walk the service boundaries.
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      [
+        plan,
+        checks,
+        node,
+        ui,
+        build,
+        api,
+        gates,
+        image,
+        cli,
+        reference-compatibility,
+        cli-intel-preview
+      ]
+    if: always()
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: All selected jobs green
+        env:
+          CI__NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci.mjs check
+
+  # RELEASE ONLY. Selected when the CLI version changed (scripts/lib/ci-plan.mjs `cliRelease`): the
+  # four-platform build was 4.5 minutes on the Intel runner with the render proofs queued behind it,
+  # on every full run, for bytes the publisher never uploads unless the version moved. An ordinary
+  # CLI change is guarded by the bundle build and the source suite in the node job.
+  cli:
+    needs: [ plan ]
+    if: needs.plan.outputs.cli == 'true'
+    name: CLI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel ]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: node_modules/.cache/cli-prebuilt-node/node
+          key: cli-prebuilt-node-${{ matrix.os }}-${{
+            hashFiles('services/cli/runtime-lock.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: services/cli/.cache/chromium-archive
+          key: chromium-archive-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json', 'services/cli/scripts/runtime-archive.mjs') }}
+      - name: Download and verify pinned prebuilt Node
+        run: node services/cli/scripts/fetch-runtime.mjs
+      - name: Chromium system libraries
+        if: startsWith(matrix.os, 'ubuntu')
+        run: npx playwright install-deps chromium
+      - name: Build compact standalone CLI
+        run: npm run build:binary -w services/cli
+      - run: npm run test:binary -w services/cli
+      - name: File preview from the actual executable
+        if: matrix.os != 'macos-15-intel'
+        working-directory: services/cli
+        run: |
+          npx playwright install chromium
+          node --import tsx scripts/test-preview.ts
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-${{ matrix.os }}
+          path: |
+            services/cli/dist/afbin-*
+            services/cli/dist/afbin.1
+          if-no-files-found: error
+
+  # Intel's browser proof is three minutes by itself. Keep it a required job
+  # consuming the exact built bytes, rather than stacking it after packaging.
+  cli-intel-preview:
+    needs: [ plan, cli ]
+    if: needs.plan.outputs.cli-intel-preview == 'true'
+    name: CLI Intel ${{ matrix.phase }}
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [preview, export-basic, export-variants]
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      # Export phases launch the CLI's downloaded browser, not this test driver's browser.
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        if: matrix.phase == 'preview'
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: afbin-macos-15-intel
+          path: services/cli/dist
+      - name: Preview and local export from the exact executable
+        working-directory: services/cli
+        run: |
+          chmod +x dist/afbin-darwin-x64
+          if [ "${{ matrix.phase }}" = preview ]; then npx playwright install chromium; fi
+          node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 --phase=${{ matrix.phase }}
+
+  # WHAT THIS RUN ACTUALLY COST, on the run's own summary page.
+  #
+  # The budget is three minutes a job, and it is a GOAL MET BY FIXING CAUSES — not a cap and not a
+  # gate. So this job is deliberately toothless: it reads the durations GitHub already recorded,
+  # writes them to the step summary with anything over 180s marked, and cannot fail the run. It is
+  # absent from CI_JOBS and from the `test` roll-up's `needs`, so it can never block a merge, and
+  # `continue-on-error` means an API hiccup here costs a missing table and nothing else.
+  #
+  # The alternative — `timeout-minutes: 180s` per job, or a step that exits 1 over budget — turns a
+  # slow runner into a red merge button and teaches everyone to re-run rather than to measure. A
+  # table in front of whoever opened the run is the pressure that actually works.
+  timings:
+    name: job timings
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      [
+        plan,
+        checks,
+        node,
+        ui,
+        build,
+        api,
+        gates,
+        image,
+        cli,
+        test,
+        reference-compatibility,
+        cli-intel-preview
+      ]
+    if: always()
+    continue-on-error: true
+    # This is the one job here that reads the Actions API rather than the repository. A job-level
+    # block REPLACES the workflow's, so `contents: read` is restated rather than inherited.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # No checkout: the run's own job list is the only input.
+      - name: every job's wall clock, over-budget marked
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUDGET_S: '180'
+        run: |
+          set -euo pipefail
+          gh api --paginate \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
+            --jq '.jobs[]
+                  | select(.name != "job timings")
+                  | select(.started_at != null and .completed_at != null)
+                  | [ ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)),
+                      .name, .conclusion ]
+                  | @tsv' \
+            | sort -rn > durations.tsv
+          {
+            echo "## Job wall clock (budget ${BUDGET_S}s)"
+            echo
+            echo '| | job | seconds | result |'
+            echo '| --- | --- | ---: | --- |'
+            over=0
+            while IFS=$'\t' read -r seconds name conclusion; do
+              mark=''
+              if [ "$seconds" -gt "$BUDGET_S" ]; then mark='OVER'; over=$((over + 1)); fi
+              printf '| %s | %s | %s | %s |\n' "$mark" "$name" "$seconds" "$conclusion"
+            done < durations.tsv
+            echo
+            if [ "$over" -eq 0 ]; then
+              echo "Every job finished inside ${BUDGET_S}s."
+            else
+              echo "${over} job(s) over ${BUDGET_S}s. This is a goal, not a gate: fix the cause, do not cap the job."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  reference-compatibility:
+    needs: [ plan ]
+    if: needs.plan.outputs.reference-compatibility == 'true'
+    name: CLI distributions against ID-first host
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: candidate
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+          cache: npm
+          cache-dependency-path: candidate/package-lock.json
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            candidate/node_modules
+            candidate/services/*/node_modules
+            candidate/services/app/public/fonts
+            candidate/services/app/lib/data/story/story-font-manifest.json
+          key: install-candidate-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('candidate/package-lock.json', 'candidate/services/app/scripts/copy-assets.mjs', 'candidate/services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+        working-directory: candidate
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/node_modules/playwright-core/browsers.json') }}
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: candidate/services/cli/.cache/chromium-archive
+          key: chromium-archive-candidate-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/node_modules/playwright-core/browsers.json', 'candidate/services/cli/scripts/runtime-archive.mjs') }}
+      - run: npm run build:binary -w services/cli
+        working-directory: candidate
+      - name: Install real package artifacts outside both checkouts
+        working-directory: candidate
+        run: |
+          mkdir -p "$RUNNER_TEMP/afbin-packages" "$RUNNER_TEMP/afbin-consumer"
+          npm pack -w services/contracts -w services/utils -w services/sql -w services/cli --pack-destination "$RUNNER_TEMP/afbin-packages"
+          npm install --prefix "$RUNNER_TEMP/afbin-consumer" --no-audit "$RUNNER_TEMP"/afbin-packages/*.tgz
+      - run: npx playwright install --with-deps chromium
+        working-directory: candidate
+      - name: Installed npm package runs file preview
+        working-directory: candidate/services/cli
+        run: node --import tsx scripts/test-preview.ts "$RUNNER_TEMP/afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs"
+      - name: Build OSS host
+        working-directory: candidate
+        run: npm run build
+      - name: ID-first conformance for bundle, installed package and executable
+        working-directory: candidate
+        run: |
+          # Each runner owns a PID-scoped data directory, outbox and OS-allocated port.
+          wait_pair() {
+            ci_result=0
+            for ci_pid in "${ci_pids[@]}"; do wait "$ci_pid" || ci_result=1; done
+            return "$ci_result"
+          }
+          ci_pids=()
+          for cli in "$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin.mjs" "$RUNNER_TEMP/afbin-consumer/node_modules/@artifactbin/cli/dist/afbin.mjs"; do
+            CONFORMANCE__CLI="$cli" node scripts/gates.mjs --servers=1 --only=cli-conformance &
+            ci_pids+=("$!")
+          done
+          wait_pair
+          ci_pids=()
+          CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=cli-conformance &
+          ci_pids+=("$!")
+          CONFORMANCE__CREDENTIAL_SOURCE=outbox-oauth CONFORMANCE__CLI="$GITHUB_WORKSPACE/candidate/services/cli/dist/afbin-linux-x64" node scripts/gates.mjs --servers=1 --only=cli-conformance &
+          ci_pids+=("$!")
+          wait_pair
+
+      - name: Prepare standalone sandbox worker
+        run: |
+          sudo apt-get install -y bubblewrap
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo mkdir -p /sys/fs/cgroup/afbin-sessions
+          echo '+cpu +memory +pids' | sudo tee /sys/fs/cgroup/afbin-sessions/cgroup.subtree_control
+          sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
+          sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
+      - name: Team hosts with isolated PGLite and PostgreSQL
+        working-directory: candidate/services/cli
+        run: |
+          docker run -d --name afbin-serve-postgres -p 5432:5432 -e POSTGRES_PASSWORD=afbin -e POSTGRES_DB=afbin postgres:17-alpine
+          for attempt in $(seq 1 60); do
+            if docker exec afbin-serve-postgres pg_isready -U postgres; then break; fi
+            sleep 1
+          done
+          node scripts/test-team-host.mjs &
+          ci_local_pid=$!
+          CONFORMANCE__DB_URL=postgres://postgres:afbin@127.0.0.1:5432/afbin node scripts/test-team-host.mjs &
+          ci_postgres_pid=$!
+          ci_result=0
+          wait "$ci_local_pid" || ci_result=1
+          wait "$ci_postgres_pid" || ci_result=1
+          exit "$ci_result"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: afbin-npm-packages
+          path: ${{ runner.temp }}/afbin-packages/*.tgz
+          compression-level: 0
+          if-no-files-found: error

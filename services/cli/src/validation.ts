@@ -1,0 +1,69 @@
+import {stat} from 'node:fs/promises';
+import {join} from 'node:path';
+import {validateMarkupStructure} from '../../app/lib/story/local-validation';
+import {repairJsxSource} from '../../app/lib/jsx';
+import {formatMarkupSource} from '../../app/lib/story/format-source';
+import {STORY_THEME_NAMES,STORY_TEMPLATE_NAMES} from '../../app/lib/validation/atlas-schemas';
+import {inspectWorkspace,type Workspace} from './workspace';
+import {assetInput} from './upload-input';
+import {atomicWrite,digest,readOptional} from './files';
+import {CliError} from './commands';
+import {resourceContent} from './resource-file';
+interface Diagnostic {code:string;message:string;fix?:string;start?:number;end?:number;severity?:'error'|'notice'}
+export async function validateFiles(workspace:Workspace,paths?:string[],fix=false,options:{skipMissingTracked?:boolean}={}){
+ const files:Array<{path:string;valid:boolean;fixed:boolean;diagnostics:Diagnostic[]}>=[];
+ for(const file of await inspectWorkspace(workspace,paths)){
+  if(options.skipMissingTracked&&!file.bytes&&file.tracked)continue;
+  const diagnostics:Diagnostic[]=[];let fixed=false;
+  try{
+   if(!file.bytes)throw new CliError('missing_file',`Missing file: ${file.path}.`,'Restore the file or use afbin delete to delete its remote artifact explicitly.');
+   if(file.document){
+    const {metadata,body}=file.document;
+    if(metadata.theme&&!STORY_THEME_NAMES.includes(metadata.theme as never))throw new CliError('unknown_theme',`Unknown theme ${metadata.theme}.`,`Choose ${STORY_THEME_NAMES.join(', ')}.`);
+    if(metadata.template&&!STORY_TEMPLATE_NAMES.includes(metadata.template as never))throw new CliError('unknown_template',`Unknown template ${metadata.template}.`,`Choose ${STORY_TEMPLATE_NAMES.join(', ')}.`);
+    const source=file.bytes.toString();const fence=source.slice(0,source.length-body.length);
+    const fenceLines=(fence.match(/\n/g)??[]).length;
+    let markup=body;let checked=validateMarkupStructure(markup);
+    // A brace count the grammar can prove is REPAIRED, not refused: the file is rewritten so it matches
+    // what push sends, and the repair is reported as a notice. 15 tasks spent 82 model calls on one
+    // `}` in eval runs 34740707220–34741910427; the publish door applies the same repair (lib/jsx/repair).
+    if(checked.errors.some(error=>error.message.startsWith('JSX syntax error'))){
+     const repaired=repairJsxSource(body);
+     if(repaired){
+      const again=validateMarkupStructure(repaired.source);
+      if(!again.errors.some(error=>error.message.startsWith('JSX syntax error'))){
+       const original=file.bytes.toString();const path=join(workspace.root,file.path);const current=await readOptional(path);
+       if(!current||digest(current)!==digest(file.bytes))throw new CliError('local_changed',`${file.path} changed during validation; it was not overwritten.`);
+       await atomicWrite(path,original.slice(0,original.length-body.length)+repaired.source,{mode:(await stat(path)).mode&0o777});
+       fixed=true;markup=repaired.source;checked=again;
+       const located=fenceLines?repaired.repair.message.replace(/\bline (\d+)\b/g,(_,n:string)=>`line ${Number(n)+fenceLines}`):repaired.repair.message;
+       diagnostics.push({code:repaired.repair.code,message:`${file.path}: ${located}`,severity:'notice'});
+      }
+     }
+    }
+    // The grammar sees the body; the author sees the file. A diagnostic that said "line 115" for a
+    // fault on file line 130 cost an agent 17 calls and 130 s to locate one brace (eval run
+    // 34714728585, pi deck), so lines and offsets are moved past the metadata fence here.
+    const relocate=(error:{message:string;start?:number;end?:number})=>({code:'invalid_markup',
+     message:fenceLines?error.message.replace(/\bline (\d+)\b/g,(_,n:string)=>`line ${Number(n)+fenceLines}`):error.message,
+     ...(typeof error.start==='number'?{start:error.start+fence.length}:{}),...(typeof error.end==='number'?{end:error.end+fence.length}:{})});
+    diagnostics.push(...checked.errors.map(relocate));
+    if(fix&&!diagnostics.length){
+     const formatted=formatMarkupSource(markup);
+     const original=file.bytes.toString();
+     const next=original.slice(0,original.length-body.length)+formatted;
+     if(next!==original){
+      const path=join(workspace.root,file.path);const current=await readOptional(path);
+      if(!current||digest(current)!==digest(file.bytes))throw new CliError('local_changed',`${file.path} changed during validation; it was not overwritten.`);
+      await atomicWrite(path,next,{mode:(await stat(path)).mode&0o777});fixed=true;
+     }
+    }
+   }else if(file.resource){
+    const content=await resourceContent(file.resource,file.path,workspace.root);
+    if(typeof content.markup==='string')diagnostics.push(...validateMarkupStructure(content.markup).errors.map(error=>({code:'invalid_markup',message:error.message,start:error.start,end:error.end})));
+   }else assetInput(file.path,file.bytes);
+  }catch(error){diagnostics.push({code:error instanceof CliError?error.code:'validation_failed',message:error instanceof Error?error.message:String(error),...(error instanceof CliError&&error.fix?{fix:error.fix}:{})});}
+  files.push({path:file.path,valid:!diagnostics.some(x=>x.severity!=='notice'),fixed,diagnostics});
+ }
+ return{valid:files.every(file=>file.valid),files};
+}

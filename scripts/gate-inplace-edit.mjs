@@ -1,0 +1,321 @@
+/**
+ * Gate: THERE IS ONE DOCUMENT.
+ *
+ * Editing used to build a second one — a different iframe, a different origin,
+ * a different renderer, a second React root, the dataflow run again and every
+ * chart mounted again — and everything that made that bearable (the reading
+ * position carried between two renderings, the holds that put it back, the
+ * reveal that hid the seam) existed because of it. This gate asserts the thing
+ * that replaced all of it, and asserts it by OBJECT IDENTITY, which no amount
+ * of timing luck can fake: the frame and the chart embed are the same objects
+ * from reading, through typing and an agent's write, and back out again.
+ *
+ * The third section is the concurrency corner of the same promise: uncommitted
+ * typing must survive a remote edit landing, and pressing edit after watching
+ * an agent write must open on the live document rather than rewind to the one
+ * the page was rendered with.
+ *
+ * The second half is the trust model. The author's <script> shares the frame's
+ * realm with the editor, so a document that tries to forge an edit must write
+ * nothing: the runtime mints its session nonce before that script exists
+ * (lib/story-runtime/pristine), and the page drops everything unsigned.
+ *
+ *   usage: node scripts/gate-inplace-edit.mjs [base]
+ */
+import { inlineStory } from './lib/page-facts.mjs';
+import { createChecker } from './lib/assert.mjs';
+import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
+import { chromium } from 'playwright';
+import { openArtifactControls } from './lib/reveal-chrome.mjs';
+import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+
+const BASE = process.argv[2] ?? 'http://localhost:3030';
+const check = createChecker('inplace-edit');
+const note = (label) => console.log(`  ·   ${label}`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const CHART = '{"kind":"vega-lite","spec":{"mark":"bar","encoding":{"x":{"field":"x","type":"nominal"},"y":{"field":"y","type":"quantitative"}}}}';
+const filler = Array.from({ length: 40 }, (_, i) =>
+  `<p id="f${i}">filler paragraph ${i}, long enough that this document scrolls a good way past the fold.</p>`).join('');
+
+const doc = (lede) =>
+  '<Helmet><Value name="rows" type="table" value={[{"x":"a","y":1},{"x":"b","y":3}]} /></Helmet>'
+  + '<div data-design="tw" className="p-10">'
+  + `<h1 id="h" className="text-3xl">In place</h1><p id="lede">${lede}</p>`
+  + '<p id="total">Total: 42</p>'
+  + `<Question data="$rows" height={280} viz={${CHART}} />`
+  + `<p id="after">a paragraph after the chart</p>${filler}</div>`;
+
+const api = async (id, token, path, init) => fetch(`${BASE}/api/artifacts/${id}${path}`, {
+  ...init,
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
+});
+
+const publish = async (markup) => {
+  const start = await startDocument(BASE);
+  const res = await api(start.id, start.token, '', { method: 'PUT', body: JSON.stringify({ markup }) });
+  if (!res.ok) throw new Error(`PUT → ${res.status} ${await res.text()}`);
+  return start;
+};
+
+const browser = await chromium.launch();
+
+// ── 1. One document, all the way through ────────────────────────────────────
+{
+  const start = await publish(doc('the first version'));
+  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  await becomeOwner(page, BASE, start.token);
+  await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await inlineStory(page);
+  await sleep(7000);
+
+  const frame = () => page.mainFrame();
+
+  // Stamp what must survive, and start counting frame replacements.
+  await page.evaluate(() => {
+    document.querySelector('[data-mx-inline-story]').__probe = 'same-document';
+    window.__swaps = 0;
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) {
+        if (n.nodeType === 1 && n.matches?.('[data-mx-inline-story]')) window.__swaps++;
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await frame().evaluate(() => {
+    document.querySelector('[aria-label="Question embed"]').__probe = 'same-embed';
+    const drawn = document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas');
+    if (drawn) drawn.__probe = 'same-chart';
+    window.scrollTo(0, 900);
+  });
+  await sleep(700);
+  const initialReadingAt = await frame().evaluate(() => window.scrollY);
+  check(initialReadingAt > 500, `the reader is somewhere specific before editing (scrollY ${initialReadingAt})`);
+
+  // ENTER
+  await openArtifactControls(page);
+  // Revealing hidden reader controls intentionally scrolls. Baseline the Edit
+  // action itself, after that gesture, rather than attributing it to editing.
+  const readingAt = await frame().evaluate(() => window.scrollY);
+  await page.click('[aria-label="Edit artifact"]');
+  await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
+  await sleep(3000);
+  check(await page.evaluate(() => window.__swaps) === 0
+    && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
+    'entering edit did not replace the document');
+  const afterEntering = await frame().evaluate(() => window.scrollY);
+  check(Math.abs(afterEntering - readingAt) < 5,
+    `and did not move the reader (${readingAt} → ${afterEntering})`);
+  check(await frame().evaluate(() => !!document.querySelector('#lede')?.isContentEditable),
+    'the document itself became editable');
+
+  /*
+   * Focus WITHOUT clicking, and edit something ON SCREEN: both click() and
+   * focus() scroll their target into view, so anything else measures the gate
+   * scrolling rather than the product.
+   */
+  const hosts = await frame().evaluate(() => [...document.querySelectorAll('p[id]')]
+    .filter((el) => { const r = el.getBoundingClientRect(); return r.top > 40 && r.bottom < window.innerHeight - 40; })
+    .slice(0, 2).map((el) => el.id));
+  if (hosts.length !== 2) throw new Error('gate: no visible paragraph pair to edit');
+  note(`editing ${hosts[0]}, committing by moving to ${hosts[1]}`);
+  const focusHost = (id) => frame().evaluate((hostId) => {
+    const el = document.getElementById(hostId);
+    el.focus();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }, id);
+
+  // TYPE
+  const before = await (await api(start.id, start.token, '', {})).json();
+  await focusHost(hosts[0]);
+  await page.keyboard.type('EDITED IN PLACE');
+  await focusHost(hosts[1]);
+  await sleep(3500);
+  const after = await (await api(start.id, start.token, '', {})).json();
+  check(after.version > before.version, `typing persists with no save (v${before.version} → v${after.version})`);
+  check(after.markup.includes('EDITED IN PLACE'), 'the typed text reached the stored source');
+  const afterTyping = await frame().evaluate(() => window.scrollY);
+  check(Math.abs(afterTyping - readingAt) < 5, `and typing did not move the reader (${readingAt} → ${afterTyping})`);
+
+  // AN AGENT WRITES, into the paragraph the cursor is parked in
+  const head = await (await api(start.id, start.token, '', {})).json();
+  await api(start.id, start.token, '/edits', {
+    method: 'POST',
+    body: JSON.stringify({ edit_id: head.edit_id, old_string: 'Total:', new_string: 'Agent total:' }),
+  });
+  await sleep(5000);
+  const shown = await frame().evaluate(() => document.body.innerText);
+  check(/Agent total:/.test(shown), "the agent's write reached the open document");
+  check(/EDITED IN PLACE/.test(shown), "and the human's own text survived it");
+  check(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"] svg, [aria-label="Question embed"] canvas')?.__probe) === 'same-chart',
+    'the chart kept the svg it had drawn');
+  check(await page.evaluate(() => window.__swaps) === 0, 'and the document was still never replaced');
+
+  // LEAVE
+  const leavingAt = await frame().evaluate(() => window.scrollY);
+  await page.click('[aria-label="Exit edit mode"]');
+  await sleep(3000);
+  check(await page.evaluate(() => window.__swaps) === 0
+    && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
+    'leaving edit did not replace it either');
+  check(Math.abs(await frame().evaluate(() => window.scrollY) - leavingAt) < 5, 'nor moved the reader on the way out');
+  check(await frame().evaluate(() => !document.querySelector('#lede')?.isContentEditable), 'and the document is no longer editable');
+  /*
+   * The EMBED is the no-remount promise. Its <svg> is Vega's own: leaving gives
+   * the viewport back the editing bar's height, and a responsive view redraws
+   * when its container resizes — exactly as it would if the reader resized the
+   * window. The svg identity is asserted across the agent's write above, where
+   * nothing resizes.
+   */
+  check(await frame().evaluate(() => document.querySelector('[aria-label="Question embed"]')?.__probe) === 'same-embed',
+    'the chart embed was never remounted across the whole journey');
+  await page.close();
+}
+
+// ── 2. A document whose author script is hostile ────────────────────────────
+{
+  const AUTHOR = `
+    // Everything a script in this realm can reach, reaching for the write path.
+    try { window.top.postMessage({ type: 'mx:text-edit', path: '0.1', innerHtml: 'FORGED BY THE SCRIPT' }, '*'); } catch (e) {}
+    try { window.top.postMessage({ type: 'mx:text-edit', nonce: 'guessed', path: '0.1', innerHtml: 'FORGED WITH A GUESS' }, '*'); } catch (e) {}
+    setTimeout(function () {
+      try { window.top.postMessage({ type: 'mx:text-edit', path: '0.1', innerHtml: 'FORGED LATE' }, '*'); } catch (e) {}
+    }, 2500);
+  `;
+  const markup = `<Helmet><script>{\`${AUTHOR}\`}</script></Helmet>`
+    + '<div data-design="tw" className="p-10"><h1 id="h">Scripted</h1><p id="lede">the author wrote this</p>'
+    + filler + '</div>';
+  const start = await publish(markup);
+  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  await becomeOwner(page, BASE, start.token);
+  await page.evaluate(() => { window.__swaps = 0; });
+  await page.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await inlineStory(page);
+  await sleep(6000);
+  await page.evaluate(() => {
+    document.querySelector('[data-mx-inline-story]').__probe = 'same-document';
+    window.__swaps = 0;
+    new MutationObserver((records) => {
+      for (const r of records) for (const n of r.addedNodes) {
+        if (n.nodeType === 1 && n.matches?.('[data-mx-inline-story]')) window.__swaps++;
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+
+  const at = await (await api(start.id, start.token, '', {})).json();
+  await openArtifactControls(page);
+  await page.click('[aria-label="Edit artifact"]');
+  await page.waitForSelector('[aria-label="Exit edit mode"]', { timeout: 20000 });
+  await sleep(5000);
+
+  const frame = () => page.mainFrame();
+  check(await page.evaluate(() => window.__swaps) === 0
+    && await page.evaluate(() => document.querySelector('[data-mx-inline-story]')?.__probe) === 'same-document',
+    'a SCRIPTED document is edited in place too — no swap');
+  check(await frame().evaluate(() => !!document.getElementById('lede')?.isContentEditable),
+    'and it is editable');
+
+  const now = await (await api(start.id, start.token, '', {})).json();
+  /*
+   * Assert the PARAGRAPH, not the absence of the word: the forged payloads
+   * appear in the author script's own source, so searching the markup for them
+   * finds the attempt rather than its result.
+   */
+  const lede = /<p id="lede">([^<]*)<\/p>/.exec(now.markup)?.[1] ?? '(gone)';
+  check(lede === 'the author wrote this', `nothing the author script forged reached the document ("${lede}")`);
+  check(now.version === at.version, `and it spent no versions trying (v${at.version} → v${now.version})`);
+  await page.close();
+}
+
+// ── 3. A human typing while an agent writes ─────────────────────────────────
+/*
+ * The dangerous window: text the human has typed but NOT yet committed — the
+ * engine commits on blur — while a remote change lands over the live stream.
+ * Adopting the remote document then would remount the canvas and silently
+ * discard what they were typing. The second half is the reverse entry order: a
+ * reader can watch an agent write for minutes before pressing edit, so the
+ * editor has to open on what they are LOOKING AT rather than on the markup the
+ * page was server-rendered with.
+ */
+{
+  const start = await publish('<div className="p-8"><h1>Concurrent edit</h1>'
+    + '<p>First paragraph.</p><p>Second paragraph.</p></div>');
+  const read = async () => (await api(start.id, start.token, '', {})).json();
+  const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+  await becomeOwner(page, BASE, start.token);
+  // Seeding BEFORE the first navigation is load-bearing: `/a/<id>#edit` differs
+  // from `/a/<id>` only by a hash, so a later visit would be a client-side hash
+  // change with no re-render and the editor would seed the stale placeholder.
+  await page.goto(`${BASE}/a/${start.id}#edit`, { waitUntil: 'load' });
+  // Wait for the canvas to POPULATE, then let it settle: the editor runs the
+  // document's dataflow on load and remounts the canvas once when it completes,
+  // so a click inside that window hits a detached frame.
+  await page.waitForFunction(
+    () => (document.querySelector('[data-mx-inline-story]')?.querySelectorAll('p').length ?? 0) >= 2,
+    null, { timeout: 30000 },
+  ).catch(() => {});
+  await sleep(6000);
+  const surface = () => page.mainFrame();
+
+  await surface().locator('p').nth(1).click();
+  await page.keyboard.type(' Typed by the human.');
+  check(/Typed by the human\./.test(await surface().locator('body').innerText()), 'the typing is in the editor DOM');
+
+  // The agent edits a DIFFERENT node while that text is still uncommitted.
+  const head = await read();
+  const agentResult = await (await api(start.id, start.token, '/edits', {
+    method: 'POST',
+    body: JSON.stringify({
+      edit_id: head.edit_id,
+      old_string: 'First paragraph.',
+      new_string: 'First paragraph, revised by the agent.',
+    }),
+  })).json();
+  check(agentResult.markup.includes('revised by the agent'), 'the agent edit applied server-side');
+  await sleep(2500);
+  check(/Typed by the human\./.test(await surface().locator('body').innerText()),
+    'uncommitted typing SURVIVES a remote edit arriving');
+
+  // Now commit (blur) and let the buffer drain.
+  await surface().locator('h1').first().click();
+  await sleep(3000);
+  const persisted = await read();
+  check(persisted.markup.includes('Typed by the human.'), "the human's text reached the server");
+  check(persisted.markup.includes('revised by the agent'), "the agent's text is still there");
+  check(/Typed by the human\./.test(await surface().locator('body').innerText()),
+    'the editor still shows the human text');
+
+  const viewer = await browser.newPage();
+  await becomeOwner(viewer, BASE, start.token);
+  await viewer.goto(`${BASE}/a/${start.id}`, { waitUntil: 'load' });
+  await sleep(2500);
+  const watched = await read();
+  await api(start.id, start.token, '/edits', {
+    method: 'POST',
+    // Append, so the later check can still anchor on the original text.
+    body: JSON.stringify({
+      edit_id: watched.edit_id,
+      old_string: 'Second paragraph.',
+      new_string: 'Second paragraph. Written while watching.',
+    }),
+  });
+  await sleep(3000);
+  check(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+    'the viewer saw the live edit');
+  // Reading is chromeless until the artifact controls are opened.
+  await openArtifactControls(viewer);
+  await viewer.click('[aria-label="Edit artifact"]');
+  await sleep(4000);
+  check(/Written while watching/.test(await viewer.mainFrame().locator('body').innerText()),
+    'the editor opens on the LIVE document, not the page it was rendered with');
+  const headNow = await read();
+  check(headNow.version >= 2, `the document is on a real, advanced version (v${headNow.version})`);
+  await viewer.close();
+  await page.close();
+}
+
+await browser.close();
+check.done();

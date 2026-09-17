@@ -1,0 +1,23 @@
+{
+  "name": "@artifactbin/events",
+  "version": "0.1.0",
+  "description": "The events service: the log of what happened, in a schema of its own, in this process or in one of its own. `.` is the contract, the table declaration, the HTTP server shell and the boot; `./local` is the writer, imported only from a composition root.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./local": "./src/local.ts"
+  },
+  "files": ["src", "CONTRACT.md"],
+  "dependencies": {
+    "@artifactbin/contracts": "*",
+    "@artifactbin/utils": "*",
+    "pg": "8.17.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "vitest": "4.1.11"
+  }
+}

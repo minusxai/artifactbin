@@ -1,0 +1,234 @@
+/**
+ * The `markup` content tier — the minusx stories engine's publish path.
+ *
+ * A markup artifact's SOURCE is the single truth: static JSX over the ported
+ * shadcn kit (lib/story-ui registry) + a content-tag allowlist, validated by
+ * the ported three-gate pipeline and compiled to a per-artifact Tailwind sheet
+ * at publish time (classes used ∪ recipe union, all six theme token blocks —
+ * theme switching is a `data-theme` attribute flip, never a recompile). The
+ * the page at /a/<id> renders the source with the ported interpreter;
+ * `content` stays empty for this tier.
+ *
+ * (The file keeps its jsx-* name because JSX is the SYNTAX; the stored and
+ * wire format is `markup`.)
+ *
+ * Mirrors minusx `lib/data/story/file-markup.ts` JSX_STORY_CTX semantics:
+ * component allowlist + STORY_HTML_TAGS + `no-inline-style` style policy, then
+ * the banned-css sanitizer as belt, then the compile.
+ */
+import { validateMarkupStructure } from './local-validation';
+import { repairJsxSource } from '@/lib/jsx/repair';
+import { canonicalizeMarkup } from './canonical-source';
+export {canonicalizeMarkup} from './canonical-source';
+import { parseJsx } from '@/lib/jsx';
+import { splitHelmet } from '@/lib/story/helmet';
+import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
+import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { sanitizeStoryMarkupCss } from '@/lib/data/story/banned-css';
+import { RETIRED_STORY_THEMES } from '@/lib/data/story/story-themes';
+import { remapMarkupStyleViewportUnits, transformOutsideManagedIframes } from '@/lib/story/managed-iframe-source';
+import { compileStoryCss, storyCssCompileVersion } from '@/lib/data/story/story-css.server';
+import { STORY_THEME_NAMES, STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
+import { json } from '../http';
+import { MAX_CONTENT_BYTES, type ContentInputCtx, type StoredContent } from './input';
+import { collectExternalAssetUrls } from './external-images';
+import type { AssetWarning, WebAssetKind } from '@/lib/web-assets';
+import { documentFonts, invalidFontFamilies } from './document-fonts';
+import { MAX_EXTERNAL_ASSETS_PER_PUBLISH, MAX_EXTERNAL_IMAGES_PER_PUBLISH } from '@/lib/config';
+import { checkDocumentData } from './data-checks';
+
+/** The full story vocabulary: kit registry + the data embeds (minusx JSX_STORY_COMPONENT_NAMES verbatim). */
+export const JSX_TIER_COMPONENTS = JSX_STORY_COMPONENT_NAMES;
+
+const COLOR_MODES = ['light', 'dark'] as const;
+
+export interface PreparedMarkup {
+  content: StoredContent;
+  imports: Array<{url: string; kind: WebAssetKind}>;
+  fonts: string[];
+}
+
+/** Validation and compilation have no import or persistence capability. */
+export async function prepareJsx(body: Record<string, unknown>, sourceIn: string, ctx: Pick<ContentInputCtx, 'loadRef' | 'normalizeMarkup'> = {}): Promise<PreparedMarkup | Response> {
+  /*
+   * REPAIR FIRST, above everything that reads the source. The one fault we fix
+   * rather than refuse is the shell-escaped backtick (lib/jsx/repair — it costs
+   * an agent minutes and cannot be meant), and it has to happen before the
+   * asset scan below: that scan has SIDE EFFECTS (it fetches URLs), so
+   * repairing afterwards would import twice. Free for every document that does
+   * not carry the sequence.
+   */
+  const repaired = repairJsxSource(sourceIn);
+  const source = repaired ? repaired.source : sourceIn;
+  const repairs = repaired ? [repaired.repair] : [];
+  /** What the door changed, for the reply — absent when it changed nothing. */
+  const repairsEcho = repairs.length ? { repairs } : {};
+  const theme = body.theme ?? null;
+  // Retired names are rejected BY NAME with a hint naming the successor —
+  // stored rows alias forward at read time (resolveStoredStoryDesign), but a
+  // NEW publish must learn the live vocabulary, same pattern as the retired
+  // input formats in lib/story/input.ts.
+  if (typeof theme === 'string' && theme in RETIRED_STORY_THEMES) {
+    return json({ error: 'retired_theme', hint: RETIRED_STORY_THEMES[theme].hint, allowed: STORY_THEME_NAMES }, 400);
+  }
+  if (theme !== null && !STORY_THEME_NAMES.includes(theme as never)) {
+    return json({ error: 'unknown_theme', allowed: STORY_THEME_NAMES }, 400);
+  }
+  const template = body.template ?? null;
+  if (template !== null && !STORY_TEMPLATE_NAMES.includes(template as never)) {
+    return json({ error: 'unknown_template', allowed: STORY_TEMPLATE_NAMES }, 400);
+  }
+  const colorMode = body.colorMode ?? null;
+  if (colorMode !== null && !COLOR_MODES.includes(colorMode as never)) {
+    return json({ error: 'unknown_color_mode', allowed: COLOR_MODES }, 400);
+  }
+
+  /*
+   * IMPORT, AND KEEP THE URL. Every web URL the document names in an image
+   * position — and every `@font-face` src in its own stylesheet — is fetched
+   * once into the global asset cache (lib/web-assets) and the SOURCE IS LEFT
+   * ALONE: the author wrote a URL and reads a URL back, while the served
+   * document is pointed at our copy on the way out (lib/story/asset-url), which
+   * is what satisfies the sandbox's `img-src 'self'` and keeps a reader's
+   * browser away from the upstream host.
+   *
+   * A URL that will not import is a WARNING, never a refusal: the document is
+   * fine, one picture is missing, and an author can act on a named failure. The
+   * CAP is checked hook-or-no-hook, which is what keeps /api/preview (no import
+   * hook, no fetches) agreeing with publish.
+   */
+  const externalAssets = collectExternalAssetUrls(source);
+  if (externalAssets.images.length > MAX_EXTERNAL_IMAGES_PER_PUBLISH) {
+    return json({
+      error: 'too_many_external_images',
+      details: [`this publish imports ${externalAssets.images.length} external images; the cap is ${MAX_EXTERNAL_IMAGES_PER_PUBLISH} — save the rest beside the document and reference their relative paths, and afbin push publishes them with it as ref:<id>`],
+    }, 400);
+  }
+  /*
+   * The TOTAL cap — images, faces and the PDFs a <File> card names,
+   * together. The image cap above counts images
+   * alone, so a document naming a dozen `@font-face` urls caused a dozen
+   * outbound fetches that nothing bounded — the count was the author's to set.
+   * Over the cap the excess is NAMED and not fetched, rather than refused:
+   * losing a whole document to a thirteenth font is the failure this milestone
+   * exists to stop, and an author who is told which urls were skipped can act.
+   * Counted hook-or-no-hook, so /api/preview agrees with publish.
+   */
+  const wanted = [
+    ...externalAssets.images.map((url) => ({ url, kind: 'image' as const })),
+    ...externalAssets.fonts.map((url) => ({ url, kind: 'font' as const })),
+    // A PDF a <File> card names by URL is an outbound fetch like any other, and
+    // the biggest of them: it counts against the same total.
+    ...externalAssets.pdfs.map((url) => ({ url, kind: 'pdf' as const })),
+  ];
+  const warnings: AssetWarning[] = wanted.slice(MAX_EXTERNAL_ASSETS_PER_PUBLISH).map(({ url }) => ({
+    code: 'too_many_external_assets',
+    url,
+    fix: `this document names ${wanted.length} external assets; the cap is ${MAX_EXTERNAL_ASSETS_PER_PUBLISH} — this one was not imported, so save it beside the document and reference its relative path for afbin push to publish, or drop it`,
+  }));
+
+
+  // Gate 1: the ported three-gate pipeline (registry, handlers, URL schemes).
+  // Gate 2 (artifactbin's own): every subresource must be self-contained —
+  // see findExternalSubresources for why this can't live in the ported engine.
+  // The Helmet subtree is validated by ITS grammar (lib/story/helmet.ts) and
+  // split out before the generic gate — lib/jsx never learns Helmet exists,
+  // and body nodes keep their original spans so diagnostics stay precise.
+  const structural = validateMarkupStructure(source);
+  const split = structural.split;
+  if (!split) return json({error:'invalid_jsx',details:structural.errors},400);
+
+  // FONTS the document asks for (Helmet <meta name="font-display" …>),
+  // resolved at PUBLISH so a reader never waits on — or is exposed to — an
+  // upstream: lib/webfonts copies the faces into our object store and every
+  // render serves them from this origin. Bundled families short-circuit. An
+  // unknown family FAILS the publish: a document that silently fell back to
+  // sans-serif would look like it worked.
+  const fonts = documentFonts(split.content);
+  const badFamilies = invalidFontFamilies(fonts);
+  if (badFamilies.length > 0) {
+    return json({ error: 'unknown_font', details: badFamilies.map((f) => `"${f}" is not a font family name`) }, 400);
+  }
+  const errors = structural.errors;
+  if (errors.length > 0) {
+    // An agent's only route out of a tag rejection is knowing the set. It rides
+    // ONCE on the response — not inside each offending tag's message, which is
+    // how a rejection turns into context bloat — and only when a tag was the
+    // problem, so every other failure stays as small as it was.
+    const refusedATag = errors.some((e) => e.message.includes('allowed_html_tags'));
+    return json({
+      error: 'invalid_jsx',
+      details: errors,
+      ...(refusedATag ? { allowed_html_tags: [...STORY_HTML_TAGS] } : {}),
+    }, 400);
+  }
+
+  // Belt to the validator's no-inline-style gate: strip banned CSS declarations
+  // (fixed/sticky positioning, external url()/@import) from authored style
+  // content, then remap viewport-height units in it — authored `<style>` renders
+  // straight through the interpreter, so the compiled-sheet injection remap
+  // never sees it (lib/story-surface/viewport-units.ts).
+  const normalized = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
+  const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(normalized, sanitizeStoryMarkupCss)));
+  if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);
+
+  // The reference graph: every ref:<id> resolves to one of the
+  // caller's artifacts, with bidirectional binding validation. Skipped when no
+  // loader is supplied (the /api/preview draft compile).
+  // …plus the SQL dry run (every <Query> must PREPARE against the real
+  // dataset shapes — a typo'd column, a non-SELECT, a missing table are 400s
+  // with the engine's own message, which names candidates) and every chart
+  // bound to a query checked against that query's result columns. ONE module
+  // (lib/story/data-checks) shared with the dataset-refresh warnings path.
+  let refs: Array<{ id: string; kind: string }> = [];
+  if (ctx.loadRef) {
+    const checked = await checkDocumentData(sanitized, ctx.loadRef);
+    if (!checked.ok) return json({ error: checked.error, details: checked.details }, 400);
+    refs = checked.refs;
+  }
+
+  const compiledCss = await compileStoryCss(sanitized, { force: true });
+
+  // The Helmet <title> names the document when the request carries no explicit
+  // title — same precedence markdown's `# heading` derivation has at the door.
+  const canonical = parseJsx(sanitized);
+  const helmetTitle = canonical.ok ? splitHelmet(canonical.nodes).content.title : null;
+
+  const content: StoredContent = {
+    format: 'markup',
+    content: '',
+    source: sanitized,
+    meta: {
+      format: 'markup',
+      theme,
+      template,
+      colorMode,
+      compiledCss,
+      cssCompileVersion: storyCssCompileVersion(),
+      refs,
+    },
+    derivedTitle: helmetTitle?.trim() || null,
+    ...(warnings.length ? { warnings } : {}),
+    ...repairsEcho,
+  };
+  return {content, imports: wanted.slice(0, MAX_EXTERNAL_ASSETS_PER_PUBLISH), fonts: fonts.families};
+}
+
+/** Apply only a successfully prepared document, retaining publication warnings. */
+export async function applyPreparedJsx(prepared: PreparedMarkup, effects: Pick<ContentInputCtx, 'importAsset' | 'resolveFont'>): Promise<StoredContent | Response> {
+  if (effects.resolveFont) for (const family of prepared.fonts) {
+    const failure = await effects.resolveFont(family);
+    if (failure) return failure;
+  }
+  const warnings = [...(prepared.content.warnings ?? [])];
+  if (effects.importAsset) for (const asset of prepared.imports) {
+    const warning = await effects.importAsset(asset.url, asset.kind);
+    if (warning) warnings.push(warning);
+  }
+  return {...prepared.content, ...(warnings.length ? {warnings} : {})};
+}
+
+export async function publishJsx(body: Record<string, unknown>, source: string, ctx: ContentInputCtx = {}): Promise<StoredContent | Response> {
+  const prepared = await prepareJsx(body, source, ctx);
+  return prepared instanceof Response ? prepared : applyPreparedJsx(prepared, ctx);
+}

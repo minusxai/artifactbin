@@ -1,0 +1,191 @@
+/**
+ * Story interpreter — contract tests.
+ *
+ * The interpreter turns a VALIDATED static-JSX AST into React elements over an injected
+ * component registry. No eval, ever. It is the second gate after validateJsxSource
+ * (defense in depth): even if an unvalidated AST reaches it, dangerous props never reach
+ * React. Tested here with a stub registry — the real shadcn registry plugs in unchanged.
+ */
+import { describe, it, expect } from 'vitest';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import { renderStoryNodes } from '../interpreter';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
+
+const propsProbe: Record<string, unknown>[] = [];
+const StubCard = ({ children, ...props }: { children?: React.ReactNode } & Record<string, unknown>) => {
+  propsProbe.push(props);
+  return <div aria-label="stub-card" {...(props as object)}>{children}</div>;
+};
+const REGISTRY: Record<string, React.ComponentType<Record<string, unknown>>> = {
+  Card: StubCard as React.ComponentType<Record<string, unknown>>,
+};
+
+const mount = (src: string) => {
+  const parsed = parseJsxOrThrow(src);
+  return render(<>{renderStoryNodes(parsed.nodes, { components: REGISTRY })}</>);
+};
+
+beforeEach(() => { propsProbe.length = 0; });
+
+describe('rendering basics', () => {
+  it('renders HTML tags with className/htmlFor mapping (class/for authored)', () => {
+    const { container } = mount('<div class="a b"><label for="x" aria-label="lab">L</label></div>');
+    const div = container.querySelector('div.a.b');
+    expect(div).toBeTruthy();
+    expect(screen.getByLabelText('lab').getAttribute('for')).toBe('x');
+  });
+
+  it('renders registry components with children and string props', () => {
+    mount('<Card title="hello">body</Card>');
+    expect(screen.getByLabelText('stub-card').textContent).toBe('body');
+    expect(propsProbe[0].title).toBe('hello');
+  });
+
+  it('renders text and static expression children', () => {
+    const { container } = mount('<p>count: {42}</p>');
+    expect(container.querySelector('p')!.textContent).toBe('count: 42');
+  });
+
+  it('converts inline style strings to React style objects on HTML tags', () => {
+    const { container } = mount('<div style="color: rgb(1, 2, 3); margin-top: 4px">x</div>');
+    const el = container.querySelector('div')! as HTMLElement;
+    expect(el.style.color).toBe('rgb(1, 2, 3)');
+    expect(el.style.marginTop).toBe('4px');
+  });
+
+  it('stamps every element with its AST path (WYSIWYG write-back anchor)', () => {
+    const { container } = mount('<div><p>a</p><p>b</p></div>');
+    const ps = container.querySelectorAll('p');
+    expect(ps[0].getAttribute('data-mx-ast')).toBe('0.0');
+    expect(ps[1].getAttribute('data-mx-ast')).toBe('0.1');
+  });
+});
+
+describe('controlled → uncontrolled prop mapping (components only)', () => {
+  it('maps open/checked to their default* forms on components', () => {
+    mount('<Card open={true} checked={false} />');
+    expect(propsProbe[0].defaultOpen).toBe(true);
+    expect(propsProbe[0].defaultChecked).toBe(false);
+    expect(propsProbe[0].open).toBeUndefined();
+  });
+
+  it('maps value only on the stateful roots (Tabs/Accordion), never on identity/data value props', () => {
+    const Stub = REGISTRY.Card;
+    REGISTRY.Tabs = Stub;
+    REGISTRY.TabsTrigger = Stub;
+    try {
+      // Tabs value selects a pane → controlled → remapped.
+      mount('<Tabs value="a" />');
+      expect(propsProbe[0].defaultValue).toBe('a');
+      expect(propsProbe[0].value).toBeUndefined();
+      // TabsTrigger value NAMES a pane (identity, like Progress value={60} is data) → kept.
+      propsProbe.length = 0;
+      mount('<TabsTrigger value="a" />');
+      expect(propsProbe[0].value).toBe('a');
+      expect(propsProbe[0].defaultValue).toBeUndefined();
+    } finally {
+      delete REGISTRY.Tabs;
+      delete REGISTRY.TabsTrigger;
+    }
+  });
+});
+
+describe('prop deny list (defense in depth — even on an unvalidated AST)', () => {
+  it('drops on* handlers, ref/key, dangerouslySetInnerHTML, srcDoc, is', () => {
+    const { container } = mount(
+      '<div onClick="alert(1)" onmouseover="x" is="c-e" srcDoc="s">x</div>');
+    const el = container.querySelector('div')!;
+    expect(el.getAttribute('onClick')).toBeNull();
+    expect(el.getAttribute('onmouseover')).toBeNull();
+    expect(el.getAttribute('is')).toBeNull();
+    expect(el.getAttribute('srcDoc')).toBeNull();
+    expect(el.getAttribute('srcdoc')).toBeNull();
+  });
+
+  it('drops dangerous URL schemes on href/src (control-char normalized)', () => {
+    const { container } = mount(`<a href="java\tscript:alert(1)">x</a>`);
+    expect(container.querySelector('a')!.getAttribute('href')).toBeNull();
+  });
+
+  it('keeps safe URLs', () => {
+    const { container } = mount('<a href="https://example.com">x</a>');
+    expect(container.querySelector('a')!.getAttribute('href')).toBe('https://example.com');
+  });
+
+  it.each([' ', '\t', '\n', '\r', '\f'])('drops an unvalidated ping with a later dangerous URL after %j', separator => {
+    const { container } = mount(`<a href="/" ping="https://safe.example/p${separator}javascript:alert(1)">x</a>`);
+    expect(container.querySelector('a')!.getAttribute('ping')).toBeNull();
+    expect(container.querySelector('a')!.getAttribute('href')).toBe('/');
+  });
+
+  it('preserves safe ping lists and image srcset descriptors', () => {
+    const ping = 'https://safe.example/p,javascript:literal https://other.example/p';
+    const srcset = 'https://a/x.png 1x, https://a/y.png 2x';
+    const { container } = mount(`<a href="/" ping="${ping}">x</a><img srcset="${srcset}" />`);
+    expect(container.querySelector('a')!.getAttribute('ping')).toBe(ping);
+    expect(container.querySelector('img')!.getAttribute('srcset')).toBe(srcset);
+  });
+
+  it('drops a srcset containing a later dangerous URL', () => {
+    const { container } = mount('<img srcset="https://a/x.png 1x, javascript:alert(1) 2x" />');
+    expect(container.querySelector('img')!.getAttribute('srcset')).toBeNull();
+  });
+
+  it('drops object props on HTML tags (except style) but passes them to components', () => {
+    const { container } = mount('<div data-x={{ a: 1 }}>x</div>');
+    expect(container.querySelector('div')!.getAttribute('data-x')).toBeNull();
+    mount('<Card viz={{ type: "bar" }} />');
+    expect(propsProbe[0].viz).toEqual({ type: 'bar' });
+  });
+});
+
+describe('unknown tags', () => {
+  it('renders nothing for unregistered components (validator rejects them; interpreter stays safe)', () => {
+    const { container } = mount('<Nope>hidden</Nope>');
+    expect(container.textContent).toBe('');
+  });
+});
+
+describe('managed Iframe interpreter boundary',()=>{
+  it('passes only compiled inert payload to the adapter; no author DOM enters parent',()=>{
+    const calls:Record<string,unknown>[]=[];
+    const Iframe=(props:Record<string,unknown>)=>{calls.push(props);return <div aria-label="managed-frame"/>;};
+    const parsed=parseJsxOrThrow('<Iframe id="1"><style>{`body{color:red}`}</style><canvas id="2"/><script>{`window.untrusted=true`}</script></Iframe>');
+    const result=render(<>{renderStoryNodes(parsed.nodes,{components:{Iframe}})}</>);
+    expect(calls[0].compiled).toEqual({html:'<style>body{color:red}</style><canvas id="2"></canvas>',scripts:[{type:'classic',source:'window.untrusted=true'}]});
+    expect(calls[0].children).toBeUndefined();
+    expect(result.container.querySelector('canvas,style,script')).toBeNull();
+    expect(calls[0].id).toBe('1');
+  });
+  it('fails closed for unvalidated forged platform props or unsafe child markup',()=>{
+    for(const source of ['<Iframe compiled={{html:"evil"}}/>','<Iframe><iframe/></Iframe>']){
+      const parsed=parseJsxOrThrow(source);
+      const Iframe=()=>{throw Error('must not render');};
+      expect(renderStoryNodes(parsed.nodes,{components:{Iframe}})).toEqual([null]);
+    }
+  });
+});
+
+/**
+ * Authored `<style>` blocks — interpreter render. The CSS travels as a
+ * template-literal child (the JSX idiom that keeps `{`/`}` as data); the
+ * interpreter must render it as a real <style> node inside the surface so the
+ * capture path (which serializes in-root styles) carries it for free.
+ */
+const mountBare = (src: string) => {
+  const parsed = parseJsxOrThrow(src);
+  return render(<>{renderStoryNodes(parsed.nodes, { components: {} })}</>);
+};
+
+describe('authored <style> rendering', () => {
+  it('renders a style element whose text is the authored CSS', () => {
+    const { container } = mountBare(
+      '<style>{`@keyframes rise { from { opacity: 0 } } .rise { animation: rise 1s both }`}</style><p className="rise">x</p>',
+    );
+    const style = container.querySelector('style');
+    expect(style).not.toBeNull();
+    expect(style!.textContent).toContain('@keyframes rise');
+    expect(style!.textContent).toContain('.rise');
+  });
+});

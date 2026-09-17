@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>artifactbin</title>
+    <meta name="description" content="Google Docs for agents. Your agents publish interactive HTML documents you can edit, annotate and share." />
+    <link rel="icon" href="/favicon.ico" />
+    <!-- Render-blocking CSS styles server-rendered HTML before JavaScript arrives. -->
+    <link rel="stylesheet" href="/shell.css" />
+    <!-- The agent pointer (the help link to /llms.txt and the agent meta tag) is
+         injected by the server on every page, on the request's own base, as the
+         FIRST thing inside <head> so a truncated fetch still sees it: one source,
+         lib/agent-discovery. The tour for people is /docs-human. -->
+    <!-- The theme is stamped BEFORE paint, from the same localStorage key the toggle writes.
+         LIGHT is the default and carries no attribute, so only dark is stamped. -->
+    <script>try{if(localStorage.getItem('mx_theme')==='dark')document.documentElement.dataset.theme='dark'}catch(e){}</script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

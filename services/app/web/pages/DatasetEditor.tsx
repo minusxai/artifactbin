@@ -1,0 +1,1533 @@
+import AssetPageHeader from "@/components/AssetPageHeader";
+import StepHeader from "@/components/StepHeader";
+import PageChrome from "@/components/PageChrome";
+import ShareLink from "@/components/ShareLink";
+import { DatasetPolicies } from "@/components/DatasetPolicies";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Navigate, useParams } from "react-router";
+import {
+  ChevronDown,
+  ChevronRight,
+  Database,
+  DatabasePlus,
+  Plus,
+  Play,
+  Code2,
+} from "lucide-react";
+import { Button, Input, PANEL } from "@/components/ui";
+import {
+  CatalogRows,
+  DatasetExplorer,
+  type CatalogPreview,
+  type CatalogQuery,
+} from "@/components/DatasetCatalogView";
+import {
+  DatasetWhitelist,
+  type SourceDraft,
+} from "@/components/DatasetWhitelist";
+import {
+  parseDatasetDefinition,
+  serializeDatasetDefinition,
+} from "@/lib/datasets/definition";
+import type {
+  CatalogInput,
+  DatasetCatalog,
+  DatasetConnection,
+  DiscoveredTable,
+  NotebookCell,
+} from "@/lib/datasets/types";
+import type { DatasetColumn } from "@/lib/story/dataset-shape";
+import type { Row } from "@/lib/story/dataflow";
+import { useRouter } from "@/lib/navigation";
+import { useSession } from "@/web/session";
+
+type ModelDraft = {
+  cell: NotebookCell;
+  schema: string;
+  columns: DatasetColumn[];
+  selected: string[];
+  stale: boolean;
+  collapsed: boolean;
+  legacy: boolean;
+  preview?: CatalogPreview;
+};
+type StoredDraft = {
+  key: string;
+  schema: string;
+  name: string;
+  rows: string;
+  retained: boolean;
+};
+const initialConnection = (): DatasetConnection => ({
+  host: "",
+  port: 5432,
+  database: "",
+  username: "",
+  passwordSecretId: "",
+  ssl: true,
+});
+const control =
+  "w-full rounded border border-edge bg-surface px-3 py-2 font-mono text-sm text-fg focus:border-accent focus:outline-none";
+const sourceKey = (table: { schema: string; name: string }) =>
+  JSON.stringify([table.schema, table.name]);
+const namesToColumns = (names: string[] = []): DatasetColumn[] =>
+  names.map((name) => ({ name, type: "string" }));
+function Field({ name, children }: { name: string; children: ReactNode }) {
+  return (
+    <label className="grid min-w-0 gap-1.5 text-xs text-muted">
+      {name}
+      {children}
+    </label>
+  );
+}
+async function request<T>(
+  url: string,
+  body?: unknown,
+  method = "POST",
+): Promise<T> {
+  const response = await fetch(
+    url,
+    body === undefined
+      ? { credentials: "same-origin" }
+      : {
+          method,
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+  );
+  const data = await response.json();
+  if (!response.ok)
+    throw new Error(data.details?.[0] ?? data.error ?? "The request failed.");
+  return data as T;
+}
+
+/** Visual authoring and source share one definition boundary. Passwords never enter the definition. */
+export function DatasetEditorPage({
+  artifactId,
+  onSaved,
+}: { artifactId?: string; onSaved?: () => Promise<unknown> } = {}) {
+  const { id: routeId } = useParams<{ id: string }>();
+  const id = artifactId ?? routeId;
+  const router = useRouter();
+  const { session } = useSession();
+  const [section, setSection] = useState<"actions" | "data" | "source">(
+    id ? "actions" : "source",
+  );
+  const originalDefinition = useRef<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [kind, setKind] = useState<DatasetCatalog["kind"]>("stored");
+  const [connection, setConnection] = useState(initialConnection);
+  const [password, setPassword] = useState("");
+  const [sources, setSources] = useState<SourceDraft[]>([]);
+  const [models, setModels] = useState<ModelDraft[]>([]);
+  const [stored, setStored] = useState<StoredDraft[]>([]);
+  const [defaultSchema, setDefaultSchema] = useState("");
+  const [refreshSeconds, setRefreshSeconds] = useState(0);
+  const [version, setVersion] = useState<number>();
+  const [state, setState] = useState<string>();
+  const [loading, setLoading] = useState(Boolean(id));
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [connectionFeedback, setConnectionFeedback] = useState<{
+    kind: "connecting" | "success" | "error";
+    message: string;
+  } | null>(null);
+  const [sourceText, setSourceText] = useState<string | null>(null);
+
+  const loadDefinition = (
+    input: CatalogInput,
+    metadata?: DatasetCatalog,
+    preserveDraft = false,
+  ) => {
+    setKind(input.kind);
+    setConnection(input.connection ?? initialConnection());
+    setPassword("");
+    setConnectionFeedback(null);
+    setDefaultSchema(input.defaultSchema ?? "public");
+    setRefreshSeconds(input.refreshSeconds ?? 0);
+    const sameConnection = Boolean(
+      input.connection &&
+      Object.entries(connection).every(
+        ([key, value]) =>
+          input.connection![key as keyof DatasetConnection] === value,
+      ),
+    );
+    const discoveries =
+      metadata?.notebookSources ??
+      (preserveDraft && sameConnection ? sources.map((s) => s.discovery) : []);
+    const physical = input.tables
+      .filter((t) => t.source)
+      .map((t) => {
+        const discovery = discoveries.find(
+          (d) => d.schema === t.source!.schema && d.name === t.source!.table,
+        );
+        const shape =
+          metadata?.tables.find(
+            (d) => d.schema === t.schema && d.name === t.name,
+          )?.columns ?? namesToColumns(t.columns?.map(c=>typeof c==='string'?c:c.name));
+        return {
+          discovery: discovery ?? {
+            schema: t.source!.schema,
+            name: t.source!.table,
+            columns: shape,
+          },
+          included: true,
+          schema: t.schema,
+          name: t.name,
+          columns: t.columns?.map(c=>typeof c==='string'?c:c.name) ?? shape.map((c) => c.name),
+        };
+      });
+    setSources([
+      ...physical,
+      ...discoveries
+        .filter(
+          (d) => !physical.some((s) => sourceKey(s.discovery) === sourceKey(d)),
+        )
+        .map((discovery) => ({
+          discovery,
+          included: false,
+          schema: discovery.schema,
+          name: discovery.name,
+          columns: [],
+        })),
+    ]);
+    const notebookCells = input.notebook?.cells ?? [];
+    const notebook = notebookCells.map((cell, index) => {
+      const table = input.tables.find((t) => t.modelCellId === cell.id);
+      const prefixUnchanged = notebookCells
+        .slice(0, index + 1)
+        .every((candidate, i) => {
+          const previous = models.filter((m) => !m.legacy)[i]?.cell;
+          return (
+            previous &&
+            candidate.id === previous.id &&
+            candidate.name === previous.name &&
+            candidate.sql === previous.sql
+          );
+        });
+      const previous =
+        preserveDraft && sameConnection && prefixUnchanged
+          ? models.find((m) => m.cell.id === cell.id)
+          : undefined;
+      const columns = preserveDraft
+        ? (previous?.columns ?? [])
+        : (metadata?.tables.find((t) => t.modelCellId === cell.id)?.columns ??
+          []);
+      const stale = preserveDraft
+        ? !previous ||
+          previous.stale ||
+          Boolean(
+            table?.columns?.some(
+              (name) => !columns.some((c) => c.name === name),
+            ),
+          )
+        : !table;
+      return {
+        cell,
+        schema: table?.schema ?? "models",
+        columns,
+        selected: table?.columns?.map(c=>typeof c==='string'?c:c.name) ?? [],
+        stale,
+        collapsed: previous?.collapsed ?? false,
+        legacy: false,
+        ...(previous && !stale ? { preview: previous.preview } : {}),
+      };
+    });
+    const legacy = input.tables
+      .filter((t) => t.sql !== undefined)
+      .map((t) => ({
+        cell: { id: crypto.randomUUID(), name: t.name, sql: t.sql! },
+        schema: t.schema,
+        columns:
+          metadata?.tables.find(
+            (d) => d.schema === t.schema && d.name === t.name,
+          )?.columns ?? namesToColumns(t.columns?.map(c=>typeof c==='string'?c:c.name)),
+        selected:
+          t.columns?.map(c=>typeof c==='string'?c:c.name) ??
+          metadata?.tables
+            .find((d) => d.schema === t.schema && d.name === t.name)
+            ?.columns.map((c) => c.name) ??
+          [],
+        stale: false,
+        collapsed: false,
+        legacy: true,
+      }));
+    setModels([...notebook, ...legacy]);
+    setStored(
+      input.tables
+        .filter((t) => !t.source && t.sql === undefined && !t.modelCellId)
+        .map((t) => ({
+          key: crypto.randomUUID(),
+          schema: t.schema,
+          name: t.name,
+          rows: t.rows ? JSON.stringify(t.rows, null, 2) : "",
+          retained: t.rows === undefined,
+        })),
+    );
+  };
+
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    void request<{
+      title: string;
+      version: number;
+      state: string;
+      meta: { catalog?: DatasetCatalog };
+      source?: string;
+    }>(`/api/my/artifacts/${encodeURIComponent(id)}`)
+      .then((data) => {
+        if (!alive) return;
+        const catalog = data.meta.catalog;
+        if (!catalog)
+          throw new Error("This artifact does not have a dataset catalog.");
+        if (catalog.kind === "postgres") setSection("source");
+        setTitle(data.title ?? "");
+        setVersion(data.version);
+        setState(data.state);
+        loadDefinition(
+          {
+            ...catalog,
+            tables: catalog.tables.map(({ objectKey: _, ...table }) => ({
+              ...table,
+              columns: table.columns.map((c) => c.name),
+            })),
+          },
+          catalog,
+        );
+      })
+      .catch((err) => {
+        if (alive) {
+          setError(err.message);
+          setLoadFailed(true);
+        }
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+
+  const run = async (operation: string, action: () => Promise<void>) => {
+    setBusy(operation);
+    setError("");
+    if (operation === "discover")
+      setConnectionFeedback({
+        kind: "connecting",
+        message: "Connecting to PostgreSQL…",
+      });
+    else
+      setConnectionFeedback((value) =>
+        value?.kind === "error" ? null : value,
+      );
+    try {
+      await action();
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not reach the server.";
+      if (operation === "discover")
+        setConnectionFeedback({ kind: "error", message });
+      else setError(message);
+    } finally {
+      setBusy("");
+    }
+  };
+  const invalidate = (items: ModelDraft[], from: number) =>
+    items.map((item, index) =>
+      index >= from ? { ...item, stale: true, preview: undefined } : item,
+    );
+  const updateModel = (index: number, patch: Partial<NotebookCell>) =>
+    setModels((items) =>
+      invalidate(
+        items.map((item, i) =>
+          i === index ? { ...item, cell: { ...item.cell, ...patch } } : item,
+        ),
+        index,
+      ),
+    );
+  const addModel = (after = models.length - 1) =>
+    setModels((items) => {
+      const next = invalidate(items, after + 1);
+      let suffix = 1;
+      while (items.some((item) => item.cell.name === `query_${suffix}`))
+        suffix++;
+      next.splice(after + 1, 0, {
+        cell: { id: crypto.randomUUID(), name: `query_${suffix}`, sql: "" },
+        schema: kind === "postgres" ? "models" : defaultSchema || "public",
+        columns: [],
+        selected: [],
+        stale: true,
+        collapsed: false,
+        legacy: kind === "stored",
+      });
+      return next;
+    });
+  const updateConnection = (patch: Partial<DatasetConnection>) => {
+    setConnectionFeedback(null);
+    setConnection((value) => ({ ...value, ...patch, passwordSecretId: "" }));
+    setModels((items) => invalidate(items, 0));
+  };
+  const ensureConnection = async () => {
+    if (
+      !connection.host.trim() ||
+      !connection.database.trim() ||
+      !connection.username.trim() ||
+      !Number.isInteger(connection.port) ||
+      connection.port < 1 ||
+      connection.port > 65535
+    )
+      throw new Error("Enter a host, port, database and username.");
+    if (connection.passwordSecretId) return connection;
+    if (!password)
+      throw new Error(
+        "Enter a password for this connection. Changing the destination requires a replacement password.",
+      );
+    const { passwordSecretId: _, ...destination } = connection;
+    const data = await request<{ secret: { id: string } }>("/api/my/secrets", {
+      value: password,
+      connection: destination,
+      ...(id ? { datasetId: id } : {}),
+    });
+    const configured = { ...connection, passwordSecretId: data.secret.id };
+    setConnection(configured);
+    setPassword("");
+    return configured;
+  };
+  const notebook = () => ({
+    cells: models.filter((m) => !m.legacy).map((m) => m.cell),
+  });
+  const buildCatalog = (
+    configured = connection,
+    validate = true,
+  ): CatalogInput => {
+    const tables: CatalogInput["tables"] =
+      kind === "postgres"
+        ? sources
+            .filter((s) => s.included && s.columns.length)
+            .map((s) => ({
+              schema: s.schema,
+              name: s.name,
+              source: { schema: s.discovery.schema, table: s.discovery.name },
+              columns: s.columns,
+            }))
+        : stored.map((s) => {
+            if (!s.rows.trim() && s.retained)
+              return { schema: s.schema, name: s.name };
+            let rows: unknown;
+            try {
+              rows = JSON.parse(s.rows);
+            } catch {
+              throw new Error(
+                `Enter a JSON array of rows for ${s.name || "the stored table"}.`,
+              );
+            }
+            if (
+              !Array.isArray(rows) ||
+              rows.some(
+                (row) => !row || typeof row !== "object" || Array.isArray(row),
+              )
+            )
+              throw new Error("Stored rows must be a JSON array of objects.");
+            return { schema: s.schema, name: s.name, rows: rows as Row[] };
+          });
+    for (const model of models) {
+      if (!model.selected.length && !model.legacy) continue;
+      if (validate && model.stale)
+        throw new Error(
+          `Run ${model.cell.name || "the model"} again before saving or querying its exposed output.`,
+        );
+      if (model.legacy)
+        tables.push({
+          schema: model.schema,
+          name: model.cell.name,
+          sql: model.cell.sql,
+        });
+      else
+        tables.push({
+          schema: model.schema,
+          name: model.cell.name,
+          modelCellId: model.cell.id,
+          columns: model.selected,
+        });
+    }
+    // Nobody has to open Advanced to make a dataset: an unchosen default
+    // schema is the first table's, exactly what the select shows as automatic.
+    const schema = defaultSchema || tables[0]?.schema || "public";
+    if (validate) {
+      if (!tables.length)
+        throw new Error("Expose at least one table or model output.");
+      if (tables.some((t) => !t.schema.trim() || !t.name.trim()))
+        throw new Error("Every table needs a schema and name.");
+      if (new Set(tables.map(sourceKey)).size !== tables.length)
+        throw new Error("Table names must be unique within a schema.");
+      if (!tables.some((t) => t.schema === schema))
+        throw new Error("Choose a default schema containing an exposed table.");
+      if (!Number.isInteger(refreshSeconds) || refreshSeconds < 0)
+        throw new Error(
+          "Refresh interval must be a whole number of seconds, or 0 for manual refresh.",
+        );
+    }
+    return {
+      kind,
+      ...(kind === "postgres"
+        ? { connection: configured, notebook: notebook() }
+        : {}),
+      defaultSchema: schema,
+      refreshSeconds,
+      tables,
+    };
+  };
+  const runCell = (index: number) => {
+    const model = models[index];
+    if (
+      busy ||
+      sourceText !== null ||
+      !model?.cell.name.trim() ||
+      !model.cell.sql.trim()
+    )
+      return;
+    void run(`cell-${model.cell.id}`, async () => {
+      const allCells = notebook().cells;
+      const cells = allCells.slice(
+        0,
+        allCells.findIndex((cell) => cell.id === model.cell.id) + 1,
+      );
+      if (
+        new Set(cells.map((c) => c.name)).size !== cells.length ||
+        cells.some((c) => !c.name.trim())
+      )
+        throw new Error("Give every notebook cell a unique name.");
+      const preview = model.legacy
+        ? await request<CatalogPreview>("/api/my/datasets/preview", {
+            dataset: buildCatalog(connection, false),
+            sql: model.cell.sql,
+            ...(id ? { datasetId: id } : {}),
+          })
+        : await request<CatalogPreview>("/api/my/datasets/notebook/preview", {
+            connection: await ensureConnection(),
+            notebook: { cells },
+            cellId: model.cell.id,
+            ...(id ? { datasetId: id } : {}),
+          });
+      setModels((items) =>
+        items.map((item) =>
+          item.cell.id === model.cell.id
+            ? {
+                ...item,
+                preview,
+                columns: preview.columns,
+                selected:
+                  item.legacy && !item.selected.length
+                    ? preview.columns.map((c) => c.name)
+                    : item.selected.filter((name) =>
+                        preview.columns.some((c) => c.name === name),
+                      ),
+                stale: false,
+              }
+            : item,
+        ),
+      );
+    });
+  };
+  const discover = () =>
+    void run("discover", async () => {
+      const configured = await ensureConnection();
+      const data = await request<{ tables: DiscoveredTable[] }>(
+        "/api/my/datasets/discover",
+        { connection: configured, ...(id ? { datasetId: id } : {}) },
+      );
+      setSources((current) => {
+        const discovered = data.tables.map((discovery) => {
+          const previous = current.find(
+            (s) => sourceKey(s.discovery) === sourceKey(discovery),
+          );
+          // A disappeared selected leaf stays explicit until the editor removes it or the server validates it.
+          const missing =
+            previous?.discovery.columns.filter(
+              (column) =>
+                previous.columns.includes(column.name) &&
+                !discovery.columns.some((c) => c.name === column.name),
+            ) ?? [];
+          return {
+            discovery: {
+              ...discovery,
+              columns: [...discovery.columns, ...missing],
+            },
+            schema: previous?.schema ?? discovery.schema,
+            name: previous?.name ?? discovery.name,
+            included: previous?.included ?? false,
+            columns: previous?.columns ?? [],
+          };
+        });
+        return [
+          ...discovered,
+          ...current.filter(
+            (previous) =>
+              previous.included &&
+              !data.tables.some(
+                (d) => sourceKey(d) === sourceKey(previous.discovery),
+              ),
+          ),
+        ];
+      });
+      setConnectionFeedback({
+        kind: "success",
+        message: data.tables.length
+          ? `Connected. Found ${data.tables.length} table${data.tables.length === 1 ? "" : "s"}. Choose what to expose below.`
+          : "Connected. No tables found for this database account.",
+      });
+    });
+  const exposures: SourceDraft[] = [
+    ...sources,
+    ...models
+      .filter((m) => !m.legacy)
+      .map((m) => ({
+        discovery: {
+          schema: m.schema,
+          name: m.cell.name || "Untitled cell",
+          columns: m.stale ? [] : m.columns,
+        },
+        schema: m.schema,
+        name: m.cell.name,
+        columns: m.selected,
+        included: m.selected.length > 0,
+        modelCellId: m.cell.id,
+        stale: m.stale,
+      })),
+  ];
+  const changeExposures = (next: SourceDraft[]) => {
+    setSources(next.filter((s) => !s.modelCellId));
+    setModels((items) =>
+      items.map((item) => {
+        const entry = next.find((s) => s.modelCellId === item.cell.id);
+        return entry && !item.stale
+          ? { ...item, selected: entry.included ? entry.columns : [] }
+          : item;
+      }),
+    );
+  };
+  // Annotated, or the literal's element type collapses to the JSON shape and
+  // the model entries' columns become invisible to the whitelist listing.
+  const exposedTables = useMemo<{ schema: string; name: string; columns?: string[] }[]>(
+    () => [
+      ...(kind === "postgres"
+        ? sources
+            .filter((s) => s.included && s.columns.length)
+            .map((s) => ({
+              schema: s.schema,
+              name: s.name,
+              columns: s.columns,
+            }))
+        : stored
+            .filter((s) => s.schema && s.name)
+            .map((s) => ({ schema: s.schema, name: s.name }))),
+      ...models
+        .filter((m) => !m.stale && (m.selected.length || m.legacy))
+        .map((m) => ({
+          schema: m.schema,
+          name: m.cell.name,
+          columns: m.selected,
+        })),
+    ],
+    [kind, sources, stored, models],
+  );
+  const exposedTableKey = JSON.stringify(exposedTables);
+  // Requery for exposed column changes; notebook presentation and hidden drafts leave this catalog stable.
+  const explorerCatalog = useMemo(
+    () => ({ kind, defaultSchema: defaultSchema || exposedTables[0]?.schema || "public", refreshSeconds, tables: exposedTables }),
+    // exposedTableKey stands in for exposedTables on purpose: the key changes
+    // only when the exposed tables do, so a collapse or an unexposed draft
+    // edit does not rerun the final SQL.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kind, defaultSchema, refreshSeconds, exposedTableKey],
+  );
+  // Use the latest draft at execution time; typing source/cell SQL does not itself execute final SQL.
+  const queryDraft = useRef<(sql: string) => Promise<CatalogPreview>>(null!);
+  queryDraft.current = async (sql) =>
+    request<CatalogPreview>("/api/my/datasets/preview", {
+      dataset: buildCatalog(),
+      sql,
+      ...(id ? { datasetId: id } : {}),
+    });
+  const previewDraft = useCallback<CatalogQuery>(
+    (sql) => queryDraft.current(sql),
+    [],
+  );
+  const selectedSchemas = [...new Set(exposedTables.map((t) => t.schema))];
+  useEffect(() => {
+    if (!id || loading || loadFailed || originalDefinition.current !== null) return;
+    originalDefinition.current = serializeDatasetDefinition(buildCatalog(connection, false));
+  }, [id, loading, loadFailed]);
+
+  if (!id && session && !session.user)
+    return (
+      <Navigate
+        to={`/login?callbackUrl=${encodeURIComponent(id ? `/a/${id}/edit` : "/datasets/new")}`}
+        replace
+      />
+    );
+  const share = (className: string) => (
+    <ShareLink
+      artifactId={id}
+      title={title}
+      format="dataset"
+      datasetKind={kind}
+      editable
+      className={className}
+      url={`/a/${id}`}
+    />
+  );
+  return (
+    <>
+      {id && (
+        <PageChrome
+          authed={!!session?.user}
+          anon={session?.kind === "anon"}
+          title={title}
+          label="Artifact controls"
+        >
+          {!loading && !loadFailed && (
+            <section aria-label="Document actions">
+              <h2 className="mb-2 text-xs text-muted">Artifact</h2>
+              {share(
+                "w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-raised",
+              )}
+            </section>
+          )}
+        </PageChrome>
+      )}
+      <main className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
+        <AssetPageHeader
+          icon={id ? Database : DatabasePlus}
+          eyebrow="Dataset workspace"
+          title={id ? title || "Edit dataset" : "Create a dataset"}
+          link={
+            id
+              ? { href: `/a/${id}`, label: "View dataset", text: "view dataset" }
+              : { href: "/assets", label: "Back to assets", text: "all assets" }
+          }
+          actions={
+            id && !loading && !loadFailed ? (
+              <>
+                <span className="rounded-full border border-edge px-2.5 py-1 text-xs text-muted">
+                  {kind === "stored" ? "Stored data" : "PostgreSQL"}
+                </span>
+                {share(
+                  "inline-flex items-center gap-2 rounded-lg border border-edge bg-surface px-4 py-2 text-sm hover:border-accent [&>span]:inline",
+                )}
+              </>
+            ) : undefined
+          }
+        />
+        {!loading && !loadFailed && (
+          <nav
+            aria-label="Dataset workspace"
+            className="mb-7 flex gap-1 overflow-x-auto border-b sm:gap-5 border-edge"
+          >
+            {(
+              [
+                ...(id && kind === "stored"
+                  ? [["actions", "Data actions"]]
+                  : []),
+                ["source", "Source & models"],
+                ["data", "Data preview"],
+              ] as Array<[typeof section, string]>
+            ).map(([key, label]) => (
+              <button
+                type="button"
+                key={key}
+                aria-current={section === key ? "page" : undefined}
+                className={`shrink-0 border-b-2 px-1 pb-3 text-xs font-medium sm:text-sm ${section === key ? "border-accent text-fg" : "border-transparent text-muted hover:text-fg"}`}
+                onClick={() => setSection(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+        {error && (
+          <p
+            role="alert"
+            aria-label="Dataset error"
+            className="rounded border border-danger/30 bg-danger-soft p-3 text-sm text-danger"
+          >
+            {error}
+          </p>
+        )}
+        {loading ? (
+          <p className="text-sm text-muted">Loading dataset…</p>
+        ) : loadFailed ? (
+          <p className="text-sm text-muted">
+            The dataset could not be opened for editing.
+          </p>
+        ) : (
+          <>
+            <div
+              hidden={section !== "source"}
+              className="mx-auto max-w-4xl space-y-6"
+            >
+              <fieldset
+                disabled={Boolean(busy) || sourceText !== null}
+                className="min-w-0 space-y-6"
+              >
+                <Field name="Dataset title">
+                  <Input
+                    aria-label="Dataset title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Weekly sales"
+                  />
+                </Field>
+                <section aria-label="Raw data" className={`${PANEL} overflow-hidden rounded-xl`}>
+                  <StepHeader n={1} title="Raw data">
+                    Where the rows come from: JSON rows pasted into named tables, or a PostgreSQL database read live.
+                  </StepHeader>
+                  <div role="tablist" aria-label="Raw data source" className="flex gap-5 border-b border-edge px-4 sm:px-5">
+                    {(
+                      [
+                        ["stored", "Dataset JSON"],
+                        ["postgres", "PostgreSQL"],
+                      ] as Array<[DatasetCatalog["kind"], string]>
+                    ).map(([key, label]) => (
+                      <button
+                        type="button"
+                        role="tab"
+                        key={key}
+                        aria-label={label}
+                        aria-selected={kind === key}
+                        disabled={Boolean(id)}
+                        onClick={() => setKind(key)}
+                        className={`-mb-px shrink-0 border-b-2 px-1 py-3 text-xs font-medium disabled:cursor-default ${kind === key ? "border-accent text-fg" : "border-transparent text-muted enabled:hover:text-fg disabled:opacity-50"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* One height for both tabs, so switching does not move the
+                    * steps below. What does not fit scrolls inside. */}
+                  <div className="h-[22rem] overflow-y-auto p-4 sm:p-5">
+                    {kind === "postgres" ? (
+                      <section aria-label="Dataset connection" className="space-y-4">
+                        <p className="text-xs text-muted">
+                          Use a database account with read access. The password is stored securely and cannot be retrieved.
+                        </p>
+                    <div className="grid gap-4 sm:grid-cols-[1fr_7rem]">
+                      <Field name="Host">
+                        <Input
+                          aria-label="Host"
+                          autoComplete="off"
+                          placeholder="db.example.com"
+                          value={connection.host}
+                          onChange={(e) =>
+                            updateConnection({ host: e.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field name="Port">
+                        <Input
+                          aria-label="Port"
+                          type="number"
+                          min={1}
+                          max={65535}
+                          value={connection.port}
+                          onChange={(e) =>
+                            updateConnection({ port: Number(e.target.value) })
+                          }
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field name="Database">
+                        <Input
+                          aria-label="Database"
+                          autoComplete="off"
+                          value={connection.database}
+                          onChange={(e) =>
+                            updateConnection({ database: e.target.value })
+                          }
+                        />
+                      </Field>
+                      <Field name="Username">
+                        <Input
+                          aria-label="Username"
+                          autoComplete="off"
+                          value={connection.username}
+                          onChange={(e) =>
+                            updateConnection({ username: e.target.value })
+                          }
+                        />
+                      </Field>
+                    </div>
+                    {connection.passwordSecretId ? (
+                      <div className="flex items-center gap-3">
+                        <span
+                          aria-label="Password status"
+                          className="text-xs text-muted"
+                        >
+                          Password · Configured
+                        </span>
+                        <Button
+                          aria-label="Replace password"
+                          variant="ghost"
+                          onClick={() => {
+                            setConnectionFeedback(null);
+                            setConnection((value) => ({
+                              ...value,
+                              passwordSecretId: "",
+                            }));
+                            setPassword("");
+                          }}
+                        >
+                          Replace
+                        </Button>
+                      </div>
+                    ) : (
+                      <Field name="Password">
+                        <Input
+                          aria-label="Password"
+                          type="password"
+                          autoComplete="new-password"
+                          value={password}
+                          onChange={(e) => {
+                            setConnectionFeedback(null);
+                            setPassword(e.target.value);
+                          }}
+                        />
+                      </Field>
+                    )}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 text-xs text-muted">
+                        <input
+                          aria-label="Use SSL"
+                          type="checkbox"
+                          className="accent-accent"
+                          checked={connection.ssl}
+                          onChange={(e) =>
+                            updateConnection({ ssl: e.target.checked })
+                          }
+                        />
+                        Use SSL / TLS
+                      </label>
+                      <Button
+                        aria-label="Test and discover"
+                        variant="ghost"
+                        onClick={discover}
+                      >
+                        {busy === "discover"
+                          ? "Connecting…"
+                          : "Test and discover"}
+                      </Button>
+                    </div>
+                    {connectionFeedback && (
+                      <p
+                        role={
+                          connectionFeedback.kind === "error"
+                            ? "alert"
+                            : "status"
+                        }
+                        aria-label={
+                          connectionFeedback.kind === "error"
+                            ? "Dataset error"
+                            : "Dataset notice"
+                        }
+                        className={`text-xs leading-5 ${connectionFeedback.kind === "error" ? "text-danger" : connectionFeedback.kind === "success" ? "text-accent" : "text-muted"}`}
+                      >
+                        {connectionFeedback.message}
+                      </p>
+                    )}
+                      </section>
+                    ) : (
+                      <section aria-label="Stored tables editor" className="space-y-4">
+                        <p className="text-xs text-muted">
+                          Add JSON rows to a named table. Step 2 can query it right away as schema.table; the rows are stored when you {id ? "save" : "create"} the dataset. Existing rows are retained unless you replace them.
+                        </p>
+                        {!stored.length && (
+                          <div className="rounded border border-dashed border-edge p-5 text-center">
+                            <Database size={20} className="mx-auto mb-2 text-faint" />
+                            <p className="text-sm text-muted">No tables yet.</p>
+                            <p className="mt-1 text-xs text-faint">
+                              Add a table, name it, and paste rows as a JSON array, for example [{"{"}&quot;id&quot;: 1{"}"}].
+                            </p>
+                          </div>
+                        )}
+                    {stored.map((table, index) => (
+                      <div
+                        key={table.key}
+                        className="space-y-3 border-t border-edge pt-4"
+                      >
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Field name="Schema">
+                            <Input
+                              aria-label={`Stored schema ${index + 1}`}
+                              disabled={table.retained}
+                              value={table.schema}
+                              onChange={(e) =>
+                                setStored((items) =>
+                                  items.map((s) =>
+                                    s.key === table.key
+                                      ? { ...s, schema: e.target.value }
+                                      : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field name="Table name">
+                            <Input
+                              aria-label={`Stored table name ${index + 1}`}
+                              disabled={table.retained}
+                              value={table.name}
+                              onChange={(e) =>
+                                setStored((items) =>
+                                  items.map((s) =>
+                                    s.key === table.key
+                                      ? { ...s, name: e.target.value }
+                                      : s,
+                                  ),
+                                )
+                              }
+                            />
+                          </Field>
+                        </div>
+                        <Field
+                          name={
+                            table.retained ? "Replace rows (optional)" : "Rows"
+                          }
+                        >
+                          <textarea
+                            aria-label={`Stored rows ${index + 1}`}
+                            className={`${control} min-h-32`}
+                            spellCheck={false}
+                            value={table.rows}
+                            placeholder='[{"id": 1}]'
+                            onChange={(e) =>
+                              setStored((items) =>
+                                items.map((s) =>
+                                  s.key === table.key
+                                    ? { ...s, rows: e.target.value }
+                                    : s,
+                                ),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Button
+                          aria-label={`Remove stored table ${index + 1}`}
+                          variant="ghost"
+                          onClick={() =>
+                            setStored((items) =>
+                              items.filter((s) => s.key !== table.key),
+                            )
+                          }
+                        >
+                          Remove table
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      aria-label="Add JSON table"
+                      variant="ghost"
+                      onClick={() =>
+                        setStored((items) => [
+                          ...items,
+                          {
+                            key: crypto.randomUUID(),
+                            schema: defaultSchema || "public",
+                            name: "",
+                            rows: "",
+                            retained: false,
+                          },
+                        ])
+                      }
+                    >
+                      Add JSON table
+                    </Button>
+                      </section>
+                    )}
+                  </div>
+                </section>
+                <section
+                  aria-label="Data models notebook"
+                  className={`${PANEL} rounded-xl overflow-hidden`}
+                >
+                  <StepHeader n={2} title="Data models">
+                    {kind === "postgres"
+                      ? "Read raw tables using schema.table, for example public.orders. Later cells can reference an earlier cell by its name. Expose only the outputs readers need."
+                      : "Save SQL queries over your JSON tables as named model tables."}
+                  </StepHeader>
+                  <div className="space-y-4 p-3 sm:p-4">
+                    {!models.length && (
+                      <div className="rounded border border-dashed border-edge p-5 text-center">
+                        <Code2 size={20} className="mx-auto mb-2 text-faint" />
+                        <p className="text-sm text-muted">
+                          Start with a query, build on it in the next cell.
+                        </p>
+                        <p className="mt-1 text-xs text-faint">
+                          Optional — you can expose raw tables directly.
+                        </p>
+                      </div>
+                    )}
+                    {models.map((model, index) => (
+                      <article
+                        key={model.cell.id}
+                        aria-label={`Notebook cell ${index + 1}`}
+                        className="min-w-0 overflow-hidden rounded border border-edge bg-bg/30"
+                      >
+                        <header className="flex flex-wrap items-center gap-2 border-b border-edge bg-raised/30 p-2.5">
+                          <button
+                            type="button"
+                            aria-label={`Collapse cell ${index + 1}`}
+                            aria-expanded={!model.collapsed}
+                            className="rounded p-1 text-muted hover:text-fg"
+                            onClick={() =>
+                              setModels((items) =>
+                                items.map((m) =>
+                                  m.cell.id === model.cell.id
+                                    ? { ...m, collapsed: !m.collapsed }
+                                    : m,
+                                ),
+                              )
+                            }
+                          >
+                            {model.collapsed ? (
+                              <ChevronRight size={16} />
+                            ) : (
+                              <ChevronDown size={16} />
+                            )}
+                          </button>
+                          <span className="font-mono text-xs text-faint">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <Input
+                            aria-label={`Cell name ${index + 1}`}
+                            className="min-w-24 max-w-64 flex-1 bg-transparent text-xs"
+                            placeholder="model_name"
+                            value={model.cell.name}
+                            onChange={(e) =>
+                              updateModel(index, { name: e.target.value })
+                            }
+                          />
+                          {!model.legacy && (
+                            <label className="ml-auto flex items-center gap-2 text-xs text-muted">
+                              <input
+                                aria-label={`Expose cell ${index + 1}`}
+                                type="checkbox"
+                                className="accent-accent"
+                                disabled={model.stale || !model.columns.length}
+                                checked={
+                                  !model.stale &&
+                                  model.selected.length ===
+                                    model.columns.length &&
+                                  model.columns.length > 0
+                                }
+                                aria-checked={
+                                  !model.stale &&
+                                  model.selected.length > 0 &&
+                                  model.selected.length < model.columns.length
+                                    ? "mixed"
+                                    : !model.stale && model.selected.length > 0
+                                }
+                                ref={(node) => {
+                                  if (node)
+                                    node.indeterminate =
+                                      !model.stale &&
+                                      model.selected.length > 0 &&
+                                      model.selected.length <
+                                        model.columns.length;
+                                }}
+                                onChange={(e) =>
+                                  setModels((items) =>
+                                    items.map((m) =>
+                                      m.cell.id === model.cell.id
+                                        ? {
+                                            ...m,
+                                            selected: e.target.checked
+                                              ? m.columns.map((c) => c.name)
+                                              : [],
+                                          }
+                                        : m,
+                                    ),
+                                  )
+                                }
+                              />
+                              Expose
+                            </label>
+                          )}
+                          <Button
+                            aria-label={`Run cell ${index + 1}`}
+                            aria-keyshortcuts="Meta+Enter Control+Enter"
+                            variant="ghost"
+                            disabled={
+                              !model.cell.name.trim() || !model.cell.sql.trim()
+                            }
+                            onClick={() => runCell(index)}
+                            className="inline-flex items-center gap-1.5"
+                          >
+                            <Play size={12} />
+                            Run
+                          </Button>
+                        </header>
+                        {!model.collapsed && (
+                          <div className="space-y-3 p-3">
+                            {model.legacy && (
+                              <Field name="Model schema">
+                                <Input
+                                  aria-label={`Model schema ${index + 1}`}
+                                  value={model.schema}
+                                  onChange={(e) =>
+                                    setModels((items) =>
+                                      items.map((m) =>
+                                        m.cell.id === model.cell.id
+                                          ? { ...m, schema: e.target.value }
+                                          : m,
+                                      ),
+                                    )
+                                  }
+                                />
+                              </Field>
+                            )}
+                            <textarea
+                              aria-label={`Cell SQL ${index + 1}`}
+                              spellCheck={false}
+                              onKeyDown={(event) => {
+                                if (
+                                  event.key !== "Enter" ||
+                                  !(event.metaKey || event.ctrlKey) ||
+                                  event.repeat ||
+                                  event.nativeEvent.isComposing ||
+                                  event.nativeEvent.keyCode === 229 ||
+                                  event.currentTarget.matches(":disabled") ||
+                                  busy ||
+                                  sourceText !== null
+                                )
+                                  return;
+                                event.preventDefault();
+                                runCell(index);
+                              }}
+                              className={`${control} min-h-36 resize-y border-transparent bg-transparent leading-6`}
+                              placeholder={
+                                index
+                                  ? `SELECT * FROM ${models[index - 1].cell.name || "previous_cell"}`
+                                  : "SELECT * FROM public.orders"
+                              }
+                              value={model.cell.sql}
+                              onChange={(e) =>
+                                updateModel(index, { sql: e.target.value })
+                              }
+                            />
+                            <p className="text-[11px] text-faint">
+                              Run this cell with{" "}
+                              <kbd className="font-mono">⌘ Enter</kbd> or{" "}
+                              <kbd className="font-mono">Ctrl Enter</kbd>.
+                            </p>
+                            {model.preview ? (
+                              <CatalogRows
+                                result={model.preview}
+                                label={`Cell preview ${index + 1}`}
+                              />
+                            ) : (
+                              <p className="text-xs text-faint">
+                                {model.stale
+                                  ? "Run this cell to inspect its current output columns."
+                                  : `${model.columns.length} saved output columns · run to preview rows`}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap justify-between gap-2">
+                              <Button
+                                aria-label={`Insert cell after ${index + 1}`}
+                                variant="ghost"
+                                className="inline-flex items-center gap-1"
+                                onClick={() => addModel(index)}
+                              >
+                                <Plus size={12} />
+                                Insert cell below
+                              </Button>
+                              <Button
+                                aria-label={`Remove cell ${index + 1}`}
+                                variant="ghost"
+                                onClick={() =>
+                                  setModels((items) =>
+                                    invalidate(
+                                      items.filter(
+                                        (m) => m.cell.id !== model.cell.id,
+                                      ),
+                                      index,
+                                    ),
+                                  )
+                                }
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                    <Button
+                      aria-label="Add notebook cell"
+                      variant="ghost"
+                      className="inline-flex items-center gap-1.5"
+                      onClick={() => addModel()}
+                    >
+                      <Plus size={14} />
+                      Add SQL cell
+                    </Button>
+                  </div>
+                </section>
+                {kind === "postgres" ? (
+                  <DatasetWhitelist
+                    sources={exposures}
+                    onChange={changeExposures}
+                  />
+                ) : (
+                  /* JSON tables have no picker: a pasted table is exposed
+                   * whole, and a model once its cell has run. The step still
+                   * exists so the reader sees what a reader of the dataset
+                   * will get, in the same place the PostgreSQL picker sits. */
+                  <section aria-label="Exposed tables" className={`${PANEL} overflow-hidden rounded-xl`}>
+                    <StepHeader n={3} title="Whitelist">
+                      JSON tables are exposed whole, and a model is exposed once its cell has run. Column-level whitelisting is for PostgreSQL sources.
+                    </StepHeader>
+                    <div className="p-4 sm:p-5">
+                      {exposedTables.length ? (
+                        <ul className="grid gap-2 sm:grid-cols-2">
+                          {exposedTables.map((table) => (
+                            <li
+                              key={`${table.schema}.${table.name}`}
+                              className="flex items-center justify-between gap-3 rounded border border-edge bg-raised/40 px-3 py-2 text-xs"
+                            >
+                              <span className="truncate font-mono text-fg">
+                                {table.schema}.{table.name}
+                              </span>
+                              <span className="shrink-0 text-muted">
+                                {table.columns?.length ? `${table.columns.length} columns` : "all columns"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-muted">
+                          Name a table in step 1, or run a model in step 2, and it appears here.
+                        </p>
+                      )}
+                    </div>
+                  </section>
+                )}
+              </fieldset>
+            </div>
+            <div
+              hidden={section !== "data"}
+              className={`${PANEL} rounded-xl overflow-hidden rounded-xl`}
+            >
+              <header className="border-b border-edge px-4 py-3">
+                <h2 className="text-sm font-semibold text-fg">
+                  Explore exposed data
+                </h2>
+              </header>
+              <DatasetExplorer
+                catalog={explorerCatalog}
+                query={previewDraft}
+                paginate={false}
+              />
+            </div>
+            {id && kind === "stored" && (
+              <div hidden={section !== "actions"}>
+                <DatasetPolicies artifactId={id} expanded />
+              </div>
+            )}
+            <div
+              hidden={section !== "source"}
+              className="mx-auto mt-6 max-w-4xl space-y-6"
+            >
+              <details className={`group ${PANEL} overflow-hidden rounded-xl`}>
+                <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 sm:px-5 [&::-webkit-details-marker]:hidden">
+                  <ChevronRight size={14} className="text-muted transition-transform group-open:rotate-90" />
+                  <span className="text-sm font-semibold text-fg">Advanced</span>
+                  <span className="text-xs text-muted">default schema · result cache · source markup</span>
+                </summary>
+                <div className="space-y-5 border-t border-edge p-4 sm:p-5">
+                  <fieldset disabled={Boolean(busy) || sourceText !== null} className="grid gap-4 sm:grid-cols-2">
+                  <Field name="Default schema">
+                    <span className="text-[11px] leading-4 text-faint">Assumed when a table is named without a schema, in notebook SQL and in agent edits. Fixed once the dataset is created.</span>
+                    <select
+                      aria-label="Default schema"
+                      disabled={Boolean(id)}
+                      className={control}
+                      value={defaultSchema}
+                      onChange={(e) => setDefaultSchema(e.target.value)}
+                    >
+                      <option value="">Automatic ({selectedSchemas[0] ?? "public"})</option>
+                      {[
+                        ...new Set([
+                          ...selectedSchemas,
+                          ...(defaultSchema ? [defaultSchema] : []),
+                        ]),
+                      ].map((schema) => (
+                        <option key={schema}>{schema}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field name="Result cache (seconds)">
+                    <span className="text-[11px] leading-4 text-faint">PostgreSQL results are served from cache this long before being queried again; 0 queries the database on every read. Ignored for JSON tables.</span>
+                    <Input
+                      aria-label="Refresh interval"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={refreshSeconds}
+                      onChange={(e) =>
+                        setRefreshSeconds(Number(e.target.value))
+                      }
+                    />
+                  </Field>
+                  </fieldset>
+              <section
+                className="space-y-3"
+                aria-label="Dataset definition"
+              >
+                {sourceText === null ? (
+                  <Button
+                    aria-label="Edit dataset source"
+                    variant="ghost"
+                    disabled={Boolean(busy)}
+                    onClick={() => {
+                      try {
+                        setSourceText(
+                          serializeDatasetDefinition(
+                            buildCatalog(connection, false),
+                          ),
+                        );
+                        setError("");
+                      } catch (err) {
+                        setError(
+                          err instanceof Error
+                            ? err.message
+                            : "Could not show source.",
+                        );
+                      }
+                    }}
+                  >
+                    Edit source markup
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <Field name="Dataset source markup">
+                      <textarea
+                        aria-label="Dataset source"
+                        spellCheck={false}
+                        className={`${control} min-h-64 resize-y text-xs leading-5`}
+                        value={sourceText}
+                        onChange={(e) => setSourceText(e.target.value)}
+                      />
+                    </Field>
+                    <p className="text-xs text-muted">
+                      Apply markup to update the visual editor. Passwords are
+                      represented by secret references.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        aria-label="Apply dataset source"
+                        onClick={() => {
+                          try {
+                            const definition =
+                              parseDatasetDefinition(sourceText);
+                            if (
+                              id &&
+                              definition.defaultSchema !== defaultSchema
+                            )
+                              throw new Error(
+                                "The default schema of an existing dataset cannot change.",
+                              );
+                            loadDefinition(definition, undefined, true);
+                            setSourceText(null);
+                            setError("");
+                          } catch (err) {
+                            setError(
+                              err instanceof Error
+                                ? err.message
+                                : "Invalid dataset source.",
+                            );
+                          }
+                        }}
+                      >
+                        Apply source
+                      </Button>
+                      <Button
+                        aria-label="Cancel dataset source"
+                        variant="ghost"
+                        onClick={() => setSourceText(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </section>
+                </div>
+              </details>
+              <div className="flex items-center gap-4">
+                <Button
+                  aria-label="Save dataset"
+                  disabled={Boolean(busy) || sourceText !== null}
+                  onClick={() =>
+                    void run("save", async () => {
+                      const configured =
+                        kind === "postgres"
+                          ? await ensureConnection()
+                          : connection;
+                      const dataset = serializeDatasetDefinition(
+                        buildCatalog(configured),
+                      );
+                      const metadataOnly = Boolean(id && dataset === originalDefinition.current);
+                      const data = await request<{ id: string }>(
+                        id
+                          ? `/api/my/artifacts/${encodeURIComponent(id)}`
+                          : "/api/my/artifacts",
+                        metadataOnly ? { title, expectedState: state } : {
+                          dataset,
+                          title,
+                          ...(id
+                            ? { expectedVersion: version, expectedState: state }
+                            : {
+                                visibility: session?.user
+                                  ? "private"
+                                  : "unlisted",
+                              }),
+                        },
+                        metadataOnly ? "PATCH" : id ? "PUT" : "POST",
+                      );
+                      await onSaved?.();
+                      router.push(`/a/${data.id}`);
+                    })
+                  }
+                >
+                  {busy === "save"
+                    ? "Saving…"
+                    : id
+                      ? "Save changes"
+                      : "Create dataset"}
+                </Button>
+                {busy && (
+                  <span role="status" className="text-sm text-muted">
+                    Working…
+                  </span>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </main>
+    </>
+  );
+}

@@ -1,0 +1,94 @@
+/**
+ * runDataflow: a document's declarations + its datasets → the DataflowState
+ * the island carries. Ordering, overrides, partial re-runs, and failure shape.
+ */
+import { describe, expect, it } from 'vitest';
+import { type JsxNode } from '@/lib/jsx';
+import { splitHelmet } from '@/lib/story/helmet';
+import { runDataflow } from '@/lib/sql/run-dataflow';
+import type { Dataflow } from '@/lib/story/dataflow';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
+
+const flowOf = (helmetChildren: string): Dataflow => {
+  const parsed = parseJsxOrThrow(`<Helmet>${helmetChildren}</Helmet>`);
+  const { content } = splitHelmet(parsed.nodes as JsxNode[]);
+  return { values: content.values, queries: content.queries };
+};
+
+const DATASETS = {
+  abc123: {
+    rows: [{ region: 'EU', revenue: 100 }, { region: 'EU', revenue: 200 }, { region: 'NA', revenue: 300 }],
+    columns: [{ name: 'region', type: 'string' as const }, { name: 'revenue', type: 'number' as const }],
+  },
+};
+
+const FLOW = flowOf(
+  '<Value name="region" type="string" />' +
+  '<Value name="min_rev" type="number" default={0} />' +
+  '<Value name="tiny" type="table" value={[{"k":"a"},{"k":"b"}]} />' +
+  '<Query name="top">{`select region from sales order by revenue desc limit 1`}</Query>' +
+  '<Query name="sales" source="ref:abc123">{`select region, sum(revenue) revenue from public.rows where ($region is null or region = $region) and revenue >= $min_rev group by 1 order by 1`}</Query>' +
+  '<Query name="k">{`select count(*) n from tiny`}</Query>',
+);
+
+describe('runDataflow', () => {
+  it('uses complete local source inputs for joins and aggregates, including empty and null rows', async () => {
+    const flow=flowOf('<Query name="left_rows" source="ref:abc123">{`select * from public.rows`}</Query><Query name="right_rows" source="ref:def456">{`select * from public.rows`}</Query><Query name="stats">{`select count(*) as n, median(a.n) as middle from left_rows a join right_rows b on true`}</Query>');
+    const columns=[{name:'n',type:'number' as const}];
+    for(const rows of [Array.from({length:10005},(_,n)=>({n:n+1})),[{n:null}],[]]) {
+      const state=await runDataflow(flow,{abc123:{rows,columns},def456:{rows:[{n:1}],columns}},{only:['stats']});
+      expect(state.errors).toEqual({});
+      expect(state.tables.stats.rows).toEqual([{n:rows.length,middle:rows.length===10005?5003:null}]);
+      expect(state.tables.left_rows.rows.length).toBe(Math.min(rows.length,10000));
+    }
+  });
+
+  it('runs every query in dependency order with defaults bound and returns tables + values', async () => {
+    const state = await runDataflow(FLOW, DATASETS);
+    expect(state.values).toEqual({ region: null, min_rev: 0 });
+    expect(state.tables.sales.rows).toEqual([{ region: 'EU', revenue: 300 }, { region: 'NA', revenue: 300 }]);
+    expect(state.tables.top.rows).toEqual([{ region: 'EU' }]);
+    expect(state.tables.k.rows).toEqual([{ n: 2 }]);
+    // The inline table is carried as a table too, so an embed can bind it directly.
+    expect(state.tables.tiny).toEqual({ rows: [{ k: 'a' }, { k: 'b' }], columns: [{ name: 'k', type: 'string' }] });
+    expect(state.errors).toEqual({});
+  });
+
+  it('applies value overrides, ignoring undeclared names', async () => {
+    const state = await runDataflow(FLOW, DATASETS, { values: { region: 'NA', bogus: 1 } });
+    expect(state.values).toEqual({ region: 'NA', min_rev: 0 });
+    expect(state.tables.sales.rows).toEqual([{ region: 'NA', revenue: 300 }]);
+  });
+
+  it('re-runs only the requested queries and their inputs when asked', async () => {
+    const state = await runDataflow(FLOW, DATASETS, { values: { region: 'EU' }, only: ['top'] });
+    // `top` reads `sales`, so `sales` had to run too — but `k` did not.
+    expect(state.tables.top.rows).toEqual([{ region: 'EU' }]);
+    expect(state.tables.sales.rows).toEqual([{ region: 'EU', revenue: 300 }]);
+    expect(state.tables.k).toBeUndefined();
+  });
+
+  it('reports a failing query and lets the rest run; a dependent of a failure fails too', async () => {
+    const flow = flowOf(
+      '<Query name="bad" source="ref:abc123">{`select nope from public.rows`}</Query>' +
+      '<Query name="dep">{`select * from bad`}</Query>' +
+      '<Query name="ok">{`select 1 one`}</Query>',
+    );
+    const state = await runDataflow(flow, DATASETS);
+    expect(state.errors.bad).toMatch(/nope/);
+    expect(state.errors.dep).toMatch(/bad/);
+    expect(state.tables.ok.rows).toEqual([{ one: 1 }]);
+    expect(state.tables.bad).toBeUndefined();
+  });
+
+  it('a dataset the caller could not resolve reads as a missing table, named', async () => {
+    const flow = flowOf('<Query name="q" source="ref:gone12">{`select * from public.rows`}</Query>');
+    const state = await runDataflow(flow, {});
+    expect(state.errors.q).toMatch(/ref:gone12/);
+  });
+
+  it('runs nothing for an empty flow', async () => {
+    const state = await runDataflow({ values: [], queries: [] }, {});
+    expect(state).toEqual({ values: {}, tables: {}, errors: {} });
+  });
+});

@@ -1,0 +1,67 @@
+/**
+ * Edit-mode structural CSS for the story `<Grid>` — a hand-vendored subset of
+ * react-grid-layout/css/styles.css (v1.5.2), injected INSIDE the story surface root by the
+ * edit-mode Grid adapter (never `<head>`: head styles are lost by the SVG capture path, and
+ * the top document's stylesheets never reach the iframe realm at all).
+ *
+ * Four deliberate deviations from the library stylesheet:
+ *  - ALL `.react-grid-item` transitions are killed. Chromium does not repaint transformed
+ *    `foreignObject` content mid-transition — items would freeze between positions (the
+ *    dashboard's stale-tiles bug; DashboardView injects the same rule).
+ *  - Only the south-east resize handle rules are carried (the adapter enables only `se`).
+ *  - Anchors inside tiles get `-webkit-user-drag: none`: an embed title is an `<a href>`,
+ *    natively draggable, so a tile drag starting on it also dragged the LINK (URL ghost +
+ *    drop-navigation). The adapter's dragstart preventDefault is the engine-agnostic half.
+ *  - The placeholder is `pointer-events: none`. RGL inserts it on plain MOUSEDOWN (its
+ *    onDragStart runs before any movement) at the pressed tile's own cell, and its
+ *    `z-index: 2` paints it OVER the tile — so on a plain click the mouseup landed on the
+ *    placeholder, the mousedown/mouseup targets differed, and the browser retargeted the
+ *    `click` to their common ancestor: the grid container, not the tile's chart. Selecting
+ *    a chart tile took a drag-and-shake (the dragged item's `z-index: 3` beats the
+ *    placeholder, so only THEN did mouseup land back in the tile). RGL itself calls the
+ *    placeholder "display only"; transparent to input makes that true.
+ *
+ * View mode needs none of this: the pure-CSS Grid positions via compiled Tailwind classes.
+ */
+export const STORY_GRID_EDIT_CSS = `
+.react-grid-layout { position: relative; }
+.mx-grid-grip { position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; z-index: 4; border: 1px solid rgba(100,116,139,.3); border-radius: 50%; background: white; color: #64748b; cursor: grab; touch-action: none; opacity: 0; }
+.react-grid-item:hover > .mx-grid-grip, .react-grid-item:focus-within > .mx-grid-grip, .mx-grid-grip:focus { opacity: 1; }
+@media (hover: none) { .mx-grid-grip { opacity: 1; } }
+@media (pointer: coarse) { .mx-grid-grip, .react-grid-item > .react-resizable-handle { min-width: 44px; min-height: 44px; } }
+.react-grid-item { transition: none !important; }
+.react-grid-item img { pointer-events: none; user-select: none; }
+.react-grid-item a { -webkit-user-drag: none; }
+.react-grid-item.resizing { z-index: 1; will-change: width, height; }
+.react-grid-item.react-draggable-dragging { z-index: 3; will-change: transform; cursor: grabbing; }
+.react-grid-item.react-grid-placeholder {
+  background: var(--primary, #14b8a6);
+  opacity: 0.15;
+  border-radius: 6px;
+  z-index: 2;
+  user-select: none;
+  pointer-events: none;
+}
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+}
+.react-grid-item > .react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 5px;
+  height: 5px;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08);
+}
+.react-grid-item > .react-resizable-handle.react-resizable-handle-se {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+`;

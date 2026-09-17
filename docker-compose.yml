@@ -1,0 +1,30 @@
+# OSS single host: authentication, artifact APIs/UI and local compute.
+# For team access, set the public URL and configure email delivery.
+services:
+  web:
+    build: .
+    image: artifactbin:latest
+    restart: unless-stopped
+    ports:
+      - "${PORT_BIND:-127.0.0.1}:${APP__PORT:-3030}:3000"
+    environment:
+      AUTH__SECRET: ${AUTH__SECRET:?Set AUTH__SECRET in .env}
+      ADMIN__SECRET: ${ADMIN__SECRET:-}
+      APP__PUBLIC_BASE_URL: ${APP__PUBLIC_BASE_URL:-http://localhost:${APP__PORT:-3030}}
+      DATABASE_URL: pglite:///app/data/pglite
+      OBJECT_STORE__LOCAL_DIR: /app/data/objects
+      QUOTA__ARTIFACTS_PER_TOKEN: ${QUOTA__ARTIFACTS_PER_TOKEN:-1000}
+      EMAIL__RESEND_API_KEY: ${EMAIL__RESEND_API_KEY:-}
+      EMAIL__FROM: ${EMAIL__FROM:-artifactbin <login@example.com>}
+      SQL__MAX_ROWS: ${SQL__MAX_ROWS:-10000}
+      EXPORT__INTERNAL_ORIGIN: http://127.0.0.1:3000
+    volumes:
+      - artifactbin_data:/app/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+volumes:
+  artifactbin_data:

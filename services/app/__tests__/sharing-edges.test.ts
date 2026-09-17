@@ -1,0 +1,257 @@
+import {observedRequest} from '@/__tests__/conditional-request';
+/**
+ * Edge cases around the ACL, placement, and the agent surfaces — the ones the
+ * happy-path suites don't reach: share rows outliving their artifact, the
+ * bounds on a share list, a trailing segment that looks like a file id, HTTP
+ * validation, and what the list/metadata surfaces disclose.
+ */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useAppHarness, request } from '@/__tests__/harness';
+import { artifactMetadata, profilePage as UserPage } from '@/test/helpers/pages';
+import {operationHttp} from './operation-http';
+import { DELETE as deleteArtifactRoute, PUT as putArtifact } from '@/app/api/artifacts/[id]/route';
+import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { GET as listMineRoute } from '@/app/api/my/artifacts/route';
+import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
+import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
+import { mintToken } from '@/lib/tokens';
+import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
+
+const harness = useAppHarness();
+const sessionUser = { id: '', email: '' };
+vi.mock('@/auth', () => ({
+  auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
+}));
+const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
+
+
+async function outcome(p: Promise<unknown>): Promise<'render' | 'redirect' | 'notFound'> {
+  try {
+    // The pages answer as data now (test/helpers/pages): the outcome IS the value.
+    const value = await p;
+    if (value && typeof value === 'object' && 'kind' in (value as Record<string, unknown>)) return (value as { kind: 'render' | 'redirect' | 'notFound' }).kind;
+    return 'render';
+  } catch (error) {
+    const digest = String((error as { digest?: string }).digest ?? '');
+    if (digest.startsWith('NEXT_REDIRECT')) return 'redirect';
+    if (digest.includes('NOT_FOUND') || digest.includes('404')) return 'notFound';
+    throw error;
+  }
+}
+
+async function ownerFixture() {
+  const owner = await ensureUsername(await createUser({ email: 'edge@example.com' }));
+  await setUsername(owner.id, 'edgeowner');
+  const t = await mintToken('edge');
+  await claimToken(owner.id, t.token);
+  return { owner, token: t.token };
+}
+
+const create = async (token: string, body: Record<string, unknown>, expected = 201) => {
+  const res = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: token, json: body }));
+  expect(res.status).toBe(expected);
+  return res.json() as Promise<Record<string, unknown> & { id: string }>;
+};
+
+beforeEach(async () => {
+  sessionUser.id = '';
+  sessionUser.email = '';
+});
+
+/*
+ * THE SHARE LIST OUTLIVES THE DELETE, and that is now the whole rule.
+ *
+ * This suite used to say the opposite — "share rows never outlive their
+ * artifact" — because a delete erased the row and a recycled id must never
+ * inherit a stranger's grant. Neither half is true any more: nothing erases an
+ * artifact, so no id is ever freed to be recycled, and a restored document has
+ * to come back shared with the same people. The grants are unreachable
+ * meanwhile for the reason every other dependent row is — the artifact answers
+ * the uniform 404 (trashed-rows.test.ts), so nothing can reach the ACL to use.
+ */
+describe('share rows survive their artifact\'s delete, and the id is never recycled', () => {
+  const sharesFor = async (id: string) =>
+    (await (await harness.db()).query('SELECT 1 FROM artifact_shares WHERE artifact_id = $1', [id])).rows.length;
+  /** Age the stamp past any retention this product has ever had; nothing sweeps. */
+  const age = async (id: string) => {
+    await (await harness.db()).query(`UPDATE artifacts SET deleted_at = now() - interval '400 days' WHERE id = $1`, [id]);
+  };
+
+  it('the bearer DELETE keeps the share list', async () => {
+    const { owner, token } = await ownerFixture();
+    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
+    expect(await sharesFor(doc.id)).toBe(1);
+
+    expect((await deleteArtifactRoute(request(`/api/artifacts/${doc.id}`, { method: 'DELETE', token: token }), params({ id: doc.id }))).status).toBe(200);
+    // A restored document must come back shared with the same people, and
+    // there is no later sweep to take them: the row and its grants are kept.
+    expect(await sharesFor(doc.id)).toBe(1);
+    await age(doc.id);
+    expect(await sharesFor(doc.id)).toBe(1);
+    expect((await (await harness.db()).query('SELECT 1 FROM artifacts WHERE id = $1', [doc.id])).rows).toHaveLength(1);
+  });
+
+  it('the session DELETE does too', async () => {
+    const { owner, token } = await ownerFixture();
+    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: [{email:'a@b.com',role:'viewer'}] } }), params({ id: doc.id }));
+    expect((await deleteMineRoute(request(`/api/my/artifacts/${doc.id}`, { method: 'DELETE' }), params({ id: doc.id }))).status).toBe(200);
+    await age(doc.id);
+    expect(await sharesFor(doc.id)).toBe(1);
+  });
+});
+
+describe('share-list bounds', () => {
+  it('refuses an unbounded list rather than storing it', async () => {
+    const { owner, token } = await ownerFixture();
+    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    const tooMany = Array.from({ length: 101 }, (_, i) => ({email:`u${i}@example.com`,role:'viewer'}));
+    const res = await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: tooMany } }), params({ id: doc.id }));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('invalid_shares');
+  });
+
+  it('takes a list right at the bound, deduped case-insensitively', async () => {
+    const { owner, token } = await ownerFixture();
+    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    const hundred = Array.from({ length: 100 }, (_, i) => ({email:`U${i}@Example.com`,role:'viewer'}));
+    const res = await putSharingRoute(request(`/api/my/artifacts/${doc.id}/sharing`, { method: 'PUT', json: { shares: hundred } }), params({ id: doc.id }));
+    expect(res.status).toBe(200);
+    expect((await res.json()).shares).toHaveLength(100);
+  });
+});
+
+describe('a trailing segment that looks like a file id', () => {
+  /*
+   * There is no listing below the handle any more: a folder is an artifact
+   * with its own id-anchored address, so nesting left the URL entirely. What
+   * used to be "does the file win over the folder of the same name" is now the
+   * simpler pair — an id resolves, and anything else is the uniform 404.
+   */
+  it('an id-shaped segment naming nothing is the uniform 404, never a listing', async () => {
+    const { owner } = await ownerFixture();
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    expect(await outcome(UserPage('@edgeowner', ['abc123']))).toBe('notFound');
+  });
+
+  it('a real file of that id resolves, and heals to its canonical address', async () => {
+    const { owner, token } = await ownerFixture();
+    const doc = await create(token, { title: 'the file', markup: '<h1>x</h1>', visibility: 'public' });
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    // Resolving by id means the canonical redirect, not a listing render.
+    expect(await outcome(UserPage('@edgeowner', [doc.id]))).toBe('redirect');
+  });
+});
+
+describe('what the surfaces disclose', () => {
+  it('a private doc unfurls as nothing — no title for a stranger', async () => {
+    const { token } = await ownerFixture();
+    const doc = await create(token, { title: 'Secret Title', markup: '<h1>x</h1>' });
+    const meta = await artifactMetadata(doc.id);
+    expect(meta).toEqual({});
+  });
+
+  it('both list surfaces carry visibility and placement', async () => {
+    const { owner, token } = await ownerFixture();
+    const box = await create(token, { format: 'folder', title: 'Q3' });
+    await create(token, { title: 'x', markup: '<h1>x</h1>', parent_id: box.id });
+    const byToken = await (await listArtifactsRoute(request('/api/artifacts', { token: token }))).json();
+    expect(byToken.artifacts.find((a: { id: string }) => a.id !== box.id)).toMatchObject({ visibility: 'private', parent_id: box.id, ancestor_ids: [box.id] });
+
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    const byUser = await (await listMineRoute(request('/api/my/artifacts'))).json();
+    expect(byUser.artifacts.find((a: { id: string }) => a.id !== box.id)).toMatchObject({ visibility: 'private', parent_id: box.id, ancestor_ids: [box.id] });
+  });
+
+  it('an invalid visibility or parent on PUT is a 400, not a silent ignore', async () => {
+    const { token } = await ownerFixture();
+    const doc = await create(token, { title: 'x', markup: '<h1>x</h1>' });
+    const notAFolder = await create(token, { title: 'plain', markup: '<h1>z</h1>' });
+    for (const [body, error] of [
+      [{ markup: '<h1>y</h1>', visibility: 'hidden' }, 'invalid_visibility'],
+      // Unknown, and not-a-folder: ONE refusal, because the parent must be
+      // yours and telling them apart says whether an id exists.
+      [{ markup: '<h1>y</h1>', parent_id: 'zzzzzz' }, 'invalid_parent'],
+      [{ markup: '<h1>y</h1>', parent_id: notAFolder.id }, 'invalid_parent'],
+      // The retired PATH field is answered by name, never as "invalid".
+      [{ markup: '<h1>y</h1>', folder: 'reports/q3' }, 'folder_retired'],
+    ] as const) {
+      const res = await putArtifact(await observedRequest(`/api/artifacts/${doc.id}`, { method: 'PUT', token: token, json: body }), params({ id: doc.id }));
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect((await res.json()).error).toBe(error);
+    }
+  });
+});
+
+describe('the advanced HTTP surface preserves sharing policy', () => {
+  it('an anonymous token cannot publish private; an account-owned one defaults to it', async () => {
+    const anon = await mintToken('anon');
+    const refused = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', visibility: 'private' });
+    expect(refused.isError).toBe(true);
+    expect(refused.data.error).toBe('private_requires_account');
+
+    const anonDefault = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    expect(anonDefault.data.visibility).toBe('public');
+
+    const { token } = await ownerFixture();
+    const owned = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    expect(owned.data.visibility).toBe('private');
+  });
+
+  it('update_artifact HONOURS visibility and parent_id — the doc tells agents to use it', async () => {
+    const { token } = await ownerFixture();
+    const box = await operationHttp(token, 'create_artifact', { format: 'folder', title: 'Shared' });
+    expect(box.isError).toBe(false);
+    const made = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    expect(made.data.visibility).toBe('private');
+
+    // "make it shareable" — the agent's only lever, and it must actually pull.
+    const updated = await operationHttp(token, 'update_artifact', {
+      id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'public', parent_id: box.data.id as string,
+    });
+    expect(updated.isError).toBe(false);
+    expect(updated.data.visibility).toBe('public');
+
+    const row = await (await harness.db()).query<{ visibility: string; ancestor_ids: string[] }>(
+      'SELECT visibility, ancestor_ids FROM artifacts WHERE id = $1', [made.data.id],
+    );
+    expect(row.rows[0]).toEqual({ visibility: 'public', ancestor_ids: [box.data.id] });
+  });
+
+  it('update_artifact refuses private on an anonymous token, like the REST route', async () => {
+    const anon = await mintToken('anon2');
+    const made = await operationHttp(anon.token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>' });
+    const refused = await operationHttp(anon.token, 'update_artifact', {
+      id: made.data.id as string, markup: '<h1>y</h1>', visibility: 'private',
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused.data.error).toBe('private_requires_account');
+  });
+
+  it('rejects an unreachable parent instead of storing it, and names the retired field', async () => {
+    const { token } = await ownerFixture();
+    const bad = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: 'zzzzzz' });
+    expect(bad.isError).toBe(true);
+    expect(bad.data.error).toBe('invalid_parent');
+
+    const retired = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', folder: 'reports/q3' });
+    expect(retired.isError).toBe(true);
+    expect(retired.data.error).toBe('folder_retired');
+
+    const box = await operationHttp(token, 'create_artifact', { format: 'folder', title: 'Reports' });
+    const good = await operationHttp(token, 'create_artifact', { title: 'x', markup: '<h1>x</h1>', parent_id: box.data.id as string });
+    expect(good.isError).toBe(false);
+  });
+});

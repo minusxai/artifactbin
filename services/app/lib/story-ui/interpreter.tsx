@@ -1,0 +1,524 @@
+/**
+ * Story interpreter: validated static-JSX AST → React elements over an
+ * injected component registry. No eval, ever — the AST is data, the registry is code we ship.
+ *
+ * Runs inside the document's own React tree (the runtime hydrates it there).
+ * Defense in depth: `validateJsxSource` is the
+ * authoring gate, but the interpreter independently drops dangerous props (handlers, HTML
+ * injection, dangerous URL schemes), so an unvalidated AST still can't reach React unsafely.
+ *
+ * Every element is stamped with `data-mx-ast` (its path in the AST, e.g. "0.2.1") — the
+ * WYSIWYG write-back uses it to map a DOM edit to the JSX source node it came from. The
+ * stamped DOM is render output only; new-format stories persist JSX source, never DOM.
+ */
+import React from 'react';
+import { keyedRowsError, validRowKey, commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
+import type { CommentTarget } from '@/lib/story/comment-target';
+import { DENIED_JSX_ATTRS } from '@/lib/jsx/denied-attrs';
+import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
+import { compileManagedIframe } from '@/lib/story/managed-iframe';
+import type { JsxNode, JsxElement } from '@/lib/jsx';
+import { immutableSet } from '@/lib/utils/immutable-collections';
+import { hasDangerousScheme, listHasDangerousScheme } from '@/lib/jsx/validate';
+// Shared with the save-time gate in lib/jsx/validate.ts — see lib/jsx/url-attrs.ts
+// for why these must not be maintained separately.
+import { URL_ATTRS as URL_PROPS, URL_LIST_ATTRS as URL_LIST_PROPS, SVG_PAINT_ATTRS, paintHasExternalUrl } from '@/lib/jsx/url-attrs';
+import { STORY_SVG_TAGS } from './component-names';
+import { carriesRef, REF_ATTRS, refName } from '@/lib/story/dataflow';
+import type { JsxAttribute } from '@/lib/jsx';
+import { substituteRow, parseRowRef } from '@/lib/story/row-scope';
+import type { ColumnTemplate } from '@/components/kit/data-table';
+
+/** A keyed row action captures row values at invocation, without a cell draft. */
+export interface RowActionProps {
+  props: Record<string, unknown>;
+  row: Record<string, unknown>;
+  identity: string;
+  children?: React.ReactNode;
+}
+
+export interface CellControlProps {
+  tag: string;
+  component?: React.ComponentType<Record<string, unknown>>;
+  props: Record<string, unknown>;
+  row: Record<string, unknown>;
+  identity: string;
+  column: string;
+  rowKey: unknown;
+  tableName?: string;
+  valueField?: string;
+  children?: React.ReactNode;
+}
+
+/**
+ * A native form control whose `value`/`checked`/`options` is a `$name`
+ * reference (lib/story/dataflow.ts REF_ATTRS). The interpreter hands the
+ * element to the registered `boundControl` component instead of the tag: the
+ * bound attributes are REMOVED from `props` (a literal "$region" must never
+ * reach the DOM) and named in `bind`, so the control can read and write the
+ * document's store. Authored children (a `<select>`'s own `<option>`s) pass
+ * through.
+ */
+export interface BoundControlProps {
+  tag: 'input' | 'select' | 'textarea';
+  props: Record<string, unknown>;
+  bind: { value?: string; checked?: string; options?: string };
+  children?: React.ReactNode;
+}
+
+/**
+ * A `$`-bound SOURCE: `<img src="$pick">`, or the braced form
+ * `<img src="https://cdn.x.com/{$pick}.png">`.
+ *
+ * Its own seam rather than the control one above, because nothing about it is a
+ * control: no two-way write, no `disabled`, and the resolved value is a URL
+ * that must be mapped to our own copy before it reaches the DOM
+ * (lib/story/asset-url). `template` is the attribute value verbatim — resolving
+ * it is `resolveRefTemplate`, and both ends of the wire call the same function.
+ */
+export interface BoundSourceProps {
+  tag: 'img';
+  /** Everything the author wrote except the bound attribute itself. */
+  props: Record<string, unknown>;
+  /** The `src` the author wrote: `$pick`, or a string carrying `{$pick}`. */
+  template: string;
+}
+
+export interface StoryInterpreterOptions {
+  values?: Record<string, unknown>;
+  tables?: Record<string, { rows: Record<string, unknown>[] }>;
+  repeatScope?: { owner: string; key: string | number; durable: boolean; ids: Set<string> };
+  tableCommentScope?: { owner: string; rowKey?: string | number; index: number; columnKey: string; ids: Set<string> };
+  /** Component registry: shadcn components + embeds. Unknown component tags render nothing. */
+  components: Record<string, React.ComponentType<Record<string, unknown>>>;
+  /**
+   * Renders a `$`-bound native control (see BoundControlProps). Absent, the
+   * control renders STATIC — bound attributes stripped, `disabled` — which is
+   * what a render with no store behind it wants: a control that looks right
+   * and cannot pretend to work.
+   */
+  boundControl?: React.ComponentType<BoundControlProps>;
+  /**
+   * Renders a `$`-bound image source (see BoundSourceProps). Absent, the image
+   * renders with NO src and the binding named on `data-mx-bound` — the same
+   * honesty as the static control: the alt text stands where the picture would
+   * be, rather than a `$pick` in the DOM the browser would try to fetch.
+   */
+  boundSource?: React.ComponentType<BoundSourceProps>;
+  /**
+   * Optional per-element decoration hook, called with every rendered element node (the built
+   * React element, its AST node, and its AST path). The WYSIWYG editor uses it to wrap text
+   * hosts with contenteditable + the render-during-edit freeze. The returned node replaces
+   * the element in the tree — implementations must keep `element`'s key (identity across
+   * re-renders, see `keyFor`) on whatever they return.
+   */
+  decorateChildren?: (children: React.ReactNode[], nodes: JsxNode[], parentPath: string) => React.ReactNode;
+  decorateElement?: (element: React.ReactElement, node: JsxElement, path: string) => React.ReactNode;
+  /**
+   * The React key for the node at a path (lib/story-ui/node-identity). Absent,
+   * the path IS the key — correct for a tree rendered once, wrong for one that
+   * is re-rendered after an edit: paths are positional, so removing a node
+   * renumbers its siblings and React remounts every one of them and their
+   * subtrees. A renderer that re-renders a document supplies this.
+   */
+  keyFor?: (path: string) => string;
+  row?: Record<string, unknown>;
+  cellScope?: { table: string; key: unknown; column: string; tableName?: string };
+  rowAction?: React.ComponentType<RowActionProps>;
+  cellControl?: React.ComponentType<CellControlProps>;
+}
+
+/** JSX attr names → React prop names for HTML tags (agents author HTML spellings). */
+const HTML_ATTR_TO_REACT: Record<string, string> = { class: 'className', for: 'htmlFor' };
+
+/**
+ * SVG is case-sensitive where HTML is not: `createElement('clippath')` is an
+ * unknown element and a `viewbox` attribute is silently ignored. The interpreter
+ * lowercases HTML tags (below), so canonical SVG casing must be restored for
+ * both tags and the camelCase attribute set, whatever casing was authored.
+ */
+const SVG_TAG_CASE: Record<string, string> = Object.fromEntries(
+  STORY_SVG_TAGS.filter(t => t !== t.toLowerCase()).map(t => [t.toLowerCase(), t]),
+);
+const SVG_CAMEL_ATTRS = [
+  'viewBox', 'preserveAspectRatio', 'gradientUnits', 'gradientTransform', 'spreadMethod',
+  'clipPathUnits', 'stopColor', 'stopOpacity',
+  'strokeWidth', 'strokeLinecap', 'strokeLinejoin', 'strokeDasharray', 'strokeDashoffset',
+  'strokeOpacity', 'strokeMiterlimit', 'fillOpacity', 'fillRule', 'clipRule',
+  'textAnchor', 'dominantBaseline', 'textLength', 'lengthAdjust', 'baselineShift',
+] as const;
+const SVG_ATTR_CASE: Record<string, string> = Object.fromEntries(
+  SVG_CAMEL_ATTRS.map(a => [a.toLowerCase(), a]),
+);
+
+/** Controlled props mapped to their uncontrolled forms — authored markup has no handlers. */
+const CONTROLLED_TO_DEFAULT: Record<string, string> = {
+  value: 'defaultValue', open: 'defaultOpen', checked: 'defaultChecked',
+};
+/**
+ * `value` is only a CONTROLLED prop on the stateful roots (Tabs/Accordion select a value).
+ * Everywhere else it's identity or data — TabsTrigger/TabsContent/AccordionItem use `value`
+ * to NAME a pane, Progress uses it as the displayed number — and rewriting those to
+ * `defaultValue` breaks the component. Restrict the mapping to the roots.
+ *
+ * …and to the HTML form controls, where it means the same thing for the opposite
+ * reason: authored markup is STATIC and a document's own `<script>` drives it,
+ * so `value`/`checked` are the starting state. Passed through as-is React makes
+ * the field controlled with no onChange — it warns, and then refuses every
+ * keystroke, which is an authored form that silently does not work.
+ */
+const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
+const FORM_CONTROL_TAGS = immutableSet(['input', 'textarea', 'select']);
+
+/** Name-denied props, lowercase (mirrors lib/jsx/validate.ts DENIED_ATTRS + React internals). */
+const DENIED_PROPS = DENIED_JSX_ATTRS;
+
+/** URL-bearing props, lowercase (scheme-filtered; list-valued ones checked per entry). */
+
+import { AST_PATH_ATTR } from './ast-path';
+export { AST_PATH_ATTR } from './ast-path';
+
+export function renderStoryNodes(nodes: JsxNode[], options: StoryInterpreterOptions): React.ReactNode {
+  const children = nodes.map((n, i) => renderNode(n, options, String(i)));
+  return options.decorateChildren ? options.decorateChildren(children, nodes, '') : children;
+}
+
+function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: string): React.ReactNode {
+  if (node.type === 'text') return options.row ? substituteRow(node.value, options.row) : node.value;
+  if (node.type === 'expression') {
+    if (!node.value.static) {
+      if (isReactiveExpression(node.value.reactive)) {
+        const value = evaluateReactive(node.value.reactive, options.values ?? {}, options.row);
+        return typeof value === 'string' || typeof value === 'number' ? value : null;
+      }
+      const field = options.row ? /^\s*\$_row\.([A-Za-z_]\w*)\s*$/.exec(node.source)?.[1] : null;
+      return field ? String(options.row?.[field] ?? '') : null;
+    }
+    const v = node.value.json;
+    return typeof v === 'string' || typeof v === 'number' ? String(v) : null;
+  }
+
+  if (node.control) {
+    if (node.control.kind === 'fragment') {
+      return React.createElement(React.Fragment, {key: path}, ...node.children.map((child, i) => renderNode(child, options, `${path}.${i}`)));
+    }
+    if (!isReactiveExpression(node.control.test) || node.children.length !== 2) return null;
+    const value = evaluateReactive(node.control.test, options.values ?? {}, options.row);
+    if (node.control.kind === 'and' && !value) return typeof value === 'number' ? value : null;
+    const index = value ? 0 : 1;
+    return renderNode(node.children[index], options, `${path}.${index}`);
+  }
+
+  const buildProps = (...args: Parameters<typeof rawBuildProps>) => scopeProps(rawBuildProps(...args), options);
+  if (node.tag === 'For') {
+    if (options.row) return React.createElement('div', {role: 'alert', key: path}, 'Nested For is not supported');
+    const each = node.attributes.find(a => a.name === 'each');
+    const keyBy = node.attributes.find(a => a.name === 'keyBy')?.value;
+    const owner = node.attributes.find(a => a.name === 'id')?.value;
+    const expr = each && !each.value.static ? each.value.reactive : undefined;
+    const name = expr?.kind === 'signal' ? expr.name : null;
+    if (!name) return React.createElement('div', {role: 'alert', key:path}, 'For requires each={$table}');
+    if (keyBy && (!keyBy.static || typeof keyBy.json !== 'string' || !keyBy.json)) return React.createElement('div', {role:'alert',key:path}, 'For keyBy must be a nonempty field name when supplied');
+    const keyField = keyBy?.static ? keyBy.json as string : undefined;
+    const source = options.tables?.[name]?.rows ?? options.values?.[name] ?? [];
+    if (!Array.isArray(source) || source.some(row => !row || typeof row !== 'object' || Array.isArray(row))) return React.createElement('div', {role:'alert', key:path}, 'For requires table rows');
+    const error = source.length > 1000 ? 'For supports at most 1000 rows' : source.length * templateSize(node.children) > 50000 ? 'For expansion exceeds 50000 nodes' : keyField === undefined ? null : keyedRowsError(source, keyField, 'keyBy');
+    if (error) return React.createElement('div', {role:'alert', key:path}, error);
+    const ownerId = owner?.static && typeof owner.json === 'string' ? owner.json : '';
+    const ids = templateIds(node.children);
+    const wrapper = buildProps(node.attributes.filter(a=>a.name !== 'each' && a.name !== 'keyBy'),true,node.tag,path,undefined,options.values);
+    const instances = source.map((row,index) => {
+      const key = keyField === undefined ? index : row[keyField] as string | number;
+      return React.createElement(React.Fragment, {key:JSON.stringify([keyField === undefined ? 'index' : 'key',typeof key,key])}, ...node.children.map((child,i) => renderNode(child, {...options,row,repeatScope:{owner:ownerId,key,durable:keyField !== undefined,ids}}, `${path}.${i}`)));
+    });
+    // Table rows and cells: no wrapper element. A `<div>` inside `<tbody>` or `<tr>` is not valid HTML;
+    // the browser hoists it out of the table while parsing the server-rendered page, so hydration
+    // sees a different DOM and fails with React error 418 (eval run 34741910427, pi deck). The
+    // instances still carry the owner attribute; only the wrapper's own id and classes have nowhere to go.
+    const tableParts = node.children.every(child => child.type === 'text' ? !child.value.trim() : child.type === 'element' && ['tr','td','th'].includes(child.tag));
+    if (tableParts) return React.createElement(React.Fragment, {key:options.keyFor?.(path) ?? path}, ...instances);
+    return React.createElement('div', {...wrapper,id: ownerId || undefined, key:options.keyFor?.(path) ?? path, style:{minHeight:1,...(wrapper.style as object ?? {})}}, ...instances);
+  }
+  if (options.repeatScope && node.attributes.some(a=>(['value','checked','options'].includes(a.name) || (a.name === 'run' && node.tag !== 'Button')) && a.value.static && refName(a.value.json))) return React.createElement('div', {role:'alert',key:path}, 'Bound controls inside For are not supported; use editable DataTable columns');
+  if (options.repeatScope && ['DataTable', 'Iframe'].includes(node.tag)) return React.createElement('div', {role:'alert',key:path}, 'DataTable and Iframe must be outside For templates');
+  const isComponent = node.isComponent;
+  const Component = isComponent ? options.components[node.tag] : null;
+  if (isComponent && !Component) return null; // validator rejects these; render stays safe regardless
+
+  if (node.tag === 'Iframe' && Component) {
+    try {
+      const compiled = compileManagedIframe(node);
+      const props = buildProps(node.attributes, true, node.tag, path, options.row);
+      const element = React.createElement(Component, { ...props, compiled, key: options.keyFor?.(path) ?? path });
+      return options.decorateElement ? options.decorateElement(element, node, path) : element;
+    } catch { return null; }
+  }
+
+  if (node.tag === 'DataTable' && Component) {
+    const props = buildProps(node.attributes, true, node.tag, path, options.row, options.values);
+    const templates: ColumnTemplate[] = node.children.flatMap((child, index) => {
+      if (child.type !== 'element' || child.tag !== 'Column') return [];
+      const cp = buildProps(child.attributes, true, child.tag, `${path}.${index}`, options.row, options.values);
+      return typeof cp.col === 'string' ? [{ col: cp.col, title: typeof cp.title === 'string' ? cp.title : undefined, props: cp, nodes: child.children, path: `${path}.${index}` }] : [];
+    });
+    const renderCell = (template: ColumnTemplate, row: Record<string, unknown>, index = 0) => template.nodes.map((child, i) => renderNode(child, {
+      ...options, row, tableCommentScope: typeof props.id === 'string' ? {owner: props.id, index, rowKey: validRowKey(row[String(props.rowKey)]) ? row[String(props.rowKey)] as string | number : undefined, columnKey:template.col, ids:templateIds(template.nodes)} : undefined, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col, tableName: refName(props.data) ?? undefined },
+    }, `${template.path}.${i}`));
+    const element = React.createElement(Component, { ...props, commentOwner: props.id, templates, renderCell, key: options.keyFor?.(path) ?? path });
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
+
+  const run = node.attributes.find((a) => a.name === 'run');
+  if (options.row && node.tag === 'Button' && run?.value.static && refName(run.value.json)) {
+    if (node.attributes.some(a => ['value', 'checked', 'options'].includes(a.name))) return React.createElement('span', {role:'alert',key:path}, 'Row action buttons do not accept editor bindings');
+    const key = options.repeatScope?.key ?? options.cellScope?.key;
+    if ((options.repeatScope && !options.repeatScope.durable) || !validRowKey(key)) return React.createElement('span', {role:'alert',key:path}, 'Row actions require a stable row key');
+    const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
+    const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+    const identity = JSON.stringify([options.repeatScope?.owner ?? options.cellScope?.table, typeof key, key, options.keyFor?.(path) ?? path, run.value.json]);
+    if (!options.rowAction) return React.createElement(Component ?? 'button', {...props, ...(Component ? {} : {run:undefined}), disabled:true, key:path}, ...children);
+    const element = React.createElement(options.rowAction, {key:identity, props, row:options.row, identity}, ...children);
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
+  if (options.row && options.cellControl && run?.value.static && typeof run.value.json === 'string' && refName(run.value.json)) {
+    const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
+    const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+    return React.createElement(options.cellControl, { key: options.keyFor?.(path) ?? path, tag: node.tag, component: Component ?? undefined, props, row: options.row, identity: JSON.stringify([options.cellScope?.table, typeof options.cellScope?.key, options.cellScope?.key, options.cellScope?.column, path]), column: options.cellScope?.column ?? '', rowKey: options.cellScope?.key, tableName: options.cellScope?.tableName, valueField: node.attributes.flatMap((a) => a.name === 'value' && a.value.static ? [parseRowRef(a.value.json)] : [])[0] ?? undefined, children });
+  }
+
+  // A `$`-bound image SOURCE goes to its own seam, for the same reason as the
+  // control below: the reference must never reach the DOM, and here the
+  // resolved value additionally has to be mapped to our copy of it.
+  const source = isComponent ? null : boundSourceAttr(node);
+  if (source) {
+    const props = buildProps(node.attributes.filter((a) => a !== source.attr), false, node.tag, path, options.row, options.values);
+    const Source = options.boundSource ?? StaticBoundSource;
+    const element = React.createElement(Source, {
+      key: options.keyFor?.(path) ?? path, tag: 'img' as const, props, template: source.template,
+    });
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
+
+  // A `$`-bound native control goes to the bound-control seam. Decided HERE,
+  // before buildProps rewrites value→defaultValue: this is the one place the
+  // element TYPE can change, and the reference must never reach the DOM.
+  const bound = isComponent ? null : boundAttrs(node);
+  if (bound) {
+    const rest = node.attributes.filter((a) => !bound.attrs.has(a));
+    const props = buildProps(rest, false, node.tag, path, options.row, options.values);
+    const children = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+    const Control = options.boundControl ?? StaticBoundControl;
+    const element = React.createElement(Control, {
+      key: options.keyFor?.(path) ?? path, tag: node.tag.toLowerCase() as BoundControlProps['tag'], props, bind: bound.bind,
+    }, ...children);
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
+
+  const props = buildProps(node.attributes, isComponent, node.tag, path, options.row, options.values);
+  const rendered = node.children.map((c, i) => renderNode(c, options, `${path}.${i}`));
+  const children = options.decorateChildren && !options.row && node.children.length > 0 && (!node.isComponent || ['GridItem','Slide'].includes(node.tag))
+    ? [options.decorateChildren(rendered, node.children, path)] : rendered;
+  const type = (Component ?? SVG_TAG_CASE[node.tag.toLowerCase()] ?? node.tag.toLowerCase()) as React.ElementType;
+  // Void HTML elements must not receive children (React throws).
+  const kids = children.length > 0 ? children : undefined;
+  // Decided here, never read from the author: a trigger that already holds a
+  // control must not draw a second one around it (wrapsControl below).
+  const trigger = isComponent && BUTTON_TRIGGERS.has(node.tag) ? { wrapsControl: wrapsControl(node) } : null;
+  const element = React.createElement(type, { ...props, ...trigger, key: options.keyFor?.(path) ?? path }, ...(kids ?? []));
+  return options.decorateElement ? options.decorateElement(element, node, path) : element;
+}
+
+/**
+ * The story components that render a plain `<button>` around whatever the
+ * author put in them. The other triggers (Tabs/Accordion/Collapsible/Popover)
+ * carry `role`/`aria-expanded`/`aria-controls` on that button and are left
+ * alone: they are not interchangeable with a span.
+ */
+const BUTTON_TRIGGERS = new Set(['DialogTrigger', 'DialogClose']);
+
+/**
+ * The tags that draw something INTERACTIVE, which the HTML content model
+ * forbids inside a `<button>`: the browser closes the button early and promotes
+ * the inner control to its sibling, so the parsed page and React's tree
+ * disagree and hydration fails with error 418 (components/kit/dialog
+ * DialogTrigger; the same parse-time reshaping as a `<div>` in a `<tbody>`).
+ */
+const INTERACTIVE_TAGS = new Set(['button', 'a', 'input', 'select', 'textarea', 'label', 'Button', 'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch']);
+
+/** Does this trigger already hold a control of its own — at any depth? */
+function wrapsControl(node: JsxElement): boolean {
+  return node.children.some((child) => child.type === 'element'
+    && (INTERACTIVE_TAGS.has(child.tag) || INTERACTIVE_TAGS.has(child.tag.toLowerCase()) || wrapsControl(child)));
+}
+
+/** The bound `src` on an `<img>`, or null when it carries no reference. */
+function boundSourceAttr(node: JsxElement): { attr: JsxAttribute; template: string } | null {
+  if (node.tag.toLowerCase() !== 'img') return null;
+  const attr = node.attributes.find((a) => a.name.toLowerCase() === 'src');
+  if (!attr || !attr.value.static || typeof attr.value.json !== 'string') return null;
+  return carriesRef(attr.value.json) ? { attr, template: attr.value.json } : null;
+}
+
+/**
+ * The static rendering of a bound image: everything the author wrote, no src,
+ * and the binding named. The alt text is what a reader sees — which is the
+ * honest answer for a render that has no store and no asset endpoint behind it.
+ */
+function StaticBoundSource({ props, template }: BoundSourceProps) {
+  return React.createElement('img', { ...props, 'data-mx-bound': `src:${template}` });
+}
+
+/**
+ * The `$name` bindings on a native form control, or null when it has none.
+ *
+ * Gated on the FORM control tags rather than on REF_ATTRS having an entry: the
+ * reference table also carries `img.src`, which is a bound SOURCE and not a
+ * control at all — without this an `<img>` would render through the control
+ * seam, which sets `disabled` and speaks a two-way value it has no idea what to
+ * do with.
+ */
+function boundAttrs(node: JsxElement): { bind: BoundControlProps['bind']; attrs: Set<JsxAttribute> } | null {
+  if (!FORM_CONTROL_TAGS.has(node.tag.toLowerCase())) return null;
+  const table = REF_ATTRS.html[node.tag.toLowerCase()];
+  if (!table) return null;
+  const bind: BoundControlProps['bind'] = {};
+  const attrs = new Set<JsxAttribute>();
+  for (const a of node.attributes) {
+    const key = a.name.toLowerCase() as keyof BoundControlProps['bind'];
+    if (!table[key] || !a.value.static) continue;
+    const name = refName(a.value.json);
+    if (!name) continue;
+    bind[key] = name;
+    attrs.add(a);
+  }
+  return attrs.size ? { bind, attrs } : null;
+}
+
+/**
+ * The static rendering of a bound control: the element with its bindings
+ * stripped and `disabled` set — right shape, no pretence of working. The
+ * runtime supplies the live one (StoryRuntimeApp).
+ */
+function StaticBoundControl({ tag, props, bind, children }: BoundControlProps) {
+  const bindings = Object.entries(bind).map(([k, v]) => `${k}:$${v}`).join(' ');
+  return React.createElement(tag, { ...props, disabled: true, 'data-mx-bound': bindings }, ...(React.Children.toArray(children)));
+}
+
+function rawBuildProps(
+  attributes: JsxAttribute[],
+  isComponent: boolean,
+  tag: string,
+  path: string,
+  row?: Record<string, unknown>,
+  values: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const props: Record<string, unknown> = { [AST_PATH_ATTR]: path };
+  for (const a of attributes) {
+    const lower = a.name.toLowerCase();
+    if (lower.startsWith('on') || DENIED_PROPS.has(lower)) continue;
+    if (!a.value.static) {
+      if (REACTIVE_BOOLEAN_PROPS.has(a.name) && isReactiveExpression(a.value.reactive)) {
+        props[a.name] = Boolean(evaluateReactive(a.value.reactive, values, row));
+      }
+      continue;
+    }
+
+    let name = HTML_ATTR_TO_REACT[a.name] ?? SVG_ATTR_CASE[lower] ?? a.name;
+    let value = row && lower !== 'id' ? substituteRow(a.value.json, row) : a.value.json;
+
+    // Dangerous URL schemes dropped (browser-normalized check — see lib/jsx/validate.ts).
+    if (typeof value === 'string') {
+      const dangerous = URL_LIST_PROPS.has(lower)
+        ? listHasDangerousScheme(value, lower)
+        : URL_PROPS.has(lower) && hasDangerousScheme(value);
+      if (dangerous) continue;
+      // SVG paint references must stay local — url(#id) only (see url-attrs.ts).
+      if (SVG_PAINT_ATTRS.has(lower) && paintHasExternalUrl(value)) continue;
+    }
+
+    // `style`: authored as a CSS string (HTML idiom) or an object — React needs an object.
+    if (name === 'style') {
+      const style = typeof value === 'string' ? cssStringToStyleObject(value) : sanitizeStyleObject(value);
+      if (style) props.style = style;
+      continue;
+    }
+
+    // Objects/arrays: meaningful as component props (viz/params envelopes); dropped on HTML
+    // tags, where React would stringify them into attributes to no purpose.
+    if (typeof value === 'object' && value !== null && !isComponent) continue;
+
+    // Controlled → uncontrolled on components (no handlers exist to service controlled props).
+    // `value` only on the stateful roots — see VALUE_CONTROLLED_TAGS — and on
+    // the HTML form controls, where an authored value is the starting state.
+    const controlled = isComponent
+      ? CONTROLLED_TO_DEFAULT[name] && (name !== 'value' || VALUE_CONTROLLED_TAGS.has(tag))
+        // …except on a bound-control component's own binding positions
+        // (REF_ATTRS.components): `checked` on <Switch> is the control's API,
+        // and the adapter — not React — services it.
+        && !REF_ATTRS.components[tag]?.[name]
+      : CONTROLLED_TO_DEFAULT[name] && FORM_CONTROL_TAGS.has(tag.toLowerCase());
+    if (controlled && !row) {
+      name = CONTROLLED_TO_DEFAULT[name];
+    }
+
+    props[name] = value;
+  }
+  return props;
+}
+
+/** "margin-top: 4px; color: red" → { marginTop: '4px', color: 'red' } (custom props kept as-is). */
+function cssStringToStyleObject(css: string): Record<string, string> | null {
+  const out: Record<string, string> = {};
+  for (const decl of css.split(';')) {
+    const idx = decl.indexOf(':');
+    if (idx === -1) continue;
+    const rawProp = decl.slice(0, idx).trim();
+    const value = decl.slice(idx + 1).trim();
+    if (!rawProp || !value) continue;
+    const prop = rawProp.startsWith('--')
+      ? rawProp
+      : rawProp.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase()).replace(/^(webkit|moz|ms|o)([A-Z])/, (_, p: string, c: string) => p[0].toUpperCase() + p.slice(1) + c);
+    out[prop] = value;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+/** Style objects: plain string/number values only — never nested structures or functions-as-data. */
+function sanitizeStyleObject(value: unknown): Record<string, string | number> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const out: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v === 'string' || typeof v === 'number') out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function templateSize(nodes: JsxNode[]): number {
+  return nodes.reduce((sum,node)=>sum+1+(node.type==='element'?templateSize(node.children):0),0);
+}
+function templateIds(nodes: JsxNode[]): Set<string> {
+  const ids = new Set<string>();
+  const visit = (nodes: JsxNode[]) => nodes.forEach(node => { if(node.type === 'element') { const id = node.attributes.find(a=>a.name==='id')?.value; if(id?.static && typeof id.json==='string') ids.add(id.json); visit(node.children); } });
+  visit(nodes); return ids;
+}
+function scopeProps(props: Record<string,unknown>, options: StoryInterpreterOptions): Record<string,unknown> {
+  const repeat = options.repeatScope, table = options.tableCommentScope;
+  if (!repeat && !table) return props;
+  const owner = repeat?.owner ?? table!.owner;
+  // Index-scoped DOM IDs support labels, but are not durable comment targets.
+  if (repeat && !repeat.durable) delete props[AST_PATH_ATTR];
+  const scope = repeat ? ['repeat',owner,repeat.durable ? typeof repeat.key : 'index',repeat.key] : ['table',owner,typeof table!.rowKey,table!.rowKey ?? ['index',table!.index],table!.columnKey];
+  const ids = repeat?.ids ?? table!.ids;
+  const sourceId = typeof props.id === 'string' ? props.id : undefined;
+  if(sourceId) {
+    const target: CommentTarget = repeat ? {kind:'repeat',scopes:[{nodeId:owner,key:repeat.key}],templateNodeId:sourceId} : {kind:'table',rowKey:table!.rowKey ?? table!.index,columnKey:table!.columnKey,templateNodeId:sourceId};
+    if (repeat?.durable || table?.rowKey !== undefined) Object.assign(props, commentMetadata(owner,target));
+    props.id = instanceDomId(scope,sourceId);
+  }
+  for(const attr of ['htmlFor','aria-labelledby','aria-describedby','aria-controls','aria-owns','aria-activedescendant','aria-details','aria-errormessage','aria-flowto','headers','list','form']) if(typeof props[attr] === 'string') props[attr] = (props[attr] as string).split(/\s+/).map(id=>ids.has(id)?instanceDomId(scope,id):id).join(' ');
+  for(const [attr,value] of Object.entries(props)) if(typeof value==='string') {
+    if(attr==='href' && value.startsWith('#') && ids.has(value.slice(1))) props[attr] = '#'+instanceDomId(scope,value.slice(1));
+    else if(/^url\(#[^)]+\)$/.test(value) && ids.has(value.slice(5,-1))) props[attr] = 'url(#'+instanceDomId(scope,value.slice(5,-1))+')';
+  }
+  return props;
+}

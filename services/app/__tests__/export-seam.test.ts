@@ -1,0 +1,227 @@
+/**
+ * THE BROWSER SEAM, pinned (cleanup/testmig-1, milestone 1 of the test redesign). Route-level export tests must not
+ * launch Chromium: the app reaches its BrowserService through lib/services (`setServices`/`services()`), so a route
+ * test injects utils' `fakeBrowser` and asserts the REQUEST the route builds and the VERDICT it maps — every field
+ * of RenderRequest the route decides, every RenderResult branch the route answers. Real bytes stay with the browser
+ * contract suite and the gates (`gate-full-kit`, `gate-export-slice`).
+ *
+ * Seeded by the orchestrator. Blue → red → blue: break the forwarding of `capture`/`format` in lib/export and this
+ * file must go red; restore and it is blue again.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fakeBrowser } from '@artifactbin/utils';
+import type { RenderRequest, RenderResult } from '@artifactbin/contracts';
+import {exportImage,EXPORT_PNG} from './export-helpers';
+import { createArtifact } from '@/lib/artifacts';
+import {getDb} from '@/lib/db';
+import { objectStore } from '@/lib/object-store';
+import { resetExportRenderer, renderArtifactImage } from '@/lib/export';
+import { setServices } from '@/lib/services';
+import { mintToken } from '@/lib/tokens';
+import { DEFAULT_SOCIAL_PREVIEW_CROP } from '@/lib/story/social-preview';
+import { useAppHarness } from '@/__tests__/harness';
+
+useAppHarness();
+
+const BASE = 'http://localhost:3000';
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const PNG = EXPORT_PNG;
+type Fake = ReturnType<typeof fakeBrowser> & { calls: unknown[] };
+let fake: Fake;
+const browser = (result: RenderResult = {ok:true,mime:'image/png',bytes:PNG}) => { fake = fakeBrowser(result) as Fake; setServices({ browser: fake }); return fake; };
+const lastRequest = () => fake.calls.at(-1) as RenderRequest;
+
+beforeEach(async () => {
+  await resetExportRenderer();
+});
+afterEach(() => setServices({}));
+
+async function doc(): Promise<string> {
+  const t = await mintToken('t');
+  const row = await createArtifact(t.id, null, { format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null });
+  return row.id;
+}
+
+describe('the export route through the browser seam', () => {
+  it('a full-page png: the route asks for the document URL, body, png, full capture, and returns the bytes', async () => {
+    browser();
+    const id = await doc();
+    const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('image/png');
+    expect(new Uint8Array(await res.arrayBuffer()).slice(0, 4)).toEqual(PNG.slice(0, 4));
+    const req = lastRequest();
+    expect(req.url).toContain(`/a/${id}`);
+    expect(req.format).toBe('png');
+    expect(req.capture).toBe('full');
+    expect(req.selector).toBe('body');
+    expect(req.viewport.width).toBeGreaterThan(0);
+    expect(req.viewport.height).toBeGreaterThan(0);
+  });
+
+  it('a card capture forwards capture=card; jpg forwards format=jpg and answers image/jpeg', async () => {
+    browser({ ok: true, mime: 'image/jpeg', bytes: PNG });
+    const id = await doc();
+    const res = await exportImage(new Request(`${BASE}/a/${id}/export?mode=card&format=jpg`), params(id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('image/jpeg');
+    expect(lastRequest().capture).toEqual({ card: DEFAULT_SOCIAL_PREVIEW_CROP });
+    expect(lastRequest().format).toBe('jpg');
+  });
+
+  it('forwards a saved social-preview crop to the browser', async () => {
+    browser();
+    const t = await mintToken('crop');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '',
+      source: '<Helmet><meta name="artifactbin:og-crop" content="x=300;y=900;width=800" /></Helmet><div>hi</div>',
+      meta: {}, title: 'hi', description: null,
+    });
+    await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=card`), params(row.id));
+    expect(lastRequest().capture).toEqual({ card: { x: 300, y: 900, width: 800 } });
+  });
+
+  it('keeps the framing overview editor-only and renders it at the canonical layout width', async () => {
+    browser();
+    const t = await mintToken('preview');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+    });
+    const anonymous = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`), params(row.id));
+    expect(anonymous.status).toBe(404);
+    const owner = await exportImage(new Request(`${BASE}/a/${row.id}/export?mode=preview`, {
+      headers: { authorization: `Bearer ${t.token}` },
+    }), params(row.id));
+    expect(owner.status).toBe(200);
+    expect(owner.headers.get('cache-control')).toBe('private, max-age=86400');
+    expect(lastRequest()).toMatchObject({ capture: 'preview', viewport: { width: 1600, height: 840 } });
+
+    const dataset = await createArtifact(t.id, null, {
+      format: 'dataset', content: 'a\n1', source: null, meta: {}, title: 'data', description: null,
+    });
+    const unsupported = await exportImage(new Request(`${BASE}/a/${dataset.id}/export?mode=preview`, {
+      headers: { authorization: `Bearer ${t.token}` },
+    }), params(dataset.id));
+    expect(unsupported.status).toBe(404);
+  });
+
+  it('renders an editor draft crop sharply without making it a durable public card', async () => {
+    browser();
+    const t = await mintToken('draft-owner');
+    const row = await createArtifact(t.id, null, {
+      format: 'markup', content: '', source: '<div>hi</div>', meta: {}, title: 'hi', description: null,
+    });
+    const res = await exportImage(new Request(
+      `${BASE}/a/${row.id}/export?mode=preview&format=png&crop=x%3D120%3By%3D640%3Bwidth%3D600`,
+      { headers: { authorization: `Bearer ${t.token}` } },
+    ), params(row.id));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+    expect(lastRequest()).toMatchObject({
+      capture: { card: { x: 120, y: 640, width: 600 } },
+      viewport: { width: 1600, height: 840 },
+    });
+
+    const invalid = await exportImage(new Request(
+      `${BASE}/a/${row.id}/export?mode=preview&crop=nope`,
+      { headers: { authorization: `Bearer ${t.token}` } },
+    ), params(row.id));
+    expect(invalid.status).toBe(400);
+  });
+
+  it('a slide capture forwards { slide: n }', async () => {
+    browser();
+    const id = await doc();
+    await exportImage(new Request(`${BASE}/a/${id}/export?slide=2`), params(id));
+    expect(lastRequest().capture).toEqual({ slide: 2 });
+  });
+
+  it('an unavailable browser is 503 render_unavailable — the verdict, not a crash', async () => {
+    browser({ ok: false, reason: 'unavailable' });
+    const id = await doc();
+    const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'render_unavailable' });
+  });
+
+  it('a missing slide is a client error naming how many slides exist', async () => {
+    browser({ ok: false, reason: 'no_slide', slides: 2 });
+    const id = await doc();
+    const res = await exportImage(new Request(`${BASE}/a/${id}/export?slide=9`), params(id));
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(JSON.stringify(await res.json())).toContain('2');
+  });
+
+  it('a failed navigation is a server-side error, and the fake was asked exactly once', async () => {
+    browser({ ok: false, reason: 'navigation', detail: 'boom' });
+    const id = await doc();
+    const res = await exportImage(new Request(`${BASE}/a/${id}/export`), params(id));
+    expect(res.status).toBeGreaterThanOrEqual(500);
+    expect(fake.calls).toHaveLength(1);
+  });
+});
+
+
+describe('stored export admission before screenshot work', () => {
+  it('refreshes the stored image when a repair changes edit identity without changing version', async () => {
+    const render = vi.fn(async (): Promise<RenderResult> => ({ ok: true, mime: 'image/png', bytes: PNG }));
+    setServices({ browser: { render } });
+    const original = { id: 'repaired-export', version: 3, edit_id: 'before' };
+    const repaired = { ...original, edit_id: 'after' };
+    const options = { pageUrl: () => BASE, target: 'body' };
+    await renderArtifactImage(original, 'png', options);
+    await renderArtifactImage(repaired, 'png', {...options,refresh:true});
+    expect(render).toHaveBeenCalledTimes(2);
+    await resetExportRenderer();
+    await renderArtifactImage(repaired, 'png', options);
+    expect(render).toHaveBeenCalledTimes(2);
+    const laterRepair = { ...repaired, edit_id: 'later' };
+    await renderArtifactImage(laterRepair, 'png', {...options,refresh:true});
+    expect(render).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns a stored image while an unrelated cold render is still blocked', async () => {
+    let release!: () => void, entered!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const stored = { id: 'stored-hit', version: 1 };
+    const options = { pageUrl: () => BASE, target: 'body' };
+    setServices({browser:{render:async()=>({ok:true,mime:'image/png',bytes:PNG})}});
+    await renderArtifactImage(stored,'png',options);await resetExportRenderer();
+    setServices({ browser: { render: async () => { entered(); await gate; return { ok: true, mime: 'image/png', bytes: PNG }; } } });
+    const cold = renderArtifactImage({ id: 'cold-miss', version: 1 }, 'png', options);
+    await started;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const hit = renderArtifactImage(stored, 'png', options);
+      const result = await Promise.race([hit, new Promise<'blocked'>(resolve => { timer = setTimeout(() => resolve('blocked'), 500); })]);
+      expect(result).not.toBe('blocked');
+      expect(result).toMatchObject({ ok: true, mime: 'image/png' });
+    } finally { clearTimeout(timer); release(); await cold; }
+  });
+
+  it('shares one storage lookup and render among concurrent identical requests', async () => {
+    const get = vi.spyOn(objectStore(), 'get');
+    const render = vi.fn(async (): Promise<RenderResult> => ({ ok: true, mime: 'image/png', bytes: PNG }));
+    setServices({ browser: { render } });
+    const artifact = { id: 'concurrent-twins', version: 1 }, options = { pageUrl: () => BASE, target: 'body' };
+    try {
+      const results = await Promise.all(Array.from({ length: 5 }, () => renderArtifactImage(artifact, 'png', options)));
+      expect(results.every(result => result.ok)).toBe(true);
+      expect(get).not.toHaveBeenCalled(); expect(render).toHaveBeenCalledOnce();
+    } finally { get.mockRestore(); }
+  });
+
+  it('releases failed in-flight keys so a later request can succeed', async () => {
+    const render = vi.fn<() => Promise<RenderResult>>()
+      .mockResolvedValueOnce({ ok: false, reason: 'unavailable' })
+      .mockResolvedValue({ ok: true, mime: 'image/png', bytes: PNG });
+    setServices({ browser: { render } });
+    const artifact = { id: 'retry-after-unavailable', version: 1 }, options = { pageUrl: () => BASE, target: 'body' };
+    expect(await renderArtifactImage(artifact, 'png', options)).toMatchObject({ ok: false });
+    await (await getDb()).query('UPDATE export_image_cache SET retry_after=NULL');
+    expect(await renderArtifactImage(artifact, 'png', options)).toMatchObject({ ok: true });
+    expect(render).toHaveBeenCalledTimes(2);
+  });
+});

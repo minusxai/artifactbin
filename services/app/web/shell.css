@@ -1,0 +1,7 @@
+/* HTML owns first-paint styles. Vite bundles these imports in production and
+ * serves them as CSS in development; neither path waits for main.tsx. */
+@import '@fontsource-variable/cormorant-garamond';
+@import '@fontsource-variable/jetbrains-mono';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '../app/globals.css';

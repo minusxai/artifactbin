@@ -1,0 +1,46 @@
+/**
+ * Shared recovery vocabulary for runtime errors, local help, the manual and skills.
+ *
+ * A fix that names a server writes the placeholder, never an origin: this table
+ * is compiled into the installed skill and printed by `afbin help errors`, and
+ * both are rendered for the SELECTED server (src/teaching-origin). A
+ * self-hoster must not be told to install from someone else's box.
+ */
+import {TEACHING_BASE} from './teaching-origin';
+export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
+ approval_origin_mismatch:{meaning:'The selected server advertises its browser approval page on a different origin, so the pairing cannot be trusted for the selected origin.',fix:'Select the server by its public origin with --server; credentials are never sent to an origin you did not select.'},
+ unmanaged_installation:{meaning:'This afbin was not installed as a verified standalone executable.',fix:`Install it with ${TEACHING_BASE}/chat/install.sh, then rerun afbin update.`},
+ compatible_release_unavailable:{meaning:'No published release matches the version and protocol the selected server named.',fix:'Retry after a compatible CLI release is published; afbin update --dry-run reports what it resolved.'},
+ outside_workspace:{meaning:'The destination is outside the workspace afbin runs in.',fix:'Write inside the workspace, e.g. --output shot.png, and move the file afterwards if it must live elsewhere.'},
+ sql_in_argument:{meaning:'A query argument was SQL; arguments name the datasets or documents to query.',fix:'Put the SQL in a file and run afbin query <ref> --input query.sql, or pipe it: afbin query <ref> --input - < query.sql.'},
+ image_fetch_failed:{meaning:'The server could not fetch an external image URL named by the document.',fix:'Check the URL is public and reachable, or register the local image with afbin add --json and reference its returned ID.'},
+ dataset_read_only:{meaning:'The dataset does not accept row mutations: Postgres datasets are read-only and stored datasets need access: readwrite.',fix:'Publish a stored dataset with afbin push <file> --type dataset --access readwrite; Postgres datasets cannot be written.'},
+ renderer_unavailable:{meaning:'This representation requires a published head, and this target is not one.',fix:'Use PNG/JPG for a local JSX image, push for published HTML, or export csv, json, yaml or original.'},
+ unsupported_version_export:{meaning:'A historical version has no rendering; only the current head is photographed.',fix:'Export csv, json, yaml or original for a historical version.'},
+ unpublished_draft:{meaning:'The published viewer requires a published, unchanged document.',fix:'Use afbin preview <path> for local drafts, or publish with afbin push, then open it.'},
+ not_forkable:{meaning:'A folder names the original children and a Postgres dataset keeps its bound secret.',fix:'Fork a document, dataset rows or a file.'},
+ output_exists:{meaning:'The destination is taken; fork and export never replace a source or an existing file.',fix:'Choose a free --output path, or use export --force to replace it after a recoverable backup.'},
+ type_mismatch:{meaning:'--type disagrees with the type the named source actually is.',fix:'Remove --type, or name a source of that type.'},
+ session_disconnected:{meaning:'The remote session was removed; a replacement is never created silently.',fix:'Start a new session with afbin remote <command>.'},
+ transport_error:{meaning:'The selected server could not be reached, so no request was answered.',fix:'Check the server URL (--server or ARTIFACTBIN_URL) and your network, then retry; afbin config set host <url> changes the default server.'},
+ auth_required:{meaning:'This remote operation needs credentials for the selected origin.',fix:'Run afbin auth, or set ARTIFACTBIN_TOKEN and ARTIFACTBIN_URL for the selected server.'},
+ approval_required:{meaning:'Browser approval is pending; --yes cannot approve it.',fix:'Open verification_url, approve the request, then rerun afbin auth before expires_at.'},
+ access_denied:{meaning:'Browser approval was denied.',fix:'Run afbin auth only when you intend to start a new approval request.'},
+ approval_expired:{meaning:'The browser approval window expired.',fix:'Run afbin auth to start a new approval request.'},
+ cli_update_required:{meaning:'The server requires a newer CLI protocol.',fix:'Run afbin update, then retry the command.'},
+ state_conflict:{meaning:'Metadata or content changed since the observed head.',fix:'Inspect afbin diff --remote <ref>, reconcile the changes, then push. Use --force only when you intend a conditional replacement.'},
+ version_conflict:{meaning:'The content version changed since the observed head.',fix:'Inspect afbin diff --remote <ref> and reconcile the current content before pushing again.'},
+ edit_conflict:{meaning:'The body edit could not be rebased without a conflict.',fix:'Inspect the returned diff and current source; reconcile your proposal before pushing again.'},
+ outcome_unknown:{meaning:'A write has no confirmed response; it may have committed.',fix:'Keep the pending request journal and rerun afbin push to recover the frozen request. Do not create another artifact to retry.'},
+ pending_recovery:{meaning:'An interrupted operation must be recovered before starting a different write.',fix:'Rerun afbin push. For an uncertain conditional update, afbin pull --force archives the proposal and reads the current head; uncertain creates must be recovered first.'},
+ result_deleted:{meaning:'The original create result was deleted; its operation key will never create a replacement.',fix:'Restore that artifact and pull it, or deliberately create a new local file to fork. Keep the recovery record.'},
+ wrong_server:{meaning:'The artifact or workspace belongs to a different server origin.',fix:'Use the workspace server; keep work for another server in a separate workspace.'},
+ account_mismatch:{meaning:'The authenticated account differs from the workspace account.',fix:'Sign in with the workspace account before retrying. Do not discard tracking or recovery records.'},
+ duplicate_identity:{meaning:'Two local files claim the same published artifact.',fix:'Keep one tracked file. To fork a copy, remove id, edit_id, head_version, state and version from its fence.'},
+ version_not_writable:{meaning:'Historical selectors are read-only.',fix:'Use @version with pull, diff or log. To restore old content, pull that version into the tracked file and push the file without a suffix.'},
+ invalid_reference:{meaning:'The value is not an artifact reference.',fix:'Use <url|id|path>[@version] at the command line, ref:<id> in published markup, and $query for result bindings.'},
+ invalid_markup:{meaning:'Static JSX does not satisfy the local authoring grammar.',fix:'Run afbin help markup and correct the indicated source. afbin validate --fix applies mechanical formatting only.'},
+ invalid_dataset:{meaning:'A local dataset is not supported tabular data.',fix:'Use CSV or a JSON array of row objects. Use afbin help data for Query and Mutation examples.'},
+ unsupported_file_type:{meaning:'This local format cannot be published through native push.',fix:'Use a .jsx document, CSV/JSON rows, or an allowed media/file format. See afbin help publishing-datasets.'},
+};
+export function diagnosticsHelp():string{return '# Errors and recovery\n\nLocal checks run before authentication. Every refusal returns a stable code, the field or location at fault and a recovery instruction; with --json it is one document with error.code, error.message and error.fix, exit status 2. Follow the returned instruction; the codes below say the same. A server refusal may add current source or a diff. A conflict never touches your file. For a refusal or interrupted write, preserve the returned code, fix and pending request record, then retry push: its frozen request recovers the original result.\n\n'+Object.entries(diagnosticCatalog).map(([code,entry])=>`## ${code}\n\n${entry.meaning}\n\n${entry.fix}\n`).join('\n');}
