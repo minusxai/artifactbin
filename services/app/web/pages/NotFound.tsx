@@ -13,10 +13,12 @@
  * through.
  */
 import { LINK } from '@/components/ui';
+import { useLoginHref } from '@/lib/login-href';
 import { useSession } from '../session';
 
 export function NotFoundPage() {
   const { session } = useSession();
+  const login = useLoginHref();
   return (
     <main aria-label="Not found" className="mx-auto mt-16 max-w-4xl px-6 pb-24 justify-center text-center">
       <style>{`
@@ -56,7 +58,7 @@ export function NotFoundPage() {
           ← back to your artifacts
         </a>
         {!session?.user && (
-          <a href="/login" aria-label="Sign in" className="text-muted no-underline underline-offset-4 hover:text-fg hover:underline">
+          <a {...login} aria-label="Sign in" className="text-muted no-underline underline-offset-4 hover:text-fg hover:underline">
             sign in — if it&rsquo;s yours to see
           </a>
         )}

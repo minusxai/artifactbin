@@ -7,6 +7,7 @@
  * The answer is the state, and a refusal leaves the current state intact.
  */
 import { useCallback, useRef, useState } from 'react';
+import { useLoginHref } from '@/lib/login-href';
 import { pageDataChanged } from '@/web/page-data-events';
 
 const PILL = 'inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-edge bg-surface px-3 py-1 font-mono text-xs text-muted no-underline transition-colors hover:border-accent hover:text-fg disabled:cursor-default disabled:opacity-60';
@@ -42,6 +43,7 @@ export function FollowButton({ userId, following, count, signedIn }: {
     })();
   }, [userId, state.following]);
 
+  const login = useLoginHref();
   const label = state.following ? 'Unfollow' : 'Follow';
   const body = (
     <>
@@ -49,7 +51,7 @@ export function FollowButton({ userId, following, count, signedIn }: {
       <span className="text-faint">{state.count}</span>
     </>
   );
-  if (!signedIn) return <a href="/login" aria-label={label} className={PILL}>{body}</a>;
+  if (!signedIn) return <a {...login} aria-label={label} className={PILL}>{body}</a>;
   return (
     <button
       type="button"

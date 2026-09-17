@@ -35,7 +35,8 @@ import RefreshAssets from '@/components/RefreshAssets';
 import ForkArtifact, { ForkConfirm } from '@/components/ForkArtifact';
 import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
-import { readIntent, stripIntent, withIntent } from '@/lib/intent';
+import { readIntent, stripIntent } from '@/lib/intent';
+import { loginHref } from '@/lib/login-href';
 import PageChrome, { PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
@@ -497,7 +498,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [, redrawReactions] = useState(0);
   const toggleLike = useCallback(async (want?: boolean) => {
     if (!accountSession) {
-      void navigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'like')}`)}`);
+      void navigate(loginHref(window.location, 'like'));
       return;
     }
     const next = want ?? !likeRef.current.liked;
@@ -512,7 +513,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const target = followRef.current;
     if (!target) return;
     if (!accountSession) {
-      void navigate(`/login?callbackUrl=${encodeURIComponent(`${window.location.pathname}${withIntent('', 'follow')}`)}`);
+      void navigate(loginHref(window.location, 'follow'));
       return;
     }
     const next = want ?? !target.following;
@@ -708,7 +709,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
           else if (action === 'follow') void toggleFollow();
           else if (action === 'fork') setForkAsked(true);
           else if (action === 'edit' && canEdit) { if (editing) void finishEdit(); else enterEdit(); }
-          else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(`/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent('', 'comment'))}`); }
+          else if (action === 'comment') { if (canAnnotate) setRailOpen(value => !value); else void navigate(loginHref(window.location, 'comment')); }
           else if (action === 'controls' || action === 'menu') requestPageChrome(action);
         }} />
         {sharingOpen && <ShareLink version={live?.version ?? version} onSharingChange={onSharingChange} artifactId={id} title={shownTitle} owner={owner} editable={canEdit} format={format} datasetKind={shownCatalog?.kind} variant="dialog" className="" onClose={() => setSharingOpen(false)} onSocialPreview={shownSource !== null && format === 'markup' ? () => { setSharingOpen(false); setSocialPreviewOpen(true); } : undefined} />}

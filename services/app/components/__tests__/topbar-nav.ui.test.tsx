@@ -34,6 +34,15 @@ describe('page menu', () => {
     expect(screen.queryByLabelText('Tokens')).toBeNull();
   });
 
+  it('sends a signed-out reader to login and back to the address they are on', () => {
+    window.history.replaceState(null, '', '/@vivek/ab12cd-my-doc?$exp_desc=Dinner#ledger');
+    router.path = '/@vivek/ab12cd-my-doc';
+    render(<PageMenu authed={false} />);
+    fireEvent.click(screen.getByLabelText('Open menu'));
+    expect(screen.getByLabelText('Login')).toHaveAttribute('href', `/login?callbackUrl=${encodeURIComponent('/@vivek/ab12cd-my-doc?$exp_desc=Dinner#ledger')}`);
+    window.history.replaceState(null, '', '/');
+  });
+
   it('puts page context in the page bar and keeps it out of the account menu', () => {
     router.path = '/@vivek/notes/ab12cd-my-doc';
     render(<><AppBar title="My doc" /><PageMenu authed title="My doc" triggerless /></>);

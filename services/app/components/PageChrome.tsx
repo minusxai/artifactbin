@@ -17,6 +17,7 @@ import { Tooltip } from '@/components/Tooltip';
 import { forgetTokens } from '@/lib/browser-session';
 import { CHROME_IDENTITY } from '@/lib/chrome-identity';
 import { crumbsFor } from '@/lib/breadcrumb';
+import { loginHref } from '@/lib/login-href';
 import { usePathname } from '@/lib/navigation';
 
 export type AppearanceMode = 'light' | 'dark';
@@ -206,7 +207,8 @@ export function PageMenu({
             Disconnect this browser
           </button>
         ) : (
-          link('/login', 'Login', <LogIn size={15} strokeWidth={1.5} />, pathname === '/login')
+          // Only rendered while the menu is open, so the address is the one on screen now.
+          link(loginHref(window.location), 'Login', <LogIn size={15} strokeWidth={1.5} />, pathname === '/login')
         )}
       </nav>
     </>
