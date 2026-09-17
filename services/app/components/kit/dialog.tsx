@@ -78,8 +78,10 @@ export function DialogTrigger({children, wrapsControl, ...props}: TriggerProps) 
   if (wrapsControl) return <ControlDelegate {...props} act={open}>{children}</ControlDelegate>;
   // A trigger the kit DRAWS is a button, so it looks like one. An author who
   // passes a className is styling it themselves and gets exactly that: this is
-  // the default look, not a base the author has to undo.
-  return <button {...props} type="button" className={props.className ?? buttonVariants()} disabled={props.disabled || !context || context.busy} onClick={event => {
+  // the default look, not a base the author has to undo. An EMPTY className
+  // (`class=""` survives the interpreter's attribute pass) is not styling, so
+  // it still takes the default rather than rendering the trigger as bare text.
+  return <button {...props} type="button" className={props.className || buttonVariants()} disabled={props.disabled || !context || context.busy} onClick={event => {
     if (!context) return;
     context.trigger.current = event.currentTarget;
     context.setOpen(true);
