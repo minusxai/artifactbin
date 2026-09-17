@@ -2,8 +2,6 @@
  * FOLLOW on a public profile: the count for everyone; a signed-in click asks
  * the follow door and renders its answer; an anonymous reader is sent to
  * /login and the door is never asked.
- *
- * Seeded RED by the orchestrator.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

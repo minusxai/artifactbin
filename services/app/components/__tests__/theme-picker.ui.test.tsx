@@ -133,14 +133,14 @@ describe('ThemePicker', () => {
 
     /**
      * Still anchored to the trigger on a wide screen — but PORTALLED there
-     * rather than `absolute` inside it. The old in-place panel was clipped out
-     * of existence by the editor toolbar's `overflow-x-auto` scroller, which
-     * has no visible symptom at all: right box, right columns, no page
-     * overflow, and nothing painted (see AnchoredPanel, and the hit test in
-     * scripts/gate-mobile.mjs). So the assertion moved off `absolute` — the
-     * mechanism that caused it — and onto what makes the panel reachable: it
-     * is not a sheet, it is not inside the box that rendered it, and it still
-     * lays the cards out in two columns.
+     * rather than `absolute` inside it. An in-place panel is clipped out of
+     * existence by the editor toolbar's `overflow-x-auto` scroller, which has
+     * no visible symptom at all: right box, right columns, no page overflow,
+     * and nothing painted (see AnchoredPanel, and the hit test in
+     * scripts/gate-mobile.mjs). So the assertions here are about what makes
+     * the panel reachable rather than about `absolute`: it is not a sheet, it
+     * is not inside the box that rendered it, and it still lays the cards out
+     * in two columns.
      */
     it('keeps hanging off the trigger on a wide one, portalled out of it', () => {
       setWidth(1280);

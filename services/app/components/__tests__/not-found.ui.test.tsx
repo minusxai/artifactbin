@@ -1,12 +1,12 @@
 /**
  * The 404 page.
  *
- * With no app/not-found.tsx, Next serves its built-in fallback, which injects
- * `body{color:#000;background:#fff;margin:0}` — a `background` shorthand that
- * wipes the dot-grid `background-image` every other page is painted on. A miss
- * therefore landed on a bare white (or, in dark OS mode, bare black) Helvetica
- * page that looks like a different product. Owning the route is the fix; these
- * guard that it stays owned and never repaints the body itself.
+ * A miss must land on the app's own page rather than a framework fallback: a
+ * fallback injects `body{color:#000;background:#fff;margin:0}` — a
+ * `background` shorthand that wipes the dot-grid `background-image` every
+ * other page is painted on, leaving a bare page that looks like a different
+ * product. These guard that the route stays owned and that the page never
+ * repaints the body itself.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

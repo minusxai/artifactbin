@@ -1,9 +1,7 @@
 /**
- * REJECT beside claim in the banner (tok-p2). Each offered token gets a "Reject <id>" control; it confirms
+ * REJECT beside claim in the banner. Each offered token gets a "Reject <id>" control; it confirms
  * (a rejected token is gone for good), posts `{ tokenId }` to /api/tokens/reject, and on 204 the offer leaves the
  * list without a reload (the response already rewrote the cookie). A failed reject keeps the offer and says so.
- *
- * Seeded RED by the orchestrator; make it green without changing an expectation.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';

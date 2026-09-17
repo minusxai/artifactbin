@@ -1,12 +1,12 @@
 /**
  * A LONG REPLY MUST NOT PUSH THE SHORT ONE OFF THE RAIL.
  *
- * The rail rendered every comment whole, so one agent answer of sixty lines
- * put the human's own two-line reply below the fold — on a phone, below the
- * sheet entirely. Three folds answer that, all rail-only and all per viewer:
+ * Rendering every comment whole would let one agent answer of sixty lines put
+ * the human's own two-line reply below the fold — on a phone, below the sheet
+ * entirely. Three folds answer that, all rail-only and all per viewer:
  *
  *   1. AUTO-FOLD  — a body longer than ten LAID-OUT lines clamps itself, with
- *      "show more (N lines)". Measured, never counted: F5 markdown and a phone
+ *      "show more (N lines)". Measured, never counted: markdown and a phone
  *      width make the same characters a different number of lines. The one
  *      exemption is the newest comment of a thread somebody just opened — that
  *      is the answer they came for.
@@ -19,8 +19,8 @@
  * in `localStorage`, so it survives a remount and reaches neither the wire nor
  * the URL — a shared link must not carry someone else's folds.
  *
- * F7 rides along: a resolved card must READ as resolved when scanning, not
- * only when its check is found.
+ * Resolution rides along: a resolved card must READ as resolved when scanning,
+ * not only when its check is found.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, fireEvent, within } from '@testing-library/react';

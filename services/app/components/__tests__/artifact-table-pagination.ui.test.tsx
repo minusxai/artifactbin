@@ -1,9 +1,9 @@
 /**
  * ArtifactTable pagination.
  *
- * The table rendered every row, so an account with a dozen artifacts pushed the
- * pro tip (and anything else below it) off the screen entirely — the list grew
- * without bound while the page around it stayed fixed. Five rows, then a pager.
+ * Rendering every row lets the list grow without bound while the page around
+ * it stays fixed, pushing everything below it off the screen. Five rows, then
+ * a pager.
  *
  * The sharp edge is the interaction with search: a filter narrows the result set
  * under a page cursor that was set against the old one, so page 3 of 12 becomes

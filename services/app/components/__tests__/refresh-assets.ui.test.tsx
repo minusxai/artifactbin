@@ -36,12 +36,10 @@ describe('the refresh row', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Refresh result')).toHaveTextContent('1 refreshed'));
     /*
-     * …and NOT the caveat it used to carry. While the mapped url had no
-     * version, a refreshed image never reached a reader who had already loaded
-     * the old one, and saying so was the whole mitigation (R19). The url now
+     * …and NOT a caveat about readers keeping the old copy. The mapped url
      * carries a content-derived `?v=` (lib/story/asset-url), so the next render
      * points every reader at an address their browser has never seen, and a
-     * warning that no longer describes the product is worse than none.
+     * warning that does not describe the product is worse than none.
      */
     expect(screen.getByLabelText('Refresh result')).not.toHaveTextContent('old copy');
     expect(calls[0].url).toBe('/api/my/artifacts/story1/assets/refresh');

@@ -3,9 +3,9 @@
  *
  * `<title>` is server-rendered once, from the row as it stood when the page was
  * requested. A reader who opens an agent's still-empty document therefore gets
- * "Untitled" in the tab, and it stays "Untitled" for the whole session no
- * matter what the agent writes — the live stream repaints the document and the
- * in-page name, but nothing ever touched document.title. The tab is the name
+ * "Untitled" in the tab, and it would stay "Untitled" for the whole session no
+ * matter what the agent writes: the live stream repaints the document and the
+ * in-page name, and nothing else touches document.title. The tab is the name
  * the reader sees in their window list, so it has to follow too.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';

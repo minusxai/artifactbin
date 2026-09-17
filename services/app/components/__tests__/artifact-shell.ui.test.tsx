@@ -2,12 +2,11 @@
  * The shell answers ONE question — does this browser own the artifact — and
  * everything above it (the top bar's actions, the editor) gates on that.
  *
- * The answer now arrives with the page: BOTH kinds of owner (an account
- * session, and an anonymous browser holding the agent-session cookie) are
- * resolved server-side by lib/viewer's `isOwner`. The old client probe —
- * a bearer `GET /api/artifacts` to test a localStorage token — is gone with
- * the token itself, so this component must make NO request at all. That is
- * what these tests pin: a stubbed fetch that throws on any call.
+ * The answer arrives with the page: BOTH kinds of owner (an account session,
+ * and an anonymous browser holding the agent-session cookie) are resolved
+ * server-side by lib/viewer's `isOwner`, so this component must make NO
+ * request at all. That is what these tests pin: a stubbed fetch that throws on
+ * any call.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, renderHook, screen } from '@testing-library/react';
@@ -82,9 +81,9 @@ describe('useArtifactOwner', () => {
 
 /**
  * THREE ROLES, TWO RIGHTS. `useCanEditArtifact` answers the owner and a named
- * editor; `useCanAnnotateArtifact` answers those two AND a commenter. The
- * first version of the shell derived "can edit" as "not a reader", which
- * handed a commenter the edit button the moment the role existed.
+ * editor; `useCanAnnotateArtifact` answers those two AND a commenter. "Can
+ * edit" is not "not a reader": derived that way it hands a commenter the edit
+ * button.
  */
 const under = (role: ArtifactRole) => ({ children }: { children: ReactNode }) => <ArtifactShell role={role}>{children}</ArtifactShell>;
 

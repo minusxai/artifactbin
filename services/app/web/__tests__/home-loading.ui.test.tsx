@@ -145,11 +145,9 @@ it('an older same-account refresh cannot overwrite the newer shelf', async () =>
 });
 
 /**
- * `refresh()` re-reads, it does not reload. Under Next it refetched the
- * server components in place; the naive translation (`navigate(0)`) reloads
- * the page and destroys exactly the local state the caller had just set (the
- * claim banner's result — measured: it never painted). These pin the
- * replacement: the event re-fetches the pages' data, and nothing navigates.
+ * `refresh()` re-reads, it does not reload. A reload would destroy exactly the
+ * local state the caller had just set (the claim banner's result). These pin
+ * the rule: the event re-fetches the pages' data, and nothing navigates.
  */
 describe('the refresh event', () => {
   let fetches: string[] = [];
@@ -182,7 +180,7 @@ describe('the refresh event', () => {
   });
 });
 
-// Workspaces retain their useful content after activity is removed.
+// Workspaces retain their useful content and draw no activity heading.
 it.each([true, false])('renders an activity-free workspace (empty=%s)', async (empty) => {
   vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(response(url.includes('/session') ? session
     : url.includes('part=core') ? { ...core, artifacts: empty ? [] : core.artifacts }

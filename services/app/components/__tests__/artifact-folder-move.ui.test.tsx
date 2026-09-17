@@ -5,11 +5,11 @@
  * never the content PUT — and reflects the new placement in place. Non-manage
  * rows get no menu at all.
  *
- * P2 replaced the id FIELD with the picker (components/FolderPicker): the row
+ * The destination comes from the picker (components/FolderPicker): the row
  * chooses from the account's own folders, with the moved folder's own subtree
- * greyed out. The WIRE is unchanged and is what this asserts — including the
- * distinction the field existed to make, that the ROOT is `null` and never an
- * absent key, which the picker keeps by offering root as a row of its own.
+ * greyed out. The WIRE is what this asserts — including that the ROOT is
+ * `null` and never an absent key, which the picker keeps by offering root as a
+ * row of its own.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -134,8 +134,8 @@ describe('ArtifactTable folder moves', () => {
     // The title is the flexible element — it ellipsizes so the badges keep their room.
     expect((screen.getByLabelText(`Open ${long}`) as HTMLElement).className).toContain('truncate');
     // The format badge must never break internally ("mx-" / "markup"). Two
-    // elements say "mx-markup" now — the badge in its own DESKTOP column, and
-    // the phone's stacked meta line under the title, which exists because that
+    // elements say "mx-markup" — the badge in its own DESKTOP column, and the
+    // phone's stacked meta line under the title, which exists because that
     // column is hidden there. This assertion is about the badge, so it names
     // the badge rather than whichever one the DOM happens to reach first.
     const badge = screen

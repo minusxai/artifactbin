@@ -516,18 +516,6 @@ describe('the view-mode selection bubble is granted, and re-checked, by the page
 });
 
 /**
- * FORK — the one document action that is offered to EVERYONE the shell is
- * served to, and the only one that is. Every other row here is capability
- * chrome (edit needs write, comments need annotate); forking needs the right
- * to READ, which everyone holding this page already has — the door agrees,
- * refusing on the read ACL rather than on ownership.
- *
- * So this describe exists to hold the two halves the row could get wrong: WHO
- * is offered it (owner, editor, commenter — and a dataset, which has no
- * "Artifact" section of its own until now), and what each of the door's three
- * answers does.
- */
-/**
  * REFRESH EXTERNAL IMAGES — owner chrome, unlike the fork row beside it.
  *
  * A refresh re-fetches bytes that every reader of every document naming that
@@ -558,6 +546,18 @@ describe('the refresh row', () => {
   });
 });
 
+/**
+ * FORK — the one document action that is offered to EVERYONE the shell is
+ * served to, and the only one that is. Every other row here is capability
+ * chrome (edit needs write, comments need annotate); forking needs the right
+ * to READ, which everyone holding this page already has — the door agrees,
+ * refusing on the read ACL rather than on ownership.
+ *
+ * So this describe exists to hold the two halves the row could get wrong: WHO
+ * is offered it (owner, editor, commenter — and a dataset, which has no
+ * "Artifact" section of its own), and what each of the door's three answers
+ * does.
+ */
 describe('the fork row', () => {
   const forkResponse = (status: number, body: unknown) => vi.fn(async (url: string) => url.endsWith('/sharing')
     ? new Response(JSON.stringify({ visibility: 'private', linkRole: 'viewer', shares: [] }))
