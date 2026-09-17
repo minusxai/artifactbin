@@ -694,7 +694,14 @@ export interface StorySpotlightMessage { type: typeof STORY_SPOTLIGHT_MESSAGE; p
 /**
  * Parent → frame: the pin set, one idempotent message — re-posted whole
  * whenever the list changes, so the frame holds no annotation state it could
- * get out of step on. `pins` are the OPEN, non-orphaned roots by BODY path.
+ * get out of step on. `pins` are the OPEN, non-orphaned roots by BODY path —
+ * plus the ONE resolved root the reader has expanded in the rail, which is also
+ * this message's `openId`: selecting a resolved comment is how somebody asks
+ * what it was about, so its passage is painted and scrolled to like any other.
+ * It travels in the SAME message as that `openId` (the frame records the scroll
+ * as done on arrival and would never repeat it for a pin arriving later), and
+ * leaves again when the card is collapsed, another thread is opened or the rail
+ * closes. Nothing resolved is in `pins` at rest.
  *
  * `mode` is ON or OFF and nothing else. It used to carry a third value naming
  * which PAGE MODE was open ('pins' for view, 'annotate' for #annotate), which
