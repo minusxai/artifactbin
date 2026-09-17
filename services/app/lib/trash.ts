@@ -122,8 +122,8 @@ export async function restoreArtifactFor(actor: TokenActor, id: string): Promise
     const trail = row.ancestor_ids ?? [];
     if (!trail.length) return trail;
     // A trail is only a placement while every id in it is still there to hold
-    // it: an ancestor still in the trash (or purged out of existence) makes
-    // this row's address a chain of nothing, so it comes back at the root.
+    // it: an ancestor still in the trash makes this row's address a chain of
+    // nothing, so it comes back at the root.
     const live = await tx.query<{ n: number }>(
       `SELECT COUNT(*)::int AS n FROM artifacts WHERE id = ANY($1::text[]) AND ${LIVE_ARTIFACT_SQL}`,
       [trail],

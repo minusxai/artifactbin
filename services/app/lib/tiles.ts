@@ -6,9 +6,9 @@
  * this module is the one mapping from that path onto the Carto upstream.
  *
  * Two things answer the path: in production, nginx intercepts `/tiles/` before
- * Next ever sees it (same allowlist, plus an on-disk cache); `app/tiles` is the
- * identical mapping for dev/CI so every environment serves tiles the same way
- * and the nginx block is a cache in front, never required for correctness.
+ * the app ever sees it (same allowlist, plus an on-disk cache); `app/tiles` is
+ * the identical mapping for dev/CI so every environment serves tiles the same
+ * way and the nginx block is a cache in front, never required for correctness.
  *
  * The allowlist is the security boundary: only the two Carto basemap styles the
  * theme swap uses, numeric slippy coordinates, `.png` (optional `@2x`). This is

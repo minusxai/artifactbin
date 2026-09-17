@@ -176,8 +176,8 @@ function renderRequest(
 ): RenderRequest {
   return {
     // The key is minted HERE, at the moment the request goes out — see
-    // RenderInput. Previously an unbounded cold launch let the key expire
-    // in the queue produced a 200 PNG of a 404 page.
+    // RenderInput. A key minted earlier can expire while the request waits, and
+    // the shot then SUCCEEDS against a 404 page: a 200 PNG of it.
     url: input.urlFor(),
     format,
     ...(format === 'jpg' ? { quality: 85 } : {}),
@@ -285,7 +285,7 @@ async function imageResponse(image:ExportImage,base:string,delivery:'bytes'|'red
  * The whole export answer for an ALREADY-AUTHORIZED artifact: parse the
  * caller's format/mode/slide, render, and build the image (or refusal)
  * Response. ONE implementation behind both doors — the `/a/<id>/export` route
- * and the `export_artifact` MCP operation — so caps, error names and cache
+ * and the `export_artifact` operation — so caps, error names and cache
  * rules cannot fork. Authorization stays with the CALLER: only a door that
  * has run the read ACL may call this.
  */
@@ -358,9 +358,8 @@ export async function exportImageResponse(
     // The headless browser has no session, so a private page would 404 on
     // itself. Mint a signed, seconds-long key scoped to this artifact —
     // minted only AFTER the caller's ACL admitted the requester, and never a
-    // value any reader has seen. Minted lazily (see RenderInput): a cold
-    // browser launch used to be unbounded, and a key that expired in the queue
-    // produced a 200 PNG of a 404 page.
+    // value any reader has seen. Minted lazily (see RenderInput): a key that
+    // expires while the request waits produces a 200 PNG of a 404 page.
     // A markup document is photographed from its OWN page (`raw?chrome=0` —
     // the document with none of the reading chrome); the data tiers have no
     // document of their own and render inside the app's <main>.

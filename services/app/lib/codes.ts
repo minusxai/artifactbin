@@ -89,9 +89,7 @@ export async function claimBySubject(input: {
 
 /**
  * Read a live code's payload WITHOUT consuming it — the claim is a separate,
- * deliberate act. Null = unknown, spent, or expired. The start flow leans on
- * this twice: the brief GET proves the link is live, and chunk writes need the
- * handle's token server-side while the handle stays valid for the next chunk.
+ * deliberate act. Null = unknown, spent, or expired.
  */
 export async function peekByHash(input: { kind: string; code: string; now?: number }): Promise<CodePayload | null> {
   return store().peekByHash(input);

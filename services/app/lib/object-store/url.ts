@@ -95,9 +95,8 @@ export function parseS3Url(raw: string): S3Config {
  *
  * Pure and exported ON PURPOSE. The prefix is the ONLY thing keeping a dev
  * machine from writing over production objects — one bucket serves both,
- * separated by `artifacts` vs `artifacts-dev` — and while the rule lived
- * inline in the S3 store it could only be checked against a real server, so
- * CI never checked it at all: deleting it broke no test.
+ * separated by `artifacts` vs `artifacts-dev` — and the same rule inline in the
+ * S3 store could only ever be checked against a real server.
  */
 export function storageKeyFor(config: Pick<S3Config, 'prefix'>, key: string): string {
   return config.prefix ? `${config.prefix}/${key}` : key;

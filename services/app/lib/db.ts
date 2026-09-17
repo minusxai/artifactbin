@@ -1,6 +1,6 @@
 /**
  * Database adapter: PGLite (embedded, default) or Postgres — selected by ONE
- * env, `DATABASE_URL`, via scheme dispatch (see parseDatabaseUrl below).
+ * env, `DATABASE_URL`, via scheme dispatch (lib/database-url parseDatabaseUrl).
  * Distilled from minusx lib/database/adapter/{pglite-adapter,postgres-adapter,factory}.ts.
  *
  * This is the only file that imports @electric-sql/pglite or pg.
@@ -68,7 +68,7 @@ export interface Db extends Queryable {
   close(): Promise<void>;
   /**
    * The driver handle, for the ONE other owner of this database in the
-   * process: the co-hosted proxy (packages/proxy), whose identity tables share
+   * process: the co-hosted proxy, whose identity tables share
    * a PGLite instance (single-owner) or a pool with the app. Nothing else
    * should reach for it.
    */

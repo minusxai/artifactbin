@@ -100,7 +100,7 @@ export function resetWebIngestRateLimit(): void {
  * `<whatever the client sent>, <what proxy1 saw>, <what proxy2 saw>, …`. The
  * address our outermost TRUSTED proxy observed therefore sits `hops` from the
  * END; everything left of that is text the caller typed. Reading `[0]` — the
- * intuitive choice, and the one this used to make — hands every caller a fresh
+ * intuitive choice — would hand every caller a fresh
  * bucket per request behind exactly the appending proxies (Caddy, Traefik,
  * nginx's `$proxy_add_x_forwarded_for`) that docker-compose.yml tells operators
  * to put in front.

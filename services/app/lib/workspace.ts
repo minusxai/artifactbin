@@ -34,7 +34,7 @@ export async function accountWorkspaceCoreFor(userId: string, email?: string | n
   };
 }
 
-/** Lifetime visitor semantics stay identical to the old per-row subquery. */
+/** All-time unique daily visitors per document, counted once for the whole account. */
 async function workspaceViewCounts(userId: string): Promise<Record<string, number>> {
   const db = await getDb();
   const result = await db.query<{ id: string; views: number }>(`SELECT a.id, COUNT(DISTINCT COALESCE(e.visitor, e.seq::text))::int AS views

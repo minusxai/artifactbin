@@ -32,8 +32,8 @@ export async function sessionViewer(request?: Request): Promise<Viewer> {
 /**
  * Who is asking. A presented bearer token wins (its user, if claimed, becomes
  * the viewer; its id lets the caller honor direct token ownership), else the
- * browser's credentials — see requestOrSessionActor (the export route's
- * resolver); routes that hand-roll a bearer check fall back to sessionActor.
+ * browser's credentials — see requestOrSessionActor; routes that hand-roll a
+ * bearer check fall back to sessionActor.
  */
 export interface RequestActor {
   viewer: Viewer;
@@ -43,8 +43,8 @@ export interface RequestActor {
    * HOW the caller was authenticated (`services/contracts` Credential). Load-
    * bearing for the same-site guard: a cookie-borne write must be same-site,
    * a bearer one never is (agents send no Origin). Keying that guard on
-   * `tokenId` protected the anonymous browser and waved the logged-in one
-   * through — `session` yields tokenId null — which is the hole this closes.
+   * `tokenId` instead would wave the logged-in browser through, because a
+   * `session` credential yields tokenId null.
    */
   credential: Credential;
   /** Token ids the browser's agent cookie holds (proxy-provided) — what a sign-up may claim. */

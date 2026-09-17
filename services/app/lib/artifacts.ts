@@ -74,10 +74,11 @@ import { ANONYMOUS_CEILING, canEdit, canRead, capRole, maxRole, shareRolesAtLeas
 /**
  * The read ACL. 'public' = anyone with the link may read, and owned docs list
  * on the owner's profile root (/@handle);
- * 'unlisted' = reads exactly like public but never lists anywhere (the
- * pre-profile meaning of public, kept nameable); 'private' = the owner plus
- * the emails in artifact_shares. Defaults at create: user-owned → 'private',
- * anonymous → 'public' (no owner to anchor an ACL).
+ * 'unlisted' = reads exactly like public but never lists anywhere;
+ * 'private' = the owner plus the emails in artifact_shares. Defaults at create
+ * (createArtifact): anonymous → 'public', or 'unlisted' where the deployment
+ * has not opened public; user-owned → 'unlisted' for image/dataset/pdf/file
+ * and 'private' otherwise.
  */
 export type Visibility = 'public' | 'private' | 'unlisted';
 
@@ -124,10 +125,8 @@ export interface ArtifactRow {
   /** Present only on an authorized governance snapshot, never a public summary. */
   shares?: ShareEntry[];
   /**
-   * GENERAL ACCESS: what the LINK grants whoever holds the address. NULL on
-   * every row written before the column existed, and NULL means `viewer` —
-   * exactly what those rows already granted, which is why nothing needed
-   * backfilling. Read it through `linkRoleOf`, never directly.
+   * GENERAL ACCESS: what the LINK grants whoever holds the address. NULL means
+   * `viewer`. Read it through `linkRoleOf`, never directly.
    */
   link_role: ShareRole | null;
   /**
@@ -146,9 +145,9 @@ export interface ArtifactRow {
   updated_at: string;
   /**
    * PROVENANCE: the artifact this one was FORKED from — the immediate parent,
-   * never a chain. NULL is "authored here", which is every row that predates
-   * forking. Written once at creation and never updated: a fork's own life
-   * (versions, comments, shares) is its own from the first save.
+   * never a chain. NULL is "authored here". Written once at creation and never
+   * updated: a fork's own life (versions, comments, shares) is its own from the
+   * first save.
    */
   forked_from: string | null;
   /**
@@ -200,23 +199,6 @@ export function ownsArtifact(row: Pick<ArtifactRow, 'user_id' | 'token_id'>, act
 }
 
 /**
- * THE ONE ACCESS DECISION — what this actor may do with this row, as a single
- * value on the lattice (lib/share-roles). Read-access is `canRead` of it, the
- * page chrome is `canEdit`/`canAnnotate` of it, and the reader/owner serving
- * split is a comparison against it.
- *
- * It is the MAX of the three independent ways a role can arrive:
- *   - ownership       — the account, or the bare token that created it;
- *   - a named share   — artifact_shares, by resolved user id or unresolved email;
- *   - the LINK        — what a stranger holding the address gets.
- *
- * Replacing `canReadArtifact` + `roleFor`, which asked the same question twice
- * and disagreed: one matched every share role and the session's address, the
- * other matched only editor/commenter and only through users.email. The union
- * of the two is what this implements, which is why the swap is behaviour-
- * preserving — the disagreements were all between values of EQUAL rank.
- */
-/**
  * The role this actor holds WITHOUT the link — ownership, or a share naming
  * them personally. The other half of `effectiveRole`, and it is separate
  * because one question in the product needs it alone: a LISTING.
@@ -239,6 +221,17 @@ export async function roleWithoutLink(
   return namedRoleFor(row, actor);
 }
 
+/**
+ * THE ONE ACCESS DECISION — what this actor may do with this row, as a single
+ * value on the lattice (lib/share-roles). Read-access is `canRead` of it, the
+ * page chrome is `canEdit`/`canAnnotate` of it, and the reader/owner serving
+ * split is a comparison against it.
+ *
+ * It is the MAX of the three independent ways a role can arrive:
+ *   - ownership       — the account, or the bare token that created it;
+ *   - a named share   — artifact_shares, by resolved user id or unresolved email;
+ *   - the LINK        — what a stranger holding the address gets.
+ */
 export async function effectiveRole(
   row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id' | 'visibility' | 'link_role'> & Partial<Pick<ArtifactRow,'format'>>,
   actor: RoleActor,
@@ -261,8 +254,7 @@ export async function effectiveRole(
  * the column holds — which is what lets the setting be REMEMBERED across a trip
  * through `private` rather than silently reset.
  *
- * NULL is the pre-column shape and reads as `viewer`, exactly what those rows
- * already granted. That equivalence is the whole migration.
+ * NULL reads as `viewer`.
  */
 export function linkRoleOf(row: Pick<ArtifactRow, 'visibility' | 'link_role'>): ArtifactRole {
   if (row.visibility === 'private') return 'none';
@@ -449,8 +441,8 @@ export async function createArtifact(
           input.visibility ??
             (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
               : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
-          // NULL is the pre-column shape and reads as 'viewer' (linkRoleOf), so
-          // every ordinary creation stays exactly as it was.
+          // NULL reads as 'viewer' (linkRoleOf), which is what every ordinary
+          // creation grants whoever holds the link.
           atCreation.linkRole ?? null,
           input.ancestor_ids ?? [],
           newEditId(),
@@ -612,10 +604,9 @@ async function listArtifactsScoped(scope: Scope): Promise<ArtifactSummary[]> {
  * The id is an ADDRESS, not a credential — whether this viewer may see the
  * row is the caller's decision (the visibility ACL), made before serving.
  *
- * Request-memoized (React cache): the page resolves the row in
- * generateMetadata AND again in the render, and without the memo every view
- * pays the lookup twice. Outside an RSC render (route handlers, tests)
- * cache() is a pass-through, so it can never serve a stale row.
+ * Request-memoized (React cache), so a page that resolves the same row twice in
+ * one render pays the lookup once. Outside a React render (route handlers,
+ * tests) cache() is a pass-through, so it can never serve a stale row.
  */
 export const getArtifactById = cache(async (id: string): Promise<ArtifactRow | null> => {
   const db = await getDb();
@@ -678,8 +669,8 @@ export type Scope = { where: (param: string) => string; val: string };
  * `git grep LIVE_ARTIFACT_SQL` is the whole audit.
  *
  * lib/trash is the ONE module that reads past it, through `ownerPredicate`
- * below: the trash listing, restore and the purge are the readers of trashed
- * rows, and they are the reason the rows are still there.
+ * below: the trash listing and restore are the readers of trashed rows, and
+ * they are the reason the rows are still there.
  */
 export const LIVE_ARTIFACT_SQL = 'deleted_at IS NULL';
 
@@ -711,7 +702,7 @@ async function resolveSharesFor(db: Queryable, artifactId: string, userId: strin
 
 /**
  * WHO owns the row, WITHOUT the trash gate — for lib/trash alone, which reads
- * trashed rows on purpose (the listing, restore, the purge). Every other
+ * trashed rows on purpose (the listing, restore). Every other
  * caller wants `ownerScope`, which is this with the gate composed in.
  */
 export const ownerPredicate = ({ tokenId, userId }: TokenActor): Scope =>
@@ -720,27 +711,25 @@ export const ownerPredicate = ({ tokenId, userId }: TokenActor): Scope =>
 const ownerScope = (actor: TokenActor): Scope => live(ownerPredicate(actor));
 
 /**
- * The SQL MIRROR of the lattice: the owner, or an account holding any share
- * role that reaches `min`. One generator rather than a hand-written predicate
- * per door, so "which roles may edit" is answered in the same place for the
- * statement and for the page (lib/share-roles shareRolesAtLeast) — and so the
- * LINK term, when it arrives, is added once here rather than three times.
+ * The LINK half of the lattice, in SQL. Only ever composed into a scope that
+ * has already narrowed to an actor with an ACCOUNT (scopeAtLeast below), which
+ * is where the anonymous ceiling is enforced for statements — the mirror of
+ * what effectiveRole does for reads.
  *
- * An anonymous token has no account to be named through, so it narrows to
- * bare ownership.
- */
-/**
- * The LINK half of the same lattice, in SQL. Only ever composed into a scope
- * that has already narrowed to an actor with an ACCOUNT (scopeAtLeast below),
- * which is where the anonymous ceiling is enforced for statements — the mirror
- * of what effectiveRole does for reads.
- *
- * COALESCE carries the pre-column rows: NULL is `viewer`, exactly what they
- * already granted.
+ * COALESCE reads a NULL `link_role` as `viewer`.
  */
 const LINK_PREDICATE = (min: ArtifactRole) =>
   `(artifacts.visibility <> 'private' AND COALESCE(artifacts.link_role, 'viewer') IN (${shareRolesAtLeast(min).map((r) => `'${r}'`).join(', ')}))`;
 
+/**
+ * The SQL MIRROR of the lattice: the owner, an account holding any share role
+ * that reaches `min`, or the LINK. One generator rather than a hand-written
+ * predicate per door, so "which roles may edit" is answered in the same place
+ * for the statement and for the page (lib/share-roles shareRolesAtLeast).
+ *
+ * An anonymous token has no account to be named through, so it narrows to
+ * bare ownership.
+ */
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
     ? live({ where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})`, val: actor.userId })
@@ -752,12 +741,11 @@ export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'ed
  * The scope the annotation sidecar reaches a document through: the owner, an
  * editor, or a COMMENTER (lib/annotations).
  *
- * It was `ownerScope`, and that was an accident rather than a decision — a
- * collaborator who may rewrite the document met the uniform 404 on the way to
- * commenting on it. A document two people may WRITE should not be a document
- * only one may DISCUSS, and a commenter is someone invited to discuss it and
- * nothing else. Deletion does NOT use this (see deleteAnnotationFor): erasing
- * someone else's words is the owner's verb.
+ * A document two people may WRITE should not be a document only one may
+ * DISCUSS, and a commenter is someone invited to discuss it and nothing else.
+ * Deleting a thread reaches the document through this same scope and is then
+ * narrowed again (deleteAnnotationFor): the owner may remove any thread, a
+ * named editor only one they wrote.
  */
 export const annotationScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'commenter');
 
@@ -905,11 +893,6 @@ async function getVersionScoped(scope: Scope, id: string, version: number): Prom
 }
 
 /**
- * Revert to an archived version — as a NEW version (the current state is
- * archived first), so a revert is itself revertible and the URL never moves.
- * Null when the artifact or the requested version doesn't exist.
- */
-/**
  * Asked for a version of an artifact that exists and is theirs, but which was
  * never archived. Save-less editing bumps `version` on every accepted edit
  * while snapshots COALESCE, so most version numbers are checkpoints that were
@@ -926,6 +909,11 @@ export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived)
   return r !== null && 'notArchived' in r;
 }
 
+/**
+ * Revert to an archived version — as a NEW version (the current state is
+ * archived first), so a revert is itself revertible and the URL never moves.
+ * Null when the artifact or the requested version doesn't exist.
+ */
 async function revertScoped(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
   const db = await getDb();
   const scope = editorScope(actor);
@@ -984,12 +972,6 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
 }
 
 /**
- * Full replace: archive the current state to artifact_versions, then overwrite
- * with version+1 (format may switch html↔story). Omitted title/description
- * keep their current values. Null when no artifact matches (unknown/foreign).
- */
-
-/**
  * Optimistic-concurrency miss: the caller's `expectedVersion` no longer names
  * the head. Distinct from `null` (unknown/foreign) — routes answer 409, not
  * 404, and report the head version so the caller can read → merge → replay.
@@ -1013,6 +995,11 @@ export interface ReplaceOpts {
   expectedVersion?: number;
 }
 
+/**
+ * Full replace: archive the current state to artifact_versions, then overwrite
+ * with version+1 (the format may change). Omitted title/description keep their
+ * current values. Null when no artifact matches (unknown/foreign).
+ */
 async function replaceScoped(
   actor: TokenActor,
   id: string,
@@ -1149,7 +1136,7 @@ function sayMoved(actor: TokenActor, id: string, moved: { from: string | null; t
   void emit(actorSubject(actor), 'moved', { kind: 'artifact', id }, { from_parent_id: moved.from, to_parent_id: moved.to });
 }
 
-// ── The concurrent-edit protocol (concurrent-artifacts-edits.md) ─────────────
+// ── The concurrent-edit protocol ─────────────────────────────────────────────
 
 /**
  * One edit against a claimed base version. Agents send the Edit-tool diff;
@@ -1171,7 +1158,7 @@ export interface EditInput {
 }
 
 /**
- * The resolution outcomes (doc: "Resolution, step by step"). `null` keeps the
+ * The resolution outcomes. `null` keeps the
  * uniform-404 contract: unknown and foreign ids are indistinguishable.
  * Candidate markup that fails validation returns the publish pipeline's 400
  * Response unchanged (same shape as parseContentInput).
@@ -1693,9 +1680,8 @@ function refLoaderForUser(userId: string): RefLoader {
  * is counted. The byte quota is charged inside `importWebAsset`, at the one
  * door that turns a URL into stored bytes.
  *
- * This replaced an importer that created an image ARTIFACT per URL and rewrote
- * the source to `ref:<id>`: an agent got documents it never asked for, in a
- * markup it no longer recognised, and re-publishing the same URL made another.
+ * Nothing here creates an artifact or rewrites the source: the URL the author
+ * wrote stays in the document, and only the served page points at our copy.
  */
 export function assetImporterFor(tokenId: string, userId: string | null): (url: string, kind: WebAssetKind) => Promise<AssetWarning | null> {
   return async (url, kind) => {

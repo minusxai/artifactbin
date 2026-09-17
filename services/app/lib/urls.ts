@@ -1,5 +1,5 @@
 /**
- * The URL grammar — pure functions, no DB, no Next.
+ * The URL grammar — pure functions, no DB.
  *
  * One rule anchors everything: the file ID resolves the document; the username
  * and the title slug in a URL are DECORATION. Any path whose last segment
@@ -9,9 +9,8 @@
  *
  * NESTING IS NEVER IN A URL. A folder is an artifact with its own address, and
  * two sibling folders may share a name — so a path through them is ambiguous
- * by construction, and the address stayed decoration while the trail
- * (`ancestor_ids`) is drawn on the page. The old folder segments and their
- * grammar are gone, not kept.
+ * by construction, so the address stays decoration while the trail
+ * (`ancestor_ids`) is drawn on the page.
  *
  * Canonical forms:
  *   /a/<id>                            anonymous (or owner has no username yet)
@@ -34,7 +33,7 @@ export function titleSlug(title: string | null | undefined): string {
  * The forgiving parse: given the path segments AFTER /@username/, find the
  * file id. Null = the last segment can't carry one. Everything before the last
  * segment is ignored on purpose — resolution is by id alone, which is what
- * lets an OLD link carrying folder names keep working after the grammar died.
+ * lets a link carrying folder names keep working.
  */
 export function parsePrettyPath(segments: string[]): { id: string } | null {
   const last = segments[segments.length - 1];

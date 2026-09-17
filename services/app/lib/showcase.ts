@@ -105,11 +105,11 @@ const KIND_LABELS: Record<ShowcaseKind, string> = {
 
 /**
  * WHAT THE FORMAT RAIL NAMES — every kind the wall actually carries, once
- * each, IN THE WALL'S OWN ORDER. It was a hand-written list in the component
- * with an order of its own, which is exactly the drift this file exists to
- * prevent: reordering `ENTRIES` left the wheel and the rail beside it reading
- * two different sequences, silently. A kind is on the rail because a document
- * has it — adding one is still a single entry, with no second list to touch.
+ * each, IN THE WALL'S OWN ORDER. Derived rather than hand-written in the
+ * component: a second list with an order of its own would let reordering
+ * `ENTRIES` leave the wheel and the rail reading two sequences, silently. A
+ * kind is on the rail because a document has it — adding one is still a single
+ * entry, with no second list to touch.
  */
 export const SHOWCASE_FORMATS: readonly { kind: ShowcaseKind; label: string }[] = SHOWCASE.reduce<
   { kind: ShowcaseKind; label: string }[]
