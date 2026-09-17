@@ -264,11 +264,13 @@ async function recoverRequest(workspace:Workspace,client:HttpClient,pending:Pend
   if(response.response_expired===true&&typeof response.id==='string')response=await client.request(`/artifacts/${response.id}`);
   pending=await savePendingResponse(workspace.home,workspace.root,pending,response,client.account);
  }
- return acknowledgeSavedResponse(workspace,pending,client.account);
+ return acknowledgeSavedResponse(workspace,pending,client.account,[client.connection.server,...client.aliases]);
 }
-async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingRequest,fallbackAccount?:string):Promise<Snapshot>{
+/** One server, several addresses: a record journaled under any verified address is this server's. */
+const sameAddress=(one:string,other:string,addresses:readonly string[])=>one===other||(addresses.includes(one)&&addresses.includes(other));
+async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingRequest,fallbackAccount?:string,addresses:readonly string[]=[]):Promise<Snapshot>{
  const account=pending.responseAccount??fallbackAccount;
- if(workspace.tracking&&(workspace.tracking.server!==pending.server||workspace.tracking.account!==account))throw new CliError('account_mismatch','Saved recovery belongs to another server or account.');
+ if(workspace.tracking&&(!sameAddress(workspace.tracking.server,pending.server,addresses)||workspace.tracking.account!==account))throw new CliError('account_mismatch','Saved recovery belongs to another server or account.');
  const snapshot=readSnapshot(pending.response!,pending);
  const current=await readOptional(await confinedPath(workspace.root,pending.file.path));
  if(!current)throw new CliError('local_changed',`Remote publication succeeded, but ${pending.file.path} was removed. Recovery was retained.`,'Restore the local file and rerun afbin push.');
@@ -319,13 +321,13 @@ function readSnapshot(response:Record<string,unknown>,pending:PendingRequest):Sn
 }
 
 /** Persist a confirmed response using only its checksummed journal. */
-export async function finishSavedRequest(workspace:Workspace,server?:string):Promise<string|undefined>{
+export async function finishSavedRequest(workspace:Workspace,server?:string,addresses:readonly string[]=[]):Promise<string|undefined>{
  const initial=await readPendingRequest(workspace.home,workspace.root);if(!initial?.response)return;
- if(server&&server!==initial.server)throw new CliError('account_mismatch','Saved recovery belongs to another server.');
+ if(server&&!sameAddress(server,initial.server,addresses))throw new CliError('account_mismatch','Saved recovery belongs to another server.');
  return withLock(workspace.home,workspace.root,async()=>{
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.home,workspace.root);if(!pending?.response)return;
-  await acknowledgeSavedResponse(workspace,pending);return pending.file.path;
+  await acknowledgeSavedResponse(workspace,pending,undefined,addresses);return pending.file.path;
  });
 }
 

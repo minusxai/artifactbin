@@ -9,6 +9,7 @@ import {deviceAuthenticate} from '../src/browser-auth';
 import {runCli} from '../src/dispatch';
 import {saveConnection} from '../src/config';
 import {stateFor} from '../src/state-access';
+import {stageRequest,savePendingResponse} from '../src/pending-request';
 
 // One deployment, two names: a link copied from either is the same artifact on the selected server.
 test('a URL at a verified alias of the selected server resolves to its artifact id',async()=>{
@@ -297,5 +298,25 @@ for(const args of [['query'],['log'],['comment'],['open'],['export','--format','
   const run=await cli([command,`${ALIAS}/a/abc123?$x=1`,...rest,'--server',CANONICAL,'--json'],home,net.fetch);
   assert.doesNotMatch(run.out.join('')+run.err.join(''),/wrong_server/);
   assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS).map(call=>call.path),[]);
+ });
+});
+
+// A write journaled under the OLD hostname, before the folder healed, is still this server's write.
+test('a saved reply journaled under a verified alias finishes recovery on the canonical origin',async()=>{
+ await withHome(async home=>{
+  await saveConnection({server:ALIAS,token:'alias-token'},home,{});
+  await trackWorkspace(home,home,ALIAS,'usr_one');
+  const body='<p>Saved reply</p>';await writeFile(join(home,'doc.jsx'),body);
+  const scope=await realpath(home);
+  const pending=await stageRequest(home,scope,{server:ALIAS,account:'usr_one',credential:'old-credential-hash',request:{path:'/artifacts',method:'POST',body:{markup:body}},file:{path:'doc.jsx',bytes:Buffer.from(body).toString('base64')}});
+  await savePendingResponse(home,scope,pending,{id:'abc123',version:1,edit_id:'one',state:'a'.repeat(64),format:'markup',markup:'<p id="p001">Saved reply</p>'},'usr_one');
+  const net=world({
+   [`${ALIAS}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]},
+   [`${CANONICAL}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]},
+  });
+  const run=await cli(['push','doc.jsx','--server',CANONICAL,'--json'],home,net.fetch);
+  assert.equal(run.code,0,run.err.join('')+run.out.join(''));
+  assert.doesNotMatch(run.out.join('')+run.err.join(''),/account_mismatch/);
+  assert.ok(!(await stateFor(home)).get(scope,'pending-request','current'),'the recovery record is cleared');
  });
 });
