@@ -22,6 +22,7 @@ delete env.ARTIFACTBIN_TOKEN;
 delete env.ARTIFACTBIN_REFRESH_TOKEN;
 const evidence = [];
 const failures = [];
+let guestCookie = '';
 async function scenario(run) {
   try { await run(); } catch (error) { failures.push(error); console.error(error); }
 }
@@ -49,6 +50,8 @@ async function invoke(args, { cwd = workspace, expected = 0, approve = false } =
         body: new URLSearchParams({ user_code: pairing.userCode, decision: 'anonymous' }),
       });
       assert.equal(response.status, 200);
+      guestCookie = response.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+      assert.ok(guestCookie, 'guest approval establishes the approving browser identity');
       approved = true;
     } catch (error) { approvalError = error; child.kill(); }
     finally { checking = false; }
@@ -74,6 +77,7 @@ try {
   const saved = await readFile(join(home,'hosts',profile,'credentials.env'),'utf8');
   const token = saved.match(/^ARTIFACTBIN_TOKEN=(.+)$/m)?.[1];
   assert.ok(token);
+  let accountCookie;
   if (credentialSource) {
     // The eval helper is TypeScript; load it through its existing runner boundary.
     const { acquireCredential } = await tsImport('./lib/credential.ts', import.meta.url);
@@ -82,17 +86,21 @@ try {
     const account = await acquireCredential(credentialSource, {
       base, env: process.env, email, localOutbox: process.env.EMAIL__DEV_OUTBOX_PATH,
     });
-    assert.equal((await fetch(`${base}/api/tokens/claim`, {
-      method: 'POST', headers: { 'content-type': 'application/json', cookie: account.cookie },
-      body: JSON.stringify({ token }),
-    })).status, 200);
+    accountCookie = `${guestCookie}; ${account.cookie}`;
   } else {
   const owner = await browser.newPage();
+  await owner.context().addCookies(guestCookie.split('; ').map(pair => {
+    const separator = pair.indexOf('=');
+    return { name: pair.slice(0, separator), value: pair.slice(separator + 1), url: base, httpOnly: true, sameSite: 'Lax' };
+  }));
   await loginViaEmail(owner, base, sink, `mxmx_test_conformance_${Date.now().toString(36)}@example.com`);
-  assert.equal(await owner.evaluate(async token => (await fetch('/api/tokens/claim', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }),
-  })).status, token), 200);
+  accountCookie = (await owner.context().cookies(base)).map(({ name, value }) => `${name}=${value}`).join('; ');
   }
+  // A verified browser session merges its guest identity, including the CLI credential.
+  // Claiming that credential by bearer secret would try to take another user's token.
+  const accountHome = await fetch(`${base}/api/page/home?part=core`, { headers: { cookie: accountCookie } });
+  assert.equal(accountHome.status, 200);
+  assert.equal((await accountHome.json()).signedIn, true);
   const api = async (path, credential = token, init = {}) => fetch(`${base}${path}`, {
     ...init, headers: { ...(credential ? { authorization: `Bearer ${credential}` } : {}), ...init.headers },
   });
@@ -104,6 +112,10 @@ try {
   const published = pushed.operations.find(item => item.path.endsWith('report.jsx'));
   assert.ok(published?.id, JSON.stringify(pushed));
   const id = published.id;
+  const library = await fetch(`${base}/api/page/home?part=core`, { headers: { cookie: accountCookie } });
+  assert.equal(library.status, 200);
+  assert.ok((await library.json()).artifacts.some(artifact => artifact.id === id), 'the logged-in account owns the CLI publication after guest merge');
+  record('guest CLI connection follows its browser into the account');
   const read = await api(`/api/artifacts/${id}`);
   assert.equal(read.status, 200);
   const head = await read.json();
