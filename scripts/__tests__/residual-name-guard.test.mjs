@@ -166,6 +166,8 @@ describe('retired surfaces', () => {
 
 /** THE README IS A FRONT DOOR: four sections in order, the two one-liners, no retired env name. */
 const readme = () => read('README.md');
+/** The one place the default host is spelled (services/contracts); prose that names it is checked against this. */
+const defaultServer = () => /DEFAULT_SERVER = '([^']+)'/.exec(read('services/contracts/src/default-server.ts'))[1];
 // The flat settings this product retired; the boot-time alias map is gone (no backward compatibility), so the
 // list lives in the guards that keep the names from coming back (see services/app/lib/__tests__/retired-names.test.ts).
 const retiredEnvNames = () => [
@@ -180,13 +182,14 @@ describe('README.md', () => {
     expect(readme().split('\n')[0]).toBe('# Artifactbin');
   });
   it('documents the released cloud and standalone workflows and development setup', () => {
-    expect(readme()).toContain('curl -fsSL https://artifactbin.dev/chat/install.sh | sh');
+    expect(readme()).toContain(`curl -fsSL ${defaultServer()}/chat/install.sh | sh`);
     expect(readme()).toContain('afbin preview report.jsx');
     expect(readme()).toContain('afbin serve --dir ./artifactbin-data --port 7445');
     expect(readme()).toContain('afbin add report.jsx sales.csv --json');
     expect(readme()).toMatch(/git clone https:\/\/github\.com\/minusxai\/artifactbin[\s\S]*npm ci[\s\S]*npm run setup[\s\S]*npm run dev/);
     expect(readme()).toContain('npm run setup -- --yes --port 7445');
-    expect(readme()).toContain('https://artifactbin.dev');
+    expect(readme()).toContain(`afbin config set host ${defaultServer()}`);
+    expect(readme()).not.toMatch(/https:\/\/artifactbin\.dev/);
     expect(readme()).toContain('Apache-2.0');
   });
 });

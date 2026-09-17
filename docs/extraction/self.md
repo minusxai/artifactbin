@@ -9,7 +9,7 @@ and comment on its selected files; names provide attribution, not authentication
 
 `afbin serve --dir ./team` runs the authenticated persistent server in the foreground.
 See [team hosting](team.md) for configuration. There is no managed self instance or daemon.
-The client defaults to artifactbin.dev. `afbin config set host <url>` saves a default;
+The client defaults to app.artifactbin.dev. `afbin config set host <url>` saves a default;
 `--server <url>` overrides one invocation. Existing workspace host/account bindings still apply.
 
 ```text

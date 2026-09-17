@@ -6,6 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import * as agentCopy from '@/lib/agent-copy';
 import { existingPaste } from '@/lib/agent-copy';
+import { DEFAULT_SERVER } from '@artifactbin/contracts';
 
 const B = 'https://x.test';
 const ID = 'ab3cd9';
@@ -25,7 +26,7 @@ describe('the tokenless paste', () => {
   it.each(['https://x.test', 'http://127.0.0.1:45407/'])('selects the handed-over server for every remote command: %s', (base) => {
     expect(existingPaste(base, ID)).toContain(`Pass --server ${base.replace(/\/$/, '')} to every afbin server command`);
   });
-  it.each(['https://artifactbin.dev', 'https://artifactbin.dev/'])('keeps the default production handoff short: %s', (base) => {
+  it.each([DEFAULT_SERVER, `${DEFAULT_SERVER}/`])('keeps the handoff short on the host a fresh CLI already defaults to: %s', (base) => {
     expect(existingPaste(base, ID)).not.toContain('--server');
     expect(existingPaste(base, ID)).toContain('Run afbin help first.');
   });

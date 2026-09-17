@@ -1,3 +1,4 @@
+import { DEFAULT_SERVER } from "@artifactbin/contracts";
 import { useEffect, useRef, useState } from "react";
 import { usePageData } from '@/web/use-page-data';
 import { CopyIcon } from "@/components/CopyIcon";
@@ -353,7 +354,7 @@ function InstallInstructions() {
   const [harness, setHarness] = useState("claude");
   return (
     <div className="mt-4 space-y-4">
-      <CopyCommand label="Install CLI" command={'curl -fsSL https://artifactbin.dev/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"'} />
+      <CopyCommand label="Install CLI" command={`curl -fsSL ${DEFAULT_SERVER}/chat/install.sh | sh\nexport PATH="$HOME/.local/bin:$PATH"`} />
       <p className="text-xs text-muted">macOS and Linux · Intel and ARM. Windows: use WSL.</p>
       <p className="text-xs text-muted">Run afbin to sign in and choose an installed agent, or use the explicit command below.</p>
       <div>
