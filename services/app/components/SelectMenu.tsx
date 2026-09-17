@@ -2,9 +2,8 @@
 
 /**
  * The house dropdown — terminal-graphite chrome for what a native <select>
- * draws with OS widgets. Same anatomy as ThemePicker (trigger button, absolute
- * panel, pointerdown-outside + Escape dismiss), made reusable now that the
- * pattern repeats across the chart inspector.
+ * draws with OS widgets. A trigger button over a Radix popover, the same
+ * anatomy AnchoredPanel gives the theme and mode chips.
  *
  * Lives beside ui.tsx rather than in it: the kit file is imported by server
  * components for its class constants, and this one needs state.
@@ -18,10 +17,9 @@
  * placed panel is clipped by any `overflow-hidden`/`overflow-y-auto` ancestor,
  * and z-index does not escape a clip. This dropdown's homes are precisely the
  * places that have one — the centered share dialog (which rounds its corners
- * and scrolls its own body) and the chart inspector rail — so the role list on
- * the last person in the share list was cut in half and `can edit` could not be
- * reached. Radix Popover also flips it above the trigger when the space below
- * runs out, which is the other half of the same bug.
+ * and scrolls its own body) and the chart inspector rail — where a clipped
+ * list would put its last options out of reach. Radix Popover also flips it
+ * above the trigger when the space below runs out.
  */
 import { Check, ChevronDown } from 'lucide-react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';

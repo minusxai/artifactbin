@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * THE ONE CREATE DIALOG. Every "new artifact" gesture on the site opens THIS —
- * the workspace's Create menu and the landing footer alike — so there is one
+ * THE ONE CREATE DIALOG. Every "new artifact" gesture on the site opens THIS
+ * (the workspace's Create menu), so there is one
  * place that says how an artifact comes to exist: install afbin, copy the
  * instructions, paste them into an agent (GetStarted). Folders are the other
  * kind, a plain named form. Portaled to <body>, so it floats above whichever

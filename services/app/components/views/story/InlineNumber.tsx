@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * ADAPTED from minusx InlineNumber: a data-driven figure that
+ * A data-driven figure that
  * flows inside a sentence — `data="$name"` names a table declared in the
  * document, `col` picks the column, optional `agg`
  * (sum|avg|min|max|count|first), `prefix`/`suffix`/`format` (d3-format) shape

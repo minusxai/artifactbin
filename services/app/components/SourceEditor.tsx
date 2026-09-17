@@ -5,9 +5,9 @@
  *
  * `@monaco-editor/react` does not contain Monaco. Left alone it injects a
  * <script> pointing at jsdelivr and waits for it — and the app's own CSP
- * (`script-src 'self'`, server/app.ts) refuses that, so `code` mode showed
- * "Loading…" forever, in development and on the deployment alike. It had never
- * worked. Nothing in the unit suite could see it either: the editor's UI test
+ * (`script-src 'self'`, server/app.ts) refuses that, which leaves `code` mode
+ * at "Loading…" forever, in development and on the deployment alike. Nothing
+ * in the unit suite can see that either: the editor's UI test
  * mocks `@monaco-editor/react`, so the loader never runs there — which is why
  * the guard for this lives in scripts/gate-editor-v2.mjs (§4), where a real
  * browser really loads it.

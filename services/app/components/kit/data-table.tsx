@@ -77,8 +77,8 @@ interface DataTableProps {
   /**
    * Unknown props reach the root div, like every other kit component — the
    * interpreter's `data-mx-ast` stamp among them, which is what makes an
-   * authored <DataTable> selectable in edit mode. Destructuring everything
-   * and spreading nothing silently dropped it.
+   * authored <DataTable> selectable in edit mode — destructuring everything
+   * and spreading nothing drops it silently.
    */
   [key: `data-${string}`]: unknown
 }

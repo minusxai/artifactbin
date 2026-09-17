@@ -1,12 +1,11 @@
 'use client';
 
 /**
- * The data-backed chart embed — the adaptation of minusx's SQL-era Question
- * containers, and SQL-era again: `data="$name"` names a `<Query>` (or a
+ * The data-backed chart embed: `data="$name"` names a `<Query>` (or a
  * table `<Value>`) declared in the Helmet of the document, and the rows come from
- * the runtime store (lib/story-runtime/store.ts). Rendering contract unchanged:
- * rows are injected as the named Vega dataset "main" (via the ported
- * VegaChart), envelope kinds vega-lite | vega | recipe | table | single_value.
+ * the runtime store (lib/story-runtime/store.ts). Rendering contract:
+ * rows are injected as the named Vega dataset "main" (via VegaChart),
+ * envelope kinds vega-lite | vega | recipe | table | single_value.
  *
  * Chrome here is token classes only (this file is in EXTRA_CLASS_SOURCES): the
  * story iframe's sole stylesheet is the compiled story CSS.
@@ -21,16 +20,6 @@ import type { RefDataMap } from '@/lib/story/ref-data';
 import type { VizEnvelope } from '@/lib/validation/atlas-schemas';
 
 /**
- * The vega stack behind VegaChart (vega + vega-lite + vega-interpreter +
- * vega-tooltip) is ~500 KB gzipped — two thirds of the JS on the reader route —
- * so it loads through the same dynamic boundary that keeps Monaco away from
- * readers (guarded by lib/__tests__/reader-bundle-hygiene.test.ts). Table and
- * single_value embeds never trigger the fetch; a chart shows its placeholder
- * chrome for the beat the chunk is in flight. (No apostrophes in comments
- * here: the recipe-class extractor tokenizes this file — see
- * scripts/generate-story-ui-classes.ts.)
- */
-/**
  * The ONE loading lockup every embed state speaks: a spinning ring over a mono
  * uppercase label, centered — the same visual language as the .mx-busy
  * updating overlay (lib/story-runtime/chrome-css.ts), composed from utilities
@@ -43,6 +32,14 @@ const waiting = (label: string) => (
   </div>
 );
 
+/**
+ * The vega stack behind VegaChart (vega + vega-lite + vega-interpreter +
+ * vega-tooltip) is ~500 KB gzipped — two thirds of the JS on the reader route —
+ * so it loads through the same dynamic boundary that keeps Monaco away from
+ * readers (guarded by lib/__tests__/reader-bundle-hygiene.test.ts). Table and
+ * single_value embeds never trigger the fetch; a chart shows its placeholder
+ * chrome for the beat the chunk is in flight.
+ */
 const VegaChart = dynamic(() => import('@/components/viz/VegaChart').then((m) => m.VegaChart), {
   ssr: false,
   loading: () => waiting('loading chart…'),

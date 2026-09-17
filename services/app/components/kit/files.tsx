@@ -3,7 +3,7 @@
 /**
  * `<Files>` — a LISTING of artifacts, as a document may draw one.
  *
- * A folder's own page is app chrome now (web/pages/Folder) and does not come
+ * A folder's own page is app chrome (web/pages/Folder) and does not come
  * through here. What this component is for is the power feature underneath it:
  * a document may declare `<Query name="q">{`select * from ref_<folderId>`}</Query>`
  * over any folder it may read and bind the rows with `<Files data="$q" />`, so
@@ -23,9 +23,9 @@
  *    (`/a/<id>/export?mode=card`) worth showing; a private one, and every
  *    folder, has none, and draws the glyph for its FORMAT instead
  *    (lib/story-ui/file-glyphs, the list the SERVER resolves for this component
- *    — see lib/story/icon-glyphs, which learned `<Files>` because a document
- *    that binds a listing need name no `<Icon>` anywhere and would otherwise
- *    ship no glyphs).
+ *    — see lib/story/icon-glyphs, which accounts for `<Files>` because a
+ *    document that binds a listing need name no `<Icon>` anywhere and would
+ *    otherwise ship no glyphs).
  *  - THE NUMBERS ARE OPTIONAL FIELDS, and absent is not zero. `views: null`
  *    means "not counted for you", so the mark is omitted entirely rather than
  *    printed as 0 — the same judgement the shelf's ViewsMark makes.
@@ -64,9 +64,9 @@ const GRID: Record<string, string> = {
  * The rest of the props reach the ROOT so the node's `data-mx-ast` stamp lands
  * in the DOM — that stamp is what makes a component selectable in the editor
  * and writable back into the source, and a component that swallows it is
- * unreachable (lib/story-ui selectable-kit). It moved from the `<ul>` to the
- * section when the head arrived: the stamp names the whole component, and a
- * click on the folder's own name is still a click on `<Files>`.
+ * unreachable (lib/story-ui/ast-path AST_PATH_ATTR). It lands on the section
+ * rather than the `<ul>`: the stamp names the whole component, so a click on
+ * the folder's own name is still a click on `<Files>`.
  */
 function Files({ rows, variant = "icons", capture = false, className, ...rest }: FilesProps) {
   const items = rows ?? []

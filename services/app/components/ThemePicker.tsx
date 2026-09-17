@@ -4,10 +4,8 @@
  * The theme control for artifact chrome: one trigger naming the current theme,
  * opening a grid of the REAL preview images (`public/story-themes/<name>.png`).
  *
- * It replaces six flat name-buttons that filled the top bar while saying nothing
- * about what a theme looks like — the previews are the whole point, since a
- * theme is a palette plus a type stack, and neither survives being written out
- * as a word.
+ * The previews are the whole point: a theme is a palette plus a type stack, and
+ * neither survives being written out as a word.
  *
  * Deliberately dumb: it reports a pick and closes. Choosing a theme is an EDIT,
  * not a viewer preference (a reader flips only the MODE, never the theme), and

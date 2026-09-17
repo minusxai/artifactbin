@@ -1,6 +1,6 @@
 /**
  * The public profile listing — the pretty-URL page's chrome, rendered
- * in the browser from /api/page/profile. Moved out of the Next page as-is.
+ * in the browser from /api/page/profile.
  */
 import { FollowButton } from '@/components/FollowButton';
 import PageChrome from '@/components/PageChrome';
@@ -27,11 +27,10 @@ export function ListingShell({ authed = false, anon = false, children }: {
  * The profile masthead: micro-label, the handle, and a one-line readout of what
  * sits below.
  *
- * It carried a FOLDER PATH once — a crumb per segment, each its own link —
- * because a folder used to be a string on a document and a listing address.
- * Nesting is not in a URL any more (lib/urls): a folder is an artifact with its
- * own address, this page is the account ROOT, and the trail from `ancestor_ids`
- * is drawn on the folder's own document. So there is nothing here to segment.
+ * No folder path: nesting is not in a URL (lib/urls). A folder is an artifact
+ * with its own address, this page is the account ROOT, and the trail from
+ * `ancestor_ids` is drawn on the folder's own page. There is nothing here to
+ * segment.
  */
 export function ListingHero({ handle, label, count, noun, follow }: {
   handle: string; label: string; count: number; noun: string;

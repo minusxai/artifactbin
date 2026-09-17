@@ -83,13 +83,13 @@ const ICON_ACTION =
   'inline-flex h-6 w-6 cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-muted transition-colors';
 
 /**
- * Rows per page when this table IS the list (the logged-out token browser):
- * one block in a taller page, which must not grow into everything below it.
+ * The fallback when a caller names no page size: one block in a taller page,
+ * which must not grow into everything below it.
  *
  * In a shelf's list view the count is raised (SHELF_LIST_PER_PAGE), because
- * rows are compact and cheap. Five is also below the count at which a pager helps anyone: it
- * costs a click to reveal what a little scrolling would have shown, which is
- * most of why the old dashboard list read as small.
+ * rows are compact and cheap. Five is also below the count at which a pager
+ * helps anyone: it costs a click to reveal what a little scrolling would have
+ * shown.
  */
 export const ARTIFACTS_PER_PAGE = 5;
 
@@ -112,9 +112,9 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
   manage?: boolean;
   /**
    * Whether a row may be opened in the editor. Separate from `manage` because
-   * a PROFILE offers the link and nothing that changes the document, while the
-   * logged-out token browser has always offered editing without the owner's
-   * move/delete menu — two different subsets, so one boolean cannot say both.
+   * a PROFILE offers the link and nothing that changes the document, while a
+   * caller may offer editing without the owner's move/delete menu — two
+   * different subsets, so one boolean cannot say both.
    */
   canEdit?: boolean;
   showVisibility?: boolean;
@@ -185,8 +185,8 @@ export function ArtifactTable({ artifacts, treeRows, includeAssets = true, folde
   // are among these rows.
   const pickable: PickerFolder[] = folders
     ?? artifacts.filter((a) => a.format === 'folder').map((a) => ({ id: a.id, title: a.title ?? null, ancestor_ids: a.ancestor_ids ?? [] }));
-  // A folder is named, never spelled: the id was only ever a placeholder for
-  // the picker that now knows the account's own names.
+  // A folder is named, never spelled: the picker knows the account's own
+  // names, so the id is only the fallback when one is missing.
   const placeName = (id: string): string => pickable.find((f) => f.id === id)?.title ?? id;
 
   const [localQuery, setLocalQuery] = useState('');
