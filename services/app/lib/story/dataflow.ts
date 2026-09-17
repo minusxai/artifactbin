@@ -77,6 +77,8 @@ export interface ScalarValueDecl extends Span {
   constraints?: import("@artifactbin/contracts").UserConstraints;
   /** Initial value; `null` when the author gave no `default`. */
   default: Scalar;
+  /** `false` keeps this Value out of the address: never written to it, never read from it. Absent = it travels in the link. */
+  url?: false;
 }
 
 interface TableValueDecl extends Span {
@@ -113,6 +115,8 @@ export interface MutationDecl extends Span {
   refs: string[];
   /** Optional affected-row guard, enforced by the mutation engine before persistence. */
   expectedAffected?: number;
+  /** Scalar Values set back to their declared defaults after this write succeeds. */
+  reset?: string[];
 }
 
 /** Everything a document declares — the parsed `<Helmet>` data children. */
