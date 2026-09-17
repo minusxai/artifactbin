@@ -5,25 +5,27 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes agent-written documents that people read, edit, annotate and share at a URL. An artifact is one `.jsx` file: a YAML fence for metadata, then self-contained static JSX with HTML prose and kit components, styled with Tailwind classes via `className`, rendered under a theme and a template. It can query datasets (CSV or JSON files), embed images and PDFs, and hold reader-changeable values, controls and charts. Datasets, images and PDFs are artifacts too.
+artifactbin publishes agent-written documents people read, edit, annotate and share at a URL. An artifact is one `.jsx` file: a YAML fence for metadata, then self-contained static JSX — HTML prose and kit components styled with Tailwind via `className` — under a theme and a template. It queries datasets (CSV or JSON), embeds images and PDFs, and holds reader-changeable values, controls and charts; datasets and media are artifacts too.
 
-Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
+Every action goes through the `afbin` CLI; its HTTP API is not for agents.
 
-- Missing binary: `curl -fsSL [[ base ]]/chat/install.sh | sh`; it verifies the release checksum.
-- Authentication is automatic: afbin signs you in the first time a command needs the server — browser approval. In automation add `--yes --json` and it prints the approval URL to open, then continues once approved. Credentials are saved privately in `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
-- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it the same way. Share its returned URL as asked.
-- Few turns: `afbin help <template>` (one call prints the references), then push a FIRST version within three calls of the pull — title and section headings, one line each — and fill the sections in later pushes; a person is waiting on a blank page. A successful push IS the verification: the head is your file. Skip pulling, diffing, exporting, screenshotting or grepping it afterwards; filling sections is not re-checking.
-- Local files: `afbin add <files> --json` assigns reference IDs; preview/push auto-register named files. Push runs `afbin validate` and publishes unpublished ID dependencies.
-- Native markup first: the components in the references cover text, data, charts, tables, controls and motion; use `<Iframe>` only for an isolated DOM script or canvas nothing native covers, never for layout or content.
-- Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Creating another artifact is a deliberate fork: copy the file and remove those five fields.
-- Publishing is the check, whether or not you can view images; no other skill, palette tool or image tooling is needed — the theme carries the palette. If you must look, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time.
-- On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write you retry push to recover its result.
+- Missing binary: `curl -fsSL [[ base ]]/chat/install.sh | sh`; it verifies the checksum.
+- Authentication is automatic: afbin signs you in when a command first needs the server — browser approval. With `--yes --json` it prints the approval URL to open, then continues once approved. Credentials are saved in `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
+- For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
+- Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
+- Few turns: `afbin help <template>`, then push a FIRST version within three calls of the pull — title and section headings, one line each — and fill the sections in later pushes; a person is waiting on a blank page. A successful push IS the verification: the head is your file. Skip pulling, diffing, exporting, screenshotting or grepping it afterwards; filling sections is not re-checking.
+- A push proves markup and reads, never a write: a page with a `<Mutation>` is done only once every write has run in a live session (`afbin help live-sessions`) as yourself and `--as guest`, fixed and pushed until a pass is clean — never hand over an untested button.
+- Local files: `afbin add <files> --json` assigns reference IDs; preview/push auto-register named files. Push runs `afbin validate` and publishes unpublished IDs.
+- Native markup first: the components cover text, data, charts, tables, controls and motion; use `<Iframe>` only for an isolated DOM script or canvas, never for layout or content.
+- Preserve its identity: the CLI maintains `id`, `edit_id`, `head_version`, `state` and `version` in the YAML fence. Another artifact is a deliberate fork: copy the file and remove those five fields.
+- Publishing is the check, whether or not you can view images; no other skill, palette tool or image tooling is needed — the theme carries the palette. To look, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time.
+- On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write retry push to recover it.
 
-`afbin -h`, `afbin <command> -h` and `afbin help <topic>` work offline and print the same references that sit in `references/` beside this file; bare `afbin help` prints this file's absolute location, so never search the filesystem for them.
+`afbin -h` and `afbin help <topic>` work offline and print the references in `references/` beside this file; bare `afbin help` prints this file's absolute location, so never search the filesystem.
 
 ## Example
 
-Before writing, read design, markup, template and theme; a template's frame keeps content from sitting flush to the viewport edge. `afbin help example` prints this file; `afbin help <template>` (dashboard, deck, editorial, plan, scrolly) prints every reference that kind of document needs, together.
+Before writing, read design, markup, template and theme; its frame keeps content from sitting flush to the viewport edge. `afbin help <template>` prints every reference that kind needs.
 
 ```jsx
 [[ example ]]
@@ -31,16 +33,15 @@ Before writing, read design, markup, template and theme; a template's frame keep
 
 ## Read next
 
-Read what the task needs:
-
-- [design](references/design.md) — for any document a person will judge by eye.
-- [markup](references/markup.md) — the component allowlist, Helmet, images, layout; then [data and controls](references/markup-data.md) for queries, Values, charts and KPI tiles.
-- `afbin help templates` and `afbin help themes` list the choices; then `references/templates-<name>.md` and `references/themes-<name>.md` for the one picked.
-- [sync and recovery](references/publishing.md) — status, diff, dry-run, force, retrying an uncertain write, node ids.
+- [design](references/design.md) — for anything a person judges by eye.
+- [markup](references/markup.md) — the allowlist, Helmet, images, layout; then [data](references/markup-data.md) for queries, Values and charts.
+- `afbin help templates` and `afbin help themes` list them; then `references/templates-<name>.md` and `references/themes-<name>.md` for the one picked.
+- [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
 - [errors](references/errors.md) — every refusal code and its fix.
-- [comments](references/publishing-annotations.md) — `afbin comment` lists, starts, answers and resolves threads.
-- [datasets and media](references/publishing-datasets.md), [database catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
-- [history and deletion](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
-- [authentication](references/publishing-auth.md) — how automatic sign-in works, `--harness`, credentials per server.
+- [comments](references/publishing-annotations.md) — `afbin comment` lists, answers and resolves threads.
+- [apps](references/apps.md) — a page several people use.
+- [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
+- [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.
+- [authentication](references/publishing-auth.md) — automatic sign-in, `--harness`, credentials per server.
 - [live sessions](references/live-sessions.md) — Playwright, `mx`, screenshots.
 - [commands](references/commands.md) — every command and flag; [Markdown import](references/markdown.md) for a one-time `.md` push.
