@@ -14,11 +14,15 @@
  * moved keeps its DOM, its embeds and their state; only what genuinely arrived
  * is new.
  *
- * Alignment is an LCS over a node SIGNATURE (kind + tag), per sibling list,
- * recursing into matched pairs. Deliberately coarse: two `<p>`s that swap
- * content still match, and matching them is right — React updates the text in
- * place, which is the outcome we want. A `<Question>` never matches a
- * `<Number>`, because a component's identity is what holds a chart's view.
+ * Alignment runs per sibling list, in two passes, recursing into matched pairs
+ * (`alignBySignature`): first CONTENT anchors — a node whose entire content
+ * appears exactly once on each side is itself, wherever it moved to — then an
+ * LCS over a node SIGNATURE (kind + tag) across whatever the anchors left
+ * unpaired, which is what matches an EDITED node to its old self. The signature
+ * is deliberately coarse: two `<p>`s that swap content still match, and matching
+ * them is right — React updates the text in place, which is the outcome we want.
+ * A `<Question>` never matches a `<Number>`, because a component's identity is
+ * what holds a chart's view.
  *
  * With no previous tree the keys are a pure function of the tree (the paths),
  * which is what keeps SSR and hydration in agreement: both ends compute the

@@ -5,7 +5,7 @@ The log of what happened, one service owning it in a schema of its own. `@artifa
 | Method | Route | Body | Answer |
 |---|---|---|---|
 | `emit` | `POST /emit` | `EventEnvelope[]` | `{ accepted: number }` — envelopes received; storage is `ON CONFLICT (id) DO NOTHING`, so a replayed envelope is harmless |
-| — | `GET /health` | — | `200 {"ok":true}` — the Docker HEALTHCHECK and the compose `depends_on` condition; the one GET, every other route POST-only |
+| — | `GET /health` | — | `200 {"ok":true}` — the liveness/readiness probe for whatever orchestrates the service; the one GET, every other route POST-only |
 
 One row is a SENTENCE — `subject_kind`/`subject_id`, `verb`, `object_kind`/`object_id` — plus `id` (the emitter's
 uuid, and the dedupe key), `at`, `source` and `payload`. The catalogue of verbs per object kind lives in
@@ -44,9 +44,11 @@ are dropped with ONE `console.warn` per overflow episode: telemetry may never gr
 `close()` flushes the tail and stops the timer — what a SIGTERM handler awaits before the listener closes.
 
 Entry points: `@artifactbin/events` is the contract, the table declaration, the client, the server shell and the
-boot (`serveEvents`, `loadEventsConfig`, `runEvents`); `./local` is the writer and the ONLY entry that touches the
-database — a composition root hands it a `Queryable` (the single image its own `Db` handle, never a second engine
-on one data directory) and it is never imported from the app tree.
+boot (`serveEvents`, `loadEventsConfig`, `runEvents`); `./local` is the writer and the ONLY entry that issues the
+service's statements — it is never imported from the app tree. The boot is the one other place that reaches the
+database: `runEvents` opens a `pg` Pool from `DATABASE_URL` when no `Queryable` is injected, and ensures the
+schema before the shell listens, so a service that cannot reach its database dies loudly. A composition root
+instead hands it a `Queryable` (the single image its own `Db` handle, never a second engine on one data directory).
 
 Sinks: `runEvents(config, { sinks })` takes a list of `EventSink`s a STORED batch is handed to next. The list is
 EMPTY in this repo — a deployment that forwards the log somewhere fills it, and a sink that throws is logged, not

@@ -8,7 +8,7 @@
  *
  *     <Query name="q">{\`select …\`}</Query>
  *
- * MEASURED, on the CI agent eval (run 33868923276, the `data` task): that
+ * MEASURED, on the CI agent eval's `data` task: that
  * publish was refused as `invalid_jsx` with "Expecting Unicode escape sequence
  * \uXXXX (1:311)", and the agent spent 171s composing it and a further 90s
  * working out what to change — 39% of a 673s task, on two backslashes. The
@@ -78,7 +78,7 @@ describe('repairJsxSource', () => {
   });
 
   it('repairs the exact markup the eval captured', () => {
-    // Verbatim from the ledger of run 33868923276, the request that was refused.
+    // Verbatim from the eval ledger, the request that was refused.
     const real =
       '<article className="mx-auto max-w-3xl"><h1>Revenue by region</h1><p>Total revenue grew.</p>' +
       '<Helmet><Query name="totals">{\\`select month, sum(revenue) as revenue from ref_JcgHCq group by month order by month\\`}</Query></Helmet>' +

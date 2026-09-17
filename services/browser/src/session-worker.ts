@@ -14,10 +14,9 @@ const rpc = payload => new Promise((resolve, reject) => {
   const timer = setTimeout(() => { requests.delete(id); reject(new Error('Request deadline exceeded')); }, 10000);
   requests.set(id, {resolve, reject, timer}); send({type:'fetch', id, ...payload});
 });
-const pageList = () => [...pages].filter(([,page]) => !page.isClosed()).map(([page_id,page]) => {
-  const url = page.url(), match = new URL(url).pathname.match(/^\/a\/([A-Za-z0-9]{6})(?:\/|$)/);
-  return {page_id,url,...(match ? {artifact_id:match[1]} : {})};
-});
+// The raw URL only: artifact identity is derived on the trusted side (src/sessions.ts) from the
+// shared reference grammar, so the sandbox never carries a second copy of it.
+const pageList = () => [...pages].filter(([,page]) => !page.isClosed()).map(([page_id,page]) => ({page_id,url:page.url()}));
 readline.createInterface({input:process.stdin}).on('line', async line => {
   const message = JSON.parse(line);
   if (message.type === 'fetched') {

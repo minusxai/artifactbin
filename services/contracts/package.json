@@ -1,7 +1,7 @@
 {
   "name": "@artifactbin/contracts",
   "version": "0.1.0",
-  "description": "The types every artifactbin service speaks: parts, the upstream seam, actors, the sql and browser services, a queryable database. Types and pure constants only — no runtime, no dependencies.",
+  "description": "The types every artifactbin service speaks: parts, the upstream seam, actors, identity, sharing, relations, agents, account resources, the sql, browser and events services, a queryable database. Types, constants and the small pure helpers that derive from them (denyResponse, declaredAgentSlug, eventName, isQueryFailure) — no runtime dependencies (hono is a type-only peer).",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./src/index.ts",

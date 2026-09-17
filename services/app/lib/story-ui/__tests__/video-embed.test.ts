@@ -157,7 +157,7 @@ describe('the validator boundary', () => {
     expect(errors).toEqual([]);
   });
 
-  it('raw <iframe> stays rejected — Video is the only way to a nested frame', () => {
+  it('raw <iframe> stays rejected — a nested frame exists only through the managed <Iframe>', () => {
     const errors = validateJsxSource(
       '<iframe src="https://www.youtube.com/embed/87DyyMV0kCY"></iframe>',
       JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS,

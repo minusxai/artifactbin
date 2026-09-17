@@ -1,9 +1,12 @@
 import type { BrowserSessions } from './browser-sessions';
 /**
- * THE BROWSER SERVICE — a Chromium that renders a URL to an image. Stateless:
- * the app hands it a URL (carrying its own short-lived signed key) and gets
- * bytes or a VERDICT back. The verdict is part of the contract because the
- * app's retry decision and its 503-vs-500 split depend on which failure it was.
+ * THE BROWSER SERVICE — a Chromium that renders a URL to an image. Rendering is
+ * stateless: the app hands it a URL (carrying its own short-lived signed key)
+ * and gets bytes or a VERDICT back. The verdict is part of the contract because
+ * the app's retry decision and its 503-vs-500 split depend on which failure it
+ * was. The service's one STATEFUL surface is optional `sessions` (below,
+ * `./browser-sessions`): persistent isolated browser sessions that keep their
+ * context and pages across calls. See docs/mx-sessions.md.
  *
  * There is no PDF: the product exports png and jpg, element-scoped by a
  * selector, with full, card, positioned-card, preview, and slide capture
