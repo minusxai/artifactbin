@@ -27,3 +27,12 @@ test('decorative names and view parameters never change exact artifact identity'
   for(const url of ['https://other.example/a/AbC123','https://user:password@example.com/a/AbC123','https://example.com/api/artifacts/AbC123','https://example.com/@user/old-folder/AbC123'])await assert.rejects(resolveReference(url,{root,server:'https://example.com'}));
  }finally{await rm(root,{recursive:true,force:true});}
 });
+
+test('default artifact URLs use the app origin while explicit servers remain supported',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-default-ref-'));
+ try{
+  assert.deepEqual(await resolveReference('https://app.artifactbin.dev/a/AbC123',{root}),{kind:'id',id:'AbC123',notices:[]});
+  await assert.rejects(resolveReference('https://artifactbin.dev/a/AbC123',{root}),{code:'wrong_server'});
+  assert.deepEqual(await resolveReference('https://artifactbin.dev/a/AbC123',{root,server:'https://artifactbin.dev'}),{kind:'id',id:'AbC123',notices:[]});
+ }finally{await rm(root,{recursive:true,force:true});}
+});

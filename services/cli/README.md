@@ -23,7 +23,7 @@ Client defaults/credentials stay separate. There is no managed self daemon.
 ## Install and authenticate
 
 ```sh
-curl -fsSL https://artifactbin.dev/chat/install.sh | sh
+curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
 ```
 
 The installer needs `curl`, `gzip`, a SHA-256 tool and a POSIX shell: it downloads the standalone executable for this
@@ -59,10 +59,16 @@ also works); append `afbin-vVERSION/afbin-sql-OS-ARCH.gz` to that base. A locall
 uses `CLI__SERVICE_BASE_URL=http://localhost:3030/chat/releases`. Checksums stay pinned in the executable.
 Local JSX image export uses the cached preview runtime and lazily downloaded Chromium: `afbin export report.jsx --output report.png`. It renders current local bytes and registered ID dependencies without publishing or rewriting source. A locally registered ID also selects its local file; other IDs and explicit artifact URLs use their server. PNG/JPG support `--page` and `--og`. HTML still requires a published head.
 
-Remove it again with `curl -fsSL https://artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
+Remove it again with `curl -fsSL https://app.artifactbin.dev/chat/uninstall.sh | sh`. That deletes the
 executable, `~/.artifactbin`, cached downloads and the agent skills afbin manages, and never touches
 your project files. `--keep-state` keeps your sign-in and the download cache, `--dry-run`
 only lists, and `--dir` names a custom executable location.
+
+The default remote server is `https://app.artifactbin.dev`. Explicit `--server`,
+`ARTIFACTBIN_URL`, and saved host settings still take precedence. Credentials remain
+scoped to their original host; users switching from the old apex host must authenticate
+on the new host. `afbin config set host https://app.artifactbin.dev` updates a saved
+host preference.
 
 Authentication opens browser approval and saves credentials privately in `~/.artifactbin/hosts/<origin-id>/credentials.env`.
 Skill setup supports Claude Code, Codex, pi and OpenCode and remembers your choices. Standalone executables

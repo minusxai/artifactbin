@@ -118,7 +118,7 @@ test('setup --server records a self-hosted origin as the default, once, and neve
  try{
   await mkdir(bin);await writeFile(join(bin,'pi'),'#!/bin/sh\nexit 0\n',{mode:0o755});
   const context={home,cwd:home,env:{PATH:bin},interactive:false,stdout:(s:string)=>out.push(s),stderr:()=>{},fetch:async()=>{throw new Error('setup must stay offline');}};
-  assert.equal(await runCli(['setup','--yes','--json','--server','https://artifactbin.dev'],context),0);
+  assert.equal(await runCli(['setup','--yes','--json','--server','https://app.artifactbin.dev'],context),0);
   await assert.rejects(stat(join(home,'.artifactbin','config.json')),{code:'ENOENT'},'the public server needs no record');
   assert.equal(await runCli(['setup','--yes','--json','--server=https://self.example'],context),0);
   assert.deepEqual(JSON.parse(await readFile(join(home,'.artifactbin','config.json'),'utf8')),{host:'https://self.example'});

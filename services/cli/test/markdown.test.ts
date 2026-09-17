@@ -50,11 +50,11 @@ test('CLI push imports once, while dry-run only sends preflight and leaves no lo
   const context={home,cwd:root,env:{ARTIFACTBIN_TOKEN:'test_token'},interactive:false,stdout:(s:string)=>output.push(s),stderr:()=>{},fetch:async(input:unknown,init?:RequestInit)=>{
    const path=new URL(String(input)).pathname;calls.push(path);const body=JSON.parse(String(init?.body));
    if(path.endsWith('/preflight')){assert.match(body.input.markup,/<h1>Draft/);return Response.json({valid:true,dry_run:true});}
-   assert.match(body.markup,/<h1>Draft/);return Response.json({id:'abc123',version:1,edit_id:'edit_one',state:'a'.repeat(64),markup:body.markup,title:null,format:'markup',url:'https://artifactbin.dev/a/abc123'},{status:201,headers:{'X-Artifactbin-Account':'account1'}});
+   assert.match(body.markup,/<h1>Draft/);return Response.json({id:'abc123',version:1,edit_id:'edit_one',state:'a'.repeat(64),markup:body.markup,title:null,format:'markup',url:'https://app.artifactbin.dev/a/abc123'},{status:201,headers:{'X-Artifactbin-Account':'account1'}});
   }};
   assert.equal(await runCli(['push','draft.md','--dry-run','--json'],context),0,output.join(''));assert.deepEqual(calls,['/api/artifacts/preflight']);
   await assert.rejects(stat(join(root,'.artifactbin')),{code:'ENOENT'});await assert.rejects(stat(join(root,'draft.jsx')),{code:'ENOENT'});
-  await seedIdentityPool(home,root,['abc123'],'account1','https://artifactbin.dev');
+  await seedIdentityPool(home,root,['abc123'],'account1','https://app.artifactbin.dev');
   output.length=0;calls.length=0;assert.equal(await runCli(['push','draft.md','--json'],context),0,output.join(''));assert.deepEqual(calls,['/api/artifacts']);assert.equal(parseDocument(await readFile(join(root,'draft.jsx'),'utf8')).metadata.id,'abc123');
   output.length=0;calls.length=0;assert.equal(await runCli(['push','draft.md','--json'],context),2);assert.equal(JSON.parse(output.join('')).error.code,'markdown_already_converted');assert.deepEqual(calls,[]);
  }finally{await rm(root,{recursive:true,force:true});await rm(home,{recursive:true,force:true});}

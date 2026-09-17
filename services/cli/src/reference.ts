@@ -5,6 +5,7 @@ import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
 import {CliError} from './commands';
 import {confinedPath} from './journal';
 import {isMissing} from './files';
+import {DEFAULT_SERVER} from './config';
 export type Reference=({kind:'path';path:string}|{kind:'id';id:string})&{version?:number;notices:string[]};
 export async function resolveReference(input:string,options:{root:string;cwd?:string;server?:string;writable?:boolean}):Promise<Reference>{
  const root=await realpath(options.root);
@@ -22,7 +23,7 @@ export async function resolveReference(input:string,options:{root:string;cwd?:st
  let id=value;
  if(/^https?:\/\//.test(value)){
   let url:URL;try{url=new URL(value);}catch{throw new CliError('invalid_reference','Invalid artifact URL.');}
-  if(url.origin!==new URL(options.server??'https://artifactbin.dev').origin||url.username||url.password)throw new CliError('wrong_server','The artifact URL must belong to the selected server origin.','Use --server URL to select that server.');
+  if(url.origin!==new URL(options.server??DEFAULT_SERVER).origin||url.username||url.password)throw new CliError('wrong_server','The artifact URL must belong to the selected server origin.','Use --server URL to select that server.');
   const parsedId=artifactIdFromPath(url.pathname);
   if(!parsedId)throw new CliError('invalid_reference','Use an artifact URL with an artifact id.');
   id=parsedId;
