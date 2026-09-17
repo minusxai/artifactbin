@@ -56,7 +56,11 @@ export interface AnnotationAuthor {
   kind: 'human' | 'agent';
   /** Display snapshot (username, token name…); stored beside the row so reads never join. */
   label: string | null;
-  /** How this individual comment arrived; stored per comment because one token can use several transports. */
+  /**
+   * How this individual comment arrived; stored per comment because one token
+   * can use several transports. Nothing writes `'mcp'` any more — it is a value
+   * stored rows still carry, and the rail renders its own chip for it.
+   */
   transport: 'browser' | 'http' | 'mcp' | 'unknown';
 }
 

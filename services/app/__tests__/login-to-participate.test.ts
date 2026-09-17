@@ -15,8 +15,7 @@
  * Three properties this file exists to hold:
  *   - it appears only where signing in would actually CHANGE something;
  *   - it costs a guest nothing — static markup in the reader chrome already
- *     being sent, so the direct-document fast path (server/app
- *     servesDocumentDirectly) survives untouched;
+ *     being sent, so there is no extra request and nothing becomes dynamic;
  *   - it never appears on a capture, which /export photographs.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';

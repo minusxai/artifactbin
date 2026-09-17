@@ -32,7 +32,8 @@ vi.mock('@/lib/story/use-live-edits', () => ({
   }),
 }));
 vi.mock('@/lib/story/use-live-artifact', () => ({ useLiveArtifact: () => live.remote }));
-// next/dynamic resolves lazily; in a test the pane must simply be there.
+// lib/dynamic resolves lazily and mounts after commit; in a test the pane
+// must simply be there.
 vi.mock('@/lib/dynamic', () => ({
   __esModule: true,
   default: (loader: () => Promise<{ default: unknown }>) => {

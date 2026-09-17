@@ -1,11 +1,9 @@
 /**
- * A shared link must unfurl — and readers no longer reach the PAGE.
+ * A shared link must unfurl, and the og: tags have to be on the DOCUMENT.
  *
- * The page's `generateMetadata` used to be the only source of og:*, which was
- * fine while every viewer got the app shell. A reader is now served the
- * document itself, so a document with no cards of its own would unfurl as a
- * bare URL in every chat app it is pasted into — the single most common thing
- * that happens to one of these links.
+ * `/a/<id>/raw` serves the document itself, so cards that lived only on the app
+ * shell would leave a pasted link unfurling as a bare URL in every chat app —
+ * the single most common thing that happens to one of these links.
  *
  * Crawlers do not run JavaScript, so this has to be in the SERVED HTML.
  */

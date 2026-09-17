@@ -18,8 +18,10 @@ import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
 import { APP_ROOT, REPO_ROOT, codeOf, sourceFiles } from '@/test/helpers/source-files';
 
 /**
- * The flat, un-namespaced settings this product retired. The map that once translated them at boot is gone
- * (no backward compatibility), so the list lives here: a retired name must not be SET anywhere in the tree.
+ * Settings the app must not be given: the flat, un-namespaced spellings this product retired, a few
+ * namespaced ones whose feature is gone, and `CONTRACT__ACTOR_SECRET`, which is live but belongs to the
+ * composition alone. Nothing translates a retired name at boot, so one that is SET is silently ignored:
+ * none may be set anywhere this repo tracks, except in the files `stillOwned` below names.
  */
 const RETIRED_ENV_NAMES = [
   'ADMIN_SECRET', 'ARTIFACT_QUOTA_PER_TOKEN', 'AUTH_SECRET', 'BROWSER__WS_URL', 'EVENTS__DATABASE_URL',
@@ -228,10 +230,8 @@ describe('the retired env names', () => {
     'services/utils/__tests__/env.test.ts',
   ]);
   const proxyComposition = new Set([
-    '.github/workflows/ci.yml', 'docker-compose.lean.yml',
-    'scripts/check-production-packages.mjs', // Composes the actual signed app/proxy HTTP boundary.
     'scripts/__tests__/app-only-auth.test.mjs', 'scripts/__tests__/setup-plan.test.mjs',
-    'scripts/agent-worktree.mjs', 'scripts/image-checks.mjs', 'scripts/lib/setup-plan.mjs', 'scripts/setup.mjs',
+    'scripts/agent-worktree.mjs', 'scripts/lib/setup-plan.mjs', 'scripts/setup.mjs',
   ]);
   const stillOwned = (file: string, name: string): boolean =>
     (name === 'CONTRACT__ACTOR_SECRET' && proxyComposition.has(file)) ||

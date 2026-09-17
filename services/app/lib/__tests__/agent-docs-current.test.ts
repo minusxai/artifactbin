@@ -2,13 +2,13 @@
  * EVERY surface we expose to an agent, checked against the rules the door
  * actually enforces.
  *
- * This exists because the docs drifted apart and only the one I happened to
- * read got fixed. An agent handed a working interactive HTML page reasoned:
- * "This platform can't take the original's hand-rolled JS — static JSX, no
- * event handlers", and rewrote it as data embeds. It was right to believe us:
- * `/docs/markup` said "no `<script>`" and never mentioned `<Helmet>` at all,
- * written before a document could carry a script. `/docs/llm` said the
- * opposite, correctly, in the same deployment.
+ * This exists because the surfaces drift apart one at a time and only the one
+ * an agent happened to read gets fixed. Handed a working interactive HTML page,
+ * an agent reasoned: "This platform can't take the original's hand-rolled JS —
+ * static JSX, no event handlers", and rewrote it as data embeds. It was right
+ * to believe us: the markup reference said "no `<script>`" and never mentioned
+ * `<Helmet>`, while the publishing reference said the opposite, correctly, in
+ * the same deployment.
  *
  * So the rule is checked ACROSS the surfaces rather than one at a time: a doc
  * may not deny a capability the door allows, nor teach a shape the door
@@ -19,7 +19,7 @@ import { buildQuickSheet, renderDoc } from '../skills';
 
 const BASE = 'https://example.test';
 const files = (...paths: string[]) => (base: string) => paths.map((p) => renderDoc(p, base)).join('\n');
-/** The publishing skill as one text (what /docs/llm used to be). */
+/** The publishing references as one text. */
 const buildSkillDoc = files('artifactbin/references/publishing.md', 'artifactbin/references/publishing-auth.md', 'artifactbin/references/publishing-datasets.md', 'artifactbin/references/publishing-annotations.md', 'artifactbin/references/publishing-versions.md');
 const buildMarkupDoc = files('artifactbin/references/markup.md', 'artifactbin/references/markup-data.md', 'artifactbin/references/markup-motion.md', 'artifactbin/references/markup-video.md', 'artifactbin/references/markup-svg.md');
 const buildDesignDoc = files('artifactbin/references/design.md');
@@ -33,13 +33,13 @@ import { validateJsx } from '../jsx/validate';
 import { STORY_HTML_TAGS } from '../story-ui/component-names';
 
 const SURFACES: Array<[string, string]> = [
-  ['/docs/llm', buildSkillDoc(BASE)],
-  ['/docs/markup', buildMarkupDoc(BASE)],
-  ['/docs/artifact-design', buildDesignDoc(BASE)],
-  ['/docs/themes', buildThemesDoc(BASE)],
-  ['/docs/themes/<name>', buildThemeDoc('modernist', BASE)],
-  ['/docs/templates', buildTemplatesDoc(BASE)],
-  ['/docs/templates/<name>', buildTemplateDoc('editorial', BASE)],
+  ['references/publishing*.md', buildSkillDoc(BASE)],
+  ['references/markup*.md', buildMarkupDoc(BASE)],
+  ['references/design.md', buildDesignDoc(BASE)],
+  ['references/themes.md', buildThemesDoc(BASE)],
+  ['references/themes-modernist.md', buildThemeDoc('modernist', BASE)],
+  ['references/templates.md', buildTemplatesDoc(BASE)],
+  ['references/templates-editorial.md', buildTemplateDoc('editorial', BASE)],
   ['shared markup field', MARKUP_FIELD_GUIDANCE],
   ['markup style rule', MARKUP_STYLE_RULE],
 ];

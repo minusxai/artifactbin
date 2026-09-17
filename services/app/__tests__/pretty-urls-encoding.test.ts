@@ -84,7 +84,7 @@ describe('percent-encoded route params (what the router really sends)', () => {
     });
   });
 
-  it('generateMetadata resolves the encoded form as well', async () => {
+  it('the unfurl metadata resolves the encoded form as well', async () => {
     const { doc } = await fixtures();
     const meta = await artifactMetadata(doc.id);
     expect(meta.title).toBe('Eating Healthy');

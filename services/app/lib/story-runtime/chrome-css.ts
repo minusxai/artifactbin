@@ -2,8 +2,8 @@ import { CHROME_IDENTITY } from '../chrome-identity';
 
 /**
  * The document's own navigation chrome, as CSS — react-free so the builder
- * (which compiles inside the Next server graph) can inline it into <head>
- * without importing the runtime's React half.
+ * (which runs on the server) can inline it into <head> without importing the
+ * runtime's React half.
  *
  * Inlined by the SERVER, not injected by the runtime: the rail is a layout
  * sibling of the document, so a rail that arrived with hydration would shift

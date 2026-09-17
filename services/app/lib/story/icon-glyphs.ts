@@ -12,9 +12,9 @@
  * the client renders them from data (components/kit/icon).
  *
  * This module is reached only through the SSR bundle (lib/story-runtime/ssr-entry),
- * which is loaded with createRequire OUTSIDE the Next graph — route handlers compile
- * under the react-server condition, which forbids rendering the client components
- * this imports.
+ * which lib/story/ssr.server loads with createRequire from a prebuilt file OUTSIDE
+ * the app's module graph — so the client components it renders never enter the
+ * server's own graph.
  *
  * The glyph is extracted by RENDERING lucide's own component and keeping what is
  * inside its <svg>, rather than reaching for the `__iconNode` data: that data is not

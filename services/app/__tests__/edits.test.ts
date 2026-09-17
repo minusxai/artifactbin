@@ -493,7 +493,7 @@ describe('document-level meta edits', () => {
 });
 
 describe('deletion', () => {
-  it('the purge erases the edit log too — the genesis row holds the whole document', async () => {
+  it('a delete keeps the edit log — the genesis row holds the whole document', async () => {
     const t = await mint();
     const doc = await createMarkup(t.token);
     await edit(t.token, doc.id, { edit_id: doc.edit_id, old_string: 'alpha text', new_string: 'SECRET' });

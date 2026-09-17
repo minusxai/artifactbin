@@ -10,7 +10,8 @@
  * tokens stored as hashes, a view counter that never keeps a raw IP).
  *
  * Every factual claim below is checkable against the code it describes:
- * lib/tokens (hashed, shown once), lib/codes (hashed, single-use, 5 guesses),
+ * lib/tokens (hashed, shown once), services/auth `emailOTP` (six digits, ten
+ * minutes, five attempts),
  * lib/analytics (the daily-rotating visitor hash — never a raw IP or UA),
  * lib/artifacts + canReadArtifact (the three visibilities), lib/config (the
  * only third parties: Resend, an S3-compatible store).

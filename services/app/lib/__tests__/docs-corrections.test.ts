@@ -330,7 +330,7 @@ describe('URL-kept external assets', () => {
     expect(flat(publishing)).toContain('count against your ACCOUNT\'s byte quota');
     expect(flat(publishing)).toContain('charged once, to whoever first named the URL');
   });
-  it('the MCP image-url field no longer promises the rewrite either', () => {
+  it('the imageUrl field guidance keeps the URL rather than promising a ref: rewrite', () => {
     expect(IMAGE_URL_FIELD_GUIDANCE).not.toContain('rewritten to ref:<id>');
     expect(IMAGE_URL_FIELD_GUIDANCE).toContain('LEAVES YOUR URL in the document');
   });

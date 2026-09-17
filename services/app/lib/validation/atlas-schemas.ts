@@ -1,10 +1,8 @@
 /**
- * ADAPTED from minusx lib/validation/atlas-schemas.ts — the subset the ported
- * engine imports, on the same TypeBox foundation. The theme/template enums and
- * the StoryContent field structure are copied from minusx (SQL-era fields —
- * suggestedQuestions, parameterValues, format:'html' legacy — trimmed);
- * prose descriptions are shortened where they referenced minusx-only
- * tooling (Clarify, saved questions).
+ * The TypeBox schemas the story engine validates against: the theme and
+ * template enums, the `StoryContent` field structure, and the viz envelope.
+ * Their `description` strings are model-facing — an agent reads them as the
+ * field's own documentation — so they carry the rule, not just the type.
  */
 import { Type, type Static, type TSchema } from 'typebox';
 import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
@@ -68,18 +66,7 @@ export const StoryContent = Type.Object({
 }, { title: 'StoryContent' });
 export type StoryContent = Static<typeof StoryContent>;
 
-// ── SQL-era loose types (ADAPTED) ────────────────────────────────────────────
-// Stand-ins for the SQL-era shapes the ported modules (story-params/question/
-// number) still name. Type-only consumers.
-export type ParameterType = 'text' | 'number' | 'date';
-// Loose on purpose: the real QuestionContent drags the whole SQL-era schema
-// tree (SemanticQuerySpec, CachePolicy, connections); the embed modules only
-// pass it through; the dataset-backed embeds do not use it.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type QuestionContent = Record<string, any>;
-export interface SpreadsheetColumn { name: string; type: 'auto' | 'text' | 'number' | 'boolean' | 'date' }
-
-// ── Viz envelope + recipe schemas — VERBATIM from minusx atlas-schemas ──────
+// ── Viz envelope + recipe schemas ────────────────────────────────────────────
 const VIZ_TYPES = [
   'table', 'bar', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot',
   'trend', 'waterfall', 'combo', 'radar', 'geo', 'single_value', 'row',
@@ -324,8 +311,8 @@ export const VizSourceVegaLite = Type.Object({
 }, { title: 'VizSourceVegaLite' });
 export type VizSourceVegaLite = Static<typeof VizSourceVegaLite>;
 
-// Raw native-Vega spec — the full-control escape hatch. A recipe is
-// "detached" into this via detachRecipe(): its materialized spec is frozen here so the
+// Raw native-Vega spec — the full-control escape hatch. A recipe is "detached"
+// into this: its materialized spec is frozen here so the
 // agent can edit ANY property (marks, signals, projections, layers) with no recipe
 // param. Native Vega expresses charts Vega-Lite can't (projections/signals/geo/tiles),
 // so this is where detached radar/trend/geo maps land; VL-engine recipes detach to
@@ -393,8 +380,7 @@ export const VizSourcePivot = Type.Object({
 }, { title: 'VizSourcePivot' });
 export type VizSourcePivot = Static<typeof VizSourcePivot>;
 
-// Discriminated on `kind`. `slippy-map` joins this union when it lands
-// (additive — see the RFC).
+// Discriminated on `kind`, so a new source kind joins additively.
 export const VizSource = Type.Union([VizSourceVegaLite, VizSourceVega, VizSourceRecipe, VizSourceTable, VizSourcePivot], { title: 'VizSource' });
 export type VizSource = Static<typeof VizSource>;
 

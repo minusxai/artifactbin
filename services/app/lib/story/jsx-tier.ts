@@ -165,9 +165,9 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
 
   // Belt to the validator's no-inline-style gate: strip banned CSS declarations
   // (fixed/sticky positioning, external url()/@import) from authored style
-  // content, then remap viewport-height units in it — authored `<style>` renders
-  // straight through the interpreter, so the compiled-sheet injection remap
-  // never sees it (lib/story-surface/viewport-units.ts).
+  // content, then remap viewport-height units in it. Authored `<style>` renders
+  // straight through the interpreter, and this save-side pass is the only place
+  // its `vh` lengths are rewritten (lib/story-surface/viewport-units.ts).
   const normalized = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
   const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(normalized, sanitizeStoryMarkupCss)));
   if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);

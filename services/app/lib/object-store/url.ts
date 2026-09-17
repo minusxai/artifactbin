@@ -1,11 +1,10 @@
 /**
  * One connection string for object storage, parsed here.
  *
- * minusx spreads this across five variables (OBJECT_STORE_BUCKET / REGION /
- * ACCESS_KEY_ID / SECRET_ACCESS_KEY / ENDPOINT). Five secrets to set correctly
- * is five chances to set one wrong, and the failure is silent until an upload
- * fails. This repo already treats a connection as ONE string (`DATABASE_URL`),
- * so object storage follows suit.
+ * Spreading it across five variables (bucket, region, key id, secret,
+ * endpoint) is five chances to set one wrong, and the failure is silent until
+ * an upload fails. This repo already treats a connection as ONE string
+ * (`DATABASE_URL`), so object storage follows suit.
  *
  * Neither client library parses a URL — `@aws-sdk/client-s3` and `minio` both
  * take discrete fields — so the parsing is ours. It is a pure function, which

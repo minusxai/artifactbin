@@ -295,7 +295,8 @@ const ANNOTATIONS: Table = {
     { name: 'author_token_id', type: 'TEXT' },
     { name: 'author_user_id', type: 'TEXT' },
     { name: 'author_label', type: 'TEXT' }, // display snapshot; survives token revocation
-    // Per-comment provenance: a token may use the browser for one reply and raw HTTP for the next.
+    // Per-comment provenance: a token may use the browser for one reply and raw
+    // HTTP for the next. Stored rows may also carry 'mcp'; nothing writes it now.
     { name: 'author_transport', type: 'TEXT', notNull: true, default: "'unknown'" },
     // Root-only columns (NULL on replies):
     { name: 'status', type: 'TEXT', notNull: true, default: "'open'" }, // 'open' | 'resolved'
@@ -353,25 +354,22 @@ const ANALYTICS_EVENTS: Table = {
 };
 
 /**
- * ALL one-time codes, one table (lib/codes.ts is the only writer/reader). A
- * code is a hashed secret that expires and is spent once; the kinds differ only
- * in lookup mode and payload:
- *   login — subject = email, guessable 6-digit → found by subject, attempts-capped
- *   oauth — subject NULL, payload {user_id, redirect_uri, code_challenge} → found by hash
- * Future kinds are a new `kind` string, not a new table.
+ * One-time codes: a hashed secret that expires and is spent once, keyed by
+ * `kind` so several flows share one table.
  *
- * Rows, not a Map: the two legs of a handshake are different route handlers in
- * different bundles (separate instances the moment this scales), and in-memory
- * codes strand one leg of the exchange. Hashed like every credential —
- * a dump must never contain a working code. Near-empty by construction:
- * short TTLs, spent-on-claim, and each issue sweeps its kind's expired rows.
+ * NOTHING IN THE APP READS OR WRITES IT. Login codes belong to the identity
+ * service (`services/auth`, Better Auth's `emailOTP` over `auth.credentials`).
+ * The table is still declared here, so every boot creates it and
+ * lib/__tests__/schema-ownership.test.ts holds it as app-owned;
+ * `createCodeStore` in `@artifactbin/utils` is what an app-side flow would bind
+ * to it.
  */
 const CODES: Table = {
   name: 'codes',
   columns: [
     { name: 'kind', type: 'TEXT', notNull: true },
     { name: 'code_hash', type: 'TEXT', notNull: true }, // sha256 hex; plaintext never stored
-    { name: 'subject', type: 'TEXT' }, // what the code is bound to; NULL = unbound (oauth)
+    { name: 'subject', type: 'TEXT' }, // what the code is bound to; NULL = unbound (found by hash alone)
     { name: 'payload', type: 'JSONB', notNull: true, default: "'{}'" }, // handed back on claim
     { name: 'attempts', type: 'INTEGER', notNull: true, default: '0' }, // guess counter; only subject-lookup kinds use it
     { name: 'expires_at', type: 'TIMESTAMPTZ', notNull: true },

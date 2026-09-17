@@ -59,7 +59,7 @@ describe('generic file artifacts', () => {
     expect(await response.json()).toMatchObject({ filename, contentType });
   });
 
-  it('rejects unsupported files through JSON/MCP too', async () => {
+  it('rejects unsupported files through the JSON body too', async () => {
     const token = await mintToken('unsupported-json-file');
     const res = await POST(new Request(`${base}/api/artifacts`, {
       method: 'POST', headers: { Authorization: `Bearer ${token.token}`, 'Content-Type': 'application/json' },

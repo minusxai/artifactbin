@@ -1,6 +1,6 @@
 /**
- * `next/dynamic`'s shape, with its `ssr: false` semantics kept: the component
- * mounts only in the browser, after the first commit. A React.lazy alone is
+ * Browser-only panes: the component mounts only in the browser, after the
+ * first commit. A React.lazy alone is
  * not that — SSR would suspend on a boundary the server can never resolve, and
  * React answers that by discarding the tree and re-rendering the root (#419;
  * seen as "no page errors" failing in the full-kit gate, with the chart

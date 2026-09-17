@@ -1,12 +1,14 @@
 /**
  * THE ANNOTATION ANCHOR AS IT LIVES IN THE MARKUP — pure, parser only, no DB.
  *
- * `data-annotation-anchor="<key>"` is the attribute a comment thread is pinned
- * to (lib/annotations owns the threads themselves and stamps the attribute
- * through the ordinary edit protocol). TWO modules need to know the attribute
- * and only one of them may touch the annotations table: lib/annotations, and
- * lib/artifacts, whose FORK must strip every anchor — comments belong to the
- * original document's life, not to its content, so a copy starts with none.
+ * A thread is pinned to the node's own `id` (lib/story/node-ids stamps one on
+ * every element through the ordinary edit protocol), and
+ * `data-annotation-anchor="<key>"` is the RETIRED spelling stored rows may
+ * still name — lib/annotations reads `id` first and falls back to it.
+ *
+ * The attribute lives here because lib/artifacts' FORK must strip every one of
+ * them and may not import lib/annotations: comments belong to the original
+ * document's life, not to its content, so a copy starts with none.
  *
  * A pure module is what keeps that from being an import cycle (lib/annotations
  * already imports lib/artifacts), the same reason lib/share-roles exists.
@@ -14,7 +16,7 @@
 import { parseJsx } from '@/lib/jsx';
 import type { JsxNode } from '@/lib/jsx';
 
-/** The attribute an annotated node carries. The value is an OPAQUE key — never comment text. */
+/** The retired anchor attribute. Its value is an OPAQUE key — never comment text. */
 export const ANNOTATION_ANCHOR_ATTR = 'data-annotation-anchor';
 
 /**

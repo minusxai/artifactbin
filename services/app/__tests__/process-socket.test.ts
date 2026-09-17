@@ -13,12 +13,12 @@ import { freePort, withHttpServer } from '@artifactbin/test-support/net';
 import { renderedSchema, renders } from './rendered-schema';
 
 const ROOT = path.resolve(import.meta.dirname, '../../..');
-const OWN = new Set(['services/app/__tests__/net.ts', 'services/app/__tests__/rendered-schema.ts', 'services/app/__tests__/process-socket.test.ts']);
+const OWN = new Set(['services/app/__tests__/rendered-schema.ts', 'services/app/__tests__/process-socket.test.ts']);
 const testFiles = (): string[] => {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      if (e.name === 'node_modules' || e.name === '.next' || e.name === 'dist') continue;
+      if (e.name === 'node_modules' || e.name === 'dist') continue;
       const full = path.join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (/\.test\.(ts|tsx|mjs)$/.test(e.name) || /__tests__\/.*\.ts$/.test(path.relative(ROOT, full))) out.push(path.relative(ROOT, full));

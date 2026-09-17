@@ -2,12 +2,12 @@ import type {EditorBookmark,EditorSelectionChange} from '@/lib/editor-v2/bookmar
 import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 /**
  * The react-free contract between the document builder (server), the SSR
- * bundle, and the in-iframe hydration runtime. This file is importable from
- * the Next server graph (route handlers compile under the react-server
- * condition, where client-React APIs are forbidden) — so it carries ONLY types
- * and ids. The React composition lives in StoryRuntimeApp.tsx, which reaches
- * the server exclusively as a prebuilt esbuild bundle (story-ssr.cjs) loaded
- * outside the module graph — see scripts/build-story-runtime.mjs.
+ * bundle, and the in-iframe hydration runtime. BOTH sides import it, so it
+ * carries ONLY types and ids: a value here would drag one side's graph into
+ * the other's bundle. The React composition lives in StoryRuntimeApp.tsx,
+ * which reaches the server exclusively as a prebuilt esbuild bundle
+ * (story-ssr.cjs) loaded outside the module graph — see
+ * scripts/build-story-runtime.mjs.
  */
 import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
@@ -458,9 +458,9 @@ export function isValuesMessage(data: unknown, nonce: string): data is StoryValu
  * The SSE event name a DATA wakeup carries on `/a/<id>/events` (the default,
  * unnamed frame stays the document). It lives HERE rather than beside the
  * route because both ends need it and only one of them is a server: a client
- * module importing a VALUE from a route handler pulls that route — and
- * `next/headers` with it — into the browser bundle, which is a build failure,
- * not a size regression.
+ * module importing a VALUE from a route handler pulls that route's whole
+ * server graph (lib/db, lib/analytics, …) into the browser bundle, which is a
+ * build failure, not a size regression.
  */
 export const STORY_DATA_EVENT = 'data';
 
