@@ -108,6 +108,36 @@ it('rejects a concurrent mutation before transport and acknowledges a commit ind
   store.dispose();
 });
 
+/**
+ * A script that writes a form has to be able to SEE the two things the markup
+ * says about it: that a signal is deliberately not in the link, and which
+ * signals a mutation clears when it lands. Both are reported only when the
+ * declaration carries them, so every existing document's description is
+ * byte-identical to what it was.
+ */
+it('reports url={false} on the signal and reset on the mutation, and nothing extra otherwise', async () => {
+  const store = createDataflowStore({
+    flow: {
+      values: [
+        { kind: 'scalar', name: 'count', type: 'number', default: 0, start: 0, end: 0 },
+        { kind: 'scalar', name: 'draft', type: 'string', default: null, url: false, start: 0, end: 0 },
+      ],
+      queries: [],
+      mutations: [
+        { name: 'save', target: 'owned', sql: 'insert into ref_owned (d) values ($draft)', params: ['draft'], refs: ['owned'], reset: ['draft'], start: 0, end: 0 },
+        { name: 'plain', target: 'owned', sql: 'update ref_owned set n=$count', params: ['count'], refs: ['owned'], start: 0, end: 0 },
+      ],
+    },
+    state: { values: { count: 0, draft: null }, tables: {}, errors: {}, mutationAccess: { save: null, plain: null } },
+  }, { transport: { mutate: async () => ({ dataset: 'owned' }), run: async () => ({ tables: {}, errors: {} }), page: async () => ({ rows: [], columns: [] }) } });
+  const described = await createMx(store).describe();
+  expect(described.signals.find(s => s.name === 'draft')).toMatchObject({ name: 'draft', kind: 'scalar', url: false });
+  expect('url' in described.signals.find(s => s.name === 'count')!).toBe(false);
+  expect(described.mutations.find(m => m.name === 'save')!.reset).toEqual(['draft']);
+  expect('reset' in described.mutations.find(m => m.name === 'plain')!).toBe(false);
+  store.dispose();
+});
+
 it('passes declared row and cell arguments without creating scalar signals', async () => {
   const mutate = vi.fn(async () => ({dataset:'owned'}));
   const store = createDataflowStore({ flow: { ...flow, mutations: [{ name:'edit', target:'owned', sql:'update ref_owned set n=$_value where id=$_row.id', params:['_row','_value'], refs:['owned'], start:0,end:0 }] }, state:{values:{count:0,other:''},tables:{},errors:{},mutationAccess:{edit:null}} }, {

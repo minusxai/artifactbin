@@ -148,6 +148,50 @@ describe('dataflow at the publish door', () => {
     expect(((await got.json()) as { markup: string }).markup).toContain('data="$sales"');
   });
 
+  /*
+   * `url={false}` and `reset="…"` are DECLARATIONS, so the publish door is
+   * where an author learns they got one wrong. The accepted case is the form
+   * the state reference teaches (references/markup-state.md): scalars kept out
+   * of the link, one of them cleared by the local write it feeds.
+   */
+  it('accepts url={false} scalars and a local Mutation that resets one', async () => {
+    const t = await mintToken('t');
+    const res = await create(t.token, {
+      markup: '<Helmet><Value name="editing" type="boolean" default={false} url={false} />'
+        + '<Value name="title" type="string" default="Untitled" url={false} />'
+        + '<Value name="drafts" type="table" value={[{"title":"First"}]} />'
+        + '<Query name="summary">{`select count(*) count from drafts`}</Query>'
+        + '<Mutation name="add" reset="title">{`insert into drafts (title) values ($title)`}</Mutation></Helmet>'
+        + '<div><input aria-label="Title" value="$title" /><Button run="$add">Add draft</Button>'
+        + '<Number data="$summary" col="count" /></div>',
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it('refuses url= on a table Value, and a url= that is not a boolean', async () => {
+    const t = await mintToken('t');
+    const table = await create(t.token, { markup: '<Helmet><Value name="tiny" type="table" value={[{"a":1}]} url={false} /></Helmet><p>x</p>' });
+    expect(table.status).toBe(400);
+    expect(await details(table)).toMatch(/url.*scalar/);
+    const text = await create(t.token, { markup: '<Helmet><Value name="draft" type="string" url="no" /></Helmet><p>x</p>' });
+    expect(text.status).toBe(400);
+    expect(await details(text)).toMatch(/url must be true or false/);
+  });
+
+  it('refuses a reset name that is not a declared scalar, naming the mutation and the name', async () => {
+    const t = await mintToken('t');
+    const ds = await dataset(t.token);
+    const res = await create(t.token, {
+      markup: '<Helmet><Value name="title" type="string" />'
+        + `<Mutation name="add" source="ref:${ds}" reset="title nope">{\`insert into public.rows (region) values ($title)\`}</Mutation></Helmet>`
+        + '<Button run="$add">Add</Button>',
+    });
+    expect(res.status).toBe(400);
+    const message = await details(res);
+    expect(message).toMatch(/name="add"/);
+    expect(message).toMatch(/nope/);
+  });
+
   it('accepts a table Value and a query over it, with no dataset at all', async () => {
     const t = await mintToken('t');
     const res = await create(t.token, {

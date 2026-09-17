@@ -77,6 +77,8 @@ export interface ScalarValueDecl extends Span {
   constraints?: import("@artifactbin/contracts").UserConstraints;
   /** Initial value; `null` when the author gave no `default`. */
   default: Scalar;
+  /** `false` keeps this Value out of the address: never written to it, never read from it. Absent = it travels in the link. */
+  url?: false;
 }
 
 interface TableValueDecl extends Span {
@@ -113,6 +115,8 @@ export interface MutationDecl extends Span {
   refs: string[];
   /** Optional affected-row guard, enforced by the mutation engine before persistence. */
   expectedAffected?: number;
+  /** Scalar Values set back to their declared defaults after this write succeeds. */
+  reset?: string[];
 }
 
 /** Everything a document declares — the parsed `<Helmet>` data children. */
@@ -376,10 +380,10 @@ export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
   }
 };
 
-const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'source', 'column', 'constraints']);
+const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'source', 'column', 'constraints', 'url']);
 
 /**
- * `<Value name type? default? value? columns? source? column? constraints? />`
+ * `<Value name type? default? value? columns? source? column? constraints? url? />`
  * → a declaration, or the precise errors. Attributes (VALUE_ATTRS; anything
  * else is rejected by name): `name` (identifier), `type` (VALUE_TYPES,
  * defaulting to "string", or to "user" when `source` is present), `default`
@@ -388,12 +392,14 @@ const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'sou
  * only), and the BOUND form's `source` (`ref:<id>`) + `column` (the field it
  * inherits its type and `constraints` from — so a bound Value may write neither
  * `type` nor `constraints` itself, and `column` without `source` is an error).
+ * `url={false}` (SCALAR only) keeps this Value out of the address in both
+ * directions — lib/story/url-values.
  */
 export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   const tag = VALUE_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (!VALUE_ATTRS.has(a.name)) errors.push(err(`<Value> takes name, type, default, value, columns — not "${a.name}"`, a, tag, a.name));
+    if (!VALUE_ATTRS.has(a.name)) errors.push(err(`<Value> takes name, type, default, value, columns, url — not "${a.name}"`, a, tag, a.name));
     else if (!a.value.static) errors.push(err(`<Value> attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
@@ -410,6 +416,20 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   if (!VALUE_TYPES.includes(type)) {
     return { ok: false, errors: [err(`<Value name="${name}"> type must be one of ${VALUE_TYPES.join(' | ')}, got ${JSON.stringify(typeAttr?.json)}`, typeAttr?.attr ?? el, tag, 'type')] };
   }
+  /*
+   * `url={false}` — the one Value that does NOT travel in the link. Only a
+   * scalar does in the first place (a table's rows were never settable from an
+   * address), and `url={true}` is the default said out loud, so it leaves no
+   * field behind: the declaration a document at rest carries is unchanged.
+   */
+  const urlAttr = staticAttr(el, 'url');
+  if (urlAttr && typeof urlAttr.json !== 'boolean') {
+    return { ok: false, errors: [err(`<Value name="${name}"> url must be true or false, got ${JSON.stringify(urlAttr.json ?? urlAttr.attr.value)}`, urlAttr.attr, tag, 'url')] };
+  }
+  if (urlAttr && type === 'table') {
+    return { ok: false, errors: [err(`<Value name="${name}" type="table"> takes no url= — only a scalar <Value> travels in the link`, urlAttr.attr, tag, 'url')] };
+  }
+  const outOfUrl = urlAttr?.json === false;
   const def = staticAttr(el, 'default');
   const val = staticAttr(el, 'value');
   const cols = staticAttr(el, 'columns');
@@ -453,7 +473,7 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
     errors.push(err(`<Value name="${name}" type="${type}"> default ${JSON.stringify(dflt)} is not a ${type}${type === 'date' ? ' (use YYYY-MM-DD)' : ''}`, def.attr, tag, 'default'));
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), default: dflt, start: el.start, end: el.end } };
+  return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), ...(outOfUrl ? { url: false as const } : {}), default: dflt, start: el.start, end: el.end } };
 }
 
 /**
@@ -498,7 +518,7 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
 }
 
 /**
- * `<Mutation name source? expectedAffected?>{`sql`}</Mutation>` → a
+ * `<Mutation name source? expectedAffected? reset?>{`sql`}</Mutation>` → a
  * declaration, or the errors. The Query rules (one template-literal child,
  * non-empty) plus one of its own: it names exactly ONE target — the dataset
  * `source="ref:<id>"` points at, or a local table the SQL writes directly.
@@ -511,7 +531,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const tag = MUTATION_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name=, source= and expectedAffected= — the SQL is its child: <Mutation name="…" source="ref:<id>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected' && a.name !== 'reset') errors.push(err(`<Mutation> takes only name=, source=, expectedAffected= and reset= — the SQL is its child: <Mutation name="…" source="ref:<id>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
@@ -541,7 +561,18 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
     return { ok: false, errors: [err(`<Mutation expectedAffected> must be a non-negative integer`, expected.attr, tag, 'expectedAffected')] };
   }
-  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), target: local ? direct.name : refs[0], refs, ...(local ? {scope: 'local' as const} : {}), ...(expected ? { expectedAffected: expected.json as number } : {}), start: el.start, end: el.end } };
+  /*
+   * `reset="draft amount"` — the form this write clears once it has SUCCEEDED.
+   * A static, space-separated list of names; that each one is a declared scalar
+   * is a whole-document fact, so it is checked in `validateDataflow` where the
+   * declarations are in hand. Empty is absent: nothing to clear.
+   */
+  const resetAttr = staticAttr(el, 'reset');
+  if (resetAttr && typeof resetAttr.json !== 'string') {
+    return { ok: false, errors: [err(`<Mutation name="${name}"> reset must be a space-separated list of scalar <Value> names, got ${JSON.stringify(resetAttr.json ?? resetAttr.attr.value)}`, resetAttr.attr, tag, 'reset')] };
+  }
+  const reset = typeof resetAttr?.json === 'string' ? resetAttr.json.trim().split(/\s+/).filter(Boolean) : [];
+  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), target: local ? direct.name : refs[0], refs, ...(local ? {scope: 'local' as const} : {}), ...(expected ? { expectedAffected: expected.json as number } : {}), ...(reset.length ? { reset } : {}), start: el.start, end: el.end } };
 }
 
 // ── the reference graph ─────────────────────────────────────────────────────
@@ -703,6 +734,13 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
     checkParams(m, MUTATION_TAG);
     if (m.scope === 'local' && m.target !== SIGNALS_TABLE && !flow.values.some(v => v.kind === 'table' && v.name === m.target)) {
       errors.push(err(`Local mutation "${m.name}" must target a declared table Value or _signals`, m, MUTATION_TAG));
+    }
+    // `reset=` clears a FORM: every name must be a scalar <Value> with a default to go back to.
+    for (const name of m.reset ?? []) {
+      const kind = kinds.get(name);
+      if (kind !== 'scalar') {
+        errors.push(err(`<Mutation name="${m.name}"> reset="… ${name} …" names ${kind ? describe(kind) : 'nothing declared'} — reset clears scalar <Value>s${kind ? '' : hint}`, m, MUTATION_TAG, 'reset'));
+      }
     }
   }
 
