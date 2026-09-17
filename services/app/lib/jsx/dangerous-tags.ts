@@ -22,25 +22,12 @@
  * Every stored document has passed this gate, so the save-time check covers
  * the whole corpus.
  *
- * ── `<form>`: asked and answered, so it stays ──────────────────────────────
+ * ── `<form>` ───────────────────────────────────────────────────────────────
  *
  * The reader's document cannot submit one: `form-action 'none'` is in the CSP
  * (lib/story/markup-csp.ts), so the tag would be inert there and admitting it
  * would merely complete the interactive vocabulary (`button`, `input`,
  * `select` … are all allowed, with author JS to drive them).
- *
- * The EDIT CANVAS is why it does not. That surface is deliberately SAME-ORIGIN
- * — the WYSIWYG needs `contentDocument` — and it carries no sandbox. It DOES
- * carry a CSP (`AGENT_IFRAME_CSP`, written into the canvas document by
- * components/views/shared/AgentHtml.tsx; `default-src 'none'` covers scripts),
- * and that policy carries no `form-action`, so nothing there answers for a
- * form. A stored `<form action="/api/…" method="post">` would render in the
- * owner's canvas as a live, same-origin, cookie-carrying submit one click
- * away, in a document an AGENT may have written. Allowing the tag therefore
- * is not a one-line change: it needs `action` neutralised in the interpreter
- * first.
- *
- * So: denied on purpose, not pending. Revisit only together with the canvas.
  */
 import { immutableSet } from '@/lib/utils/immutable-collections';
 

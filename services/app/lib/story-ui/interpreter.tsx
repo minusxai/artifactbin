@@ -170,10 +170,8 @@ const CONTROLLED_TO_DEFAULT: Record<string, string> = {
 const VALUE_CONTROLLED_TAGS = immutableSet(['Tabs', 'Accordion']);
 const FORM_CONTROL_TAGS = immutableSet(['input', 'textarea', 'select']);
 
-/** Name-denied props, lowercase (mirrors lib/jsx/validate.ts DENIED_ATTRS + React internals). */
+/** Name-denied props, lowercase — the same set the save-time gate uses (lib/jsx/denied-attrs.ts). */
 const DENIED_PROPS = DENIED_JSX_ATTRS;
-
-/** URL-bearing props, lowercase (scheme-filtered; list-valued ones checked per entry). */
 
 import { AST_PATH_ATTR } from './ast-path';
 export { AST_PATH_ATTR } from './ast-path';

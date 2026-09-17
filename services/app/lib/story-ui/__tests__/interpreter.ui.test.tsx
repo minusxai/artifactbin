@@ -170,8 +170,8 @@ describe('managed Iframe interpreter boundary',()=>{
 /**
  * Authored `<style>` blocks — interpreter render. The CSS travels as a
  * template-literal child (the JSX idiom that keeps `{`/`}` as data); the
- * interpreter must render it as a real <style> node inside the surface so the
- * capture path (which serializes in-root styles) carries it for free.
+ * interpreter must render it as a real <style> node inside the surface, so the
+ * capture path carries it for free.
  */
 const mountBare = (src: string) => {
   const parsed = parseJsxOrThrow(src);

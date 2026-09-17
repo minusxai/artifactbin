@@ -5,10 +5,9 @@
  * A leaf module on purpose. These three answers are needed in two very
  * different places — the write-back path, which composes edits into source, and
  * the in-frame editor, which only has to decide what is editable and what the
- * breadcrumb should say. They used to live beside the write-back, so asking the
- * cheap question dragged the whole AST-editing machinery (and the validator,
- * and the component tables) into the document's edit chunk: 75 KB gzipped to
- * ask "is this a paragraph".
+ * breadcrumb should say. Keeping them here is what stops the cheap question
+ * from dragging the whole AST-editing machinery — the validator and the
+ * component tables with it — into the document's edit chunk.
  *
  * Nothing here reaches for a DOM, and nothing imports upward. `lib/data/story`
  * re-exports these so no caller has to learn a second name for them.
