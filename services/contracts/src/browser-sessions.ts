@@ -16,7 +16,8 @@ export interface BrowserSessionResult {
   error?: MxError;
 }
 export type BrowserSessionRequest = { actor: Actor } & (
-  | { op: 'script'; session_id: string; execution_id: string; create: boolean; code: string }
+  /** `viewer: 'guest'` on the creating request makes the session browse signed out; who a session browses as never changes. */
+  | { op: 'script'; session_id: string; execution_id: string; create: boolean; code: string; viewer?: 'guest' }
   | { op: 'status'; session_id: string; execution_id?: string }
   | { op: 'close'; session_id: string }
 );
