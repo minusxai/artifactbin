@@ -1,0 +1,51 @@
+/**
+ * WHO IS VIEWING, IN MARKUP. `$_me` is the viewer's account id and null for a
+ * guest, but only SQL could read it: a page could not show a form to signed-in
+ * people and a prompt to guests without a script and a flag that stuck in the link.
+ * It is readable in conditions, never bindable, and two kit components exist to
+ * show a person and to ask a guest to sign in.
+ */
+import { describe, expect, it } from 'vitest';
+import { type JsxNode } from '@/lib/jsx';
+import { collectRefNameUses, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/story/dataflow';
+import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
+import { validateJsxSource } from '@/lib/jsx';
+import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
+import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
+import { parseJsxOrThrow } from '@/test/helpers/jsx';
+
+const nodes = (source: string): JsxNode[] => parseJsxOrThrow(source).nodes;
+const EMPTY = { values: [], queries: [], mutations: [] } as unknown as Dataflow;
+const errors = (source: string) => validateDataflow(EMPTY, collectRefNameUses(nodes(source))).map((e) => e.message);
+
+describe('$_me in markup', () => {
+  it('is readable in a condition without being declared', () => {
+    expect(errors('{$_me ? <p>in</p> : <p>out</p>}')).toEqual([]);
+    expect(errors('{!$_me && <p>guest</p>}')).toEqual([]);
+  });
+
+  it('is never bindable: a control cannot write the viewer', () => {
+    expect(errors('<input aria-label="Who" value="$_me" />').join(' ')).toMatch(/_me/);
+    expect(errors('<Dialog open="$_me"><DialogContent aria-label="x"><p>x</p></DialogContent></Dialog>').join(' ')).toMatch(/_me/);
+  });
+
+  it('still cannot be declared by an author', () => {
+    const declared = parseValueDecl(nodes('<Value name="_me" type="string" />')[0] as never);
+    expect(declared.ok).toBe(false);
+  });
+});
+
+describe('the kit can show a person and ask a guest to sign in', () => {
+  it('registers User and SignIn as author components', () => {
+    for (const name of ['User', 'SignIn']) {
+      expect(STORY_UI_COMPONENT_NAME_LIST).toContain(name);
+      expect(Object.keys(STORY_UI_COMPONENTS)).toContain(name);
+    }
+  });
+
+  it('accepts them at publish', () => {
+    const source = '<div data-design="tw">{$_me ? <p>Paid by <User id="$_me" /></p> : <SignIn>Sign in to add an expense</SignIn>}</div>';
+    expect(validateJsxSource(source, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style')).toEqual([]);
+  });
+});
