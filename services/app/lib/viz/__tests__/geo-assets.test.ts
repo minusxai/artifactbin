@@ -11,7 +11,7 @@ describe('geo asset feature extraction', () => {
     const features = assetFeatures('us-states', read(GEO_ASSETS['us-states'].file));
     const names = features.map(f => (f.properties as { name: string }).name);
     expect(names).toContain('California');
-    expect(names).toContain('Alaska'); // clean antimeridian geometry — no longer excluded
+    expect(names).toContain('Alaska'); // clean antimeridian geometry
     expect(names).toContain('Hawaii');
     // Every feature carries a name for the choropleth lookup.
     expect(features.every(f => typeof (f.properties as { name?: unknown })?.name === 'string')).toBe(true);

@@ -51,8 +51,8 @@ describe('isWoff2', () => {
 
 /*
  * The tier's whole safety story is "the type comes from the bytes", and the
- * image sniffer is image-only by construction — it does not know `%PDF-`
- * (measured in the spike, S4). sniffAssetType is the one that knows both, and
+ * image sniffer is image-only by construction — it does not know `%PDF-`.
+ * sniffAssetType is the one that knows both, and
  * it knows nothing else: an asset we do not serve is not a type we sniff.
  */
 describe('sniffAssetType', () => {

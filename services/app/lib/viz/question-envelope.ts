@@ -5,10 +5,10 @@
  *   stored prop   {kind: 'vega-lite', spec: {...}}
  *   envelope      {version: 2, source: {kind: 'vega-lite', spec: {...}}, ...}
  *
- * `lib/viz/encoding-edit` operates on the envelope (it was written for a world
- * where a viz carries bindings, view params and asset refs). A story's `viz`
- * prop is the flat form, because a story artifact has none of that — its data
- * comes from a `ref:` and nothing else.
+ * `lib/viz/encoding-edit` operates on the envelope — the form in which a viz
+ * carries bindings, view params and asset refs. A story's `viz` prop is the flat
+ * form, because a story artifact has none of that — its data comes from a `ref:`
+ * and nothing else.
  *
  * Keeping the conversion in one pure module means the panel never reasons about
  * two shapes, and the round trip is testable without a browser. It is
@@ -63,7 +63,7 @@ export function vizPropToEnvelope(viz: unknown): VizEnvelope {
  * `viz` renders the themed table. Writing `{kind:'vega-lite', spec:{}}` instead
  * would render an empty chart frame, which looks broken rather than deliberate.
  * A composed spec (layer/facet/concat) carries its marks a level down and must
- * NOT read as blank — that turned one spec-box apply into a vanished chart.
+ * NOT read as blank — reading one as blank makes a spec-box apply vanish the chart.
  */
 export function envelopeToVizProp(envelope: VizEnvelope): QuestionVizProp | undefined {
   const source = (envelope as { source?: { kind?: string; spec?: Record<string, unknown> } }).source;

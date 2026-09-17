@@ -1,9 +1,8 @@
 /**
  * Neutral font-asset mechanism: the PLATFORM provides story fonts
  * for jsx stories — a theme registry maps theme name → font assets (family + static asset URL), and
- * `getStoryFontCss` turns the active theme's entries into @font-face CSS. The live view loads fonts
- * by URL (cacheable static assets under /fonts); the data-URI form exists only in the capture-time
- * parsed copy (lib/story-surface/serialize inlines url() → data: at serialization).
+ * `getStoryFontCss` turns the active theme's entries into @font-face CSS. Faces load by URL —
+ * cacheable static assets under /fonts.
  */
 import { describe, it, expect } from 'vitest';
 import { createHash } from 'node:crypto';
@@ -153,9 +152,9 @@ describe('per-theme font assets (Story_Design_V2 §5)', () => {
 });
 
 /**
- * The bundled assets are the delivery half of the fix: a reader used to wait
- * ~1.1s for a 1.8MB TTF before the document stopped rendering in a fallback
- * face. Each property below is one thing that made that slow, pinned so a
+ * The bundled assets are the delivery half: an unsubset 1.8MB TTF costs a
+ * reader ~1.1s of fallback-face rendering before the real face arrives. Each
+ * property below is one thing that keeps that from happening, pinned so a
  * later rebuild can't quietly undo it.
  */
 describe('bundled font assets are subset WOFF2, and safe to serve immutable', () => {

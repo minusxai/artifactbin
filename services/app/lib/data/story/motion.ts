@@ -9,9 +9,9 @@
  *     `@utility` reveal rules) interpolated into the per-story compile
  *     (story-css.server.ts). Keyframes ride `@theme`, so Tailwind emits them
  *     only for documents that actually use the utility.
- *  2. The reveal OBSERVER (lib/story-ui/use-reveal-motion.ts) — trusted
- *     parent-side code, never story code. The story iframe is CONTENT-SIZED
- *     (the parent scrolls), so CSS scroll-driven timelines can never fire
+ *  2. The reveal OBSERVER — trusted parent-side code, never story code. The
+ *     story iframe is CONTENT-SIZED (the parent scrolls), so CSS
+ *     scroll-driven timelines can never fire
  *     inside it; instead the observer watches reveal elements against the real
  *     viewport and stamps them seen.
  *

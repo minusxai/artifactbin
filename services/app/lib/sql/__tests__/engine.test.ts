@@ -136,7 +136,7 @@ describe('runQueries', () => {
     expect(r.rows).toHaveLength(5);
     expect(r.truncated).toBe(true);
     expect(r.totalRows).toBe(20000000);
-    // Reading all 20M rows into JS cost +2.6 GB before the streaming read; the
+    // Reading all 20M rows into JS costs +2.6 GB without the streaming read; the
     // cap must bound MEMORY, not just what the document shows.
     expect((process.memoryUsage().rss - rss0) / 1e6).toBeLessThan(300);
   });

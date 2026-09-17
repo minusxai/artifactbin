@@ -51,8 +51,8 @@ describe('STORY_TEMPLATES registry', () => {
     // described only under "acts" (structure, conditional on deck length) gets dropped from every
     // short deck, and the deck ships with no saturated slide at all.
     const guidance = guidanceOf('deck');
-    // Bounded by the Do list, not by the skeleton: the skeleton now LEADS the page (it is the
-    // thing agents copy, so it sits in the top half), and slicing to it read backwards.
+    // Bounded by the Do list, not by the skeleton: the skeleton LEADS the page (it is the
+    // thing agents copy, so it sits in the top half), so slicing to it would read backwards.
     const start = guidance.indexOf('SLIDE TYPES');
     const slideTypes = guidance.slice(start, guidance.indexOf('\nDo\n', start));
     expect(slideTypes, 'deck SLIDE TYPES block').toMatch(/divider/i);

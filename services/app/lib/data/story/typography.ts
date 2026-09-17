@@ -92,15 +92,15 @@ type StoryColorClassKind = 'text' | 'fill';
 const colorPrefix = (kind: StoryColorClassKind): 'text' | 'bg' => kind === 'text' ? 'text' : 'bg';
 
 /**
- * A picker-owned color utility. The important suffix deliberately preserves the old inline-style
- * semantics: a manual user choice beats authored responsive/theme color classes, while clearing
- * the picker removes only this override and reveals the authored colors again.
+ * A picker-owned color utility. The important suffix gives it inline-style semantics: a manual
+ * user choice beats authored responsive/theme color classes, while clearing the picker removes
+ * only this override and reveals the authored colors again.
  */
 export function storyColorClass(kind: StoryColorClassKind, hex: string): string {
   return `${colorPrefix(kind)}-[${hex.toLowerCase()}]!`;
 }
 
-/** The picker-owned arbitrary hex color on the base element, including pre-important v1 values. */
+/** The picker-owned arbitrary hex color on the base element, `!` marker optional. */
 export function currentStoryColor(className: string, kind: StoryColorClassKind): string | null {
   const prefix = colorPrefix(kind);
   const re = new RegExp(`^${prefix}-\\[(#[0-9a-f]{6})\\]!?$`, 'i');

@@ -130,7 +130,7 @@ interface VegaViewOptions {
   height?: number;
   /** Container-bounded child sizing for a top-level Vega-Lite facet. */
   facetLayout?: FacetLayoutPlan | null;
-  /** Install the styled HTML tooltip handler (browser only; styled in globals.css). */
+  /** Install the styled HTML tooltip handler (browser only; styled in `tooltip-styles.ts`). */
   tooltipTheme?: 'light' | 'dark';
   /** Vega parser config — used by the native-vega engine (VL bakes theme at compile). */
   parserConfig?: Record<string, unknown>;

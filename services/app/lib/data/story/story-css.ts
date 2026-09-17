@@ -7,7 +7,8 @@
  * per-story CSS blob (see story-css.server.ts), persisted on the content as `compiledCss` —
  * a SERVER-MANAGED field: it is not part of the authored StoryContent schema, is never shown
  * to the agent (contentToJsx iterates schema fields only), and is recomputed on every save.
- * At render time AgentHtml injects it into the story iframe's <head>.
+ * At render time `buildStoryDocument` emits it into the document <head> as
+ * `<style data-mx-tw>` (lib/story/document.ts).
  *
  * Legacy stories (no marker) get `compiledCss: null` and render exactly as before — the
  * marker gate exists so Tailwind's preflight reset can never leak into a story that styles

@@ -191,7 +191,7 @@ export function buildTooltipPlan(spec: Record<string, unknown>): TooltipPlan | n
   if (facets.length > 0 && child) {
     // A single scale function can snap every panel only while x is shared (VL's
     // default). Independent x scales need per-cell scale lookup and stay on the
-    // native per-mark tooltip for now.
+    // native per-mark tooltip.
     const xResolution = (spec.resolve as { scale?: { x?: unknown } } | undefined)?.scale?.x;
     if (xResolution === 'independent') return null;
     const childPlan = buildTooltipPlan(child);
@@ -473,7 +473,7 @@ interface RenderTooltipOptions {
 
 /**
  * Render the shared tooltip's inner HTML: an x header, then one row per series with a color
- * swatch, name, and value. Styled by the `#vg-tooltip-element` rules in globals.css.
+ * swatch, name, and value. Styled by the `#mx-shared-tooltip` rules in `tooltip-styles.ts`.
  */
 export function renderSharedTooltipHtml(entry: TooltipEntry, opts: RenderTooltipOptions): string {
   const rows = opts.sortByValue === false ? entry.rows : [...entry.rows].sort((a, b) => b.value - a.value);

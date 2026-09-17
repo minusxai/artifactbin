@@ -88,9 +88,8 @@ const cache: Record<string, Feature[]> = {};
 /**
  * How a boundary file is fetched, given its PUBLIC path (`/geojson/<file>.json`). The default is
  * the browser fetch (same-origin static asset). Root-relative URLs are unparseable in Node, so
- * NO-ORIGIN contexts (headless server renders — Slack images, scripts) install a filesystem
- * fetcher via `lib/viz/geo-assets.server.ts` instead; without it, geo charts silently dropped
- * from server images.
+ * a NO-ORIGIN context (a headless server render — Slack images, scripts) has to replace this
+ * fetcher with a filesystem one, or its geo charts silently render without geometry.
  */
 type GeoAssetFetcher = (publicPath: string) => Promise<unknown>;
 
