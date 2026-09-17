@@ -11,7 +11,7 @@ import RemoteMentionPicker, { type MentionPickerHandle } from './RemoteMentionPi
  * that text; it never produces markup, and there is no rich-text model here to
  * diverge from the string.
  *
- * Two things are load-bearing and both were learned by leaving them out:
+ * Two things are load-bearing:
  *
  *   · A toolbar button MUST NOT take the caret. `onMouseDown` is prevented on
  *     every one of them, because the click handler needs the selection that

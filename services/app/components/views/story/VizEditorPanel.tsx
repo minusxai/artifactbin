@@ -9,11 +9,10 @@
  * document, which is what makes the live preview honest rather than a copy that
  * can drift.
  *
- * Deliberately selects rather than drag-and-drop. minusx's builder drags column
- * chips into zones, which is lovely with a mouse and unusable on a phone, needs
- * a touch fallback, and would have to be restyled from Chakra. Selects say the
- * same thing, are keyboard- and screen-reader-navigable for free, and match the
- * terminal-graphite chrome. Nothing here forecloses adding drag later.
+ * Deliberately selects rather than drag-and-drop. Dragging column chips into
+ * zones is lovely with a mouse, unusable on a phone and needs a touch fallback.
+ * Selects say the same thing, are keyboard- and screen-reader-navigable for
+ * free, and match the terminal-graphite chrome.
  *
  * Field lists are TYPE-AWARE: an axis that wants a measure offers numeric
  * columns first, because a quantitative encoding over a text column renders a
@@ -64,17 +63,6 @@ interface VizEditorPanelProps {
 }
 
 /**
- * The raw surface under the zone selects: the WHOLE spec as editable JSON, for
- * everything the zones don't reach — colors, scales, per-mark config.
- *
- * A draft with an explicit apply, not live parsing: half-typed JSON is invalid
- * by nature, and emitting on every keystroke would spray parse errors (or worse,
- * partial specs) into the document. The draft is keyed off the canonical JSON by
- * the parent, so an edit landing from OUTSIDE the box (a zone select, a remote
- * agent) re-seeds it rather than letting a stale draft quietly revert that
- * change on the next apply.
- */
-/**
  * The Question's header strip, as a rename field. A draft committed on blur or
  * Enter — not per keystroke, which would push a document write (and a re-parse
  * of the whole body) on every letter. Keyed off the prop by the parent, so a
@@ -103,6 +91,17 @@ function TitleField({ title, onCommit }: { title: string | null; onCommit: (titl
   );
 }
 
+/**
+ * The raw surface under the zone selects: the WHOLE spec as editable JSON, for
+ * everything the zones don't reach — colors, scales, per-mark config.
+ *
+ * A draft with an explicit apply, not live parsing: half-typed JSON is invalid
+ * by nature, and emitting on every keystroke would spray parse errors (or worse,
+ * partial specs) into the document. The draft is keyed off the canonical JSON by
+ * the parent, so an edit landing from OUTSIDE the box (a zone select, a remote
+ * agent) re-seeds it rather than letting a stale draft quietly revert that
+ * change on the next apply.
+ */
 function SpecEditor({ specJson, onApply }: { specJson: string; onApply: (parsed: Record<string, unknown>) => string | null }) {
   const [draft, setDraft] = useState(specJson);
   const [error, setError] = useState<string | null>(null);

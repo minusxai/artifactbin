@@ -265,10 +265,8 @@ function AppearancePicker({ mode, onPick }: { mode: AppearanceMode; onPick: (mod
  * WHAT THE PAGE IS RIGHT NOW. The pre-paint script in web/index.html has
  * already stamped the reader's stored choice by the time React mounts, so the
  * document is the only honest source for the control's opening state — a
- * constant here can only disagree with what the reader is looking at, and did:
- * it still said 'dark' after the default was flipped to light, so anyone who
- * had never touched the toggle was told they were in dark mode on a light
- * page. Reading the attribute also survives the default being flipped again.
+ * constant here can only disagree with what the reader is looking at, and it
+ * survives the default mode being changed.
  */
 const currentAppAppearance = (): AppearanceMode =>
   typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
@@ -320,9 +318,8 @@ export function PageControls({
   const mode = controlledMode ?? appMode;
 
   // Re-reads the page when a controlled document hands the control back. The
-  // question "what mode is this" is asked HERE and in the initial state, and
-  // it used to be spelled out twice — the second copy still tested for a
-  // 'light' attribute that light, being the default, never carries.
+  // question "what mode is this" is asked HERE and in the initial state, both
+  // through currentAppAppearance so the two can never answer differently.
   useEffect(() => {
     if (controlledMode) return;
     setAppMode(currentAppAppearance());
@@ -409,12 +406,11 @@ const BAR_BUTTON =
   'flex h-9 w-9 cursor-pointer items-center justify-center rounded-[8px] border-0 bg-transparent text-muted transition-colors hover:bg-raised hover:text-fg';
 
 /**
- * ONE BAR, ALWAYS THERE. The app pages used to float a hamburger in one corner
- * and a controls button in the other (a dock on phones); now they carry one
- * 44px bar in the page's own flow — the logo home on the left, the page's crumb
- * beside it, and the two panels' buttons on the right — the same shape the
- * reader's document bar has, so moving between a document and the app does
- * not change where anything is. Sticky, not fixed, so it never covers content.
+ * ONE BAR, ALWAYS THERE. Every app page carries one 44px bar in its own flow —
+ * the logo home on the left, the page's crumb beside it, and the two panels'
+ * buttons on the right — the same shape the reader's document bar has, so
+ * moving between a document and the app does not change where anything is.
+ * Sticky, not fixed, so it never covers content.
  */
 export function AppBar({
   title,

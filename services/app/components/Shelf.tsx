@@ -218,10 +218,10 @@ function FolderTile({ row, count, level, folders, onDeleted, documents, gallery,
   /**
    * RENAMING IS THE ONE VERB A FOLDER HAS THAT A DOCUMENT DOES NOT NEED HERE.
    * A document is renamed in its editor's Title field; a folder has no content
-   * and therefore no editor, so the pencil beside it opened on nothing. The
-   * verb moves into the menu with the other folder verbs and edits the tile in
-   * place, through the metadata door (PATCH {title}) rather than the replace
-   * one — a name should not archive a version.
+   * and therefore no editor, so the verb lives in the menu with the other
+   * folder verbs and edits the tile in place, through the metadata door
+   * (PATCH {title}) rather than the replace one — a name should not archive a
+   * version.
    */
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState('');
@@ -578,12 +578,12 @@ export default function Shelf({ rows, actions = 'none', showVisibility = true, a
         * changes what the shelf says you have. */}
       {view === 'grid' && shelf.folders.length > 0 && (
         /*
-         * `relative z-20` is load-bearing, and was found by a real click. Every
-         * row here carries `.reveal`, which is a CSS ANIMATION — so each row is
-         * its own stacking context and a menu's `z-30` cannot escape it. The
-         * strip sits ABOVE the document tiers in the DOM, so painting order put
-         * a folder's open menu UNDERNEATH the hero card below it: visible,
-         * and unclickable. Raising the section raises everything inside it.
+         * `relative z-20` is load-bearing. Every row here carries `.reveal`,
+         * which is a CSS ANIMATION — so each row is its own stacking context
+         * and a menu's `z-30` cannot escape it. The strip sits ABOVE the
+         * document tiers in the DOM, so painting order would put a folder's
+         * open menu UNDERNEATH the hero card below it: visible, and
+         * unclickable. Raising the section raises everything inside it.
          */
         <section aria-label="Folders" className="relative z-20">
           <div className="mb-2 flex items-baseline gap-2">

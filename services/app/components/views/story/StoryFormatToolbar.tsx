@@ -6,8 +6,8 @@
  * The document is a separate document, in its own realm, and this toolbar has
  * no element from it — only the DESCRIPTION the document sent (its path, its
  * current classes, and where it is on screen). Everything shown here is derived
- * from that description through the same pure class algebra the canvas toolbar
- * used (lib/data/story/typography), and every change goes back as one message:
+ * from that description through a pure class algebra (lib/data/story/typography),
+ * and every change goes back as one message:
  * applied to the live element instantly, folded into the source to persist.
  *
  * Layout is independent of selection geometry: formatting occupies a stable

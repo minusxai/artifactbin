@@ -2,7 +2,7 @@
 
 /**
  * <VegaChart> — the single browser renderer for Viz V2 envelopes.
- * Pure view: envelope + rows + colorMode in, chart out. No Redux.
+ * Pure view: envelope + rows + colorMode in, chart out.
  *
  * Lifecycle: compile+parse+mount on spec/mode change (theme change = recompile);
  * data-only updates flow through view.data without a rebuild; container resizes
@@ -38,7 +38,7 @@ const makeXFormatter = (plan: TooltipPlan) => (raw: unknown): string => {
 };
 
 // The shared-tooltip guide line (a native Vega `rule` mark driven by mxGuidePx/mxGuideOn/
-// mxGuideH signals) lives in ./guide-mark — extracted so its bounds invariant is
+// mxGuideH signals) lives in lib/viz/guide-mark — extracted so its bounds invariant is
 // unit-tested (mxGuideH rests at 0 so the guide never feeds the fit solver; see guide-mark.ts).
 
 // Interactive maps (drag pan, wheel zoom, +/- buttons, persisted view). The predicate
@@ -80,7 +80,7 @@ const sizeOf = (el: HTMLElement) => ({
 });
 
 // Vega writes fonts as SVG presentation attributes, which lose to ANY author CSS rule —
-// including Chakra's `@layer reset` universal preflight. The app font then overrides
+// a universal preflight reset included. The app font then overrides
 // every chart label (measured mono, rendered sans → all spacing wrong). Promote vega's
 // font-* attributes to inline styles, which win the cascade. Re-applied via a
 // MutationObserver because vega rewrites text nodes on every dataflow re-render.
@@ -248,8 +248,8 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
         // Shared-tooltip charts suppress the DEFAULT per-mark tooltip — and this MUST
         // happen before the first runAsync: vega's View.tooltip() re-initializes the
         // renderer, which synchronously CLEARS the SVG. Calling it after the first
-        // render wiped the just-painted chart with no error, and nothing repainted
-        // until the next interaction-triggered run (the silent-blank-chart bug).
+        // render wipes the just-painted chart with no error, and nothing repaints
+        // until the next interaction-triggered run.
         if (tooltipPlan) view.tooltip(() => {});
         // Recipe boundary/lookup datasets (choropleth & analytic geo,) are
         // resolved from the asset registry and bound before the first layout.
@@ -524,14 +524,13 @@ export function VegaChart({ envelope, rows, colorMode, ariaLabel = 'Vega chart',
   }, []);
 
   // The container must ALWAYS stay mounted: the build effect needs containerRef on
-  // every envelope change. Unmounting it on error made error states permanent (the
-  // effect bailed on a null ref forever). Errors overlay instead.
+  // every envelope change, and it bails on a null ref — unmounting on error would
+  // make the error state permanent. Errors overlay instead.
   return (
     <div className="relative min-h-0 w-full flex-1 overflow-hidden">
       {error && (
         <div className="absolute inset-0 z-[1] overflow-auto bg-muted" aria-label="Vega chart error">
-          {/* Same friendly card as the classic charts (V1 parity); the full stack is
-              already on the console from the build effect's catch. */}
+          {/* The full stack is already on the console from the build effect's catch. */}
           <ChartError message={error} />
         </div>
       )}

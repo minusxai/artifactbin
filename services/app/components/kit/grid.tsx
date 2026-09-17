@@ -2,7 +2,7 @@
 
 /**
  * Story layout grid — `<Grid>` / `<GridItem>`, the dashboard-style positioned layout for
- * `format:'jsx'` stories. NOT vendored shadcn: authored for the story registry, but it lives
+ * markup documents. NOT vendored shadcn: authored for the story registry, but it lives
  * in kit/ because the registry maps story tags to this directory and the recipe-class
  * extractor scans it (all positioning classes below must stay LITERAL, and every calc()
  * must stay space-free — the extractor splits string literals on whitespace).

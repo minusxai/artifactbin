@@ -37,8 +37,7 @@ export function Dialog({open, defaultOpen = false, onOpenChange, children, ...pr
  * author reaches for (the Radix `asChild` habit), and two nested `<button>`s
  * are not HTML: parsing the served page closes the outer one and PROMOTES the
  * inner one to its sibling, so the browser's DOM and React's tree disagree and
- * hydration dies with error 418 (production eval run 34868729411, codex's
- * tracker). With a control inside, the trigger becomes a `display:contents`
+ * hydration dies with error 418. With a control inside, the trigger becomes a `display:contents`
  * span that acts when that control is clicked: one button in the DOM — the
  * author's, with its own id and styling — and the same markup on both sides.
  *

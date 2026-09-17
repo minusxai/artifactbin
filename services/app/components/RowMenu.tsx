@@ -3,10 +3,9 @@
 /**
  * THE OVERFLOW MENU BEHIND A ROW'S "…".
  *
- * Extracted because it is now needed twice — the list-view rows (move,
- * delete) and a shelf's ASSET rows (delete) — and a second hand-rolled
- * popover is how two menus start disagreeing about focus, dismissal and which
- * side they open on.
+ * Shared by the list-view rows (move, delete) and a shelf's ASSET rows
+ * (delete): a second hand-rolled popover is how two menus start disagreeing
+ * about focus, dismissal and which side they open on.
  *
  * The interface is a list of items, not a set of booleans: a caller says what
  * it offers, and nothing here knows what a folder or an artifact is. That is
@@ -106,9 +105,8 @@ export default function RowMenu({ name, items }: { name: string; items: RowMenuI
  * count belongs in the sentence the person answers, not in a refusal they have
  * to work around. It says the trash and the undo too, because what makes
  * taking a folder full of documents an ordinary act rather than a cliff is
- * that it is recoverable — which is why the plain sentence says it too. It
- * used to read "the link dies and history is erased", written when a delete
- * WAS one hard DELETE; with the trash under it, only the first half is true.
+ * that it is recoverable — which is why the plain sentence says it too. The
+ * link stops working; nothing is erased.
  */
 export function useDeleteArtifact() {
   const { confirmAction, confirmation } = useConfirmation();

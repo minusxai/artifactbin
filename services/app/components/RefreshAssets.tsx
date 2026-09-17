@@ -37,14 +37,9 @@ function summarise(reply: RefreshReply, status: number): string[] {
   const lines: string[] = [];
   const refreshed = reply.refreshed?.length ?? 0;
   /*
-   * "N refreshed" and nothing else. This used to add "readers who already
-   * loaded an image may see the old copy for a while", which was the honest
-   * caveat while the mapped url had no version: the address is derived from
-   * the URL and served `immutable`, so a repointed row reached nobody who had
-   * already fetched it. The url now carries a content-derived `?v=`
-   * (lib/story/asset-url), so the next render asks every reader for an address
-   * their browser has never seen — and a warning that no longer describes the
-   * product is worse than no warning at all.
+   * "N refreshed" and nothing else — no staleness caveat. The mapped url
+   * carries a content-derived `?v=` (lib/story/asset-url), so the next render
+   * asks every reader for an address their browser has never seen.
    */
   if (refreshed > 0) lines.push(`${refreshed} refreshed`);
   else if ((reply.unchanged?.length ?? 0) > 0) lines.push('already up to date');

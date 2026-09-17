@@ -1,8 +1,8 @@
 "use client"
 
 /**
- * Story slide deck — `<SlideDeck>` / `<Slide>`, the presentation layout for `format:'jsx'`
- * stories (the `deck` template's slide recipe as a component). NOT vendored shadcn: authored
+ * Story slide deck — `<SlideDeck>` / `<Slide>`, the presentation layout for markup
+ * documents (the `deck` template's slide recipe as a component). NOT vendored shadcn: authored
  * for the story registry, but it lives in kit/ because the registry maps story tags to this
  * directory and the recipe-class extractor scans it (all classes below must stay LITERAL).
  *
@@ -11,10 +11,10 @@
  * headless renders). Nothing here is
  * interactive and no JS measures anything, so captures serialize by construction.
  *
- * The `data-mx-slide` / `data-mx-slide-title` stamps are the render-side contract the PARENT
- * document's slide navigation (birds-eye rail, present-mode controls) discovers slides
- * through — see lib/story-ui/slide-nav.ts. They are render artifacts: the data-mx-* prefix
- * strip in lib/data/story/jsx-edit.ts keeps them out of any WYSIWYG write-back.
+ * The `data-mx-slide` / `data-mx-slide-title` stamps are the render-side contract the
+ * document's own slide navigation (lib/story-runtime/StoryRuntimeApp) and the capture
+ * browser (services/browser) find slides through. They are render artifacts: the data-mx-*
+ * prefix strip in lib/data/story/jsx-edit.ts keeps them out of any WYSIWYG write-back.
  */
 import * as React from "react"
 

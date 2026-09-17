@@ -8,18 +8,17 @@ import type { EditorSelectionChange } from '@/lib/editor-v2/bookmark';
  * The page's mounted InlineStoryRuntime becomes editable in place. This
  * component owns the editing chrome, source composition, persistence and history.
  *
- * What that buys is the whole point of the rewrite. Pressing edit does not
- * unmount the runtime, build a second document, boot a second React root, re-run
- * the dataflow and re-mount every chart; it sends a runtime command. The scroll
- * position is not restored because nothing moved it. Nothing flashes because
- * nothing was replaced.
+ * Pressing edit does not unmount the runtime, build a second document, boot a
+ * second React root, re-run the dataflow and re-mount every chart; it sends a
+ * runtime command. The scroll position is not restored because nothing moved
+ * it. Nothing flashes because nothing was replaced.
  *
  * Division of labour:
  *   runtime (lib/story-runtime/edit/session) — makes hosts editable, says what
  *          is selected, stages what was typed, applies a format instantly.
- *   here   — composes every edit into the source, persists through the same
- *          save-less protocol as before, and pushes structural changes back
- *          down as `mx:document`, which the runtime re-renders in place.
+ *   here   — composes every edit into the source, persists through the
+ *          save-less protocol, and pushes structural changes back down as
+ *          `mx:document`, which the runtime re-renders in place.
  * runtimeRef carries commands on the app page; frameRef preserves the standalone
  * framed-document compatibility path through the same endpoint contract.
  */
@@ -284,7 +283,7 @@ export default function InPlaceEditor({
     [showInDocument],
   );
 
-  // ── persistence (unchanged protocol) ──────────────────────────────────────
+  // ── persistence ───────────────────────────────────────────────────────────
   /*
    * The ONE path that replaces the source from outside. The code pane cannot
    * tell that apart from an echo of its own typing by looking at the text (both
@@ -1184,11 +1183,10 @@ export default function InPlaceEditor({
 
       {/* The embed inspector: a fixed panel, since the thing it edits lives in
           another realm and anchoring to it buys only positioning bugs.
-          It is the RIGHT RAIL's other occupant — one width for both, because
-          they can now be up at the same time (comments no longer leave with the
-          mode). It takes the rail while a chart is selected: same width, higher
-          layer, so the two read as one column rather than two panels fighting
-          for an edge. */}
+          It is the RIGHT RAIL's other occupant — one width for both, since the
+          comments rail can be up at the same time. It takes the rail while a
+          chart is selected: same width, higher layer, so the two read as one
+          column rather than two panels fighting for an edge. */}
       {inspector && mode === 'design' && (
         <aside
           aria-label={INSPECTOR_LABEL[inspector]}

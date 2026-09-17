@@ -13,7 +13,7 @@
  *                       second reading column.
  *   · the COMPOSER    — a draft beside the words it is about, opened from a
  *                       view-mode selection bubble, the editor's toolbar, or
- *                       the rail's PICK tool (`picking`): the edit-mode
+ *                       the rail's PICK tool (`pick`): the edit-mode
  *                       hover-and-click, for a comment — the only way to
  *                       comment on a chart, an image or a whole list, which
  *                       have no words to select. One-shot, never in the URL.
@@ -27,9 +27,9 @@
  * (`mx:annotations`) and answers with pin clicks, hovers, geometry and node
  * selections, signed like every frame message.
  *
- * Mounted for anyone who may comment (the owner, or a named editor); a shared
- * reader's document is top-level with no parent window, so nothing here can
- * even reach them.
+ * Mounted for anyone who may comment (the owner, a named editor, or a
+ * commenter — lib/share-roles' canAnnotate); a shared reader's document is
+ * top-level with no parent window, so nothing here can even reach them.
  */
 import { useConfirmation } from './ConfirmDialog';
 import { CommentTimestamp } from './CommentTimestamp';
@@ -908,8 +908,8 @@ export default function AnnotationLayer({
     if (liveAnnotations) setAnnotations(liveAnnotations);
   }, [liveAnnotations]);
 
-  // The resolved index is part of annotate mode: its rows stay collapsed until
-  // one is clicked, so seeing history does not compete with open work.
+  // The resolved index is read only while the rail is open: its rows stay
+  // collapsed until one is clicked, so history does not compete with open work.
   useEffect(() => {
     if (!railOpen) return;
     let gone = false;const abort=new AbortController();
@@ -922,8 +922,7 @@ export default function AnnotationLayer({
   /*
    * OPENING THE RAIL OPENS A PICK. Someone who presses "comments" is about to
    * leave one, so the document is ready for the click at once; the tool in
-   * the header stays as the explicit way back in (and the place other
-   * selection modes will sit beside it). Not for a rail opened FOR A THREAD —
+   * the header stays as the explicit way back in. Not for a rail opened FOR A THREAD —
    * a pin click came for an answer — not while a composer is already open
    * (the subject is chosen), not under the editor (`pickOnOpen`), and not on
    * a phone, whose sheet covers the document. Closing the rail ends the pick
@@ -994,7 +993,8 @@ export default function AnnotationLayer({
     );
   }, [frameRef, runtimeRef]);
 
-  // What the document says: pin clicks always; selections only in annotate mode.
+  // What the document says: pin clicks always; selections only while a pick or
+  // a composer is open.
   useEffect(() => {
     const onMessage = (event: { data: unknown }) => {
       const nonce = nonceRef.current;
@@ -1222,7 +1222,7 @@ export default function AnnotationLayer({
     }
   };
   const endPick = () => setPick(null);
-  /** The header tools: pressing the active one is the way out; pressing the other switches. */
+  /** The header tool: pressing it while it is active is the way out. */
   const toggleTool = (mode: 'select') => (pick === mode ? endPick() : beginPick(mode));
 
   // The collapsed 36px identity mark is small enough for phones too; clicking
@@ -1250,8 +1250,7 @@ export default function AnnotationLayer({
     <>
       {confirmation}
       {/* The ambient surface: tiny open-thread identities over the document's
-          right edge, at their anchors. Present in view mode AND while editing —
-          removing the `!editing` gate here is the whole feature. */}
+          right edge, at their anchors. Present in view mode AND while editing. */}
       {floating && (
         <div aria-label="Open annotation comments" className="pointer-events-none fixed inset-0 z-20">
           {placed.map(({ annotation, top }) => (
@@ -1479,7 +1478,7 @@ export default function AnnotationLayer({
 }
 
 /**
- * The conversation's two homes (the ShareLink rule): the fixed right rail on
+ * The conversation's two homes: the fixed right rail on
  * desktop — the page narrows the document by its width — and a bottom sheet
  * on a phone. The content between them is identical; this wrapper is the only
  * thing that knows the difference.

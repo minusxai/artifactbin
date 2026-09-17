@@ -4,9 +4,10 @@ import * as React from "react"
 
 import { cn } from "./cn"
 
-// Inline SVG replacements for lucide-react's ChevronRight / MoreHorizontal
-// (lucide-react is not installed in this repo). Same paths and className
-// wiring as the lucide icons so the shadcn class recipes still apply.
+// Inline SVG replacements for lucide-react's ChevronRight / MoreHorizontal: the
+// story kit never imports lucide, whose whole glyph map would ride in every
+// served document (lib/story/icon-glyphs). Same paths and className wiring as
+// the lucide icons so the shadcn class recipes still apply.
 function ChevronRightIcon(props: React.ComponentProps<"svg">) {
   return (
     <svg

@@ -3,7 +3,7 @@
  * upload alike: an icon tile, an eyebrow naming the workspace, the page's
  * title, and on the right the way out ("all assets →") beside whatever
  * actions the page has. One component, so the two pages cannot drift into
- * two designs the way they briefly did.
+ * two designs.
  */
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';

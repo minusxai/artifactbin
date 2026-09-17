@@ -5,8 +5,9 @@ import * as AccordionPrimitive from "@radix-ui/react-accordion"
 
 import { cn } from "./cn"
 
-// Inline SVG replacement for lucide-react's ChevronDownIcon (lucide-react is
-// not installed in this repo). Same className wiring as the lucide icon so the
+// Inline SVG replacement for lucide-react's ChevronDownIcon: the story kit never
+// imports lucide, whose whole glyph map would ride in every served document
+// (lib/story/icon-glyphs). Same className wiring as the lucide icon so the
 // `[&[data-state=open]>svg]:rotate-180` rotation on the trigger still works.
 function ChevronDownIcon(props: React.ComponentProps<"svg">) {
   return (

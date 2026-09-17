@@ -30,7 +30,7 @@ const TOC = [
 type SectionId = (typeof TOC)[number]['id'];
 const anchor = (id: SectionId) => ({ id, className: 'mt-8 scroll-mt-8' });
 
-/** The four document genres, in the order an agent meets them. */
+/** The document genres, in the order an agent meets them. */
 const TEMPLATES = [
   { name: 'editorial', blurb: 'A long read. Chaptered argument, page breakers, takeaways on every section.' },
   { name: 'deck', blurb: 'A presentation that scrolls. Full-viewport slides in acts, with solid-accent act dividers, arrow-key paging and a present mode.' },

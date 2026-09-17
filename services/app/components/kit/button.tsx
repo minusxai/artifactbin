@@ -45,7 +45,7 @@ const buttonVariants = cva(
  * (the edit canvas, a capture, a deck-rail preview): the binding is stripped
  * from the DOM and stamped as `data-mx-bound`, and the button is disabled.
  * The right look, with no pretence of working — the same bargain the bound
- * controls make (components/kit/controls StaticBoundControl). The runtime
+ * controls make (lib/story-ui/interpreter StaticBoundControl). The runtime
  * overrides this with an adapter wired to the store
  * (lib/story-runtime/StoryRuntimeApp).
  *

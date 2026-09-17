@@ -2,7 +2,7 @@
 
 /**
  * The owner's gate into editing, mounted BY the artifact page (/a/<id>) when
- * edit mode is on — not a route of its own, so a document has exactly one URL.
+ * edit mode is on — a mode of that page, not a page of its own.
  *
  * Everything below it is one editor, because there is one document format:
  * InPlaceEditor, which makes the document the page is already showing
@@ -43,7 +43,7 @@ interface Loaded {
    */
   compiledCss?: string | null;
   refs?: Array<{ id: string; kind: string }>;
-  /** Present when SEEDED from the page: the document's server-run dataflow (see JsxEditorArtifact). */
+  /** Present when SEEDED from the page: the document's server-run dataflow (InPlaceEditor's EditorArtifact). */
   dataflow?: StoryIslandDataflow | null;
 }
 
@@ -76,9 +76,6 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
   id: string;
   seed?: EditorSeed;
   onExit: () => void;
-  /**
-   * Where the reader was in the document when they pressed edit — the editor
-   */
   /** The live document's iframe — editing happens IN it, so it is never remounted. */
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
@@ -89,7 +86,6 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
   /** Comment on the selected node — the page owns the composer and the drain. */
   onComment?: (selection: StoryEditSelection) => void;
   rightInset?: number;
-  /** Where they are NOW, for the document they go back to. */
   /**
    * Where the mounted editor publishes its drain, so the page can empty it
    * before unmounting — the back button leaves edit mode without ever pressing
@@ -156,7 +152,8 @@ export default function ArtifactEditor({ id, seed, onExit, flushRef, frameRef, r
           </div>
           <p className="mt-3 font-sans text-sm leading-relaxed text-muted">
             Only its owner can edit it.{' '}
-            {/* Back to THIS artifact in edit mode — there is no separate editor url. */}
+            {/* Back to THIS artifact in edit mode, via the fragment — the shared
+                link is unchanged by it. */}
             <a
               href={`/login?callbackUrl=${encodeURIComponent(typeof window === 'undefined' ? '/' : `${window.location.pathname}#edit`)}`}
               className={LINK}

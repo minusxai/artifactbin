@@ -159,7 +159,7 @@ export default function ForkArtifact({ id, title = null, variant = 'menu' }: {
  * It asks because the instruction arrived in a URL: a fork writes a copy into
  * somebody's account, and an address anyone may hand over must not be able to
  * do that silently. Focus goes to Cancel and stays inside the dialog,
- * Escape is cancel — the house dialog contract (components/ShareLink).
+ * Escape is cancel — the house dialog contract (components/ConfirmDialog).
  */
 export function ForkConfirm({ id, title, onClose }: { id: string; title: string | null; onClose: () => void }) {
   const { busy, refusal, fork, dismiss } = useForkArtifact(id);

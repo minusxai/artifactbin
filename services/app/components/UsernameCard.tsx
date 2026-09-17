@@ -45,9 +45,8 @@ export default function UsernameCard({ username }: { username: string | null }) 
   return (
     <section className={`${PANEL} p-4`}>
       <MicroLabel>handle</MicroLabel>
-      {/* One line: @ + name + save. The handle is PUBLIC — plain Input, never
-       * TokenInput (its password masking turned the name into dots, and its
-       * w-full pushed the @ and the button onto their own lines). */}
+      {/* One line: @ + name + save. The handle is PUBLIC, so it takes the plain
+       * Input — never a masked field, which would render the name as dots. */}
       <form
         className="mt-2 flex items-center gap-2"
         onSubmit={(e) => { e.preventDefault(); void save(); }}
