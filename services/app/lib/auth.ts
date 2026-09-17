@@ -158,11 +158,16 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const account=actor.userId??actor.id;
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
     if(expectedAccount&&expectedAccount!==account)return json({error:'account_mismatch',hint:'Use the credentials for this workspace account.'},409);
+    // An explicit dry run is a QUESTION — "would this work?" — and this door's convention is that it
+    // leaves no trace: `touchToken` below is withheld from it. The profile upsert is the other write
+    // on this path, so it obeys the same rule. A read-only ROUTE is not a dry run: it is an ordinary
+    // visit, and it must still write the row the share predicates are read through.
+    const dryRun=['GET','HEAD'].includes(request.method)&&request.headers.get('X-Artifactbin-Dry-Run')==='1';
     // The app's own row for this person follows the claims under a bearer
     // credential too, so a CLI-only invitee reaches what they were invited to
     // (lib/viewer syncProfileForToken). No-op without a proxy or an account.
-    if (resolved?.userId) await syncProfileForToken(request, { userId: resolved.userId, tokenId: resolved.id });
-    const readOnly=options.readOnly||(['GET','HEAD'].includes(request.method)&&request.headers.get('X-Artifactbin-Dry-Run')==='1');
+    if (resolved?.userId && !dryRun) await syncProfileForToken(request, { userId: resolved.userId, tokenId: resolved.id });
+    const readOnly=options.readOnly||dryRun;
     if (resolved && !readOnly) {
       await touchToken(resolved.id);
       const declared = identifyClient({ agentHeader: request.headers.get(ARTIFACTBIN_AGENT_HEADER) });

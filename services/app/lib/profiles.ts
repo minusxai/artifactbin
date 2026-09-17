@@ -19,6 +19,13 @@
 import { getDb } from './db';
 import { ensureUsername } from './users';
 
+/**
+ * ONE ADDRESS, TWO IDS — the provisioning fault below, as a type callers can single out. A door that
+ * wants the request to survive it (lib/viewer's bearer sync) must not survive a broken database as
+ * well, and matching on the message text would make this module's wording load-bearing at a distance.
+ */
+export class DuplicateProfileEmail extends Error {}
+
 const LRU_MAX = 5000;
 const seen = new Map<string, string>();
 let writes = 0;
@@ -49,7 +56,7 @@ export async function syncProfile(claims: { userId: string; email?: string }): P
      */
     const held = (await db.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email])).rows[0];
     if (held && held.id !== claims.userId) {
-      throw new Error(
+      throw new DuplicateProfileEmail(
         `${email} already belongs to another id (${held.id}) — one address is one person; resolve which identity owns it before this one signs in again`,
       );
     }
