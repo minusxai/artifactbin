@@ -201,10 +201,10 @@ describe('view-mode text selection actions', () => {
   });
 
   /*
-   * ADDED (F3). Edit and Annotate want DIFFERENT nodes from the same Range:
+   * Edit and Annotate want DIFFERENT nodes from the same Range:
    * the editor should open on the deepest element the user touched, while a
    * comment belongs to the BLOCK that contains the whole selection — anchoring
-   * a comment on the <strong> is how the rest of the sentence used to be lost.
+   * a comment on the <strong> loses the rest of the sentence.
    * The words themselves travel with it.
    */
   it('annotates the BLOCK containing the selection, and carries the quote and its parts', async () => {
@@ -250,9 +250,9 @@ describe('view-mode text selection actions', () => {
   });
 
   /*
-   * ADDED (F4). …AND NOT UNDER THE DOCK. A document served top-level parks the
+   * …AND NOT UNDER THE DOCK. A document served top-level parks the
    * reader's own chrome at the bottom of a phone's viewport, and the bubble
-   * hangs BELOW the words now — so a selection near the foot of the page would
+   * hangs BELOW the words — so a selection near the foot of the page would
    * put the only way to act on it behind the dock. The clamp counts the dock
    * only when it is really parked down there: it is `display: none` while the
    * document is framed and only `position: fixed` under 640px, and a dock in
@@ -304,14 +304,14 @@ describe('view-mode text selection actions', () => {
   });
 
   /*
-   * ADDED (F4, round 2). THE SETTLE IS FOR THE GESTURE THAT HAS NO OTHER EVENT.
+   * THE SETTLE IS FOR THE GESTURE THAT HAS NO OTHER EVENT.
    * A mouse drag fires `selectionchange` continuously too, so a drag that
-   * pauses for the settle raised the bubble mid-gesture — into the path of the
-   * cursor it is heading for, and a release could land ON it. The review could
-   * not turn that into a wrong-target action (the drag's own last change
-   * re-arms the settle and re-measures), so this is not a correctness fix: the
-   * settle simply buys a MOUSE nothing, since `pointerup` already covers every
-   * mouse selection and `keyup` every keyboard one.
+   * pauses for the settle would raise the bubble mid-gesture — into the path of
+   * the cursor it is heading for, where a release could land ON it. That never
+   * becomes a wrong-target action (the drag's own last change re-arms the
+   * settle and re-measures), so this is not a correctness rule: the settle
+   * simply buys a MOUSE nothing, since `pointerup` already covers every mouse
+   * selection and `keyup` every keyboard one.
    *
    * Tracked as a held BUTTON rather than as a `pointerType` branch: jsdom's
    * MouseEvent carries no `pointerType`, and every case above dispatches a
@@ -388,14 +388,13 @@ describe('view-mode text selection actions', () => {
   });
 
   /*
-   * ADDED (F4). A TOUCH SELECTION FIRES NEITHER OF THE EVENTS THE BUBBLE USED
-   * TO WAIT FOR. Android takes the long-press over for its own selection UI
-   * (the page sees `pointercancel` at best) and dragging the handles is browser
-   * chrome that never reaches the page — so `pointerup` never comes and no key
-   * is pressed. `selectionchange` is the one event every touch selection does
-   * fire, and it was wired ONLY to hide: on a phone the bubble was unreachable.
-   * It SHOWS now, after a settle, so a drag of the handles raises it once at
-   * the end rather than chasing every intermediate selection.
+   * A TOUCH SELECTION FIRES NEITHER `pointerup` NOR A KEY. Android takes the
+   * long-press over for its own selection UI (the page sees `pointercancel` at
+   * best) and dragging the handles is browser chrome that never reaches the
+   * page. `selectionchange` is the one event every touch selection does fire,
+   * so it SHOWS the bubble rather than only hiding it — after a settle, so a
+   * drag of the handles raises it once at the end rather than chasing every
+   * intermediate selection.
    */
   it('raises the bubble for a touch selection, which fires no pointerup at all', async () => {
     actions.update({ type: 'mx:selection-actions', edit: true, annotate: true });
@@ -434,9 +433,9 @@ describe('view-mode text selection actions', () => {
   });
 
   /*
-   * ADDED (F4). ABOVE THE SELECTION IS EXACTLY WHERE A PHONE DRAWS ITS OWN
+   * ABOVE THE SELECTION IS EXACTLY WHERE A PHONE DRAWS ITS OWN
    * Copy/Share menu, and the bounding box of a multi-line selection starts at
-   * its FIRST line — so the old placement put our bubble under the native menu
+   * its FIRST line — placing the bubble there puts it under the native menu
    * and nowhere near the words the thumb just finished on. On a coarse pointer
    * it hangs below the LAST client rect instead, and its buttons grow to a
    * 44px touch target.

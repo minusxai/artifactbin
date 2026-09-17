@@ -1,8 +1,8 @@
 /**
- * F3 — describing a text selection relative to its anchor (SEEDED RED by the orchestrator).
+ * Describing a text selection relative to its anchor.
  *
- * The frame holds the real Range and used to throw it away, keeping only the deeper
- * endpoint element. `anchorFor` picks the block that contains the whole selection;
+ * The frame holds the real Range: keeping only the deeper endpoint element throws
+ * the words away. `anchorFor` picks the block that contains the whole selection;
  * `describeRange` turns the Range into a quote plus parts addressed from that anchor;
  * `resolveParts` does the reverse on a later DOM, re-finding each part's text with the
  * stored index as a hint only.

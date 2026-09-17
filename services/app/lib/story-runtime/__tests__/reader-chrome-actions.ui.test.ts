@@ -194,11 +194,11 @@ describe('wireReaderChrome — the rail', () => {
 });
 
 /*
- * ADDED: THE PAGE'S COMMENT RAIL. The page no longer narrows the frame when
- * the rail opens — the bar inside it would narrow too, and its controls
- * would shift. The frame stays full-width, the rail sits UNDER the bar, and
- * the document leaves the rail its width the way it leaves the pinned bars
- * their height: a variable the page sets through the same message.
+ * THE PAGE'S COMMENT RAIL. The page does not narrow the frame when the rail
+ * opens — the bar inside it would narrow too, and its controls would shift.
+ * The frame stays full-width, the rail sits UNDER the bar, and the document
+ * leaves the rail its width the way it leaves the pinned bars their height:
+ * a variable the page sets through the same message.
  */
 describe('wireReaderChrome — the page\'s rail', () => {
   // Only a FRAMED document listens to the page; the fake parent is the page.

@@ -2,17 +2,14 @@
  * Slide discovery for the served document — pure, over the AST the island
  * already carries.
  *
- * The old rail discovered slides by POLLING the built iframe from the parent
- * document, because the engine painted asynchronously into a frame the parent
- * could reach into. Neither half of that is true any more: the document owns
- * its own chrome (same realm, no cross-origin reach), and the nodes are in
- * hand before the first paint. So discovery is a tree walk — the rail can be
- * SERVER-rendered at its final size, and the reservation dance that existed
- * only to stop a 190px layout shift (scripts/gate-layout-shift.mjs) is gone
- * with the guesswork that caused it.
+ * The document owns its own chrome (same realm, no cross-origin reach) and the
+ * nodes are in hand before the first paint, so discovery is a tree walk rather
+ * than a poll of the rendered frame. That is what lets the rail be
+ * SERVER-rendered at its final size, with no reservation guess and so no 190px
+ * layout shift (scripts/gate-layout-shift.mjs).
  *
- * The title fallback matches the old `slide-nav.ts` rule: the authored
- * `title` prop, else the slide's first heading, else "Slide N".
+ * The title fallback chain: the authored `title` prop, else the slide's first
+ * heading, else "Slide N".
  */
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 

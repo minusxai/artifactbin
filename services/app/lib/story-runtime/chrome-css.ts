@@ -30,8 +30,9 @@ import { CHROME_IDENTITY } from '../chrome-identity';
  *
  * `container-type: inline-size` is the load-bearing half, and it is here to
  * make the full-bleed idiom we ship actually cancel. That idiom
- * (lib/data/story/typography FULL_BLEED_CLASSES, taught in skills/markup and
- * orchestrator/prompts/story-guidance.yaml) pairs `px-6 @2xl:px-12` on the page
+ * (lib/data/story/typography FULL_BLEED_CLASSES, taught in the artifactbin
+ * skill's template references and orchestrator/prompts/story-guidance.yaml)
+ * pairs `px-6 @2xl:px-12` on the page
  * wrapper with `-mx-6 @2xl:-mx-12` on a slide that wants the whole column — and
  * the two only cancel if both queries resolve against the SAME container.
  *
@@ -567,18 +568,6 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 `;
 
 /**
- * The EMBED busy state — the visible half of stale-while-revalidate. A value
- * change re-runs the queries that bind it; the rows on screen stay (no flash)
- * and the runtime marks each embed over an in-flight table `aria-busy` + this
- * class. Dim the content hard and center the ONE loading lockup the whole
- * platform speaks — spinner ring over a mono uppercase label (the lazy-chart
- * fallback and the pending-data placeholders in QuestionEmbed compose the
- * same lockup from utilities); the inline Number only dims (a lockup has no
- * room in a sentence). Inlined with EVERY document —
- * chrome-less exports included — because a document is a document either
- * way; the deck rail is the only chrome that is optional.
- */
-/**
  * TABLES, in every document. A table is its own horizontal scroll box, capped
  * at its column: a wide one scrolls inside the column rather than pushing the
  * page sideways (which is what a 3-column table did to a phone, cut mid-word
@@ -600,6 +589,18 @@ export const STORY_TABLE_CSS = `
 :where([data-mx-story-root]) table[data-mx-scrollable="end"] { mask-image: none; -webkit-mask-image: none; }
 `;
 
+/**
+ * The EMBED busy state — the visible half of stale-while-revalidate. A value
+ * change re-runs the queries that bind it; the rows on screen stay (no flash)
+ * and the runtime marks each embed over an in-flight table `aria-busy` + this
+ * class. Dim the content hard and center the ONE loading lockup the whole
+ * platform speaks — spinner ring over a mono uppercase label (the lazy-chart
+ * fallback and the pending-data placeholders in QuestionEmbed compose the
+ * same lockup from utilities); the inline Number only dims (a lockup has no
+ * room in a sentence). Inlined with EVERY document —
+ * chrome-less exports included — because a document is a document either
+ * way; the deck rail is the only chrome that is optional.
+ */
 export const STORY_EMBED_CSS = `
 .mx-busy { position: relative; }
 .mx-busy > * { opacity: 0.3; transition: opacity 150ms ease; }

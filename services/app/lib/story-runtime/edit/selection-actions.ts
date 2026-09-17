@@ -297,8 +297,7 @@ export function createFrameSelectionActions({
      * Copy/Share menu there, and a multi-line selection's bounding box starts
      * at its FIRST line — so on a coarse pointer the bubble hangs below the
      * LAST line the gesture covered, where the thumb already is. A mouse keeps
-     * today's placement, where above is out of the words' way and nothing else
-     * is painted.
+     * the bubble ABOVE, out of the words' way, where nothing else is painted.
      *
      * Degenerate rects are skipped for the same reason `coversText` exists: a
      * Range ending at offset 0 of the following block carries a zero-width rect
@@ -364,11 +363,11 @@ export function createFrameSelectionActions({
    * THE ONLY EVENT A TOUCH SELECTION FIRES. Android hands the long-press to its
    * own selection UI (the page sees `pointercancel` at best) and dragging the
    * handles is browser chrome that never reaches the page — so neither
-   * `pointerup` nor a key ever arrives, and this listener, wired only to hide,
-   * is what made the bubble unreachable on a phone. It SHOWS now, after a
-   * settle that every further change re-arms, so a drag raises the bubble once,
-   * where it ended. Collapsing still hides at once: a settle would leave the
-   * bubble hanging over words that are no longer selected.
+   * `pointerup` nor a key ever arrives, and a listener wired only to hide
+   * leaves the bubble unreachable on a phone. It SHOWS, after a settle that
+   * every further change re-arms, so a drag raises the bubble once, where it
+   * ended. Collapsing still hides at once: a settle would leave the bubble
+   * hanging over words that are no longer selected.
    */
   const onSelectionChange = () => {
     // Free for a reader and inside the editor, where nothing is granted: this

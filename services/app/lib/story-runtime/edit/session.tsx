@@ -202,8 +202,8 @@ export function createFrameEditSession({
    * An element described for the parent, WITH the words the user has selected
    * inside it when there are any. The editor's "Comment on selection" reaches
    * the same composer as the view-mode bubble, so it must hand it the same
-   * quote — a comment made from the toolbar used to keep the node and lose the
-   * sentence. Absent for a bare caret, which has selected nothing.
+   * quote — without this a comment made from the toolbar keeps the node and
+   * loses the sentence. Absent for a bare caret, which has selected nothing.
    */
   const describeWithQuote = (el: Element): StoryEditSelection | null => {
     const selection = describeSelection(el, nodes);
