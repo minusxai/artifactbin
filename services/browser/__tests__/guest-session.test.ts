@@ -32,6 +32,23 @@ it('keeps a guest session owned by its creator', async () => {
   } finally { await sessions.close(); }
 });
 
+it('answers ownership before the viewer, and resumes a guest session without naming it again', async () => {
+  const seen: Actor[] = [];
+  const sessions = createBrowserSessions(async (actor) => { seen.push(actor); return worker(); });
+  try {
+    await sessions.request({ actor: owner, op: 'script', session_id: 'guest', execution_id: 'e1', create: true, code: 'return 1', viewer: 'guest' });
+    await sessions.request({ actor: owner, op: 'script', session_id: 'self', execution_id: 'e1', create: true, code: 'return 1' });
+    // A stranger whose viewer differs learns nothing beyond the session being unavailable to it.
+    const stranger = await sessions.request({ actor: { credential: 'bearer', tokenId: 'stranger' }, op: 'script', session_id: 'self', execution_id: 'e2', create: false, code: 'return 2', viewer: 'guest' });
+    expect(stranger.error?.code).toBe('SESSION_NOT_FOUND');
+    // Resuming without a viewer keeps browsing as the guest; no second worker is created.
+    const resumed = await sessions.request({ actor: owner, op: 'script', session_id: 'guest', execution_id: 'e3', create: false, code: 'return 3' });
+    expect(resumed.error).toBeUndefined();
+    await vi.waitFor(() => expect(seen).toHaveLength(2));
+    expect(seen[0]).toEqual(ANONYMOUS);
+  } finally { await sessions.close(); }
+});
+
 it('never changes who an existing session browses as', async () => {
   const seen: Actor[] = [];
   const sessions = createBrowserSessions(async (actor) => { seen.push(actor); return worker(); });
