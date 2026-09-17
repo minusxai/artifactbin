@@ -35,7 +35,7 @@ export interface AnnotationRangePart {
   text: string;
 }
 
-/** The selected WORDS: text runs addressed from the anchor. `kind` absent on rows written before areas existed. */
+/** The selected WORDS: text runs addressed from the anchor. `kind` is optional — a row without one is text. */
 export interface AnnotationTextRange {
   v: 1;
   kind?: 'text';

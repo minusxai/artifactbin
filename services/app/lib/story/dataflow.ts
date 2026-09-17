@@ -379,11 +379,15 @@ export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
 const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'source', 'column', 'constraints']);
 
 /**
- * `<Value name type default? value? columns? />` → a declaration, or the
- * precise errors. Attributes: `name` (identifier), `type` (VALUE_TYPES,
- * default "string"), `default` (scalar matching the type; dates are ISO
- * strings), `value` (table rows — required for and only for type "table"),
- * `columns` (`[{name, type}]`, table only). Anything else is rejected by name.
+ * `<Value name type? default? value? columns? source? column? constraints? />`
+ * → a declaration, or the precise errors. Attributes (VALUE_ATTRS; anything
+ * else is rejected by name): `name` (identifier), `type` (VALUE_TYPES,
+ * defaulting to "string", or to "user" when `source` is present), `default`
+ * (scalar matching the type; dates are ISO strings), `value` (table rows —
+ * required for and only for type "table"), `columns` (`[{name, type}]`, table
+ * only), and the BOUND form's `source` (`ref:<id>`) + `column` (the field it
+ * inherits its type and `constraints` from — so a bound Value may write neither
+ * `type` nor `constraints` itself, and `column` without `source` is an error).
  */
 export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   const tag = VALUE_TAG;

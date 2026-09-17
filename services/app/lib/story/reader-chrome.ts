@@ -15,12 +15,12 @@
  * lib/story/__tests__/reader-chrome.test.ts and read by browser gates — rename
  * nothing):
  *
- *  1. the LOGO (`.mx-reader-home`, aria "Home"): a plain link to `/`, and
- *     the only "hosted on artifactbin" mark left;
- *  2. the RAIL: like · comment · share (`data-mx-reader-action`), then two
- *     panel triggers — `controls` ("Open artifact controls": appearance, the
- *     sign-in door, fork, provenance) and `menu` ("Open menu": the app
- *     drawer) — 44px targets with tiny mono labels;
+ *  1. the LOGO (`.mx-reader-home`, aria "Home"): a plain link to `/`;
+ *  2. the RAIL: the github-star span, then like · comment
+ *     (`data-mx-reader-action`), then fork, edit and share — each only where
+ *     the caller asked for it — then two panel triggers: `controls` ("Open
+ *     artifact controls": appearance, the sign-in door, fork, provenance) and
+ *     `menu` ("Open menu": the app drawer). 44px targets with tiny mono labels;
  *  3. the BYLINE: the artifactbin home crumb, the author's `@handle` (their
  *     profile), the title, and the follow pill;
  *  4. the share toast and the copy fallback field;

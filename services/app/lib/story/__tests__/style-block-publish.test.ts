@@ -9,7 +9,7 @@
  *  - the viewport-height remap (a raw `100vh` inside the content-sized iframe
  *    is the no-fixed-point sizing bug — see lib/story-surface/viewport-units);
  *  - inline `style=` stays rejected (the editor's class algebra can't merge it).
- * And the compiled sheet now carries `!important` utilities, so Tailwind
+ * And the compiled sheet carries `!important` utilities, so Tailwind
  * classes always beat authored CSS — the instructable cascade contract.
  */
 import { publishJsx } from '../jsx-tier';
