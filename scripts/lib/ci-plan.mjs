@@ -27,7 +27,7 @@ export const CI_MODULES = {
  * about to ship: the publisher (`release-cli.yml`) only uploads when the CLI version changed. So
  * `cliRelease` — the CLI version differs between base and head — is what selects them; an
  * ordinary CLI change gets the bundle build and the CLI source suite in the node job (`cliTests`).
- * The "Release afbin" workflow opens the PR that flips the version.
+ * The "Release afbin" workflow pushes the branch that flips the version.
  */
 export function planCi(paths, { full = false, cliRelease = false } = {}) {
   const changed = new Set();

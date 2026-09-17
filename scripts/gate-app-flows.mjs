@@ -288,8 +288,7 @@ await p.click('[aria-label="Alignment"]');
 await p.click('[aria-label="Align center"]'); await p.waitForTimeout(500);
 await p.getByRole('button',{name:'Document options',exact:true}).click();
 await p.fill('[aria-label="Title"]', 'Gate doc renamed');
-// Colour mode FIRST: a theme that pins its mode hides this toggle entirely
-// (JsxArtifactEditor renders it only when storyThemeMode(theme) is null), so
+// Colour mode FIRST: a theme that pins its mode hides this toggle entirely, so
 // doing it after the pick would be waiting for a control that is gone by design.
 if (await p.locator('[aria-label="Toggle color mode"]').count()) {
   await p.click('[aria-label="Toggle color mode"]');

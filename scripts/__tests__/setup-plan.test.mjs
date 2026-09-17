@@ -1,6 +1,5 @@
-// THE SETUP MODULE'S CONTRACT (node S1). One pure planner, one runner, two
-// callers (`npm run setup`, and `docker run … node scripts/setup.mjs` inside the
-// image). Seeded RED by the orchestrator.
+// THE SETUP MODULE'S CONTRACT. One pure planner, one runner, two callers
+// (`npm run setup`, and `docker run … node scripts/setup.mjs` inside the image).
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -214,7 +213,7 @@ describe('scripts/setup.mjs (child process)', () => {
   });
 });
 
-describe('scripts/setup.mjs --no-next (S5: no dev hint inside the installer)', () => {
+describe('scripts/setup.mjs --no-next: no dev hint inside the installer', () => {
   it('prints Wrote but not the npm run dev hint with --no-next; keeps the hint without it', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'setup-nonext-'));
     const quiet = run(['--yes', '--out', path.join(dir, '.env'), '--no-next']);

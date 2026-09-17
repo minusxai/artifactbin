@@ -219,10 +219,10 @@ const broken = await api('/api/artifacts', {
  *
  * There is no edit canvas any more, and with it goes the rule that the author's
  * script was rendered statically there. Editing happens in this document, so
- * the script has already run and keeps running — which is the accepted trade
- * (seamless-editing-v2.md §5), paid for by the trust model rather than by a
- * second rendering: what the script CANNOT do is write, because it has no way
- * to sign a message (gate-inplace-edit proves that).
+ * the script has already run and keeps running — which is the accepted trade,
+ * paid for by the trust model rather than by a second rendering: what the
+ * script CANNOT do is write, because it has no way to sign a message
+ * (gate-inplace-edit proves that).
  *
  * What must hold here is that a document containing a managed script is
  * editable in the frame it was already in, without remounting that script.

@@ -215,14 +215,6 @@ if (targets.length === 0) {
   process.exit(2);
 }
 
-/*
- * SAY HOW WIDE THE RUN IS, BEFORE IT RUNS. A serial pass and a parallel one differ by an order of magnitude
- * in wall-clock and by nothing at all in output, so a log that does not say which it was cannot be read
- * afterwards — and the failure mode this guards is silent: a `--servers=1` somewhere upstream turns a
- * three-minute set into half an hour and looks exactly like a slow machine.
- */
-
-
 /**
  * A gate's verdict is its EXIT CODE — the summary text is for the human, and
  * it is BUFFERED rather than inherited: several gates writing to one terminal
@@ -265,6 +257,12 @@ const withinSerialGroup = (serialGroup, task) => {
   return current;
 };
 
+/*
+ * SAY HOW WIDE THE RUN IS, BEFORE IT RUNS. A serial pass and a parallel one differ by an order of magnitude
+ * in wall-clock and by nothing at all in output, so a log that does not say which it was cannot be read
+ * afterwards — and the failure mode this guards is silent: a `--servers=1` somewhere upstream turns a
+ * three-minute set into half an hour and looks exactly like a slow machine.
+ */
 console.log(`gates: ${targets.length} server(s), ${selected.length} gate(s)${serversFrom === 'default' ? ' (default: one per core, capped at 6 — --servers=1 is serial, for debugging)' : ''}\n`);
 const queue = [...selected];
 const failed = [];
