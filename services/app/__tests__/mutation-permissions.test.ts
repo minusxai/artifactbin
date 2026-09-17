@@ -149,3 +149,34 @@ it('refuses a value whose type is not the one it was declared with, naming the p
  expect((await bad.json()).detail).toMatch(/\$n/);
  expect((await send(12.5)).status,'the same value, correctly typed, writes').toBe(200);
 });
+
+/*
+ * A GUEST'S WRITE SAYS WHAT TO DO.
+ *
+ * A statement that binds `$_me` needs a person, and until now a guest learned
+ * that by pressing the button and reading "$_me requires a logged-in user" —
+ * a sentence about a parameter binding. The capability the page draws from and
+ * the refusal a direct call gets now both carry `sign_in_required`, so the
+ * page can offer the door instead. The status and `error` are unchanged.
+ */
+it('answers a guest with sign_in_required for a $_me write, in the capability and in the refusal',async()=>{
+ const f=await fixture();
+ const markup='<Helmet>'
+  +'<Value name="rows" type="table" value={[{"id":1,"who":"nobody"}]} />'
+  +'<Query name="current">{`select * from rows`}</Query>'
+  +'<Mutation name="claim">{`update rows set who=$_me where id=1`}</Mutation>'
+  +'</Helmet><Button run="$claim">Claim it</Button><DataTable data="$current" />';
+ const doc=await f.publish({markup});
+ const capability=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));
+ expect(capability.status,await capability.clone().text()).toBe(200);
+ expect((await capability.json()).mutationAccess.claim).toBe('sign_in_required');
+ const refused=await mutate(request(`/a/${doc}/mutate`,{method:'POST',json:{mutation:'claim'}}),ctx(doc));
+ expect(refused.status).toBe(403);
+ expect(await refused.json()).toMatchObject({error:'policy_denied',code:'sign_in_required'});
+ // A signed-in reader is told nothing of the sort: the write is simply theirs.
+ const signedIn=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
+ expect((await signedIn.json()).mutationAccess.claim).toBe(null);
+ // Every other refusal keeps its own words.
+ const dataset=await anonymousQuery(request(`/a/${f.doc}/query?q=%7B%7D`),ctx(f.doc));
+ expect((await dataset.json()).mutationAccess.add).not.toBe('sign_in_required');
+});

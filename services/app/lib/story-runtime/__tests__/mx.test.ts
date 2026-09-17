@@ -33,6 +33,17 @@ describe('shared mx signal contract', () => {
     expect(store.getValue('count')).toBe(0);
     await expect(mx.set({ count: Infinity })).rejects.toMatchObject({ code: 'INVALID_VALUE' });
     await expect(mx.set({ rows: null })).rejects.toMatchObject({ code: 'NOT_WRITABLE' });
+    /*
+     * `$_me` is READ-ONLY, and a script is no exception. The viewer's account
+     * id is not the document's data: it is never declared, so `set` refuses it
+     * as unwritable and `read`/`describe` never name it — the declared-signal
+     * namespace is exactly what those three pin, and the viewer stays outside
+     * it. A page reads it in markup (`{$_me ? … : <SignIn/>}`) instead.
+     */
+    await expect(mx.set({ _me: 'usr_someone' })).rejects.toMatchObject({ code: 'NOT_WRITABLE' });
+    await expect(mx.read(['_me'])).rejects.toMatchObject({ code: 'UNKNOWN_SIGNAL' });
+    expect((await mx.describe()).signals.map(s => s.name)).not.toContain('_me');
+    expect(store.getValue('_me')).toBeNull();
     await mx.set({ count: 4, other: 'ok' });
     expect((await mx.read(['count'])).signals.count!.value).toBe(4);
     store.dispose();

@@ -2131,9 +2131,14 @@ export async function dataflowForRow(
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
-  if(result&&(result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
+  // A document NAMES people when a user-typed value or column reaches it, and
+  // now also when it draws a <User> — which a document with no user data at all
+  // may do (`<User id="$_me" />`). The viewer's own id is added for both,
+  // because the one person a page can always name is the one reading it.
+  if(result&&(drawsPeople(row.source)||result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
     const db=await getDb(), options:NonNullable<DataflowState['userOptions']>={}, ids=new Set<string>();
     const viewer=opts.viewer??null;
+    if(viewer?.userId)ids.add(viewer.userId);
     const permitted=async(column:DatasetColumn)=>{
       const refs=column.constraints?.memberOf;
       if(!refs)return column;
