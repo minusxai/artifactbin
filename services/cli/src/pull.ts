@@ -89,7 +89,7 @@ async function representation(snapshot:Snapshot,head:Snapshot,format:string|unde
 export async function pullToStdout(workspace:Workspace,args:string[],client:HttpClient,parsed:ParsedCommand,stdout:(value:string)=>void):Promise<Record<string,unknown>|undefined>{
  const {flags}=parsed;
  if(flags.json)throw new CliError('conflicting_output','--json cannot share stdout with pulled content.','Choose a file with --output, or omit --json.');
- const [target]=await preparePull(workspace,args,false,client.connection.server,'-');
+ const [target]=await preparePull(workspace,args,false,client.connection.server,'-',client.aliases);
  const head=await client.request<Snapshot>(`/artifacts/${target.id}`);
  if(head.id!==target.id||typeof head.edit_id!=='string'||typeof head.state!=='string'||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');
  checkResourceType(flags.type,head);
@@ -110,7 +110,7 @@ export async function pull(workspace:Workspace,args:string[],client:HttpClient,o
  const run=async()=>{
   if(!options.dryRun){await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   const pending=await readPendingRequest(workspace.home,workspace.root);
-  const targets=await preparePull(workspace,args,!!options.force,client.connection.server,options.output);
+  const targets=await preparePull(workspace,args,!!options.force,client.connection.server,options.output,client.aliases);
   const pendingId=pending?.request.path.match(/^\/artifacts\/([A-Za-z0-9]{6,12})(?:\/edits)?$/)?.[1];
   if(pending&&(!options.force||options.dryRun||!pendingId||!targets.some(target=>target.id===pendingId)))throw new CliError('pending_recovery','Recover the pending write with afbin push before pulling.','An ambiguous conditional write may instead be resolved with pull --force on the same artifact; its proposal is archived first.');
   const files:FileChange[]=[];const tracked:Record<string,TrackedFile>={};const untracked:string[]=[];
