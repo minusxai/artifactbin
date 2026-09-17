@@ -38,10 +38,10 @@ export async function startDocument(base) {
     throw new Error(`cannot start a document (${res.status} ${JSON.stringify(body)}).`);
   }
   if (typeof body.prompt !== 'string'
-    || body.prompt.includes('\n')
+    || !body.prompt.includes("\n\n---\n\nLet's build an artifact for ")
     || body.prompt.includes('\r')
     || body.prompt.includes('mx_')) {
-    throw new Error('the start paste is not one tokenless line');
+    throw new Error('the start paste must contain tokenless instructions and an editable brief');
   }
   if ('token' in body) throw new Error('the start response handed out a credential');
   return { id: body.id, token, editId: body.edit_id, prompt: body.prompt };

@@ -13,7 +13,11 @@ export function existingPaste(base: string, artifactId: string): string {
   const origin = base.replace(/\/$/, '');
   // A fresh CLI already points at DEFAULT_SERVER; any other host must be selected explicitly.
   const serverHint = origin === DEFAULT_SERVER ? '' : ` Pass --server ${origin} to every afbin server command.`;
-  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place, not as a new document. Use the afbin CLI to operate artifactbin, or (curl -fsSL ${origin}/chat/install.sh | sh) if not installed. Run afbin help first.${serverHint}`;
+  return `Edit my artifact at ${artifactUrl(base, artifactId)} in place, not as a new document. Use the afbin CLI to operate artifactbin, or (curl -fsSL ${origin}/chat/install.sh | sh) if not installed. Run afbin help first.${serverHint}
+
+---
+
+Let's build an artifact for `;
 }
 
 const artifactUrl = (base: string, artifactId: string): string =>

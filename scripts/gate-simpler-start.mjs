@@ -45,7 +45,7 @@ check(!(await startRes.allHeaders())['set-cookie'], 'and no agent cookie is set'
 check(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
 check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
 check(!/\/start\?k=/.test(prompt), 'and carries no start link');
-check(prompt.length < 300 && !prompt.includes('\n'), `and is one short line (${prompt.length} chars)`);
+check(prompt.length < 600 && prompt.includes("\n\n---\n\nLet's build an artifact for "), `and includes a short editable brief (${prompt.length} chars)`);
 check(prompt.includes('afbin'), 'the paste points to the afbin CLI (afbin authenticates itself; no setup step)');
 check(prompt.includes('/chat/install.sh'), 'and says how to get it when it is not installed');
 if (!id) { console.log('cannot continue without the doc id'); process.exit(1); }

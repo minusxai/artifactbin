@@ -1,6 +1,8 @@
 'use client';
 
 import type { SharingVerdict } from '@/lib/visibility-icons';
+import StarterInstructions from '@/components/StarterInstructions';
+import { isStartPlaceholder } from '@/lib/start-placeholder';
 import type { Visibility } from '@/lib/artifacts';
 import type { DatasetCatalog } from '@/lib/datasets/types';
 import { datasetQuerySnippet } from '@/lib/story/dataset-usage';
@@ -326,6 +328,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
 
   const liveSource = live && live.format === 'markup' ? live.source : null;
   const shownSource = liveSource ?? source;
+  const showStarter = !editing && !props.captureKey && isStartPlaceholder(shownSource, live?.version ?? version);
   // What the row actually holds — null when nobody has named it. The editor's
   // field must seed from THIS, so an inherited name never becomes an explicit
   // one just because someone opened the editor.
@@ -749,11 +752,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             paddingTop: (phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0),
             paddingRight: railInset,
             right: 0,
-            background: readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
+            // The starter uses the app's existing dotted body background.
+            background: showStarter ? 'transparent' : readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
           }}
         >
           {/* Loading ink must read on both fallback grounds before the runtime is ready. */}
-          {!frameLoaded && (
+          {!frameLoaded && !showStarter && (
             <div
               aria-label="Loading document"
               className="absolute inset-0 flex items-center justify-center font-mono text-xs"
@@ -762,6 +766,8 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
               loading…
             </div>
           )}
+          {showStarter && <TrustedUi><StarterInstructions id={id} /></TrustedUi>}
+          <div hidden={showStarter}>
           <InlineStoryRuntime
             key={id}
             data={initialRuntimeData}
@@ -770,6 +776,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             authorScript={props.runtime?.authorScript}
             onController={onController}
           />
+          </div>
         </div>
         {/* Annotations are chrome too: pins live IN the document runtime, markers and
             threads on the page (which holds the content and the session).

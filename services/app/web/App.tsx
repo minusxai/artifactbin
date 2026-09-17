@@ -4,7 +4,7 @@ import { Shell } from './Shell';
 import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
 
-const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, TrashPage } = routePages;
+const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, StartPage, TrashPage } = routePages;
 
 export function App() {
   return (
@@ -12,6 +12,7 @@ export function App() {
       <NavigationPreloads>
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/start" element={<StartPage />} />
         <Route element={<Shell />}>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/chat" element={<ChatPage />} />

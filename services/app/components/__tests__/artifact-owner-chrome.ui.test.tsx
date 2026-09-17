@@ -8,6 +8,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { render } from '@/test/helpers/surface-ui';
 import { storyUpdateParts } from '@/lib/story/update-parts';
+import { START_PLACEHOLDER_MARKUP } from '@/lib/start-placeholder';
+import { existingPaste } from '@/lib/agent-copy';
 import { router, resetRouter } from '@/test/setup/router';
 import { useLayoutEffect } from 'react';
 import type { InlineStoryController, InlineStoryRuntimeProps } from '@/lib/story-runtime/InlineStoryRuntime';
@@ -112,6 +114,25 @@ const openDocumentControls = () => {
   expect(trigger).not.toBeNull();
   fireEvent.click(trigger!);
 };
+
+it('shows anonymous visitors the full starter instructions and copies them without login', async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.assign(navigator, { clipboard: { writeText } });
+  const view = render(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps({ source: START_PLACEHOLDER_MARKUP })} /></ArtifactShell>);
+  const prompt = existingPaste(window.location.origin, 'story1');
+  const instructions = screen.getByRole('textbox', { name: 'Agent instructions' });
+  expect(instructions).toHaveValue(prompt);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy agent instructions' }));
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith(prompt));
+  expect(screen.getByRole('button', { name: 'Copy agent instructions' })).toHaveTextContent('Copied');
+  const edited = `${prompt}\nBuild a dashboard for my reading list.`;
+  fireEvent.change(instructions, { target: { value: edited } });
+  expect(screen.getByRole('button', { name: 'Copy agent instructions' })).toHaveTextContent(/^Copy agent instructions$/);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy agent instructions' }));
+  await waitFor(() => expect(writeText).toHaveBeenLastCalledWith(edited));
+  view.rerender(<ArtifactShell role="viewer"><ArtifactSurface {...surfaceProps({ source: '<h1>My report</h1>', version: 2 })} /></ArtifactShell>);
+  expect(screen.queryByRole('button', { name: 'Copy agent instructions' })).not.toBeInTheDocument();
+});
 
 describe('the surface header buttons are owner chrome', () => {
   it('a reader has no Share button or owner controls', () => {

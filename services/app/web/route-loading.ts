@@ -22,6 +22,7 @@ export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity:
     // would change retry semantics; code loading still overlaps their route.
     '/assets': { code: routePages.AssetsPage }, '/chat': { code: routePages.ChatPage },
     '/login': { code: routePages.LoginPage },
+    '/start': { code: routePages.StartPage },
     '/docs-human': { code: routePages.DocsPage },
   };
   const match = app[path] ?? (path.startsWith('/datasets/') ? { code: routePages.DatasetEditorPage } : null);
