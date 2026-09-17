@@ -1,15 +1,15 @@
 /**
  * questionEmbedHeightPx — the ONE <Question> sizing contract, used when both the inline
- * editor and view render StoryRuntimeApp. Before it was shared, the two paths had defaults
- * (430 vs 320), and only one renderer parsed string heights — the same chart
- * changed size between editing and reading.
+ * editor and view render StoryRuntimeApp. Two renderers with their own defaults, or only
+ * one of them parsing string heights, make the same chart change size between editing and
+ * reading.
  */
 import {
   questionEmbedHeightPx, MIN_CHART_H, DEFAULT_CHART_H, SINGLE_VALUE_MIN_H, SINGLE_VALUE_DEFAULT_H,
 } from '../question-height';
 
 describe('questionEmbedHeightPx', () => {
-  it('missing height takes the documented default (430 chart / 120 bare)', () => {
+  it('missing height takes the tier default (430 chart / 120 bare)', () => {
     expect(questionEmbedHeightPx(undefined, false)).toBe(DEFAULT_CHART_H);
     expect(questionEmbedHeightPx(undefined, true)).toBe(SINGLE_VALUE_DEFAULT_H);
     expect(DEFAULT_CHART_H).toBe(430);
