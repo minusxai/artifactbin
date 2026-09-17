@@ -1,12 +1,12 @@
 /**
  * EDIT MODE DOES NOT TOUCH THE DOCUMENT.
  *
- * Editing happens IN the frame the reader is already looking at, so the whole
- * class of faults this file was written for cannot occur: there is no second
- * document to build, nothing to reveal, and no moment where the page has to
- * decide whether a frame has painted yet. What has to be true now is simpler
- * and stronger — the frame is the SAME ELEMENT throughout, and the page's own
- * stale copy of the text never comes back over it.
+ * Editing happens IN the frame the reader is already looking at, so a whole
+ * class of faults cannot occur: there is no second document to build, nothing
+ * to reveal, and no moment where the page has to decide whether a frame has
+ * painted yet. What has to be true is simpler and stronger — the frame is the
+ * SAME ELEMENT throughout, and the page's own stale copy of the text never
+ * comes back over it.
  *
  * (An iframe that is re-parented reloads, so "same element" is not a detail:
  * it is the difference between a mode and a reload.)

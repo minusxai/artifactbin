@@ -35,8 +35,8 @@ it('commits a successful copy through the router', async () => {
   fireEvent.click(screen.getByLabelText('Fork artifact'));
   fireEvent.click(screen.getByLabelText('Confirm fork'));
   await waitFor(() => expect(router.state.location.pathname).toBe('/@owner/copy01-document'));
-  // The door it POSTs to, from artifact-owner-chrome.ui.test.tsx, which drove the
-  // same two navigations a second time through the whole shell.
+  // The door it POSTs to; who is offered the control and where it sits is
+  // artifact-owner-chrome.ui.test.tsx's subject.
   expect(fetchMock.mock.calls[0][0]).toBe('/api/my/artifacts/abcdef/fork');
 });
 

@@ -19,8 +19,8 @@ vi.mock('@/lib/navigation', () => ({ useRouter: () => ({ refresh, push: () => {}
 import ClaimBanner from '../ClaimBanner';
 
 /**
- * What the browser holds is now its httpOnly cookie, which this component
- * cannot read and does not name: it asks the server with an EMPTY request and
+ * What the browser holds is its httpOnly cookie, which this component cannot
+ * read and does not name: it asks the server with an EMPTY request and
  * claims by token ID. So there is nothing to seed in localStorage here — the
  * `claimable` fixture IS what the browser holds.
  */

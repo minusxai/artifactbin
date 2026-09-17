@@ -1,20 +1,18 @@
 /**
  * The one-click document button. Four things are guarded here:
  *
- * 1. The "copied" feedback is VISIBLE — the first version stored the message
- *    in state no JSX ever read, then navigated away the same tick, so the
- *    copy was silent and the reader had no idea the prompt was on their
- *    clipboard.
+ * 1. The "copied" feedback is VISIBLE. A message held in state no JSX reads,
+ *    followed by a navigation in the same tick, is a silent copy: the reader
+ *    has no idea the prompt is on their clipboard.
  * 2. Navigation waits a beat for that feedback to land. Pushing immediately
  *    is indistinguishable from the button not working.
  * 3. The beat is NARRATED, on the SAME ROW as the copy message: a silent
  *    three-second pause reads as a hang, and a page that then moves on its
  *    own reads as a page moving under the reader. Counting it down out loud
  *    makes the navigation something they were told about.
- * 4. Every surface behaves IDENTICALLY. The landing page used to opt out of
- *    the navigation entirely (a `reveal` prop), so the same button meant two
- *    different things depending on which page had drawn it — and the landing
- *    page carried BOTH shapes at once, hero and footer.
+ * 4. Every surface behaves IDENTICALLY. No page opts out of the navigation, so
+ *    the same button never means two different things depending on which page
+ *    drew it.
  */
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -45,16 +45,14 @@ function ResolvedProfile({ user, rest }: { user: string | undefined; rest: strin
 }
 
 /**
- * EVERYTHING INSIDE THE SHELL, as one component. The page renders it and the
- * suite renders it — `__tests__/pretty-urls` used to re-compose these pieces
- * by hand, which is how it came to assert a listing the page had stopped
- * rendering.
+ * EVERYTHING INSIDE THE SHELL, as one component, so the page and the suite
+ * render the same pieces rather than each composing them by hand.
  *
  * Count documents and folders: the assets band is withheld below, so counting
  * datasets would promise rows that are not there.
  */
 export function ProfileListing({ data }: { data: { handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; authed?: boolean; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
-  // Folders are ROWS in this listing now (`format: 'folder'`), reached at their
+  // Folders are ROWS in this listing (`format: 'folder'`), reached at their
   // own address, so there is no derived folder panel and no path crumb to draw.
   return (
     <>
@@ -74,11 +72,9 @@ export function ProfileListing({ data }: { data: { handle: string; owner?: { id:
 
 /**
  * The owner's own profile root is the dashboard's shelf asked a different
- * question — same account, same root — so it gets the one control that puts
- * something new on it. Never the row verbs: `actions` stays `share`, because a
- * page whose whole point is handing someone a link should not be where a
- * document is edited or deleted. A stranger's profile passes `owned` false and
- * is unchanged.
+ * question — same account, same root. Never the row verbs: `actions` stays
+ * `share`, because a page whose whole point is handing someone a link should
+ * not be where a document is edited or deleted.
  */
 function ProfileShelf({ handle, files }: { handle: string; files: Array<Record<string, unknown> & { id: string; format: string }> }) {
   return (

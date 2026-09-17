@@ -1,11 +1,8 @@
 /**
- * The app's ONE 404 — the glitch page that was `app/not-found.tsx` before the
- * SPA split, restored: the split left three misses with three faces (this
- * page's plainer successor, a bare "not found" line inside the artifact and
- * profile pages, and Hono's text default on root typos). Every miss renders
- * THIS component now — the SPA's catch-all route, ArtifactPage and
- * ProfilePage on a data miss, and the server serves the SPA with the 404
- * STATUS so a curl and a crawler read the same verdict a person sees.
+ * The app's ONE 404. Every miss renders THIS component — the SPA's catch-all
+ * route, ArtifactPage and ProfilePage on a data miss — and the server serves
+ * the SPA with the 404 STATUS so a curl and a crawler read the same verdict a
+ * person sees.
  *
  * It catches "gone" and "not yours to read" alike — the ACL answers a uniform
  * 404 for both on purpose (existence must not leak), so the copy is honest

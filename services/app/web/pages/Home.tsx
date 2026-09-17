@@ -17,10 +17,9 @@ import { useSession } from '@/web/session';
 /**
  * THE EMPTY LIBRARY IS THE ONLY PAGE THAT SAYS WHAT TO DO FIRST.
  *
- * Signed in with nothing published, the dashboard used to be one closed strip
- * on an empty column — the page was literally blank under it. It leads with
- * the act instead, keeps the same panel every other surface shows, and then
- * keeps dataset creation and recovery links available.
+ * Signed in with nothing published, the page leads with the act, keeps the
+ * same panel every other surface shows, and then keeps dataset creation and
+ * recovery links available.
  */
 function FirstArtifact() {
   // The greeting rides the session the chrome already read — a name is worth

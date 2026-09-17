@@ -141,7 +141,7 @@ describe('ThemePicker on a phone', () => {
     render(<ThemePicker value={null} onPick={vi.fn()} />);
     fireEvent.click(screen.getByLabelText('Theme'));
 
-    // The sheet carries the label the anchored panel used to, so the mobile
+    // The sheet carries the same label the anchored panel does, so the mobile
     // gate's geometry check needs no new vocabulary.
     const sheet = screen.getByLabelText('Themes');
     expect(sheet.getAttribute('role')).toBe('dialog');

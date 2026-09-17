@@ -142,8 +142,8 @@ describe('the chrome the selection drives', () => {
      * Every element is clickable and every click lands somewhere useful
      * (lib/story/selection-toolbar is the one mapping). A component's classes
      * are render output, so no class algebra — but the element's name, the
-     * comment door and delete are unconditional. A <GridItem> tile used to
-     * select into silence: outline, no controls, nothing to do with it.
+     * comment door and delete are unconditional: no selection may land on an
+     * outline with no controls and nothing to do with it.
      */
     const onComment = vi.fn();
     mount({ onComment });

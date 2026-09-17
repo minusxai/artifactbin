@@ -1,14 +1,9 @@
 /**
  * The human tour at /docs-human, guarded against DRIFT.
  *
- * It went stale invisibly: it advertised a template called "report" (there is no
- * such template — the four are editorial/deck/scrolly/dashboard), described
- * nocturne as "dark, gold" when its accent is violet, and knew nothing about the
- * data tiers or the plugin. Prose has no type checker, so the vocabulary it
- * quotes is asserted here instead.
- *
- * (Lives under components/__tests__ because that and lib/** are the only paths
- * the vitest `ui` project includes.)
+ * Prose has no type checker and goes stale invisibly, so the vocabulary the
+ * tour quotes is asserted here: theme and template names against the schemas
+ * the API accepts, and the content tiers against the four it has.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -29,8 +24,8 @@ describe('/docs-human', () => {
 
   it('invents no vocabulary the API does not accept', async () => {
     render(DocsHuman());
-    // "report" was documented as a template for weeks. An agent told to use it
-    // gets a 400, and a human reading this page has no way to know.
+    // "report" is not a template. An agent told to use it gets a 400, and a
+    // human reading this page has no way to know.
     expect(text()).not.toMatch(/\breport\b\s*[—·:-]/);
   });
 

@@ -3,8 +3,8 @@
  * artifact's type and visibility. Multi-select — within a group selections
  * OR together, across groups they AND, and both compose with the search
  * query. A group only renders when the rows actually carry ≥2 distinct
- * values for it, so a single-format list (or token rows with no visibility
- * at all) shows no dead chips.
+ * values for it, so a single-format list (or rows carrying no visibility at
+ * all) shows no dead chips.
  *
  * The format group starts with mx-markup PRESSED (documents are the
  * deliverable; datasets/images are their supporting assets) — but only when
@@ -132,7 +132,7 @@ describe('ArtifactTable quick filters', () => {
   });
 
   it('hides a group with fewer than two distinct values', () => {
-    // All markup + no visibility on any row (logged-out token rows): no chips at all.
+    // All markup + no visibility on any row: no chips at all.
     render(
       <ArtifactTable
         artifacts={[row({ title: 'Only', format: 'markup' }), row({ title: 'Other', format: 'markup' })]}

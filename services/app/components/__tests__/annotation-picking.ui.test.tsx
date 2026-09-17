@@ -64,7 +64,7 @@ describe('picking a block from the rail', () => {
     const tool = within(screen.getByLabelText('Annotation sidebar')).getByLabelText('Select');
     expect(tool).toHaveAttribute('aria-pressed', 'true');
 
-    // The tool stays an explicit choice (other selection modes will sit beside it).
+    // The tool stays an explicit choice: pressing it again turns the pick off.
     fireEvent.click(tool);
     expect(tool).toHaveAttribute('aria-pressed', 'false');
     expect(pill()).toBeNull();

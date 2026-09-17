@@ -1,4 +1,4 @@
-/** The page-level hamburger keeps the old navigation without reserving a bar. */
+/** The page-level hamburger carries the navigation without reserving a bar. */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { AppBar, PageMenu } from '@/components/PageChrome';

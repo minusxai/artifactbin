@@ -69,8 +69,7 @@ describe('the session control', () => {
 /**
  * Sign out is a POST to the PROXY's sign-out (Better Auth's `/api/auth/sign-out`)
  * and then a navigation the top bar performs ITSELF, to `/`. Nothing computes
- * a redirect from request headers on our behalf — the reason the old NextAuth
- * `callbackUrl` shape was refused still holds: a redirect target that a
+ * a redirect from request headers on our behalf: a redirect target that a
  * library derives from headers is a redirect target an attacker can shape.
  */
 describe('the sign-out request', () => {

@@ -32,11 +32,10 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
 
   it('deletes a folder WITH its contents, naming what goes, and drops the tile', async () => {
     /*
-     * P3 made delete a TRASH, so the refusal this row used to draw is gone:
-     * a folder and everything under it go in one statement, recoverable for 30
-     * days. What survives is that deleting a folder is deleting everything in
-     * it, so the count is still said — now in the confirm, where it is a fact
-     * about what is ABOUT to happen rather than a reason it cannot.
+     * Delete is a TRASH, so a non-empty folder is never refused: the folder
+     * and everything under it go in one statement, recoverable for 30 days.
+     * Deleting a folder is still deleting everything in it, so the count is
+     * said in the confirm, as a fact about what is ABOUT to happen.
      */
     render(<Shelf actions="full" rows={[folder, empty, child] as never} />);
     fireEvent.click(screen.getByLabelText('More actions for Reports'));
@@ -58,9 +57,9 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     /*
      * `/api/page/home` sends `ancestor_ids` and no `parent_id`: the trail is
      * the stored truth and the id is derived from it (its last element). A
-     * shelf that read only the derived field counted every folder as empty and
-     * offered a delete the door would refuse — which is what the browser gate
-     * caught, with every fixture here passing because they all sent both.
+     * shelf that read only the derived field would count every folder as empty
+     * and offer a delete the door refuses, which a fixture sending both fields
+     * cannot catch.
      */
     const trailed = { ...child, parent_id: undefined, ancestor_ids: ['rep001'] };
     render(<Shelf actions="full" rows={[folder, empty, trailed] as never} />);
@@ -83,21 +82,19 @@ describe('a folder tile carries the folder\u2019s own actions', () => {
     await waitFor(() => expect(deletes).toEqual(['/api/my/artifacts/emp001']));
     expect(message).not.toContain('inside it');
     /*
-     * P4: the wording a person answers has to be TRUE. It said "the link dies
-     * and history is erased", which was the whole story when a delete was one
-     * hard DELETE and is now half of it: the link does die, and everything
-     * else is restorable. Pinned here because this is the only branch that
-     * renders it — the folder branch above says its own sentence.
+     * The wording a person answers has to be TRUE: the link does die, and
+     * everything else is restorable — so "history is erased" would be a lie.
+     * Pinned here because this is the only branch that renders it — the folder
+     * branch above says its own sentence.
      */
     expect(message).toContain('Delete "Empty"? The link stops working. It goes to the trash, where you can restore it any time.');
   });
 
   /**
-   * RENAMING IS THE ONE THING A FOLDER HAS. It has no content, so the editor
-   * the pencil used to open would open on nothing — the verb it replaces, in
-   * the place the other folder verbs already live, writing through the same
-   * metadata door the folder page's own name uses (PATCH {title}: no version,
-   * no archived copy for a string).
+   * RENAMING IS THE ONE THING A FOLDER HAS. It has no content, so a pencil
+   * would open an editor on nothing: rename takes that place, beside the other
+   * folder verbs, writing through the same metadata door the folder page's own
+   * name uses (PATCH {title}: no version, no archived copy for a string).
    */
   it('renames a folder in place from its menu, and offers no editor to open', async () => {
     render(<Shelf actions="full" rows={[folder] as never} />);

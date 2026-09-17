@@ -1,15 +1,12 @@
 /**
  * A FOLDER'S PAGE — identity above, contents below, one rule between.
  *
- * WHY IT IS HERE AND NOT IN A DOCUMENT. A folder was briefly served as one: a
- * two-line scaffold whose `<Query>` read its own children and whose `<Files>`
- * drew them, inside the sandboxed frame every document is served in. Measured
- * on production, the owner's view of a folder went shell HTML 0.25 s → the
- * frame's document 0.98 s → the sandboxed runtime downloaded and booted
- * 2.59 s → the children query answered 2.86 s. The listing was the LAST thing
- * to paint, behind a runtime an opaque origin cannot cache, for a query the
- * server answers in about 50 ms. A listing is app data, not authored markup, so
- * it arrives with the HTML (`withBootstrap`) and this page draws it.
+ * WHY IT IS HERE AND NOT IN A DOCUMENT. Served as one — a two-line scaffold
+ * whose `<Query>` reads its own children and whose `<Files>` draws them,
+ * inside the sandboxed frame every document is served in — the listing is the
+ * LAST thing to paint, behind a runtime an opaque origin cannot cache, for a
+ * query the server answers in about 50 ms. A listing is app data, not authored
+ * markup, so it arrives with the HTML (`withBootstrap`) and this page draws it.
  *
  * WHAT THE PAGE IS. Nobody reads a folder; they scan it and leave. So exactly
  * one thing carries weight — the NAME — and everything else is set to stay out

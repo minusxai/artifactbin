@@ -67,11 +67,10 @@ describe('what the document says', () => {
 
 describe('drafts', () => {
   /*
-   * PAINT FIRST reaches the editor too. The page used to run every query
-   * server-side and inline the rows into its own HTML, so the owner waited on
-   * the SQL before their page existed. Now it sends the declarations, which
-   * makes "no state" the ordinary arrival — and the editor has to notice, or
-   * the chart panel opens on columns it never fetched.
+   * PAINT FIRST reaches the editor too. The page sends the declarations rather
+   * than running every query server-side and inlining the rows, which makes
+   * "no state" the ordinary arrival — and the editor has to notice, or the
+   * chart panel opens on columns it never fetched.
    *
    * The signal is STATE, not the presence of a dataflow: keying on the latter
    * is what suppressed the run, because declarations alone are still a

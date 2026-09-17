@@ -6,8 +6,8 @@
  * axis into `auto` with it, which makes that group a ~26px-tall clip box in
  * BOTH directions — and an `absolute top-full` panel opens below those 26px,
  * into the clip. `z-index` does not escape a clip, so the theme grid and the
- * mode list rendered with a real bounding box, painted nothing, and let every
- * click fall through to the document iframe underneath.
+ * mode list would render with a real bounding box, paint nothing, and let
+ * every click fall through to the document iframe underneath.
  *
  * The fix is the one SelectMenu already documents: PORTAL the panel. jsdom
  * models no layout, so clipping itself is a browser gate's question
@@ -94,7 +94,7 @@ describe('AnchoredPanel', () => {
 });
 
 /*
- * The two panels the bug was actually reported against. Their props do not
+ * The two panels that live inside the toolbar scroller. Their props do not
  * change — only where their markup lands.
  */
 describe('the edit toolbar controls escape the toolbar scroller', () => {

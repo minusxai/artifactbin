@@ -6,10 +6,9 @@ import { InlineReaderChrome } from '../InlineReaderChrome';
 
 /**
  * The widget caches its star count in MODULE state, keyed on a clock, so a case must run past the
- * previous case's cache window to see a fresh request. Each case used to do that for itself
- * (`now += 120_000; vi.spyOn(Date, 'now')…`) over a shared mutable `now` — order-dependent shared
- * state, and silently wrong for any case that forgot the two lines. The hook owns it now: every
- * case gets a clock strictly past every case before it, whichever ones run.
+ * previous case's cache window to see a fresh request. The hook below owns that clock rather than
+ * each case advancing it for itself: every case gets a clock strictly past every case before it,
+ * whichever ones run, so no case is silently wrong for forgetting the two lines.
  */
 let now = Date.now();
 beforeEach(() => { now += 120_000; vi.spyOn(Date, 'now').mockReturnValue(now); });

@@ -1,4 +1,4 @@
-/** P2 (seeded RED) — the move picker: a tree from ancestor_ids, the moved folder's subtree disabled, one PATCH body. */
+/** The move picker: a tree from ancestor_ids, the moved folder's subtree disabled, one PATCH body. */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FolderPicker } from '@/components/FolderPicker';

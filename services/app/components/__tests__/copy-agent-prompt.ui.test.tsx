@@ -46,10 +46,9 @@ describe('CopyAgentPrompt', () => {
   });
 
   it('mints server-side even for an anonymous owner — the page holds no secret to inline', async () => {
-    // This used to build the string in the browser from a localStorage token.
-    // With the credential in an httpOnly cookie the page cannot read one, so
-    // the server is the only place that can put a token in the paste-string —
-    // and a leftover localStorage value must not tempt it back.
+    // The credential lives in an httpOnly cookie the page cannot read, so the
+    // server is the only place that can put a token in the paste-string — and a
+    // leftover localStorage value must not tempt it back.
     localStorage.setItem('mx_tokens', JSON.stringify(['mx_held']));
     render(<CopyAgentPrompt id="Ab3xK9" />);
     fireEvent.click(screen.getByLabelText('Copy agent instructions'));

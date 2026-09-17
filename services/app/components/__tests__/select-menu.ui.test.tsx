@@ -83,7 +83,7 @@ describe('SelectMenu', () => {
    * A dropdown that opens INSIDE its caller is at the mercy of that caller's
    * overflow. The share dialog is a centered panel with `overflow-hidden`
    * (it has to be — it rounds its own corners and scrolls its own body), so
-   * the role listbox on the last person in the list was cut in half and
+   * the role listbox on the last person in the list would be cut in half and
    * `can edit` could not be picked at all.
    *
    * z-index cannot answer this: stacking does not escape a clip. Only leaving

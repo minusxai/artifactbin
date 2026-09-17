@@ -4,10 +4,10 @@
  * Serving already treats it as one (server/app `servesDocumentDirectly` admits
  * `format: 'folder'` beside `markup`), and the folder's own scaffold IS the
  * document — so the owner, who is the one person the shell is for, must see the
- * FRAME. It did not: the surface's document branch was `format === 'markup'`,
- * and a folder fell through to the data-tier view, which draws a table for a
- * dataset, a picture for an image and NOTHING for a folder. An owner opening
- * their own folder got a page of chrome around an empty column.
+ * FRAME. A document branch keyed on `format === 'markup'` would drop a folder
+ * through to the data-tier view, which draws a table for a dataset, a picture
+ * for an image and NOTHING for a folder: a page of chrome around an empty
+ * column.
  *
  * The one thing the shell adds that a document does not have is the way to make
  * ANOTHER folder inside this one: `New folder`, in the same bar as every other

@@ -1,8 +1,8 @@
 /**
  * ArtifactTable views column (dashboard only): each managed row shows its
  * view count over the server-rendered spline. Desktop and mobile use the same
- * views mark at different widths; the logged-out token browser passes no
- * views, so no column or mobile mark appears.
+ * views mark at different widths; a page that passes no views gets neither
+ * column nor mobile mark.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -86,12 +86,12 @@ describe('ArtifactTable views column', () => {
     }
   });
 
-  // WAS: "has no views column outside manage mode". The column used to be
-  // gated on the owner's PERMISSION, which conflated two questions — may this
-  // viewer manage the row, and did the page even count. Profiles need the
-  // second answered "no" while the first is irrelevant, so the gate moved to
-  // the DATA: a row carrying a count renders it, a row without one reserves
-  // nothing. The absence case is asserted at the top of this file.
+  // The column is gated on the DATA, not the owner's PERMISSION: gating on
+  // permission conflates two questions — may this viewer manage the row, and
+  // did the page even count. Profiles need the second answered "no" while the
+  // first is irrelevant. So a row carrying a count renders it and a row
+  // without one reserves nothing; the absence case is asserted at the top of
+  // this file.
   it('shows a count the page supplied even when the viewer cannot manage', () => {
     render(<ArtifactTable artifacts={row(3)} />);
     for (const mark of screen.getAllByLabelText('Artifact 0 views')) expect(mark).toHaveTextContent('3 views');

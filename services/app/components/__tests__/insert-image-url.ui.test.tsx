@@ -1,7 +1,7 @@
 /**
- * Insert image FROM A URL — the human half of web importing. The button that
- * used to be only a file picker opens a small popover with both ways in;
- * pasting a URL posts `imageUrl` to the browser's own create door (the same
+ * Insert image FROM A URL — the human half of web importing. The button opens
+ * a small popover with both ways in; pasting a URL posts `imageUrl` to the
+ * browser's own create door (the same
  * ingest-and-own path the agent door runs) and inserts `ref:<id>` into the
  * source. A refusal SHOWS — the door's whole point is naming what failed.
  */

@@ -2,19 +2,18 @@
  * Warming the editor bundle is a PREFETCH, and a prefetch owes the page two things.
  *
  * `ArtifactSurface` fetches the editor while the reader is still reading, so pressing
- * edit swaps in rather than downloading Monaco first. It scheduled that on an idle
- * callback (or a 1.5s timer) and then forgot about it, which cost twice:
+ * edit swaps in rather than downloading Monaco first. That warm is scheduled on an
+ * idle callback (or a 1.5s timer), and forgetting about it would cost twice:
  *
- *  1. the timer OUTLIVED the component. Unmounting the surface — leaving the page,
- *     or a test finishing — left a timer that would still start a module load with
- *     nothing left to receive it. In the ui suite that is an EnvironmentTeardownError
- *     ("Cannot load … after the environment was torn down"), which failed `ui tests
- *     (2/2)` on three master runs before anyone read the stack: the module named in it
- *     (lib/html/css-urls) is simply the deepest one in the editor's graph, so it is the
- *     one still loading when the environment goes away.
- *  2. a FAILED warm was an unhandled rejection. `void import(...)` has no catch, and
- *     the import can legitimately fail — the reader is offline, or a redeploy replaced
- *     the chunk this page's build names (every /story/ and /_next/ asset is
+ *  1. the timer must not OUTLIVE the component. Unmounting the surface — leaving the
+ *     page, or a test finishing — would otherwise leave a timer that still starts a
+ *     module load with nothing left to receive it. In the ui suite that is an
+ *     EnvironmentTeardownError ("Cannot load … after the environment was torn down"),
+ *     reported against whichever module in the editor's graph is still loading when
+ *     the environment goes away.
+ *  2. a FAILED warm must not be an unhandled rejection. `void import(...)` has no
+ *     catch, and the import can legitimately fail — the reader is offline, or a
+ *     redeploy replaced the chunk this page's build names (build assets are
  *     content-addressed, so an old page names URLs that no longer exist). A prefetch
  *     failing is not an error: the real import, when the reader presses edit, is what
  *     gets to report.
@@ -58,8 +57,8 @@ beforeEach(() => {
   editorImported = false;
   localStorage.clear();
   vi.stubGlobal('EventSource', FakeEventSource);
-  // No idle callback in jsdom, which is the 1.5s timer path — the one that outlived
-  // the component. Stubbed explicitly so the test pins the branch it means to test.
+  // No idle callback in jsdom, which is the 1.5s timer path. Stubbed explicitly so
+  // the test pins the branch it means to test.
   vi.stubGlobal('requestIdleCallback', undefined);
   vi.useFakeTimers();
 });
