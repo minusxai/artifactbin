@@ -2061,8 +2061,12 @@ export async function runDocumentMutation(
     // planned and bound under the DECLARED type, so a value of another JS type
     // is not a statement the engine should be asked to make sense of — it is a
     // caller error, and the message names the parameter. `null` always clears.
-    if (!scalarMatches(v, paramTypes[k]!)) return { ok: false, reason: 'invalid_sql', detail: `parameter $${k} does not match its declared type` };
-    bound[k] = v;
+    // An EMPTY string for a number, date, boolean or user Value is "no value" — what a cleared
+    // input sends, and what `--param due=` means on a command line (coerceScalarInput reads it
+    // the same way). A string Value keeps its empty string: '' is a string.
+    const value = v === '' && paramTypes[k] !== 'string' ? null : v;
+    if (!scalarMatches(value, paramTypes[k]!)) return { ok: false, reason: 'invalid_sql', detail: `parameter $${k} does not match its declared type` };
+    bound[k] = value;
   }
 
   bound._me=actor.userId;

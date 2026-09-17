@@ -14,7 +14,14 @@ function declaredMutation(head:Snapshot,name:string,values:Record<string,Scalar>
  const declared=(Array.isArray(head.mutations)?head.mutations:[]) as MutationDeclaration[];
  const selected=declared.find(item=>item&&item.name===name);
  if(!selected)throw new CliError('unknown_mutation',`${head.id} does not declare the mutation ${name}.`,declared.length?`Declared mutations: ${declared.map(item=>item.name).join(', ')}.`:'This resource declares no mutations; write dataset rows with --input SQL.');
- const params=selected.params??[];
+ /*
+  * What the SERVER binds is never the caller's to supply. `$_me` is whoever is signed in; `$_row`
+  * and `$_value` exist only where a page draws a row. Asking for `_me` made an agent look up its
+  * own account id and pass it; the server ignores it, but the question was wrong to ask.
+  */
+ if(Object.hasOwn(values,'_me'))throw new CliError('invalid_parameter',`${name} binds $_me from your sign-in; it cannot be supplied.`,'Remove --param _me: the server signs the write as you.');
+ if((selected.params??[]).some(param=>param.name==='_row'||param.name==='_value'))throw new CliError('row_mutation',`${name} is a row action: it runs on the row a page draws it beside.`,'Press it in a live session instead (afbin help live-sessions).');
+ const params=(selected.params??[]).filter(param=>param.name!=='_me');
  for(const key of Object.keys(values))if(!params.some(param=>param.name===key))throw new CliError('unknown_parameter',`${name} does not declare the parameter ${key}.`,`Declared parameters: ${params.map(param=>param.name).join(', ')||'none'}.`);
  const missing=params.filter(param=>param.required!==false&&param.default===undefined&&!Object.hasOwn(values,param.name)).map(param=>param.name);
  if(missing.length)throw new CliError('missing_parameter',`${name} requires ${missing.join(', ')}.`,'Supply each value with --param name=value.');

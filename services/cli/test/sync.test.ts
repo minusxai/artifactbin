@@ -330,6 +330,52 @@ describe('pulling a dataset', () => {
   });
 });
 
+describe('a declared write that names the viewer', () => {
+  // Found by rerunning the original prompt with a fresh agent: `afbin query DOC --name join --write`
+  // answered "join requires _me", so the agent looked up its own account id and passed it in.
+  const head=(mutations:unknown[])=>Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',access:'readwrite',mutations,capabilities:{edit:true,mutation_receipts:true}},{headers:{'X-Artifactbin-Account':'account'}});
+  const run=async(root:string,args:string[],mutations:unknown[])=>{
+   const out:string[]=[];const bodies:unknown[]=[];
+   const code=await runCli(['query','abc123','--write',...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
+    if(init?.method==='POST'){bodies.push(JSON.parse(String(init.body)));return Response.json({id:'abc123',version:2,affected:1,rowCount:1},{headers:{'X-Artifactbin-Account':'account'}});}
+    return head(mutations);
+   }});
+   return{code,result:JSON.parse(out.join('')),bodies};
+  };
+  test('runs without asking for $_me: the server binds it from the sign-in',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
+   try{
+    await saveTestConnection({server:'https://example.com',token:'test'},root);
+    const joined=await run(root,['--name','join'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    assert.equal(joined.code,0,JSON.stringify(joined.result));
+    assert.deepEqual(joined.bodies,[{name:'join',values:{}}]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+  test('refuses a supplied $_me by saying whose it is, and sends nothing',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
+   try{
+    await saveTestConnection({server:'https://example.com',token:'test'},root);
+    const forged=await run(root,['--name','join','--param','_me=usr_someone'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    assert.notEqual(forged.code,0);
+    assert.equal(forged.result.error.code,'invalid_parameter');
+    assert.match(forged.result.error.message,/_me/);
+    assert.match(forged.result.error.fix,/sign/i);
+    assert.deepEqual(forged.bodies,[]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+  test('says a row action runs from the page, not from a command line',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
+   try{
+    await saveTestConnection({server:'https://example.com',token:'test'},root);
+    const row=await run(root,['--name','remove'],[{name:'remove',params:[{name:'_row'},{name:'_me',type:'user'}]}]);
+    assert.notEqual(row.code,0);
+    assert.equal(row.result.error.code,'row_mutation');
+    assert.match(row.result.error.fix,/live-sessions/);
+    assert.deepEqual(row.bodies,[]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+});
+
 describe('a lost mutation reply', () => {
   test('a lost mutation reply resumes the frozen operation with the same identity and rejects changed input',async()=>{
    const root=await mkdtemp(join(tmpdir(),'afbin-write-recovery-'));const keys:string[]=[];let lose=true;

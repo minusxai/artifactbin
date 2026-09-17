@@ -99,7 +99,9 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
           if(ref.datasetPolicy){
             const policy=viewerMutationPolicy(ref.datasetPolicy,compiled.table,placeholderSession(ref.datasetPolicy));
             if(!policy)throw new Error(`Dataset policy: no policy permits writes to ${compiled.table.schema}.${compiled.table.name}`);
-            policed.push({name:m.name,sql,columns:compiled.table.columns,policy,...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
+            // A row action with no row to bind has ALREADY been named above ("must be invoked inside…").
+            // Planning `$_row.id` with no struct behind it only adds the engine's own crash text to that answer.
+            if(!mutationUsesRow(m.sql)||rowSchemas[m.name])policed.push({name:m.name,sql,columns:compiled.table.columns,policy,...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
           }
         }catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
         prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
