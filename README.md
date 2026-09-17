@@ -21,18 +21,20 @@ The installer supports macOS and Linux, ARM64 and x64, without Node or sudo. The
 ```sh
 afbin serve --dir ./artifactbin-data --port 7445
 # In another terminal:
-afbin config set host http://localhost:7445
+afbin config set host http://127.0.0.1:7445
 afbin auth
 afbin add report.jsx --json
 afbin preview report.jsx
 afbin push report.jsx
 ```
 
-`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. The server prints setup and login instructions. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; DuckDB still handles queries.
+Use the origin the server prints. It advertises `http://127.0.0.1:7445`, and approval and login must happen at that exact origin — `http://localhost:7445` is a different origin and `afbin auth` refuses it with `approval_origin_mismatch`.
+
+`serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. On startup it prints the host teammates set, the installer to run, and where login codes appear. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; DuckDB still handles queries.
 
 Use `--server URL` for one command without changing defaults. `afbin config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. IDs belong to the host/account that reserved them.
 
-For trusted local collaboration, `afbin preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Hosting details](docs/extraction/team.md).
+For trusted local collaboration, `afbin preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Hosting details](docs/extraction/team.md), and [team on a network](docs/extraction/team.md#team-on-a-network) for what a shared host needs: an HTTPS public URL, a login method and the URL teammates type.
 
 ## Develop
 

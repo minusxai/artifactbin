@@ -9,11 +9,22 @@
  * `(userId → claimsHash)` means a logged-in reader's query hops never write,
  * and an email change reaches the row on the very next request. The user id
  * is the proxy's (`usr_…`) — the same value every artifact, share and token
- * keys on. The row is created LAZILY on the first session sight (there is no
- * boot-time sync): one identity, one row, ids agreeing by construction.
+ * keys on. The row is created LAZILY on the first sight of a credential that
+ * CARRIES claims — a cookie session (lib/viewer proxyActor) or a bearer token
+ * the proxy could name an account for (lib/viewer syncProfileForToken), since
+ * a CLI-only person is a person too and `artifact_shares` is matched through
+ * this row. There is no boot-time sync: one identity, one row, ids agreeing by
+ * construction.
  */
 import { getDb } from './db';
 import { ensureUsername } from './users';
+
+/**
+ * ONE ADDRESS, TWO IDS — the provisioning fault below, as a type callers can single out. A door that
+ * wants the request to survive it (lib/viewer's bearer sync) must not survive a broken database as
+ * well, and matching on the message text would make this module's wording load-bearing at a distance.
+ */
+export class DuplicateProfileEmail extends Error {}
 
 const LRU_MAX = 5000;
 const seen = new Map<string, string>();
@@ -45,7 +56,7 @@ export async function syncProfile(claims: { userId: string; email?: string }): P
      */
     const held = (await db.query<{ id: string }>('SELECT id FROM users WHERE email = $1', [email])).rows[0];
     if (held && held.id !== claims.userId) {
-      throw new Error(
+      throw new DuplicateProfileEmail(
         `${email} already belongs to another id (${held.id}) — one address is one person; resolve which identity owns it before this one signs in again`,
       );
     }

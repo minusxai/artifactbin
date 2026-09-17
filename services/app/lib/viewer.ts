@@ -7,7 +7,7 @@
 import { currentRequest } from './request-context';
 import { actorOf } from '@artifactbin/utils';
 import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts';
-import { syncProfile } from './profiles';
+import { DuplicateProfileEmail, syncProfile } from './profiles';
 import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRole, type ArtifactRow, type RoleActor, type TokenActor, type Viewer } from './artifacts';
 import { liveAgentSession } from './agent-session';
 import { resolveToken, resolveTokenById, touchToken } from './tokens';
@@ -140,12 +140,27 @@ export async function sessionActor(request?: Request, opts: { headerOnly?: boole
   return { viewer: token.userId ? { userId: token.userId, email: null } : null, tokenId: token.id, credential: 'agent-cookie' };
 }
 
-/** A request-scoped actor, bearer first (agents), then browser credentials. */
+/**
+ * A request-scoped actor, bearer first (agents), then browser credentials.
+ *
+ * THE OTHER BEARER DOOR. Export, mutate, tables, raw, the dataset endpoints and the remote routes
+ * admit a token here rather than through `withTokenAuth`, so the app's own row for the caller has to
+ * follow the claims here too — otherwise whose first call landed on one of these routes still met the
+ * uniform 404 from every scope that reads a share through `users` (lib/artifacts SHARE_PREDICATE).
+ * Both doors call the SAME `syncProfileForToken`, so "do these claims belong to this credential"
+ * stays one rule in one place.
+ *
+ * The dry-run suppression that `withTokenAuth` applies is deliberately NOT repeated here: this door
+ * has no dry-run notion at all — `touchToken` above is ungated too — and the client that sets the
+ * header most (preview-entry, which marks its whole session read-only) reaches exactly these routes,
+ * so honouring it here would leave the invitee rowless on the paths this fix is for.
+ */
 export async function requestOrSessionActor(request: Request): Promise<RequestActor> {
   const offered = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   const token = offered ? await resolveToken(offered) : null;
   if (token) {
     await touchToken(token.id);
+    await syncProfileForToken(request, {userId: token.userId, tokenId: token.id});
     const {tokenId, ...viewer} = tokenActorForRequest(request, {userId: token.userId, tokenId: token.id});
     return { viewer: token.userId ? {...viewer, userId: token.userId, email: viewer.email ?? null} : null, tokenId, credential: 'bearer' };
   }
@@ -202,6 +217,78 @@ export async function browserSessionKind(request?: Request, admitted?: RequestAc
   if (await sessionViewer()) return 'account';
   const actor = await sessionActor(request);
   return actor.tokenId ? 'anon' : 'none';
+}
+
+/**
+ * The app's own `users` row for a BEARER caller, from the proxy's claims.
+ *
+ * The row is what every SQL share predicate reads an invitation through:
+ * `artifact_shares` holds the invited ADDRESS, and while the share is still
+ * unresolved `lib/artifacts` matches it as `(SELECT email FROM users WHERE
+ * id = $actor)`. Written on the first COOKIE session alone, that subselect was
+ * NULL for someone who had only ever used the CLI — so an invited account's
+ * listing was empty, a named editor's pull was the uniform 404 and a commenter
+ * could not comment, until one browser visit created the row. The claims ride
+ * on a bearer request too (the proxy attaches the account's address to it), so
+ * the row follows them here, at the one door every token-authenticated route
+ * comes through.
+ *
+ * Reuses `tokenActorForRequest` rather than re-deriving "do these claims belong
+ * to this credential": that rule is load-bearing and is pinned in one place.
+ * Cheap on the hot path — `syncProfile` keeps an LRU of what it has written, so
+ * a claimed token's every later call is a map lookup and no query.
+ *
+ * EXACTLY ONE failure is absorbed, and it is not "anything went wrong". See below.
+ */
+export async function syncProfileForToken(request: Request, scope: TokenActor): Promise<void> {
+  const claimed = tokenActorForRequest(request, scope);
+  if (!claimed.userId || !claimed.email) return;
+  try {
+    await syncProfile({ userId: claimed.userId, email: claimed.email });
+  } catch (error) {
+    /*
+     * A SECOND identity for one address is a provisioning fault the lazy upsert
+     * cannot absorb (lib/profiles diagnoses it by name), and it is PERMANENT
+     * until a human resolves it: rethrowing would turn every one of that
+     * person's CLI calls into a 500 forever, for a row they can live without —
+     * they keep exactly the reach they had the day the row was missing. But it
+     * must not be silent, or an operator whose invitee never gains access has
+     * nothing at all to read; once per user id is enough to say it without
+     * making a log line out of every request.
+     */
+    if (!(error instanceof DuplicateProfileEmail)) {
+      /*
+       * ANYTHING ELSE PROPAGATES, as it did before this sync existed. Two
+       * reasons to prefer that over a blanket swallow. First, the cookie door
+       * (proxyActor, above) has always called `syncProfile` unguarded, so this
+       * keeps one contract for one function rather than two. Second, the fear
+       * — "a GET now 500s on a database blip" — does not survive contact with
+       * the call site: every route that gets here goes on to query the same
+       * database for the artifact itself, so a broken database fails the
+       * request either way; this only surfaces it one step earlier, with the
+       * real error instead of an empty listing that looks like a permission
+       * problem. (`touchToken` swallows everything, but usage bookkeeping is
+       * not the request's business; an identity row the ACL reads is.)
+       */
+      throw error;
+    }
+    warnDuplicateOnce(claimed.userId, error.message);
+  }
+}
+
+/**
+ * User ids already reported as duplicate-address faults: the warning is per person, not per call, and
+ * it is PROCESS-LIFETIME, exactly like lib/profiles' `seen` — a restart says it again, and a test that
+ * reuses an id across cases sees it once in total. Bounded the same way, so a long-lived process with
+ * a long-lived fault cannot grow a set out of it.
+ */
+const WARNED_MAX = 5000;
+const warnedDuplicateProfile = new Set<string>();
+function warnDuplicateOnce(userId: string, message: string): void {
+  if (warnedDuplicateProfile.has(userId)) return;
+  warnedDuplicateProfile.add(userId);
+  if (warnedDuplicateProfile.size > WARNED_MAX) warnedDuplicateProfile.delete(warnedDuplicateProfile.keys().next().value!);
+  console.warn(message);
 }
 
 /** Enrich an authenticated token scope only from matching proxy claims. */

@@ -16,8 +16,9 @@ who may read a document is decided by its visibility, never by guessability:
 Independently of visibility, the share menu names **people**: each invited
 email carries a role — `can view` (reads it when private), `can comment` (also
 opens, answers and resolves comment threads on it, but never edits) or `can
-edit` (also edits it in place, through the API, reverts and reads history —
-never deletes, shares or moves it). A public document can have editors; a
+edit` (also edits it in place, through the API, reverts, reads history and
+manages its visibility and share list — never deletes it, moves it or takes
+ownership). A public document can have editors; a
 collaborator's own agent edits too, through the CLI connection their account
 holds.
 
