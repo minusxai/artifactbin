@@ -27,7 +27,7 @@ export const EVENTS_TABLE: Table = {
     /** Emitter-minted uuid — the dedupe key: a retried batch inserts ON CONFLICT DO NOTHING. */
     { name: 'id', type: 'TEXT', notNull: true },
     { name: 'at', type: 'TIMESTAMPTZ', notNull: true, default: 'now()' },
-    /** 'app' | 'proxy' */
+    /** 'app' | 'auth' | 'proxy' */
     { name: 'source', type: 'TEXT', notNull: true },
     /** 'user' | 'token' | 'visitor' (the daily hash); NULL when nobody did it. */
     { name: 'subject_kind', type: 'TEXT' },

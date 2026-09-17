@@ -5,8 +5,8 @@
  * ONE `run` (a later query may read an earlier one's result by name).
  *
  * Four methods, not two: the dry-runs are the publish-time check that refuses
- * a bad query with a 400 instead of a blank chart at render; leaving them
- * in-process made a DuckDB-less image crash on every write.
+ * a bad query with a 400 instead of a blank chart at render, and they cross
+ * the same wire as the other two, so no caller needs DuckDB in its own process.
  */
 import type { DatasetMutationPolicy, MutationAnalysis } from './dataset-policy';
 

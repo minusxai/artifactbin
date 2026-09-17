@@ -88,7 +88,7 @@ describe('service auth', () => {
 });
 
 describe('renaming a schema', () => {
-  /** P3 (seeded RED) — a column rename is DECLARED: add, guarded copy, drop; idempotent across boots. */
+  /** A column rename is DECLARED: add, guarded copy, drop; idempotent across boots. */
 
   const OLD: Table = { name: 'tokens', columns: [{ name: 'id', type: 'TEXT', notNull: true }, { name: 'revoked_at', type: 'TIMESTAMPTZ' }], primaryKey: ['id'] };
   const NEW: Table = { name: 'tokens', columns: [{ name: 'id', type: 'TEXT', notNull: true }, { name: 'deleted_at', type: 'TIMESTAMPTZ', renamedFrom: 'revoked_at' } as never], primaryKey: ['id'] };

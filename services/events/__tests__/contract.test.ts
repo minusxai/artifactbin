@@ -3,9 +3,6 @@
  * and the same writer behind `serveEvents` reached through `eventsClient`.
  * One suite, two shapes — in-process and remote can never disagree. Then the
  * shell's own guards, the client's batching, and the boot.
- *
- * Seeded RED by the orchestrator: every implementation below is a skeleton
- * that throws `events-svc: implement …`.
  */
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

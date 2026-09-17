@@ -85,9 +85,8 @@ describe('expiry', () => {
   /**
    * THE PROXY'S READER REFUSES EXPIRED TOKENS — AT EXPIRY, NOT AT CACHE EVICTION.
    *
-   * Before this guard a token dying INSIDE the reader's 5 s
-   * TTL window kept answering from cache until eviction, and after eviction the SQL admitted the expired row
-   * anyway. Two refusal points are therefore asserted here:
+   * A token dying INSIDE the reader's 5 s TTL window must stop answering at once, not at eviction, and the
+   * SQL must not admit the expired row either. Two refusal points are therefore asserted here:
    *   (i)  the SELECT carries the expiry clause  — `expires_at IS NULL OR expires_at > now()`;
    *   (ii) a cache entry never outlives its token — an entry for a token expiring in 300 ms is gone at 400 ms
    *        (clamp the entry's TTL to the remaining lifetime at remember(), or check per hit; either passes).

@@ -142,7 +142,7 @@ export interface RunningEvents {
   close(): Promise<void>;
 }
 
-/** A pg Pool as the one database interface every package speaks (proxy standalone.ts's, verbatim). */
+/** A pg Pool behind the one database interface every package speaks. */
 const poolQueryable = (pool: Pool): Queryable => ({
   query: async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => {
     const result = await pool.query(sql, params as never[]);
@@ -151,8 +151,8 @@ const poolQueryable = (pool: Pool): Queryable => ({
 });
 
 /**
- * Boot: config → writer (schema ensured) → shell → listening socket. Logs the
- * unknown-name warnings the way the proxy's runStandalone does, under `events`.
+ * Boot: config → writer (schema ensured) → shell → listening socket. The
+ * unknown-name warnings are logged under `events`.
  * The schema is ensured HERE, at boot, so a service that cannot reach its
  * database dies loudly instead of dropping the first hour of the log.
  */

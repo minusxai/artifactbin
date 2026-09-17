@@ -11,10 +11,6 @@ import {createAppServer} from '@/server/app';
  * THE SESSION PART — who is asking, resolved once and attached to nothing
  * (the actor travels as `c.get('actor')` to the forwarder, which hands it to
  * the upstream — utils attachActor, never a part).
- *
- * The rate-limit cases that used to sit at the bottom of this file moved to
- * `rate-limits-parts.test.ts`: they were here because a composed app was
- * already standing up, not because they were about who is asking.
  */
 
 let seenActor: unknown = null;

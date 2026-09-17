@@ -31,7 +31,7 @@ export function isDocumentPath(pathname: string): boolean {
 /**
  * THE INTERNAL SURFACE. Everything under this prefix is the app answering the
  * PROXY, never a client: the proxy refuses the prefix outright (parts
- * `internalBoundary`, which sits in front of `forward`), so the only way in is
+ * `internalBoundary`, which sits in front of `application`), so the only way in is
  * a call the proxy makes on its own upstream seam — a Request the parts never
  * saw. One prefix rather than a list, so the boundary cannot drift from what
  * is behind it.

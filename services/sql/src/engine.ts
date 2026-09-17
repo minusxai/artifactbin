@@ -107,9 +107,6 @@ function jsonValue(v: unknown, type: ColumnType): unknown {
   return text;
 }
 
-/** Our column type → the DuckDB type a registered table's column is created with. */
-
-
 const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 
 /**
