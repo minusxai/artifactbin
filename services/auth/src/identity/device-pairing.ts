@@ -60,10 +60,12 @@ export function createDevicePairing(db: Queryable, schema = 'auth') {
         AND (subject_id IS NOT NULL OR payload->>'anon' = 'true')
         AND consumed_at IS NULL AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true' AND expires_at > now() RETURNING subject_id`, args);
       if (approved.rows[0]) return { status: 'approved', userId: approved.rows[0].subject_id ?? null };
+      // LIVE, not "still unapproved": an approval that lands between the claim above and this read is
+      // neither claimed nor unapproved, and answering `invalid` for it told the CLI its approval had
+      // expired (server CI run 35205911571). The poll after this one claims it.
       const pending = await db.query(`SELECT 1 FROM ${table} WHERE kind = $1 AND credential_hash = $2
-        AND payload->>'origin' = $3 AND subject_id IS NULL AND consumed_at IS NULL
-        AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true'
-        AND payload->>'anon' IS DISTINCT FROM 'true' AND expires_at > now()`, args);
+        AND payload->>'origin' = $3 AND consumed_at IS NULL
+        AND deleted_at IS NULL AND payload->>'denied' IS DISTINCT FROM 'true' AND expires_at > now()`, args);
       if (pending.rows.length) return {status:'pending'};
       const denied = await db.query(`SELECT 1 FROM ${table} WHERE kind = $1 AND credential_hash = $2
         AND payload->>'origin' = $3 AND payload->>'denied' = 'true' AND expires_at > now()`, args);
