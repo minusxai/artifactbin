@@ -234,7 +234,7 @@ describe('CI job shape', () => {
     }
   });
 
-  it('fans the gate set over three runners and pulls the Postgres image the datasets gate drives', () => {
+  it('fans the gate set over four runners and pulls the Postgres image the datasets gate drives', () => {
     const { jobs } = ci();
     expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
     const run = jobs.gates.steps.find((step) => /scripts\/gates\.mjs/.test(step.run ?? ''));

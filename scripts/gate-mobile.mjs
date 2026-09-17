@@ -225,7 +225,7 @@ await wide.close();
 
 // ── 5. a chart tooltip must be dismissable with a finger ───────────────────
 /*
- * MEASURED FIRST, then written (the event log is in .agent/REPORT.md): headless
+ * MEASURED FIRST, then written: headless
  * Chromium's touch emulation sends a stationary tap as pointerdown → pointerup →
  * pointerleave with NO pointermove, and Vega opens a tooltip on a MOVE — so an
  * emulated tap opens no card at all and cannot exercise this. A real finger is

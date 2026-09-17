@@ -2,7 +2,7 @@
  * Gate: a PDF a document links is reachable, from a real browser, by a stranger.
  *
  * WHAT A HEADLESS BROWSER CANNOT ANSWER, stated plainly because it is the most
- * useful thing this gate knows (spike S4, R12): headless Chromium ships NO PDF
+ * useful thing this gate knows: headless Chromium ships NO PDF
  * viewer. It downloads every `application/pdf` response identically, whatever
  * the headers say, so `inline` and `attachment` look the same here and nothing
  * in this file proves a PDF RENDERS. That check is headful and by hand; the

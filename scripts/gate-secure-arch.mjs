@@ -246,7 +246,7 @@ await splitPage.goto(`${BASE}/`, { waitUntil: 'load' });
 const splitExchange = await splitPage.evaluate(async (t) => (await fetch('/api/session/token', {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
 })).status, anon.token);
-check(splitExchange === 204, 'the split-viewer browser holds only the agent cookie (no NextAuth session)');
+check(splitExchange === 204, 'the split-viewer browser holds only the agent cookie (no account session)');
 await splitPage.goto(`${BASE}/a/${claimedPriv.id}`, { waitUntil: 'load' });
 const splitText = await splitPage.locator('[data-mx-inline-story]').locator('h1').first().textContent({ timeout: 20000 }).catch(() => null);
 check(splitText === 'CLAIMED-PRIVATE-BODY', 'the shell frame shows the DOCUMENT, not a 404 — raw resolved the cookie viewer');
