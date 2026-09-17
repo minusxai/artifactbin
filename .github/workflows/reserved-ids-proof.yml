@@ -1,4 +1,5 @@
 name: Identity concurrency checks
+# Runs only for changes to the identity reservation paths listed below.
 on:
   pull_request:
     paths:

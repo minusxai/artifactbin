@@ -74,7 +74,7 @@ Page objects are retained in memory; arbitrary JS heaps are not serialized to di
   Focused tests first failed, then passed for broker redirect resolution, external-origin
   rejection, loops, and redirect method/body handling. The paid session track now
   requires a real navigation/query preflight before model requests.
-- [PR checks](https://github.com/minusxai/artifactbin-old/pull/148/checks) are the
+- The PR checks of that change (in the project's earlier private repository) are the
   authoritative results for the latest revision, including agent-fixture replay.
   The broad local suite was deferred under the repository test budget.
 - Both browser images include bubblewrap. Hosting must also permit user namespaces

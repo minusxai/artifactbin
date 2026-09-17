@@ -1,6 +1,7 @@
 name: Build CLI Node runtimes
 
 # Maintainer operation, only when the pinned Node version or build recipe changes.
+# Dispatched from the Actions tab; its output is what services/cli/runtime-lock.json pins.
 # Ordinary CLI CI downloads a checksum-pinned release and never invokes this build.
 on:
   workflow_dispatch:

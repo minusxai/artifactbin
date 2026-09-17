@@ -136,7 +136,7 @@ printed in the Actions summary so each skipped job is reviewable.
 Every job other than the planner is one of the plan's outputs, and each exists because of a class
 of failure the others cannot see. `checks` is the type and name guard (`npm run validate`) — the
 cheapest signal there is. The Vitest projects run as their own sharded jobs; the browser set is
-described in [operations](operations.md). Maintainer evaluations are documented in [evals](evals.md).
+described in [operations](operations.md). Maintainer agent evaluations live in a private repository, checked out at `evals/` for a run.
 `build` proves the production build compiles.
 
 Three jobs exist because a green unit suite does not prove a shippable artifact:
@@ -199,7 +199,7 @@ coverage. CI always executes and remains the merge authority.
 
 PR concurrency cancels superseded runs on the same PR; main runs remain independent. Node shards
 retain existing coverage, but only the integration shard provisions Chromium and Postgres. CLI
-builds remain available on every Node shard because `evals/__tests__/cli-kit.test.ts` executes the actual CLI and can land on any shard.
+builds remain available on every Node shard because tests that execute the actual CLI can land on any shard.
 
 ### First useful content and workspace performance
 

@@ -1,4 +1,5 @@
 name: Publish afbin CLI
+# Manual fallback for release-cli.yml: publishes an existing, CI-tested afbin-vX.Y.Z tag.
 
 on:
   workflow_dispatch:

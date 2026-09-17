@@ -55,12 +55,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.AUTOMATION_TOKEN || github.token }}
           HAS_PAT: ${{ secrets.AUTOMATION_TOKEN != '' }}
+          ACTOR: ${{ github.actor }}
+          ACTOR_ID: ${{ github.actor_id }}
           VERSION: ${{ steps.bump.outputs.version }}
         run: |
           set -euo pipefail
           branch="release/afbin-v$VERSION"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Authored as whoever dispatched the release: a bot author makes GitHub append a
+          # `Co-authored-by` trailer to the squash merge, and merge commits here are title-only.
+          git config user.name "$ACTOR"
+          git config user.email "$ACTOR_ID+$ACTOR@users.noreply.github.com"
           git checkout -b "$branch"
           git add -A
           git commit -m "Release afbin $VERSION"
