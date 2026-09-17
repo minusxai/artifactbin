@@ -1,8 +1,8 @@
 /**
  * The BROWSER's copy of a bearer token — as an httpOnly cookie, not localStorage.
  *
- * A person with no account can still own documents: they mint an anonymous
- * `mx_` token (or are handed one by /api/start) and their browser must
+ * A person with no account can still own documents: /api/start creates a guest
+ * ownership identity, discards its bearer, and the browser must
  * remember it, or the tab that just published cannot edit what it made. That
  * memory must not be a durable credential any script on the app's origin can
  * read and keep, so the browser holds a SIGNED COOKIE NAMING the token ids;

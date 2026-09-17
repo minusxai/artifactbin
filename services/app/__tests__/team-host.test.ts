@@ -16,7 +16,7 @@ it('team host composes real public auth and preserves separate owners and anonym
  expect(bareStart.status).toBe(201);
  const bareDocument=await bareStart.json();expect(bareDocument.id).toBeTruthy();
  expect(bareDocument).not.toHaveProperty('token');expect(bareDocument).not.toHaveProperty('expiresAt');
- expect(JSON.stringify(bareDocument)).not.toMatch(/mx_/);expect(bareStart.headers.has('set-cookie')).toBe(false);
+ expect(JSON.stringify(bareDocument)).not.toMatch(/mx_/);expect(bareStart.headers.get('set-cookie')).toContain('HttpOnly');
  const db=await getDb();
  await db.query('INSERT INTO users (id,email,name,username) VALUES ($1,$2,$3,$4),($5,$6,$7,$8)',
  ['usr_team1','mxmx_test_team1@example.test','First','team1','usr_team2','mxmx_test_team2@example.test','Second','team2']);

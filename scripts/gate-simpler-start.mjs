@@ -1,8 +1,8 @@
 /**
- * Gate: the one-line handoff, end to end, the way it is actually used.
+ * Gate: guest browser creation, artifact approval and live agent editing.
  *
  * The setup guide creates a document and
- * copies one line naming the document and the afbin CLI. There is no credential in the paste, none in
+ * copies instructions naming the document and the afbin CLI. There is no credential in the paste, none in
  * the response, and no second door that hands one out: the CLI's browser
  * approval is the only way a client is connected. This gate drives that in a
  * real browser + real HTTP, and the negative space too: the start-link
@@ -40,7 +40,7 @@ const id = started.id;
 check(!!id, 'the create button makes a real document');
 check(!('token' in started) && !('expiresAt' in started), 'and the API body hands out NO credential and no expiry');
 check(!/mx_/.test(JSON.stringify(started)), 'nothing token-shaped rides the response at all');
-check(!(await startRes.allHeaders())['set-cookie'], 'and no agent cookie is set');
+check(/HttpOnly/i.test((await startRes.allHeaders())['set-cookie'] ?? ''), 'guest ownership stays in an HttpOnly cookie');
 // The COPIED paste is tokenless and points at afbin — the agent-facing surface carries no secret.
 check(/\/a\/[A-Za-z0-9]+/.test(prompt), 'the copied paste names the artifact URL');
 check(!/mx_[A-Za-z0-9_-]+/.test(prompt), 'and carries NO token inline (afbin authenticates itself)');
@@ -64,19 +64,28 @@ const bareDocument = await bareStart.json();
 check(bareStart.status === 201 && !!bareDocument.id, 'an HTTP client can create a document without browser-only policy');
 check(!('token' in bareDocument) && !('expiresAt' in bareDocument) && !/mx_/.test(JSON.stringify(bareDocument)),
   'HTTP creation hands out no credential or expiry');
-check(!bareStart.headers.has('set-cookie'), 'HTTP creation sets no authentication cookie');
+check(/HttpOnly/i.test(bareStart.headers.get('set-cookie') ?? ''), 'guest creation sets an HttpOnly ownership cookie');
 // The start door is the thing under test, so this gate cannot use the shared
 // start helper — it walks the same two steps by hand.
 const agent = await connectAgent(B);
 check(/^mx_/.test(agent.token ?? ''), 'the CLI device approval is the only way a credential exists');
-const agentDoc = await (await fetch(`${B}/api/start`, {
-  method: 'POST',
-  headers: { origin: new URL(B).origin, 'sec-fetch-site': 'same-origin', authorization: `Bearer ${agent.token}` },
+const approval = await (await fetch(`${B}/api/agent-approvals`, {
+  method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${agent.token}` },
+  body: JSON.stringify({ artifactId: id }),
 })).json();
-check(!!agentDoc.id, 'and the connected agent has a document it can write');
+await page.goto(approval.verification_uri_complete);
+await page.getByRole('button', { name: 'Continue as guest', exact: true }).click();
+await page.getByRole('heading', { name: 'Access approved', exact: true }).waitFor();
+const granted = await fetch(`${B}/api/agent-approvals/token`, {
+  method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${agent.token}` },
+  body: JSON.stringify({ device_code: approval.device_code }),
+});
+const connection = await granted.json();
+check(granted.ok && !!connection.access_token, 'the browser connects the CLI to its guest user');
+agent.token = connection.access_token;
 
-await page.goto(`${B}/a/${agentDoc.id}`, { waitUntil: 'load' });
-const put = await fetch(`${B}/api/artifacts/${agentDoc.id}`, {
+await page.goto(`${B}/a/${id}`, { waitUntil: 'load' });
+const put = await fetch(`${B}/api/artifacts/${id}`, {
   method: 'PUT',
   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agent.token}` },
   body: JSON.stringify({
@@ -85,7 +94,7 @@ const put = await fetch(`${B}/api/artifacts/${agentDoc.id}`, {
     theme: 'modernist',
   }),
 });
-check(put.status === 200, `the connection edits what it created (PUT ${put.status})`);
+check(put.status === 200, `the connection edits the original browser-created artifact (PUT ${put.status})`);
 
 /**
  * Is this text on screen, wherever the document happens to be?

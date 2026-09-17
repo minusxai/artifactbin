@@ -205,6 +205,12 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   let connection=await loadConnection(server,home,context.env);
   const authenticate=()=>browserAuthenticate(connection?.server??server??declaredServer,{...context.auth,home,env:context.env,interactive,rejectedToken:connection?.token,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
   if(command==='auth'){
+   if(positionals[0]) {
+    const ref=await resolveReference(positionals[0],{root:workspace.root,cwd:workspace.cwd,server:server??declaredServer,writable:true});
+    if(ref.kind!=='id')throw new CliError('invalid_reference','Use the artifact URL or id for approval.');
+    const authorized=await browserAuthenticate(server??declaredServer,{...context.auth,home,env:context.env,interactive,artifactId:ref.id,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')});
+    emit({authenticated:true,authorized:true,artifactId:ref.id,server:authorized.server});return 0;
+   }
    // AUTH is lazy and idempotent. A saved token is verified with one read and its account reported;
    // no token or a rejected one runs the same browser approval the rest of the CLI uses on 401.
    if(connection){

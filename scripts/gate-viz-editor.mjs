@@ -23,7 +23,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
-import { becomeOwner, startDocument } from './lib/start-doc.mjs';
+import { mergeGuestIntoAccount, becomeOwner, startDocument } from './lib/start-doc.mjs';
 
 const B = process.argv[2] ?? 'http://localhost:3030';
 // Printed AS IT HAPPENS, not collected and dumped at the end: this gate has a
@@ -280,15 +280,7 @@ try {
   const page = await b.newPage({ viewport: { width: 1500, height: 1000 } });
   const email = `mxmx_test_viz_${Date.now().toString(36)}@example.com`;
   await loginViaEmail(page, B, sink, email);
-  // The account takes ownership of what this connection published. There is
-  // no paste anywhere in the product, so the gate calls the claim API with the
-  // browser's own session, which is what any account surface would do.
-  const cookieHeader = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ');
-  await fetch(`${B}/api/tokens/claim`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', cookie: cookieHeader, origin: new URL(B).origin },
-    body: JSON.stringify({ token }),
-  });
+  await mergeGuestIntoAccount(page, B, token);
   await page.waitForTimeout(1000);
 
   // No stored bearer: the editor must authenticate by session alone.

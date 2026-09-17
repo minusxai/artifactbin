@@ -16,7 +16,16 @@
  * gate pointed at `npm run dev:app` alone has no device door.
  */
 
-/** Approve a fresh anonymous CLI connection and return its bearer: `{ token }`. */
+// Per-process fixture state: the approving browser and the CLI have distinct
+// credentials. Never exchange the API-scoped CLI token for a browser session.
+const browsers = new Map();
+export function connectionBrowserCookie(base, token) {
+  const browser = browsers.get(token);
+  if (!browser || !browser.origins.includes(new URL(base).origin)) throw new Error('No approving browser for this fixture connection');
+  return browser.cookie;
+}
+
+/** Approve a fresh guest connection, retaining its browser credential for gates. */
 export async function connectAgent(base) {
   const origin = new URL(base).origin;
   const begin = await fetch(`${origin}/oauth/device`, { method: 'POST' });
@@ -52,5 +61,8 @@ export async function connectAgent(base) {
       : '';
     throw new Error(`POST ${origin}/oauth/device/token → ${exchange.status}${hint}: ${JSON.stringify(granted)}`);
   }
+  const cookie = approve.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+  if (!cookie) throw new Error('Guest approval did not establish a browser session');
+  browsers.set(granted.access_token, { origins: [origin, advertised], cookie });
   return { token: granted.access_token };
 }

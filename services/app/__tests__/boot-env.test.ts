@@ -21,6 +21,7 @@ type BootOutcome = {
   kind: 'exited' | 'listened' | 'timed-out';
   code: number | null;
   output: string;
+  guestCookieAccepted?: boolean;
 };
 
 async function availablePort(offset: number): Promise<number> {
@@ -87,6 +88,15 @@ async function runBoot(port: number, overrides: Record<string, string>): Promise
     const deadline = setTimeout(() => finish({ kind: 'timed-out', code: child.exitCode, output }), 60_000);
   });
 
+  if (outcome.kind === 'listened') {
+    const base = `http://localhost:${port}`;
+    const started = await fetch(base + '/api/start', { method: 'POST' });
+    const { id } = await started.json() as { id: string };
+    const cookie = started.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const home = await fetch(base + '/api/page/home', { headers: { cookie } });
+    const result = await home.json() as { drafts?: Array<{ id: string }> };
+    outcome.guestCookieAccepted = result.drafts?.some(draft => draft.id === id) ?? false;
+  }
   if (child.exitCode === null && child.signalCode === null) {
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
     child.kill('SIGTERM');
@@ -133,6 +143,7 @@ describe('production boot environment', () => {
     expect(result.kind, result.output).toBe('listened');
     expect(result.output).toContain('[boot] AUTH__SECRET unset — generated per boot');
     expect(result.output).toContain(`[boot] auth + app on http://localhost:${port} (dev, db pglite)`);
+    expect(result.guestCookieAccepted).toBe(true);
   }, 90_000);
 
   it('turns an occupied port into an actionable error without an unhandled stack', async () => {

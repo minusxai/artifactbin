@@ -1,7 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
-import { INTERNAL_MINT_PATH } from '@artifactbin/contracts';
+import { INTERNAL_MINT_PATH, INTERNAL_ARTIFACT_APPROVAL_PATH } from '@artifactbin/contracts';
 import { createHumanAuth } from '../src/auth/human';
 import { consumeAuthCode, createAuthCode, createOAuthStore, isAllowedRedirectUri, sameRedirectTarget, s256 } from '../src/identity/oauth';
 import { authParts, type AuthOptions } from '../src/parts';
@@ -26,6 +26,7 @@ const optionsOf = async (): Promise<AuthOptions> => {
       resolve: async () => session ? { userId: session.userId, email: session.email, emailVerified: true } : null,
     },
     upstream: async (request, actor) => {
+      if (new URL(request.url).pathname === INTERNAL_ARTIFACT_APPROVAL_PATH) return Response.json({ userId: 'usr_guest', tokenId: 'tok_guest_browser', guest: true });
       if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential === 'session' && actor.userId) {
         const requested = await request.json() as { audience?: string; scope?: string };
         const serial = String(++mintedCount);
@@ -302,9 +303,9 @@ it('offers a logged-out visitor both a login and an anonymous path, and the anon
   expect(credentials).toMatchObject({ access_token: expect.stringMatching(/^mx_/), refresh_token: expect.stringMatching(/^mxr_/), client_id: expect.any(String) });
   expect(credentials.expires_in).toBeGreaterThan(0);
   expect((await poll()).status).toBe(400);
-  // The minted token belongs to no account — claimable later, like any anonymous mint.
+  // Guest browser and CLI share a user without a registered login identity.
   const row = await pg.query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE token_hash = $1', [hashToken(credentials.access_token)]);
-  expect(row.rows[0]?.user_id ?? null).toBeNull();
+  expect(row.rows[0]?.user_id).toBe('usr_guest');
 });
 
 it('requires same-origin browser consent and denial issues no authorization code',async()=>{

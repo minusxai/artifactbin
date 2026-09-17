@@ -1,3 +1,4 @@
+import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -172,8 +173,8 @@ const ownerCtx = await b.newContext();
 const owner = await ownerCtx.newPage();
 await loginViaEmail(owner, B, sink, `mxmx_test_dataflow_owner_${stamp}@example.com`);
 const ownerTok = (await connectAgent(B)).token;
-const claimed = await owner.evaluate(async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status, ownerTok);
-check(claimed === 200, 'the owner claimed a token');
+const claimed = await mergeGuestIntoAccount(owner, B, ownerTok);
+check(claimed === 200, 'the owner adopted a guest connection');
 const OH = { Authorization: `Bearer ${ownerTok}`, 'Content-Type': 'application/json' };
 const pds = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ dataset: [{ region: 'EU', revenue: 10 }, { region: 'NA', revenue: 20 }] }) }));
 const priv = await j(await fetch(`${B}/api/artifacts`, { method: 'POST', headers: OH, body: JSON.stringify({ markup: doc1(pds.id), visibility: 'private' }) }));

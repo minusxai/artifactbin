@@ -13,6 +13,7 @@ import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { getArtifactById } from '@/lib/artifacts';
 
 import { mintToken } from '@/lib/tokens';
+import { createGuestOwner } from '@/lib/guest-owner';
 import { claimToken, createUser } from '@/lib/users';
 import { useAppHarness } from '@/__tests__/harness';
 
@@ -58,6 +59,20 @@ async function userToken(email: string) {
 }
 
 describe('born visibility per format', () => {
+  it('guest users retain public defaults and can explicitly choose private', async () => {
+    const guest = await createGuestOwner();
+    const credential = await mintToken('guest-cli', guest.userId);
+    for (const body of [{ markup: '<h1>Guest</h1>' }, { dataset: ROWS }, { viz: RECIPE }]) {
+      const created = await create(credential.token, body);
+      expect(created.status).toBe(201);
+      expect(created.body.visibility).toBe('public');
+      expect((await getArtifactById(created.body.id))?.user_id).toBe(guest.userId);
+    }
+    expect((await createImage(credential.token)).body.visibility).toBe('public');
+    const privateDoc = await create(credential.token, { markup: '<h1>Private</h1>', visibility: 'private' });
+    expect(privateDoc.status).toBe(201);
+    expect(privateDoc.body.visibility).toBe('private');
+  });
   it('a user-owned dataset is born unlisted', async () => {
     const token = await userToken('dv-ds@example.com');
     const { status, body } = await create(token, { title: 'sales', dataset: ROWS });

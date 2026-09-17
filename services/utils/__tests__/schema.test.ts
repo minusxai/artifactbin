@@ -12,6 +12,13 @@ beforeAll(async () => { pg = new PGlite(); await pg.exec('CREATE SCHEMA app'); d
 afterAll(() => pg.close());
 
 describe('renderSchema', () => {
+  it('relaxes an existing required email column for guest users without losing registered rows', async () => {
+    await pg.exec("CREATE TABLE app.guest_users_test (id TEXT PRIMARY KEY, email TEXT NOT NULL); INSERT INTO app.guest_users_test VALUES ('registered', 'mxmx_test@example.test')");
+    const table: Table = { name: 'guest_users_test', columns: [{ name: 'id', type: 'TEXT', notNull: true }, { name: 'email', type: 'TEXT', relaxNotNull: true }], primaryKey: ['id'] };
+    for (const statement of renderSchema([table], { schema: 'app' })) await pg.exec(statement);
+    await pg.exec("INSERT INTO app.guest_users_test VALUES ('guest', NULL)");
+    expect((await pg.query('SELECT email FROM app.guest_users_test ORDER BY id')).rows).toEqual([{ email: null }, { email: 'mxmx_test@example.test' }]);
+  });
   it('emits CREATE TABLE IF NOT EXISTS, one ADD COLUMN IF NOT EXISTS per column, DROP NOT NULL for a retired column, and the indexes', () => {
     const s = renderSchema([T]);
     expect(s[0]).toMatch(/^CREATE TABLE IF NOT EXISTS widgets \(/);

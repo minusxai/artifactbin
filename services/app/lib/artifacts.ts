@@ -217,6 +217,7 @@ export async function roleWithoutLink(
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
+  if (await isGuestActor(actor)) return 'none';
   if (row.format === 'markup' && hasDocumentEditorAccess(actor)) return 'editor';
   return namedRoleFor(row, actor);
 }
@@ -241,8 +242,13 @@ export async function effectiveRole(
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
-  const byLink = actor.userId ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
+  const byLink = actor.userId && !await isGuestActor(actor) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
   return maxRole(byLink, held);
+}
+
+async function isGuestActor(actor: RoleActor): Promise<boolean> {
+  if (!actor.userId) return false;
+  return (await (await getDb()).query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [actor.userId])).rows.length > 0;
 }
 
 /**
@@ -407,6 +413,9 @@ export async function createArtifact(
         await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
         const catalog=catalogOf(input);
         if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
+        const guestDefault = input.visibility === undefined && userId
+          ? (await tx.query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [userId])).rows.length > 0
+          : false;
         const created = await tx.query<ArtifactRow>(
         // The genesis edit row makes the creation's edit_id resolvable like any
         // other: an agent that creates and then edits against that id is on an
@@ -433,13 +442,13 @@ export async function createArtifact(
           input.content,
           input.source,
           JSON.stringify(input.meta),
-          // Born private when someone owns it, public when nobody could ever
-          // manage an ACL for it — except assets (images/datasets), born
+          // Guest identities retain anonymous public defaults. Registered
+          // accounts create private documents, except assets, born
           // unlisted: a public document reaches them at read time, and a
           // born-private ref bakes a 404 into every shared document that uses
           // it. Routes validate an explicit ask upstream.
           input.visibility ??
-            (!userId ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
+            (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
               : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
           // NULL reads as 'viewer' (linkRoleOf), which is what every ordinary
           // creation grants whoever holds the link.
@@ -732,7 +741,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  */
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(user_id = ${p} OR ${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})`, val: actor.userId })
+    ? live({ where: (p) => `(user_id = ${p} OR (NOT EXISTS (SELECT 1 FROM users WHERE id = ${p} AND is_guest = true) AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');

@@ -11,6 +11,31 @@ const origin='https://example.com';
 const pairing=()=>Response.json({device_code:'d'.repeat(43),user_code:'ABCD',verification_uri_complete:origin+'/oauth/device?user_code=ABCD',expires_in:10,interval:5});
 const credentials=()=>Response.json({access_token:'new_access',refresh_token:'new_refresh',client_id:'client',expires_in:3600});
 
+for (const state of ['fresh', 'connected', 'already-authorized', 'revoked'] as const) test(`artifact handoff: ${state}`, async () => {
+ const home=await mkdtemp(join(tmpdir(),'afbin-artifact-approval-'));let opened=0;const calls:string[]=[];
+ try {
+  if(state!=='fresh')await saveConnection({server:origin,token:'existing_access'},home);
+  const code=await runCli(['auth',origin+'/a/ABC123','--server',origin,'--json'],{
+   home,cwd:home,env:{},interactive:false,stdout:()=>{},stderr:()=>{},auth:{open:async()=>{opened++;}},
+   fetch:async(input,init)=>{
+    const path=new URL(String(input)).pathname;calls.push(path);
+    const auth = new Headers(init?.headers).get('Authorization');
+    if (state === 'revoked' && auth) return Response.json({error:'unauthorized'},{status:401});
+    assert.equal(auth,state==='fresh'||state==='revoked'?null:'Bearer existing_access');
+    if(path==='/api/agent-approvals'){
+     assert.deepEqual(JSON.parse(String(init?.body)),{artifactId:'ABC123'});
+     return state==='already-authorized'?Response.json({authorized:true}):pairing();
+    }
+    assert.equal(path,'/api/agent-approvals/token');
+    return credentials();
+   },
+  });
+  assert.equal(code,0);assert.equal(opened,state==='already-authorized'?0:1);
+  assert.equal((await loadConnection(origin,home,{}))?.token,state==='already-authorized'?'existing_access':'new_access');
+  assert.equal(calls.length,state==='already-authorized'?1:state==='revoked'?3:2);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
 test('agent first operation opens browser, waits for approval and continues without a setup command',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-auto-auth-'));let opened=0;let now=0;let polls=0;const output:string[]=[];
  try{

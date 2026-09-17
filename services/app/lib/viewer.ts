@@ -6,6 +6,7 @@
  */
 import { currentRequest } from './request-context';
 import { actorOf } from '@artifactbin/utils';
+import { mergeGuestUsers } from '@/lib/guest-owner';
 import { BROWSER_SESSION_HEADER, type Credential } from '@artifactbin/contracts';
 import { DuplicateProfileEmail, syncProfile } from './profiles';
 import { effectiveRole as artifactRole, ownsArtifact, type ArtifactRole, type ArtifactRow, type RoleActor, type TokenActor, type Viewer } from './artifacts';
@@ -85,7 +86,10 @@ async function proxyActor(request: Request | undefined): Promise<RequestActor | 
       if (!token || token.userId !== (attached.viewer?.userId ?? null)) return NO_ACTOR;
     }
     // The app's own row for this person follows the claims (lib/profiles) — created on first sight, updated on change.
-    if (attached.credential === 'session' && attached.viewer?.userId) await syncProfile({ userId: attached.viewer.userId, email: attached.viewer.email ?? undefined });
+    if (attached.credential === 'session' && attached.viewer?.userId) {
+      await syncProfile({ userId: attached.viewer.userId, email: attached.viewer.email ?? undefined });
+      if (attached.viewer.emailVerified) await mergeGuestUsers(attached.viewer.userId, attached.heldTokenIds ?? []);
+    }
     return attached;
   }
   return null;

@@ -42,6 +42,9 @@ export function isDocumentPath(pathname: string): boolean {
  */
 export const INTERNAL_API_PREFIX = '/api/internal';
 export const INTERNAL_MINT_PATH = `${INTERNAL_API_PREFIX}/tokens`;
+export const INTERNAL_ARTIFACT_APPROVAL_PATH = `${INTERNAL_API_PREFIX}/artifact-approval`;
+/** API audience allows an existing CLI connection to request an additional grant. */
+export const ARTIFACT_APPROVAL_PATH = '/api/agent-approvals';
 export function isInternalApiPath(pathname: string): boolean {
   return pathname === INTERNAL_API_PREFIX || pathname.startsWith(`${INTERNAL_API_PREFIX}/`);
 }
