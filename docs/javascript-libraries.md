@@ -76,7 +76,7 @@ const url = await artifact.resolve('ref:Abc123');
 page; `resolve(ref)` checks anonymous read access and returns a
 document-scoped URL, and the subsequent GET rechecks it. **Neither helper is
 exposed inside the isolated `<Iframe>` realm.** New documents use the frame
-above; existing ones keep working until they migrate to it.
+above; existing ones keep working.
 
 ## File transport
 
