@@ -36,7 +36,7 @@ test('config get host reports the fallback without creating state',async()=>{
  try{
   assert.equal(await runCli(['config','get','host','--json'],{home,cwd:home,env:{},interactive:false,
    stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('config must remain offline')}),0);
-  assert.deepEqual(JSON.parse(output.join('')),{host:DEFAULT_SERVER});
+  assert.deepEqual(JSON.parse(output.join('')),{host:'https://app.artifactbin.dev'});
   await assert.rejects(stat(join(home,'.artifactbin')),{code:'ENOENT'});
  }finally{await rm(home,{recursive:true,force:true});}
 });

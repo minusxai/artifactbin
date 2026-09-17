@@ -16,11 +16,11 @@ test("reads the single credential directory, scopes to host, saves privately wit
   try {
     assert.equal(await loadConnection(undefined, home, {}), null);
     await saveConnection(
-      { server: "https://artifactbin.dev", token: "mx_test" },
+      { server: "https://app.artifactbin.dev", token: "mx_test" },
       home,
     );
     assert.deepEqual(await loadConnection(undefined, home, {}), {
-      server: "https://artifactbin.dev",
+      server: "https://app.artifactbin.dev",
       token: "mx_test",
     });
     assert.equal(await loadConnection("http://localhost:6400", home, {}), null);
@@ -31,17 +31,17 @@ test("reads the single credential directory, scopes to host, saves privately wit
       null,
     );
     assert.equal(
-      (await stat(join(hostDirectory("https://artifactbin.dev", home, {}), "credentials.env"))).mode & 0o777,
+      (await stat(join(hostDirectory("https://app.artifactbin.dev", home, {}), "credentials.env"))).mode & 0o777,
       0o600,
     );
     assert.match(
-      await readFile(join(hostDirectory("https://artifactbin.dev", home, {}), "credentials.env"), "utf8"),
+      await readFile(join(hostDirectory("https://app.artifactbin.dev", home, {}), "credentials.env"), "utf8"),
       /ARTIFACTBIN_TOKEN=mx_test/,
     );
     assert.equal(
       await loadConnection("http://localhost:6400", home, {
         ARTIFACTBIN_TOKEN: "prod",
-        ARTIFACTBIN_URL: "https://artifactbin.dev",
+        ARTIFACTBIN_URL: "https://app.artifactbin.dev",
       }),
       null,
     );
@@ -84,15 +84,15 @@ test("persists refresh credentials privately but explicit tokens never inherit t
 test("keeps one credential per origin, so switching servers never re-prompts or overwrites", async () => {
   const home = await mkdtemp(join(tmpdir(), "afbin-origins-"));
   try {
-    await saveConnection({ server: "https://artifactbin.dev", token: "mx_prod" }, home, {});
+    await saveConnection({ server: "https://app.artifactbin.dev", token: "mx_prod" }, home, {});
     await saveConnection({ server: "http://localhost:3030", token: "mx_local" }, home, {});
-    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://artifactbin.dev", token: "mx_prod" });
+    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://app.artifactbin.dev", token: "mx_prod" });
     assert.deepEqual(await loadConnection("http://localhost:3030", home, {}), { server: "http://localhost:3030", token: "mx_local" });
     assert.deepEqual(await loadConnection(undefined, home, { ARTIFACTBIN_URL: "http://localhost:3030" }), { server: "http://localhost:3030", token: "mx_local" });
-    assert.match(await readFile(join(hostDirectory("https://artifactbin.dev", home, {}), "credentials.env"), "utf8"), /ARTIFACTBIN_TOKEN=mx_prod/);
+    assert.match(await readFile(join(hostDirectory("https://app.artifactbin.dev", home, {}), "credentials.env"), "utf8"), /ARTIFACTBIN_TOKEN=mx_prod/);
     await saveConnection({ server: "http://localhost:3030", token: "mx_local2" }, home, {});
     assert.deepEqual(await loadConnection("http://localhost:3030", home, {}), { server: "http://localhost:3030", token: "mx_local2" });
-    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://artifactbin.dev", token: "mx_prod" });
+    assert.deepEqual(await loadConnection(undefined, home, {}), { server: "https://app.artifactbin.dev", token: "mx_prod" });
   } finally { await rm(home, { recursive: true, force: true }); }
 });
 
@@ -121,4 +121,13 @@ test('automatic update policy is opt-out and a version pin always suppresses bac
  for(const value of ['0','false','off'])assert.equal(autoUpdatePolicy({CLI__AUTO_UPDATE:value}).enabled,false);
  assert.deepEqual(autoUpdatePolicy({CLI__VERSION_PIN:'1.2.3'}),{enabled:false,pin:'1.2.3'});
  assert.equal(autoUpdatePolicy({CLI__VERSION_PIN:'bad'}).enabled,false);
+});
+
+test('legacy apex credentials stay scoped to an explicit legacy server', async () => {
+ const home = await mkdtemp(join(tmpdir(), 'afbin-legacy-origin-'));
+ try {
+  await saveConnection({server:'https://artifactbin.dev',token:'mx_legacy'},home,{});
+  assert.equal(await loadConnection(undefined,home,{}),null);
+  assert.deepEqual(await loadConnection('https://artifactbin.dev',home,{}),{server:'https://artifactbin.dev',token:'mx_legacy'});
+ } finally { await rm(home,{recursive:true,force:true}); }
 });

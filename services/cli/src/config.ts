@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 /** Where afbin talks when nothing selects a server. */
-export const DEFAULT_SERVER = "https://artifactbin.dev";
+export const DEFAULT_SERVER = "https://app.artifactbin.dev";
 /** Client-only defaults. Reading or changing these never starts a server. */
 export interface ClientDefaults { host?: string; output?: "text" | "json"; updates?: boolean }
 
