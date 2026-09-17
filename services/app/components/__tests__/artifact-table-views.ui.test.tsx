@@ -1,8 +1,8 @@
 /**
- * ArtifactTable views column (dashboard only): each managed row shows its
- * view count over the server-rendered spline. Desktop and mobile use the same
- * views mark at different widths; a page that passes no views gets neither
- * column nor mobile mark.
+ * ArtifactTable views column: a row carrying a count shows it over the
+ * server-rendered spline, whether or not the viewer may manage the row.
+ * Desktop and mobile use the same views mark at different widths; a page that
+ * passes no views gets neither column nor mobile mark.
  */
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
@@ -59,7 +59,7 @@ const row = (views?: number, sparkline?: string) => [
   },
 ];
 
-describe('ArtifactTable views column', () => {
+describe('ArtifactTable views column — how the mark renders', () => {
   it('shows the count and the spline on managed rows', () => {
     render(<ArtifactTable manage artifacts={row(3, '<svg data-testid="spark"></svg>')} />);
     const marks = screen.getAllByLabelText('Artifact 0 views');

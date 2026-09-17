@@ -1,8 +1,9 @@
 /**
  * The app's ONE 404. Every miss renders THIS component — the SPA's catch-all
- * route, ArtifactPage and ProfilePage on a data miss — and the server serves
- * the SPA with the 404 STATUS so a curl and a crawler read the same verdict a
- * person sees.
+ * route, ArtifactPage and ProfilePage on a data miss — and the server answers
+ * a miss with the 404 STATUS, so every caller reads the same verdict. Only the
+ * BODY differs: a caller that asked for HTML gets this page, anything else
+ * gets the JSON refusal that names the way on (server/app `apiNotFound`).
  *
  * It catches "gone" and "not yours to read" alike — the ACL answers a uniform
  * 404 for both on purpose (existence must not leak), so the copy is honest

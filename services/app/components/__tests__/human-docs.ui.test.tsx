@@ -1,9 +1,10 @@
 /**
  * The human tour at /docs-human, guarded against DRIFT.
  *
- * Prose has no type checker and goes stale invisibly, so the vocabulary the
- * tour quotes is asserted here: theme and template names against the schemas
- * the API accepts, and the content tiers against the four it has.
+ * Prose has no type checker and goes stale invisibly, so what the tour says is
+ * asserted here: theme and template names against the schemas the API accepts,
+ * the content tiers against the four it has, the CLI as the only client, the
+ * house voice (no em dashes), and a table of contents whose entries all land.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
@@ -39,9 +40,10 @@ describe('/docs-human', () => {
     }
   });
 
-  it('teaches CLI installation, browser setup and local skills', () => {
+  it('teaches CLI installation, and names no plugin address', () => {
     render(DocsHuman());
     expect(screen.getByLabelText('Copy the CLI install command')).toBeTruthy();
+    // The CLI is the only client. There is no plugin surface to send anyone to.
     expect(text()).not.toContain('/plugin');
   });
 

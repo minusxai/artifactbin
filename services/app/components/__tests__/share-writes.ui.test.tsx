@@ -40,7 +40,7 @@ const open = () => fireEvent.click(screen.getByLabelText('Share'));
 describe('ShareLink — writes', () => {
   it('explains PostgreSQL read-only access from authoritative sharing metadata without offering writes', async () => {
     state.datasetKind = 'postgres';
-    state.access = 'readwrite'; // Never advertise an unsupported legacy flag.
+    state.access = 'readwrite'; // Inert on PostgreSQL, so it must not be advertised there.
     render(<ShareLink className="x" artifactId="k3Pq9z" owner format="dataset" />);
     open();
     await waitFor(() => expect(screen.getByLabelText('PostgreSQL read-only access')).toHaveTextContent('Editors can manage the connection, notebook and whitelist. Viewers can query exposed data. Database rows cannot be changed here.'));

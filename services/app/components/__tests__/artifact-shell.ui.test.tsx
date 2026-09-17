@@ -50,7 +50,7 @@ describe('ArtifactShell', () => {
     expect(screen.getByLabelText('owner flag')).toHaveTextContent('viewer');
   });
 
-  it('ignores a leftover localStorage token — a credential there no longer means anything', async () => {
+  it('ignores a leftover localStorage token — a credential there means nothing', async () => {
     localStorage.setItem('mx_tokens', JSON.stringify(['mx_secret']));
     localStorage.setItem('mx_token', 'mx_secret');
     render(<ArtifactShell role="viewer">{DOC}</ArtifactShell>);
@@ -80,7 +80,7 @@ describe('useArtifactOwner', () => {
 });
 
 /**
- * THREE ROLES, TWO RIGHTS. `useCanEditArtifact` answers the owner and a named
+ * FOUR ROLES, TWO RIGHTS. `useCanEditArtifact` answers the owner and a named
  * editor; `useCanAnnotateArtifact` answers those two AND a commenter. "Can
  * edit" is not "not a reader": derived that way it hands a commenter the edit
  * button.
