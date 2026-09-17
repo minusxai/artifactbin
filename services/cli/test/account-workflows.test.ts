@@ -35,7 +35,6 @@ test('profile YAML pulls, edits, recovers a lost reply and subsequently pushes o
  }finally{await rm(root,{recursive:true,force:true});await rm(home,{recursive:true,force:true});}
 });
 
-// ---- Seeded by the orchestrator for workstream W2b (cli-account-docs). Turn into a passing, non-todo test. ----
 test('account resource tracking lives in the state store as account records plus the workspace binding, never accounts.json',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-account-store-'));
  const home=await mkdtemp(join(tmpdir(),'afbin-account-home-'));

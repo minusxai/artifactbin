@@ -2,9 +2,8 @@
  * THE CLI SUITE'S HARNESS — a disposable home that is also the workspace, a saved connection, and a
  * `fetch` that records every call instead of making one.
  *
- * Forty-odd files opened their own `mkdtemp` and built this by hand, and five of them had written the
- * same twelve-line `harness()` with small differences in what it recorded. The differences are options
- * here; what a test asserts on is the same `RecordedCall` everywhere.
+ * What varies between cases is an option here; what a test asserts on is the same `RecordedCall`
+ * everywhere.
  *
  * Runner-agnostic, like `@artifactbin/test-support` underneath it: the CLI suite runs under `node:test`.
  */

@@ -2,10 +2,10 @@
  * THE BUNDLE IS ORIGIN-FREE UNTIL IT IS USED.
  *
  * The skill sources address the server as `[[ base ]]` so one corpus can serve
- * any deployment. The CLI bundle used to render that once, at COMPILE time,
- * against a fixed origin — so every installed skill told the agent to fetch
- * from that host no matter which server the CLI was pointed at, and a
- * self-hoster's agent was taught to talk to somebody else's box.
+ * any deployment. Rendering that once, at COMPILE time, against a fixed origin
+ * would make every installed skill tell the agent to fetch from that host no
+ * matter which server the CLI is pointed at, teaching a self-hoster's agent to
+ * talk to somebody else's box.
  *
  * So compilation renders the placeholder below instead, and the origin is
  * substituted where it is finally known: when the skill is installed, and

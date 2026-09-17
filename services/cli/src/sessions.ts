@@ -19,11 +19,6 @@ export function sessionIdentity(value:string):string{
  return value;
 }
 
-/**
- * The shared account-resource vocabulary validates every session field except
- * the id, whose contract pattern (`tok_`) matches no id the relay mints. See
- * the contract request in .agent/REPORT.md; the id is checked here meanwhile.
- */
 export function parseSessionResource(input:unknown):SessionResource{
  if(!input||typeof input!=='object'||Array.isArray(input))throw new CliError('invalid_resource','A session resource must be a mapping.');
  let value;try{value=parseAccountResource({...(input as Record<string,unknown>),type:'session'});}catch(error){throw new CliError('invalid_resource',error instanceof Error?error.message:String(error));}

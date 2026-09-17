@@ -2,10 +2,8 @@
  * WHAT THE CLI TELLS YOU ABOUT ITSELF — the command registry, the screens rendered from it, the colour
  * that may only be added on top, the generated manual and the bundled teaching.
  *
- * This was four files (help-screen, commands, style, teaching) that all asserted the same thing from
- * different angles, plus two seeded cases about `--format man`. The invariant the whole surface rests on
- * is one line in what used to be teaching.test.ts: help formats, destinations and the manual come from
- * ONE command registry. So the registry is asserted once and every screen is checked by generating from
+ * The invariant the whole surface rests on: help formats, destinations and the manual come from ONE
+ * command registry. So the registry is asserted once and every screen is checked by generating from
  * it — no case pins a rendered string that the registry already decides.
  */
 import {test,describe} from 'node:test';
@@ -377,8 +375,8 @@ describe('the bundled teaching and the manual', () => {
    assert.match(themes,/Available themes: .*modernist/);
    const templates=helpDocument('templates');
    assert.match(templates,/Pick ONE by the content's shape/);
-   // The bundle no longer ends with the starter — `afbin pull` and `afbin help <topic>` give it, and
-   // there was no starter for `plan` at all — so the overview must not promise one.
+   // The bundle does not end with the starter — `afbin pull` and `afbin help <topic>` give it, and
+   // `plan` has none at all — so the overview must not promise one.
    assert.match(templates,/Run afbin help <template> for everything that kind of document needs, in one call/);
    assert.doesNotMatch(helpDocument('templates')+briefDocument(),/starter last/,'nothing still promises a starter the bundle dropped');
   });
@@ -465,7 +463,7 @@ test('the datasets topic names the push flag that publishes a writable dataset',
 });
 
 /**
- * THE RECOVERY CATALOGUE SPEAKS afbin, NOT HTTP (workstream F).
+ * THE RECOVERY CATALOGUE SPEAKS afbin, NOT HTTP.
  *
  * Every fix here is printed by `afbin help errors`, compiled into the installed
  * skill AND used as the fix of any CliError raised with that code — so it is the

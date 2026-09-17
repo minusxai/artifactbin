@@ -51,12 +51,6 @@ function declaredAccountType(bytes:Buffer):'profile'|'session'|undefined{
 async function withStore<T>(workspace:Workspace,run:(state:State|null)=>Promise<T>):Promise<T>{
  return run(await readState(workspace.home));
 }
-/**
- * `stageFiles` still journals through a directory inside the workspace. Once the
- * journal has been applied nothing of ours belongs there, so the empty directory
- * goes too and the workspace keeps only the user's files. This disappears with
- * the file journal itself, when staged files become `staged-file` records.
- */
 /** An interrupted write of this workspace, waiting for the command that started it to finish it. */
 const pendingOperation=(workspace:Workspace)=>withStore(workspace,async state=>!!state?.get(workspace.root,'pending-operation','current'));
 /** Everything an unchanged push must still finish: an interrupted operation, or staged files not yet applied. */

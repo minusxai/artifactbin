@@ -48,12 +48,6 @@ async function conversionRecord(state:State|null,root:string):Promise<Record<str
  }
  return records;
 }
-/**
- * `stageFiles` still journals through a directory inside the workspace; once the
- * journal has been applied the empty directory goes too, so importing Markdown
- * leaves the user's files and nothing else. This disappears with the file
- * journal itself, when staged files become `staged-file` records.
- */
 export async function prepareMarkdown(workspace:Workspace,paths:string[]):Promise<MarkdownPlan>{
  const conversions:Conversion[]=[],selected:string[]=[];const virtualFiles={...workspace.virtualFiles};
  const state=paths.some(path=>['.md','.markdown'].includes(extname(path).toLowerCase()))?await readState(workspace.home):null;

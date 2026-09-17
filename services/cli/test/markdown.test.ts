@@ -60,7 +60,6 @@ test('CLI push imports once, while dry-run only sends preflight and leaves no lo
  }finally{await rm(root,{recursive:true,force:true});await rm(home,{recursive:true,force:true});}
 });
 
-// ---- Seeded by the orchestrator for workstream W2b (cli-account-docs). Turn into a passing, non-todo test. ----
 test('a markdown conversion record lives in the state store and the workspace gains no .artifactbin directory',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-markdown-store-'));const home=await isolated();
  try{

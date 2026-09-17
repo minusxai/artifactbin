@@ -37,7 +37,7 @@ files['references/errors.md']=diagnosticsHelp();
 files['references/commands.md']=commands.map(command=>'## '+command.name+'\n\n```text\n'+commandHelp(command.name)+'```\n').join('\n');
 /**
  * A guide is its domain rules plus the usage screens of the commands that carry them. The screens are
- * marked bundle-skippable: `afbin help <template>` concatenates eight references, and `afbin push -h`
+ * marked bundle-skippable: `afbin help <template>` concatenates seven references, and `afbin push -h`
  * already prints the screen on demand — 2.3 KB of flags is the first thing that should leave a bundle
  * an agent has to read whole. `afbin help publishing-datasets` still prints them.
  */
