@@ -55,8 +55,8 @@ describe('UsernameCard', () => {
   });
 
   it('renders the handle in the clear — it is a public name, not a secret', () => {
-    // TokenInput masks its value like a password; a HANDLE is the most public
-    // string the account owns and must never render as dots.
+    // A masked field renders its value as dots; a HANDLE is the most public
+    // string the account owns and must never be drawn that way.
     render(<UsernameCard username="mxmx_owner" />);
     expect((screen.getByLabelText('Username') as HTMLInputElement).className).not.toContain('text-security');
   });

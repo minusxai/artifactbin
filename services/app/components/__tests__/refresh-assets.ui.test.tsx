@@ -28,7 +28,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('the refresh row', () => {
   it('posts to the browser door and names what moved', async () => {
     vi.stubGlobal('fetch', answering(200, { refreshed: ['https://a.example/one.png'], unchanged: [], failed: [] }));
-    render(<RefreshAssets id="story1" variant="menu" />);
+    render(<RefreshAssets id="story1" />);
 
     const row = screen.getByLabelText('Refresh external images');
     expect(row).toHaveTextContent('refresh external images');
@@ -48,7 +48,7 @@ describe('the refresh row', () => {
 
   it('says so when nothing changed — the answer that stops a needless republish', async () => {
     vi.stubGlobal('fetch', answering(200, { refreshed: [], unchanged: ['https://a.example/one.png'], failed: [] }));
-    render(<RefreshAssets id="story1" variant="menu" />);
+    render(<RefreshAssets id="story1" />);
     fireEvent.click(screen.getByLabelText('Refresh external images'));
     await waitFor(() => expect(screen.getByLabelText('Refresh result')).toHaveTextContent('already up to date'));
   });
@@ -57,7 +57,7 @@ describe('the refresh row', () => {
     vi.stubGlobal('fetch', answering(200, {
       refreshed: [], unchanged: [], failed: [{ code: 'bad_status', url: 'https://a.example/gone.png', fix: 'check it is public and still there' }],
     }));
-    render(<RefreshAssets id="story1" variant="menu" />);
+    render(<RefreshAssets id="story1" />);
     fireEvent.click(screen.getByLabelText('Refresh external images'));
     await waitFor(() => expect(screen.getByLabelText('Refresh result')).toHaveTextContent('gone.png'));
     expect(screen.getByLabelText('Refresh result')).toHaveTextContent('check it is public');
@@ -65,7 +65,7 @@ describe('the refresh row', () => {
 
   it('does not fire twice on a double click', async () => {
     vi.stubGlobal('fetch', answering(200, { refreshed: [], unchanged: [], failed: [] }));
-    render(<RefreshAssets id="story1" variant="menu" />);
+    render(<RefreshAssets id="story1" />);
     const row = screen.getByLabelText('Refresh external images');
     fireEvent.click(row);
     fireEvent.click(row);

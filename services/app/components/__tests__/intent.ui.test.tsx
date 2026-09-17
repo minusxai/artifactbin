@@ -1,10 +1,10 @@
 /**
  * `?intent=` — the one-shot instruction a door leaves on the way back in.
  *
- * Two journeys leave a document and have to come back to it DOING the thing
- * that was asked: "fork this" (which needs an account) and "log in to comment"
- * (which needs one too). Without this the person returns to a document that
- * has forgotten what they pressed, and does the work twice.
+ * Some journeys leave a document and have to come back to it DOING the thing
+ * that was asked — "fork this" and "log in to comment" are the two covered
+ * here, and like/follow travel the same way. Without this the person returns
+ * to a document that has forgotten what they pressed, and does the work twice.
  *
  * Four properties, and each of them is a way this could go wrong:
  *  - a STRICT ALLOWLIST. It rides on a SHARED link, so anybody may append
@@ -13,8 +13,8 @@
  *  - a fork ASKS. It writes into someone's account, and the address that asked
  *    for it is one anyone could have handed over.
  *  - it is consumed ONCE and stripped, so a refresh does not re-prompt.
- *  - stripping keeps the rest of the address exactly as it was: the `$` values
- *    of F2 live in this same query string and are the reader's document.
+ *  - stripping keeps the rest of the address exactly as it was: the reader's
+ *    `$` values live in this same query string and are their own selection.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';

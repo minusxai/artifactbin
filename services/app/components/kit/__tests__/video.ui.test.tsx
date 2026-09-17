@@ -4,8 +4,8 @@ import { Video } from '@/components/kit/video';
 
 // <Video> is a click-to-open CARD, not an embedded player: the served
 // document's sandbox propagates to every nested browsing context, so a
-// third-party player iframe inherits an opaque origin and refuses to run —
-// readers saw a dead black frame. Instead the component renders the poster
+// third-party player iframe inherits an opaque origin and refuses to run,
+// leaving the reader a dead black frame. Instead the component renders the poster
 // (an author-hosted image, or the CSS slab) with a play badge, and a link
 // that opens the video on its own page in a new tab (the sandbox's
 // allow-popups flags exist for exactly this). videoWatchUrl

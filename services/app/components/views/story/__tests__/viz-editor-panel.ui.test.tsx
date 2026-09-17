@@ -180,8 +180,8 @@ describe('the empty states', () => {
 });
 
 describe('a complex spec the pickers cannot classify', () => {
-  // The user's layered scatter+trend spec. getVizType cannot name it, and the
-  // dropdown used to claim "table" — so the next interaction WROTE table over
+  // A layered scatter+trend spec. getVizType cannot name it, and a dropdown
+  // that claimed "table" for it would let the next interaction WRITE table over
   // the author's chart. The pickers stay out of the way; the spec box remains.
   const LAYERED = {
     kind: 'vega-lite',

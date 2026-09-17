@@ -48,11 +48,8 @@ function summarise(reply: RefreshReply, status: number): string[] {
   return lines;
 }
 
-export default function RefreshAssets({ id }: {
-  id: string;
-  /** `menu` renders as a full-width document-control row (the fork row's precedent). */
-  variant?: 'menu';
-}) {
+/** Always a full-width document-control row: its one home is the owner section. */
+export default function RefreshAssets({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string[] | null>(null);
   const inFlight = useRef(false);

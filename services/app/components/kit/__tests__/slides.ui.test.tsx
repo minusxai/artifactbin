@@ -3,9 +3,10 @@ import { render, screen } from '@testing-library/react';
 import { SlideDeck, Slide } from '@/components/kit/slides';
 
 // The deck is pure stacked flow — slides render in source order, each a full-viewport
-// section. The data-mx-slide stamps are the render-side contract the parent document's
-// slide navigation (birds-eye rail, present controls) discovers slides through; they are
-// render artifacts, stripped from any WYSIWYG write-back by the data-mx-* prefix rule.
+// section. The data-mx-slide stamps are the render-side contract the document's own
+// slide navigation (lib/story-runtime/StoryRuntimeApp) and the capture browser
+// (services/browser) find slides through; they are render artifacts, stripped from any
+// WYSIWYG write-back by the data-mx-* prefix rule.
 function renderDeck() {
   return render(
     <SlideDeck aria-label="deck">
