@@ -43,13 +43,39 @@ describe('shared guest ownership', () => {
       const credential = await (await post('/oauth/device/token', { device_code: pending.device_code })).json();
       const cliCheck = () => host.fetch(new Request(base + '/api/agent-approvals', { method: 'POST', headers: { authorization: `Bearer ${credential.access_token}`, 'content-type': 'application/json' }, body: JSON.stringify({ artifactId }) }));
       expect(await (await cliCheck()).json()).toEqual({ authorized: true });
+      const before = await host.fetch(new Request(base + `/api/artifacts/${artifactId}`, { headers: { authorization: `Bearer ${credential.access_token}` } }));
+      const workspaceAccount = before.headers.get('X-Artifactbin-Account')!;
+      const snapshot = await before.json();
+      const publish = () => host.fetch(new Request(base + '/api/artifacts', { method: 'POST', headers: {
+        authorization: `Bearer ${credential.access_token}`, 'content-type': 'application/json', 'X-Artifactbin-Account': workspaceAccount,
+        'Idempotency-Key': 'guest-adoption-retry-001',
+      }, body: JSON.stringify({ markup: '<p>Created once</p>' }) }));
+      const publication = await publish();
+      expect(publication.status).toBe(201);
+      const published = await publication.json();
       const accountId = await login(cookie);
       if (previousUserId) expect(accountId).toBe(previousUserId);
       expect((await getArtifactById(artifactId))?.user_id).toBe(accountId);
       expect(await (await cliCheck()).json()).toEqual({ authorized: true });
+      const edit = await host.fetch(new Request(base + `/api/artifacts/${artifactId}`, { method: 'PUT', headers: {
+        authorization: `Bearer ${credential.access_token}`, 'content-type': 'application/json', 'X-Artifactbin-Account': workspaceAccount,
+      }, body: JSON.stringify({ markup: '<h1>Edited after login</h1>', expectedVersion: snapshot.version, expectedState: snapshot.state }) }));
+      expect(edit.status, await edit.clone().text()).toBe(200);
+      expect(edit.headers.get('X-Artifactbin-Account')).toBe(workspaceAccount);
+      expect(await (await publish()).json()).toEqual(published);
       const refresh = await post('/oauth/token', { grant_type: 'refresh_token', client_id: credential.client_id, refresh_token: credential.refresh_token, resource: base + '/api' });
       expect(refresh.status).toBe(200);
-      expect(await resolveToken((await refresh.json()).access_token)).toMatchObject({ userId: accountId });
+      const refreshed = (await refresh.json()).access_token;
+      expect(await resolveToken(refreshed)).toMatchObject({ userId: accountId });
+      const continued = await host.fetch(new Request(base + `/api/artifacts/${artifactId}`, { headers: { authorization: `Bearer ${refreshed}`, 'X-Artifactbin-Account': workspaceAccount } }));
+      expect(continued.status).toBe(200);
+      expect(continued.headers.get('X-Artifactbin-Account')).toBe(workspaceAccount);
+      const stranger = await createGuestOwner();
+      const denied = await host.fetch(new Request(base + `/api/artifacts/${artifactId}`, { headers: { authorization: `Bearer ${refreshed}`, 'X-Artifactbin-Account': stranger.userId } }));
+      expect(denied.status).toBe(409);
+      const wrongCredential = await mintToken('wrong-account', stranger.userId);
+      const switched = await host.fetch(new Request(base + `/api/artifacts/${artifactId}`, { headers: { authorization: `Bearer ${wrongCredential.token}`, 'X-Artifactbin-Account': workspaceAccount } }));
+      expect(switched.status).toBe(409);
     } finally { await rm(directory, { recursive: true, force: true }); }
   });
   it.each([true, false])('shares browser and CLI creation with one approval (browser first=%s)', async browserFirst => {

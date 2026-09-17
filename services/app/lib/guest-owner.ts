@@ -27,8 +27,18 @@ export async function mergeGuestUsers(userId: string, heldTokenIds: string[]): P
       await tx.query('UPDATE artifacts SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
       await tx.query('UPDATE tokens SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
       await tx.query('UPDATE dataset_secrets SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
+      await tx.query('UPDATE users SET merged_into_user_id = $1 WHERE id = $2', [userId, guest.id]);
       // Keep the empty guest row for historical author attribution. No live
       // credential or owned artifact remains attached to it.
     }
   });
+}
+
+/** A workspace keeps its original account pin across verified guest adoption.
+ * This is only an identity comparison: artifact permissions still use the live owner. */
+export async function matchesWorkspaceAccount(expected: string, current: string): Promise<boolean> {
+  if (expected === current) return true;
+  const result = await (await getDb()).query(
+    'SELECT 1 FROM users WHERE id = $1 AND is_guest = true AND merged_into_user_id = $2', [expected, current]);
+  return result.rows.length > 0;
 }

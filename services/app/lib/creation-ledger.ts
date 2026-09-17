@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {Queryable} from '@artifactbin/contracts';
 import type {ArtifactRow,TokenActor} from './artifacts';
+import {matchesWorkspaceAccount} from './guest-owner';
 
 interface CreationReply {status: number; body: Record<string,unknown>}
 export interface CreationOperation {
@@ -16,10 +17,14 @@ const ordered = (value: unknown): unknown => Array.isArray(value) ? value.map(or
   : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key,ordered((value as Record<string,unknown>)[key])])) : value;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(ordered(value))).digest('hex');
 
-export function creationOperation(actor: TokenActor, origin: string, key: string | null | undefined, payload: unknown, reply: CreationOperation['reply']): CreationOperation | null {
+export async function creationOperation(actor: TokenActor, origin: string, key: string | null | undefined, payload: unknown, reply: CreationOperation['reply'], workspaceAccount?: string | null): Promise<CreationOperation | null> {
   if (!key) return null;
   if (!/^[A-Za-z0-9_-]{16,128}$/.test(key)) throw new CreationReplay({status:400,body:{error:'invalid_idempotency_key'}});
-  return {scope:hash([new URL(origin).origin,actor.userId ?? actor.tokenId]),key,fingerprint:hash(payload),reply};
+  const current = actor.userId ?? actor.tokenId;
+  // A retry retains its original ledger scope after verified adoption. Never
+  // trust a caller-supplied account pin without checking its relationship.
+  const account = workspaceAccount && await matchesWorkspaceAccount(workspaceAccount,current) ? workspaceAccount : current;
+  return {scope:hash([new URL(origin).origin,account]),key,fingerprint:hash(payload),reply};
 }
 
 export async function lookupCreation(db: Queryable, operation: CreationOperation): Promise<CreationReply | null> {

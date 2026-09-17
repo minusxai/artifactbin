@@ -67,7 +67,12 @@ After verified login, the app merges the cookie-held guest users into the authen
 1. Transfer their artifacts to the account’s `user_id` without changing artifact URLs.
 2. Transfer their approved CLI credentials to the account.
 3. Preserve CLI access through subsequent credential refreshes.
-4. Retain the emptied guest records only for historical attribution.
+4. Retain the emptied guest records for historical attribution and record their adoption destination in `merged_into_user_id`.
+
+Existing CLI workspaces keep their guest account pin. The API accepts that pin only when its
+recorded adoption destination matches the current authenticated owner, and echoes the same
+pin so workspace tracking and creation retries survive login. Ownership checks still use
+the current account. A pin belonging to an unrelated identity remains an account mismatch.
 
 Both new registrations and existing accounts use this merge path. The login provider owns the registered account ID, so new registration also merges into that ID rather than trying to rename a guest into the provider’s identity.
 
