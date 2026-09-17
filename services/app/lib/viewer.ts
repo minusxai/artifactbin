@@ -149,6 +149,11 @@ export async function sessionActor(request?: Request, opts: { headerOnly?: boole
  * uniform 404 from every scope that reads a share through `users` (lib/artifacts SHARE_PREDICATE).
  * Both doors call the SAME `syncProfileForToken`, so "do these claims belong to this credential"
  * stays one rule in one place.
+ *
+ * The dry-run suppression that `withTokenAuth` applies is deliberately NOT repeated here: this door
+ * has no dry-run notion at all — `touchToken` above is ungated too — and the client that sets the
+ * header most (preview-entry, which marks its whole session read-only) reaches exactly these routes,
+ * so honouring it here would leave the invitee rowless on the paths this fix is for.
  */
 export async function requestOrSessionActor(request: Request): Promise<RequestActor> {
   const offered = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
