@@ -44,10 +44,16 @@ interface ValuesUrlSink {
 /** ~150ms: long enough to swallow a drag, short enough that a click feels answered. */
 const VALUES_URL_DEBOUNCE_MS = 150;
 
-/** The declared scalars of `flow`, at the values `state` holds. */
+/**
+ * The declared scalars of `flow` that TRAVEL IN THE LINK, at the values `state`
+ * holds. A `url={false}` Value is skipped here for the same reason
+ * `urlValueParams` skips it: this report is how a framed document's address is
+ * written, so a form draft included here is the draft in the owner's address —
+ * the leak the opt-out exists to close. The two sinks must agree on the set.
+ */
 function scalarsAt(flow: Dataflow, values: Record<string, Scalar>): Record<string, Scalar> {
   const out: Record<string, Scalar> = {};
-  for (const v of flow.values) if (v.kind === 'scalar' && v.name in values) out[v.name] = values[v.name];
+  for (const v of flow.values) if (v.kind === 'scalar' && v.url !== false && v.name in values) out[v.name] = values[v.name];
   return out;
 }
 

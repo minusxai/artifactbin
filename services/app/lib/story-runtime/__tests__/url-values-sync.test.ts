@@ -99,3 +99,52 @@ describe('syncValuesToUrl, framed', () => {
     expect(post.mock.calls[0][0]).toEqual({ region: 'west', zoom: 2 });
   });
 });
+
+/**
+ * A Value the author kept OUT of the link (`url={false}`) — a half-typed form
+ * field, a flag a script sets — reaches neither sink: not the top-level
+ * document's `__mxValues`, and not the framed one's `mx:values` report, which
+ * is the leak that would put the draft in the owner's address instead.
+ */
+describe('a url={false} Value', () => {
+  const PRIVATE: Dataflow = {
+    values: [
+      ...FLOW.values,
+      { kind: 'scalar', name: 'draft', type: 'string', default: null, url: false, start: 0, end: 0 },
+      { kind: 'scalar', name: 'guest', type: 'boolean', default: false, url: false, start: 0, end: 0 },
+    ],
+    queries: [],
+  };
+  const privateHarness = () => {
+    const store = createDataflowStore({ flow: PRIVATE }, { debounceMs: 0 });
+    return { store, hook: vi.fn(), post: vi.fn() };
+  };
+
+  it('never reaches the address on its own', async () => {
+    const { store, hook } = privateHarness();
+    syncValuesToUrl(store, () => PRIVATE, { hook }, 5);
+    store.setValue('draft', 'Dinner');
+    store.setValue('guest', true);
+    await tick(30);
+    expect(hook).not.toHaveBeenCalled();
+  });
+
+  it('is absent from the write another Value triggers', async () => {
+    const { store, hook } = privateHarness();
+    syncValuesToUrl(store, () => PRIVATE, { hook }, 5);
+    store.setValues({ draft: 'Dinner', region: 'west' });
+    await tick(30);
+    expect(hook).toHaveBeenCalledTimes(1);
+    expect(hook.mock.calls[0][0]).toEqual({ region: 'west', zoom: null });
+  });
+
+  it('is absent from the framed report too', async () => {
+    const { store, hook, post } = privateHarness();
+    syncValuesToUrl(store, () => PRIVATE, { hook, post }, 5);
+    store.setValues({ draft: 'Dinner', guest: true, region: 'west' });
+    await tick(30);
+    expect(hook).not.toHaveBeenCalled();
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toEqual({ region: 'west', zoom: 2 });
+  });
+});
