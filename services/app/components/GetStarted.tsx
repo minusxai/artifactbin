@@ -12,6 +12,7 @@
  * The install URL is built from window.location, never hardcoded — the same
  * card serves localhost, staging and production.
  */
+import { DEFAULT_SERVER } from '@artifactbin/contracts';
 import { useEffect, useState } from 'react';
 import AgentLink from '@/components/AgentLink';
 import { ClaudeCodeIcon, CodexIcon, OpenCodeIcon, PiIcon } from '@/components/brand-icons';
@@ -100,7 +101,7 @@ export default function GetStarted({ heading = true, frame = true }: { heading?:
         >
           <CopyBlock
             className="mt-2"
-            text={`curl -fsSL ${origin || 'https://artifactbin.dev'}/chat/install.sh | sh`}
+            text={`curl -fsSL ${origin || DEFAULT_SERVER}/chat/install.sh | sh`}
             label="Copy the CLI install command"
           />
           {/* WHICH AGENTS, as badges — mark left, name right — under the

@@ -1,18 +1,18 @@
 # Artifactbin
 
-Interactive documents for people and agents. Create local files, preview and edit them in a browser, then publish and share. Use [artifactbin.dev](https://artifactbin.dev) or run your own server.
+Interactive documents for people and agents. Create local files, preview and edit them in a browser, then publish and share. Use [app.artifactbin.dev](https://app.artifactbin.dev) or run your own server.
 
 ## Install and use
 
 ```sh
-curl -fsSL https://artifactbin.dev/chat/install.sh | sh
+curl -fsSL https://app.artifactbin.dev/chat/install.sh | sh
 afbin auth
 afbin add report.jsx sales.csv --json
 afbin preview report.jsx
 afbin push report.jsx
 ```
 
-`artifactbin.dev` is the default host. `add` assigns stable, server/account-scoped IDs without uploading. Reference datasets and media with `ref:ID`; use `/a/ID` for navigation links. Local paths inside artifact references are rejected. Preview reads registered local files and saves browser edits back to them; push publishes registered unpublished dependencies first. It does not rewrite paths or silently publish changes to an already-published dependency.
+`app.artifactbin.dev` is the default host. `add` assigns stable, server/account-scoped IDs without uploading. Reference datasets and media with `ref:ID`; use `/a/ID` for navigation links. Local paths inside artifact references are rejected. Preview reads registered local files and saves browser edits back to them; push publishes registered unpublished dependencies first. It does not rewrite paths or silently publish changes to an already-published dependency.
 
 The installer supports macOS and Linux, ARM64 and x64, without Node or sudo. The CLI downloads its host runtime, DuckDB and Chromium when needed and caches them. `afbin help` works offline. `afbin update` updates the verified executable and agent skills.
 
@@ -30,7 +30,7 @@ afbin push report.jsx
 
 `serve` stays in the foreground. Its directory contains server settings, uploaded objects and a PGLite database; restart with the same directory to retain them. The server prints setup and login instructions. Optional `--db-url postgres://…` or `--db-url pglite://…` selects the application database; DuckDB still handles queries.
 
-Use `--server URL` for one command without changing defaults. `afbin config set host https://artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. IDs belong to the host/account that reserved them.
+Use `--server URL` for one command without changing defaults. `afbin config set host https://app.artifactbin.dev` restores the cloud default. Client host credentials and defaults live under `~/.artifactbin`, separately from server data. IDs belong to the host/account that reserved them.
 
 For trusted local collaboration, `afbin preview report.jsx --share` allows anyone who can reach that preview to edit/comment on its selected files. Use the authenticated server for persistent team hosting. [Hosting details](docs/extraction/team.md).
 

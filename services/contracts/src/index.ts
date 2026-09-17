@@ -10,6 +10,7 @@ export * from './relations';
 export * from './agent';
 export * from './deny';
 export * from './routes';
+export { DEFAULT_SERVER } from './default-server';
 export * from './artifact-reference';
 export * from './sharing';
 export type { TokenRecord, TokenReader, TokenReaderOptions, ClaimResult, CodeStore, AgentSession } from './identity';
