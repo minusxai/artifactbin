@@ -204,6 +204,41 @@ export async function browserSessionKind(request?: Request, admitted?: RequestAc
   return actor.tokenId ? 'anon' : 'none';
 }
 
+/**
+ * The app's own `users` row for a BEARER caller, from the proxy's claims.
+ *
+ * The row is what every SQL share predicate reads an invitation through:
+ * `artifact_shares` holds the invited ADDRESS, and while the share is still
+ * unresolved `lib/artifacts` matches it as `(SELECT email FROM users WHERE
+ * id = $actor)`. Written on the first COOKIE session alone, that subselect was
+ * NULL for someone who had only ever used the CLI — so an invited account's
+ * listing was empty, a named editor's pull was the uniform 404 and a commenter
+ * could not comment, until one browser visit created the row. The claims ride
+ * on a bearer request too (the proxy attaches the account's address to it), so
+ * the row follows them here, at the one door every token-authenticated route
+ * comes through.
+ *
+ * Reuses `tokenActorForRequest` rather than re-deriving "do these claims belong
+ * to this credential": that rule is load-bearing and is pinned in one place.
+ * Cheap on the hot path — `syncProfile` keeps an LRU of what it has written, so
+ * a claimed token's every later call is a map lookup and no query.
+ */
+export async function syncProfileForToken(request: Request, scope: TokenActor): Promise<void> {
+  const claimed = tokenActorForRequest(request, scope);
+  if (!claimed.userId || !claimed.email) return;
+  try {
+    await syncProfile({ userId: claimed.userId, email: claimed.email });
+  } catch {
+    /*
+     * A SECOND identity for one address is a provisioning fault the lazy
+     * upsert cannot absorb (lib/profiles says so by name). Diagnosing it is
+     * that module's job; refusing it here is not — left to throw it would turn
+     * every CLI call into a 500. The request continues with exactly the reach
+     * it had before, which is the behaviour of the day the row was missing.
+     */
+  }
+}
+
 /** Enrich an authenticated token scope only from matching proxy claims. */
 export function tokenActorForRequest(request: Request, scope: TokenActor): TokenActor {
   const actor = actorOf(request);

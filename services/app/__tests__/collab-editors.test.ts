@@ -18,10 +18,12 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * scope the reached ones are.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { attachActor } from '@artifactbin/utils';
 import { useAppHarness } from './harness';
 import { GET as getArtifactRoute, PUT as putArtifactRoute } from '@/app/api/artifacts/[id]/route';
 import { POST as editsRoute } from '@/app/api/artifacts/[id]/edits/route';
-import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
+import { POST as annotateBearerRoute } from '@/app/api/artifacts/[id]/annotations/route';
+import { GET as listArtifactsRoute, POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { DELETE as deleteMineRoute, GET as getMineRoute, PATCH as patchMineRoute, PUT as putMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { POST as editsMineRoute } from '@/app/api/my/artifacts/[id]/edits/route';
 import { POST as revertMineRoute } from '@/app/api/my/artifacts/[id]/revert/route';
@@ -456,5 +458,107 @@ describe('roleFor and the read ACL', () => {
     expect(await canReadArtifact(row, { userId: w.bob.id, email: 'bob@x.com' })).toBe(true);
     expect(await canReadArtifact(row, { userId: w.carol.id, email: null })).toBe(false);
     expect(await canReadArtifact(row, null)).toBe(false);
+  });
+});
+
+/**
+ * THE INVITEE WHO ONLY EVER SPEAKS TO THE API.
+ *
+ * `users` is the app's OWN row for a person, and it was written on the first
+ * COOKIE session alone (lib/profiles, through lib/viewer's proxyActor). A
+ * bearer caller never reached it, so an invited account that had only ever
+ * used the CLI held a token, a user id and a verified address — and no row.
+ * Every SQL share predicate matches a still-unresolved invite through
+ * `(SELECT email FROM users WHERE id = $p)` (lib/artifacts SHARE_PREDICATE),
+ * which was therefore NULL: the listing came back empty, a named EDITOR's pull
+ * was the uniform 404 (artifact-read rechecks through `editorScope`) and a
+ * COMMENTER could not comment — while a viewer's pull worked, because that one
+ * path (`namedRoleFor`) also matches the address the request carries. A single
+ * cookie visit to /a/:id repaired all of it, which is what named the bug.
+ *
+ * So the row now follows the claims under a BEARER credential too, and these
+ * cases are the whole grant, exercised the way the CLI reaches it: the bearer
+ * header the agent sends, plus the claims the proxy attaches to that request.
+ */
+describe('an invited account that has only ever presented a bearer token', () => {
+  /** The pair a CLI request really carries: the bearer header AND the proxy's verdict on it. */
+  async function cliCaller(userId: string, email: string) {
+    const minted = await mintToken('cli');
+    await claimToken(userId, minted.token);
+    return async (path: string, method = 'GET', body?: unknown) =>
+      attachActor(
+        await observedRequest(path, { method, token: minted.token, ...(body === undefined ? {} : { json: body }) }),
+        { credential: 'bearer', tokenId: minted.id, userId, email, emailVerified: true },
+      );
+  }
+
+  // lib/profiles remembers what it has already written, per process — so each
+  // case names its own person rather than sharing one across a wiped database.
+  let people = 0;
+
+  /** Owner A's PRIVATE document, invited to an address whose account the app has never written down. */
+  async function invitedTo(role: 'viewer' | 'commenter' | 'editor') {
+    const who = `cli${people++}`, userId = `usr_${who}`, email = `${who}@invited.example`;
+    const w = await world(PROSE, 'private');
+    asSession({ id: w.owner.id, email: w.owner.email });
+    expect((await share(w.doc.id, [{ email, role }])).status).toBe(200);
+    noSession();
+    const call = await cliCaller(userId, email);
+    // The premise: no `users` row, because nothing has ever brought a cookie.
+    const db = await harness.db();
+    expect((await db.query('SELECT 1 FROM users WHERE id = $1', [userId])).rows).toEqual([]);
+    return { w, call, id: w.doc.id, userId, email };
+  }
+
+  const listedIds = async (response: Response) =>
+    ((await response.json()) as { artifacts: Array<{ id: string }> }).artifacts.map((a) => a.id);
+
+  it('an EDITOR lists, reads and writes the document — and the app writes down the account', async () => {
+    const { call, id, userId, email } = await invitedTo('editor');
+
+    // The pull FIRST: an editor's read rechecks the edit predicate
+    // (artifact-read readArtifactSnapshot), which is where it used to 404 while
+    // a commenter's read of the same document answered.
+    const read = await getArtifactRoute(await call(`/api/artifacts/${id}`), params({ id }));
+    expect(read.status, await read.clone().text()).toBe(200);
+
+    const listed = await listArtifactsRoute(await call('/api/artifacts'));
+    expect(listed.status).toBe(200);
+    expect(await listedIds(listed)).toEqual([id]);
+
+    const put = await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }));
+    expect(put.status, await put.clone().text()).toBe(200);
+    expect((await head(id)).source).toContain('hello again');
+
+    const db = await harness.db();
+    expect((await db.query<{ email: string }>('SELECT email FROM users WHERE id = $1', [userId])).rows[0]?.email).toBe(email);
+  });
+
+  it('a COMMENTER comments, and still may not rewrite the document', async () => {
+    const { call, id } = await invitedTo('commenter');
+
+    const made = await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'looks right to me' }), params({ id }));
+    expect(made.status, await made.clone().text()).toBe(201);
+
+    expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+  });
+
+  it('a VIEWER reads and lists, but neither writes nor comments', async () => {
+    const { call, id } = await invitedTo('viewer');
+
+    expect(await listedIds(await listArtifactsRoute(await call('/api/artifacts')))).toEqual([id]);
+    expect((await getArtifactRoute(await call(`/api/artifacts/${id}`), params({ id }))).status).toBe(200);
+    expect((await putArtifactRoute(await call(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+    expect((await annotateBearerRoute(await call(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'nope' }), params({ id }))).status).toBe(404);
+  });
+
+  it('an account nobody invited keeps the uniform 404 and an empty listing', async () => {
+    const { id } = await invitedTo('editor');
+    const stranger = await cliCaller('usr_cli_stranger', 'cli-stranger@invited.example');
+
+    expect(await listedIds(await listArtifactsRoute(await stranger('/api/artifacts')))).toEqual([]);
+    expect((await getArtifactRoute(await stranger(`/api/artifacts/${id}`), params({ id }))).status).toBe(404);
+    expect((await putArtifactRoute(await stranger(`/api/artifacts/${id}`, 'PUT', { markup: PROSE2 }), params({ id }))).status).toBe(404);
+    expect((await annotateBearerRoute(await stranger(`/api/artifacts/${id}/annotations`, 'POST', { quote: 'hello', body: 'no' }), params({ id }))).status).toBe(404);
   });
 });

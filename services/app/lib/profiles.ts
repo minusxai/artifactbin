@@ -9,8 +9,12 @@
  * `(userId → claimsHash)` means a logged-in reader's query hops never write,
  * and an email change reaches the row on the very next request. The user id
  * is the proxy's (`usr_…`) — the same value every artifact, share and token
- * keys on. The row is created LAZILY on the first session sight (there is no
- * boot-time sync): one identity, one row, ids agreeing by construction.
+ * keys on. The row is created LAZILY on the first sight of a credential that
+ * CARRIES claims — a cookie session (lib/viewer proxyActor) or a bearer token
+ * the proxy could name an account for (lib/viewer syncProfileForToken), since
+ * a CLI-only person is a person too and `artifact_shares` is matched through
+ * this row. There is no boot-time sync: one identity, one row, ids agreeing by
+ * construction.
  */
 import { getDb } from './db';
 import { ensureUsername } from './users';

@@ -12,7 +12,7 @@ import { TRUSTED_PROXY_HOPS, WEB_INGEST_MAX_PER_HOUR } from './config';
 import { ARTIFACTBIN_AGENT_HEADER, forwardedFor, identifyClient } from './client-identity';
 import { isCrossSiteRequest, json, unauthorized } from './http';
 import { rememberTokenClient, resolveToken, touchToken } from './tokens';
-import { sessionActor } from './viewer';
+import { sessionActor, syncProfileForToken } from './viewer';
 import type { RequestActor } from './viewer';
 import type { Harness } from './client-identity';
 
@@ -158,6 +158,10 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const account=actor.userId??actor.id;
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
     if(expectedAccount&&expectedAccount!==account)return json({error:'account_mismatch',hint:'Use the credentials for this workspace account.'},409);
+    // The app's own row for this person follows the claims under a bearer
+    // credential too, so a CLI-only invitee reaches what they were invited to
+    // (lib/viewer syncProfileForToken). No-op without a proxy or an account.
+    if (resolved?.userId) await syncProfileForToken(request, { userId: resolved.userId, tokenId: resolved.id });
     const readOnly=options.readOnly||(['GET','HEAD'].includes(request.method)&&request.headers.get('X-Artifactbin-Dry-Run')==='1');
     if (resolved && !readOnly) {
       await touchToken(resolved.id);
