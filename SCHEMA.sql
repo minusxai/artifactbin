@@ -145,6 +145,7 @@ CREATE TABLE IF NOT EXISTS app.users (
   id TEXT NOT NULL,
   email TEXT,
   is_guest BOOLEAN NOT NULL DEFAULT false,
+  merged_into_user_id TEXT,
   name TEXT,
   username TEXT,
   password_hash TEXT,
@@ -157,6 +158,8 @@ ALTER TABLE app.users ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS email TEXT;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS merged_into_user_id TEXT;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS name TEXT;
 

@@ -18,6 +18,7 @@ import type { Harness } from './client-identity';
 
 import type { Credential } from '@artifactbin/contracts';
 import { isCookieCredential } from './viewer';
+import { matchesWorkspaceAccount } from './guest-owner';
 
 interface TokenContext {
   tokenId: string;
@@ -157,7 +158,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     if (!actor) return unauthorized(request);
     const account=actor.userId??actor.id;
     const expectedAccount=request.headers.get('X-Artifactbin-Account');
-    if(expectedAccount&&expectedAccount!==account)return json({error:'account_mismatch',hint:'Use the credentials for this workspace account.'},409);
+    if(expectedAccount&&!await matchesWorkspaceAccount(expectedAccount,account))return json({error:'account_mismatch',hint:'Use the credentials for this workspace account.'},409);
     // An explicit dry run is a QUESTION — "would this work?" — and this door's convention is that it
     // leaves no trace: `touchToken` below is withheld from it. The profile upsert is the other write
     // on this path, so it obeys the same rule. A read-only ROUTE is not a dry run: it is an ordinary
@@ -180,7 +181,7 @@ export function withTokenAuth(handler: TokenHandler, options: {readOnly?:boolean
     const params = routeCtx ? await routeCtx.params : {};
     const response=await handler(request, { tokenId: actor.id, userId: actor.userId, credential, clientHarness: actor.clientHarness, params });
     const headers=new Headers(response.headers);
-    headers.set('X-Artifactbin-Account',account);
+    headers.set('X-Artifactbin-Account',expectedAccount||account);
     headers.set('X-Artifactbin-Protocol',String(CLI_PROTOCOL_VERSION));
     return new Response(response.body,{status:response.status,statusText:response.statusText,headers});
   };
