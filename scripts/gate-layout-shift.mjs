@@ -115,11 +115,16 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
   // to cost.
   await page.addInitScript(() => {
     window.__shifts = [];
-    const name = (n) => (n?.getAttribute?.('aria-label') ?? n?.tagName?.toLowerCase?.() ?? '?');
+    // Attribute the source while its DOM ancestry still exists. Toolbar divs
+    // (such as the GitHub star control) are not the document or slide rail.
+    const region = '.mx-doc, .mx-rail, [aria-label="Slide overview"], [aria-label="Slides"]';
+    const movesDocument = (node) => !!node && (
+      !!node.closest?.(region) || !!node.querySelector?.(region)
+    );
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
         if (e.hadRecentInput) continue;
-        window.__shifts.push({ value: e.value, sources: (e.sources || []).map((s) => name(s.node)) });
+        window.__shifts.push({ value: e.value, movesDocument: (e.sources || []).some((s) => movesDocument(s.node)) });
       }
     }).observe({ type: 'layout-shift', buffered: true });
   });
@@ -157,9 +162,8 @@ async function watchCanvas(id, { edit = false, token, width = 1600 } = {}) {
       }
       await new Promise((r) => setTimeout(r, 50));
     }
-    const moved = (s) => s === 'Slide overview' || s === 'Slides' || s === 'div';
     const shifts = window.__shifts ?? [];
-    const blamed = shifts.filter((x) => x.sources.some(moved));
+    const blamed = shifts.filter((x) => x.movesDocument);
     return {
       seen,
       shifts: shifts.reduce((a, b) => a + b.value, 0),
@@ -351,7 +355,11 @@ check(mm.overflow === 0, `mismatch: the document still does not scroll sideways 
     'the counter tracks position');
 
   // The CAPTURE render — what /export screenshots — carries no chrome at all.
-  const bare = await (await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`)).text();
+  const capture = await fetch(`${B}/a/${navDeck.id}/raw?chrome=0`, {
+    headers: { Authorization: `Bearer ${navDeck.token}` },
+  });
+  check(capture.status === 200, 'the owner can read the private capture render');
+  const bare = await capture.text();
   check(!bare.includes('Slide controls') && !bare.includes('mx-rail'), 'the capture render (?chrome=0) has no chrome');
   check(bare.includes('The Cover Slide'), 'and still carries the document');
   await page.close();
