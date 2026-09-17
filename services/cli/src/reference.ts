@@ -7,7 +7,7 @@ import {confinedPath} from './journal';
 import {isMissing} from './files';
 import {DEFAULT_SERVER} from './config';
 export type Reference=({kind:'path';path:string}|{kind:'id';id:string})&{version?:number;notices:string[]};
-export async function resolveReference(input:string,options:{root:string;cwd?:string;server?:string;writable?:boolean}):Promise<Reference>{
+export async function resolveReference(input:string,options:{root:string;cwd?:string;server?:string;/** Verified alias origins of `server`; a URL at one of them names the same server. */aliases?:string[];writable?:boolean}):Promise<Reference>{
  const root=await realpath(options.root);
  const exists=async(value:string)=>{try{return(await stat(resolve(options.cwd??options.root,value))).isFile();}catch(error){if(isMissing(error)||(error as NodeJS.ErrnoException).code==='ENOTDIR')return false;throw error;}};
  const suffix=input.match(/^(.+)@(\d+)$/);
