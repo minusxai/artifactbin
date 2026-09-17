@@ -66,7 +66,14 @@ export async function prepareCatalog(input:unknown,actor:TokenActor,previous?:Ar
    const prior=old?.tables.find(p=>key(p)===key(t));
    if(!t.rows&&prior?.objectKey){tables.push({...prior});continue;}
    const declared=t.columns?.filter(c=>typeof c!=='string')??prior?.columns.filter(c=>c.type==='user');
-   const stored=await publishDataset(declared?.length?{columns:declared}:{},t.rows,objects);if(stored instanceof Response)return stored;
+   /*
+    * A table with NO ROWS has nothing to infer from, so the names it declares
+    * are the whole shape: a bare `columns={['name','joined_on']}` becomes text
+    * columns rather than a refusal. Only here — with rows present, inference
+    * still types them, and a bare name must not silently retype a number.
+    */
+   const named=t.rows?.length===0&&!declared?.length?t.columns?.filter(c=>typeof c==='string').map(name=>({name,type:'string' as const})):undefined;
+   const stored=await publishDataset(declared?.length?{columns:declared}:named?.length?{columns:named}:{},t.rows,objects);if(stored instanceof Response)return stored;
    tables.push({schema:t.schema,name:t.name,columns:stored.meta.columns as DatasetTable['columns'],objectKey:stored.meta.objectKey as string});
   }
   const catalog:DatasetCatalog={kind:data.kind,defaultSchema:data.defaultSchema,refreshSeconds:data.kind==='stored'?0:data.refreshSeconds,tables};

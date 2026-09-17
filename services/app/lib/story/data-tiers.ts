@@ -46,8 +46,21 @@ function valueMatches(v: unknown, t: ColumnType): boolean {
 
 export async function publishDataset(body: Record<string, unknown>, rows: unknown, objects?: ContentObjects): Promise<StoredContent | Response> {
   const details: string[] = [];
-  if (!Array.isArray(rows) || rows.length === 0) {
-    return json({ error: 'invalid_dataset', details: ['dataset must be a non-empty JSON array of flat objects'] }, 400);
+  if (!Array.isArray(rows)) {
+    return json({ error: 'invalid_dataset', details: ['dataset must be a JSON array of flat objects'] }, 400);
+  }
+  /*
+   * AN EMPTY TABLE IS ONLY EMPTY OF ROWS.
+   *
+   * The CSV/JSON tier infers its columns FROM the rows, so zero rows there is a
+   * table with no shape at all, and that refusal stays. A caller that DECLARES
+   * the columns has already said what the table is — a stored `<Table>` that
+   * the people using the page fill in later legitimately starts with none of
+   * them, and refusing it is what pushed an author into seeding a fake row.
+   * The guard therefore belongs to the tier that infers, not to every dataset.
+   */
+  if (rows.length === 0 && !(Array.isArray(body.columns) && body.columns.length > 0)) {
+    return json({ error: 'invalid_dataset', details: ['dataset has no rows and no declared columns — send at least one row, or declare columns to publish an empty table'] }, 400);
   }
   for (const [i, row] of rows.entries()) {
     if (row === null || typeof row !== 'object' || Array.isArray(row)) {

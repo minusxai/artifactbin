@@ -11,6 +11,7 @@ import { getArtifactById } from '@/lib/artifacts';
 import { artifactState } from '@/lib/artifact-state';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { publishDataset } from '@/lib/story/data-tiers';
+import type { StoredContent } from '@/lib/story/input';
 import { mintToken } from '@/lib/tokens';
 import { request, useAppHarness } from './harness';
 useAppHarness();
@@ -73,7 +74,42 @@ it('never answers not_found for a dataset the caller can see', async () => {
 it('accepts a stored table with declared columns and no rows, and still refuses a bare empty array', async () => {
   const declared = await publishDataset({ columns: [{ name: 'name', type: 'string' }, { name: 'joined_on', type: 'date' }] }, []);
   expect(declared).not.toBeInstanceOf(Response);
+  expect((declared as StoredContent).meta).toMatchObject({ rowCount: 0, columns: [{ name: 'name', type: 'string' }, { name: 'joined_on', type: 'date' }] });
   const bare = await publishDataset({}, []);
   expect(bare).toBeInstanceOf(Response);
   expect((bare as Response).status).toBe(400);
+  // The refusal that remains has to say what is wrong with THIS input: a CSV or
+  // JSON tier infers its columns from the rows, and zero rows declare nothing.
+  expect(JSON.stringify(await (bare as Response).json())).toMatch(/declared columns/);
+});
+
+/**
+ * END TO END, through the door an author actually uses: the sign-up sheet a page
+ * fills in later publishes EMPTY with its shape declared, instead of being seeded
+ * with a fake row to get past the refusal.
+ */
+it('publishes a stored <Dataset> whose table declares columns and starts with no rows', async () => {
+  const author = await mintToken('empty-table-author');
+  const definition = `<Dataset kind="stored">
+  <Table schema="public" name="rows" columns={[{"name":"name","type":"string"},{"name":"joined_on","type":"date"}]} rows={[]} />
+</Dataset>`;
+  const created = await create(request('/api/artifacts', { method: 'POST', token: author.token, json: { dataset: definition, access: 'readwrite' } }));
+  expect(created.status, await created.clone().text()).toBe(201);
+  const row = (await getArtifactById((await created.json()).id as string))!;
+  const table = (row.meta.catalog as {tables:Array<{columns:Array<{name:string;type:string}>;objectKey?:string}>}).tables[0];
+  expect(table.columns).toEqual([{ name: 'name', type: 'string' }, { name: 'joined_on', type: 'date' }]);
+  expect(table.objectKey).toBeTruthy();
+});
+
+/** A bare column NAME has nothing to infer from in an empty table, so it is text. */
+it('names the columns a stored table declares with bare names when it starts empty', async () => {
+  const author = await mintToken('empty-named-author');
+  const definition = `<Dataset kind="stored">
+  <Table schema="public" name="rows" columns={["name","note"]} rows={[]} />
+</Dataset>`;
+  const created = await create(request('/api/artifacts', { method: 'POST', token: author.token, json: { dataset: definition } }));
+  expect(created.status, await created.clone().text()).toBe(201);
+  const row = (await getArtifactById((await created.json()).id as string))!;
+  const table = (row.meta.catalog as {tables:Array<{columns:Array<{name:string;type:string}>}>}).tables[0];
+  expect(table.columns).toEqual([{ name: 'name', type: 'string' }, { name: 'note', type: 'string' }]);
 });

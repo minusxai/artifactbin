@@ -2,6 +2,9 @@ import { getDb } from '@/lib/db';
 import { createUser, claimToken } from '@/lib/users';
 import { it, expect, vi } from 'vitest';
 import { POST as create } from '@/app/api/artifacts/route';
+import { PUT as replace } from '@/app/api/artifacts/[id]/route';
+import { artifactState } from '@/lib/artifact-state';
+import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { GET as query } from '@/app/a/[id]/query/route';
 import { POST as mutate } from '@/app/a/[id]/mutate/route';
 import {
@@ -93,18 +96,72 @@ it('fences administration by edit access and revision, and removing a policy rev
   });
   expect((await f.write()).status).toBe(403);
 });
+/**
+ * THE SECURITY INTENT IS UNCHANGED: a governed dataset's rows are not rewritable
+ * by whoever happens to hold edit access — replacing the file is not a side door
+ * around the policy. What changed is WHO is refused and WHAT they are told. The
+ * OWNER may republish (the dataset would otherwise be frozen the moment it was
+ * made writable); a named editor may not, and now hears `policy_locked` instead
+ * of a `not_found` about a dataset they are looking straight at.
+ */
 it('cannot evade active policy through ordinary file replacement', async () => {
-  const f = await fixture();
+  const f = await sharedFixture('editor');
   await setDatasetPolicy(f.actor, f.ds, f.policy, 0);
   const row = (await getArtifactById(f.ds))!;
-  expect(
-    await replaceArtifactFor(f.actor, f.ds, {
-      format: 'dataset',
-      content: '',
-      source: null,
-      meta: row.meta,
-    }),
-  ).toBeNull();
+  const editor = { tokenId: f.token.id, userId: f.user.id };
+  const refused = await replaceArtifactFor(editor, f.ds, {
+    format: 'dataset',
+    content: '',
+    source: null,
+    meta: row.meta,
+  });
+  expect(refused).toBeInstanceOf(Response);
+  expect((refused as Response).status).toBe(409);
+  expect(await (refused as Response).json()).toMatchObject({
+    error: 'policy_locked',
+  });
+  const unchanged = (await getArtifactById(f.ds))!;
+  expect(unchanged.version).toBe(1);
+  expect(unchanged.dataset_policy).toMatchObject({ enforcement: 'enabled' });
+});
+/**
+ * THE DATA-LOSS CHECK. Viewers write rows into this dataset, so the owner's
+ * re-push must not be able to overwrite rows it never saw. A viewer's write
+ * moves the head; a replacement naming the OLD head is refused, and the rows
+ * survive. The CLI names its observed base on every tracked push, which is what
+ * makes this the ordinary path rather than a precaution nobody takes.
+ */
+it('refuses an owner re-push from a stale base, so rows written by viewers survive', async () => {
+  const f = await fixture();
+  expect(await setDatasetPolicy(f.actor, f.ds, f.policy, 0)).toMatchObject({
+    revision: 1,
+  });
+  const observed = (await getArtifactById(f.ds))!;
+  const base = {
+    expectedVersion: observed.version,
+    expectedState: artifactState(observed),
+  };
+  const push = (dataset: object[], from: object) =>
+    replace(
+      request(`/api/artifacts/${f.ds}`, {
+        method: 'PUT',
+        token: f.owner.token,
+        json: { dataset, ...from },
+      }),
+      { params: Promise.resolve({ id: f.ds }) },
+    );
+  expect((await f.write()).status).toBe(200);
+  const written = (await getArtifactById(f.ds))!;
+  expect(written.version).toBe(2);
+  const stale = await push([{ n: 1 }], base);
+  expect(stale.status).toBe(409);
+  expect((await getArtifactById(f.ds))!.version).toBe(2);
+  expect(await loadDatasetRows((await getArtifactById(f.ds))!)).toHaveLength(2);
+  const fresh = await push([{ n: 1 }, { n: 2 }, { n: 3 }], {
+    expectedVersion: written.version,
+    expectedState: artifactState(written),
+  });
+  expect(fresh.status, await fresh.clone().text()).toBe(200);
 });
 it('returns per-mutation capability previews without executing a write', async () => {
   const f = await fixture();
