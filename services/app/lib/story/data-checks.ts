@@ -6,8 +6,7 @@ import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
  * the right kind (lib/story/refs.ts), every <Query> prepares against the real
  * dataset shapes (the engine dry run), and every chart bound to a query is
  * checked against that query's RESULT columns — vega encodings and recipe
- * slots alike — exactly as a `ref:` chart used to be checked against its
- * dataset. ONE function, so the publish door (jsx-tier) and the refresh path
+ * slots alike. ONE function, so the publish door (jsx-tier) and the refresh path
  * (a dataset changed → which dependents broke?) cannot drift apart.
  */
 import { analyzeRowScopes, mutationUsesRow, mutationUsesValue } from './row-scope';

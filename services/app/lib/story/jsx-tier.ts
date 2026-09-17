@@ -110,8 +110,8 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
    * alone, so a document naming a dozen `@font-face` urls caused a dozen
    * outbound fetches that nothing bounded — the count was the author's to set.
    * Over the cap the excess is NAMED and not fetched, rather than refused:
-   * losing a whole document to a thirteenth font is the failure this milestone
-   * exists to stop, and an author who is told which urls were skipped can act.
+   * losing a whole document to a thirteenth font is the failure this cap exists
+   * to stop, and an author who is told which urls were skipped can act.
    * Counted hook-or-no-hook, so /api/preview agrees with publish.
    */
   const wanted = [

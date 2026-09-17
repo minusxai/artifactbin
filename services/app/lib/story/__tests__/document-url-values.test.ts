@@ -1,5 +1,5 @@
 /**
- * F2 — ONE DATAFLOW OBJECT, TWO CONSUMERS.
+ * ONE DATAFLOW OBJECT, TWO CONSUMERS.
  *
  * The reader's `?$region=west` is parsed on the SERVER and put on the island
  * dataflow's third field. `buildStoryDocument` then hands the SAME object to

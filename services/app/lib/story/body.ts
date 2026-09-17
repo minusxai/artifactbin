@@ -5,12 +5,10 @@
  * There are three renderings of one document: the SSR string, the island the
  * client hydrates from, and the live frame an open reader adopts. The first two
  * are built by `lib/story/document.ts` and the third by
- * `lib/story/update-parts.ts`, and until this module existed each did the parse
- * → nesting repair → Helmet split for itself. Two copies of a transform whose
- * whole job is to make those renderings identical is the shape of the bug it
- * was written to prevent: the serve-time asset mapping landed in one of them
- * and a reader watching an agent write would have seen a different document
- * from the one a reload gives them.
+ * `lib/story/update-parts.ts`. A second copy of a transform whose whole job is
+ * to make those renderings identical is how they drift: a pass that landed in
+ * one of them and not the other would show a reader watching an agent write a
+ * different document from the one a reload gives them.
  *
  * So the passes live here, in order, and both consumers call this:
  *   1. `fixHtmlNesting` — nesting the HTML parser will not undo (a `<p>` around

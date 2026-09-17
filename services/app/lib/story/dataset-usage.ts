@@ -83,7 +83,8 @@ export function datasetCreateFields(id: string, columns: unknown, rowCount: unkn
       ? { totalRows: meta.totalRows, truncated: true,
           note: `Source had ${meta.totalRows} rows; the first ${rowCount} were kept.` }
       : {}),
-    // Legacy wire field retained; new authoring uses source="id" below.
+    // Wire field retained for older callers; authoring uses the
+    // source="ref:<id>" form the usage example below teaches.
     ref: `ref:${id}`,
     usage: datasetUsageExample(id, cols, meta?.catalog)
       + (effectiveAccess === 'readwrite' ? `\n\n${datasetMutationExample(id, cols, meta?.catalog)}` : ''),

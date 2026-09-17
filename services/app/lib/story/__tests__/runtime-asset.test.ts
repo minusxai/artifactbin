@@ -99,9 +99,8 @@ describe('the serving path degrades instead of failing', () => {
    * `storyRuntimeSrc` throws, which is right for a build step and wrong for a
    * read: /a/<id>/raw would answer 500 for EVERY document — prose included,
    * which needs no runtime at all — over a build artifact that has nothing to
-   * do with the row being served. lib/story/document.ts states the same
-   * invariant two functions apart ("a missing/broken runtime bundle must never
-   * take the page down with it"), so the serving accessor honours it: the
+   * do with the row being served. A missing or broken runtime bundle must never
+   * take the page down with it, so the serving accessor honours that: the
    * document is still SSR'd, readable and indexable; it simply does not
    * hydrate. The build and the image are where this fails loudly
    * (scripts/build-story-runtime.mjs, Dockerfile).

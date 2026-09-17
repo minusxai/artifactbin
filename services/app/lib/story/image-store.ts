@@ -1,11 +1,11 @@
 /**
  * Where image BYTES actually live — the exact shape of lib/story/dataset-store.
  *
- * They used to sit in `artifacts.content` as a base64 `data:` URL. That is
- * ~33% larger than the bytes, lives in a TEXT column read on every render, and
- * is capped by the JSON-body limit. So the bytes go to the object store and the
- * row keeps a reference (`meta.objectKey`); `content` stays empty. Both
- * directions live here so no caller has to know where an image's bytes are.
+ * Not in `artifacts.content` as a base64 `data:` URL: that is ~33% larger than
+ * the bytes, lives in a TEXT column read on every render, and is capped by the
+ * JSON-body limit. So the bytes go to the object store and the row keeps a
+ * reference (`meta.objectKey`); `content` stays empty. Both directions live
+ * here so no caller has to know where an image's bytes are.
  */
 import { objectKey, objectStore } from '@/lib/object-store';
 import { VARIANT_CONTENT_TYPE } from '@/lib/images/optimise';

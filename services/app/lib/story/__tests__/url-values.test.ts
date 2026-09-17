@@ -1,5 +1,5 @@
 /**
- * F2 — `<Value>` selections travel in the URL as `$name` params (SEEDED RED by the orchestrator).
+ * `<Value>` selections travel in the URL as `$name` params.
  *
  * `readUrlValues` is the ONLY place a URL string becomes typed scalars: it coerces
  * per the declaration, validates like publish validates a default, ignores what is

@@ -5,8 +5,8 @@
  * the way they drift is by each doing the parse → nesting → split → asset
  * mapping for itself. This pins that `storyBodyFor` IS what both do: the nodes
  * the frame carries and the nodes the page renders are equal for the same
- * source and the same assets, and every pass that used to live in a caller
- * (the nesting repair, the Helmet split) still runs here.
+ * source and the same assets, and every pass a caller could have owned
+ * (the nesting repair, the Helmet split) runs here.
  */
 import { describe, expect, it } from 'vitest';
 import { storyBodyFor } from '@/lib/story/body';

@@ -66,9 +66,9 @@ const DEFAULT_TABLE_HEIGHT = 420;
 /**
  * Parse the authored `height` prop into a pixel CEILING.
  *
- * The docs teach `height="420px"` while the prop was typed `number`, so a
- * string reached the component and it emitted `420pxpx` — a declaration the
- * browser drops. One parser, so the docs and the component agree on what a
+ * The docs teach `height="420px"`, so a string reaches a component whose prop
+ * is a pixel count; concatenating a unit onto it emits `420pxpx`, a declaration
+ * the browser drops. One parser, so the docs and the component agree on what a
  * height is: a positive number, a numeric string, or a `"<n>px"` string.
  * Anything else (absent, 0, negative, NaN, `"abc"`, a percentage or any other
  * unit) falls back — a length this component cannot honour is not a length.
@@ -256,5 +256,3 @@ export function gridGeometry(columns: ResolvedColumn[], measured: number[] | nul
     .join(' ');
   return { template, minWidth: minWidth > 0 ? minWidth : null };
 }
-
-// re-exported so the kit does not import d3 twice

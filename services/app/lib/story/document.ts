@@ -350,11 +350,6 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   const { runtime: prepared, split, helmet, mode, title, docFonts, importedFaces } = await prepareStoryParts(input);
   const bodyHtml = split ? loadStorySsr().renderStoryBody(prepared.data) : `<pre>${escapeHtml(source)}</pre>`;
 
-  // Mode resolution lives HERE, for every reader: a theme is designed for
-  // one mode and wins; colorMode decides unthemed documents. The edit canvas
-  // resolves it the same way (JsxArtifactEditor), which is what keeps a
-  // document from being edited in a mode it will never be read in.
-
   /*
    * THE READER'S CHROME (lib/story/reader-chrome) — assembled here and dropped
    * after the story root below. Chrome-less documents are CAPTURE inputs, so
@@ -380,22 +375,6 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       reactions: input.reactions ?? null,
     })
     : '';
-
-  /*
-   * Resolved ONCE and handed to both the SSR render and the island below: the
-   * two are compared by React at hydration, so a second resolution — or one of
-   * them missing — is a mismatch. Empty for a document that draws no icons,
-   * which is 153 of the 155 on production.
-   */
-
-  /*
-   * The SSR string and the island below are built from SEPARATE prop lists, and
-   * an island field that CHANGES WHAT IS DRAWN must appear in both or React
-   * discards the whole server tree at hydration (#418). `assetsUrl` was the
-   * first such field — `queryUrl`/`mutateUrl` only name a transport, so their
-   * absence here is correct, while a bound `<img src="$pick">` has nowhere to
-   * import from without this and rendered as a bare alt until hydration.
-   */
 
   // Style order mirrors the engine's injection order (compiled Tailwind → bare
   // typography floor → fonts), author CSS last so it sees everything it may
@@ -446,10 +425,9 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
   const commentFallback = !!input.commenting && !commentSrc;
   const hydrates = !!split && !!runtimeSrc && (needsRuntime(split.body) || !!helmet.script || !!dataflow || !!input.editable || commentFallback);
   /*
-   * The THIRD delivery: comments without hydration. A commenter's frame used
-   * to ask for `?edit=1` — which made this `hydrates` — so a page of prose
-   * downloaded the entire runtime in order to tint a paragraph. This is the
-   * same frame half at 1/29th the bytes.
+   * The THIRD delivery: comments without hydration — the same frame half as
+   * the runtime's annotate chunk at 1/29th the bytes, so a page of prose does
+   * not download the entire runtime in order to tint a paragraph.
    *
    * Only when the document would ship NOTHING otherwise: one that hydrates
    * already reaches the annotate chunk through its runtime, and two annotate

@@ -148,7 +148,7 @@ describe('the chart walk, at its edges', () => {
 });
 
 /*
- * SPIKE S4 (B1 — the mobile bar stays put while the page is loading, risk R2).
+ * THE MOBILE BAR STAYS PUT WHILE THE PAGE IS LOADING.
  *
  * The anchor module is the one script EVERY document ships, and it owns the
  * reader's own chrome: the scroll relay that hides and shows the phone bar, the

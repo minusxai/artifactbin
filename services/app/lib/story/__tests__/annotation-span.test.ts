@@ -2,7 +2,7 @@
  * The body↔source path translation annotations ride on (the Helmet-offset
  * lesson): the served document renders the BODY (Helmet hoisted out), the
  * source counts from the top, and only the FIRST index differs. The anchor
- * itself is the node's `data-annotation-anchor` attribute — a lookup, not span algebra —
+ * itself is the node's `id` attribute — a lookup, not span algebra —
  * so this is the one pure coordinate seam left to hold.
  */
 import { describe, expect, it } from 'vitest';
