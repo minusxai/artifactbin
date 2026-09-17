@@ -93,7 +93,7 @@ describe('repairJsxSource', () => {
 /**
  * THE BRACE COUNT — the fault that cost the most model calls in the agent eval: 15 tasks and 82
  * calls across runs 34740707220–34741910427, one `}` at a time. Three shapes, all provable: stray
- * `}`s after an expression that already closed (pi's report, run 34741910427: 13 opens, 15 closes),
+ * `}`s after an expression that already closed (13 opens, 15 closes),
  * a `{{{` opening from wrapping an already-wrapped object (pi's second attempt at the same line),
  * and — NOT repaired — an expression that never closes, because where the brace belongs is a guess.
  * Each repair is kept only if the result parses.
@@ -128,8 +128,8 @@ describe('repairJsxSource — brace counts', () => {
 /**
  * THE SAME FAULT TWICE. The repair used to fix the first `viz={{{` (or the first stray `}`), re-parse
  * ONCE, and refuse everything that still failed — so a document carrying TWO charts built the same
- * wrong way was refused with `fixed:false` and cost three calls to recover (claude-code scrolly,
- * production run 15). An agent that makes a mistake once makes it in every chart it writes, so the
+ * wrong way was refused with `fixed:false` and cost three calls to recover. An agent that makes a
+ * mistake once makes it in every chart it writes, so the
  * repair iterates: fix at the parse error, re-parse, again, bounded — and the message states the
  * TOTAL, because "collapsed 1" against a document with two would teach the wrong lesson.
  */

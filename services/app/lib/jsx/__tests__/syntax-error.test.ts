@@ -63,7 +63,7 @@ it('explains a missing object opening brace, rather than suggesting more closing
   expect(d.snippet).toContain('▶');
 });
 
-describe('too many braces are named too — pi spent 10 model calls on this in eval run 34741910427', () => {
+describe('too many braces are named too — an agent spent 10 model calls on this', () => {
   it('names an expression that closes early with a stray `}` after it', () => {
     // 13 opens, 15 closes: the object closed, then two more `}` before ` />`.
     const src = '<article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>';

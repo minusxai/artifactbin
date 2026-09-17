@@ -58,7 +58,7 @@ const hookBodies = (text: string): string => {
 const offenders = (mechanism: Mechanism, test: (text: string) => boolean): string[] =>
   files.filter(({ text }) => !exemptions(text).has(mechanism) && test(text)).map(({ rel }) => rel);
 
-describe('the harness owns the four mechanisms (testmig-4 rollout)', () => {
+describe('the harness owns the four mechanisms', () => {
   it('1. no test file resets the database itself — one PGLite per file is the harness\'s job', () => {
     expect(offenders('reset', (t) => /\bresetDb\(/.test(t) || /new PGlite\(/.test(t))).toEqual([]);
   });

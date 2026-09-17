@@ -14,7 +14,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *     (from the source) and every unit test still passes.
  *  2. The picture paints from /assets/<hash>, at the size the row recorded,
  *     with the blur behind it — URL-keeping without the box is a layout-shift
- *     regression against the `ref:` path (R2).
+ *     regression against the `ref:` path.
  *  3. The FONT applies, from our origin. The document's own CSP is
  *     `font-src 'self' data:`, so a face that was not mapped does not fall back
  *     — it silently does not exist.
@@ -33,7 +33,7 @@ import { artifactDocument } from './lib/artifact-document.mjs';
  *     (asked once, served from /assets, never reached from the page) plus the
  *     refusals and the private-document bound that keep it from being an open
  *     image proxy.
- *  6. R15: a stored SVG is markup, and a top-level navigation to one must not
+ *  6. A stored SVG is markup, and a top-level navigation to one must not
  *     run in this app's origin — while an <img> of the same asset still paints.
  *     `Content-Disposition: attachment` makes the navigation a download and
  *     `CSP: sandbox` makes it opaque if it renders at all; either is a pass,
@@ -184,7 +184,7 @@ check(ASSET_URL.test(probe.svgSrc ?? ''), `the SVG <img> is served from our orig
 check(probe.svgNatural[0] > 0, `the SVG paints as an image despite the attachment header (${probe.svgNatural.join('×')})`);
 check(probe.sheet.includes('/assets/') && !probe.sheet.includes(WEB), 'the @font-face src was rewritten to our origin');
 // …and VERSIONED: a face is served from the same immutable address a picture
-// is, so a refreshed font needs the same cache key (R19).
+// is, so a refreshed font needs the same cache key.
 check(/url\(\/assets\/[0-9a-f]{64}\?v=[0-9a-f]{8}\)/.test(probe.sheet), 'the @font-face src carries the content version');
 check(probe.fontFamily.includes('Probe'), `the paragraph asks for the imported face (${probe.fontFamily})`);
 check(
@@ -237,7 +237,7 @@ for (const dpr of [2, 3]) {
 const desk = await whichCopy('desktop', { width: 1200, height: 900 }, 2);
 check(!(desk.current ?? '').includes('w='), `${desk.label} loads the full copy — 768 x 2 needs more than 1280 (${desk.current})`);
 
-/* ── a refresh reaches a reader who already has the old bytes (R19) ──────────
+/* ── a refresh reaches a reader who already has the old bytes ────────────────
  * /assets/<hash> is immutable for a year and its address is derived from the
  * URL, so the only thing that can make a browser ask again is the url the next
  * render emits. */
@@ -290,7 +290,7 @@ const shifted = await frame.evaluate(async () => {
 });
 check(shifted < 0.02, `no layout shift as the images land (CLS ${shifted.toFixed(4)})`);
 
-/* ── R15: the SVG as a TOP-LEVEL navigation ─────────────────────────────────
+/* ── the SVG as a TOP-LEVEL navigation ──────────────────────────────────────
  * A pass is anything but "a document running in this app's origin": the
  * attachment header turns it into a download, and the sandbox header makes it
  * opaque if a browser renders it anyway. */

@@ -50,7 +50,7 @@ describe('exporting and opening a published artifact', () => {
   const tracked=(id:string,markup:string)=>`---\nid: ${id}\nedit_id: e1\nhead_version: 1\nstate: ${'a'.repeat(64)}\nversion: 1\ntitle: Report\nvisibility: unlisted\nshares:\n  - email: a@example.com\n    role: editor\n---\n${markup}\n`;
    const harness=(prefix:string)=>cliHarness(prefix,{account:null});
 
-  test('an export destination outside the workspace, and an image format on pull, are refused naming the fix (claude-code lost five calls to these in run 34740707220)',async()=>{
+  test('an export destination outside the workspace, and an image format on pull, are refused naming the fix (an agent lost five calls to these)',async()=>{
    const h=await harness('afbin-export-refusals-');
    try{
     await writeFile(join(h.root,'rows.csv'),'name,n\na,1\n');

@@ -19,16 +19,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const COMPONENTS_DIR = join(ROOT, 'components', 'kit');
 
-// EMBED CHROME: these render INSIDE stories (portaled into the iframe), so
-// their Tailwind classes must be part of every story's compiled CSS. Add each
-// embed-chrome file here — every entry must exist on disk (the
-// embed-chrome-coverage test enforces it, so a renamed file cannot silently
-// fall out of the sheet).
 /**
- * Sources OUTSIDE components/kit whose class literals still reach a story.
- * A component that leaves that directory has to be named here or its classes
- * silently stop compiling into the base sheet — the authored element renders
- * unstyled, with nothing anywhere to say why.
+ * Sources OUTSIDE components/kit whose class literals still reach a story —
+ * embed chrome renders INSIDE the iframe, whose only stylesheet is the compiled
+ * story CSS. A component that leaves that directory has to be named here or its
+ * classes silently stop compiling into the base sheet — the authored element
+ * renders unstyled, with nothing anywhere to say why. Every entry must exist on
+ * disk (lib/story-ui/__tests__/embed-chrome-coverage.test.ts enforces it, so a
+ * renamed file cannot silently fall out of the sheet).
  */
 export const EXTRA_CLASS_SOURCES = [
   join(ROOT, 'components', 'viz', 'VegaChart.tsx'),

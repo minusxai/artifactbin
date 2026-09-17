@@ -87,8 +87,8 @@ const MARKUP_STYLE_BLOCK_RE = /(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi;
 
 /**
  * Remap viewport-height units inside every `<style>` block of a chunk of story
- * SOURCE (the save-side twin of the compiled-sheet remap above). The block
- * content is a template-literal/text child in the source, so the CSS is
+ * SOURCE — the `<style>`-block wrapper around the declaration remap above. The
+ * block content is a template-literal/text child in the source, so the CSS is
  * remapped in place and everything around it survives byte-for-byte.
  *
  * Knows nothing about managed iframes: which chunks of a document reach it is

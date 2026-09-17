@@ -176,7 +176,7 @@ describe('POST /api/start', () => {
     }
   });
 
-  it('carries no in-process valve — the proxy\'s door is the only count (P2 §H)', async () => {
+  it('carries no in-process valve — the proxy\'s door is the only count', async () => {
     // The app handler serves the create; the proxy in front counts it. Driven
     // in-process (no proxy), no call here is ever refused on a budget.
     for (let i = 0; i < 15; i++) {

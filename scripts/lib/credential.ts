@@ -4,7 +4,7 @@
  * Why a leg logs in at all is in the evals' own guide (a private repository); this is the mechanism. Email
  * OTP for the session cookie — the code comes from the eval's Resend inbox against a deployment and
  * from the dev outbox file when this driver booted the server, and only that reader is swapped — then
- * the OAuth grant an MCP client makes (dynamic registration, PKCE, the consent form fetched with the
+ * the OAuth client grant (dynamic registration, PKCE, the consent form fetched with the
  * cookie and posted back verbatim, the code off the 303's `Location`, exchanged at `/oauth/token`).
  * That bearer is the DRIVER's: it seeds documents and reads the product back, and never reaches the
  * agent, which authenticates itself. ONE login per leg; every task and second attempt reuses it.
@@ -102,7 +102,7 @@ export function localLoginEmail(legLabel: string, env: CredentialEnv): string {
 /**
  * The address a DEPLOYMENT is signed into for this harness: the configured inbox address with `+<harness>`
  * added to its local part — `mxmx_eval@d.test` × `pi` → `mxmx_eval+pi@d.test`. The proxy's login door is
- * keyed by address (five sends an hour — deploys run 33782951666 hit it with four harnesses on one address),
+ * keyed by address (five sends an hour — a deploy hit it with four harnesses on one address),
  * and the inbox is a catch-all, so a sub-address is the same mailbox with its own door and its own account.
  * A configured address that already carries a `+tag` is used verbatim: the caller named it exactly.
  */
@@ -259,8 +259,8 @@ interface ShareForScoringOptions {
 /**
  * SHARE THE RUN THE WAY A PERSON WOULD, so it can be scored. An account's documents are born PRIVATE
  * while every product-truth read in the scorer is anonymous, so a run that published perfectly under an
- * account token scored `published: false` (PR #16 CI, the `data` task: `doc gKFcj2`, 200 to the agent,
- * nothing to the world). The fix is not a privileged read — the scorer must keep seeing exactly what a
+ * account token scored `published: false` — 200 to the agent, nothing to the world.
+ * The fix is not a privileged read — the scorer must keep seeing exactly what a
  * reader sees — it is to do what the person behind the agent does next: open the sharing dialog and make
  * the document unlisted. That is this, over HTTP: `PUT /api/my/artifacts/<id>/sharing {visibility:'unlisted'}`
  * with the owner's session.

@@ -14,7 +14,7 @@ export async function setupSkills(options:SetupOptions){
  const selected=await selectSkills(options);
  return installSkills(selected,options);
 }
-/** Absolute paths, never `~`: an agent reading this expanded `~` to /root and looked in the wrong home (eval run 34714026643). */
+/** Absolute paths, never `~`: an agent reading this expanded `~` to /root and looked in the wrong home. */
 export function setupSummary(installations:readonly SkillInstallation[],s:Style):string{
  const rows=['',`  ${s.bold('Agent skills')}`];
  if(!installations.length)rows.push(`    ${s.dim('No skills selected. Run afbin setup whenever you’re ready.')}`);

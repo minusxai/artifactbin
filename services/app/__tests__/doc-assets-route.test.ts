@@ -149,7 +149,7 @@ describe('the happy path', () => {
   });
 });
 
-describe('who pays (R10): the document owner, never the reader', () => {
+describe('who pays: the document owner, never the reader', () => {
   it('charges the OWNER for a URL a stranger caused us to fetch', async () => {
     const owner = await createUser({ email: `mxmx_test_payer_${Math.random().toString(36).slice(2, 8)}@example.com` });
     const t = await mintToken('payer', owner.id);

@@ -28,7 +28,7 @@ const rows = new Map([[URL_A, ROW]]);
 const held = assetLookupFrom(rows);
 const known = (u: string) => u === URL_A;
 
-// `assetUrlFor` itself — the bare address, the `?v=` (R19) and the canonical URL —
+// `assetUrlFor` itself — the bare address, the `?v=` and the canonical URL —
 // is asset-url.test.ts's subject. This file is about the three renderings agreeing.
 
 describe('mapExternalImageSources', () => {

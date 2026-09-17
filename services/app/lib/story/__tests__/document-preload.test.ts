@@ -165,7 +165,7 @@ describe('the chart walk, at its edges', () => {
  */
 const ANCHOR = '/story/anchor-TESTHASH.js';
 
-describe('the anchor module — every document ships it (spike S4)', () => {
+describe('the anchor module — every document ships it', () => {
   it('is preloaded, and FIRST: the reader chrome must not queue behind a megabyte', async () => {
     const html = await doc({ anchorSrc: ANCHOR });
     expect(preloads(html)).toEqual([ANCHOR, RUNTIME]);

@@ -7,7 +7,7 @@
  * gate says what the value has to be (lib/assert.mjs carries the verdict).
  */
 
-/** The artifact iframe the app shell used to wrap a document in. */
+/** The artifact iframe a wrapped document would sit in; a top-level delivery has none. */
 const ARTIFACT_FRAME = 'iframe[title="artifact"]';
 
 /** The story runtime, rendered INLINE into the served document. */

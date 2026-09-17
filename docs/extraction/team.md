@@ -28,13 +28,13 @@ For local development, use `APP__HOST=127.0.0.1` and `APP__PUBLIC_BASE_URL=http:
     locks/           # Existing SQLite process ownership lock
 ```
 
-Only the explicit file supplies product settings. Client defaults, credentials and inherited application/storage/service settings are not read. This OSS composition uses PGLite by default or an explicit Postgres connection, filesystem objects and local SQL/browser engines; remote object storage and service URL settings are rejected. Custom production adapters belong in the production composition. No schema/config migration or OS service manager is introduced.
+Only the explicit file supplies product settings. Client defaults, credentials and inherited application/storage/service settings are not read. This OSS composition uses PGLite by default or an explicit Postgres connection, filesystem objects and local SQL/browser engines; remote object storage and service URL settings are rejected. Custom production adapters belong in the production composition. There is no schema/config migration and no OS service manager.
 
 ## Integration contract
 
 - `teamSettings(configFile, inherited?)` validates settings and returns the isolated environment without mutating the caller.
 - `startTeamHost(configFile, assets): Promise<void>` is a **process entry**, not an in-process client API. It takes the lifetime lock before opening the application database, installs the environment, then imports the application. It serves until SIGINT/SIGTERM and closes the listener and database before releasing ownership.
 - `createTeamApplication(env, assets)` composes existing adapters around `createAppHost`; the application configuration must already be installed. No new auth logic or permission shortcuts.
-- Packaging must export `startTeamHost` through the extracted host entry. The CLI must resolve the operator config path before changing its working directory. The browser executable callback reuses the pinned lazy Chromium preparation.
+- Packaging exports `startTeamHost` through the host entry. The CLI resolves the operator config path before changing its working directory. The browser executable callback reuses the pinned lazy Chromium preparation.
 
 CI exercises real handlers with distinct owners, private access denial, email-code login, browser publication, foreground startup/stop/restart and competing-process refusal. Packaged npm and standalone executables run against real hosts, including the optional Postgres configuration.

@@ -64,7 +64,7 @@ export function unclosedExpression(source: string): { attr: string; line: number
 /**
  * The mirror image: an attribute expression that CLOSES and is then followed by stray `}`s, or that
  * opens with `{{{`. Unclosed braces are named above; these two shapes used to get only "Unexpected
- * token" — pi counted braces by hand for ten model calls (eval run 34741910427, report).
+ * token" — an agent counted braces by hand for ten model calls.
  */
 export function extraClosing(source: string): { attr: string; line: number; extra: number } | null {
   for (const m of source.matchAll(/([A-Za-z_][\w-]*)=\{/g)) {

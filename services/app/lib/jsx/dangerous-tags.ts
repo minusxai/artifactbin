@@ -15,9 +15,10 @@
  *    sanctioned door (`<Helmet><script>`, lib/story/helmet.ts), inside an
  *    opaque origin under `default-src 'none'`. Rejecting body scripts keeps ONE
  *    door instead of two; it is not what makes author JS safe.
- *  - `<base href>`, `<meta http-equiv>`, `<iframe>`, `<form>` are the ones that
- *    would act on the document itself — retarget every relative link, rewrite
- *    the document's own policy, frame or post elsewhere. Those have no door.
+ *  - `<base href>`, `<meta http-equiv>`, `<iframe>` are the ones that would act
+ *    on the document itself — retarget every relative link, rewrite the
+ *    document's own policy, frame elsewhere. Those have no door. `<form>` is
+ *    denied for a different reason, below.
  *
  * Every stored document has passed this gate, so the save-time check covers
  * the whole corpus.

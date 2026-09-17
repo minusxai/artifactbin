@@ -279,8 +279,8 @@ describe('<Dialog> bound to the store', () => {
   });
 
   /**
-   * The trigger wrapping a `<Button>` — what production shipped (eval run
-   * 34868729411, codex's tracker `<DialogTrigger><Button>Add task</Button>`).
+   * The trigger wrapping a `<Button>` — what production shipped
+   * (`<DialogTrigger><Button>Add task</Button>`).
    * Two nested `<button>`s are not HTML: the parser promotes the inner one out
    * of the trigger, React hydrates against that reshaped DOM and throws the
    * minified error 418 the browser gate recorded. Hydrating the SSR string is

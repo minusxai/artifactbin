@@ -2,11 +2,9 @@
  * A COMMENT IS A RELATION, AND NEVER AN EDIT — through every action there is.
  *
  * `node-project.test.ts` proves it for creating and deleting an annotation.
- * The browser gate that used to run beside it (scripts/gate-node-identity.mjs)
- * also drove reply, resolve and reopen against a built server, and asserted the
- * same invariant after each one; nothing else did. It needed no browser — it
- * was `fetch` and string assertions over these very routes — so the assertion
- * lives here instead and the gate is gone.
+ * Reply, resolve and reopen are covered HERE and nowhere else: the invariant
+ * needs no browser — `fetch` and string assertions over these very routes are
+ * enough — so it is asserted against the handlers rather than in a gate.
  *
  * The invariant: an annotation action leaves `edit_id`, the markup and the
  * document's history byte-identical. A comment that quietly rewrote the source

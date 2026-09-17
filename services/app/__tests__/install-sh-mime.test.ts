@@ -66,7 +66,7 @@ describe('GET /chat/*.sh', () => {
     const forwarded = await (await server.request('/chat/install.sh', { headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifacts.example.test' } })).text();
     expect(forwarded).toContain('release="https://artifacts.example.test/chat/releases/afbin-v$version"');
   });
-  // codex, eval run local17: the CLI installed from a local origin published its first dataset to
+  // The CLI installed from a local origin published its first dataset to
   // artifactbin.dev, anonymously, because nothing had told it where it came from.
   it('tells the installer the origin it was served from, so afbin adopts it at setup', async () => {
     expect(script).toContain("  origin=''");

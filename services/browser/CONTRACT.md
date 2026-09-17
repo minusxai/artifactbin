@@ -40,7 +40,7 @@ scales it to the requested viewport without relayout. `preview` captures a bound
 a named MODE and not a client recipe because that dance happens inside one page load.
 
 Renders are stateless: one page per request, closed after, and serialised inside the service. The URL must be reachable
-FROM THE SERVICE'S NETWORK — behind compose that is the app's service name, not 127.0.0.1, and never a bare host
+FROM THE SERVICE'S NETWORK — a host that network resolves to the app, not 127.0.0.1, and never a bare host
 that Chrome canonicalises into a real TLD (`app` → `.app`, HSTS-preloaded). Private network only.
 
 `POST /sessions` is the one STATEFUL surface: a `BrowserSessionRequest` (`script | status | close`) against a

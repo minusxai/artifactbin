@@ -168,7 +168,7 @@ describe('OIDC', () => {
 
 describe('the options object', () => {
   /**
-   * humanAuthOptions IS THE OPTIONS, AND NOTHING ELSE (P2 §G.3). The schema
+   * humanAuthOptions IS THE OPTIONS, AND NOTHING ELSE. The schema
    * renderer and the runtime (createHumanAuth) must build
    * Better Auth's config from ONE object — a renderer that holds a copy of
    * fifty load-bearing options is a copy that drifts. So the options builder is

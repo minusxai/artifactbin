@@ -89,7 +89,7 @@ describe('residual-name guard', () => {
 });
 
 /**
- * The token-only model (#94–#111) left no public mint and no token page: the CLI's OAuth approval is
+ * The token-only model left no public mint and no token page: the CLI's OAuth approval is
  * the one thing that issues a credential. These strings named the surfaces that used to do it. Nothing
  * the product ships or documents may name them again — an agent that reads one sends a user to a 404.
  *

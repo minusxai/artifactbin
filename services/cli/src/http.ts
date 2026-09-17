@@ -71,7 +71,7 @@ export class HttpClient {
     const code=typeof data?.error==='string'?data.error:`http_${response.status}`;
     // A refusal without a message but with a list of details (a bad column, a refused SQL function)
     // names the details: the human line used to read "invalid_sql: Bad Request" and only --json
-    // showed why (eval run 34714026643, pi dashboard — two pushes to learn "strptime is not allowed").
+    // showed why (two pushes to learn "strptime is not allowed").
     const detailed=Array.isArray(data?.details)&&data.details.length&&data.details.every((d:unknown)=>typeof d==='string')?data.details.join('; '):undefined;
     throw new CliError(code,`${code}: ${data?.message??detailed??response.statusText??'request refused'}`,typeof data?.hint==='string'?data.hint:typeof data?.recovery==='string'?data.recovery:undefined,{...data,http_status:response.status,...(response.headers.has('X-Artifactbin-Mutation-Receipt')?{mutation_receipt:response.headers.get('X-Artifactbin-Mutation-Receipt')}:{})},response.status===409?3:1);
    }

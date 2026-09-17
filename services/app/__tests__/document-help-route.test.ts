@@ -45,7 +45,7 @@ describe('GET /a/:id (the document itself)', () => {
     expect(html).toContain(`<link rel="help" href="${BASE}/llms.txt" title="Agents: read this to create, edit, or operate artifacts on the CLI using afbin">`);
     expect(html.match(/name="afbin"/g)).toHaveLength(1);
     // FIRST in the head: a fetch that keeps only the first few kilobytes must still see the pointer
-    // (run 35133663437: it sat after every preload link, one line past where OpenCode's fetch cut).
+    // (it sat after every preload link, one line past where OpenCode's fetch cut).
     expect(html.indexOf('<link rel="help"')).toBeLessThan(html.indexOf('<title>SPA</title>'));
     expect(html.indexOf('<link rel="help"')).toBe(html.indexOf('<head>') + '<head>'.length);
     const attributed = createAppServer({ indexHtml: async () => '<!doctype html><html><head lang="en"><meta charset="utf-8"><link rel="stylesheet" href="/x.css"></head><body></body></html>' });

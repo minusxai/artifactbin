@@ -12,8 +12,8 @@
  *   /a/<id>/raw      the bytes: stored html, dataset/viz JSON, image, markup source
  *   /a/<id>/export   the page as png/jpg
  *
- * A query string cannot select between these: in the App Router the PATH
- * picks the handler before the query is read, and a page (React) can neither
+ * A query string cannot select between these: the PATH picks the handler
+ * before the query is read, and a page (React) can neither
  * return bytes nor set the per-row CSP that the html tier's sandbox depends on.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';

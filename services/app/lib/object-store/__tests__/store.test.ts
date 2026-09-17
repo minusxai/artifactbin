@@ -182,7 +182,7 @@ describe('the prefix is actually applied to stored keys', () => {
  * A 25 MB PDF read through `get` is +25 MB of RSS for the life of the response
  * and, worse, would be admitted to the read cache and evict essentially all of
  * it — the cache that exists so datasets, ref images and webfonts are not
- * refetched on every render (measured in the spike, S4). So the PDF tier reads
+ * refetched on every render. So the PDF tier reads
  * through `getStream`, which buffers nothing and caches nothing, and the
  * cache's own budget never has to move.
  */
