@@ -130,7 +130,9 @@ function visit(value: unknown, fn: (node: Node) => void) {
  *
  * So the planning COPY carries what execution binds — the `$_row` struct as a
  * typed struct literal of the dataset's own columns, each scalar as a typed
- * placeholder. TYPES ONLY: no caller value ever becomes SQL text, and this
+ * placeholder: its DECLARED type when the caller sent one (`paramTypes`),
+ * otherwise inferred from the bound value as before. TYPES ONLY: no caller
+ * value ever becomes SQL text, and this
  * copy is planned, never run. Parameter references come from the lexer, so a
  * `$` inside a string or a comment is left alone.
  */
@@ -154,18 +156,28 @@ function plannedSql(input: MutationInput): string {
         )
         .join(',')}})`;
     } else {
-      const value = input.params[name];
-      const type =
-        typeof value === 'number'
-          ? 'DOUBLE'
-          : typeof value === 'boolean'
-            ? 'BOOLEAN'
-            : typeof value === 'string'
-              ? 'VARCHAR'
-              : null;
-      // An absent or null binding stays untyped, exactly as the parameter
-      // itself would be resolved: the surrounding column decides.
-      text = type ? `CAST(NULL AS ${type})` : 'NULL';
+      const declared = input.paramTypes?.[name];
+      if (declared && Object.hasOwn(COLUMN_SQL_TYPES, declared)) {
+        // The DECLARED type wins over the JavaScript value, and applies to a
+        // null binding too: a date Value travels as a string, and planning it
+        // as VARCHAR refused `coalesce($due, current_date)` for every reader
+        // who picked a date while publish, which binds NULLs, planned nothing
+        // at all. Typed here, publish sees the clash the click would.
+        text = `CAST(NULL AS ${COLUMN_SQL_TYPES[declared]})`;
+      } else {
+        const value = input.params[name];
+        const type =
+          typeof value === 'number'
+            ? 'DOUBLE'
+            : typeof value === 'boolean'
+              ? 'BOOLEAN'
+              : typeof value === 'string'
+                ? 'VARCHAR'
+                : null;
+        // Undeclared: an absent or null binding stays untyped, exactly as the
+        // parameter itself would be resolved — the surrounding column decides.
+        text = type ? `CAST(NULL AS ${type})` : 'NULL';
+      }
     }
     edits.push({ start: dollar.start, end: next.end, text });
     i++;

@@ -86,14 +86,16 @@ export const isMutationRefused = (r: MutationApplied | MutationRefused): r is Mu
  * SQL is executing prevents that write from landing.
  *
  * `sql` names the dataset as `ref_<id>`, exactly as it is written in the
- * document; `params` are bound by name and never interpolated.
+ * document; `params` are bound by name and never interpolated, under the
+ * DECLARED types the caller passes as `guard.paramTypes` — the same typing the
+ * publish-time analysis used, so the two cannot plan the statement differently.
  */
 export async function mutateDataset(
   dataset: ArtifactRow,
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean;document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected' | 'paramTypes'> & {source?:boolean;document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
 ): Promise<MutationApplied | MutationRefused> {
   if(sqlParams(sql).includes('_me')&&!actor.userId)return {reason:'policy_denied',detail:'$_me requires a logged-in user'};
   const db = await getDb();
