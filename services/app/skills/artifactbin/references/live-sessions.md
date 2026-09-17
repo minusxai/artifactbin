@@ -150,3 +150,21 @@ Actions default to 5 seconds, navigation to 10 seconds, and an entire script to
 20 seconds. Keep scripts short; move long workflows across calls. Sessions expire
 after 30 idle minutes. A session has at most 8 pages and 16 execution receipts;
 close it when finished. There is no suspended-to-disk browser heap.
+
+## Testing a page you built
+
+A push proves markup and reads; only a run proves a `<Mutation>`:
+
+```js
+const page = await context.newPage();
+await page.goto('/a/abc123');
+await page.getByLabel('Amount').fill('48.50');
+await page.getByRole('button', {name: 'Add expense'}).click();
+const after = await page.evaluate(() => mx.read(['tab'], {wait: true}));
+if (!after.signals.tab.value.length) await output.image(await page.screenshot());
+return after;
+```
+
+Screenshot only on a wrong read back. Run it again `--as guest`: every `$_me`
+write must be refused with a sign-in offer, the reads still work. Fix and push
+until both passes are clean.
