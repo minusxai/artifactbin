@@ -7,9 +7,11 @@
  * that actually parses, read/write/destructive annotated, and an error
  * vocabulary with a fix per code.
  */
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { OPERATIONS } from '@/lib/operations/registry';
+import type { BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
+import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
+import { services, setServices } from '@/lib/services';
 
 describe('the registry is curated, not generated', () => {
   it('teaches atomic batches and persistent ids in the model-facing descriptions',()=>{
@@ -82,5 +84,55 @@ describe('the registry is curated, not generated', () => {
         expect(e.status, `${op.name}/${e.code}`).toBeGreaterThanOrEqual(400);
       }
     }
+  });
+});
+
+/** Who a session BROWSES as is the caller's decision, made once, on the request that creates it. */
+describe('browser_session viewer', () => {
+  const operation = OPERATIONS.find((op) => op.name === 'browser_session')!;
+  const script = { op: 'script', session_id: 'session-id', execution_id: 'execution-id', create: true, code: 'return 1' };
+  const context = { actor: { tokenId: 'tok_owner', userId: 'usr_owner' }, base: 'http://app', request: new Request('http://app/api/browser-sessions', { method: 'POST' }), author: {} } as unknown as OpContext;
+  const previous = services().browser;
+  const record = () => {
+    const seen: BrowserSessionRequest[] = [];
+    setServices({ browser: { ...previous, sessions: {
+      async request(input: BrowserSessionRequest): Promise<BrowserSessionResult> { seen.push(input); return { session_id: input.session_id, status: 'queued', pages: [], attachments: [] }; },
+      async close() {},
+    } } });
+    return seen;
+  };
+  afterEach(() => setServices({ browser: previous }));
+
+  it('accepts only guest, and parses a script without a viewer', () => {
+    const input = z.object(operation.input);
+    expect(input.safeParse({ ...script, viewer: 'guest' }).success).toBe(true);
+    expect(input.safeParse(script).success).toBe(true);
+    for (const viewer of ['owner', 'anonymous', 'GUEST', '', true]) expect(input.safeParse({ ...script, viewer }).success, String(viewer)).toBe(false);
+  });
+
+  it('passes the viewer to the session service and sends none when the caller named none', async () => {
+    const seen = record();
+    await operation.run(context, { ...script, viewer: 'guest' });
+    await operation.run(context, script);
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toMatchObject({ viewer: 'guest', actor: { credential: 'bearer', userId: 'usr_owner' } });
+    expect(seen[1]).not.toHaveProperty('viewer');
+    // A guest session still belongs to the caller who created it.
+    expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
+  });
+
+  // runOperation hands the body to run() unparsed, so the refusal has to live in the operation itself.
+  it('refuses a viewer it cannot browse as, without reaching the session service', async () => {
+    const seen = record();
+    for (const viewer of ['owner', 'anonymous', 'GUEST', true]) {
+      const reply = await operation.run(context, { ...script, viewer });
+      expect(reply.status, String(viewer)).toBe(400);
+      expect(String(reply.body.error), String(viewer)).toBe('invalid_viewer');
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  it('tells an agent, in its description, how to see what a signed-out reader sees', () => {
+    expect(operation.description).toMatch(/guest/i);
   });
 });

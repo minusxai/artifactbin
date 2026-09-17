@@ -1,7 +1,7 @@
 import { artifactIdFromPathPrefix } from '@artifactbin/utils/artifact-reference';
 import { randomUUID } from 'node:crypto';
 import type { Actor, BrowserSessionRequest, BrowserSessionResult, BrowserSessions } from '@artifactbin/contracts';
-import { SESSION_LIMITS } from '@artifactbin/contracts';
+import { ANONYMOUS, SESSION_LIMITS } from '@artifactbin/contracts';
 
 export interface SessionWorker {
   run(code: string): Promise<Pick<BrowserSessionResult, 'result' | 'pages' | 'attachments' | 'error'>>;
@@ -11,6 +11,8 @@ export interface SessionWorker {
 export type SessionWorkerFactory = (actor: Actor) => Promise<SessionWorker>;
 interface Session {
   owner: string;
+  /** Who its PAGES browse as, fixed when the session is created; undefined is its owner. */
+  viewer: 'guest' | undefined;
   worker: Promise<SessionWorker>;
   queue: Promise<void>;
   executions: Map<string, { code: string; result: BrowserSessionResult }>;
@@ -47,6 +49,8 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
       if (!owner) return empty(input.session_id, 'AUTH_REQUIRED', 'Authenticate before using browser sessions');
       if (!idValid(input.session_id)) return empty('', 'INVALID_REQUEST', 'Invalid session ID');
       let session = sessions.get(input.session_id);
+      // Anything but exactly 'guest' is absent: the viewer a session browses as is one fixed decision.
+      const viewer = input.op === 'script' && input.viewer === 'guest' ? 'guest' : undefined;
       if (input.op === 'script') {
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {
@@ -55,16 +59,20 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
             if (ended) sessions.delete(ended[0]);
           }
           if ([...sessions.values()].filter(s => s.status === 'idle').length >= SESSION_LIMITS.sessions) return empty(input.session_id, 'CAPACITY', 'Browser session capacity reached; close an existing session');
-          const worker = Promise.resolve().then(() => factory(input.actor));
+          // PAGES browse as the guest; ownership above stays the creator's.
+          const worker = Promise.resolve().then(() => factory(viewer === 'guest' ? ANONYMOUS : input.actor));
           // Failure is recorded on the execution, including failures before the first script.
           void worker.catch(() => {});
-          session = { owner, worker, queue: Promise.resolve(), executions: new Map(), pages: [], status: 'idle', touched: Date.now() };
+          session = { owner, viewer, worker, queue: Promise.resolve(), executions: new Map(), pages: [], status: 'idle', touched: Date.now() };
           sessions.set(input.session_id, session);
           const created = session;
           void worker.then(value => value.onClose?.(() => { if (created.status === 'idle') void close(created, 'lost'); }), () => {});
         }
       }
       if (!session || session.owner !== owner) return empty(input.session_id, 'SESSION_NOT_FOUND', 'Session is unavailable to this credential');
+      // Ownership is answered first: a stranger naming a viewer still only learns SESSION_NOT_FOUND.
+      // An omitted viewer resumes whatever this session already browses as; a different one is refused.
+      if (input.op === 'script' && viewer !== undefined && viewer !== session.viewer) return empty(input.session_id, 'VIEWER_CONFLICT', `Session ${input.session_id} browses as ${session.viewer ?? 'its owner'}; a session's viewer is fixed when it is created. Create a new session instead`);
       session.touched = Date.now();
       if (input.op === 'close') {
         await close(session, 'closed');
