@@ -99,7 +99,12 @@ export function DialogClose({children, wrapsControl, ...props}: TriggerProps) {
 interface DialogContentProps extends React.DialogHTMLAttributes<HTMLDialogElement> {
   run?: unknown;
   onSubmitMutation?: () => Promise<unknown>;
-  unavailable?: string | null;
+  /**
+   * Why this dialog cannot save. A NODE, not only a string: the one refusal a
+   * reader can act on is drawn as the sign-in door itself rather than as a
+   * sentence about it (lib/story/sign-in-required).
+   */
+  unavailable?: React.ReactNode;
   conflictMessage?: string;
 }
 

@@ -50,7 +50,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         // Not the caller's fault and not permanent: say so, and say when.
         return json({ error: 'dataset_busy', detail: result.detail }, 503, { ...CORS, 'Retry-After': '1' });
       case 'policy_denied':
-        return json({error:'policy_denied',detail:result.detail},403,CORS);
+        // Same status, same `error`. `code` is the machine-readable half, and
+        // today it has exactly one value: a guest pressed a write that binds
+        // `$_me` (lib/story/sign-in-required).
+        return json({error:'policy_denied',...(result.code?{code:result.code}:{}),detail:result.detail},403,CORS);
       case 'invalid_sql':
         return json({ error: 'mutation_failed', detail: result.detail }, 400, CORS);
       default:

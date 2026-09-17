@@ -36,6 +36,7 @@ import type { ColumnTemplate } from '@/components/kit/data-table';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
 import { EMPTY_DATAFLOW, VIEWER_REF, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
 import { User } from '@/components/kit/user';
+import { SIGN_IN_TO_DO_THIS, needsSignIn, refusalText } from '@/lib/story/sign-in-required';
 import { SignIn } from '@/components/kit/sign-in';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
 import { Button } from '@/components/kit/button';
@@ -75,7 +76,7 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
   const {run: _run, ...rest} = props;
   return <>
     <Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
-      aria-busy={state?.pending || undefined} aria-description={unavailable ?? undefined}
+      aria-busy={state?.pending || undefined} aria-description={refusalText(unavailable) ?? undefined}
       onClick={() => {
         if (!chrome || !actions || !store || !name || unavailable !== null || props.disabled === true) return;
         const snapshot = scalarRow(row);
@@ -112,7 +113,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
     const optsName = refName(props.options);
     const options = (valueType==='user' ? ctx.state.userOptions?.[`${tableName}.${valueField}`]??[] : normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined))
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
-    return <MutationCellHint reason={unavailable}><SelectControl
+    return <MutationCellHint reason={refusalText(unavailable)}><SelectControl
       appearance="cell" label={label} placeholder={str(props.placeholder) ?? 'None'} className={str(props.className)} options={options}
       value={value === null ? null : String(value)} nullable={props.nullable === true}
       onOpenChange={(open) => { if (open) begin(); }} onChange={(next) => change(selectValue(next))}
@@ -136,7 +137,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
       }
       commit();
     };
-    return <MutationCellHint reason={unavailable}><Html {...(rest as Record<string, unknown>)} aria-label={label} aria-description={unavailable ?? undefined} value={value === null ? '' : String(value)} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
+    return <MutationCellHint reason={refusalText(unavailable)}><Html {...(rest as Record<string, unknown>)} aria-label={label} aria-description={refusalText(unavailable) ?? undefined} value={value === null ? '' : String(value)} disabled={!ctx.chrome || !writable || busy || props.disabled === true}
       className={cn('w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm outline-none transition-colors hover:border-border focus:border-ring focus:ring-2 focus:ring-ring/20 disabled:opacity-50', tag === 'textarea' ? 'min-h-8 resize-y' : 'h-8', props.type === 'number' && 'text-right tabular-nums', str(props.className))}
       onFocus={begin} onChange={(e) => { change(tag === 'select' ? selectValue(e.currentTarget.value) : e.currentTarget.value); if (tag === 'select') commitDraft(e.currentTarget); }} onBlur={(e) => commitDraft(e.currentTarget)}
       onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); cancel(); e.currentTarget.blur(); } else if (e.key === 'Enter' && !(tag === 'textarea' && e.shiftKey)) { e.preventDefault(); commitDraft(e.currentTarget); } }}
@@ -505,7 +506,11 @@ function DialogContentAdapter(props: Record<string, unknown>) {
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE,
     () => name ? store?.mutationUnavailable(name) ?? (store ? null : 'Checking edit access…') : null,
     () => name ? 'Checking edit access…' : null);
-  return <DialogContent {...props} unavailable={!chrome && name ? 'Read-only preview' : unavailable}
+  // The one refusal a reader can act on is drawn as the door, not as prose
+  // about it — and a guest reaching it is by construction not signed in, so
+  // <SignIn> is unconditional here.
+  const reason = !chrome && name ? 'Read-only preview' : unavailable;
+  return <DialogContent {...props} unavailable={needsSignIn(reason) ? <SignIn>{SIGN_IN_TO_DO_THIS}</SignIn> : refusalText(reason)}
     onSubmitMutation={name && store ? () => store.mutate(name) : undefined} />;
 }
 
@@ -542,7 +547,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
         {...(rest as Record<string, unknown>)}
         aria-busy={busy || undefined}
         disabled={!chrome || busy || unavailable !== null || rest.disabled === true}
-        aria-description={unavailable ?? undefined}
+        aria-description={refusalText(unavailable) ?? undefined}
         onClick={() => {
           setError(null);
           store.mutate(name).catch((e: unknown) => setError(e instanceof Error ? e.message : 'that did not save'));
@@ -550,7 +555,9 @@ function ButtonAdapter(props: Record<string, unknown>) {
       >
         {children as ReactNode}
       </Button>
-      {unavailable ? <span className="text-xs text-muted-foreground">{unavailable}</span> : null}
+      {needsSignIn(unavailable)
+        ? <SignIn className="ml-2">{SIGN_IN_TO_DO_THIS}</SignIn>
+        : unavailable ? <span className="text-xs text-muted-foreground">{unavailable}</span> : null}
       {error ? <span role="alert" className="mx-write-error">{error}</span> : null}
     </>
   );
