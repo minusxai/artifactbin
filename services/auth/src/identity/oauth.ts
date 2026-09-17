@@ -194,7 +194,11 @@ export function createOAuthStore(db: Queryable, schema = 'auth', appSchema?: str
       }
       const payload = objectOf(row.payload);
       if (typeof payload.scope !== 'string') return null;
-      return { token: next, clientId, userId: row.subject_id, resource, scope: payload.scope };
+      // Login may have merged a guest user into an account since approval.
+      // The live credential owns the current identity, not the old snapshot.
+      const current = (await db.query<{ user_id: string | null }>(`SELECT user_id FROM ${accessTokens} WHERE id = $1 AND deleted_at IS NULL`, [payload.access_token_id])).rows[0];
+      if (!current) return null;
+      return { token: next, clientId, userId: current.user_id, resource, scope: payload.scope };
     },
     async bindRefresh(token, accessTokenId) {
       await db.query(

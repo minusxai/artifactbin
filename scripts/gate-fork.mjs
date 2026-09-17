@@ -26,6 +26,7 @@
  *
  *   node scripts/gate-fork.mjs [base]
  */
+import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -68,11 +69,8 @@ check(Boolean((await ownerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.na
 
 // ── 1. a public document, published by the owner's own claimed token ──────
 const anon = await connectAgent(BASE);
-const claimed = await owner.evaluate(
-  async (t) => (await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) })).status,
-  anon.token,
-);
-check(claimed === 200, 'owner claimed the token');
+const claimed = await mergeGuestIntoAccount(owner, BASE, anon.token);
+check(claimed === 200, 'owner adopted the guest connection');
 const api = async (path, init = {}) => {
   const res = await fetch(`${BASE}${path}`, { ...init, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anon.token}`, ...(init.headers ?? {}) } });
   if (!res.ok) throw new Error(`${path} → ${res.status} ${await res.text()}`);

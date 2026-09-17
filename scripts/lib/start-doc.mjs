@@ -12,7 +12,7 @@
  * the owner-focused gates make their browser the owner, which is what
  * `becomeOwner` does.
  */
-import { connectAgent } from './cli-connection.mjs';
+import { connectAgent, connectionBrowserCookie } from './cli-connection.mjs';
 import { loginViaEmail } from './mail-login.mjs';
 
 /**
@@ -49,31 +49,30 @@ export async function startDocument(base) {
 
 /**
  * Make this browser the document's owner, so `/a/<id>` grants it owner chrome
- * (top bar and owner controls) around the inline story runtime. Exchanges the
- * token for the httpOnly session cookie — the same call the app's own UI makes.
- *
- * Must run from a page on the app's origin so `page.evaluate` can make the
- * same-origin cookie exchange; the canonical artifact page uses the inline
- * runtime and is not an opaque child frame.
+ * (top bar and owner controls) around the inline story runtime. Retains the
+ * browser cookie issued by the approval that created this CLI connection.
+ * Its credential is distinct from the API-scoped CLI token.
  */
 export async function becomeOwner(page, base, token) {
-  /*
-   * `domcontentloaded`, not `load`. All this navigation is for is a document on
-   * the app's origin to run one same-origin fetch from — and the home page's
-   * cards carry preview images the server renders on demand through its own
-   * headless browser. A run that has already seeded documents can queue several
-   * of those renders behind one navigation, and `load` waits for every one of
-   * them: MEASURED as a 30 s `page.goto` timeout inside becomeOwner on
-   * claim-flow, inplace-edit and layout-shift, each passing on a re-run. The
-   * cookie exchange below needs the DOM and the origin, nothing more.
-   */
+  const cookie = connectionBrowserCookie(base, token);
+  await page.context().addCookies(cookie.split('; ').map(pair => {
+    const separator = pair.indexOf('=');
+    return { name: pair.slice(0, separator), value: pair.slice(separator + 1), url: base, httpOnly: true, secure: new URL(base).protocol === 'https:', sameSite: 'Lax' };
+  }));
+  // Establish this origin for fixtures that immediately make browser fetches.
+  // Do not wait for shelf thumbnail exports during setup.
   await page.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
-  const status = await page.evaluate(async (t) => (await fetch('/api/session/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: t }),
-  })).status, token);
-  if (status !== 204) throw new Error(`could not adopt the token into a session (${status})`);
+}
+
+/** Adopt a guest connection into an already verified browser account. The
+ * held cookie proves guest ownership; the account session performs the merge. */
+export async function mergeGuestIntoAccount(page, base, token) {
+  await becomeOwner(page, base, token);
+  const response = await page.request.get(`${base}/api/page/session`);
+  if (!response.ok() || (await response.json()).kind !== 'account') {
+    throw new Error(`guest merge requires a verified account (${response.status()})`);
+  }
+  return response.status();
 }
 
 /**

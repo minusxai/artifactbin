@@ -26,6 +26,7 @@
 
  *   node scripts/gate-link-access.mjs [base]
  */
+import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
@@ -105,11 +106,9 @@ try {
   await loginViaEmail(stranger, BASE, sink, STRANGER_EMAIL);
   check(Boolean((await strangerCtx.cookies(BASE)).find((c) => /better-auth/.test(c.name))), 'a second person is signed in — and was never invited to anything');
 
-  // The owner's token, minted anonymously and claimed by their session.
+  // The owner's token, guest-owned and adopted by their session.
   const anon = await connectAgent(BASE);
-  await owner.evaluate(async (t) => fetch('/api/tokens/claim', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
-  }), anon.token);
+  await mergeGuestIntoAccount(owner, BASE, anon.token);
 
   const created = await fetch(`${BASE}/api/artifacts`, {
     method: 'POST',

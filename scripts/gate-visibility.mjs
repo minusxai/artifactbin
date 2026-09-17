@@ -23,6 +23,7 @@
 
  *     node scripts/gate-visibility.mjs [base]
  */
+import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
@@ -46,13 +47,10 @@ await loginViaEmail(page, BASE, sink, EMAIL);
 const sessionCookie = (await owner.cookies(BASE)).find((c) => /better-auth/.test(c.name));
 check(Boolean(sessionCookie), 'email-code login landed a session cookie');
 
-// A user-owned token: mint anonymously, claim from the session context.
+// A user-owned token: create a guest connection, then adopt it from the session context.
 const anon = await connectAgent(BASE);
-const claimed = await page.evaluate(async (t) => {
-  const r = await fetch('/api/tokens/claim', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }) });
-  return r.status;
-}, anon.token);
-check(claimed === 200, 'the session claimed the token');
+const claimed = await mergeGuestIntoAccount(page, BASE, anon.token);
+check(claimed === 200, 'the session adopted the guest connection');
 
 const api = async (path, body) => {
   const res = await fetch(`${BASE}${path}`, {

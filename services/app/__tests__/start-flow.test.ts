@@ -4,10 +4,8 @@
  * exists, the paste-able instruction names it, and the very first agent edit
  * is an ordinary protocol edit.
  *
- * WHAT THIS ROUTE MUST NOT DO is half of the contract now: it mints nothing,
- * hands out no credential and sets no agent cookie. The afbin CLI's browser
- * approval is the only door to a credential in the product, so this response
- * is the same for a signed-in and a signed-out caller.
+ * The response body exposes no credential. A guest owns the document through
+ * an HttpOnly cookie; the CLI separately needs explicit browser approval.
  */
 import { describe, expect, it } from 'vitest';
 import { GET as eventsRoute } from '@/app/a/[id]/events/route';
@@ -33,7 +31,7 @@ const start = async (opts: Parameters<typeof request>[1] = {}): Promise<Start> =
   (await (await startRoute(request('/api/start', { method: 'POST', ...opts }))).json()) as Start;
 
 describe('POST /api/start', () => {
-  it('returns a real live document and the ONE tokenless paste — no credential, no cookie', async () => {
+  it('returns a live document and tokenless instructions with HttpOnly guest ownership', async () => {
     const res = await startRoute(request('/api/start', { method: 'POST' }));
     expect(res.status).toBe(201);
     const body = (await res.json()) as Start & Record<string, unknown>;
@@ -49,7 +47,7 @@ describe('POST /api/start', () => {
     expect(body).not.toHaveProperty('token');
     expect(body).not.toHaveProperty('expiresAt');
     expect(JSON.stringify(body)).not.toContain('mx_');
-    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(res.headers.get('set-cookie')).toContain('HttpOnly');
 
     expect(body.prompt).toBe(existingPaste(BASE, body.id));
     expect(body.prompt).toContain('afbin help');
@@ -77,19 +75,17 @@ describe('POST /api/start', () => {
     expect(rows[0].user_id).toBe(user.id);
   });
 
-  it('a signed-out caller gets an UNOWNED, public document — nobody is handed a capability to it', async () => {
+  it('a signed-out caller owns a public document while unrelated CLI connections cannot edit', async () => {
     const body = await start();
     const db = await harness.db();
     const { rows } = await db.query<{ user_id: string | null; token_id: string; visibility: string }>(
       'SELECT user_id, token_id, visibility FROM artifacts WHERE id = $1', [body.id],
     );
-    expect(rows[0].user_id).toBeNull();
-    expect(rows[0].token_id).toBe('');
+    expect(rows[0].user_id).toMatch(/^usr_/);
+    expect(rows[0].token_id).toMatch(/^tok_/);
     expect(rows[0].visibility).toBe('public');
 
-    // MEASURED, and the honest shape of the signed-out door: the document is
-    // public to read and owned by nobody, so a stranger's connection — which
-    // is what an afbin anonymous approval is — reads it and cannot write it.
+    // Public readability alone never grants another connection edit access.
     const stranger = await mintToken('device-approval');
     const read = await artifactPage(request(`/api/artifacts/${body.id}`, { token: stranger.token }), params({ id: body.id }));
     expect(read.status).toBe(200);

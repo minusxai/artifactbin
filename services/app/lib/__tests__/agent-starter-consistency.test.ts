@@ -101,8 +101,8 @@ describe('every agent-facing starter says the same thing', () => {
     const [, started] = all.find(([name]) => name === 'POST /api/start prompt')!;
     const [, handed] = all.find(([name]) => name.includes('agent-prompt'))!;
     expect(started).toContain("\n\n---\n\nLet's build an artifact for " );
-    expect(handed.replace(/\/a\/[A-Za-z0-9]+/, '/a/<id>')).toBe(started.replace(/\/a\/[A-Za-z0-9]+/, '/a/<id>'));
-    expect(started.replace(/\/a\/[A-Za-z0-9]+/, '/a/<id>')).toBe(existingPaste(BASE, '<id>'));
+    expect(handed.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>')).toBe(started.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>'));
+    expect(started.replace(/\/a\/[A-Za-z0-9]+/g, '/a/<id>')).toBe(existingPaste(BASE, '<id>'));
   });
 });
 

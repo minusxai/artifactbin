@@ -5,6 +5,8 @@ export interface Column {
   notNull?: boolean;
   default?: string;
   retired?: boolean;
+  /** Explicitly relax a NOT NULL constraint from an older declaration. */
+  relaxNotNull?: boolean;
   /**
    * This column's FORMER name. A rename is DECLARED rather than scripted: the
    * renderer emits the add, a guarded copy of the old column into this one,

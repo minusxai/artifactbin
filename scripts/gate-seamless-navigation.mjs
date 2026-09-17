@@ -61,7 +61,8 @@ try {
   await becomeOwner(page, base, first.token);
   const sink = await startMailSink();
   await loginViaEmail(page, base, sink, `mxmx_test_navigation_${Date.now()}@example.com`);
-  await page.getByLabel('Add to my account', { exact: true }).click();
+  assert.equal(await page.getByLabel('Add to my account', { exact: true }).count(), 0,
+    'verified login adopts guest artifacts without a second claim step');
   await page.getByLabel('Open mxmx_test navigation A', { exact: true }).waitFor();
   const folderResponse = await page.request.post(`${base}/api/my/artifacts`, { data: { format: 'folder', title: 'Navigation folder' } });
   assert(folderResponse.ok(), 'create owned folder');

@@ -62,7 +62,7 @@ function renderTable(table: Table, qualified: (name: string) => string, schemaEx
       .map((c) => renderRename(name, table.name, schemaExpr, c)),
     // Relax constraints an older declaration applied — see Column.retired.
     ...table.columns
-      .filter((c) => c.retired)
+      .filter((c) => c.retired || c.relaxNotNull)
       .map((c) => `ALTER TABLE ${name} ALTER COLUMN ${c.name} DROP NOT NULL`),
     // Columns the declaration no longer carries (Table.dropped) — the whole
     // migration for a retired column, and idempotent, so it is safe on every

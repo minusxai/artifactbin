@@ -42,6 +42,15 @@ it('reports browser denial to the initiating CLI without granting credentials',a
 });
 
 describe('anonymous browser approval', () => {
+  it('carries an artifact target and the approving browser through one-time consumption', async () => {
+    const target = { artifactId: 'ABC123' };
+    const owner = { credential: 'agent-cookie' as const, tokenId: 'tok_guest', heldTokenIds: ['tok_guest'] };
+    const pair = await store.begin('https://example.com', target);
+    expect(await store.inspect(pair.userCode, 'https://example.com')).toMatchObject({ target });
+    expect(await store.approveAnonymously(pair.userCode, 'https://example.com', owner)).toBe(true);
+    expect(await store.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'approved', userId: null, target, approvedBy: owner });
+    expect(await store.consume(pair.deviceCode, 'https://example.com')).toEqual({ status: 'invalid' });
+  });
   it('approves without an account and the CLI consumes an approval bearing no user', async () => {
     const pair = await store.begin('https://example.com');
     // Origin-bound like the account path: a foreign origin cannot approve.

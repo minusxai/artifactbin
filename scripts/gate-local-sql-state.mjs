@@ -1,3 +1,4 @@
+import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -108,7 +109,7 @@ await exercise(anonymous, false, doc.id);
 const ownerContext = await browser.newContext();
 const owner = await ownerContext.newPage();
 await loginViaEmail(owner, B, sink, `mxmx_test_local_state_${Date.now().toString(36)}@example.com`);
-check((await owner.evaluate(async t => (await fetch('/api/tokens/claim', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({token:t})})).status, token)) === 200, 'owner claimed the publishing token');
+check(await mergeGuestIntoAccount(owner, B, token) === 200, 'owner adopted the guest connection');
 const privateDoc = await json(await api('/api/artifacts', {markup:source, visibility:'private'}));
 if (!privateDoc.id) throw new Error(`private fixture publish failed: ${JSON.stringify(privateDoc)}`);
 check((await owner.evaluate(async id => (await fetch(`/api/my/artifacts/${id}/sharing`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({access:'read'})})).status, dataset.id)) === 200, 'stored dataset was made read-only');
