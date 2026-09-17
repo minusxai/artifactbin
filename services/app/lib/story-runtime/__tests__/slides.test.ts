@@ -1,7 +1,7 @@
 /**
  * Slide discovery over the AST — the pure half
- * of the document's own slide chrome. The title fallback chain is the contract
- * the old parent-side rail had, kept identical so decks read the same.
+ * of the document's own slide chrome, including the title fallback chain every
+ * deck's rail and counter read from.
  */
 import { describe, expect, it } from 'vitest';
 import type { JsxNode } from '@/lib/jsx';

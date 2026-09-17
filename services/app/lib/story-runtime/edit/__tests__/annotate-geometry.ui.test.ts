@@ -148,7 +148,7 @@ describe('view-mode annotation geometry', () => {
 });
 
 /*
- * ADDED (F3). A comment now keeps the words that were selected, so the layer
+ * A comment keeps the words that were selected, so the layer
  * paints THOSE rather than tinting the whole paragraph — with the CSS Custom
  * Highlight API, because injected spans would be read back as document content
  * by the editor. jsdom has neither `CSS.highlights` nor `Highlight`, which is
@@ -255,7 +255,7 @@ describe('painting the exact words', () => {
 });
 
 /*
- * ADDED (F3, after spike S3). A Highlight holds LIVE Ranges, and a live update
+ * A Highlight holds LIVE Ranges, and a live update
  * (`mx:document` → the runtime re-rendering the tree) replaces the very text
  * nodes they point into. A highlight set once therefore goes stale silently —
  * it paints nothing, and nothing says so. It is rebuilt from the stored range

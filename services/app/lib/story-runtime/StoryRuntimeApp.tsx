@@ -481,19 +481,6 @@ function SwitchAdapter(props: Record<string, unknown>) {
   );
 }
 
-/**
- * The LIVE `<Button run="$add">`: a click performs the named `<Mutation>` with
- * the document's current values (lib/story-runtime/store mutate), and the
- * queries reading the dataset it wrote re-run on their own — so the click that
- * adds a row is the click that redraws the chart.
- *
- * Three things it owes the reader while that happens: it is `aria-busy` and
- * disabled for the duration (a double click is one write, enforced in the
- * store as well as here), a refusal is SHOWN rather than swallowed — the
- * server's own message, in a role="alert" beside the button, because a button
- * that silently does nothing is the failure this whole path exists to avoid —
- * and the message clears on the next attempt.
- */
 function DialogAdapter(props: Record<string, unknown>) {
   const {state, setValue} = useContext(RuntimeEmbedContext);
   const name = typeof props.open === 'string' ? refName(props.open) : null;
@@ -511,6 +498,19 @@ function DialogContentAdapter(props: Record<string, unknown>) {
     onSubmitMutation={name && store ? () => store.mutate(name) : undefined} />;
 }
 
+/**
+ * The LIVE `<Button run="$add">`: a click performs the named `<Mutation>` with
+ * the document's current values (lib/story-runtime/store mutate), and the
+ * queries reading the dataset it wrote re-run on their own — so the click that
+ * adds a row is the click that redraws the chart.
+ *
+ * Three things it owes the reader while that happens: it is `aria-busy` and
+ * disabled for the duration (a double click is one write, enforced in the
+ * store as well as here), a refusal is SHOWN rather than swallowed — the
+ * server's own message, in a role="alert" beside the button, because a button
+ * that silently does nothing is the failure this whole path exists to avoid —
+ * and the message clears on the next attempt.
+ */
 function ButtonAdapter(props: Record<string, unknown>) {
   const { store, chrome } = useContext(RuntimeEmbedContext);
   const name = typeof props.run === 'string' ? refName(props.run) : null;
@@ -764,8 +764,8 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
 /**
  * The rail's miniature of a slide: the slide's OWN nodes re-rendered into a
  * fixed 1280×800 box and scaled down, so a preview is always current and
- * nothing has to be captured, timed, or rasterized (the old rail's thumbnails
- * were raster captures that landed late and pushed rows around).
+ * nothing has to be captured, timed, or rasterized — a raster thumbnail lands
+ * late and pushes every row below it around.
  *
  * Embeds render as inert placeholders here on purpose: a chart mounted twice
  * means two live vega instances per slide, which is the whole cost the raster

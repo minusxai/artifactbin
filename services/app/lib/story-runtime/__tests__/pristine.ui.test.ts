@@ -2,9 +2,9 @@
  * capturePristine — the channel the author's script cannot reach.
  *
  * These assertions mirror what was measured in a real browser against a
- * hostile author script (seamless-editing-v2.md §3b): the nonce never leaks,
- * a shadowed `window.parent` does not redirect the channel, and a poisoned
- * `innerHTML` accessor does not change what the runtime reads.
+ * hostile author script: the nonce never leaks, a shadowed `window.parent`
+ * does not redirect the channel, and a poisoned `innerHTML` accessor does not
+ * change what the runtime reads.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { capturePristine } from '../pristine';

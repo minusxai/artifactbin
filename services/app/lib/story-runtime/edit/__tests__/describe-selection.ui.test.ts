@@ -99,9 +99,9 @@ describe('ancestorCrumbs', () => {
 });
 
 /*
- * ADDED: AN AUTHORED <svg>. Its `className` is an SVGAnimatedString, not a
- * string, and reading it as one threw `split is not a function` out of the
- * breadcrumb — which killed a drawn-area release on any document carrying an
+ * AN AUTHORED <svg>. Its `className` is an SVGAnimatedString, not a
+ * string, and reading it as one throws `split is not a function` out of the
+ * breadcrumb — which kills a drawn-area release on any document carrying an
  * inline sketch (measured on a real document: five svgs, 241 stamped
  * children, nothing posted). The class attribute is the same on both.
  */

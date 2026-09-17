@@ -35,7 +35,7 @@ describe('selection', () => {
   });
 
   /*
-   * ADDED (F3). The editor's own "Comment on selection" and the view-mode
+   * The editor's own "Comment on selection" and the view-mode
    * bubble are two doors to ONE destination, so they must hand the composer the
    * same thing: the words. A caret with nothing selected carries none, rather
    * than the two doors disagreeing about what a comment is about.

@@ -9,9 +9,8 @@
  * travels: a set of rects the page writes back into the source, exactly as it
  * writes back a paragraph.
  *
- * Ported from the canvas's GridAdapter. The one real change is where the width
- * comes from: there it was the canvas's fixed measure, here it is the element's
- * own, re-read when the window changes.
+ * The width is the element's own, re-read whenever the window or the container
+ * changes — never a fixed measure, because the document's column is not one.
  */
 import {
   cloneElement,

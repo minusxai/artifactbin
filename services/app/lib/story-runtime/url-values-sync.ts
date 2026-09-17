@@ -1,5 +1,5 @@
 /**
- * THE LINK FOLLOWS THE READER — the document's half of F2.
+ * THE LINK FOLLOWS THE READER — the document's half of the write-back.
  *
  * A dashboard is only shareable if the address bar says what the reader
  * narrowed it to. This subscribes the document's store and, when a `<Value>`
@@ -13,7 +13,7 @@
  *  - FRAMED (the owner's shell, the editor, a capture): up the signed pristine
  *    channel, because the `location` a framed document can reach is the
  *    FRAME's. Writing there moves `/a/<id>/raw?edit=1`, which nobody can see
- *    or copy — measured on the spike, and the whole reason `mx:values` exists.
+ *    or copy — the whole reason `mx:values` exists.
  *    The page then re-derives the address from the flow IT holds.
  *
  * Two rules, both about not being noisy: the write is DEBOUNCED (a slider is a

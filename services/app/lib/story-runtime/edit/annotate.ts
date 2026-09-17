@@ -18,7 +18,7 @@ import type { ManagedCommentSelection } from '../managed-comment-contract';
  * target identities, refinements and presentation state.
  *
  * THE PICK is the one exception, and it is one-shot. The rail's pick tool
- * (`picking` on the state message) is the edit-mode move for a comment: the
+ * (`pick` on the state message) is the edit-mode move for a comment: the
  * selectable node under the pointer carries an outline and a click on it IS
  * the selection — reported as `mx:selection`, the same report the breadcrumb
  * widening uses, so the page opens its composer there. A comment made by
@@ -87,7 +87,7 @@ const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
 // hover gets an outline so the relationship is unmistakable without shifting
 // layout. The composing selection keeps its stronger cursor outline.
 //
-// The tint now shows while the document is EDITABLE too, where it shares a node
+// The tint shows while the document is EDITABLE too, where it shares a node
 // with the edit selection's own outline — so it is deliberately quieter than
 // the hover and the composing states, which are the ones a person is currently
 // pointing at. `cursor: pointer` is not part of the base rule for the same

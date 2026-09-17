@@ -152,7 +152,7 @@ describe('a store built with declarations but no rows', () => {
 });
 
 /*
- * SPIKE S1 (F2 — `<Value>` selections in the URL, risk R3).
+ * `<Value>` SELECTIONS CARRIED IN THE URL.
  *
  * A URL-carried `<Value>` has to reach the store BEFORE its first run, or the
  * reader's link shows the document's defaults and then flips. The obvious

@@ -8,8 +8,8 @@ import { COMMENT_OWNER_ATTR, COMMENT_TARGET_ATTR, parseCommentTarget } from '@/l
  * instead, and everything the parent needs to render must be in it.
  *
  * The rect is in the FRAME's viewport coordinates; the parent adds the iframe's
- * own box to place its chrome (measured exact, including while the document
- * scrolls itself — seamless-editing-v2.md §3b).
+ * own box to place its chrome — exact, including while the document scrolls
+ * itself.
  */
 import type { JsxElement, JsxNode } from '@/lib/jsx';
 // The leaf classification module, NOT the write-back path: importing the

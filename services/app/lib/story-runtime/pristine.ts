@@ -27,8 +27,7 @@
  * What this does NOT stop, deliberately: a script can still puppet the editor
  * through trusted UA APIs (`focus()` + `execCommand`). That writes what the
  * editor itself can write — visible text, through the door's sanitizer — and
- * cannot inject a script, touch the Helmet, or persist itself. See
- * seamless-editing-v2.md §5.
+ * cannot inject a script, touch the Helmet, or persist itself.
  */
 
 /** 128 bits of nonce, hex — long enough that guessing is not a strategy. */

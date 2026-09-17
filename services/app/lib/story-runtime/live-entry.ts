@@ -1,11 +1,11 @@
 /**
  * A SHARED DOCUMENT HEARS ITS OWN AUTHOR.
  *
- * Hand someone a link and let an agent write: that is the product. It did not
- * work. A reader is served the document itself, top-level (proxy.ts), and the
- * document had no way to learn that it had changed — the live stream was held
- * by the app's page, which a reader never gets. They read the version they
- * loaded, for as long as they kept the tab open.
+ * Hand someone a link and let an agent write: that is the product. A reader is
+ * served the document itself, top-level (proxy.ts), and the app's page — which
+ * holds the live stream — is not something they ever get. Without a stream of
+ * its own the document cannot learn that it has changed, and they read the
+ * version they loaded for as long as they keep the tab open.
  *
  * So the document listens for itself. Two things make that safe rather than a
  * new surface: the stream is the SAME read ACL as the page (it re-checks on

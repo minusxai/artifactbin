@@ -1,5 +1,5 @@
 /**
- * F2 — the DOCUMENT's half of the write-back: when the reader picks, the link
+ * The DOCUMENT's half of the write-back: when the reader picks, the link
  * they could copy has to change with them.
  *
  * One subscriber, two sinks, chosen by whether this document is framed — and
