@@ -25,6 +25,48 @@ export interface SessionProcessOptions {
 }
 const require = createRequire(import.meta.url);
 
+/**
+ * ONE SCRIPTED FETCH. Admits the session's own origin, drops every credential the
+ * script supplied, and forwards the request as the actor the session browses as —
+ * which is ANONYMOUS for a guest session and its creator otherwise. `run` applies the
+ * process's bounded concurrency to the forwarded hop only; admission is refused before it.
+ */
+export async function forwardSessionFetch(
+  message: Record<string, unknown>,
+  actor: Actor,
+  options: Pick<SessionProcessOptions, 'baseURL' | 'request'>,
+  run: (task: () => Promise<void>) => Promise<void> = task => task(),
+): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+  if (JSON.stringify(message).length > 100000) throw new Error('Request size limit exceeded');
+  const url = new URL(String(message.url));
+  if (url.origin !== new URL(options.baseURL).origin || url.username || url.password) throw new Error('Origin is outside this session');
+  // Drop cookies, authorization, actor and hop-by-hop headers from arbitrary script traffic.
+  const supplied = new Headers(message.headers as Record<string, string>);
+  const headers = new Headers({ [BROWSER_SESSION_HEADER]: '1' });
+  for (const name of ['accept', 'content-type', 'range', 'if-none-match']) if (supplied.has(name)) headers.set(name, supplied.get(name)!);
+  const body = typeof message.body === 'string' ? Buffer.from(message.body, 'base64') : undefined;
+  if (body && body.length > SESSION_LIMITS.scriptBytes) throw new Error('Request body limit exceeded');
+  const request = new Request(url, { method: String(message.method), headers, ...(body ? { body } : {}), signal: AbortSignal.timeout(10000) });
+  let fetched: { status: number; headers: Record<string, string>; body: string } | undefined;
+  await run(async () => {
+    const response = await sessionRequest(request, next => options.request(next, actor));
+    // Streams cannot be materialized indefinitely through this bounded bridge.
+    if (response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Live event streams are unavailable in scripted sessions'); }
+    const reader = response.body?.getReader();
+    const chunks: Uint8Array[] = []; let size = 0;
+    if (reader) for (;;) {
+      const next = await reader.read(); if (next.done) break;
+      size += next.value.length;
+      if (size > SESSION_LIMITS.outputBytes) { await reader.cancel(); throw new Error('Response limit exceeded'); }
+      chunks.push(next.value);
+    }
+    const out = new Headers(response.headers);
+    for (const name of ['set-cookie', 'content-length', 'content-encoding', 'transfer-encoding']) out.delete(name);
+    fetched = { status: response.status, headers: Object.fromEntries(out), body: Buffer.concat(chunks).toString('base64') };
+  });
+  return fetched!;
+}
+
 /** No inherited environment or executable-directory mount enters the worker sandbox. */
 export function sessionSandboxPlan(runtime: string, browsers: string, executable: string, workerArgs: readonly string[] = ['--max-old-space-size=128', '/runtime/worker.mjs']) {
   const args = ['--unshare-all', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--proc', '/proc', '--dev', '/dev', '--tmpfs', '/tmp', '--tmpfs', '/home/session'];
@@ -88,34 +130,8 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
         if (message.type === 'fatal') rejectTask?.(new Error(String(message.error)));
         if (message.type === 'result') { resolveTask?.(message.value as Parameters<NonNullable<typeof resolveTask>>[0]); resolveTask = undefined; rejectTask = undefined; }
         if (message.type !== 'fetch' || stopped) return;
-        try {
-          if (JSON.stringify(message).length > 100000) throw new Error('Request size limit exceeded');
-          const url = new URL(String(message.url));
-          if (url.origin !== new URL(options.baseURL).origin || url.username || url.password) throw new Error('Origin is outside this session');
-          // Drop cookies, authorization, actor and hop-by-hop headers from arbitrary script traffic.
-          const supplied = new Headers(message.headers as Record<string, string>);
-          const headers = new Headers({ [BROWSER_SESSION_HEADER]: '1' });
-          for (const name of ['accept', 'content-type', 'range', 'if-none-match']) if (supplied.has(name)) headers.set(name, supplied.get(name)!);
-          const body = typeof message.body === 'string' ? Buffer.from(message.body, 'base64') : undefined;
-          if (body && body.length > SESSION_LIMITS.scriptBytes) throw new Error('Request body limit exceeded');
-          const request = new Request(url, { method: String(message.method), headers, ...(body ? { body } : {}), signal: AbortSignal.timeout(10000) });
-          await requests.run(async () => {
-            const response = await sessionRequest(request, next => options.request(next, actor));
-            // Streams cannot be materialized indefinitely through this bounded bridge.
-            if (response.headers.get('content-type')?.includes('text/event-stream')) { await response.body?.cancel(); throw new Error('Live event streams are unavailable in scripted sessions'); }
-            const reader = response.body?.getReader();
-            const chunks: Uint8Array[] = []; let size = 0;
-            if (reader) for (;;) {
-              const next = await reader.read(); if (next.done) break;
-              size += next.value.length;
-              if (size > SESSION_LIMITS.outputBytes) { await reader.cancel(); throw new Error('Response limit exceeded'); }
-              chunks.push(next.value);
-            }
-            const out = new Headers(response.headers);
-            for (const name of ['set-cookie', 'content-length', 'content-encoding', 'transfer-encoding']) out.delete(name);
-            send({ type: 'fetched', id: message.id, status: response.status, headers: Object.fromEntries(out), body: Buffer.concat(chunks).toString('base64') });
-          });
-        } catch (error) { send({ type: 'fetched', id: message.id, error: String((error as Error).message).slice(0, 500) }); }
+        try { send({ type: 'fetched', id: message.id, ...await forwardSessionFetch(message, actor, options, requests.run) }); }
+        catch (error) { send({ type: 'fetched', id: message.id, error: String((error as Error).message).slice(0, 500) }); }
       };
       child!.stdout!.setEncoding('utf8');
       child!.stdout!.on('data', (chunk: string) => {

@@ -46,10 +46,8 @@ Calibrate the treatment · Ground it in the subject · Plan before you build ·
 The subject motif · Hierarchy · Typography · Space · Color · Motion · Charts ·
 Copy · Structure · When it is a UI · Avoid the default AI look · Restraint.
 
-<!--/bundle:skip-->
 ## Calibrate the treatment
 
-<!--bundle:skip-->
 - A doc deserves the same craft as a landing page — what changes is the
   treatment. A plan, memo or working report wants a UTILITARIAN treatment:
   real hierarchy, considered spacing, a proper palette, no giant hero.

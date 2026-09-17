@@ -23,6 +23,15 @@ Client defaults and host credentials live under `~/.artifactbin`, separately
 from server data. `afbin config set host URL` changes the client's default;
 `--server URL` overrides it for one command. Neither configures the server.
 
+When one deployment answers at more than one hostname — a marketing name that
+proxies here, a previous name kept alive — `APP__PUBLIC_BASE_URL` stays the one
+canonical origin and `APP__ALIAS_ORIGINS` lists the others, comma-separated
+(HTTPS, or HTTP on loopback; no path, query or credentials; a malformed entry
+refuses the boot). The pair is served publicly at `GET /api/server`, so afbin
+accepts a link or a tracked folder carrying either name as this server while
+still sending every request and credential to `APP__PUBLIC_BASE_URL` alone.
+Unset, nothing changes: each hostname stays a separate server to clients.
+
 A hosted server needs a stable `AUTH__SECRET`, the correct `APP__PUBLIC_BASE_URL`
 and a login method; `afbin serve` refuses to start without them. With a loopback
 `APP__PUBLIC_BASE_URL`, login never uses mail at all: each code is printed by the

@@ -1,4 +1,18 @@
 import React, {createContext, useContext, useEffect, useRef, useState} from 'react';
+import {buttonVariants} from './button';
+import {cn} from './cn';
+
+/**
+ * What a `<dialog>` looks like when the author styled nothing.
+ *
+ * Tailwind's preflight strips the UA's dialog padding and border, so an
+ * unstyled dialog is a square white box flush against its own text. These are
+ * the kit's own chrome, merged so an author `className` wins on conflict:
+ * `p-0` replaces the padding rather than fighting it. `m-auto` centres it on the
+ * unscoped `showModal()` path, where preflight has zeroed the UA margin; the
+ * scoped inline `style` (position/inset/margin/zIndex) is separate and untouched.
+ */
+const DIALOG_CONTENT_CLASS = 'm-auto max-h-[calc(100svh-4rem)] w-fit max-w-[min(32rem,calc(100vw-2rem))] overflow-auto rounded-lg border border-border bg-background p-6 text-foreground shadow-lg';
 
 interface DialogState {
   open: boolean;
@@ -63,7 +77,12 @@ export function DialogTrigger({children, wrapsControl, ...props}: TriggerProps) 
     context.setOpen(true);
   };
   if (wrapsControl) return <ControlDelegate {...props} act={open}>{children}</ControlDelegate>;
-  return <button {...props} type="button" disabled={props.disabled || !context || context.busy} onClick={event => {
+  // A trigger the kit DRAWS is a button, so it looks like one. An author who
+  // passes a className is styling it themselves and gets exactly that: this is
+  // the default look, not a base the author has to undo. An EMPTY className
+  // (`class=""` survives the interpreter's attribute pass) is not styling, so
+  // it still takes the default rather than rendering the trigger as bare text.
+  return <button {...props} type="button" className={props.className || buttonVariants()} disabled={props.disabled || !context || context.busy} onClick={event => {
     if (!context) return;
     context.trigger.current = event.currentTarget;
     context.setOpen(true);
@@ -73,13 +92,19 @@ export function DialogTrigger({children, wrapsControl, ...props}: TriggerProps) 
 export function DialogClose({children, wrapsControl, ...props}: TriggerProps) {
   const context = useContext(Context);
   if (wrapsControl) return <ControlDelegate {...props} act={() => {if (!context?.busy) context?.setOpen(false);}}>{children}</ControlDelegate>;
-  return <button {...props} type="button" disabled={props.disabled || !context || context.busy} onClick={() => context?.setOpen(false)}>{children}</button>;
+  // The same rule as the trigger: a drawn Close is a button, quieter than the action beside it.
+  return <button {...props} type="button" className={props.className || buttonVariants({variant: 'outline'})} disabled={props.disabled || !context || context.busy} onClick={() => context?.setOpen(false)}>{children}</button>;
 }
 
 interface DialogContentProps extends React.DialogHTMLAttributes<HTMLDialogElement> {
   run?: unknown;
   onSubmitMutation?: () => Promise<unknown>;
-  unavailable?: string | null;
+  /**
+   * Why this dialog cannot save. A NODE, not only a string: the one refusal a
+   * reader can act on is drawn as the sign-in door itself rather than as a
+   * sentence about it (lib/story/sign-in-required).
+   */
+  unavailable?: React.ReactNode;
   conflictMessage?: string;
 }
 
@@ -111,6 +136,7 @@ export function DialogContent({children, run, onSubmitMutation, unavailable, con
   return <>
   {artifactScoped && open && <div aria-hidden="true" data-artifact-dialog-backdrop="" style={{position:'fixed', inset:0, zIndex:2147482000, background:'rgb(0 0 0 / .45)'}} onClick={() => {if (!submitting.current) context?.setOpen(false);}} />}
   <dialog {...props} ref={ref} tabIndex={props.tabIndex ?? -1}
+    className={cn(DIALOG_CONTENT_CLASS, props.className)}
     style={artifactScoped ? {...props.style, position:'fixed', inset:0, margin:'auto', zIndex:2147482001} : props.style}
     onKeyDown={event => {
       props.onKeyDown?.(event);

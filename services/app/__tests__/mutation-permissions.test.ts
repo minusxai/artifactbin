@@ -4,6 +4,7 @@ import {POST as create} from '@/app/api/artifacts/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById,updateSharingFor} from '@/lib/artifacts';
+import {loadDatasetRows} from '@/lib/story/dataset-store';
 import {APP_CSP,createAppServer} from '@/server/app';
 import {mintToken} from '@/lib/tokens';
 import {claimToken,createUser} from '@/lib/users';
@@ -105,4 +106,125 @@ it('a viewer completes their own row through a $_row row action',async()=>{
  // analysis, with a placeholder row, is what enables the control.
  const capability=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
  expect((await capability.json()).mutationAccess.complete).toBe(null);
+});
+
+/*
+ * DECLARED TYPES ON THE WRITE PATH. A `<Value type="date">` travels as the
+ * string '2026-09-01', so the policy analysis used to plan it as VARCHAR and
+ * refuse `coalesce($d, current_date)` for every reader who picked a date —
+ * while publish, which binds NULLs, stayed green. The plan now follows the
+ * DECLARED type, so this commits, and the mistyped twin below fails the push.
+ */
+it('a declared date Value is planned as a date, so a viewer writes one through a policed insert',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
+ const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due) select 2, coalesce($d, current_date)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ await f.share(ds,'viewer');
+ await f.grantFor(ds);
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{d:'2026-09-01'}}}),ctx(doc));
+ expect(r.status,await r.clone().text()).toBe(200);
+ const rows=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));
+ expect((await rows.json()).tables.rows.rows).toEqual([{id:1,due:'2026-01-01'},{id:2,due:'2026-09-01'}]);
+});
+
+it('a string Value used where a date is required fails the push, naming the mutation',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
+ await f.grantFor(ds);
+ const r=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:`<Helmet><Value name="d" type="string" /><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due) select 2, coalesce($d, current_date)\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
+ expect(r.status,await r.clone().text()).toBe(400);
+ const body=await r.json();
+ expect(body.error).toBe('invalid_sql');
+ expect(body.details.join(' ')).toMatch(/<Mutation name="add">/);
+});
+
+it('refuses a value whose type is not the one it was declared with, naming the parameter',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,amount:1.5}],access:'readwrite'});
+ const doc=await f.publish({markup:`<Helmet><Value name="n" type="number" default={0} /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, amount) select 2, $n\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ await f.share(ds,'viewer');
+ await f.grantFor(ds);
+ const send=(n:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{n}}}),ctx(doc));
+ const bad=await send('12.5');
+ expect(bad.status).toBe(400);
+ expect((await bad.json()).detail).toMatch(/\$n/);
+ expect((await send(12.5)).status,'the same value, correctly typed, writes').toBe(200);
+});
+
+/*
+ * Found by rerunning the original prompt with a fresh agent: it cleared a date the way every
+ * command line does, `--param spent_on=`, and the typed door refused the empty string. The
+ * browser already reads an empty input as "no value" (coerceScalarInput); the door agrees.
+ */
+it('reads an empty string for a number, date or boolean Value as no value, and keeps it for a string',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,due:'2026-01-01',note:'x'}],access:'readwrite'});
+ const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Value name="note" type="string" /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due, note) select 2, coalesce($d, date '2026-02-02'), $note\`}</Mutation></Helmet><DataTable data="$rows" />`});
+ await f.share(ds,'viewer');
+ await f.grantFor(ds);
+ const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{d:'',note:''}}}),ctx(doc));
+ expect(res.status,await res.clone().text()).toBe(200);
+ const rows=(await loadDatasetRows((await getArtifactById(ds))!)) as Array<Record<string,unknown>>;
+ expect(rows.find(r=>r.id===2)).toMatchObject({due:'2026-02-02',note:''});
+});
+
+/*
+ * A row action declared before it is placed beside a row has one problem, and the publish door
+ * names it. It used to go on to analyze the statement with no row to bind, and appended the
+ * engine's own crash text ("Attempted to dereference unique_ptr that is NULL!") to the answer.
+ */
+it('names an unplaced row action once, without the engine\'s internal error beside it',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,note:'x'}],access:'readwrite'});
+ await f.grantFor(ds);
+ const res=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="unpay" source="ref:${ds}" expectedAffected={1}>{\`delete from public.rows where id = $_row.id\`}</Mutation></Helmet><DataTable data="$rows" />`}}));
+ expect(res.status).toBe(400);
+ const text=JSON.stringify(await res.json());
+ expect(text).toMatch(/must be invoked inside a DataTable Column or keyed For/);
+ expect(text).not.toMatch(/unique_ptr|dereference|cannot be safely analyzed/);
+});
+
+/* `$_me` is the caller. A value sent under that name is not a Value the document declares, so it is ignored. */
+it('never lets a caller choose who $_me is',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,who:'seed'}],access:'readwrite'});
+ const doc=await f.publish({markup:`<Helmet><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="sign" source="ref:${ds}">{\`insert into public.rows (id, who) select 2, $_me\`}</Mutation></Helmet><DataTable data="$rows" />`});
+ await f.share(ds,'viewer');
+ await f.grantFor(ds);
+ const res=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'sign',values:{_me:'usr_someone_else'}}}),ctx(doc));
+ expect(res.status,await res.clone().text()).toBe(200);
+ const rows=(await loadDatasetRows((await getArtifactById(ds))!)) as Array<Record<string,unknown>>;
+ expect(rows.find(r=>r.id===2)!.who).not.toBe('usr_someone_else');
+ expect(String(rows.find(r=>r.id===2)!.who)).toMatch(/^usr_/);
+});
+
+/*
+ * A GUEST'S WRITE SAYS WHAT TO DO.
+ *
+ * A statement that binds `$_me` needs a person, and until now a guest learned
+ * that by pressing the button and reading "$_me requires a logged-in user" —
+ * a sentence about a parameter binding. The capability the page draws from and
+ * the refusal a direct call gets now both carry `sign_in_required`, so the
+ * page can offer the door instead. The status and `error` are unchanged.
+ */
+it('answers a guest with sign_in_required for a $_me write, in the capability and in the refusal',async()=>{
+ const f=await fixture();
+ const markup='<Helmet>'
+  +'<Value name="rows" type="table" value={[{"id":1,"who":"nobody"}]} />'
+  +'<Query name="current">{`select * from rows`}</Query>'
+  +'<Mutation name="claim">{`update rows set who=$_me where id=1`}</Mutation>'
+  +'</Helmet><Button run="$claim">Claim it</Button><DataTable data="$current" />';
+ const doc=await f.publish({markup});
+ const capability=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));
+ expect(capability.status,await capability.clone().text()).toBe(200);
+ expect((await capability.json()).mutationAccess.claim).toBe('sign_in_required');
+ const refused=await mutate(request(`/a/${doc}/mutate`,{method:'POST',json:{mutation:'claim'}}),ctx(doc));
+ expect(refused.status).toBe(403);
+ expect(await refused.json()).toMatchObject({error:'policy_denied',code:'sign_in_required'});
+ // A signed-in reader is told nothing of the sort: the write is simply theirs.
+ const signedIn=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
+ expect((await signedIn.json()).mutationAccess.claim).toBe(null);
+ // Every other refusal keeps its own words.
+ const dataset=await anonymousQuery(request(`/a/${f.doc}/query?q=%7B%7D`),ctx(f.doc));
+ expect((await dataset.json()).mutationAccess.add).not.toBe('sign_in_required');
 });

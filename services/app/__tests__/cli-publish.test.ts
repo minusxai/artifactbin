@@ -36,7 +36,11 @@ describe('cli-sync-integration', () => {
    try{
     await cli.connect('real-cli-sync');
     await writeFile(join(root,'doc.jsx'),'<p>Initial</p>');
-    await cli.invoke(['push','doc.jsx']);expect(routesCalled(calls)).toEqual(['GET /api/artifacts','POST /api/artifacts/reservations','POST /api/artifacts']);calls.splice(0,2);
+    // `GET /api/server` opens the first command this private state directory runs: the public,
+    // credential-free question of which addresses the selected server answers at
+    // (services/cli/src/server-identity). The answer is cached, so it appears exactly once here
+    // and on no later command in this workspace — the call counts below are unchanged.
+    await cli.invoke(['push','doc.jsx']);expect(routesCalled(calls)).toEqual(['GET /api/server','GET /api/artifacts','POST /api/artifacts/reservations','POST /api/artifacts']);calls.splice(0,3);
     const first=parseDocument(await readFile(join(root,'doc.jsx'),'utf8'));expect(first.metadata.id).toBeTruthy();expect(first.body).toMatch(/id=/);
     await cli.invoke(['push']);expect(calls).toHaveLength(1);
     await writeFile(join(root,'doc.jsx'),writeDocument({...first,body:first.body.replace('Initial','Updated')}));

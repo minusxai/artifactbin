@@ -8,7 +8,7 @@ import { compactSurface } from '@/lib/story/page-transport';
  * server-run dataflow, the open-annotation count).
  */
 import { countOpenAnnotations } from '@/lib/annotations';
-import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, refDataForRow } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
 import { currentStoryCss } from '@/lib/data/story/story-css.server';
 import { resolveStoredStoryDesign } from '@/lib/data/story/story-themes';
@@ -116,6 +116,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     source: artifact.source ?? '', compiledCss, theme: design.theme,
     colorMode: design.colorMode, title: artifact.title, template: meta.template ?? null,
     refData, assetUrls, dataflow,
+    // WHO IS READING — the same answer the served document gets, so the shell's
+    // inline render of a document shows its owner the signed-in branch too.
+    viewer: await viewerIdentityFor(artifact, viewerId),
     queryUrl: queryPath(artifact.id), assetsUrl: assetsPath(artifact.id),
     ...(declared?.flow.mutations?.length ? { mutateUrl: mutatePath(artifact.id) } : {}),
     ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } } : {}),

@@ -4,7 +4,7 @@ import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-import { DEFAULT_SERVER } from "@artifactbin/contracts";
+import { DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
 
 /** Where afbin talks when nothing selects a server (spelled once, in contracts). */
 export { DEFAULT_SERVER };
@@ -68,21 +68,11 @@ async function readEnvFile(path: string): Promise<Record<string, string>> {
   }
   return saved;
 }
+/** The one origin rule (`@artifactbin/contracts`), as a refusal: the server list and this client read the same one. */
 export function normalizeServer(value: string): string {
-  const url = new URL(value);
-  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (
-    (url.protocol !== "https:" && !(url.protocol === "http:" && local)) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    url.pathname !== "/"
-  )
-    throw new Error(
-      "Use an HTTPS server origin, or HTTP localhost for development.",
-    );
-  return url.origin;
+  const origin = normalizeOrigin(value);
+  if (!origin) throw new Error("Use an HTTPS server origin, or HTTP localhost for development.");
+  return origin;
 }
 /** Client defaults never read server settings or implicitly follow a login. */
 export async function exportedServer(home = homedir(), env: NodeJS.ProcessEnv = process.env): Promise<string | undefined> {
@@ -116,6 +106,28 @@ export async function loadConnection(
     refreshToken: saved.ARTIFACTBIN_REFRESH_TOKEN, clientId: saved.ARTIFACTBIN_CLIENT_ID,
     ...(Number.isSafeInteger(expiresAt) && expiresAt > 0 ? {expiresAt} : {}),
   } : {}) };
+}
+/**
+ * CREDENTIALS READ THROUGH THE ALIAS MAPPING, never rewritten.
+ *
+ * One deployment answering at several names left credentials filed under whichever
+ * name the person happened to use. Once the two names are verified as one server
+ * (services/cli/src/server-identity), a token saved under either of them belongs to
+ * the canonical origin — so it is READ from wherever it lives and reported as the
+ * canonical origin's. Nothing on disk moves: the next `saveConnection` files the
+ * refreshed credential under the canonical origin on its own, and a migration that
+ * ran before verification would be a migration that could be wrong.
+ */
+export async function loadConnectionFor(
+  identity: {canonical: string; aliases: readonly string[]},
+  home = homedir(),
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<Connection | null> {
+  for (const origin of [identity.canonical, ...identity.aliases]) {
+    const saved = await loadConnection(origin, home, env);
+    if (saved) return {...saved, server: identity.canonical};
+  }
+  return null;
 }
 export async function saveConnection(
   connection: Connection,

@@ -77,6 +77,8 @@ export interface ScalarValueDecl extends Span {
   constraints?: import("@artifactbin/contracts").UserConstraints;
   /** Initial value; `null` when the author gave no `default`. */
   default: Scalar;
+  /** `false` keeps this Value out of the address: never written to it, never read from it. Absent = it travels in the link. */
+  url?: false;
 }
 
 interface TableValueDecl extends Span {
@@ -113,6 +115,8 @@ export interface MutationDecl extends Span {
   refs: string[];
   /** Optional affected-row guard, enforced by the mutation engine before persistence. */
   expectedAffected?: number;
+  /** Scalar Values set back to their declared defaults after this write succeeds. */
+  reset?: string[];
 }
 
 /** Everything a document declares — the parsed `<Helmet>` data children. */
@@ -271,6 +275,10 @@ export const REF_ATTRS: {
     Button: { run: 'mutation' },
     Dialog: {open: 'scalar'},
     DialogContent: {run: 'mutation'},
+    // A person, shown by name (components/kit/user.tsx). `id` READS its
+    // reference and never writes it back, which is what lets the viewer's own
+    // `$_me` sit there — see VIEWER_REF below.
+    User: { id: 'scalar' },
   },
   html: {
     input: { value: 'scalar', checked: 'scalar', run: 'mutation' },
@@ -312,12 +320,40 @@ export const isTemplateRefPosition = (tag: string, attr: string, isComponent: bo
   !!(isComponent ? TEMPLATE_REF_ATTRS.components[tag] : TEMPLATE_REF_ATTRS.html[tag.toLowerCase()])
     ?.has(isComponent ? attr : attr.toLowerCase());
 
+/**
+ * THE VIEWER, READ-ONLY — `$_me`.
+ *
+ * It is the account id of whoever is looking, and `null` for a guest. SQL has
+ * always bound it (lib/sql/dataflow-core binds `_me` from the request's user);
+ * markup reads the SAME name, so a page can branch on who is reading it
+ * (`{$_me ? <form/> : <SignIn/>}`) without a script and without a `<Value>`
+ * that would stick in the link.
+ *
+ * It is admitted WITHOUT a declaration, and it can never BE declared: `_`
+ * names are reserved (checkName above), so no author can shadow it. It is
+ * equally never WRITTEN — not by a control, not from a URL, not by
+ * `mx.set` — so it is admitted only where a reference is READ: inside a
+ * reactive expression, and in the read-only attributes below. Every other
+ * reference position is a two-way binding or a data source, and refuses it by
+ * name: who is reading a page is not something the page may set.
+ */
+export const VIEWER_REF = '_me';
+
+/**
+ * The REF_ATTRS positions that only READ their reference — where `$_me` is
+ * therefore legal. Deliberately tiny and opt-in: a binding position added to
+ * REF_ATTRS later must not silently become a place the viewer can be written.
+ */
+const READ_ONLY_REF_ATTRS: Record<string, ReadonlySet<string>> = { User: new Set(['id']) };
+
 /** One `$name` occurrence in the body. */
 interface RefNameUse extends Span {
   name: string;
   tag: string;
   attr: string;
   expects: RefKind;
+  /** True where the reference is only READ — the positions `$_me` may sit in. */
+  readOnly?: boolean;
 }
 
 // ── parsing the two Helmet children ─────────────────────────────────────────
@@ -376,10 +412,10 @@ export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
   }
 };
 
-const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'source', 'column', 'constraints']);
+const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'source', 'column', 'constraints', 'url']);
 
 /**
- * `<Value name type? default? value? columns? source? column? constraints? />`
+ * `<Value name type? default? value? columns? source? column? constraints? url? />`
  * → a declaration, or the precise errors. Attributes (VALUE_ATTRS; anything
  * else is rejected by name): `name` (identifier), `type` (VALUE_TYPES,
  * defaulting to "string", or to "user" when `source` is present), `default`
@@ -388,12 +424,14 @@ const VALUE_ATTRS = new Set(['name', 'type', 'default', 'value', 'columns', 'sou
  * only), and the BOUND form's `source` (`ref:<id>`) + `column` (the field it
  * inherits its type and `constraints` from — so a bound Value may write neither
  * `type` nor `constraints` itself, and `column` without `source` is an error).
+ * `url={false}` (SCALAR only) keeps this Value out of the address in both
+ * directions — lib/story/url-values.
  */
 export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   const tag = VALUE_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (!VALUE_ATTRS.has(a.name)) errors.push(err(`<Value> takes name, type, default, value, columns — not "${a.name}"`, a, tag, a.name));
+    if (!VALUE_ATTRS.has(a.name)) errors.push(err(`<Value> takes name, type, default, value, columns, url — not "${a.name}"`, a, tag, a.name));
     else if (!a.value.static) errors.push(err(`<Value> attribute "${a.name}" must be a JSON literal, got ${a.value.exprType}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
@@ -410,6 +448,20 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
   if (!VALUE_TYPES.includes(type)) {
     return { ok: false, errors: [err(`<Value name="${name}"> type must be one of ${VALUE_TYPES.join(' | ')}, got ${JSON.stringify(typeAttr?.json)}`, typeAttr?.attr ?? el, tag, 'type')] };
   }
+  /*
+   * `url={false}` — the one Value that does NOT travel in the link. Only a
+   * scalar does in the first place (a table's rows were never settable from an
+   * address), and `url={true}` is the default said out loud, so it leaves no
+   * field behind: the declaration a document at rest carries is unchanged.
+   */
+  const urlAttr = staticAttr(el, 'url');
+  if (urlAttr && typeof urlAttr.json !== 'boolean') {
+    return { ok: false, errors: [err(`<Value name="${name}"> url must be true or false, got ${JSON.stringify(urlAttr.json ?? urlAttr.attr.value)}`, urlAttr.attr, tag, 'url')] };
+  }
+  if (urlAttr && type === 'table') {
+    return { ok: false, errors: [err(`<Value name="${name}" type="table"> takes no url= — only a scalar <Value> travels in the link`, urlAttr.attr, tag, 'url')] };
+  }
+  const outOfUrl = urlAttr?.json === false;
   const def = staticAttr(el, 'default');
   const val = staticAttr(el, 'value');
   const cols = staticAttr(el, 'columns');
@@ -418,8 +470,10 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
     if (def) errors.push(err(`<Value name="${name}" type="table"> holds its rows in value=, not default=`, def.attr, tag, 'default'));
     if (!val) return { ok: false, errors: [...errors, err(`<Value name="${name}" type="table"> needs value={[{…}, …]} — a non-empty array of flat objects`, el, tag, 'value')] };
     const rows = val.json;
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return { ok: false, errors: [...errors, err(`<Value name="${name}"> value must be a non-empty array of flat objects`, val.attr, tag, 'value')] };
+    // Rows are where a table's columns are inferred from, so an empty one has no shape —
+    // unless the author declared the columns: a temporary table a local Mutation fills starts empty.
+    if (!Array.isArray(rows) || (rows.length === 0 && !cols)) {
+      return { ok: false, errors: [...errors, err(`<Value name="${name}"> value must be a non-empty array of flat objects, or value={[]} with columns={[{name, type}]}`, val.attr, tag, 'value')] };
     }
     for (const [i, row] of rows.entries()) {
       if (row === null || typeof row !== 'object' || Array.isArray(row)) {
@@ -453,7 +507,7 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
     errors.push(err(`<Value name="${name}" type="${type}"> default ${JSON.stringify(dflt)} is not a ${type}${type === 'date' ? ' (use YYYY-MM-DD)' : ''}`, def.attr, tag, 'default'));
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), default: dflt, start: el.start, end: el.end } };
+  return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), ...(outOfUrl ? { url: false as const } : {}), default: dflt, start: el.start, end: el.end } };
 }
 
 /**
@@ -498,7 +552,7 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
 }
 
 /**
- * `<Mutation name source? expectedAffected?>{`sql`}</Mutation>` → a
+ * `<Mutation name source? expectedAffected? reset?>{`sql`}</Mutation>` → a
  * declaration, or the errors. The Query rules (one template-literal child,
  * non-empty) plus one of its own: it names exactly ONE target — the dataset
  * `source="ref:<id>"` points at, or a local table the SQL writes directly.
@@ -511,7 +565,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   const tag = MUTATION_TAG;
   const errors: ValidationError[] = [];
   for (const a of el.attributes) {
-    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected') errors.push(err(`<Mutation> takes only name=, source= and expectedAffected= — the SQL is its child: <Mutation name="…" source="ref:<id>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
+    if (a.name !== 'name' && a.name !== 'source' && a.name !== 'expectedAffected' && a.name !== 'reset') errors.push(err(`<Mutation> takes only name=, source=, expectedAffected= and reset= — the SQL is its child: <Mutation name="…" source="ref:<id>">{\`insert into public.rows …\`}</Mutation>${a.name === 'sql' ? ' (not a sql= attribute)' : ''}`, a, tag, a.name));
   }
   if (errors.length) return { ok: false, errors };
   const name = checkName(el, tag, errors);
@@ -541,7 +595,18 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
   if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
     return { ok: false, errors: [err(`<Mutation expectedAffected> must be a non-negative integer`, expected.attr, tag, 'expectedAffected')] };
   }
-  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), target: local ? direct.name : refs[0], refs, ...(local ? {scope: 'local' as const} : {}), ...(expected ? { expectedAffected: expected.json as number } : {}), start: el.start, end: el.end } };
+  /*
+   * `reset="draft amount"` — the form this write clears once it has SUCCEEDED.
+   * A static, space-separated list of names; that each one is a declared scalar
+   * is a whole-document fact, so it is checked in `validateDataflow` where the
+   * declarations are in hand. Empty is absent: nothing to clear.
+   */
+  const resetAttr = staticAttr(el, 'reset');
+  if (resetAttr && typeof resetAttr.json !== 'string') {
+    return { ok: false, errors: [err(`<Mutation name="${name}"> reset must be a space-separated list of scalar <Value> names, got ${JSON.stringify(resetAttr.json ?? resetAttr.attr.value)}`, resetAttr.attr, tag, 'reset')] };
+  }
+  const reset = typeof resetAttr?.json === 'string' ? resetAttr.json.trim().split(/\s+/).filter(Boolean) : [];
+  return { ok: true, decl: { name, sql, ...(source ? {source} : {}), params: sqlParams(sql), target: local ? direct.name : refs[0], refs, ...(local ? {scope: 'local' as const} : {}), ...(expected ? { expectedAffected: expected.json as number } : {}), ...(reset.length ? { reset } : {}), start: el.start, end: el.end } };
 }
 
 // ── the reference graph ─────────────────────────────────────────────────────
@@ -550,7 +615,8 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
 export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
   const out: RefNameUse[] = [];
   const expressionUses = (expression: ReactiveExpression | undefined, span: Span, tag: string, attr: string) => {
-    if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', start: span.start, end: span.end});
+    // A reactive expression only reads: `{$_me ? … : …}` never writes anything.
+    if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', readOnly: true, start: span.start, end: span.end});
   };
   const visit = (nodes: JsxNode[]) => {
     for (const n of nodes) {
@@ -566,13 +632,14 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
         for (const a of n.attributes) {
           const expects = table[n.isComponent ? a.name : a.name.toLowerCase()];
           if (!expects || !a.value.static) continue;
+          const readOnly = !!(n.isComponent && READ_ONLY_REF_ATTRS[n.tag]?.has(a.name));
           const name = refName(a.value.json);
-          if (name) { out.push({ name, tag: n.tag, attr: a.name, expects, start: a.start, end: a.end }); continue; }
+          if (name) { out.push({ name, tag: n.tag, attr: a.name, expects, readOnly, start: a.start, end: a.end }); continue; }
           // …and, in the one position that reads it, every `{$name}` inside the
           // string. Same kind, same checks, same refusal — one use per name.
           if (!isTemplateRefPosition(n.tag, a.name, n.isComponent)) continue;
           for (const templated of templateRefNames(a.value.json)) {
-            out.push({ name: templated, tag: n.tag, attr: a.name, expects, start: a.start, end: a.end });
+            out.push({ name: templated, tag: n.tag, attr: a.name, expects, readOnly, start: a.start, end: a.end });
           }
         }
       }
@@ -674,6 +741,17 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
   const describe = (kind: RefKind): string =>
     kind === 'scalar' ? 'a scalar <Value>' : kind === 'table' ? 'a table' : 'a <Mutation>';
   for (const u of uses) {
+    // The one name nobody declares (VIEWER_REF): admitted where a reference is
+    // only read, refused by name anywhere it would be bound or written.
+    if (u.name === VIEWER_REF) {
+      if (!u.readOnly || u.expects !== 'scalar') {
+        errors.push(err(
+          `<${u.tag} ${u.attr}="$_me"> cannot bind $_me — it is the viewer's account id and read-only. Read it in a condition ({$_me ? … : …}) or show the person with <User id="$_me" />`,
+          u, u.tag, u.attr,
+        ));
+      }
+      continue;
+    }
     const kind = kinds.get(u.name);
     if (!kind) {
       errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into public.rows …`}</Mutation>' : hint}`, u, u.tag, u.attr));
@@ -703,6 +781,13 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
     checkParams(m, MUTATION_TAG);
     if (m.scope === 'local' && m.target !== SIGNALS_TABLE && !flow.values.some(v => v.kind === 'table' && v.name === m.target)) {
       errors.push(err(`Local mutation "${m.name}" must target a declared table Value or _signals`, m, MUTATION_TAG));
+    }
+    // `reset=` clears a FORM: every name must be a scalar <Value> with a default to go back to.
+    for (const name of m.reset ?? []) {
+      const kind = kinds.get(name);
+      if (kind !== 'scalar') {
+        errors.push(err(`<Mutation name="${m.name}"> reset="… ${name} …" names ${kind ? describe(kind) : 'nothing declared'} — reset clears scalar <Value>s${kind ? '' : hint}`, m, MUTATION_TAG, 'reset'));
+      }
     }
   }
 
@@ -750,6 +835,20 @@ export function selectedQueries(flow: Dataflow, selection: { only?: Iterable<str
 /** Every dataset id any query reads, deduped — what `meta.refs` needs. */
 export function datasetRefsInDataflow(flow: Dataflow): string[] {
   return dedupe([...flow.queries.flatMap(q=>q.refs),...flow.values.flatMap(v=>v.kind==='scalar'&&v.source?[v.source]:[])]);
+}
+
+/**
+ * The DECLARED type of every `$param` a statement may bind — what the SQL
+ * service plans and binds with instead of guessing from the JavaScript value
+ * (a `date` Value travels as a 'YYYY-MM-DD' string). ONE expression, shared by
+ * the read path, the publish-time checks and the write door, so a statement is
+ * never analyzed under one typing and executed under another.
+ */
+export function scalarParamTypes(flow: Dataflow): Record<string, ColumnType> {
+  const out: Record<string, ColumnType> = {};
+  for (const v of flow.values) if (v.kind === 'scalar') out[v.name] = v.type;
+  out._me = 'user';
+  return out;
 }
 
 /** The initial `values` map: every scalar at its declared default. */

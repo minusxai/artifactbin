@@ -37,6 +37,7 @@ export type StateKind =
   | 'account'            // key: path         value: {resource, sha256}; the binding lives on the 'workspace' record
   | 'retired-create'     // key: path         value: {id, path, server, key}
   | 'background-update' // key: server origin; value: local check/backoff timestamps
+  | 'server-identity'   // key: selected origin; value: {canonical, aliases, checkedAt} (server-identity.ts)
   | 'preview-comment'   // key: comment id; value: selected-file/node attribution and text
   | 'archive';           // key: <kind>/<id>  value: anything kept for forensics, never read by commands
 

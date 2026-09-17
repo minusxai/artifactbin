@@ -82,9 +82,17 @@ function pairsOf(search: string): RawPair[] {
   return out;
 }
 
-/** The document's scalar declarations by name — tables are never settable from a link. */
+/**
+ * The document's LINK-CARRIED scalar declarations by name. Tables are never
+ * settable from a link, and neither is a scalar the author kept out of it with
+ * `url={false}` — a form draft or a script flag. Excluding them HERE, in the
+ * one map all three doors read, is what makes the opt-out symmetric: nothing
+ * reads such a name from an address (a stale or hand-made link cannot set it),
+ * nothing writes one to it, and `urlSelection` — export and cache keying —
+ * sees the same document at rest.
+ */
 const scalarsOf = (flow: Dataflow): Map<string, ScalarValueDecl> =>
-  new Map(flow.values.filter((v): v is ScalarValueDecl => v.kind === 'scalar').map((v) => [v.name, v]));
+  new Map(flow.values.filter((v): v is ScalarValueDecl => v.kind === 'scalar' && v.url !== false).map((v) => [v.name, v]));
 
 /**
  * One URL string against one declaration. `null` means "the link said nothing

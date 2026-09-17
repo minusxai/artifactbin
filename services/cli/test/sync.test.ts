@@ -330,6 +330,52 @@ describe('pulling a dataset', () => {
   });
 });
 
+describe('a declared write that names the viewer', () => {
+  // Found by rerunning the original prompt with a fresh agent: `afbin query DOC --name join --write`
+  // answered "join requires _me", so the agent looked up its own account id and passed it in.
+  const head=(mutations:unknown[])=>Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',access:'readwrite',mutations,capabilities:{edit:true,mutation_receipts:true}},{headers:{'X-Artifactbin-Account':'account'}});
+  const run=async(root:string,args:string[],mutations:unknown[])=>{
+   const out:string[]=[];const bodies:unknown[]=[];
+   const code=await runCli(['query','abc123','--write',...args,'--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>out.push(s),stderr:()=>{},fetch:async(_input,init)=>{
+    if(init?.method==='POST'){bodies.push(JSON.parse(String(init.body)));return Response.json({id:'abc123',version:2,affected:1,rowCount:1},{headers:{'X-Artifactbin-Account':'account'}});}
+    return head(mutations);
+   }});
+   return{code,result:JSON.parse(out.join('')),bodies};
+  };
+  test('runs without asking for $_me: the server binds it from the sign-in',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
+   try{
+    await saveTestConnection({server:'https://example.com',token:'test'},root);
+    const joined=await run(root,['--name','join'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    assert.equal(joined.code,0,JSON.stringify(joined.result));
+    assert.deepEqual(joined.bodies,[{name:'join',values:{}}]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+  test('refuses a supplied $_me by saying whose it is, and sends nothing',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
+   try{
+    await saveTestConnection({server:'https://example.com',token:'test'},root);
+    const forged=await run(root,['--name','join','--param','_me=usr_someone'],[{name:'join',params:[{name:'_me',type:'user'}]}]);
+    assert.notEqual(forged.code,0);
+    assert.equal(forged.result.error.code,'invalid_parameter');
+    assert.match(forged.result.error.message,/_me/);
+    assert.match(forged.result.error.fix,/sign/i);
+    assert.deepEqual(forged.bodies,[]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+  test('says a row action runs from the page, not from a command line',async()=>{
+   const root=await mkdtemp(join(tmpdir(),'afbin-me-write-'));
+   try{
+    await saveTestConnection({server:'https://example.com',token:'test'},root);
+    const row=await run(root,['--name','remove'],[{name:'remove',params:[{name:'_row'},{name:'_me',type:'user'}]}]);
+    assert.notEqual(row.code,0);
+    assert.equal(row.result.error.code,'row_mutation');
+    assert.match(row.result.error.fix,/live-sessions/);
+    assert.deepEqual(row.bodies,[]);
+   }finally{await rm(root,{recursive:true,force:true});}
+  });
+});
+
 describe('a lost mutation reply', () => {
   test('a lost mutation reply resumes the frozen operation with the same identity and rejects changed input',async()=>{
    const root=await mkdtemp(join(tmpdir(),'afbin-write-recovery-'));const keys:string[]=[];let lose=true;
@@ -411,6 +457,25 @@ describe('deleting many typed targets', () => {
     assert.equal(await readFile(join(h.root,'notes.txt'),'utf8'),'keep me\n');assert.equal(await readFile(join(h.root,'notes.yaml'),'utf8'),'type: file\nid: fil123\nsource: notes.txt\n');
    }finally{await h.cleanup();}
   });
+});
+
+test('a published page that declares a write is told the push did not run it',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-published-writes-'));
+ try{
+  const markup='<Helmet><Value name="title" type="string" /><Value name="drafts" type="table" value={[]} columns={[{"name":"title","type":"string"}]} /><Mutation name="add">{`insert into drafts (title) values ($title)`}</Mutation></Helmet><Button run="$add">Add</Button>';
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},root);await seedIdentityPool(root,root,['abc123']);await writeFile(join(root,'app.jsx'),markup);
+  const output:string[]=[];
+  const fetch=async(input:unknown)=>String(input).endsWith('/preflight')?Response.json({valid:true})
+   :Response.json({id:'abc123',version:1,edit_id:'one',state:digest('one'),format:'markup',markup},{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  assert.equal(await runCli(['push','app.jsx','--json'],{cwd:root,home:root,interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch}),0,output.join(''));
+  const result=JSON.parse(output[0]);
+  assert.ok(result.next.startsWith(PUBLISHED_NEXT),'the measured rule for documents is kept verbatim');
+  assert.match(result.next,/add/);
+  assert.match(result.next,/live session/);
+  assert.match(result.next,/--as guest/);
+  assert.match(result.next,/afbin help live-sessions/);
+  assert.ok(result.verified[0].checks.some((c:string)=>/1 write declared, not run/.test(c)),JSON.stringify(result.verified));
+ }finally{await rm(root,{recursive:true,force:true});}
 });
 
 test('a successful publish says the head is the pushed file, so the agent does not spend turns verifying it; a dry-run says nothing',async()=>{
@@ -637,6 +702,60 @@ test('push --policy viewers-write publishes a dataset the link audience can writ
   const grant=calls.filter(call=>call.method==='PATCH').at(-1)!;
   assert.equal(grant.body.expectedPolicyRevision,5);
   assert.equal(both.result.operations[0].policy,'viewers-write');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
+/**
+ * THE SHORTHAND HAS TO FIT THE DATASET IT IS AIMED AT.
+ *
+ * `viewers-write` used to be spelled for `public.rows` whatever was pushed, so a multi-table
+ * `<Dataset>` definition got a grant on a table it does not have: `invalid_policy: Policy table is
+ * not in this dataset`, answered AFTER the content was already published — a live dataset with no
+ * policy, and nothing in the message to do about it. The grant names the dataset's OWN tables.
+ */
+test('push --policy viewers-write grants every table a multi-table dataset declares',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-tables-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ let head:any;
+ const curated=({dataset_policy:_policy,policy_revision:_revision,...rest}:any)=>rest;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  if(path==='/api/artifacts'&&method==='POST'){
+   head={id:'people01',version:1,edit_id:'e1',state:digest('people-1'),format:'dataset',access:body.access??'read',policy_revision:0,dataset_policy:null};
+   return Response.json(curated(head),{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='PATCH'){
+   head={...head,edit_id:'e2',state:digest('people-2'),dataset_policy:body.policy??null,policy_revision:(head.policy_revision??0)+1};
+   return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='GET')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},home);await seedIdentityPool(home,cwd,['people01']);
+  await writeFile(join(cwd,'people.jsx'),`<Dataset kind="stored">
+  <Table schema="public" name="people" columns={["name"]} rows={[]} />
+  <Table schema="public" name="shifts" columns={["person","day"]} rows={[]} />
+</Dataset>
+`);
+  await writeFile(join(cwd,'people.yaml'),'type: dataset\nsource: people.jsx\n');
+  const out:string[]=[];
+  const code=await runCli(['push','people.yaml','--policy','viewers-write','--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});
+  const result=JSON.parse(out.join(''));
+  assert.equal(code,0,JSON.stringify(result));
+  const patch=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.deepEqual(patch.body.policy.tables.map((table:any)=>table.table),[{schema:'public',name:'people'},{schema:'public',name:'shifts'}]);
+  // Every declared table is WRITABLE, not merely named: the grant is the one `public.rows` gets.
+  for(const table of patch.body.policy.tables){
+   assert.deepEqual(table.insert_permissions,[{role:'viewer',permission:{columns:'*',check:{}}}]);
+   assert.deepEqual(table.update_permissions,[{role:'viewer',permission:{columns:'*',filter:{},check:{}}}]);
+   assert.deepEqual(table.delete_permissions,[{role:'viewer',permission:{filter:{}}}]);
+  }
+  // The shape the server will parse, proven against the shared parser rather than by hand.
+  assert.deepEqual(parseDatasetPolicy(patch.body.policy),patch.body.policy);
+  assert.equal(result.operations[0].policy,'viewers-write');
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

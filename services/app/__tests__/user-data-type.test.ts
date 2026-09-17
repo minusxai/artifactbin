@@ -5,7 +5,7 @@ import {PUT as replaceRoute} from '@/app/api/artifacts/[id]/route';
 import {observedRequest} from '@/__tests__/conditional-request';
 import {POST as mutateRoute} from '@/app/api/artifacts/[id]/mutate/route';
 import {getDb} from '@/lib/db';
-import {getArtifactById,dataflowForRow,setMetadataFor,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact} from '@/lib/artifacts';
+import {getArtifactById,dataflowForRow,setMetadataFor,applyEditFor,commitNormalizedMarkup,publishMarkupForArtifact,viewerIdentityFor} from '@/lib/artifacts';
 import {loadDatasetRows} from '@/lib/story/dataset-store';
 import {mintToken} from '@/lib/tokens';
 import {claimToken, createUser} from '@/lib/users';
@@ -111,6 +111,27 @@ describe('native user fields',()=>{
   const own=await create(anonymous.token,{dataset:[{id:1,who:null}],columns:[{name:'who',type:'user',constraints:{self:true}}],access:'readwrite'});
   const denied=await mutate(anonymous.token,own.id,'update public.rows set who=$_me');
   expect(denied.status).toBe(403);
+ });
+ /*
+  * WHO IS READING, NAMED. A <User> may show the viewer themselves, and the
+  * label comes from the SAME lookup a DataTable cell has always used: one row,
+  * by id, for the person already logged in and asking. Never an email, never a
+  * directory — a guest is told nothing at all.
+  */
+ it('names the viewer to themselves and nobody to a guest',async()=>{
+  const reader=await account('reader'), owner=await account('host');
+  const markup='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /></Helmet><p>Paid by <User id="$_me" /></p>';
+  const report=await create(owner.token,{markup,visibility:'public'});
+  const row=(await getArtifactById(report.id))!;
+  const mine=await dataflowForRow(row,{viewer:{userId:reader.user.id,tokenId:null,email:reader.user.email}});
+  expect(mine?.state.userLabels).toEqual({[reader.user.id]:'reader'});
+  expect(JSON.stringify(mine?.state.userLabels)).not.toContain('@');
+  expect((await dataflowForRow(row,{}))?.state.userLabels ?? {}).toEqual({});
+  // The island carries the same answer, so first paint needs no query at all —
+  // and a document that names nobody pays for no lookup.
+  expect(await viewerIdentityFor({source:markup},reader.user.id)).toEqual({id:reader.user.id,label:'reader'});
+  expect(await viewerIdentityFor({source:'<p>nobody here</p>'},reader.user.id)).toEqual({id:reader.user.id});
+  expect(await viewerIdentityFor({source:markup},null)).toBeNull();
  });
  it('refuses invalid constraint syntax instead of dropping it',async()=>{
   const a=await account('owner');

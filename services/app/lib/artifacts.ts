@@ -5,6 +5,7 @@ import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
 import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
+import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -52,7 +53,7 @@ import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { finalizeArtifactMetadata, readParsedArtifactMetadata } from './story/parsed-artifact-metadata';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
-import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
+import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, scalarMatches, scalarParamTypes, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { dryRunDataflow } from '@/lib/story/data-checks';
 import { mutationUsesRow, mutationUsesValue } from '@/lib/story/row-scope';
 import { compileStoredMutation } from '@/lib/datasets/stored-mutation';
@@ -64,7 +65,7 @@ import { runMutation } from '@/lib/sql/engine';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
 import { localTableOverrides } from '@/lib/story/local-tables';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
-import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
 import type { DatasetColumn } from '@/lib/story/data-tiers';
 import { checkDocumentData } from '@/lib/story/data-checks';
@@ -919,6 +920,14 @@ export function isVersionNotArchived(r: ArtifactRow | null | VersionNotArchived)
 }
 
 /**
+ * The refusal a dataset's WRITE POLICY answers — 409, by name, never the
+ * uniform 404. One spelling for every door that has to say it, because a
+ * caller learning "policy_locked" once should not meet a second code for the
+ * same fact on the next door.
+ */
+const policyLocked = (detail: string): Response => json({error:'policy_locked',detail},409);
+
+/**
  * Revert to an archived version — as a NEW version (the current state is
  * archived first), so a revert is itself revertible and the URL never moves.
  * Null when the artifact or the requested version doesn't exist.
@@ -927,7 +936,12 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
   const db = await getDb();
   const scope = editorScope(actor);
   const initial = (await db.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${scope.where('$2')}`, [id,scope.val])).rows[0];
-  if (!initial || initial.dataset_policy) return null;
+  if (!initial) return null;
+  // A governed dataset is not revertible: restoring an archived table would
+  // drop the rows viewers have written under the policy since. The GUARD is
+  // unchanged — what changed is that it now says so instead of answering the
+  // uniform 404 for a dataset the caller is looking straight at.
+  if (initial.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
   const condition = (row: ArtifactRow): Response | null => {
     if (opts.expectedVersion !== undefined && row.version !== opts.expectedVersion) return json({error:'version_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
     if (opts.expectedState !== undefined && artifactState(row) !== opts.expectedState) return json({error:'state_conflict',currentVersion:row.version,currentState:artifactState(row)},409);
@@ -944,7 +958,8 @@ async function revertScoped(actor: TokenActor, id: string, version: number, opts
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
-    if (!current || current.dataset_policy) return null;
+    if (!current) return null;
+    if (current.dataset_policy) return {notArchived:true,refusal:policyLocked('a dataset with a write policy cannot be reverted — republish the rows you want as the owner')};
     const refusal = condition(current); if (refusal) return {notArchived:true,refusal};
     if(artifactState(current)!==artifactState(initial)) return {notArchived:true,conflictVersion:current.version};
     if(prepared) return commitNormalizedMarkup(tx,actor,current,{...prepared,title:target.title,description:target.description,format:target.format});
@@ -991,7 +1006,7 @@ interface VersionConflict {
   conflict: true;
   currentVersion: number;
 }
-export function isVersionConflict(r: ArtifactRow | null | VersionConflict): r is VersionConflict {
+export function isVersionConflict(r: ArtifactRow | null | VersionConflict | Response): r is VersionConflict {
   return r !== null && 'conflict' in r;
 }
 
@@ -1014,22 +1029,52 @@ async function replaceScoped(
   id: string,
   input: ArtifactInput,
   opts: ReplaceOpts = {},
-): Promise<ArtifactRow | null | VersionConflict> {
+): Promise<ArtifactRow | null | VersionConflict | Response> {
   const db = await getDb();
   const scope = editorScope(actor);
   // Event and the parent wakeups fire post-txn — an unawaited query from
   // inside the callback would deadlock PGLite's serialized op queue.
   let moved: { from: string | null; to: string | null } | null = null;
-  const result: ArtifactRow | null | VersionConflict = await db.transaction(async (tx) => {
+  const result: ArtifactRow | null | VersionConflict | Response = await db.transaction(async (tx) => {
     const current = (
       await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id = $1 AND ${scope.where('$2')} FOR UPDATE`, [id, scope.val])
     ).rows[0];
-    if (!current || current.dataset_policy) return null;
+    if (!current) return null;
+    /*
+     * A GOVERNED DATASET IS THE OWNER'S TO REPUBLISH — AND NOBODY ELSE'S.
+     *
+     * This guard used to be `|| current.dataset_policy` on the line above, so
+     * every re-push of a dataset carrying a write policy came back as the
+     * uniform `not_found` — including the owner's, including one that only
+     * added a column. `--policy viewers-write` is the documented way to make a
+     * writable dataset, so the shorthand made the dataset permanently
+     * unmaintainable and said nothing about why.
+     *
+     * Who: the ONE ownership rule, asked in SQL (ownerScope), never mirrored
+     * in JS here. A named editor was invited to write the document, not to
+     * replace the rows other people are writing under the owner's policy, and
+     * they are told so BY NAME (`policy_locked`) rather than by a 404.
+     */
+    if (current.dataset_policy && !(await tx.query('SELECT 1 FROM artifacts WHERE id=$1 AND '+ownerScope(actor).where('$2'), [id, ownerScope(actor).val])).rows.length) {
+      return policyLocked('this dataset carries a write policy; only its owner may replace its content');
+    }
     if (opts.expectedState !== undefined && artifactState(current) !== opts.expectedState) return {conflict:true, reason:'state_conflict', currentVersion:current.version, currentState:artifactState(current)};
     if (opts.expectedVersion !== undefined && current.version !== opts.expectedVersion) {
       return { conflict: true, currentVersion: current.version };
     }
     input=retainUserScope(input,current);
+    /*
+     * The policy is re-validated against the REPLACEMENT's catalog, inside this
+     * transaction, by the same function that validated it when it was set — so
+     * a replacement that drops a table or a permission column is refused
+     * (`policy_mismatch`, naming what is missing) instead of leaving a policy
+     * pointing at columns that no longer exist. The policy row and its revision
+     * are untouched by a replace: what was granted stays granted.
+     */
+    if (current.dataset_policy) {
+      try { validateDatasetPolicyForRow({format:input.format,meta:input.meta,content:input.content}, current.dataset_policy); }
+      catch (error) { return json({error:'policy_mismatch',detail:error instanceof Error?error.message:'The dataset policy does not fit this replacement.'},400); }
+    }
     await validateUserContent(tx,input,actor.userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
     const replacementCatalog=catalogOf(input);
     if(replacementCatalog?.kind==='postgres'&&replacementCatalog.connection)await resolveDatasetConnection(replacementCatalog.connection,undefined,current.id,tx);
@@ -1115,10 +1160,11 @@ async function replaceScoped(
     moved = { from: parentOf(current), to: parentOf(updated.rows[0]) };
     return updated.rows[0];
   });
-  if (result && !isVersionConflict(result)) void trackEvent('update', result.id, { userId: result.user_id });
+  const written = result && !isVersionConflict(result) && !(result instanceof Response) ? result : null;
+  if (written) void trackEvent('update', written.id, { userId: written.user_id });
   // BOTH ends of a move wake: the folder the row left and the one it joined.
   if (moved) await wakeParents(moved);
-  if (result && !isVersionConflict(result)) sayMoved(actor, result.id, moved);
+  if (written) sayMoved(actor, written.id, moved);
   return result;
 }
 
@@ -1796,7 +1842,7 @@ export function listArtifactsFor(actor: TokenActor): Promise<ArtifactSummary[]> 
   return listArtifactsScoped(ownerScope(actor));
 }
 
-export function replaceArtifactFor(actor: TokenActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | null> {
+export function replaceArtifactFor(actor: TokenActor, id: string, input: ArtifactInput, opts: ReplaceOpts = {}): Promise<ArtifactRow | VersionConflict | Response | null> {
   return replaceScoped(actor, id, input, opts);
 }
 
@@ -1966,7 +2012,13 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
 type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
   | { ok: true; local: LocalMutationResult }
-  | { ok: false; reason: 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
+  | {
+      ok: false;
+      reason: 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row';
+      detail?: string;
+      /** The machine-readable half of the one refusal a reader can act on (lib/story/sign-in-required). */
+      code?: typeof SIGN_IN_REQUIRED;
+    };
 
 export async function runDocumentMutation(
   doc: ArtifactRow,
@@ -2002,7 +2054,20 @@ export async function runDocumentMutation(
   let flow: Dataflow = { values: content.values, queries: content.queries, mutations: content.mutations };
   try {flow=await resolveUserValues(flow,refLoaderForActor(writer));}catch(error){return {ok:false,reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid user binding'};}
   const bound = initialValues(flow);
-  for (const [k, v] of Object.entries(values)) if (k in bound) bound[k] = v;
+  const paramTypes = scalarParamTypes(flow);
+  for (const [k, v] of Object.entries(values)) {
+    if (!(k in bound)) continue;
+    // TYPE AT THE DOOR, as the read catalog already does. The statement is
+    // planned and bound under the DECLARED type, so a value of another JS type
+    // is not a statement the engine should be asked to make sense of — it is a
+    // caller error, and the message names the parameter. `null` always clears.
+    // An EMPTY string for a number, date, boolean or user Value is "no value" — what a cleared
+    // input sends, and what `--param due=` means on a command line (coerceScalarInput reads it
+    // the same way). A string Value keeps its empty string: '' is a string.
+    const value = v === '' && paramTypes[k] !== 'string' ? null : v;
+    if (!scalarMatches(value, paramTypes[k]!)) return { ok: false, reason: 'invalid_sql', detail: `parameter $${k} does not match its declared type` };
+    bound[k] = value;
+  }
 
   bound._me=actor.userId;
   let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
@@ -2029,7 +2094,7 @@ export async function runDocumentMutation(
   if (decl.scope === 'local') {
     try {
       const tables = localTableOverrides(flow, localTables);
-      if(decl.params.includes('_me')&&!actor.userId)return {ok:false,reason:'policy_denied',detail:'$_me requires a logged-in user'};
+      if(decl.params.includes('_me')&&!actor.userId)return {ok:false,reason:'policy_denied',detail:'$_me requires a logged-in user',code:SIGN_IN_REQUIRED};
       const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate:async input=>{
         const columns=input.table.columns.map(c=>c.constraints?.memberOf?{...c,constraints:{...c.constraints,memberOf:c.constraints.memberOf.map(ref=>ref==='current'?`ref:${doc.id}`:ref)}}:c);
         const out=await runMutation({...input,table:{...input.table,columns},params:{...input.params,_me:actor.userId}});
@@ -2041,8 +2106,8 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}) });
-  if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
+  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, paramTypes, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}) });
+  if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail, ...(result.code ? { code: result.code } : {}) };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
 
@@ -2124,9 +2189,14 @@ export async function dataflowForRow(
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
-  if(result&&(result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
+  // A document NAMES people when a user-typed value or column reaches it, and
+  // now also when it draws a <User> — which a document with no user data at all
+  // may do (`<User id="$_me" />`). The viewer's own id is added for both,
+  // because the one person a page can always name is the one reading it.
+  if(result&&(drawsPeople(row.source)||result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
     const db=await getDb(), options:NonNullable<DataflowState['userOptions']>={}, ids=new Set<string>();
     const viewer=opts.viewer??null;
+    if(viewer?.userId)ids.add(viewer.userId);
     const permitted=async(column:DatasetColumn)=>{
       const refs=column.constraints?.memberOf;
       if(!refs)return column;
@@ -2152,22 +2222,34 @@ export async function dataflowForRow(
   return result;
 }
 
-/** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions. */
+/** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions.
+ * The preview analyzes the statement under the DECLARED param types too, so the button the page
+ * draws and the write the click attempts are judged on one plan.
+ *
+ * A statement binding `$_me` additionally needs a PERSON, and a guest pressing
+ * it would otherwise learn that from the raw refusal ("$_me requires a
+ * logged-in user") after the click. That answer is decided last, on a
+ * capability that is otherwise PERMITTED — "unavailable only because the viewer
+ * is a guest" — so a dataset that refuses this actor for its own reasons keeps
+ * saying so, and only the reader who could proceed by signing in is asked to.
+ */
 async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+  const guestOf = (m: {params: string[]}, answer: string|null): string|null =>
+    answer === null && m.params.includes('_me') && !viewer?.userId ? SIGN_IN_REQUIRED : answer;
   return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
-    if(m.scope==='local')return [m.name,null];
+    if(m.scope==='local')return [m.name,guestOf(m,null)];
     const actor=viewer??{userId:null,tokenId:null};
     const dataset=await getArtifactFor(writerFor(doc),m.target);
     if(!dataset||await canWriteDataset(dataset,actor,true))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
-    if(!dataset.dataset_policy)return [m.name,null];
+    if(!dataset.dataset_policy)return [m.name,guestOf(m,null)];
     try {
       const name=`ref_${dataset.id}`,catalog=catalogOf(dataset);
       const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name):null;
       const columns=compiled?.table.columns??dataset.meta.columns as DatasetColumn[];
       const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},true);
-      const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:initialValues(flow),policy,policyPreview:true,
+      const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:initialValues(flow),paramTypes:scalarParamTypes(flow),policy,policyPreview:true,
         ...(mutationUsesRow(m.sql)?{row:{columns,values:Object.fromEntries(columns.map(c=>[c.name,null]))}}:{})});
-      return [m.name,'error' in out?out.error:null];
+      return [m.name,guestOf(m,'error' in out?out.error:null)];
     }catch(error){return [m.name,error instanceof Error?error.message:'Dataset policy does not permit this action.'];}
   })));
 }
@@ -2187,6 +2269,40 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
     const { flow } = readParsedArtifactMetadata(row.meta, row.source);
     return isEmptyDataflow(flow) ? null : { flow };
   } catch { return null; }
+}
+
+/**
+ * A document DRAWS A PERSON — a conservative hint, not a parse.
+ *
+ * `<User …>` is the only spelling the markup validator admits for the
+ * component, so a document that draws one always matches; a match inside a
+ * string or a comment costs exactly one indexed lookup and nothing else. It is
+ * deliberately a hint rather than a parse because the answer is only used to
+ * decide whether to SPEND a query, never to decide what a viewer may see.
+ */
+const drawsPeople = (source: string | null | undefined): boolean => /<User[\s/>]/.test(source ?? '');
+
+/**
+ * WHO IS READING, as the document may show them (lib/story-runtime/contract
+ * StoryViewer): the viewer's own account id — `$_me` — and, only for a document
+ * that draws a `<User>`, their display name.
+ *
+ * The name comes from the SAME `userLabels` lookup a DataTable cell has always
+ * used, so nothing new about anyone is exposed: one row, by id, for the person
+ * who is already logged in and asking. A guest gets null and no query at all,
+ * and a document that never names a person pays nothing beyond the id it
+ * already had in hand.
+ */
+export async function viewerIdentityFor(
+  row: Pick<ArtifactRow, 'source'>,
+  userId: string | null | undefined,
+): Promise<StoryViewer | null> {
+  if (!userId) return null;
+  if (!drawsPeople(row.source)) return { id: userId };
+  try {
+    const labels = await userLabels(await getDb(), [userId]);
+    return { id: userId, label: labels[userId] ?? null };
+  } catch { return { id: userId }; }
 }
 
 interface DataflowRunOptions {
@@ -2319,7 +2435,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
         return queryRows(table, q.sql, values, page);
       }
       usedSources.set(q.source!, JSON.stringify(catalog));
-      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:{...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),_me:'user'},authorize:async()=>{
+      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:scalarParamTypes(flow),authorize:async()=>{
         await opts.authorize?.();
         const current=await resolve(q.source!);
         if(!current || JSON.stringify((current as RefTable).catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);

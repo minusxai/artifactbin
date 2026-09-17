@@ -578,10 +578,27 @@ function Thread({
           Exact target is unavailable. This comment remains attached to its containing block.
         </p>
       )}
+      {/*
+        * WHAT THIS WAS ABOUT, when the document cannot say it. A live, quoted
+        * passage is highlighted in the document itself and is never repeated
+        * here — the rail would be showing the reader the same words twice. The
+        * two cases where the document has nothing to show are these, and an
+        * expanded card carries the original words for both: the node is gone,
+        * or the node is there and the quoted words have been edited away.
+        */}
       {!folded && a.orphaned && (
-        <p className="border-b border-edge bg-surface/60 px-3 py-1.5 font-mono text-[10px] text-faint">
-          annotated element was removed
-        </p>
+        <div className="border-b border-edge bg-surface/60 px-3 py-1.5">
+          {open && (a.quote ?? a.snippet) && (
+            <p className="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-[12px] leading-snug text-fg/80">{a.quote ?? a.snippet}</p>
+          )}
+          <p className="font-mono text-[10px] text-faint">This passage was removed from the document.</p>
+        </div>
+      )}
+      {!folded && open && !a.orphaned && a.quote_found === false && a.quote && (
+        <div className="border-b border-edge bg-surface/60 px-3 py-1.5">
+          <p className="mb-1 border-l-2 border-edge-bright pl-2 font-sans text-[12px] leading-snug text-fg/80">{a.quote}</p>
+          <p className="font-mono text-[10px] text-faint">These words have since been edited.</p>
+        </div>
       )}
       {!folded && (
       <ul className="flex flex-col gap-3 px-3 py-3">
@@ -780,7 +797,13 @@ export default function AnnotationLayer({
   // stream next says so — which in edit mode, with the stream off, is never.
   useEffect(() => { onAnnotationsChange?.(annotations); }, [annotations, onAnnotationsChange]);
   const [resolvedList, setResolvedList] = useState<AnnotationWire[] | null>(null);
-  const [openResolvedId, setOpenResolvedId] = useState<string | null>(null);
+  /*
+   * ONE OPEN THREAD, open or resolved. A resolved thread somebody expands IS
+   * the open thread: that is what makes the document highlight its passage and
+   * scroll to it, and what stops two conversations claiming the document at
+   * once. Its row is not in `annotations` — never dereference the open id
+   * against that list without a fallback.
+   */
   const [openId, setOpenId] = useState<string | null>(null);
   /*
    * WHAT THIS VIEWER FOLDED. Held here rather than in each Thread so a remount
@@ -907,6 +930,18 @@ export default function AnnotationLayer({
   useEffect(() => {
     if (liveAnnotations) setAnnotations(liveAnnotations);
   }, [liveAnnotations]);
+  /*
+   * A thread that was OPEN and has left the open list — resolved or deleted by
+   * someone else, live — stops being the open thread, so its highlight lifts as
+   * it always did. Expanding a resolved row is the reader's own choice and is
+   * untouched: that thread was never in the open list to leave it.
+   */
+  const openListIds = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const was = openListIds.current;
+    openListIds.current = new Set(annotations.map((a) => a.id));
+    setOpenId((cur) => (cur && was.has(cur) && !openListIds.current.has(cur) ? null : cur));
+  }, [annotations]);
 
   // The resolved index is read only while the rail is open: its rows stay
   // collapsed until one is clicked, so history does not compete with open work.
@@ -960,12 +995,20 @@ export default function AnnotationLayer({
   // announcement is the signal that the runtime's listener exists.
   useEffect(() => {
     if (!sessionNonce) return;
+    /*
+     * The ONE resolved thread this viewer expanded rides along with the open
+     * roots — in the SAME post as its `openId`, because the frame records the
+     * scroll as done the moment an open id arrives and would never repeat it
+     * for a pin that landed a message later. Nothing resolved is painted at
+     * rest: collapsing the card, or opening another thread, takes it out again.
+     */
+    const openResolved = openId ? (resolvedList ?? []).find((a) => a.id === openId) ?? null : null;
     const message: StoryAnnotationsMessage = {
       type: STORY_ANNOTATIONS_MESSAGE,
       // Annotations are ambient whenever this capability exists. The frame
       // decides how pins/tints coexist with view and edit mode.
       mode: 'on',
-      pins: annotations
+      pins: [...annotations, ...(openResolved ? [openResolved] : [])]
         .filter((a) => !a.orphaned && a.anchor)
         // The range travels with the pin so the frame can paint the words
         // themselves; ids, body paths and the words' own positions are still
@@ -982,10 +1025,10 @@ export default function AnnotationLayer({
       pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, pick, selection, sessionNonce, postToFrame]);
+  }, [annotations, hoverId, openId, pick, resolvedList, selection, sessionNonce, postToFrame]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
-    if (!railOpen) { setOpenResolvedId(null); setOpenId(null); }
+    if (!railOpen) setOpenId(null);
   }, [railOpen]);
   useEffect(() => () => {
     sendDocument({ frameRef, runtimeRef }, 
@@ -1097,7 +1140,8 @@ export default function AnnotationLayer({
       });
       if (wire.status === 'resolved') setOpenId((cur) => (cur === annId ? null : cur));
       else if (body.reopen) {
-        setOpenResolvedId(null);
+        // It was the open thread while it was resolved history; it stays the
+        // open thread now that the list it lives in has changed underneath it.
         setOpenId(annId);
         setJustOpenedId(annId);
       }
@@ -1112,7 +1156,6 @@ export default function AnnotationLayer({
       setAnnotations((prev) => prev.filter((a) => a.id !== annId));
       setResolvedList((prev) => (prev ? prev.filter((a) => a.id !== annId) : prev));
       setOpenId((cur) => (cur === annId ? null : cur));
-      setOpenResolvedId((cur) => (cur === annId ? null : cur));
     } finally { setBusy(false); }
   }, [id]);
 
@@ -1447,7 +1490,7 @@ export default function AnnotationLayer({
             targetMissing={missingTargets.has(a.id)}
             key={a.id}
             a={a}
-            open={openResolvedId === a.id}
+            open={openId === a.id}
             resolved
             hovered={hoverId === a.id}
             busy={busy}
@@ -1455,8 +1498,10 @@ export default function AnnotationLayer({
             justOpened={justOpenedId === a.id}
             isCommentFolded={(commentId) => isFolded(folds, 'comments', commentId)}
             onOpen={() => {
+              // Expanding it makes it the open thread — the document highlights
+              // its passage and scrolls there, and the rail brings the row up.
               setJustOpenedId(a.id);
-              setOpenResolvedId((current) => current === a.id ? null : a.id);
+              setOpenId((current) => current === a.id ? null : a.id);
             }}
             onHover={hoverUi}
             onReply={() => {}}

@@ -14,6 +14,28 @@ afbin sessions status SESSION_ID --execution EXECUTION_ID --json
 afbin sessions close SESSION_ID --json
 ```
 
+## Who the session browses as
+
+A session browses as you, so its pages show what your account can see. Create it
+with `--as guest` and its pages are fetched signed out instead — what a reader
+with the link sees, which is how to check a page you published before handing it
+over:
+
+```sh
+afbin sessions script new --as guest --input actions.js --json
+```
+
+The session is still yours: only you can run scripts in it, read its status or
+close it, and it counts against your session limit. Only the pages are anonymous.
+Every write a signed-out reader could not make is refused in a guest session
+exactly as it would be for a real guest; that refusal is the answer you came for,
+not a broken session.
+
+Who a session browses as is fixed when it is created. `--as` on an existing
+session ID is refused locally, and resuming with `afbin sessions script
+SESSION_ID` keeps the viewer that session was created with. To compare the two
+views, open one session with `--as guest` and another without.
+
 A script is a **strict async JavaScript function body**: use top-level `await`
 and `return`, without exporting or wrapping a function. Each call gets:
 
@@ -128,3 +150,21 @@ Actions default to 5 seconds, navigation to 10 seconds, and an entire script to
 20 seconds. Keep scripts short; move long workflows across calls. Sessions expire
 after 30 idle minutes. A session has at most 8 pages and 16 execution receipts;
 close it when finished. There is no suspended-to-disk browser heap.
+
+## Testing a page you built
+
+A push proves markup and reads; only a run proves a `<Mutation>`:
+
+```js
+const page = await context.newPage();
+await page.goto('/a/abc123');
+await page.getByLabel('Amount').fill('48.50');
+await page.getByRole('button', {name: 'Add expense'}).click();
+const after = await page.evaluate(() => mx.read(['tab'], {wait: true}));
+if (!after.signals.tab.value.length) await output.image(await page.screenshot());
+return after;
+```
+
+Screenshot only on a wrong read back. Run it again `--as guest`: every `$_me`
+write must be refused with a sign-in offer, the reads still work. Fix and push
+until both passes are clean.

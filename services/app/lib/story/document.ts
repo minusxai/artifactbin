@@ -27,7 +27,7 @@ import {agentDiscoveryHead,agentDiscoveryTail,type AgentDiscovery} from '../agen
 import { prepareStoryParts } from './prepare-runtime.server';
 import { loadStorySsr } from './ssr.server';
 import type { WebAssetBox } from '@/lib/story/asset-url';
-import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import { AUTHOR_SCRIPT_TYPE, STORY_HELLO_MESSAGE, STORY_VALUES_HOOK, STORY_ISLAND_ID, STORY_PAINTED_MESSAGE, STORY_ROOT_ID, type StoryIslandData, type StoryIslandDataflow, type StoryViewer } from '@/lib/story-runtime/contract';
 import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
@@ -56,6 +56,13 @@ export interface StoryDocumentInput {
   assetUrls?: ReadonlySet<string> | ReadonlyMap<string, WebAssetBox>;
   /** The document's `<Value>`/`<Query>`/`<Mutation>` declarations + render-time state (lib/artifacts dataflowForRow); null when it declares nothing. */
   dataflow?: StoryIslandDataflow | null;
+  /**
+   * WHO IS READING (lib/artifacts viewerIdentityFor): `$_me` and, when the
+   * document draws a `<User>`, their display name. Null or absent is a guest —
+   * which is also what a CAPTURE is, since the exporter's browser holds no
+   * session, so every photographed render is the guest's.
+   */
+  viewer?: StoryViewer | null;
   /** Stored title (Helmet's own <title> wins over it in the head). */
   title: string | null;
   /** src of the hydration runtime; null omits the tag (unit tests, scriptless contexts). */

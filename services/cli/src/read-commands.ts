@@ -10,8 +10,8 @@ import type {Workspace} from './workspace';
 import type {HttpClient} from './http';
 
 /** All native commands share file identity resolution; no identity HTTP request. */
-export async function artifactReference(workspace:Workspace,input:string,server:string,writable=false){
- const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server,writable});
+export async function artifactReference(workspace:Workspace,input:string,server:string,writable=false,aliases:readonly string[]=[]){
+ const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server,aliases:[...aliases],writable});
  if(ref.kind==='id')return{id:ref.id,version:ref.version,notices:ref.notices};
  const tracked=workspace.tracking?.files[ref.path];
  const id=ref.path.toLowerCase().endsWith('.jsx')?parseDocument(await readFile(join(workspace.root,ref.path),'utf8')).metadata.id:/\.ya?ml$/i.test(ref.path)?parseResourceFile(await readFile(join(workspace.root,ref.path),'utf8')).id:tracked?.id;
@@ -26,17 +26,17 @@ function pageQuery(flags:ParsedCommand['flags']):string{
 }
 export async function readCommand(workspace:Workspace,parsed:ParsedCommand,client:HttpClient){
  if(parsed.command==='list'&&parsed.positionals.length){
-  const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server);
+  const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,false,client.aliases);
   return client.request(`/artifacts/${ref.id}${ref.version!==undefined?`/versions/${ref.version}`:''}`);
  }
  if(parsed.command==='list'){
   const query=new URLSearchParams(pageQuery(parsed.flags));
   for(const [key,value] of Object.entries(collectionFilters('list',parsed.flags.filter as string[]|undefined)))query.set(key,value);
   if(parsed.flags.type)query.set('type',String(parsed.flags.type));
-  if(parsed.flags.in){const folder=await artifactReference(workspace,String(parsed.flags.in),client.connection.server);if(folder.version!==undefined)throw new CliError('invalid_container','Collection scopes use current folder identity.');query.set('parent_id',folder.id);}
+  if(parsed.flags.in){const folder=await artifactReference(workspace,String(parsed.flags.in),client.connection.server,false,client.aliases);if(folder.version!==undefined)throw new CliError('invalid_container','Collection scopes use current folder identity.');query.set('parent_id',folder.id);}
   return client.request(`/artifacts${query.size?'?'+query:''}`);
  }
- const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server);
+ const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,false,client.aliases);
  // History is read per target: the page, the filters and any cursor belong to this reference alone.
  const query=new URLSearchParams(pageQuery(parsed.flags));if(ref.version!==undefined)query.set('version',String(ref.version));
  if(parsed.flags.type!==undefined)checkTrackedType(workspace,ref.path,String(parsed.flags.type));
@@ -52,7 +52,7 @@ function checkTrackedType(workspace:Workspace,path:string|undefined,requested:st
 }
 
 export async function commentCommand(workspace:Workspace,parsed:ParsedCommand,client:HttpClient,body?:string){
- const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,true);
+ const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,true,client.aliases);
  const {flags}=parsed;const path=`/artifacts/${ref.id}/annotations`;
  if(flags['dry-run']){
   const head=await client.request<{capabilities?:{comment?:boolean};annotations?:Array<{id:string}>;nodes?:string[]}>(`/artifacts/${ref.id}`);

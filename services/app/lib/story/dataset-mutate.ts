@@ -5,6 +5,7 @@ import {completeMutationReceipt,type MutationReceipt} from '@/lib/mutation-recei
 import {throttlePublicMutation} from '@/lib/datasets/policy/usage';
 import {mutationPolicy,recheckMutation,canUseDataPolicy,policyReaderSql,type MutationDocument} from '@/lib/datasets/policy';
 import {catalogOf} from '@/lib/datasets/catalog';
+import {SIGN_IN_REQUIRED} from './sign-in-required';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
  * WRITING a dataset — the other half of lib/story/dataset-store.
@@ -68,6 +69,13 @@ interface MutationRefused {
    */
   reason: 'policy_denied' | 'invalid_sql' | 'dataset_full' | 'contended' | 'row_changed' | 'row_not_unique' | 'dataset_read_only';
   detail: string;
+  /**
+   * A MACHINE-READABLE reason beside the sentence, for the one refusal a
+   * reader can act on: `sign_in_required` (lib/story/sign-in-required). The
+   * status and `reason` are unchanged by it — it only lets the page draw a
+   * door where it would otherwise print a parameter binding.
+   */
+  code?: typeof SIGN_IN_REQUIRED;
 }
 
 interface MutationApplied {
@@ -86,16 +94,18 @@ export const isMutationRefused = (r: MutationApplied | MutationRefused): r is Mu
  * SQL is executing prevents that write from landing.
  *
  * `sql` names the dataset as `ref_<id>`, exactly as it is written in the
- * document; `params` are bound by name and never interpolated.
+ * document; `params` are bound by name and never interpolated, under the
+ * DECLARED types the caller passes as `guard.paramTypes` — the same typing the
+ * publish-time analysis used, so the two cannot plan the statement differently.
  */
 export async function mutateDataset(
   dataset: ArtifactRow,
   actor: RoleActor,
   sql: string,
   params: Record<string, Scalar> = {},
-  guard: Pick<MutationInput, 'row' | 'expectedAffected'> & {source?:boolean;document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
+  guard: Pick<MutationInput, 'row' | 'expectedAffected' | 'paramTypes'> & {source?:boolean;document?:MutationDocument;receipt?:MutationReceipt;expectedState?:string} = {},
 ): Promise<MutationApplied | MutationRefused> {
-  if(sqlParams(sql).includes('_me')&&!actor.userId)return {reason:'policy_denied',detail:'$_me requires a logged-in user'};
+  if(sqlParams(sql).includes('_me')&&!actor.userId)return {reason:'policy_denied',detail:'$_me requires a logged-in user',code:SIGN_IN_REQUIRED};
   const db = await getDb();
   const table = 'dataset_rows';
   const scope = editorScope({userId:actor.userId,tokenId:actor.tokenId ?? ''});

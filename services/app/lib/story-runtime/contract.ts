@@ -49,10 +49,35 @@ export interface RanDataflow extends StoryIslandDataflow {
   state: DataflowState;
 }
 
+/**
+ * WHO IS READING — the one fact about the reader a document is told.
+ *
+ * `id` is `$_me` (lib/story/dataflow VIEWER_REF), and `label` is the display
+ * name the SAME visibility rules already let a DataTable cell show
+ * (lib/datasets/user-fields userLabels) — never an email, never any other
+ * profile field. Both travel on the island so the SERVER render and hydration
+ * agree: a guest must never flash the signed-in branch, and a signed-in reader
+ * must never flash "Unknown person" while a query lands.
+ *
+ * Its OWN island field rather than a value on the dataflow, for two reasons: a
+ * document that declares nothing has no dataflow at all (and
+ * `{$_me ? … : <SignIn/>}` is exactly such a document), and the viewer is not
+ * the document's data — it is never declared, never carried in a link, never
+ * written, and never sent into the author-script realm's state deltas
+ * (lib/story-runtime/author-state).
+ */
+export interface StoryViewer {
+  id: string;
+  /** Absent when this render never needed a name (the source draws no <User>). */
+  label?: string | null;
+}
+
 /** What the document's JSON island carries — everything the entry needs to hydrate. */
 export interface StoryIslandData {
   nodes: JsxNode[];
   refData: RefDataMap;
+  /** The reader's identity (see StoryViewer). Absent or null = a guest. */
+  viewer?: StoryViewer | null;
   /**
    * The document's structural genre. Unlike the genre's authored layout, the
    * editorial value also opts a sectioned document into the Contents rail.
@@ -694,7 +719,14 @@ export interface StorySpotlightMessage { type: typeof STORY_SPOTLIGHT_MESSAGE; p
 /**
  * Parent → frame: the pin set, one idempotent message — re-posted whole
  * whenever the list changes, so the frame holds no annotation state it could
- * get out of step on. `pins` are the OPEN, non-orphaned roots by BODY path.
+ * get out of step on. `pins` are the OPEN, non-orphaned roots by BODY path —
+ * plus the ONE resolved root the reader has expanded in the rail, which is also
+ * this message's `openId`: selecting a resolved comment is how somebody asks
+ * what it was about, so its passage is painted and scrolled to like any other.
+ * It travels in the SAME message as that `openId` (the frame records the scroll
+ * as done on arrival and would never repeat it for a pin arriving later), and
+ * leaves again when the card is collapsed, another thread is opened or the rail
+ * closes. Nothing resolved is in `pins` at rest.
  *
  * `mode` is ON or OFF and nothing else. It used to carry a third value naming
  * which PAGE MODE was open ('pins' for view, 'annotate' for #annotate), which

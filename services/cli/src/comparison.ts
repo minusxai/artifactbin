@@ -32,12 +32,12 @@ export async function remoteStatus(workspace:Workspace,client:HttpClient,home?:s
  });
 }
 
-async function comparisonTargets(workspace:Workspace,input:string|string[]|undefined,server:string){
+async function comparisonTargets(workspace:Workspace,input:string|string[]|undefined,server:string,aliases:readonly string[]){
  const inputs=input===undefined?[]:Array.isArray(input)?input:[input];
  if(!inputs.length)return(await inspectWorkspace(workspace)).map(file=>({file,version:undefined as number|undefined}));
  const targets:Array<{file:LocalFile;version:number|undefined}>=[];
  for(const one of inputs){
-  const ref=await resolveReference(one,{root:workspace.root,cwd:workspace.cwd,server});
+  const ref=await resolveReference(one,{root:workspace.root,cwd:workspace.cwd,server,aliases:[...aliases]});
   const path=ref.kind==='path'?ref.path:Object.entries(workspace.tracking?.files??{}).find(([,file])=>file.id===ref.id)?.[0];
   if(!path)throw new CliError('not_tracked','Diff needs a local working file for this artifact.','Use afbin pull <ref> first.');
   if(targets.some(target=>target.file.path===path))throw new CliError('duplicate_identity',`The selected references address ${path} more than once.`);
@@ -46,8 +46,8 @@ async function comparisonTargets(workspace:Workspace,input:string|string[]|undef
  }
  return targets;
 }
-export async function compare(workspace:Workspace,input:string|string[]|undefined,server:string,remote:boolean,client?:HttpClient){
- const targets=await comparisonTargets(workspace,input,server);const diffs=[];
+export async function compare(workspace:Workspace,input:string|string[]|undefined,server:string,remote:boolean,client?:HttpClient,aliases:readonly string[]=[]){
+ const targets=await comparisonTargets(workspace,input,server,client?.aliases??aliases);const diffs=[];
  for(const {file,version} of targets){
   const tracked=file.tracked;
   if(!tracked){
@@ -85,10 +85,10 @@ export async function compare(workspace:Workspace,input:string|string[]|undefine
 }
 
 /** One diff, however many targets: the text is written once, to a file or to stdout. */
-export async function diffCommand(workspace:Workspace,parsed:ParsedCommand,server:string,remote:boolean,stdout:(value:string)=>void,client?:HttpClient,style?:Style):Promise<Record<string,unknown>|undefined>{
+export async function diffCommand(workspace:Workspace,parsed:ParsedCommand,server:string,remote:boolean,stdout:(value:string)=>void,client?:HttpClient,style?:Style,aliases:readonly string[]=[]):Promise<Record<string,unknown>|undefined>{
  const {flags,positionals}=parsed;const output=flags.output as string|undefined;
  if(output==='-'&&flags.json)throw new CliError('conflicting_output','--json cannot share stdout with the diff text.','Choose a file with --output, or omit --json.');
- const result=positionals.length||remote?await compare(workspace,positionals,server,remote,client):await localDiff(workspace);
+ const result=positionals.length||remote?await compare(workspace,positionals,server,remote,client,aliases):await localDiff(workspace);
  if(output===undefined)return result;
  const text=result.diffs.map(entry=>entry.diff).filter(Boolean).map(entry=>entry.endsWith('\n')?entry:entry+'\n').join('');
  if(output==='-'){stdout(style?highlightDiff(text,style):text);return undefined;}

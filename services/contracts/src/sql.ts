@@ -87,6 +87,8 @@ export interface MutationInput {
   table: { name: string; rows: Row[]; columns: DatasetColumn[] };
   sql: string;
   params: Record<string, Scalar>;
+  /** Declared types of scalar params. Policy analysis and binding use these instead of guessing from the JS value. */
+  paramTypes?: Record<string, ColumnType>;
   /** Original row values, exposed to SQL as the native typed STRUCT `$_row`. */
   row?: { columns: DatasetColumn[]; values: Record<string, Scalar> };
   /** Required changed-row count for server-controlled writes such as cell edits. */
@@ -127,6 +129,8 @@ export interface DryRunMutationsInput {
     row?: { columns: DatasetColumn[] };
   }>;
   paramNames: string[];
+  /** Declared types of scalar params; a dry run binds typed NULLs for these. */
+  paramTypes?: Record<string, ColumnType>;
 }
 export interface DryRunMutationsResult { errors: Array<{ name: string; error: string }> }
 

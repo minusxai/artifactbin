@@ -125,6 +125,98 @@ describe('store.mutate', () => {
   });
 });
 
+/**
+ * `reset="…"` — the form a successful write clears.
+ *
+ * Two properties, and the second is why it lives in the store rather than in
+ * the Button: the reset happens AFTER the write is confirmed and BEFORE the
+ * dependent queries are re-read, so the click that saves is one re-run and not
+ * two, and a refusal leaves everything the person typed exactly where it is.
+ */
+describe('store.mutate with reset', () => {
+  const RESET_FLOW = flowOf(
+    '<Value name="desc" type="string" />'
+    + '<Value name="amount" type="number" default={0} />'
+    + '<Value name="payer" type="string" default="me" />'
+    + '<Query name="mine" source="ref:abc123">{`select * from public.rows where payer = $payer`}</Query>'
+    + '<Mutation name="add" source="ref:abc123" reset="desc amount">{`insert into public.rows (d, a) values ($desc, $amount)`}</Mutation>',
+  );
+  const RESET_STATE: DataflowState = {
+    mutationAccess: { add: null },
+    values: { desc: null, amount: 0, payer: 'me' },
+    tables: { mine: { rows: [], columns: [] } },
+    errors: {},
+  };
+
+  function resetHarness() {
+    const runs: Array<{ values: Record<string, Scalar>; only: string[] }> = [];
+    let resolveWrite: ((r: { dataset: string }) => void) | null = null;
+    let rejectWrite: ((e: Error) => void) | null = null;
+    const transport: QueryTransport = {
+      run: (values, only) => { runs.push({ values, only }); return Promise.resolve({ tables: {}, errors: {} }); },
+      page: () => Promise.reject(new Error('unused')),
+      mutate: () => new Promise((resolve, reject) => { resolveWrite = resolve; rejectWrite = reject; }),
+    };
+    const store = createDataflowStore({ flow: RESET_FLOW, state: RESET_STATE }, { transport, debounceMs: 0 });
+    // The form, as the person left it: every reset Value away from its default,
+    // so a reset that never happens cannot pass by accident.
+    store.setValues({ desc: 'Dinner', amount: 500 });
+    runs.length = 0;
+    return { store, runs, settle: () => resolveWrite!({ dataset: 'abc123' }), fail: (m: string) => rejectWrite!(new Error(m)) };
+  }
+
+  it('puts the listed Values back to their declared defaults, and only those', async () => {
+    const { store, settle } = resetHarness();
+    const done = store.mutate('add');
+    expect(store.getState().values).toEqual({ desc: 'Dinner', amount: 500, payer: 'me' });
+    settle();
+    await done;
+    expect(store.getState().values).toEqual({ desc: null, amount: 0, payer: 'me' });
+  });
+
+  it('resets before the dependents are re-read, so they run once with the cleared values', async () => {
+    const { store, runs, settle } = resetHarness();
+    const done = store.mutate('add');
+    settle();
+    await done;
+    expect(runs).toHaveLength(1);
+    expect(runs[0].only).toEqual(['mine']);
+    expect(runs[0].values).toEqual({ desc: null, amount: 0, payer: 'me' });
+  });
+
+  it('resets nothing when the write is refused — the person keeps what they typed', async () => {
+    const { store, fail } = resetHarness();
+    const done = store.mutate('add');
+    fail('this dataset is not open for writes');
+    await expect(done).rejects.toThrow(/not open for writes/);
+    expect(store.getState().values).toEqual({ desc: 'Dinner', amount: 500, payer: 'me' });
+  });
+
+  it('leaves a mutation without reset alone', async () => {
+    const plainFlow = flowOf(
+      '<Value name="desc" type="string" />'
+      + '<Mutation name="add" source="ref:abc123">{`insert into public.rows (d) values ($desc)`}</Mutation>',
+    );
+    let resolveWrite: ((r: { dataset: string }) => void) | null = null;
+    const store = createDataflowStore({
+      flow: plainFlow,
+      state: { mutationAccess: { add: null }, values: { desc: null }, tables: {}, errors: {} },
+    }, {
+      transport: {
+        run: () => Promise.resolve({ tables: {}, errors: {} }),
+        page: () => Promise.reject(new Error('unused')),
+        mutate: () => new Promise((resolve) => { resolveWrite = resolve; }),
+      },
+      debounceMs: 0,
+    });
+    store.setValue('desc', 'Dinner');
+    const done = store.mutate('add');
+    resolveWrite!({ dataset: 'abc123' });
+    await done;
+    expect(store.getState().values).toEqual({ desc: 'Dinner' });
+  });
+});
+
 describe('store.invalidateDatasets', () => {
   it('re-runs the readers of a dataset that changed elsewhere — immediately, not on the debounce', () => {
     const { store, runs } = harness();

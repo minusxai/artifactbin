@@ -14,7 +14,7 @@ import { parseJsx, type JsxNode } from '@/lib/jsx';
 import { dryRunMutations, dryRunQueries, isQueryFailure, runMutation } from '@/lib/sql/engine';
 import { placeholderSession, viewerMutationPolicy } from '@/lib/datasets/policy/viewer-policy';
 import type { DatasetMutationPolicy } from '@artifactbin/contracts';
-import { mutationsOf, queryOrder, refName, type Dataflow } from './dataflow';
+import { mutationsOf, queryOrder, refName, scalarParamTypes, type Dataflow } from './dataflow';
 import { SIGNALS_TABLE } from './local-target';
 import type { DatasetColumn } from './dataset-shape';
 import { splitHelmet } from './helmet';
@@ -55,6 +55,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};
   const mutations = mutationsOf(flow);
   const paramNames = [...flow.values.filter((v) => v.kind === 'scalar').map((v) => v.name),'_me'];
+  const paramTypes = scalarParamTypes(flow);
   const order = queryOrder(flow) ?? [];
   const queries = order.map((n) => flow.queries.find((q) => q.name === n)!);
   const sourceErrors:string[]=[];
@@ -62,7 +63,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
     try{
       const ref=await load(query.source!);if(!ref?.query)throw new Error('Dataset source is unavailable');
       const params={...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.default])),_me:null};
-      tables[query.name]={columns:(await ref.query(query.sql,params,{...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),_me:'user'})).columns};
+      tables[query.name]={columns:(await ref.query(query.sql,params,paramTypes)).columns};
     }catch(error){sourceErrors.push(`<Query name="${query.name}">: ${error instanceof Error?error.message:'Dataset query failed'}`);}
   }
   const dry = await dryRunQueries({ tables, queries:queries.filter(q=>!q.source), paramNames });
@@ -98,14 +99,16 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
           if(ref.datasetPolicy){
             const policy=viewerMutationPolicy(ref.datasetPolicy,compiled.table,placeholderSession(ref.datasetPolicy));
             if(!policy)throw new Error(`Dataset policy: no policy permits writes to ${compiled.table.schema}.${compiled.table.name}`);
-            policed.push({name:m.name,sql,columns:compiled.table.columns,policy,...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
+            // A row action with no row to bind has ALREADY been named above ("must be invoked inside…").
+            // Planning `$_row.id` with no struct behind it only adds the engine's own crash text to that answer.
+            if(!mutationUsesRow(m.sql)||rowSchemas[m.name])policed.push({name:m.name,sql,columns:compiled.table.columns,policy,...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
           }
         }catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
         prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
       }
-      if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value','_me']});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
+      if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value','_me'],paramTypes});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
     }
-    details.push(...await policyRefusals(policed,[...paramNames,'_value']));
+    details.push(...await policyRefusals(policed,[...paramNames,'_value'],paramTypes));
   }
   if (details.length) return { kind: 'sql', details };
   return { kind: 'ok', columns, rowSchemas };
@@ -122,17 +125,23 @@ interface PolicedMutation {
 
 /**
  * THE CLICK'S OWN ANALYSIS, AT THE DOOR. A `<Mutation>` against a dataset that
- * carries a data policy is analyzed here exactly as the write door analyzes
- * it — same engine, same policy, placeholder bindings (a NULL scalar per
- * declared Value, a typed `$_row` of the row scope's columns) — because the
- * statement is authored ONCE and clicked by an entire audience. A denial is
- * the publisher's 400, naming the mutation and the reason, instead of a button
- * that answers 403 to every viewer who presses it.
+ * carries a data policy is analyzed here with the same engine and the same
+ * policy a click uses, and — this is what makes it predictive — under the same
+ * TYPING: each scalar is a NULL placeholder of its DECLARED type, `$_row` a
+ * typed struct of the row scope's columns. The bindings are still empty, so
+ * this is not "exactly the write door" (a value-dependent refusal cannot be
+ * seen from here), but a type clash is, because the plan no longer depends on
+ * what a reader happens to have typed. `coalesce($due, current_date)` on a
+ * `date` Value analyzed as VARCHAR is the publisher's 400 naming the mutation,
+ * not a 403 for every viewer who picks a date.
+ *
+ * `_value` has no declared type here (the edited cell's column is not tracked
+ * per mutation), so it keeps the engine's value-based inference.
  *
  * Analysis ONLY (`policyPreview`): nothing is written, and the target table is
  * empty, so this costs one throwaway instance per policed mutation.
  */
-async function policyRefusals(mutations: PolicedMutation[], paramNames: string[]): Promise<string[]> {
+async function policyRefusals(mutations: PolicedMutation[], paramNames: string[], paramTypes: Record<string, DatasetColumn['type']>): Promise<string[]> {
   const out: string[] = [];
   const params = Object.fromEntries(paramNames.map((n) => [n, null]));
   for (const m of mutations) {
@@ -140,6 +149,7 @@ async function policyRefusals(mutations: PolicedMutation[], paramNames: string[]
       table: { name: 'dataset_rows', rows: [], columns: m.columns },
       sql: m.sql,
       params,
+      paramTypes,
       policy: m.policy,
       policyPreview: true,
       ...(m.row ? { row: { columns: m.row, values: {} } } : {}),

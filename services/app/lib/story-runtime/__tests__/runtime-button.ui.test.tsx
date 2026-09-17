@@ -130,6 +130,67 @@ describe('mx.mutate — the author script\'s handle on a write', () => {
 });
 
 
+/**
+ * `<Mutation reset="desc amount">` seen from the FORM: the click that saves is
+ * the click that empties the boxes, and only once the write came back. The
+ * store owns the rule (store-mutate.test.ts pins the single re-run and the
+ * refusal); what this pins is that a bound control actually follows it, which
+ * is the whole point — the reader should not have to select-all and delete
+ * before typing the next expense.
+ */
+describe('a Button whose Mutation carries reset=', () => {
+  const FORM_HELMET =
+    '<Helmet><Value name="desc" type="string" />'
+    + '<Value name="amount" type="number" default={0} />'
+    + '<Value name="payer" type="string" default="me" />'
+    + '<Mutation name="add" source="ref:abc123" reset="desc amount">{`insert into public.rows (d, a) values ($desc, $amount)`}</Mutation></Helmet>';
+  const FORM_BODY =
+    '<div><input aria-label="Description" value="$desc" />'
+    + '<input aria-label="Amount" type="number" value="$amount" />'
+    + '<input aria-label="Payer" value="$payer" />'
+    + '<Button run="$add">Add</Button></div>';
+
+  function setup(mutate: QueryTransport['mutate']) {
+    const parsed = parseJsxOrThrow(FORM_HELMET + FORM_BODY);
+    const { content, body: nodes } = splitHelmet(parsed.nodes as JsxNode[]);
+    const state: DataflowState = { values: { desc: null, amount: 0, payer: 'me' }, tables: {}, errors: {}, mutationAccess: { add: null } };
+    const dataflow = { flow: { values: content.values, queries: content.queries, mutations: content.mutations }, state };
+    const store = createDataflowStore(dataflow, {
+      transport: { run: async () => ({ tables: {}, errors: {}, mutationAccess: { add: null } }), page: () => Promise.reject(new Error('unused')), mutate },
+      debounceMs: 0,
+    });
+    const view = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />);
+    return { ...view, store };
+  }
+
+  const fill = (view: ReturnType<typeof setup>) => {
+    fireEvent.change(view.getByLabelText('Description'), { target: { value: 'Dinner' } });
+    fireEvent.change(view.getByLabelText('Amount'), { target: { value: '500' } });
+    fireEvent.change(view.getByLabelText('Payer'), { target: { value: 'sam' } });
+  };
+
+  it('clears the bound inputs it names once the write succeeds', async () => {
+    const view = setup(async () => ({ dataset: 'abc123' }));
+    fill(view);
+    expect((view.getByLabelText('Description') as HTMLInputElement).value).toBe('Dinner');
+    fireEvent.click(view.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect((view.getByLabelText('Description') as HTMLInputElement).value).toBe(''));
+    expect((view.getByLabelText('Amount') as HTMLInputElement).value).toBe('0');
+    // A Value the mutation did not name is the person's, not the form's.
+    expect((view.getByLabelText('Payer') as HTMLInputElement).value).toBe('sam');
+    expect(view.store.getState().values).toEqual({ desc: null, amount: 0, payer: 'sam' });
+  });
+
+  it('leaves the typed form alone when the write is refused', async () => {
+    const view = setup(async () => { throw new Error('this dataset is not open for writes'); });
+    fill(view);
+    fireEvent.click(view.getByRole('button', { name: 'Add' }));
+    expect((await view.findByRole('alert')).textContent).toMatch(/not open for writes/);
+    expect((view.getByLabelText('Description') as HTMLInputElement).value).toBe('Dinner');
+    expect((view.getByLabelText('Amount') as HTMLInputElement).value).toBe('500');
+  });
+});
+
 describe.each(['For', 'DataTable'])('%s row actions', (kind) => {
   function setup() {
     const button = '<Button run="$complete" aria-label="Complete {$_row.id}">Complete</Button>';

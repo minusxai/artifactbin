@@ -381,6 +381,23 @@ export function createDataflowStore(
       ? state.mutationAccess![name] : 'Checking edit access…';
   };
 
+  /**
+   * A successful write CLEARS the form it was typed into (`<Mutation reset>`).
+   *
+   * One update for the whole list, at one moment: after the write is confirmed
+   * — a refusal must leave every character the person typed — and before the
+   * dependents are re-read, so the click that saves costs one query run and not
+   * two. Nothing here is special-cased for the link: a reset Value is back at
+   * its declared default, which is how `urlValueParams` already spells "no
+   * param", so the address loses it along the path any other change takes.
+   */
+  const applyReset = (names: string[] | undefined) => {
+    if (!names?.length) return;
+    const defaults: Record<string, Scalar> = {};
+    for (const v of flow.values) if (v.kind === 'scalar' && names.includes(v.name)) defaults[v.name] = v.default;
+    setValues(defaults);
+  };
+
   const mutate: DataflowStore['mutate'] = async (name, overrides, row) => {
     const decl = mutationsOf(flow).find((m) => m.name === name);
     if (!decl) throw new Error(`this document declares no <Mutation name="${name}">`);
@@ -420,6 +437,7 @@ export function createDataflowStore(
             commit({...state, tables: {...state.tables, [decl.target]: resultTable}});
             schedule();
           }
+          applyReset(decl.reset);
           localRevision++;
         });
         localQueue = task.catch(() => {});
@@ -428,6 +446,9 @@ export function createDataflowStore(
       }
       const values = { ...state.values, ...overrides };
       const { dataset } = await (row === undefined ? transport.mutate(values, name) : transport.mutate(values, name, row));
+      // Cleared first, re-read second: the queries below run with the form
+      // already empty, and they run once.
+      applyReset(decl.reset);
       // The click that writes is the click that redraws: the reader must not
       // wait for the live stream to tell this document about its own write.
       invalidateDatasets([dataset || decl.target]);

@@ -20,6 +20,7 @@ export const flags: Record<string,Flag> = {
  'secret-env':{value:'NAME',description:'Read a secret value from this environment variable; it is never written to YAML, journals or output.'},
  page:{value:'N',description:'One slide or page only; without it the image is the whole document, every slide stacked.'},
  execution:{value:'ID',description:'Read a browser session execution receipt without replaying the script.'},
+ as:{value:'VIEWER',description:'Browse a new session as this viewer: guest browses signed out, the way a reader with the link sees the page. Fixed names ignore case; a session\'s viewer is chosen when it is created.'},
  session:{value:'REF',description:'Attach to an existing authorized remote session instead of launching a command.'},
  output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
@@ -80,7 +81,7 @@ export const commands: Command[] = [
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in.',min:0,max:0,flags:['harness','service'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
- {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution'],examples:['afbin sessions script new --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
+ {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session'],examples:['afbin remote pi','afbin remote --name Backend codex','afbin remote --session rs_123']},
 ];
 export interface ParsedCommand {command:string;positionals:string[];flags:Record<string,string|boolean|string[]>}
@@ -139,6 +140,11 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(command.name==='sessions'){
   const [op,target]=result.positionals;
   if(!['script','status','close'].includes(op)|| (target==='new'&&op!=='script') || (op==='script'&&!f.input) || (op!=='script'&&f.input) || (op!=='status'&&f.execution))throw new CliError('invalid_arguments','Use sessions script new|session_id --input actions.js, status session_id [--execution id], or close session_id.');
+  // Who a session browses as is one decision, made when it is created; nothing later changes it.
+  if(f.as!==undefined){
+   f.as=enumArgument(f.as,['guest'],'as');
+   if(target!=='new')throw new CliError('invalid_viewer',`--as chooses who a NEW session browses as; session ${target} already has the viewer it was created with.`,'Run afbin sessions script new --as guest --input actions.js for a signed-out session, or drop --as to continue this one.');
+  }
  }
  if(command.name==='remote'&&f.session!==undefined&&(result.positionals.length||f.name!==undefined))throw new CliError('invalid_arguments','--session attaches to an existing session; omit the command and --name.');
  if(command.name==='delete'&&f.in!==undefined&&f.type!=='comment')throw new CliError('invalid_arguments','--in identifies the containing artifact for --type comment only.');

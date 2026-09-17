@@ -18,11 +18,11 @@ their old rows and show “updating…”; failures show the engine message.
 
 ```jsx
 <Helmet>
-  <Value name="editing" type="boolean" default={false} />
-  <Value name="title" type="string" default="Untitled" />
+  <Value name="editing" type="boolean" default={false} url={false} />
+  <Value name="title" type="string" default="Untitled" url={false} />
   <Value name="drafts" type="table" value={[]} columns={[{"name":"title","type":"string"}]} />
   <Query name="summary">{`select count(*) count from drafts`}</Query>
-  <Mutation name="add">{`insert into drafts (title) values ($title)`}</Mutation>
+  <Mutation name="add" reset="title">{`insert into drafts (title) values ($title)`}</Mutation>
 </Helmet>
 
 <p>Drafts: <Number data="$summary" col="count" /></p>
@@ -40,7 +40,15 @@ their old rows and show “updating…”; failures show the engine message.
 `DialogTrigger` sets the bound boolean true. `DialogClose`, Escape, or a
 successful submit sets it false and restores focus to the trigger. A failed
 Mutation leaves the dialog open and shows the server message. `DialogContent`
-uses normal form validity before running its Mutation.
+uses normal form validity before running its Mutation. The dialog is styled by
+default (your `className` wins); `Select` and `DatePicker` open inside it.
+
+Every scalar Value travels in the link unless it says otherwise, so a form field
+and a script-set flag declare `url={false}`: it stays out of the address in both
+directions — not written there, not read back from a shared or stale one.
+`reset="title amount"` on the Mutation puts those scalars back to their declared
+defaults once the write is COMMITTED, which is how the box empties itself for
+the next entry; a refused write changes nothing the person typed.
 
 For scalar-only state, update the implicit one-row `_signals` table:
 
@@ -56,6 +64,7 @@ For scalar-only state, update the implicit one-row `_signals` table:
 Local SQL is intentionally ephemeral and per loaded document. It does not
 create a source version, alter stored dataset rows, or change permissions.
 Reload resets `_signals` and inline table rows to their declared defaults;
-non-default scalar choices written into the URL persist. A Query or Mutation
+non-default scalar choices written into the URL persist, and a `url={false}`
+scalar comes back at its default because it was never in the address. A Query or Mutation
 with `source="ref:abc123"` remains a stored-dataset operation with its normal
 read and write permissions; local state does not weaken that boundary.

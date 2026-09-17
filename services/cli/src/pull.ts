@@ -21,12 +21,12 @@ import {parseResourceFile,type ResourceSource} from './resource-file';
 import {prepareResourcePull} from './resource-pull';
 /** `adopt` is the row file a dataset was published from, becoming the pulled YAML's `source`. */
 interface PullTarget {id:string;version?:number;path?:string;directory?:string;before:Buffer|null;previousPath?:string;adopt?:string}
-export async function preparePull(workspace:Workspace,args:string[],force=false,server=workspace.tracking?.server,output?:string):Promise<PullTarget[]>{
+export async function preparePull(workspace:Workspace,args:string[],force=false,server=workspace.tracking?.server,output?:string,aliases:readonly string[]=[]):Promise<PullTarget[]>{
  if(output&&!args.length)throw new CliError('invalid_output','--output requires explicit pull targets.');
  // Stdout never establishes tracking, so it resolves identity alone: no destination, no accepted base, no tracked entry.
  if(output==='-'){
   if(args.length!==1)throw new CliError('ambiguous_output','Stdout holds one pulled representation.','Write several targets into a directory with --output.');
-  const ref=await resolveReference(args[0],{root:workspace.root,cwd:workspace.cwd,server});
+  const ref=await resolveReference(args[0],{root:workspace.root,cwd:workspace.cwd,server,aliases:[...aliases]});
   const document=ref.kind==='path'&&ref.path.toLowerCase().endsWith('.jsx')?parseDocument((await readOptional(join(workspace.root,ref.path)))!.toString()):undefined;
   const resource=ref.kind==='path'&&/\.ya?ml$/i.test(ref.path)?parseResourceFile((await readOptional(join(workspace.root,ref.path)))!.toString()):undefined;
   const id=ref.kind==='id'?ref.id:document?.metadata.id??resource?.id??workspace.tracking?.files[ref.path]?.id;
@@ -40,7 +40,7 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
  const requested=args.length?args.map(input=>[input,directory?undefined:output]):Object.entries(workspace.tracking?.files??{}).map(([path,file])=>[file.id,resolve(workspace.root,path)]);
  const targets:PullTarget[]=[];
  for(const [input,destination]of requested){
-  const ref=await resolveReference(input!,{root:workspace.root,cwd:workspace.cwd,server});
+  const ref=await resolveReference(input!,{root:workspace.root,cwd:workspace.cwd,server,aliases:[...aliases]});
   let path=destination?relative(workspace.root,await confinedPath(workspace.root,resolve(workspace.cwd,destination))):ref.kind==='path'?ref.path:undefined;
   const document=ref.kind==='path'&&ref.path.toLowerCase().endsWith('.jsx')?parseDocument((await readOptional(join(workspace.root,ref.path)))!.toString()):undefined;
   const resource=ref.kind==='path'&&/\.ya?ml$/i.test(ref.path)?parseResourceFile((await readOptional(join(workspace.root,ref.path)))!.toString()):undefined;
@@ -57,7 +57,7 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
    const bytes=await readOptional(await confinedPath(workspace.root,adopt));
    if(bytes&&digest(bytes)!==prior![1].file&&!force)throw new CliError('local_changed',`${adopt} has local changes.`,`Push them first, or pull --force to replace them with the published rows.`);
   }
-  if(!adopt&&path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity. To inspect the published head instead, run afbin diff --remote <path> or afbin export <id> --format html.');
+  if(!adopt&&path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity. To inspect the published head instead, run afbin diff --remote <path>. To read one VERSION: afbin pull <id>@<v> --output - or afbin export <id>@<v> --format original --output <file>; to keep working on it, afbin fork <id>@<v>.');
   if(path&&workspace.tracking?.files[path]&&workspace.tracking.files[path].id!==id)throw new CliError('identity_mismatch',`${path} tracks a different artifact.`);
   const before=path?await readOptional(await confinedPath(workspace.root,path)):null;
   const tracked=path?workspace.tracking?.files[path]:undefined;

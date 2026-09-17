@@ -4,7 +4,7 @@ import type {ArtifactRow} from '@/lib/artifacts';
 import {catalogOf} from '@/lib/datasets/catalog';
 
 /** Validate governance against the exact row held by the write transaction. */
-export function validateDatasetPolicyForRow(row:Pick<ArtifactRow,'format'|'meta'>,value:unknown):DatasetPolicy|null {
+export function validateDatasetPolicyForRow(row:Pick<ArtifactRow,'format'|'meta'>&Partial<Pick<ArtifactRow,'content'>>,value:unknown):DatasetPolicy|null {
  if(row.format!=='dataset'||catalogOf(row)?.kind==='postgres')throw new Error('Policies require a stored dataset');
   const policy = value === null ? null : parseDatasetPolicy(value);
   if (policy) {
@@ -19,7 +19,13 @@ export function validateDatasetPolicyForRow(row:Pick<ArtifactRow,'format'|'meta'
       const target = tables.find(
         (x) => x.schema === t.table.schema && x.name === t.table.name,
       );
-      if (!target) throw new Error('Policy table is not in this dataset');
+      // NAME what is missing: this message is the `detail` of both a refused
+      // policy edit and a refused replacement, and "something does not fit" is
+      // not a thing anyone can act on.
+      if (!target)
+        throw new Error(
+          `Policy table is not in this dataset: ${t.table.schema}.${t.table.name}`,
+        );
       const columns = target.columns.map((c) => c.name);
       for (const entry of [
         ...(t.insert_permissions ?? []),
@@ -37,7 +43,9 @@ export function validateDatasetPolicyForRow(row:Pick<ArtifactRow,'format'|'meta'
           p.columns !== '*' &&
           p.columns.some((c) => !columns.includes(c))
         )
-          throw new Error('Unknown permission column');
+          throw new Error(
+            `Unknown permission column in ${t.table.schema}.${t.table.name}: ${p.columns.filter((c) => !columns.includes(c)).join(', ')}`,
+          );
         for (const field of ['filter', 'check'] as const)
           if (field in p && p[field as keyof typeof p]) {
             // Validate field names now; trusted session values are available only at execution.

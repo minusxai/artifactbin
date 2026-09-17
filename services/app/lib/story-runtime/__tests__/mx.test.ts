@@ -33,6 +33,17 @@ describe('shared mx signal contract', () => {
     expect(store.getValue('count')).toBe(0);
     await expect(mx.set({ count: Infinity })).rejects.toMatchObject({ code: 'INVALID_VALUE' });
     await expect(mx.set({ rows: null })).rejects.toMatchObject({ code: 'NOT_WRITABLE' });
+    /*
+     * `$_me` is READ-ONLY, and a script is no exception. The viewer's account
+     * id is not the document's data: it is never declared, so `set` refuses it
+     * as unwritable and `read`/`describe` never name it — the declared-signal
+     * namespace is exactly what those three pin, and the viewer stays outside
+     * it. A page reads it in markup (`{$_me ? … : <SignIn/>}`) instead.
+     */
+    await expect(mx.set({ _me: 'usr_someone' })).rejects.toMatchObject({ code: 'NOT_WRITABLE' });
+    await expect(mx.read(['_me'])).rejects.toMatchObject({ code: 'UNKNOWN_SIGNAL' });
+    expect((await mx.describe()).signals.map(s => s.name)).not.toContain('_me');
+    expect(store.getValue('_me')).toBeNull();
     await mx.set({ count: 4, other: 'ok' });
     expect((await mx.read(['count'])).signals.count!.value).toBe(4);
     store.dispose();
@@ -105,6 +116,36 @@ it('rejects a concurrent mutation before transport and acknowledges a commit ind
   expect(store.getValue('count')).toBe(0);
   complete({ dataset: 'owned' });
   await expect(first).resolves.toMatchObject({ scope: 'dataset', status: 'committed', operationId: expect.any(String) });
+  store.dispose();
+});
+
+/**
+ * A script that writes a form has to be able to SEE the two things the markup
+ * says about it: that a signal is deliberately not in the link, and which
+ * signals a mutation clears when it lands. Both are reported only when the
+ * declaration carries them, so every existing document's description is
+ * byte-identical to what it was.
+ */
+it('reports url={false} on the signal and reset on the mutation, and nothing extra otherwise', async () => {
+  const store = createDataflowStore({
+    flow: {
+      values: [
+        { kind: 'scalar', name: 'count', type: 'number', default: 0, start: 0, end: 0 },
+        { kind: 'scalar', name: 'draft', type: 'string', default: null, url: false, start: 0, end: 0 },
+      ],
+      queries: [],
+      mutations: [
+        { name: 'save', target: 'owned', sql: 'insert into ref_owned (d) values ($draft)', params: ['draft'], refs: ['owned'], reset: ['draft'], start: 0, end: 0 },
+        { name: 'plain', target: 'owned', sql: 'update ref_owned set n=$count', params: ['count'], refs: ['owned'], start: 0, end: 0 },
+      ],
+    },
+    state: { values: { count: 0, draft: null }, tables: {}, errors: {}, mutationAccess: { save: null, plain: null } },
+  }, { transport: { mutate: async () => ({ dataset: 'owned' }), run: async () => ({ tables: {}, errors: {} }), page: async () => ({ rows: [], columns: [] }) } });
+  const described = await createMx(store).describe();
+  expect(described.signals.find(s => s.name === 'draft')).toMatchObject({ name: 'draft', kind: 'scalar', url: false });
+  expect('url' in described.signals.find(s => s.name === 'count')!).toBe(false);
+  expect(described.mutations.find(m => m.name === 'save')!.reset).toEqual(['draft']);
+  expect('reset' in described.mutations.find(m => m.name === 'plain')!).toBe(false);
   store.dispose();
 });
 

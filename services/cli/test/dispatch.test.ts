@@ -99,8 +99,8 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
 test('a directory tracked against one server refuses another by name, before any request — a bare 409 cost an agent twenty steps',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-wrong-server-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
  const head={id:'abc123',version:1,edit_id:'edit1',state:digest('s1'),markup:'<p id="p001">Head</p>',format:'markup',title:'T',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
- const hosts:string[]=[];
- const request:typeof fetch=async(input)=>{const url=new URL(String(input));hosts.push(url.host);if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${url}`);};
+ const sent:Array<{host:string;path:string;authorization:string|null}>=[];
+ const request:typeof fetch=async(input,init)=>{const url=new URL(String(input));sent.push({host:url.host,path:url.pathname,authorization:new Headers(init?.headers).get('authorization')});if(url.pathname==='/api/artifacts/abc123')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});throw new Error(`Unexpected ${url}`);};
  const invoke=async(args:string[])=>{const out:string[]=[];const code=await runCli([...args,'--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});return{code,result:JSON.parse(out.join(''))};};
  try{
   await saveTestConnection({server:'https://one.example',token:'mx_one'},home);await saveTestConnection({server:'https://two.example',token:'mx_two'},home);
@@ -110,7 +110,13 @@ test('a directory tracked against one server refuses another by name, before any
   assert.notEqual(refused.code,0);assert.equal(refused.result.error.code,'wrong_server',JSON.stringify(refused.result));
   assert.match(refused.result.error.message,/tracked against https:\/\/one\.example; the command selected https:\/\/two\.example/);
   assert.match(refused.result.error.fix,/another directory, or pass --server https:\/\/one\.example/);
-  assert.ok(!hosts.includes('two.example'),`no request reached the other server: ${hosts}`);
+  // Nothing of this command reaches the other server: no artifact request, no account header and
+  // above all no token. Whether the two origins are one deployment is settled first
+  // (services/cli/src/server-identity); this fixture's hosts have already answered that they are
+  // not, so the refusal is reached without a single request leaving for two.example.
+  const other=sent.filter(call=>call.host==='two.example');
+  assert.deepEqual(other.map(call=>call.path),[],`no request reached the other server: ${JSON.stringify(sent)}`);
+  for(const call of other)assert.equal(call.authorization,null,'no credential reaches a server the workspace is not tracked against');
  }finally{await rm(root,{recursive:true,force:true});}
 });
 

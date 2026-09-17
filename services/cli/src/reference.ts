@@ -1,13 +1,13 @@
 import {artifactIdFromPath} from '../../utils/src/artifact-reference';
 import {stat,realpath} from 'node:fs/promises';
 import {relative,resolve} from 'node:path';
-import {ARTIFACT_ID_PATTERN} from '@artifactbin/contracts';
+import {ARTIFACT_ID_PATTERN,normalizeOrigin} from '@artifactbin/contracts';
 import {CliError} from './commands';
 import {confinedPath} from './journal';
 import {isMissing} from './files';
 import {DEFAULT_SERVER} from './config';
 export type Reference=({kind:'path';path:string}|{kind:'id';id:string})&{version?:number;notices:string[]};
-export async function resolveReference(input:string,options:{root:string;cwd?:string;server?:string;writable?:boolean}):Promise<Reference>{
+export async function resolveReference(input:string,options:{root:string;cwd?:string;server?:string;/** Verified alias origins of `server`; a URL at one of them names the same server. */aliases?:string[];writable?:boolean}):Promise<Reference>{
  const root=await realpath(options.root);
  const exists=async(value:string)=>{try{return(await stat(resolve(options.cwd??options.root,value))).isFile();}catch(error){if(isMissing(error)||(error as NodeJS.ErrnoException).code==='ENOTDIR')return false;throw error;}};
  const suffix=input.match(/^(.+)@(\d+)$/);
@@ -23,7 +23,14 @@ export async function resolveReference(input:string,options:{root:string;cwd?:st
  let id=value;
  if(/^https?:\/\//.test(value)){
   let url:URL;try{url=new URL(value);}catch{throw new CliError('invalid_reference','Invalid artifact URL.');}
-  if(url.origin!==new URL(options.server??DEFAULT_SERVER).origin||url.username||url.password)throw new CliError('wrong_server','The artifact URL must belong to the selected server origin.','Use --server URL to select that server.');
+  // ONE SERVER, SEVERAL ADDRESSES. The selected server's verified aliases name the same
+  // deployment, so a link copied from either hostname resolves here — but only to its
+  // artifact id: the URL never selects where the request or the credential goes.
+  const selected=new URL(options.server??DEFAULT_SERVER).origin;
+  const addresses=[selected,...(options.aliases??[]).map(alias=>normalizeOrigin(alias)).filter((alias):alias is string=>!!alias)];
+  // Userinfo is refused whatever the origin: an address that carries credentials is not an artifact URL.
+  if(url.username||url.password)throw new CliError('wrong_server',`The artifact URL carries credentials in its address; the selected server is ${selected}.`,`Use the plain URL or the artifact id, and --server <origin> to select a different server.`);
+  if(!addresses.includes(url.origin))throw new CliError('wrong_server',`The artifact URL at ${url.origin} does not belong to ${selected}, the selected server.`,`Pass --server ${url.origin} to select that server, or use a URL at ${selected}.`);
   const parsedId=artifactIdFromPath(url.pathname);
   if(!parsedId)throw new CliError('invalid_reference','Use an artifact URL with an artifact id.');
   id=parsedId;

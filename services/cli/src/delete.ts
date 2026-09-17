@@ -31,7 +31,7 @@ export async function deleteResources(workspace:Workspace,parsed:ParsedCommand,c
 }
 
 async function deleteArtifact(workspace:Workspace,input:string,client:HttpClient,options:{force?:boolean;dryRun?:boolean;type?:string}){
- const ref=await artifactReference(workspace,input,client.connection.server,true);
+ const ref=await artifactReference(workspace,input,client.connection.server,true,client.aliases);
  if(options.dryRun)return{dry_run:true,...await client.request('/artifacts/preflight','POST',{id:ref.id,mode:'delete',input:{force:!!options.force}})};
  // The head read names the kind being deleted, so a selected --type that
  // disagrees refuses instead of deleting the wrong thing; it also identifies
@@ -66,7 +66,7 @@ async function deleteArtifact(workspace:Workspace,input:string,client:HttpClient
 
 /** Comment deletion is the owner's verb; the container artifact is explicit, never inferred. */
 export async function deleteComments(workspace:Workspace,container:string,ids:string[],client:HttpClient,options:{dryRun?:boolean}){
- const ref=await artifactReference(workspace,container,client.connection.server,true);
+ const ref=await artifactReference(workspace,container,client.connection.server,true,client.aliases);
  const operations:Array<Record<string,unknown>>=[];let failed=false;
  for(const id of ids){
   if(!/^[A-Za-z0-9_-]+$/.test(id)){operations.push({id,artifact:ref.id,error:{code:'invalid_thread',message:'Use the thread id returned by afbin comment.'}});failed=true;continue;}

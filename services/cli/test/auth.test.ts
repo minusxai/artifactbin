@@ -16,19 +16,23 @@ const pairing=()=>Response.json({device_code:'d'.repeat(43),user_code:'ABCD',ver
 const credentials=()=>Response.json({access_token:'new_access',refresh_token:'new_refresh',client_id:'client',expires_in:3600});
 
 test('afbin auth is a no-op on a valid saved token: one read, reports the account, no browser',async()=>{
- const home=await mkdtemp(join(tmpdir(),'afbin-auth-valid-'));let calls=0;const output:string[]=[];
+ const home=await mkdtemp(join(tmpdir(),'afbin-auth-valid-'));const paths:string[]=[];const output:string[]=[];
  try{
   await saveConnection({server:origin,token:'saved_access'},home);
   const code=await runCli(['auth','--server',origin,'--json'],{
    home,cwd:home,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},
    auth:{open:async()=>assert.fail('a valid token must not open a browser')},
    fetch:async(input,init)=>{
-    calls++;const url=new URL(String(input));assert.equal(url.pathname,'/api/artifacts');
+    const url=new URL(String(input));paths.push(url.pathname);
+    // Before any credential is spent, the selected origin is asked which addresses it answers at
+    // — public, cacheable and unauthenticated (services/cli/src/server-identity).
+    if(url.pathname==='/api/server'){assert.equal(new Headers(init?.headers).get('Authorization'),null);return Response.json({origin,aliases:[]});}
+    assert.equal(url.pathname,'/api/artifacts');
     assert.equal(new Headers(init?.headers).get('Authorization'),'Bearer saved_access');
     return Response.json({artifacts:[]},{headers:{'X-Artifactbin-Account':'acct_1'}});
    },
   });
-  assert.equal(code,0,output.join(''));assert.equal(calls,1);
+  assert.equal(code,0,output.join(''));assert.deepEqual(paths,['/api/server','/api/artifacts']);
   assert.deepEqual(JSON.parse(output.join('')),{authenticated:true,server:origin,account:'acct_1'});
  }finally{await rm(home,{recursive:true,force:true});}
 });
@@ -48,11 +52,11 @@ test('afbin auth with no saved token runs the browser approval flow and saves th
   const code=await runCli(['auth','--server',origin,'--json'],{
    home,cwd:home,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},
    auth:{open:async()=>{}},
-   fetch:async input=>{const path=new URL(String(input)).pathname;calls.push(path);return path==='/oauth/device'?pairing():credentials();},
+   fetch:async input=>{const path=new URL(String(input)).pathname;calls.push(path);return path==='/api/server'?Response.json({origin,aliases:[]}):path==='/oauth/device'?pairing():credentials();},
   });
   assert.equal(code,0,output.join(''));
   assert.deepEqual(JSON.parse(output.join('')),{authenticated:true,server:origin});
-  assert.deepEqual(calls,['/oauth/device','/oauth/device/token']);
+  assert.deepEqual(calls,['/api/server','/oauth/device','/oauth/device/token']);
   assert.equal((await loadConnection(origin,home,{}))?.token,'new_access');
  }finally{await rm(home,{recursive:true,force:true});}
 });
@@ -247,7 +251,9 @@ describe('which origin the approval uses', () => {
       },
      });
      assert.equal(code,0);
-     assert.deepEqual(calls,[selected,selected]);
+     // Three requests, ONE origin: the identity document, the pairing and the token exchange all
+     // go to the origin this command selected, and to nothing else.
+     assert.deepEqual(calls,[selected,selected,selected]);
      assert.equal(JSON.parse(output.join('')).server,selected);
     }finally{await rm(home,{recursive:true,force:true});}
    });

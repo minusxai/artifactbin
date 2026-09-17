@@ -8,13 +8,15 @@ const id = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/);
 export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
   name: 'browser_session', title: 'Operate a live browser session',
   http: { method: 'POST', path: '/api/browser-sessions' },
-  description: 'Run an async Playwright function body in a persistent isolated browser. A script returns an execution receipt immediately; poll status with its session_id and execution_id. Multiple artifact pages share one session. Existing effects survive script errors; lost sessions are never recreated or replayed automatically.',
-  input: { op: z.enum(['script', 'status', 'close']), session_id: id, execution_id: id.optional(), create: z.boolean().optional(), code: z.string().max(65536).optional() },
+  description: 'Run an async Playwright function body in a persistent isolated browser. A script returns an execution receipt immediately; poll status with its session_id and execution_id. Multiple artifact pages share one session. Existing effects survive script errors; lost sessions are never recreated or replayed automatically. The session browses as you unless the request that creates it passes viewer: "guest", whose pages are fetched signed out — how to see what a public reader sees, with a guest\'s writes refused. Who a session browses as is fixed when it is created; naming a different viewer later is refused.',
+  input: { op: z.enum(['script', 'status', 'close']), session_id: id, execution_id: id.optional(), create: z.boolean().optional(), code: z.string().max(65536).optional(), viewer: z.enum(['guest']).optional() },
   annotations: {}, example: { input: { op: 'status', session_id: 'session-id' } }, errors: [],
   async run(ctx, input) {
     const sessionService = services().browser.sessions;
     if (!sessionService) return { status: 503, body: { error: 'sessions_unavailable' } };
     if (input.op === 'script' && (typeof input.execution_id !== 'string' || typeof input.code !== 'string')) return { status: 400, body: { error: 'invalid_script', message: 'script requires execution_id and code' } };
+    // The session service reads an unrecognized viewer as none, which would quietly browse as the caller.
+    if (input.viewer !== undefined && input.viewer !== 'guest') return { status: 400, body: { error: 'invalid_viewer', message: 'viewer is "guest" or absent; a session omitting it browses as you' } };
     const request = { ...input, actor: { credential: 'bearer', ...ctx.actor } } as BrowserSessionRequest;
     const result = await sessionService.request(request);
     return { status: 200, body: { ...result } };

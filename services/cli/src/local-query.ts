@@ -25,12 +25,12 @@ export function queryParameters(values:string[]=[]):Record<string,Scalar>{
 }
 
 /** Local engines receive bytes and bound values; no HTTP client or credentials enter this boundary. */
-export async function localQuery(workspace:Workspace,parsed:ParsedCommand,sql:string|undefined,server:string){
+export async function localQuery(workspace:Workspace,parsed:ParsedCommand,sql:string|undefined,server:string,aliases:readonly string[]=[]){
  const {flags,positionals}=parsed;if(flags.remote||flags.write)return null;
  const params=queryParameters(flags.param as string[]|undefined);
  const sources=[];
  for(const input of positionals){
-  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server});
+  const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server,aliases:[...aliases]});
   if(ref.kind!=='path'||ref.version)return null;
   let path=ref.path,bytes=await readOptional(join(workspace.root,path));if(!bytes)throw new CliError('missing_file',`Missing dataset: ${input}.`);
   if(/\.jsx$/i.test(path)){
