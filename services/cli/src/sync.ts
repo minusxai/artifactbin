@@ -313,11 +313,6 @@ export async function finishSavedRequest(workspace:Workspace,server?:string):Pro
 }
 
 /**
- * A published CSV or JSON dataset names its columns and types in the reply, so the agent writes SQL
- * against them instead of probing: pi spent eight model calls learning that `month` was a string
- * (local hardcore report, 14 Sep). Inferred locally from the bytes it just pushed; never a server call.
- */
-/**
  * The policy write the server refuses to combine with content: same command, same journal, one PATCH.
  *
  * A content write echoes a CURATED wire with no policy fields, so the revision to compare and swap on
@@ -340,6 +335,11 @@ function datasetAccess(snapshot:Snapshot,body:Record<string,unknown>):{access?:s
  const access=typeof snapshot.access==='string'?snapshot.access:typeof body.access==='string'?body.access:undefined;
  return access!==undefined&&(snapshot.format==='dataset'||typeof body.access==='string')?{access}:{};
 }
+/**
+ * A published CSV or JSON dataset names its columns and types in the reply, so the agent writes SQL
+ * against them instead of probing: pi spent eight model calls learning that `month` was a string
+ * (local hardcore report, 14 Sep). Inferred locally from the bytes it just pushed; never a server call.
+ */
 function datasetColumns(path:string,bytes:Buffer|null):{columns?:Array<{name:string;type:string}>}{
  if(!bytes)return{};
  const ext=extname(path).toLowerCase();

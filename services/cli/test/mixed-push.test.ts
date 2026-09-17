@@ -68,7 +68,7 @@ describe('a workspace of artifacts and a profile', () => {
 });
 
 /**
- * WHY `metadata_requires_patch` IS NOT AN afbin REFUSAL (workstream F).
+ * WHY `metadata_requires_patch` IS NOT AN afbin REFUSAL.
  *
  * The server's edits door answers metadata keys with
  * `metadata_requires_patch`, whose hint is "Use PATCH with expectedState … or

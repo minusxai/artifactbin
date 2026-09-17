@@ -75,8 +75,8 @@ const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help
  * reference is still here; each is carried at its BUNDLE length, the rationale spans dropped
  * (lib/skills/render), which is what puts the whole set under 28 KB.
  *
- * The starter is not in it: `afbin pull` and `afbin help <topic>` both give it, and it was the one
- * part that had no copy for every template — `afbin help plan` threw a TypeError on the missing one.
+ * The starter is not in it: `afbin pull` and `afbin help <topic>` both give it, and it is the one
+ * part with no copy for every template — `plan` has none at all.
  * Sync-and-recovery is read on a refusal, not up front.
  */
 export function helpBundle(template:string,origin:string=DEFAULT_SERVER):string{
