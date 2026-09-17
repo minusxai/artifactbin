@@ -3,11 +3,18 @@ import {homedir} from 'node:os';
 import {CliError} from './commands';
 import {CLI_VERSION} from './version';
 import {configDir,loadConnection,saveConnection,normalizeServer,type Connection} from './config';
-interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;authenticate?:()=>Promise<Connection>}
+interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
 export class HttpClient {
  connection:Connection;
  account?:string;
- constructor(private options:HttpOptions){this.connection={...options.connection,server:normalizeServer(options.connection.server)};this.account=options.account;}
+ /**
+  * The other addresses this same server answers at, already verified
+  * (services/cli/src/server-identity). They say which pasted URLs name this server; every
+  * request this client makes still goes to `connection.server` and nowhere else, so an
+  * alias never receives a credential.
+  */
+ readonly aliases:readonly string[];
+ constructor(private options:HttpOptions){this.connection={...options.connection,server:normalizeServer(options.connection.server)};this.account=options.account;this.aliases=options.aliases??[];}
  async request<T=Record<string,unknown>>(path:string,method='GET',body?:unknown,headers:Record<string,string>={},options:{timeoutMs?:number;readOnly?:boolean;signal?:AbortSignal}={}):Promise<T>{
   return this.perform(path,method,body,headers,false,options.timeoutMs,options.readOnly,apiUrl,options.signal) as Promise<T>;
  }

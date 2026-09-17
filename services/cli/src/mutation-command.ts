@@ -37,7 +37,7 @@ export async function queryMutation(workspace:Workspace,parsed:ParsedCommand,sql
  const name=typeof flags.name==='string'?flags.name:undefined;
  if(!name&&!sql?.trim())throw new CliError('invalid_query','A mutation needs SQL supplied with --input, or a declared mutation selected with --name.');
  const values=queryParameters(flags.param as string[]|undefined);
- const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,true);
+ const ref=await artifactReference(workspace,parsed.positionals[0],client.connection.server,true,client.aliases);
  if(ref.version!==undefined)throw new CliError('historical_mutation','A mutation writes the current resource.','Pull the historical version and push it conditionally instead.');
  const plan=(head:Snapshot)=>{
   if(head.id!==ref.id||typeof head.state!=='string')throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');

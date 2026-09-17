@@ -1,6 +1,7 @@
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
+import { normalizeOrigin } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -238,6 +239,35 @@ export const RESEND_API_KEY = env('EMAIL', 'RESEND_API_KEY');
 export const PUBLIC_BASE_URL = env('APP', 'PUBLIC_BASE_URL') ?? `http://localhost:${APP_PORT ?? '3030'}`;
 const assetsOriginSetting = env('APP', 'ASSETS_ORIGIN');
 export const ASSETS_ORIGIN = assetsOriginSetting ? parseAssetsOrigin(PUBLIC_BASE_URL, null, assetsOriginSetting) : null;
+
+/**
+ * OTHER ADDRESSES THIS SAME DEPLOYMENT ANSWERS AT — a marketing hostname that
+ * proxies to this process, a legacy name kept alive after a rename.
+ *
+ * `APP__PUBLIC_BASE_URL` stays the ONE canonical origin: every minted link, and
+ * the `origin` of the public identity document, come from it. This list only
+ * tells a client that a URL at one of these names is the same server, so a
+ * pasted link is accepted and a folder tracked against the old name keeps
+ * working — and clients still send every request and credential to the
+ * canonical origin, never to a name on this list.
+ *
+ * Comma-separated origins, validated with the one origin rule the CLI's
+ * `normalizeServer` uses (HTTPS, or HTTP on loopback for development; no path,
+ * query, fragment or credentials). A malformed entry throws at module load,
+ * like DATASET__DNS_SERVERS: half a list is worse than a refused boot, because
+ * the missing half is a name that silently stops being the same server.
+ */
+export function parseAliasOrigins(value: string | undefined): readonly string[] {
+  if (value === undefined || value.trim() === '') return Object.freeze([]);
+  const origins: string[] = [];
+  for (const entry of value.split(',')) {
+    const origin = normalizeOrigin(entry.trim());
+    if (!origin) throw new Error('APP__ALIAS_ORIGINS must be a comma-separated list of origins this deployment also answers at (HTTPS, or HTTP on loopback), without a path, query, fragment or credentials.');
+    if (!origins.includes(origin)) origins.push(origin);
+  }
+  return Object.freeze(origins);
+}
+export const ALIAS_ORIGINS = parseAliasOrigins(env('APP', 'ALIAS_ORIGINS'));
 
 /**
  * Where the EXPORT browser reaches this process. Internal by default, for the
