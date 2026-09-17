@@ -12,7 +12,8 @@ import { dataflowForRow, getArtifactById } from '@/lib/artifacts';
 
 import { STORY_ISLAND_ID, type StoryIslandData } from '@/lib/story-runtime/contract';
 import { mintToken } from '@/lib/tokens';
-import { useAppHarness, request } from '@/__tests__/harness';
+import { claimToken, createUser } from '@/lib/users';
+import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 
 const harness = useAppHarness();
 
@@ -97,5 +98,35 @@ describe('the served document', () => {
     const doc = ((await (await create(t.token, { markup: '<div><Badge>plain</Badge></div>' })).json()) as { id: string }).id;
     const html = await (await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }))).text();
     expect(island(html).dataflow).toBeUndefined();
+  });
+
+  /*
+   * WHO IS READING, on the island — the wiring the runtime's own tests cannot
+   * see, because they inject `viewer` as a prop.
+   *
+   * The third case is the one that keeps /export's cache honest: a CAPTURE is
+   * photographed by a session-less browser, so it is a guest render by
+   * construction, and the route pins it to nobody on purpose. A cached export
+   * is therefore never one reader's view of a document (lib/export
+   * exportCacheKey carries no viewer, and `$_me` can never reach the selection
+   * token because only DECLARED scalars do).
+   */
+  it('tells the document who is reading, and tells a capture nobody', async () => {
+    const t = await mintToken('reader-identity');
+    const user = await createUser({ email: 'mxmx_test_island_reader@example.com', name: 'Ada' });
+    await claimToken(user.id, t.token);
+    const cookie = await agentCookie([t.id]);
+    const doc = ((await (await create(t.token, { markup: '<p>Reading as <User id="$_me" /></p>', visibility: 'public' })).json()) as { id: string }).id;
+
+    const signedIn = island(await (await rawRoute(request(`/a/${doc}/raw`, { cookie }), params({ id: doc }))).text());
+    expect(signedIn.viewer).toEqual({ id: user.id, label: 'Ada' });
+    // The display name, never an email — the same rule a DataTable user cell follows.
+    expect(JSON.stringify(signedIn.viewer)).not.toContain('@');
+
+    const guest = island(await (await rawRoute(request(`/a/${doc}/raw`), params({ id: doc }))).text());
+    expect(guest.viewer).toBeUndefined();
+
+    const capture = island(await (await rawRoute(request(`/a/${doc}/raw?chrome=0`, { cookie }), params({ id: doc }))).text());
+    expect(capture.viewer).toBeUndefined();
   });
 });

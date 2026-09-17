@@ -122,9 +122,12 @@ and never carried in the link.
 an ID this reader cannot see renders "Unknown person", never the raw ID.
 
 ```jsx
-<p>Paid by <User id="$_row.paid_by" fallback="nobody" /></p>
 <p>Signed in as <User id="$_me" avatar /></p>
+<Column col="paid_by"><User id="$_row.paid_by" fallback="nobody" /></Column>
 ```
+
+`$_row.<field>` only resolves inside a `<For>` or a `<Column>`; written anywhere
+else it is an ordinary string and renders "Unknown person".
 
 `<SignIn>` is a button-styled link to login that returns to this address. It
 renders nothing for a signed-in reader, so it needs no condition of its own.

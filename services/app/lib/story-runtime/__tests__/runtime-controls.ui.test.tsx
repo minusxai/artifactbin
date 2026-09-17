@@ -340,12 +340,17 @@ describe('the viewer in markup', () => {
 
   it('gives a guest the sign-in door, returning to the address they are on', () => {
     window.history.pushState({}, '', '/a/abc123?$team=LAL#notes');
-    const view = render(<StoryRuntimeApp nodes={bodyOf(BRANCH)} refData={{}} colorMode="light" />);
-    const link = view.getByRole('link', { name: 'Join' });
-    expect(link.getAttribute('target')).toBe('_top');
-    expect(link.getAttribute('href')).toBe(`/login?callbackUrl=${encodeURIComponent('/a/abc123?$team=LAL#notes')}`);
-    expect(view.queryByText('in')).toBeNull();
-    window.history.pushState({}, '', '/');
+    // Restored even on a failure: the address is global to this jsdom, and a
+    // single bad assertion would otherwise run every later test on /a/abc123.
+    try {
+      const view = render(<StoryRuntimeApp nodes={bodyOf(BRANCH)} refData={{}} colorMode="light" />);
+      const link = view.getByRole('link', { name: 'Join' });
+      expect(link.getAttribute('target')).toBe('_top');
+      expect(link.getAttribute('href')).toBe(`/login?callbackUrl=${encodeURIComponent('/a/abc123?$team=LAL#notes')}`);
+      expect(view.queryByText('in')).toBeNull();
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
   });
 
   it('gives a signed-in reader the other branch and no door at all', () => {
@@ -390,6 +395,27 @@ describe('the viewer in markup', () => {
     expect(cells).toContain('Unknown person');
     expect(view.container.textContent).not.toContain('usr_nobody');
     expect(cells).toContain('nobody');
+  });
+
+  /*
+   * A DataTable cell is NOT the <For> path: <For> sets `repeatScope` and a
+   * <Column> template sets `tableCommentScope`, and scopeProps branches on
+   * which one it is. The <User> seam takes `id` out before either sees it, so
+   * both must resolve a row field the same way.
+   */
+  it('names a row field inside a Column, and still names the user cells beside it', () => {
+    const source = '<Helmet><Value name="tasks" type="table" value={[{"id":1,"paid_by":"usr_grace","who":"usr_ada"}]} /></Helmet>'
+      + '<DataTable data="$tasks" rowKey="id"><Column col="who" /><Column col="paid_by"><User id="$_row.paid_by" /></Column></DataTable>';
+    const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
+    const flow = { values: content.values, queries: [] };
+    const tables = { tasks: { columns: [{ name: 'id', type: 'number' as const }, { name: 'paid_by', type: 'string' as const }, { name: 'who', type: 'user' as const }], rows: [{ id: 1, paid_by: 'usr_grace', who: 'usr_ada' }] } };
+    const state: DataflowState = { values: {}, errors: {}, tables, userLabels: { usr_ada: 'Ada', usr_grace: 'Grace' } };
+    const store = createDataflowStore({ flow, state }, { transport: { run: vi.fn().mockResolvedValue({ tables: {}, errors: {} }), page: vi.fn() }, debounceMs: 0 });
+    const view = render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{ flow, state }} store={store} viewer={MEL} colorMode="light" />);
+    expect(view.container.textContent).toContain('Grace');
+    expect(view.container.textContent).toContain('Ada');
+    expect(view.container.textContent).not.toContain('usr_');
+    store.dispose();
   });
 
   it('shows the viewer their own name even before any query has answered', () => {
