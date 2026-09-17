@@ -143,7 +143,7 @@ export function parseCommand(argv:string[]):ParsedCommand {
   // Who a session browses as is one decision, made when it is created; nothing later changes it.
   if(f.as!==undefined){
    f.as=enumArgument(f.as,['guest'],'as');
-   if(target!=='new')throw new CliError('invalid_viewer',`--as chooses who a NEW session browses as; session ${target} is already fixed to whoever created it.`,'Run afbin sessions script new --as guest --input actions.js for a signed-out session, or drop --as to continue this one.');
+   if(target!=='new')throw new CliError('invalid_viewer',`--as chooses who a NEW session browses as; session ${target} already has the viewer it was created with.`,'Run afbin sessions script new --as guest --input actions.js for a signed-out session, or drop --as to continue this one.');
   }
  }
  if(command.name==='remote'&&f.session!==undefined&&(result.positionals.length||f.name!==undefined))throw new CliError('invalid_arguments','--session attaches to an existing session; omit the command and --name.');

@@ -121,6 +121,17 @@ describe('browser_session viewer', () => {
     expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
   });
 
+  // runOperation hands the body to run() unparsed, so the refusal has to live in the operation itself.
+  it('refuses a viewer it cannot browse as, without reaching the session service', async () => {
+    const seen = record();
+    for (const viewer of ['owner', 'anonymous', 'GUEST', true]) {
+      const reply = await operation.run(context, { ...script, viewer });
+      expect(reply.status, String(viewer)).toBe(400);
+      expect(String(reply.body.error), String(viewer)).toBe('invalid_viewer');
+    }
+    expect(seen).toHaveLength(0);
+  });
+
   it('tells an agent, in its description, how to see what a signed-out reader sees', () => {
     expect(operation.description).toMatch(/guest/i);
   });

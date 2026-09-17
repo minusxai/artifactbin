@@ -15,6 +15,8 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
     const sessionService = services().browser.sessions;
     if (!sessionService) return { status: 503, body: { error: 'sessions_unavailable' } };
     if (input.op === 'script' && (typeof input.execution_id !== 'string' || typeof input.code !== 'string')) return { status: 400, body: { error: 'invalid_script', message: 'script requires execution_id and code' } };
+    // The session service reads an unrecognized viewer as none, which would quietly browse as the caller.
+    if (input.viewer !== undefined && input.viewer !== 'guest') return { status: 400, body: { error: 'invalid_viewer', message: 'viewer is "guest" or absent; a session omitting it browses as you' } };
     const request = { ...input, actor: { credential: 'bearer', ...ctx.actor } } as BrowserSessionRequest;
     const result = await sessionService.request(request);
     return { status: 200, body: { ...result } };
