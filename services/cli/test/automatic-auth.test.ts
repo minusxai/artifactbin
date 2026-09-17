@@ -18,8 +18,11 @@ for (const state of ['fresh', 'connected', 'already-authorized', 'revoked'] as c
   const code=await runCli(['auth',origin+'/a/ABC123','--server',origin,'--json'],{
    home,cwd:home,env:{},interactive:false,stdout:()=>{},stderr:()=>{},auth:{open:async()=>{opened++;}},
    fetch:async(input,init)=>{
-    const path=new URL(String(input)).pathname;calls.push(path);
+    const path=new URL(String(input)).pathname;
     const auth = new Headers(init?.headers).get('Authorization');
+    // The one public question "who are you?" is asked first, without a credential; this server predates it.
+    if(path==='/api/server'){assert.equal(auth,null);return new Response('',{status:404});}
+    calls.push(path);
     if (state === 'revoked' && auth) return Response.json({error:'unauthorized'},{status:401});
     assert.equal(auth,state==='fresh'||state==='revoked'?null:'Bearer existing_access');
     if(path==='/api/agent-approvals'){
