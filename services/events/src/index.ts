@@ -20,14 +20,14 @@ export { EVENTS_ROUTES, EVENT_VERBS, eventName } from '@artifactbin/contracts';
 export { eventsClient, type EventsClientOptions } from '@artifactbin/utils';
 export { DEFAULT_EVENTS_SCHEMA, EVENTS_TABLE, EVENTS_TABLES } from './schema';
 
-/** The one GET a shell answers — the Docker HEALTHCHECK and the compose `depends_on` condition. */
+/** The one GET a shell answers — the liveness/readiness probe for whatever orchestrates the service. */
 const HEALTH = '/health';
 
 /**
  * One POST (`/emit`, a JSON array of envelopes → `{ accepted: n }`) plus
- * `GET /health`, answered BEFORE the secret check so the Docker HEALTHCHECK
- * works with a secret set. Mirrors services/sql's shell line for line: the
- * secret guard, the method guard, the body cap, the name-only error.
+ * `GET /health`, answered BEFORE the secret check so the probe works with a
+ * secret set. Mirrors services/sql's shell line for line: the secret guard,
+ * the method guard, the body cap, the name-only error.
  */
 export function serveEvents(svc: EventsService, opts: { maxBody?: number; serviceSecret?: string } = {}): JsonServer {
   const routes: Record<string, (body: unknown) => Promise<unknown>> = {

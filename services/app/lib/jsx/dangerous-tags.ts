@@ -24,10 +24,12 @@
  *
  * ── `<form>` ───────────────────────────────────────────────────────────────
  *
- * The reader's document cannot submit one: `form-action 'none'` is in the CSP
- * (lib/story/markup-csp.ts), so the tag would be inert there and admitting it
- * would merely complete the interactive vocabulary (`button`, `input`,
- * `select` … are all allowed, with author JS to drive them).
+ * Denied at SAVE, like every tag in the list, so no stored document carries one
+ * whatever renders it later. The served document's CSP independently sets
+ * `form-action 'none'` (lib/story/markup-csp.ts), so the tag would be inert
+ * there too; the controls a form would group (`button`, `input`, `select` …)
+ * are each allowed on their own and are driven from the `<Helmet>` script,
+ * which is what the rejection tells the author (lib/jsx/validate.ts).
  */
 import { immutableSet } from '@/lib/utils/immutable-collections';
 

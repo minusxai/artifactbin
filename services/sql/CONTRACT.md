@@ -9,7 +9,7 @@ Every method is one `POST` with a JSON body; a `Set` anywhere in a body is sent 
 | `mutate` | `POST /mutate` | `MutationInput` — one table, one writing statement | `{ result: MutationResult \| QueryFailure }` |
 | `dryRun` | `POST /dry-run` | `DryRunInput` — column shapes only, `paramNames: string[]` | `DryRunResult` |
 | `dryRunMutations` | `POST /dry-run-mutations` | `DryRunMutationsInput` | `{ errors }` |
-| — | `GET /health` | — | `200 {"ok":true}` — the Docker HEALTHCHECK and the compose `depends_on` condition; the one GET, every other route POST-only |
+| — | `GET /health` | — | `200 {"ok":true}` — the liveness/readiness probe for whatever orchestrates the service; the one GET, every other route POST-only |
 
 Rules the service enforces, whatever the caller says: one statement per query, admitted by type (reads on `/run`,
 one write on `/mutate`), params bound never spliced, a row cap and a per-query interrupt (`limit`/`timeoutMs`

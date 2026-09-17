@@ -96,7 +96,7 @@ describe('the first local command', () => {
   });
 });
 
-test('eager init leaves a skill addressed to another server alone — every command used to rewrite it (127 "Skill updated" lines in one local task)',async()=>{
+test('eager init leaves a skill addressed to another server alone — only setup adopts a new origin',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-init-origin-'));const bin=join(home,'bin');const err:string[]=[];
  try{
   await mkdir(bin);await writeFile(join(bin,'pi'),'#!/bin/sh\nexit 0\n',{mode:0o755});

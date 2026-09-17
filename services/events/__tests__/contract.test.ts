@@ -92,7 +92,7 @@ describe('serveEvents (the shell)', () => {
   const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
     fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) });
 
-  it('answers GET /health without the secret — before the guard, so the HEALTHCHECK works', async () => {
+  it('answers GET /health without the secret — before the guard, so the probe works', async () => {
     const r = await fetch(`${url}/health`);
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ ok: true });

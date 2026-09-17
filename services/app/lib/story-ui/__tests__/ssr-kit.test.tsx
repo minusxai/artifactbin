@@ -78,15 +78,15 @@ const UNMOUNTED_UNTIL_OPEN = new Set([
 /** Not in the bare registry: the live embeds render through the runtime. */
 const RUNTIME_ONLY = new Set(['Question', 'Number', 'Value', 'Query', 'Mutation']);
 
+// Populate the gallery's query-backed For so its template participates in the
+// stamp contract; an empty query correctly renders no template nodes.
+const TABLES = { regions: { rows: [{ region: 'EU' }] } };
+
 /**
  * <Icon> draws only from resolved glyph data (lib/story/icon-glyphs) and
  * spreads its props onto the svg — so give the render the fallback glyph the
  * server ships with any icon-bearing document, and the stamps must appear.
  */
-// Populate the gallery's query-backed For so its template participates in the
-// stamp contract; an empty query correctly renders no template nodes.
-const TABLES = { regions: { rows: [{ region: 'EU' }] } };
-
 const GLYPHS = { [FALLBACK_ICON_KEY]: { cls: 'lucide-badge-question-mark', inner: '<path d="" />' } };
 
 function componentNodes(nodes: JsxNode[], base = ''): Array<{ tag: string; path: string }> {

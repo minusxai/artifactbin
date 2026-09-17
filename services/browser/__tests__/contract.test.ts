@@ -156,7 +156,7 @@ describe('browserClient', () => {
 });
 
 describe('serveBrowser health', () => {
-  it('GET /health answers 200 {ok:true}, the docker HEALTHCHECK and the compose depends_on condition', async () => {
+  it('GET /health answers 200 {ok:true}, the liveness/readiness probe for whatever orchestrates the service', async () => {
     const res = await fetch(`${listening.url}/health`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });

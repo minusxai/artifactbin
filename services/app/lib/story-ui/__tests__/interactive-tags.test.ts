@@ -43,7 +43,7 @@ describe('interactive elements a script can drive', () => {
    * Hosted video has its own door: the `<Video>` component, a click-to-open
    * card for the three allowlisted hosts (video-embed.ts).
    */
-  it('does not pretend to support media it cannot serve self-contained', () => {
+  it('refuses media it cannot serve self-contained — the URL gate, not the tag list', () => {
     expect(validate('<video src="data:video/mp4;base64,AAAA"></video>').length).toBeGreaterThan(0);
     // An <img src> URL is IMPORTED at the door now (lib/story/external-images)
     // rather than refused, so the stored document is still self-contained —
