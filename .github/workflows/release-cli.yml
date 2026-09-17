@@ -103,11 +103,23 @@ jobs:
             gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$SOURCE_SHA"
           fi
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft > draft.txt 2> release-error.txt; then
+            # A partial draft from an earlier attempt is recovered below, never a published release.
             test "$(cat draft.txt)" = true
-            # Recover a partial draft from an earlier attempt, never a published release.
-            gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber bundle/*
           else
             grep -qi 'not found\|HTTP 404' release-error.txt || { cat release-error.txt >&2; exit 1; }
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes '' bundle/*
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --latest=false --title "$RELEASE_TAG" --notes ''
           fi
+          # ONE ASSET AT A TIME, each retried. Handing gh the whole bundle uploads several ~180 MB Chromium
+          # archives at once, and GitHub answered `HTTP 500: Error saving asset` on one of them for
+          # afbin-v0.1.37 and again for v0.1.38 (runs 35247592662, 35254779106) — each time leaving a draft
+          # that blocked every production deploy behind it. A single 200 MB upload is accepted every time.
+          for asset in bundle/*; do
+            for attempt in 1 2 3 4; do
+              if gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber "$asset"; then continue 2; fi
+              echo "upload of $asset failed (attempt $attempt)" >&2
+              sleep $((attempt * 15))
+            done
+            echo "::error::$asset could not be uploaded"
+            exit 1
+          done
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest=false
