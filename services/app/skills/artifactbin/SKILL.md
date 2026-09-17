@@ -7,7 +7,7 @@ description: >-
 
 artifactbin publishes agent-written documents people read, edit, annotate and share at a URL. An artifact is one `.jsx` file: a YAML fence for metadata, then self-contained static JSX — HTML prose and kit components styled with Tailwind via `className` — under a theme and a template. It queries datasets (CSV or JSON), embeds images and PDFs, and holds reader-changeable values, controls and charts; datasets and media are artifacts too.
 
-Every action goes through the `afbin` CLI; its HTTP API is not for agents.
+Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
 - Missing binary: `curl -fsSL [[ base ]]/chat/install.sh | sh`; it verifies the checksum.
 - Authentication is automatic: afbin signs you in when a command first needs the server — browser approval. With `--yes --json` it prints the approval URL to open, then continues once approved. Credentials are saved in `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
@@ -21,11 +21,11 @@ Every action goes through the `afbin` CLI; its HTTP API is not for agents.
 - Publishing is the check, whether or not you can view images; no other skill, palette tool or image tooling is needed — the theme carries the palette. To look, one `afbin export <ref> --output out.png` shows the whole document, every slide, in one image; never one slide at a time.
 - On refusal, follow the returned code and instruction; a conflict never touches your file, and after an uncertain write retry push to recover it.
 
-`afbin -h` and `afbin help <topic>` work offline and print the references in `references/` beside this file; bare `afbin help` prints this file's absolute location, so never search the filesystem.
+`afbin -h` and `afbin help <topic>` work offline and print the references in `references/` beside it; bare `afbin help` prints this file's absolute location, so never search the filesystem.
 
 ## Example
 
-Before writing, read design, markup, template and theme; its frame keeps content from sitting flush to the viewport edge. `afbin help <template>` prints every reference that kind needs.
+Before writing, read design, markup, template and theme; a template's frame keeps content from sitting flush to the viewport edge. `afbin help <template>` prints every reference that kind needs.
 
 ```jsx
 [[ example ]]
