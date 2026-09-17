@@ -6,7 +6,7 @@ export {
   DEV_OUTBOX_RELATIVE_PATH, DEV_OUTBOX_DEFAULT_PATH, MailNotConfigured, MailSendFailed,
 } from './mail';
 export {authEnvNamesRead,readEnv} from './env';
-export {loginProvidersOf,type LoginProviders} from './config';
+export {loginProvidersOf,completeLoginMethods,type LoginProviders,type CompleteLoginMethods} from './config';
 import type { HumanAuth } from './auth/human';
 import type { SessionStore } from './parts';
 

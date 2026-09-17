@@ -15,7 +15,7 @@ EMAIL__RESEND_API_KEY=<mail provider credential>
 EMAIL__FROM=Artifactbin <login@example.com>
 ```
 
-For local development, use `APP__HOST=127.0.0.1` and `APP__PUBLIC_BASE_URL=http://127.0.0.1:7445`. Existing local login delivery writes the protected operator outbox; public origins use the configured mail provider. Existing Google/OIDC settings work unchanged. Relative outbox paths resolve beside `server.env`. OSS has no proxy or request-rate policy; production owns those modules. The public URL is what users reach; TLS may terminate at an operator's reverse proxy.
+For local development, use `APP__HOST=127.0.0.1` and `APP__PUBLIC_BASE_URL=http://127.0.0.1:7445`. Existing local login delivery writes the protected operator outbox; public origins use the configured mail provider. Existing Google/OIDC settings work unchanged. A relative `EMAIL__DEV_OUTBOX_PATH` resolves beside `server.env` — not beside `--dir`, and not against the working directory the server later adopts — and startup prints the absolute path it settled on. OSS has no proxy or request-rate policy; production owns those modules. The public URL is what users reach; TLS may terminate at an operator's reverse proxy.
 
 `--port` selects the listener for one run and is never written back to `server.env`, so a later `afbin serve --dir <path>` listens on the port that file names. The full set of settings the host accepts is [`server.env.example`](server.env.example); the repository's own `.env.example` is for `npm run dev` and is refused here (`Unsupported team setting: OBJECT_STORE__LOCAL_DIR`).
 
@@ -24,7 +24,7 @@ For local development, use `APP__HOST=127.0.0.1` and `APP__PUBLIC_BASE_URL=http:
 `afbin serve` refuses at startup rather than serving a login page nobody can complete, so a shared host needs all of:
 
 - **An HTTPS public URL.** afbin clients only connect over HTTPS, or HTTP on localhost, so an `http://` non-loopback `APP__PUBLIC_BASE_URL` is refused. Terminate TLS at a reverse proxy in front and set `APP__PUBLIC_BASE_URL=https://…`; `APP__HOST`/`--port` still select the local listener behind it.
-- **A login method.** `EMAIL__RESEND_API_KEY` (with `EMAIL__FROM`), or Google (`AUTH__GOOGLE_CLIENT_ID` + `AUTH__GOOGLE_CLIENT_SECRET`), or OIDC (`AUTH__OIDC_PROVIDER_ID` and its `AUTH__OIDC_*` settings). There is no SMTP option, and the local `[dev-mail]` outbox serves loopback origins only.
+- **A login method teammates can COMPLETE.** Naming one is not configuring it, and a half-configured method is refused rather than served: `EMAIL__RESEND_API_KEY` **and** `EMAIL__FROM` (without the sender the composition falls back to `artifactbin <login@example.com>`, which no provider is verified for, so every code fails on the way out), or Google (`AUTH__GOOGLE_CLIENT_ID` + `AUTH__GOOGLE_CLIENT_SECRET`), or OIDC (`AUTH__OIDC_PROVIDER_ID` + `AUTH__OIDC_CLIENT_ID` + `AUTH__OIDC_CLIENT_SECRET`, plus either `AUTH__OIDC_DISCOVERY_URL` or all of `AUTH__OIDC_AUTHORIZATION_URL`, `AUTH__OIDC_TOKEN_URL` and `AUTH__OIDC_USERINFO_URL`). There is no SMTP option, and the local `[dev-mail]` outbox serves loopback origins only. Startup says which of these teammates should use; with only Google or OIDC it says so, rather than promising an emailed code.
 - **`APP__PUBLIC_BASE_URL` exactly as teammates type it.** Approval and login both happen at that origin, and `http://localhost:7445` and `http://127.0.0.1:7445` are different origins: a mismatch fails with `approval_origin_mismatch`. `APP__HOST=0.0.0.0` with a loopback public URL is refused for the same reason.
 
 Then:

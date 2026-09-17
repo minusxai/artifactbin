@@ -8,8 +8,15 @@
  */
 export const OPERATOR_ERROR_NAME='OperatorError';
 export class OperatorError extends Error{constructor(message:string){super(message);this.name=OPERATOR_ERROR_NAME;}}
-export interface StartupContext {directory:string;port:number}
+/**
+ * `started` flips once the listener is open. After that the translation is OFF: both conditions it
+ * names can only happen while claiming the port and the directory, so a later EADDRINUSE or
+ * `workspace_busy` is something else entirely and "choose another with --port" would misdirect. A
+ * running server that fails is a bug, and the stack is the evidence.
+ */
+export interface StartupContext {directory:string;port:number;started?:boolean}
 export function startupFailure(error:unknown,context:StartupContext):unknown{
+ if(context.started)return error;
  const code=(error as NodeJS.ErrnoException|null)?.code;
  if(code==='EADDRINUSE')return new OperatorError(`Port ${context.port} is already in use; choose another with --port.`);
  if(error instanceof Error&&error.message.startsWith('workspace_busy'))return new OperatorError(`Another afbin serve is already using ${context.directory}.`);
