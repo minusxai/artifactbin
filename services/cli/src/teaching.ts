@@ -42,8 +42,8 @@ export const helpTopics:Record<string,string>={
  users:referenceTopics['databases-users'],
  dataset:referenceTopics['publishing-datasets'],
  // The OVERVIEWS, not a bare name list. `afbin help themes` used to print only the six names and "use
- // help themes-<name>", so an agent choosing a mood opened three theme guides in a row (eval run
- // 34696655937: opencode deck and scrolly, pi scrolly — three reads and three turns each) while one
+ // help themes-<name>", so an agent choosing a mood opened three theme guides in a row
+ // (three reads and three turns each) while one
  // that read references/themes.md, which carries a one-line description per theme and says to pick
  // ONE, opened one. The reference is the better answer to the same question; same for templates.
  themes:themesOverview(referenceTopics['themes']!),
@@ -66,12 +66,12 @@ const commandsMarkdown=()=>`# afbin\n\nLocal files and published artifacts. Help
 /** One bundled documentation set: help, the manual and the installed skills render the same registry. */
 /**
  * Every reference a document of one kind needs, in reading order, as ONE output. Agents read these
- * files one `cat` per call — 9 to 14 calls per task in eval runs 34740707220–34741910427, each one
+ * files one `cat` per call — 9 to 14 calls per task, each one
  * growing a context that every later turn re-reads. One call, one growth.
  *
  * SO IT MUST ARRIVE INLINE. At 40 KB it did not: Claude Code spills a tool output near 30,000
  * characters to a file and reads it back in windows, so the one call that replaced nine became
- * "Output too large (39.2KB)" plus three or four `sed` reads per task (production run 15). Every
+ * "Output too large (39.2KB)" plus three or four `sed` reads per task. Every
  * reference is still here; each is carried at its BUNDLE length, the rationale spans dropped
  * (lib/skills/render), which is what puts the whole set under 28 KB.
  *
@@ -111,7 +111,7 @@ function helpBody(topic:string|undefined,format:string,origin:string):string{
  if(!isCommand(topic)){
   // A template NAME as the topic prints everything that kind of document needs, in one call. It
   // used to print the ten-line starter alone, and an agent that typed `afbin help dashboard` then read
-  // eleven to fourteen reference files one by one (local rounds after run 34740707220).
+  // eleven to fourteen reference files one by one.
   if(STORY_TEMPLATE_NAMES.includes(topic as never))return helpBundle(topic as string,origin);
   const text=helpTopics[topic as string];
   if(text===undefined){

@@ -154,7 +154,7 @@ describe('POST /a/<id>/mutate — the document\'s door', () => {
     expect((await getArtifactById(ds))!.version).toBe(2);
   });
 
-  it('carries no in-process write valve — the proxy\'s MUTATE door is the only count (P2 §H)', async () => {
+  it('carries no in-process write valve — the proxy\'s MUTATE door is the only count', async () => {
     // The app handler performs the write; the proxy in front counts the door.
     // Driven in-process (no proxy), no call here is ever refused on a budget.
     const { doc } = await poll();

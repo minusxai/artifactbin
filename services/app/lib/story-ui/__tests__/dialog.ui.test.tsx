@@ -119,7 +119,7 @@ it('preserves the field focus chosen by native show for an artifact dialog', () 
  * styled button inside the trigger's own, and the HTML parser does not keep it
  * there: it closes the outer button and PROMOTES the inner one to its sibling.
  * The browser's DOM then differs from React's tree and hydration dies with
- * error 418 (production eval run 34868729411, codex's tracker: the served
+ * error 418 (the served
  * `<button id="Nhvn"><button id="kUDI">Add task</button></button>` parsed as an
  * empty trigger followed by the real button). parse5 runs the same parsing
  * algorithm as the browser, so this pins the shape without one.

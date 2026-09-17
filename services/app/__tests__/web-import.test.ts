@@ -254,7 +254,7 @@ describe('a self-hosted font', () => {
     } }));
     expect(res.status).toBe(201);
     const body = await res.json();
-    // R7: this used to publish 201 with the @font-face silently deleted.
+    // A 201 with the @font-face silently deleted is the failure this catches.
     expect((await getArtifactById(body.id))!.source).toContain(`${web}/face.woff2`);
     const html = await (await rawRoute(request(`/a/${body.id}/raw`), params({ id: body.id }))).text();
     expect(html).toContain(assetUrlFor(`${web}/face.woff2`));

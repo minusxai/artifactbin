@@ -49,7 +49,7 @@ const PROSE = '<div data-design="tw" className="mx-auto max-w-5xl p-10">'
   + '</p>'
   /*
    * The SAME fault in the interactive vocabulary, and the one production
-   * actually shipped (eval run 34868729411, codex's tracker): a trigger that
+   * actually shipped: a trigger that
    * draws its own <button> around the <Button> the author put inside it. A
    * button may not contain a button, so the parser closes the outer one and
    * PROMOTES the inner to its sibling — #418, and a trigger that is an empty

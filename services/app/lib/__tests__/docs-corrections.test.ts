@@ -24,19 +24,19 @@ const BASE = 'https://example.test';
 
 describe('the publishing skill', () => {
   const doc = buildSkillDoc(BASE);
-  it('§1.4 does not send a bearer agent to /api/my (a browser-only surface, 401 for tokens)', () => {
+  it('does not send a bearer agent to /api/my (a browser-only surface, 401 for tokens)', () => {
     expect(doc).not.toMatch(/PATCH[^\n]*\/api\/my\//);
   });
-  it('§1.5 the script sandbox names all four connect-src endpoints, not "no network" / "the one URL"', () => {
+  it('the script sandbox names all four connect-src endpoints, not "no network" / "the one URL"', () => {
     expect(doc).not.toMatch(/the one URL its CSP admits/);
     expect(doc).not.toMatch(/no network\./);
     for (const p of ['/query', '/events', '/mutate', '/geojson/']) expect(doc).toContain(p);
   });
-  it('§1.6 the comment command teaches reopening through --state open', () => {
+  it('the comment command teaches reopening through --state open', () => {
     expect(doc).toContain('--state');
     expect(doc).toContain('open or resolved');
   });
-  it('§1.6b the annotation markdown subset says what an image DOES — it is a link, not a picture', () => {
+  it('the annotation markdown subset says what an image DOES — it is a link, not a picture', () => {
     // `![alt](url)` parses as a literal "!" plus a link (lib/markdown-lite has
     // no image node at all), so "images are shown as the characters you typed"
     // was a claim the parser does not honour.
@@ -48,7 +48,7 @@ describe('the publishing skill', () => {
     expect(doc).toContain('canonical source and identity in the same response');
     expect(doc).toContain('records the accepted server state privately in ~/.artifactbin/state.sqlite');
   });
-  it('§2.1 one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
+  it('one bullet no longer says "read the full reference first" AND "guess rather than look up"', () => {
     expect(doc).not.toContain('for the full reference before authoring');
   });
   /*
@@ -57,7 +57,7 @@ describe('the publishing skill', () => {
    * recomputed. The doc called the snippet "the text they selected", which sent
    * an agent looking for a sentence in a paragraph's worth of text.
    */
-  it('§1.8 snippet is the node\'s text; the SELECTION is `quote`', () => {
+  it('snippet is the node\'s text; the SELECTION is `quote`', () => {
     const snippet = doc.split('\n').find((l: string) => l.includes('"snippet"'))!;
     expect(snippet).not.toContain('the text they selected');
     expect(snippet).toContain('node');
@@ -65,7 +65,7 @@ describe('the publishing skill', () => {
     expect(quote).toContain('selected');
     expect(doc).toContain('quote_found');
   });
-  it('§1.9 current comments use persistent IDs and legacy anchors are preservation-only', () => {
+  it('current comments use persistent IDs and legacy anchors are preservation-only', () => {
     const text = doc.replace(/\s+/g, ' ');
     expect(text).toContain("sidecar relations to the node's persistent BODY `id`");
     expect(text).toContain('preserve an existing value with its element');
@@ -77,7 +77,7 @@ describe('the publishing skill', () => {
    * not the address — the registry renders that — but WHEN to reach for it:
    * the create/edit loop is where a document that already exists gets adapted.
    */
-  it('§F8 teaches forking as the way to adapt a document you can read', () => {
+  it('teaches forking as the way to adapt a document you can read', () => {
     expect(doc).toContain('afbin fork <ref>');
     expect(doc).toContain('forked_from');
     expect(doc).not.toContain('afbin api');
@@ -92,14 +92,14 @@ describe('the publishing skill', () => {
    * five-slide deck into five exports. The push receipt is the check; one
    * whole-document image is the look.
    */
-  it('§F2 the social preview mechanism is documented where the link points', () => {
+  it('the social preview mechanism is documented where the link points', () => {
     const versions = renderDoc('artifactbin/references/publishing-versions.md', BASE);
     expect(versions).toContain('artifactbin:og-image');
     expect(versions).toContain('artifactbin:og-crop');
     expect(versions).toContain('artifactbin:og-image-crop');
     expect(versions).toContain('<Helmet>');
   });
-  it('§F2 export teaches the whole document in one image, never a slide at a time', () => {
+  it('export teaches the whole document in one image, never a slide at a time', () => {
     const flat = doc.replace(/\s+/g, ' ');
     for (const gone of ['read the stored markup', 'one deck slide', '--page 2', 'if you can view images']) {
       expect(flat, gone).not.toContain(gone);
@@ -108,7 +108,7 @@ describe('the publishing skill', () => {
     expect(flat).toContain('shows the whole document, every slide, in one image');
     expect(flat).toContain('never one slide at a time');
   });
-  it('§1 error table carries image_fetch_failed and dataset_read_only', () => {
+  it('error table carries image_fetch_failed and dataset_read_only', () => {
     const errors = renderDoc('artifactbin/references/errors.md', BASE);
     expect(errors).toContain('image_fetch_failed');
     expect(errors).toContain('dataset_read_only');
@@ -167,10 +167,10 @@ describe('the publishing skill', () => {
 describe('folders and the trash', () => {
   const doc = buildSkillDoc(BASE);
   const flat = (t: string) => t.replace(/\s+/g, ' ');
-  it('§P4.1 unlisted is listed nowhere — a folder page included', () => {
+  it('unlisted is listed nowhere — a folder page included', () => {
     expect(flat(doc)).toContain('unlisted artifact is excluded from public listings, a folder page included');
   });
-  it('§P4.2 delete is a trash, and restore is named', () => {
+  it('delete is a trash, and restore is named', () => {
     expect(doc).toContain('Delete is a trash');
     expect(doc).toContain('push --restore');
     expect(flat(doc)).toContain('restorable with no deadline');
@@ -181,17 +181,17 @@ describe('folders and the trash', () => {
    * only real erasure is an operator's, outside this API. A doc that stops
    * saying one of them is a doc that lets an agent promise something untrue.
    */
-  it('§P5.2 a deleted COMMENT is not erased either — and an agent cannot undo one', () => {
+  it('a deleted COMMENT is not erased either — and an agent cannot undo one', () => {
     expect(flat(doc)).toContain('A deleted thread is not erased');
     expect(flat(doc)).toContain('there is no undo for it here');
   });
-  it('§P5.1 nothing is ever erased, and the docs say so three ways', () => {
+  it('nothing is ever erased, and the docs say so three ways', () => {
     expect(flat(doc)).toContain('Actual erasure is an administrative act');
     expect(flat(doc)).toContain('still counts against your quota');
     expect(flat(doc)).toContain('an administrative act on the database, outside this API');
     expect(flat(doc), 'no retention survives anywhere in the docs').not.toContain('30 days');
   });
-  it('§P4.3 the two limits are stated, not implied away', () => {
+  it('the two limits are stated, not implied away', () => {
     expect(flat(doc)).toContain('A restore can land a row deeper than the 6-level cap');
   });
   /*
@@ -204,7 +204,7 @@ describe('folders and the trash', () => {
    * it could edit. So the replacement is pinned by NAME, both halves — what a
    * folder has (nothing) and what its PUT will take.
    */
-  it('§FP.1 a folder has NO content, and the page is not something you edit', () => {
+  it('a folder has NO content, and the page is not something you edit', () => {
     expect(flat(doc)).toContain('A folder has no content');
     expect(flat(doc)).toContain('Only title, visibility and folder are editable');
     expect(flat(doc), 'the scaffold is gone').not.toContain('its own stored markup');
@@ -214,25 +214,25 @@ describe('folders and the trash', () => {
 
 describe('the markup skill', () => {
   const doc = buildMarkupDoc(BASE);
-  it('§1.2 markdown is refused, never "auto-converted"', () => {
+  it('markdown is refused, never "auto-converted"', () => {
     expect(doc).not.toContain('auto-converted');
   });
-  it('§1.3 a <Video poster> web URL is imported, not rejected', () => {
+  it('a <Video poster> web URL is imported, not rejected', () => {
     expect(doc).not.toContain('thumbnail URLs are rejected');
   });
-  it('§1.8 <Number> documents suffix and that agg defaults to first', () => {
+  it('<Number> documents suffix and that agg defaults to first', () => {
     expect(doc).toMatch(/suffix/);
     expect(doc).toMatch(/agg[^\n]*(defaults? to|default[^\n]*)`first`/);
   });
-  it('§1 omissions: all 8 shipped recipes are named', () => {
+  it('omissions: all 8 shipped recipes are named', () => {
     for (const r of ['trend', 'funnel', 'waterfall', 'radar', 'combo', 'single-value', 'choropleth', 'point-map']) {
       expect(doc, `minusx/${r}@1`).toContain(`minusx/${r}@1`);
     }
   });
-  it('§1 props are not validated — the allowlist section says so', () => {
+  it('props are not validated — the allowlist section says so', () => {
     expect(doc).toMatch(/props are not validated|unknown props? (are|is) (ignored|not validated)/i);
   });
-  it('§1.5 the CSP paragraph names the four endpoints', () => {
+  it('the CSP paragraph names the four endpoints', () => {
     expect(doc).not.toContain('the one URL its CSP admits');
   });
   /*
@@ -242,7 +242,7 @@ describe('the markup skill', () => {
    * them the only thing that catches one is a 400 round trip. They live in
    * markup.md, which owns the vocabulary.
    */
-  it('§F8 the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
+  it('the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
     expect(doc).toContain('every tag closes (`<br />`)');
     expect(doc).toContain('{/* … */}');
     expect(doc).toContain('`<html>`');
@@ -266,10 +266,10 @@ describe('the markup skill', () => {
    * keeps a pointer that still names the metas, so an agent grepping the
    * authoring reference for `og-image` finds the thread rather than nothing.
    */
-  it('§F the publish-time fields are named where the agent writes them: the YAML fence', () => {
+  it('the publish-time fields are named where the agent writes them: the YAML fence', () => {
     expect(doc.replace(/\s+/g, ' ')).toContain('`theme`, `template` and `colorMode` are top-level fields of the YAML fence');
   });
-  it('§F markup.md points at the social-preview metas and at the doc that explains them', () => {
+  it('markup.md points at the social-preview metas and at the doc that explains them', () => {
     expect(doc).toContain('artifactbin:og-image');
     expect(doc).toContain('artifactbin:og-image-crop');
     expect(doc).toContain('publishing-versions.md');
@@ -351,20 +351,20 @@ describe('URL-kept external assets', () => {
  */
 describe('the design skill', () => {
   const doc = buildDesignDoc(BASE);
-  it('§1.1 numbers bind through <Query> → data="$name", never a `ref:` dataset', () => {
+  it('numbers bind through <Query> → data="$name", never a `ref:` dataset', () => {
     expect(doc).not.toContain('binds to a real `ref:` dataset');
     expect(doc).toContain('<Query');
   });
-  it('§2.4 / §8.4 the web-font route is the Helmet meta, not a data: URI', () => {
+  it('the web-font route is the Helmet meta, not a data: URI', () => {
     expect(doc).toContain('name="font-display"');
   });
-  it('§8.3 color mode is the root class, not prefers-color-scheme', () => {
+  it('color mode is the root class, not prefers-color-scheme', () => {
     expect(doc).not.toContain('prefers-color-scheme');
   });
 });
 
 describe('template pages', () => {
-  it('§8.1 every skeleton PUBLISHES — run through the validator the door uses', async () => {
+  it('every skeleton PUBLISHES — run through the validator the door uses', async () => {
     for (const name of ['deck', 'editorial', 'dashboard', 'scrolly']) {
       const doc = buildTemplateDoc(BASE, name)!;
       const lines = doc.split('\n');
@@ -378,7 +378,7 @@ describe('template pages', () => {
       expect(refused, `${name} skeleton refused: ${refused}`).toBeNull();
     }
   });
-  it('§8.2 editorial no longer says remote image URLs are rejected', () => {
+  it('editorial no longer says remote image URLs are rejected', () => {
     // Whitespace-collapsed: the YAML wraps prose, and the first version of this
     // assertion passed against the WRONG page because the phrase broke across a line.
     expect(buildTemplateDoc(BASE, 'editorial')!.replace(/\s+/g, ' ')).not.toContain('remote URLs are rejected');
@@ -387,13 +387,13 @@ describe('template pages', () => {
 
 describe('the quick sheet', () => {
   const sheet = buildQuickSheet(BASE);
-  it('§9.a says a dangerous tag (form/iframe/meta…) is refused WITHOUT the allowlist', () => {
+  it('says a dangerous tag (form/iframe/meta…) is refused WITHOUT the allowlist', () => {
     expect(sheet).toMatch(/<form>|form,? iframe|iframe, ?meta|form\/iframe/i);
   });
-  it('§9.b a CDN script or external stylesheet is a 400, not a silent failure', () => {
+  it('a CDN script or external stylesheet is a 400, not a silent failure', () => {
     expect(sheet).not.toMatch(/silently fail/);
   });
-  it('§9.3 the sheet teaches the second write as /edits, not a whole-document PUT', () => {
+  it('the sheet teaches the second write as /edits, not a whole-document PUT', () => {
     expect(sheet).not.toContain('simply replace');
   });
 });

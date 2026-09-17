@@ -37,8 +37,8 @@ export interface RenderOptions {
   /**
    * Render the CONDENSED copy: the spans a reference marks as bundle-skippable are dropped rather
    * than kept. `afbin help <template>` concatenates eight references into one answer, and at 40 KB
-   * Claude Code spilled that answer to a file and read it back in three or four `sed` windows
-   * (production run 15) — the call that exists to save calls cost four. Nothing an author needs is
+   * Claude Code spilled that answer to a file and read it back in three or four `sed` windows —
+   * the call that exists to save calls cost four. Nothing an author needs is
    * dropped: what the markers cover is the rationale for a rule, not the rule.
    */
   bundle?: boolean;
@@ -48,10 +48,10 @@ export interface RenderOptions {
  * THE BUNDLE MARKER. A reference marks prose the bundled copy may do without:
  *
  *     <!--bundle:skip-->
- *     Why this rule exists, measured on eval run …
+ *     Why this rule exists, measured …
  *     <!--/bundle:skip-->
  *
- * or inline, `rule<!--bundle:skip--> (because …)<!--/bundle:skip-->`. Full rendering — `/docs`, the
+ * or inline, `rule<!--bundle:skip--> (because …)<!--/bundle:skip-->`. Full rendering — the
  * installed `references/` files, `afbin help <topic>` — strips the MARKERS and keeps every byte
  * between them, so the marked file renders exactly as it did before it was marked; only `afbin help
  * <template>`, which reads eight files at once, drops the spans. One source, two lengths, no fork.

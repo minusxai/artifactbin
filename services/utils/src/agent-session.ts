@@ -41,7 +41,7 @@ export function withToken(session: AgentSession | null, tokenId: string): AgentS
 }
 
 /**
- * The inverse of withToken (tok-p1, reject): drop ONE held id, preserving the order of the rest — the last
+ * The inverse of withToken: drop ONE held id, preserving the order of the rest — the last
  * entry stays the primary. Returns null when nothing remains, which the caller turns into a cleared cookie.
  */
 export function withoutToken(session: AgentSession | null, tokenId: string): AgentSession | null {

@@ -77,7 +77,7 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
  try{
   const fence='---\ntitle: Braces\n---\n';
   await writeFile(join(root,'rows.csv'),'m,v\na,1\n');
-  // pi's shape from eval run 34741910427: the object closed, then two stray `}` before ` />`.
+  // The shape observed in the wild: the object closed, then two stray `}` before ` />`.
   await writeFile(join(root,'doc.jsx'),fence+'<Helmet><Query name="q" source="ref:abc123">{`select m, v from public.rows`}</Query></Helmet><article><Question data="$q" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"m","type":"nominal"}}}}}}} /></article>\n');
   const output:string[]=[];
   const code=await runCli(['validate','doc.jsx','--json'],{cwd:root,home:root,env:{},interactive:false,stdout:s=>output.push(s),stderr:()=>{},fetch:async()=>assert.fail('local validation must stay offline')});
@@ -96,7 +96,7 @@ test('validate repairs a brace count it can prove, rewrites the file, and report
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
-test('a directory tracked against one server refuses another by name, before any request — a bare 409 cost codex twenty steps (eval run local17)',async()=>{
+test('a directory tracked against one server refuses another by name, before any request — a bare 409 cost an agent twenty steps',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-wrong-server-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
  const head={id:'abc123',version:1,edit_id:'edit1',state:digest('s1'),markup:'<p id="p001">Head</p>',format:'markup',title:'T',theme:null,template:null,visibility:'unlisted',link_role:'viewer',parent_id:null};
  const hosts:string[]=[];
@@ -117,8 +117,8 @@ test('a directory tracked against one server refuses another by name, before any
 /**
  * THE REFUSAL CARRIES ITS OWN DIAGNOSIS. Without --json a refused push printed exactly
  * "validation_failed: Local validation failed." and its fix line, so the agent's next call was
- * `afbin validate` purely to READ the message it had already been handed (claude-code scrolly,
- * production run 15, calls 16–17). The printer holds the details in both shapes — the per-file
+ * `afbin validate` purely to READ the message it had already been handed. The printer holds the
+ * details in both shapes — the per-file
  * diagnostics of a local validation and the `details` strings of a server refusal — so it prints
  * them, once, between the message and the fix.
  */
@@ -168,7 +168,7 @@ test('a server refusal prints its details once — and never twice when the mess
  * TWO SITES, AND BOTH LINE NUMBERS STILL BELONG TO THE FILE. The repair now names every site it
  * fixed, and the CLI moves each one past the YAML fence by rewriting `line N` — a notice that said
  * "lines 4, 5" would name body lines and send the author two lines up, which is the fault the fence
- * shift exists to prevent (eval run 34714728585: 17 calls and 130 s to locate one brace).
+ * shift exists to prevent (17 calls and 130 s to locate one brace).
  */
 test('a repair at two sites reports both by FILE line, past the metadata fence',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-brace-lines-'));

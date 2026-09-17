@@ -22,4 +22,4 @@ For a coordinated change, commit the toolkit change, update production's submodu
 
 ## Verification
 
-Original and extracted CLI forms run the same conformance scenarios against the original host. Original and extracted CLIs also run against the OSS host. Production independently builds each source-based service image, checks that the app dependency closure excludes DuckDB/Playwright, and runs its real Postgres/container conformance checks.
+The packaged npm and standalone CLI forms run the same conformance scenarios against a host. Production independently builds each source-based service image, checks that the app dependency closure excludes DuckDB/Playwright, and runs its real Postgres/container conformance checks.

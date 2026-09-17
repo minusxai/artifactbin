@@ -2,10 +2,10 @@
  * `?intent=` — ONE instruction carried on the artifact's own address, consumed
  * on mount and then removed.
  *
- * It exists because two doors lead AWAY from a document and have to lead back
- * INTO it doing the thing that was asked: "fork this" and "log in to comment"
- * both go through /login, and a person who comes back to a document that has
- * simply forgotten what they pressed has been made to do the work twice.
+ * It exists because the doors that lead AWAY from a document have to lead back
+ * INTO it doing the thing that was asked: fork, comment, like and follow all go
+ * through /login, and a person who comes back to a document that has simply
+ * forgotten what they pressed has been made to do the work twice.
  *
  * Three rules, and they are the whole module:
  *  - a STRICT ALLOWLIST (`INTENTS` below) and nothing else; an unknown value
@@ -22,13 +22,7 @@
  *    (`lib/story/url-values` learned this first and for the same reason).
  */
 
-/*
- * `new-folder` is the folder's own version of the same problem: the served
- * document is sandboxed at an opaque origin with no session, so its "new
- * folder" control can only be an anchor with target="_top" that ASKS — the
- * SHELL, which holds the credential, is what can actually create one.
- */
-const INTENTS = ['fork', 'comment', 'new-folder', 'like', 'follow'] as const;
+const INTENTS = ['fork', 'comment', 'like', 'follow'] as const;
 export type Intent = (typeof INTENTS)[number];
 
 /** The parameter's name, in one place: the reader, the stripper and the writer. */

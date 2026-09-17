@@ -96,8 +96,8 @@ function siteIndex(source: string, extra: { attr: string; line: number }): numbe
 }
 
 /**
- * THE BRACE COUNT, the second fault worth repairing: 15 tasks and 82 model calls in eval runs
- * 34740707220–34741910427 went to a `viz={{…}}` with one `}` too many or too few, or a `{{{`
+ * THE BRACE COUNT, the second fault worth repairing: 15 tasks and 82 model calls went to a
+ * `viz={{…}}` with one `}` too many or too few, or a `{{{`
  * opening from wrapping an already-wrapped object. The two unambiguous shapes are repaired — stray
  * `}`s after a closed expression, and `{{{` — found by the same scanners that name them in the
  * refusal, and kept only if the result parses. A missing brace is named, never guessed (see below).

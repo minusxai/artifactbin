@@ -26,7 +26,7 @@ export async function validateFiles(workspace:Workspace,paths?:string[],fix=fals
     let markup=body;let checked=validateMarkupStructure(markup);
     // A brace count the grammar can prove is REPAIRED, not refused: the file is rewritten so it matches
     // what push sends, and the repair is reported as a notice. 15 tasks spent 82 model calls on one
-    // `}` in eval runs 34740707220–34741910427; the publish door applies the same repair (lib/jsx/repair).
+    // `}`; the publish door applies the same repair (lib/jsx/repair).
     if(checked.errors.some(error=>error.message.startsWith('JSX syntax error'))){
      const repaired=repairJsxSource(body);
      if(repaired){
@@ -42,8 +42,8 @@ export async function validateFiles(workspace:Workspace,paths?:string[],fix=fals
      }
     }
     // The grammar sees the body; the author sees the file. A diagnostic that said "line 115" for a
-    // fault on file line 130 cost an agent 17 calls and 130 s to locate one brace (eval run
-    // 34714728585, pi deck), so lines and offsets are moved past the metadata fence here.
+    // fault on file line 130 cost an agent 17 calls and 130 s to locate one brace, so lines
+    // and offsets are moved past the metadata fence here.
     const relocate=(error:{message:string;start?:number;end?:number})=>({code:'invalid_markup',
      message:fenceLines?error.message.replace(/\bline (\d+)\b/g,(_,n:string)=>`line ${Number(n)+fenceLines}`):error.message,
      ...(typeof error.start==='number'?{start:error.start+fence.length}:{}),...(typeof error.end==='number'?{end:error.end+fence.length}:{})});

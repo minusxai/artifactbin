@@ -76,7 +76,7 @@ it.each(['keyBy=""','keyBy={12}','keyBy={$field}'])('rejects an explicitly malfo
  expect(screen.getByRole('alert').textContent).toContain('keyBy');
 });
 
-it('inside a table it repeats the rows with no wrapper element — a <div> in <tbody> is hoisted by the browser and hydration fails with React error 418 (eval run 34741910427, pi deck)', () => {
+it('inside a table it repeats the rows with no wrapper element — a <div> in <tbody> is hoisted by the browser and hydration fails with React error 418', () => {
   const parsed = parseJsxOrThrow('<table><tbody><For each={$rows} keyBy="id"><tr><td>{$_row.name}</td></tr></For></tbody></table>');
   const view = render(<>{renderStoryNodes(parsed.nodes, {components:{}, tables:{rows:{rows:[{id:1,name:'a'},{id:2,name:'b'}]}}})}</>);
   expect(view.container.querySelector('tbody > div')).toBeNull();

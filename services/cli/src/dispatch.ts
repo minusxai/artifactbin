@@ -98,7 +98,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   // knowable that early: an explicit --server, else the exported origin.
   // The recorded default (`.env`, written by `setup --server` from a self-hosted installer) selects a server
   // exactly as an exported ARTIFACTBIN_URL does: codex's `afbin pull <local url>` was still refused as
-  // wrong_server on the first fixed build because only the connection loader read it (eval run local17).
+  // wrong_server on the first fixed build because only the connection loader read it.
   const exportedOrigin=await exportedServer(home,context.env);
   const declaredServer=typeof flags.server==='string'?flags.server:exportedOrigin??DEFAULT_SERVER;
   if(command!=='update'&&command!=='setup')await scheduleBackgroundUpdate({home,server:declaredServer,env:context.env});
@@ -126,7 +126,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(typeof bundled.output==='string'&&bundled.output!=='-'){emit(await writeHelp(text,bundled.output,context.cwd??process.cwd(),typeof bundled.format==='string'?bundled.format:'text'));return 0;}
    if(json){emit({help:text});return 0;}
    // The printed brief says its references are files beside SKILL.md; without the absolute path an agent
-   // searched the whole filesystem for them (three tasks, 100–120 s each, eval run 34714026643).
+   // searched the whole filesystem for them (three tasks, 100–120 s each).
    const installed=!topic&&screen===undefined?(await skillStatus(await realpath(home),context.env)).filter(item=>item.installed).map(item=>item.path):[];
    emit(installed.length?`${text}\nInstalled skill: ${installed.join(', ')} — the same references, as files under references/ there.\n`:text);return 0;
   }
@@ -173,7 +173,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   if(command==='query'){
    // `afbin query <ref> 'select …'` reads as a natural call; as a second ref it ran the first target and buried the
-   // refusal of the second under its rows (pi deck, eval run 34714026643). Refuse it before anything runs.
+   // refusal of the second under its rows. Refuse it before anything runs.
    const inlineSql=positionals.find(ref=>/^\s*(select|with|show|describe|explain|pragma)\b/i.test(ref));
    if(inlineSql!==undefined)throw new CliError('sql_in_argument',`sql_in_argument: SQL cannot be an argument: ${inlineSql.trim().slice(0,40)}…`);
    queryParameters(flags.param as string[]|undefined);
@@ -221,7 +221,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   }
   // A directory is tracked against ONE server and account. Sending another server this directory's account
   // got a bare 409 ("Use the credentials for this workspace account") that cost codex twenty steps of reading
-  // login JavaScript (eval run local17). Name both origins and the way out before any request.
+  // login JavaScript. Name both origins and the way out before any request.
   if(workspace.tracking&&workspace.tracking.server!==connection.server)throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; the command selected ${connection.server}.`,`Run it from another directory, or pass --server ${workspace.tracking.server}.`);
   const client=new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,readOnly:!!flags['dry-run'],...(!flags['dry-run']?{authenticate}: {})});
   if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
@@ -254,7 +254,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    if(!flags['dry-run']){const selected=await inspectWorkspace(workspace,positionals.length?positionals:undefined);await addFiles(workspace,selected.filter(file=>file.bytes&&!file.tracked&&!file.document?.metadata.head_version&&!file.resource?.head_version).map(file=>resolve(workspace.root,file.path)),client);workspace=await loadWorkspace(workspace.cwd,home);}
    const result=await push(workspace,positionals,client,{force:!!flags.force,dryRun:!!flags['dry-run'],access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});
    // The moment the verification loop starts: after a publish, agents re-pulled, diffed, exported and
-   // grepped their own document for 5–13 calls (eval runs 34740707220–34741910427). Say it once, here.
+   // grepped their own document for 5–13 calls. Say it once, here.
    const published=!flags['dry-run']&&result.operations.some(op=>'status' in op&&op.status==='published');
    // What the door checked before it accepted the document, so the agent that wants proof has it here
    // and does not go and gather it: pi curled the page for the title, grepped for the chart spec and
@@ -304,7 +304,7 @@ const MAX_REFUSAL_FILES=3;
  *     Run afbin validate and correct the reported errors.
  *
  * and the agent's next call was `afbin validate` — a whole turn to READ a message it had already
- * been handed (claude-code scrolly, production run 15, calls 16–17). Two shapes reach here and both
+ * been handed. Two shapes reach here and both
  * are already in hand: a local validation's per-file diagnostics, and the `details` strings a server
  * refusal carries (a bad column, a refused SQL function).
  *
@@ -356,8 +356,8 @@ async function ensureInit(options:{home:string;env?:NodeJS.ProcessEnv;origin?:st
  if(!selected.length)return;
  const plans=await planSkills(selected,{home:options.home,env:options.env,origin:options.origin});
  // Eager init installs a MISSING or version-stale skill. A skill addressed to another server is
- // `afbin setup`'s decision: a command run with --server against a second server used to rewrite
- // every harness's skill files on every invocation (127 "Skill updated" lines in one local pi task).
+ // `afbin setup`'s decision: without this gate, a command run with --server against a second
+ // server rewrites every harness's skill files on every invocation.
  const stale=plans.filter(plan=>plan.status==='install'||(plan.status==='update'&&(!validVersion(plan.installed)||compareVersions(plan.installed,plan.version)<0)));
  if(!stale.length)return;
  const installed=await installSkills(stale.map(plan=>plan.harness),{home:options.home,env:options.env,origin:options.origin,preserveSelection:true});

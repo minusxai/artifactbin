@@ -75,7 +75,7 @@ describe('figures must be computed, not typed', () => {
     expect(COMPUTED_FIGURE_RULE).toMatch(/prose/i);
   });
 
-  it('rides in the SCHEMA, the only surface an MCP client reads', () => {
+  it('rides in the SCHEMA, the surface an agent reads without fetching a doc', () => {
     expect(MARKUP_FIELD_GUIDANCE).toContain(COMPUTED_FIGURE_RULE);
   });
 

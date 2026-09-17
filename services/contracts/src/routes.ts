@@ -50,7 +50,7 @@ export function isInternalApiPath(pathname: string): boolean {
 export const FORWARDED_FOR = 'x-forwarded-for';
 /**
  * WHERE THE CLIENT THINKS IT IS. The app builds absolute URLs from these — a
- * document's `connect-src`, an `og:image`, the links in an MCP tool's answer —
+ * document's `connect-src`, an `og:image`, the links in an operation's answer —
  * and behind a proxy the host it listens on is not the host anyone typed.
  *
  * They are the PROXY's for the same reason `x-forwarded-for` is: inbound, they

@@ -2,8 +2,8 @@
  * The operations registry — ONE curated list of what an agent can do, from
  * which the HTTP artifact routes are rendered. These are the rules that keep
  * it a registry
- * rather than a dump of routes (the pitfall every OpenAPI→MCP generator
- * warns about): model-facing descriptions, one worked example per operation
+ * rather than a dump of routes (the pitfall of generating a tool surface from
+ * an API spec): model-facing descriptions, one worked example per operation
  * that actually parses, read/write/destructive annotated, and an error
  * vocabulary with a fix per code.
  */

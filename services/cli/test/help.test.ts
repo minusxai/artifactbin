@@ -94,7 +94,7 @@ test('a command screen carries usage, every flag the parser accepts, and the exa
  assert.throws(()=>commandScreen('nope',plain),/unknown_help_topic|Unknown command/);
 });
 
-test('an unknown help topic names its nearest topics — `publish` (asked seven times in eval run 34694871143) points at the publishing set',()=>{
+test('an unknown help topic names its nearest topics — `publish` (asked seven times) points at the publishing set',()=>{
  assert.throws(()=>helpDocument('publish'),(error:unknown)=>{
   const e=error as {code:string;fix?:string};
   assert.equal(e.code,'unknown_help_topic');
@@ -368,7 +368,7 @@ describe('the bundled teaching and the manual', () => {
   });
 
 
-  test('help themes and help templates print the overview that describes each choice, so the agent picks one instead of opening several guides (eval run 34696655937)',()=>{
+  test('help themes and help templates print the overview that describes each choice, so the agent picks one instead of opening several guides',()=>{
    const themes=helpDocument('themes');
    assert.match(themes,/Pick ONE by the subject's mood/);
    for(const name of ['modernist','organic','industry','terminal','manuscript','pop'])assert.match(themes,new RegExp('`'+name+'` — .+ → '),name);
@@ -432,7 +432,7 @@ test('afbin help --for <template> prints every reference a document of that kind
   assert.ok(text.includes('Available themes:'),'the themes overview names the choices');
   assert.ok(!text.includes('templates-editorial'),'only the chosen template');
   // THE SHELL'S INLINE LIMIT. At 40 KB Claude Code spilled every bundle to a file and read it back in
-  // three or four `sed` windows (production run 15) — the one-call reference became five calls. Claude
+  // three or four `sed` windows — the one-call reference became five calls. Claude
   // Code keeps tool output inline up to ~30,000 characters; 28,000 BYTES holds under that with a 2 KB
   // margin, and bytes are the conservative measure (UTF-8 punctuation costs more bytes than characters).
   for(const template of ['deck','dashboard','editorial','plan','scrolly']){

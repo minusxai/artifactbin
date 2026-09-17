@@ -161,7 +161,7 @@ interface LockOptions {waitMs?: number; reentrant?: boolean}
  * How long a competing operation waits for the scope before it is refused as
  * `workspace_busy`. Agents that run their tool calls in parallel (Pi, Claude Code)
  * routinely issue `afbin pull` and `afbin push` in the same turn; with no wait the
- * second one failed instantly in eval run 34694871143 even though the first finished
+ * second one failed instantly even though the first finished
  * a second later. Queueing is the right default: a stale lock cannot exist (the OS releases
  * it when the holder exits), so only a hung holder should ever surface as busy.
  */

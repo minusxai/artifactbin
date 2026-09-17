@@ -89,7 +89,7 @@ describe('artifactSummaryToWire', () => {
   });
 });
 
-describe('placement on the wire (P1, seeded)', () => {
+describe('placement on the wire', () => {
   it('carries parent_id and ancestor_ids, never folder', () => {
     const base = { id: 'Ab3xK9', title: 't', description: null, format: 'markup', version: 1, visibility: 'private', meta: {}, created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' } as never;
     const filed = artifactSummaryToWire({ ...(base as object), ancestor_ids: ['f00001', 'f00002'] } as never, 'https://x');

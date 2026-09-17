@@ -288,28 +288,20 @@ await p.click('[aria-label="Alignment"]');
 await p.click('[aria-label="Align center"]'); await p.waitForTimeout(500);
 await p.getByRole('button',{name:'Document options',exact:true}).click();
 await p.fill('[aria-label="Title"]', 'Gate doc renamed');
-// Colour mode FIRST: a theme that pins its mode hides this toggle entirely, so
-// doing it after the pick would be waiting for a control that is gone by design.
-if (await p.locator('[aria-label="Toggle color mode"]').count()) {
-  await p.click('[aria-label="Toggle color mode"]');
-  await p.waitForTimeout(600);
-}
 // Dropdown: the per-theme buttons only exist once the picker is open.
 await p.click('[aria-label="Theme"]'); await p.waitForSelector('[aria-label="Theme organic"]', { timeout: 10_000 });
 await p.click('[aria-label="Theme organic"]'); await p.waitForTimeout(600);
-check((await p.locator('[aria-label="Toggle color mode"]').count()) === 0, 'a theme that pins its colour mode hides the toggle');
 // SAVE-LESS: nothing is clicked here. The edits above must persist on their
 // own within one debounce window.
 check((await p.locator('[aria-label="Save"]').count()) === 0, 'there is no Save button');
 await p.waitForTimeout(3000);
 const saved = (await J(`/api/artifacts/${dataDoc.id}`, {}, T)).body;
 check(/<em[^>]*>/.test(saved.markup) && saved.markup.includes('text-center'), 'toolbar edits persist with no save');
-// colorMode is no longer asserted here: a pinning theme owns the surface mode
-// (storyThemeMode), so the stored field is not what the reader sees and the
-// toggle that used to set it is hidden for such themes.
+// colorMode is not asserted here: the author's stored mode is a default the
+// reader may flip, so the stored field is not what the reader sees.
 check(saved.title === 'Gate doc renamed' && saved.theme === 'organic', 'title and theme persist with no save');
-// The old "vN · saved" chip is gone — the editor is save-less. The version
-// advancing is the same claim, anchored on the server.
+// The editor is save-less; the version advancing is the same claim, anchored
+// on the server.
 check(saved.version > dataDoc.version, `persistence advanced the version (v${dataDoc.version} → v${saved.version})`);
 await unlock(gridDoc.id);
 const box = await surface().locator('.mx-grid-grip').first().boundingBox().catch(() => null);
