@@ -1,7 +1,7 @@
 /**
  * HOW A LEG GETS ITS CREDENTIAL — a real account, logged in the way a person logs in.
  *
- * Why a leg logs in at all is in [docs/evals.md](../../docs/evals.md); this is the mechanism. Email
+ * Why a leg logs in at all is in the evals' own guide (a private repository); this is the mechanism. Email
  * OTP for the session cookie — the code comes from the eval's Resend inbox against a deployment and
  * from the dev outbox file when this driver booted the server, and only that reader is swapped — then
  * the OAuth grant an MCP client makes (dynamic registration, PKCE, the consent form fetched with the
