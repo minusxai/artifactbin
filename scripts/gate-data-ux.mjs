@@ -170,7 +170,8 @@ await becomeOwner(p, B, st.token);
 await p.goto(`${B}/a/${st.id}`, { waitUntil: 'load' });
 await p.waitForTimeout(2500);
 await openArtifactControls(p);
-check((await p.locator('[aria-label="Edit this document"], [aria-label="Edit artifact"]').count()) >= 1, 'a document still offers edit to its owner');
+check(await p.getByRole('textbox', { name: 'Agent instructions', exact: true }).isVisible(), 'a new artifact offers its owner editable agent instructions');
+check(await p.getByRole('button', { name: 'Copy agent instructions', exact: true }).isVisible(), 'the owner can copy instructions for the first agent edit');
 
 // (The upload form's error paths — bad URL, private sheet — are exercised at
 // the component level in dataset-upload.ui.test.tsx; the form is signed-in-only.)

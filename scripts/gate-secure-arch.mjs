@@ -27,7 +27,7 @@
 
  *   node scripts/gate-secure-arch.mjs [base]
  */
-import { mergeGuestIntoAccount } from './lib/start-doc.mjs';
+import { becomeOwner, mergeGuestIntoAccount } from './lib/start-doc.mjs';
 import { servedTopLevel } from './lib/page-facts.mjs';
 import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
@@ -195,14 +195,9 @@ const anonCtx = await browser.newContext({ viewport: { width: 1400, height: 950 
 const anonPage = await anonCtx.newPage();
 await anonPage.goto(`${BASE}/a/${anonDoc.id}`, { waitUntil: 'load' });
 check(await servedTopLevel(anonPage), 'before exchange: the token holder is just a reader (document, no iframe)');
-// The exchange has to run from an APP page: this tab is currently showing the
-// document itself, which is opaque-origin and cannot fetch anything at all —
-// that it cannot is the sandbox working, and is asserted above.
-await anonPage.goto(`${BASE}/`, { waitUntil: 'load' });
-const exchange = await anonPage.evaluate(async (t) => (await fetch('/api/session/token', {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: t }),
-})).status, anon2.token);
-check(exchange === 204, `POST /api/session/token exchanged the token for a session (${exchange})`);
+// Keep the distinct browser credential from the guest approval. The CLI's
+// API-scoped token is not a credential for browser page navigation.
+await becomeOwner(anonPage, BASE, anon2.token);
 const cookies = await anonCtx.cookies(BASE);
 const sess = cookies.find((c) => /mx-agent-session/.test(c.name));
 check(!!sess && sess.httpOnly, `session cookie is httpOnly (${sess?.name ?? 'missing'})`);
