@@ -155,8 +155,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     /*
      * THE PDF — inline, sandboxed, streamed, seekable.
      *
-     * The shape is the spike's recommendation (S4), and every part of it was
-     * measured rather than chosen:
+     * Every part of this shape was measured rather than chosen:
      *  - `inline` is what makes the browser's own viewer render this instead of
      *    downloading it. `attachment` was measured doing NOTHING when opened
      *    from inside a document's sandbox — no popup, no download — so it is
@@ -222,8 +221,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     }
 
     /*
-     * markup: the SSR'd standalone document — served top-level to readers
-     * (proxy.ts) and as the owner frame's src. Source read-back is the API's
+     * markup: the SSR'd standalone document, sandboxed by the headers above —
+     * the document BY ITSELF, at its own address. The app page renders the same
+     * document inline instead (server/app `withInitialStory`), so what reaches
+     * here is an explicit request for the bytes and the export's own capture
+     * (lib/export shoots `raw?chrome=0&key=`). Source read-back is the API's
      * `markup:`.
      *
      * A FOLDER IS NOT HERE. It has no content, so there is no document to

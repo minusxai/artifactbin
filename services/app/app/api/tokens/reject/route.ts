@@ -1,5 +1,5 @@
 /**
- * POST /api/tokens/reject  { tokenId }  (tok-p1)
+ * POST /api/tokens/reject  { tokenId }
  *
  * The browser gives a held token back: the token is revoked and its id leaves the agent-session cookie.
  * Capability = the signed cookie carrying the id (the claim-by-id precedent); a body naming an id the

@@ -57,7 +57,7 @@ describe('handlers through Hono', () => {
     expect(raw.status).toBe(200);
     expect(raw.headers.get('content-security-policy')).toContain("default-src 'none'");
   });
-  it('decodes params the way Next did (an encoded id is the id)', async () => {
+  it('decodes params before the handler sees them (an encoded id is the id)', async () => {
     expect((await app.request('/api/artifacts/%41b3xK9')).status).toBe(401); // reached the handler (bearer missing), not a 404 from routing
   });
 });

@@ -5,7 +5,7 @@
 import { createHash } from 'node:crypto';
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 
-// THE APP'S CWD IS ITS PACKAGE DIR (P3 §B.4). Every path below is cwd-relative,
+// THE APP'S CWD IS ITS PACKAGE DIR. Every path below is cwd-relative,
 // and CI runs this script from the repo root — so this process pins its own cwd
 // to the package it fills, and callers may run it from anywhere.
 process.chdir(path.resolve(import.meta.dirname, '..'));
