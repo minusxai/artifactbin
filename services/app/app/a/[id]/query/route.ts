@@ -16,8 +16,8 @@ import {REVALIDATE_ACTOR_HEADER} from '@artifactbin/contracts';
  * the queries the change touched (the run closes over their dependencies);
  * `page` a window of one result. Nothing is persisted.
  *
- * GET is the DOCUMENT's own path: the sandboxed document served top-level
- * (proxy.ts) fetches its re-runs itself — its CSP admits exactly this URL
+ * GET is the DOCUMENT's own path: the sandboxed standalone document served at
+ * ./raw fetches its re-runs itself — its CSP admits exactly this URL
  * (lib/story/markup-csp). It is answered with the ANONYMOUS read ACL, BY
  * CONSTRUCTION: no cookie is read, so it can only ever return what an
  * unauthenticated fetch gets (public/unlisted; a private document is the

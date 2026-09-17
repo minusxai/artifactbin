@@ -43,14 +43,14 @@ export const ASSET_HEADERS: Readonly<Record<string, string>> = {
 };
 
 /**
- * THE ONE TYPE THAT IS NOT AN ATTACHMENT, and it is not a widening of R15.
+ * THE ONE TYPE THAT IS NOT AN ATTACHMENT, and it widens nothing.
  *
  * `attachment` is here because a stored SVG is MARKUP and a navigation to one
  * must not become a page in this origin. A PDF is not markup: it cannot script,
  * `nosniff` holds the browser to the type sniffed from the bytes at import, and
  * `Content-Security-Policy: sandbox` — kept, and the actual defence — was
  * measured putting the response at an opaque origin where storage and cookies
- * both throw (spike S4). It does not stop the browser's own viewer.
+ * both throw. It does not stop the browser's own viewer.
  *
  * What `attachment` costs a PDF is the entire feature: opened from inside a
  * document's sandbox it produced neither a popup nor an observable download,
@@ -78,7 +78,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ hash: strin
    * (an old address, a hand-typed number, nothing at all) is the full copy,
    * because a width is a preference and never a reason to fail a picture.
    *
-   * `v=` is read by nobody: it is the CACHE KEY a refresh moves (R19), and the
+   * `v=` is read by nobody: it is the CACHE KEY a refresh moves, and the
    * bytes it addresses are simply whatever the row points at now.
    */
   const width = new URL(request.url).searchParams.get('w');

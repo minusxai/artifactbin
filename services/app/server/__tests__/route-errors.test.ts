@@ -38,7 +38,7 @@ describe('a route that throws', () => {
   });
 });
 
-describe('the token mint page', () => {
+describe('the CLI installer', () => {
   it('serves the CLI installer as shell text ahead of profile routing', async () => {
     const app = createAppServer({ indexHtml: async () => '<main>app shell</main>' });
     const res = await app.request('/chat/install.sh');

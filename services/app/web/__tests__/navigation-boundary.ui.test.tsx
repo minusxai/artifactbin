@@ -178,4 +178,18 @@ describe('navigation retains the editor until persistence finishes', () => {
   it.each(['/api/page/session', '/a/a1/raw', '/a/a1/export', '/assets/file.png', '/auth/callback', '/docs', '/docs/markup', '/@user/doc/raw'])('leaves server-only route %s native', (path) => {
     expect(isClientRoute(new URL(path, window.location.origin))).toBe(false);
   });
+
+  /**
+   * These addresses must TRANSITION: an in-app link to one the matcher does not
+   * know reloads the whole shell instead — and, for a path the server does not
+   * list in `SPA_PATHS` either, reloads it under a 404.
+   */
+  it.each(['/', '/login', '/account', '/assets', '/chat', '/trash', '/privacy', '/terms', '/docs-human', '/tokens', '/datasets/new', '/files/new', '/a/a1', '/a/a1/edit', '/@user', '/@user/doc'])('keeps app route %s client-side', (path) => {
+    expect(isClientRoute(new URL(path, window.location.origin))).toBe(true);
+  });
+
+  /** `/tokens/new` is a retired mint surface: nothing routes it, so it is a miss like any other. */
+  it('leaves the retired /tokens/new native', () => {
+    expect(isClientRoute(new URL('/tokens/new', window.location.origin))).toBe(false);
+  });
 });

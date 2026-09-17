@@ -184,7 +184,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
    * once per (id, edit_id) and cached (lib/story/frame), fetched by whoever
    * wants it under the same ACL. This stream therefore carries nothing a relay
    * would have to understand, which is what lets a proxy blind to content
-   * hold it (plan §3).
+   * hold it.
    */
   const frameFor = async (row: NonNullable<Awaited<ReturnType<typeof getArtifactById>>>): Promise<ArtifactVersionPing> => ({
     editId: row.edit_id,

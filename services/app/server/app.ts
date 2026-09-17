@@ -62,6 +62,18 @@ function withAgentDiscovery(html: string, origin: string): string {
   return html.replace('</head>', () => `${tags}</head>`);
 }
 
+/**
+ * The generic unfurl card, for an address with no document of its own to
+ * photograph — the home page, login, a profile. Absolute against the request's
+ * origin for the same reason the artifact tag below is: a relative og:image is
+ * resolved by some scrapers against the page URL and by others not at all.
+ * `public/og.png` is written by `npm run generate:og`.
+ */
+function withGenericSocial(html: string, origin: string): string {
+  const tags = `<meta property="og:image" content="${escapeHtml(origin)}/og.png"><meta name="twitter:card" content="summary_large_image">`;
+  return html.replace('</head>', () => `${tags}</head>`);
+}
+
 /** Where the server hands the SPA a page's data so its FIRST paint is its final one. */
 export const BOOTSTRAP_ID = 'mx-page-data';
 /** `<` is the only character that can end a script element early; JSON never needs it. */
@@ -186,7 +198,8 @@ export function candidateDocument(pathname: string): { id: string } | null {
 }
 
 
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/examples|\/datasets\/new)$/;
+/** Every static address web/App.tsx routes: a direct load or a reload of one missing here is a 404. */
+const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/examples|\/privacy|\/terms|\/datasets\/new|\/files\/new)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. A path
@@ -280,7 +293,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : publicHome ? withInitialHome(discovered) : discovered;
+      : withGenericSocial(publicHome ? withInitialHome(discovered) : discovered, baseUrl(c.req.raw));
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,

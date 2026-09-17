@@ -26,7 +26,7 @@ describe('docs addresses', () => {
     expect((await app.request('/mcp',{method:'POST'})).status).toBe(404);
   });
 
-  it('/docs-human is the page for people, and /docs/human sends them there', async () => {
+  it('/docs-human is the page for people, and /docs/human is retired with the rest of /docs', async () => {
     const human = await app.request('/docs-human', { headers: BROWSER });
     expect(human.status).toBe(200);
     expect(human.headers.get('content-type')).toContain('text/html');
