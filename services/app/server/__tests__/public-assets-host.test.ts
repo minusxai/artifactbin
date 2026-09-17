@@ -18,6 +18,19 @@ import {getRequestListener} from '@hono/node-server';
 import {createAuthHost} from '@artifactbin/auth';
 import {testAuthOptions} from '../../../auth/__tests__/helpers';
 useAppHarness();
+it('allows the export redirect host in app image policy, including development pages',async()=>{
+ const imageOrigin=new URL(exportAssetUrl('00000000-0000-0000-0000-000000000001','https://example.test')).origin;
+ for(const devHmrPort of [undefined,3041]){
+  const app=createAppServer({indexHtml:async()=>'<head></head>',devHmrPort});
+  const response=await app.request('https://example.test/account');
+  expect(response.status).toBe(200);
+  const directives=response.headers.get('content-security-policy')!.split('; ');
+  expect(directives.find(d=>d.startsWith('img-src'))?.split(' ')).toEqual(['img-src',"'self'",'data:','blob:',imageOrigin]);
+  for(const directive of ['script-src','connect-src','frame-src','worker-src']){
+   expect(directives.find(d=>d.startsWith(directive))?.split(' ')).not.toContain(imageOrigin);
+  }
+ }
+});
 it('direct app only serves cached byte GET/HEAD on asset host, ignoring credentials and forwarding spoofing',async()=>{
  const hash='a'.repeat(64),data=Buffer.from('bundle'),key=objectKey('webasset',data);
  await objectStore().put(key,data,'text/javascript');
