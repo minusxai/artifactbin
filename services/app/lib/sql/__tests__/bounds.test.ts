@@ -1,7 +1,7 @@
 /**
  * THE CALLER MAY ASK FOR LESS, NEVER FOR MORE.
  *
- * `limit` and `timeoutMs` used to be taken as given. In-process that was the
+ * `limit` and `timeoutMs` come from the caller. In-process that is the
  * app talking to itself; behind `SQL__SERVICE_URL` the same fields arrive in a
  * REQUEST BODY, and "hold this connection open for an hour" is then something
  * a caller can simply ask for (CodeQL js/resource-exhaustion, twice — the read

@@ -5,8 +5,6 @@
  * `mxGuideH` signal, never from the fit-solved `height` signal — a hidden rule spanning
  * the plot must contribute ZERO bounds to the `autosize: fit` solve. It only grows to
  * the plot height on hover, when the layout is settled (VegaChart drives the signal).
- * (The silent-blank-chart bug this was once suspected of causing turned out to be the
- * tooltip-suppression ordering in VegaChart — covered by vega-chart-render.ui.test.tsx.)
  */
 import { describe, it, expect } from 'vitest';
 import { injectGuideMark, GUIDE_WIDTH, GUIDE_OPACITY } from '../guide-mark';

@@ -1,6 +1,6 @@
 /**
- * The shared field-reference walker: one traversal powers both
- * E_FIELD_NOT_FOUND validation and (later) fieldMeta injection.
+ * The shared field-reference walker: one traversal powers encoding-field
+ * validation against a result's columns.
  */
 
 interface FieldRef {

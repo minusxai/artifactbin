@@ -164,8 +164,9 @@ describe('the per-mark handler installs ONE policy per document', () => {
 
   /*
    * …and it does not KEEP one after the last chart goes. A document's policy is released when a
-   * DIFFERENT chart scopes it, so the last chart to unmount used to leave five capture-phase
-   * listeners and a strong reference to a detached element behind for the document's lifetime.
+   * DIFFERENT chart scopes it, so the last chart to unmount would otherwise leave five
+   * capture-phase listeners and a strong reference to a detached element behind for the
+   * document's lifetime.
    * `VegaChart`'s cleanup releases it by name, and only when the policy is still ITS own.
    */
   it('releases the whole listener set when the last chart tears down', () => {

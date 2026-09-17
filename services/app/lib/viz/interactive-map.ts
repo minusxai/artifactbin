@@ -1,12 +1,11 @@
 /**
  * Which charts respond to wheel, drag and hover — the one definition.
  *
- * Two callers need this and they used to answer it separately: `VegaChart` (to wire
+ * Two callers need the answer and it must be the SAME answer: `VegaChart` (to wire
  * up view-state persistence) and the dashboard tile (to decide whether its edit-mode
- * drag surface may cover the chart). Separate answers drifted, and the drift was
- * invisible: the tile read only the LEGACY `vizSettings.type`, so a viz-first geo
- * question — where `viz` is authoritative and `vizSettings` is absent entirely —
- * looked static to it and kept the full-card overlay that eats every event.
+ * drag surface may cover the chart). A tile that judges an interactive map static
+ * keeps the full-card overlay, which eats every event — and nothing about the chart
+ * looks wrong, so the disagreement is invisible.
  *
  * Detection is by CAPABILITY (the `mxViewParams` signal) rather than recipe id, so a
  * DETACHED map (kind: 'vega', no recipe) stays interactive. Recipe ids are a fast path.

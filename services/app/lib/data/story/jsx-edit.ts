@@ -39,7 +39,7 @@ import { isEditableTextHost, resolveJsxNodeAtPath } from '@/lib/story-ui/host-cl
  */
 export { isEditableTextHost, resolveJsxNodeAtPath };
 
-/** The name this module's own write-back paths have always used. */
+/** The name this module's own write-back paths use. */
 const resolveByPath = resolveJsxNodeAtPath;
 
 interface JsxDomEdit {
@@ -298,7 +298,7 @@ const DENIED_ATTRS = immutableSet(['dangerouslysetinnerhtml', 'ref', 'key', 'src
 const INLINE_STYLE_ATTRS = immutableSet(['style', 'labelstyle']);
 const URL_ATTRS = immutableSet(['href', 'src', 'action', 'formaction', 'poster', 'background', 'cite', 'data', 'xlink:href', 'ping']);
 const URL_LIST_ATTRS = immutableSet(['srcset', 'ping']);
-// Lowercased: the paste parser lowercases tags, and STORY_HTML_TAGS now carries
+// Lowercased: the paste parser lowercases tags, while STORY_HTML_TAGS carries
 // canonical (camelCase) SVG names.
 const ALLOWED_HTML = immutableSet<string>(STORY_HTML_TAGS.map(t => t.toLowerCase()));
 

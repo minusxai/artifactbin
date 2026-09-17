@@ -2,9 +2,9 @@
  * Story design-system CSS — server-side Tailwind compile (see story-css.ts for the contract).
  *
  * Compiles the Tailwind v4 utilities a story actually uses into a per-story CSS string, in
- * process (no build step, no network). Called from the FilesAPI write paths (createFile /
- * saveFile) for every story so `compiledCss` can never drift from the markup, whichever door
- * the write came through (agent EditFile, WYSIWYG browser save, raw API).
+ * process (no build step, no network). Called from the publish path (lib/story/jsx-tier.ts)
+ * for every story so `compiledCss` can never drift from the markup, whichever door the write
+ * came through (agent edit, WYSIWYG browser save, raw API).
  */
 import { compile } from 'tailwindcss';
 import { createRequire } from 'node:module';
@@ -18,9 +18,9 @@ import { COLOR_PALETTE } from '@/lib/chart/chart-theme';
 import { partitionBannedCandidates } from './banned-css';
 import { hasDesignSystemMarker, extractClassCandidates, type CompiledCssStoryContent } from './story-css';
 
-// The stylesheet each story is compiled against. `dark:` keys off the `.dark` class AgentHtml
-// stamps on the iframe <html> (Tailwind's default is prefers-color-scheme, which would ignore
-// the app's mode toggle).
+// The stylesheet each story is compiled against. `dark:` keys off the `.dark` class
+// `buildStoryDocument` stamps on the document <html> (Tailwind's default is
+// prefers-color-scheme, which would ignore the app's mode toggle).
 const TW_INPUT = '@import "tailwindcss";\n@custom-variant dark (&:where(.dark, .dark *));\n';
 
 declare const __MX_TAILWIND_INDEX_CSS__: string;
@@ -74,8 +74,8 @@ async function tailwindCompiler(input: string) {
 /**
  * The `@theme inline` mapping that registers shadcn token utilities (`bg-background`,
  * `text-muted-foreground`, `rounded-lg`, …) onto the CSS-variable contract. Shared by the story
- * compile AND the app's main-document Tailwind build (scripts/generate-app-theme-css.ts —
- * ), so both surfaces speak the same token language.
+ * compile AND the app's main-document token layer (`buildAppThemeCss`), so both surfaces
+ * speak the same token language.
  */
 const SHADCN_THEME_MAPPING = `@theme inline {
   --color-background: var(--background);
@@ -171,7 +171,7 @@ const SHADCN_NEUTRAL_DARK_BODY = `{
  * compile; the difference is SCOPE: neutral values live under `[data-mx-theme-host]` (stamped by
  * FileLayout around file content) so the Chakra app shell never sees a bare `:root` override.
  */
-// Unthemed content must keep TODAY'S chart colors (the visual bar —):
+// Unthemed content must keep the app's chart colors:
 // the stock shadcn --chart-1..5 would silently recolor every existing chart, because VegaChart
 // reads those tokens wherever they resolve. Substitute the app palette (lib/chart/chart-theme
 // COLOR_PALETTE head) into every NEUTRAL token body — app host blocks AND story neutral bodies
@@ -352,8 +352,7 @@ async function compileStoryCssUncached(story: string, opts?: { force?: boolean }
  * Version of the compile ENVIRONMENT a `compiledCss` was produced under: a hash of the recipe
  * union (kit + embed-chrome classes) + the theme token emitter output. When either grows (a new
  * embed component is re-skinned, a theme changes), every previously-saved story is STALE — the
- * story loader (lib/data/loaders/story-loader.ts) recompiles it at read time. Self-maintaining:
- * no manual version bumps.
+ * read path (`currentStoryCss`, below) recompiles it. Self-maintaining: no manual version bumps.
  */
 export function storyCssCompileVersion(): string {
   const src = `${STORY_RECIPE_UNION.join(' ')}|${storyThemeCss()}|${TW_INPUT_JSX_IMPORTANT}`;

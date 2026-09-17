@@ -81,17 +81,17 @@ function maskEntities(s: string): { masked: string; restore: (seg: string) => st
 /**
  * THE ONE EXCEPTION: a face the document self-hosts.
  *
- * `@font-face { src: url(https://…) }` used to be stripped like every other
- * external url(), which meant a publish answered 201 and the document quietly
- * lost its typeface (R7). Such a URL is now IMPORTED at publish
- * (lib/web-assets) and the SERVED stylesheet is rewritten to our own origin
- * (lib/story/asset-url mapExternalCssUrls), so nothing a reader loads ever
- * names the upstream host — which is the whole reason the ban existed.
+ * `@font-face { src: url(https://…) }` survives the strip. Stripping it would
+ * let a publish answer 201 while the document quietly lost its typeface. Such a
+ * URL is IMPORTED at publish (lib/web-assets) and the SERVED stylesheet is
+ * rewritten to our own origin (lib/story/asset-url mapExternalCssUrls), so
+ * nothing a reader loads ever names the upstream host — which is the whole
+ * reason the ban exists.
  *
  * Deliberately narrow: the `src` property, INSIDE an `@font-face` block (the
  * immediately enclosing one, so `@media{ .a{src:…} }` is not it), with http(s)
  * targets. A `background: url(…)` in the same block, or a `src:` anywhere else,
- * is stripped exactly as before.
+ * is stripped like any other external target.
  */
 const FONT_SRC_RE = /^\s*src\s*:/;
 const isFontFacePrelude = (prelude: string | undefined): boolean =>

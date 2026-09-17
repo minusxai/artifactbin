@@ -34,8 +34,8 @@ describe('round trip', () => {
 
 describe('composed specs survive the round trip', () => {
   // A layered spec (scatter + fitted trend line) has no TOP-LEVEL mark or
-  // encoding, which the "no chart" check used to read as an empty spec — one
-  // apply in the spec box and the whole viz vanished into a table.
+  // encoding, so a "no chart" check that reads only the top level calls it an
+  // empty spec — one apply in the spec box and the whole viz becomes a table.
   const LAYERED = {
     kind: 'vega-lite',
     spec: {

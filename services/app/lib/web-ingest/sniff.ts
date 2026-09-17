@@ -42,9 +42,9 @@ export function sniffImageType(buf: Buffer): string | null {
  * a PDF. Nothing else — a font is fetched by a different door with a different
  * cap, and a type this app does not serve is a refusal rather than a guess.
  *
- * `sniffImageType` is image-only BY CONSTRUCTION, which the PDF spike found the
- * hard way: it does not know `%PDF-`, so a PDF handed to the image door is
- * simply "not an image", and the tier that stores PDFs needs its own answer.
+ * `sniffImageType` is image-only BY CONSTRUCTION: it does not know `%PDF-`, so a
+ * PDF handed to the image door is simply "not an image", and the tier that
+ * stores PDFs needs its own answer.
  * The signature must be at the very start — a PDF hidden inside an html error
  * page is an html error page.
  */

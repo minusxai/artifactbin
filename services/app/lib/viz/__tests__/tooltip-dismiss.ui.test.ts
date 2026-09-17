@@ -1,5 +1,5 @@
 /**
- * B2 — a chart tooltip must be dismissable on touch (SEEDED RED by the orchestrator).
+ * A chart tooltip must be dismissable on touch.
  *
  * Vega's per-mark tooltip (`#vg-tooltip-element`) hides only when Vega calls the
  * handler with an empty value, which it does on scenegraph `mouseout` — an event a

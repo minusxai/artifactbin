@@ -4,8 +4,8 @@
  * A hover card is written for a mouse: Vega opens it when a pointer MOVES onto a mark and closes
  * it on the scenegraph's `mouseout`. A finger reliably produces neither.
  *
- * What was MEASURED here (headless Chromium, `hasTouch`, a real emulated tap on a mark — the
- * event log is in the phase report): `pointerdown → pointerup → pointerleave → touchend →
+ * What was MEASURED here (headless Chromium, `hasTouch`, a real emulated tap on a mark):
+ * `pointerdown → pointerup → pointerleave → touchend →
  * mousemove`, no `pointermove` at any point, and no card opened at all. What is REPORTED, from a
  * real device and NOT reproduced in this environment: a finger — which is never quite stationary
  * — does open the card, and it then stays up until a different mark is tapped. Treat the opening

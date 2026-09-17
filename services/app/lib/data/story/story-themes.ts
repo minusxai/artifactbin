@@ -3,8 +3,8 @@
  *  (a) the CSS emitter (`storyThemeCss` → appended to every jsx story's compiledCss by
  *      lib/data/story/story-css.server.ts, as tiny `[data-theme="<name>"]` variable blocks —
  *      instant in-app theme switching, no recompile),
- *  (b) the settings picker UI (components/ThemePicker) and the Clarify
- *      `type:'design'` preset (lib/branding/story-theme-options.ts projects this registry),
+ *  (b) the settings picker UI (components/ThemePicker) and the skill registry
+ *      (lib/skills/render.ts projects this registry into `themes/<name>.md`),
  *  (c) preview-image generation (scripts/generate-theme-previews.ts),
  *  (d) font-asset generation (lib/data/story/story-fonts.ts maps each theme's families to
  *      the bundled font assets).
@@ -50,13 +50,13 @@ export interface StoryTheme {
   name: StoryThemeName;
   /** Short human label for the picker. */
   label: string;
-  /** One-line personality summary (picker + Clarify design preset). */
+  /** One-line personality summary for the picker. */
   description: string;
   fonts: StoryThemeFonts;
   /**
    * The mode this theme is DESIGNED to open in when the author pinned no `colorMode`.
-   * Declared, not derived: both palettes exist, so background lightness no longer says
-   * anything about intent.
+   * Declared, not derived: both palettes exist, so background lightness says nothing
+   * about intent.
    */
   defaultMode: 'light' | 'dark';
   /**

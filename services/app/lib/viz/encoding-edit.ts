@@ -1,7 +1,7 @@
 /**
  * Targeted encoding edits for the drop-zone lens over unit Vega-Lite specs.
  *
- * The RFC's cardinal rule: the UI must never parse a spec into a simplified model and
+ * The cardinal rule: the UI must never parse a spec into a simplified model and
  * rewrite it. These helpers make SURGICAL edits only — set/replace/remove one encoding
  * channel's field, preserving every other property of the channel (axis, title, scale)
  * and everything else in the spec. Composed specs (layer/facet/concat/repeat) are not
@@ -190,7 +190,7 @@ const withMark = (spec: Record<string, unknown>, type: string): void => {
     : { type };
 };
 
-/** Native-spec viz types (recipes and the DOM-tier table/pivot route through setEnvelopeVizType instead). */
+/** Native-spec viz types — recipes and the DOM-tier table/pivot are not mark swaps and never reach here. */
 type SpecVizType = Exclude<V2VizType, 'table' | 'pivot' | 'combo' | 'funnel' | 'waterfall' | 'radar' | 'trend' | 'single_value' | 'choropleth' | 'point_map'>;
 
 /** Switch a unit (or annotated-unit) spec's viz type, transforming encodings where the

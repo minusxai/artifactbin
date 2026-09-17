@@ -8,10 +8,10 @@
  * The one thing ingest must do that the JSON path never had to: DECIDE TYPES.
  * CSV has none — every cell is a string — and handing raw parser output to
  * inferColumns types every column `string`, which silently breaks a Vega
- * quantitative encoding. Measured, not assumed: see data-artifacts-v2.md §2.
+ * quantitative encoding.
  */
 
-/** What we were handed. Both forms end at the same rows. */
+/** What we were handed. Every form ends at the same rows. */
 export type DatasetSource =
   | { kind: 'csv'; text: string }
   | { kind: 'sheetUrl'; url: string }
@@ -36,7 +36,7 @@ export interface IngestResult {
 type IngestErrorCode =
   | 'empty'            // no content at all
   | 'no_header'        // header row missing or entirely blank
-  | 'too_many_rows'    // over MAX_DATASET_ROWS
+  | 'too_many_rows'    // over the row limit
   | 'too_large'        // over MAX_DATASET_BYTES
   | 'not_a_sheet_url'  // not a docs.google.com spreadsheet link
   | 'csv_fetch_failed' // the csvUrl fetch was refused (lib/web-ingest names why)
@@ -52,10 +52,9 @@ export class IngestError extends Error {
 }
 
 /**
- * Caps. There is currently NO limit anywhere (10k rows / 604 KB was accepted),
- * which is survivable while only agents hand-write JSON and an outage once we
- * accept uploaded files. Generous for a story dataset, far below where a single
- * row hurts Postgres.
+ * The byte cap on an ingested file: generous for a story dataset, far below
+ * where a single row hurts Postgres. Oversized input is REJECTED here (the row
+ * cap truncates instead — see `ingestDataset`).
  */
 export const MAX_DATASET_BYTES = 50 * 1024 * 1024;
 

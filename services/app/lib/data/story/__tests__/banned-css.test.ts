@@ -63,10 +63,10 @@ describe('sanitizeCssText — declaration-level strip', () => {
   });
 
   /**
-   * R7 — the ONE relaxation: a face a document self-hosts.
+   * The ONE relaxation: a face a document self-hosts.
    *
-   * This used to be stripped, so a publish answered 201 and the document
-   * quietly lost its typeface. The URL is now IMPORTED at publish
+   * Stripping it would let a publish answer 201 while the document quietly
+   * lost its typeface. The URL is IMPORTED at publish
    * (lib/web-assets) and rewritten to our own origin on the way out
    * (lib/story/asset-url), so keeping it here costs the reader nothing: the
    * served CSS never names the upstream host, and a face we failed to import is

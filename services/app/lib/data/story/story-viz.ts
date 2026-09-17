@@ -51,8 +51,8 @@ export function updateQuestionVizInJsx(
  *
  * `null` UNBINDS (removes the prop); an empty/whitespace string is a slip and
  * is ignored. The distinction matters: the picker offers "no table", and
- * collapsing the two left the stale binding in the document while the UI
- * showed the Question as unbound.
+ * collapsing the two would leave the stale binding in the document while the
+ * UI showed the Question as unbound.
  */
 export function updateQuestionDataInJsx(source: string, astPath: string, table: string | null): string {
   if (table === null) {

@@ -4,8 +4,7 @@
  *
  * The server renders one 96x20 spline per series (lib/viz/sparkline, headless
  * vega) and every surface that shows it stretches that one render to its own
- * box. Three transformations make that work, and they were written once, inside
- * an app-chrome component:
+ * box. Three transformations make that work:
  *
  *  - the fixed pixel size becomes a `viewBox` + `preserveAspectRatio="none"`,
  *    so ONE render serves the shelf's full-width hero line, a table cell and a
@@ -20,13 +19,12 @@
  * kit reaching into app chrome. So this module imports nothing and knows no
  * React: it is markup in, markup out, and both callers inject the answer.
  *
- * THE ANSWER IS ALWAYS ONE `<svg data-sparkline>` ELEMENT. That is the one
- * thing this adds to what `Spark` did: a caller that reserved space for a
- * picture can then find the picture it drew — and a value that is not a
- * rendered spline draws an EMPTY one rather than being injected. It matters
- * here in a way it never did on the shelf: the shelf's splines come from the
- * dashboard's own query, while a folder's come from the DOCUMENT's `<Query>`,
- * which its author writes.
+ * THE ANSWER IS ALWAYS ONE `<svg data-sparkline>` ELEMENT: a caller that
+ * reserved space for a picture can then find the picture it drew — and a value
+ * that is not a rendered spline draws an EMPTY one rather than being injected.
+ * It matters more for a folder than for the shelf: the shelf's splines come
+ * from the dashboard's own query, while a folder's come from the DOCUMENT's
+ * `<Query>`, which its author writes.
  *
  * Guarded by lib/viz/__tests__/spark-markup.test.ts.
  */

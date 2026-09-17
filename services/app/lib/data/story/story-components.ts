@@ -15,8 +15,8 @@
  * self-correction — without it they retry the same dead tag.
  *
  * So: add a name here when you retire a component, and never add one for any other
- * reason. Anything richer (the old `tag`/`props`/`classes` recipes) was carried for
- * years after the codec that read them was gone.
+ * reason. Nothing richer than a name belongs here — no `tag`/`props`/`classes`
+ * recipes; nothing reads them.
  */
 
 /** Legacy component names, kept so the validator can name the replacement. */

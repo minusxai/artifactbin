@@ -3,16 +3,17 @@
  *
  * A template is the document's GENRE: its beat structure and layout grammar (editorial long-read,
  * slide deck, scrollytelling) — orthogonal to the design theme, which is purely
- * a token set. Templates carry NO runtime CSS: `content.template` is metadata, and the `guidance`
- * mini-skill returned with the Clarify `type: 'template'` pick drives what the agent authors.
+ * a token set. Templates carry NO runtime CSS: `content.template` is metadata, and the genre's
+ * own skill doc drives what the agent authors.
  *
  * The prose (labels, personalities, beats) is human-edited in
  * `orchestrator/prompts/story-guidance.yaml`; this module is the thin typed projection over it.
  * A genre's full authoring guidance — and a theme's — is a docs file
- * (`skills/templates/<name>.md`, `skills/themes/<name>.md`), the one copy agents read.
+ * (`skills/artifactbin/references/templates-<name>.md`, `…/themes-<name>.md`), the one copy
+ * agents read.
  *
- * Consumers: the Clarify handler (lib/tools/handlers/clarify.ts — fat pick payloads and the
- * "Figure it out" catalogs) and the option projection (lib/branding/story-template-options.ts).
+ * Consumer: the skill registry (lib/skills/render.ts), which projects this registry into
+ * those docs.
  */
 import type { StoryTemplateName } from '@/lib/validation/atlas-schemas';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
@@ -26,7 +27,7 @@ interface StoryTemplate {
   name: StoryTemplateName;
   /** Short human label for the picker card. */
   label: string;
-  /** One-line summary (picker card + `description` in the clarify result). */
+  /** One-line summary for the picker card. */
   description: string;
   /** 2–3 sentence voice/personality statement. */
   personality: string;

@@ -1,10 +1,10 @@
 /**
  * Public Sheets ingest, and the caps.
  *
- * The failure shape here was measured, not guessed (data-artifacts-v2.md §2,
- * de-risk 7): a sheet that is not public answers `404` with `text/html` — no
- * redirect, no hang. So the guard is a content-type check, and the thing it
- * prevents is storing a Google login page as somebody's dataset.
+ * The failure shape here is measured, not guessed: a sheet that is not public
+ * answers `404` with `text/html` — no redirect, no hang. So the guard is a
+ * content-type check, and the thing it prevents is storing a Google login page
+ * as somebody's dataset.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { sheetCsvUrl, fetchSheetCsv } from '../sheets';
@@ -72,11 +72,11 @@ describe('fetchSheetCsv', () => {
   /**
    * GOOGLE REFUSING US IS NOT THE AUTHOR'S SHARING SETTINGS.
    *
-   * The content-type guard treated every non-CSV answer alike, so a 429 or a
-   * 5xx came back as "that sheet is not publicly readable" — sending someone
-   * to fix a share setting that was never wrong. Found when CI's `data-ingest`
-   * gate went red twice against Google's own public sample sheet
-   * (run 33874008704): the sheet was fine, the runner was refused.
+   * A content-type guard that treats every non-CSV answer alike returns a 429
+   * or a 5xx as "that sheet is not publicly readable" — sending someone to fix
+   * a share setting that was never wrong. Google really does refuse a CI runner
+   * this way against its own public sample sheet: the sheet is fine, the runner
+   * is refused.
    *
    * A 403 stays `sheet_not_public`: that is what a genuinely private sheet
    * answers, and it is the common case by a distance.

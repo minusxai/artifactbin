@@ -7,9 +7,8 @@
  * (`captureLinkTarget`), lets the user type a URL (which blurs the host — a live Range would go
  * stale if a pending text edit commits and re-renders), then re-resolves the offsets against the
  * host's CURRENT DOM and wraps them in an `<a>` (`applyLinkToHost`). The caller stages the
- * returned innerHTML through the edit session (StoryJsxEditApi.applyContentEdit), the same
- * channel a blur-commit uses — so link edits compose with text/format/layout edits under the
- * no-clobber invariant.
+ * returned innerHTML through the edit session, the same channel a blur-commit uses — so link
+ * edits compose with text/format/layout edits under the no-clobber invariant.
  *
  * Everything here is DOM-pure (Document/Range only — no React, no session): offsets are measured
  * with boundary Ranges (`range.toString().length`), which handles element-container endpoints
