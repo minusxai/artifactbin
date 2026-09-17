@@ -9,6 +9,7 @@ import {readConflicts,persistConflict,clearConflict} from './conflict-state';
 import {isDeepStrictEqual} from 'node:util';
 import {extname,resolve} from 'node:path';
 import {canonicalizeMarkup} from '../../app/lib/story/canonical-source';
+import {parseDatasetDefinition} from '../../app/lib/datasets/definition';
 import {stampNodeIds} from '../../app/lib/story/node-ids';
 import {CliError} from './commands';
 import {digest,readOptional} from './files';
@@ -33,6 +34,22 @@ import {parseResourceFile,readResourceSource,reconcileResource,resourceContent,s
 interface PushOptions {force?:boolean;dryRun?:boolean;access?:'read'|'readwrite';policy?:'viewers-write'|'none'}
 interface PushPlan {confirmed?:Snapshot;source?:ResourceSource;reconcile?:boolean;file:LocalFile;body:Record<string,unknown>;mode:'create'|'edit'|'metadata'|'replace'|'none'|'missing';id?:string;policy?:DatasetPolicy|null;policyName?:string}
 const fieldMap:Record<string,string>={link:'linkRole',folder:'parent_id'};
+/**
+ * The tables `--policy viewers-write` is aimed at: the ones the pushed `<Dataset>` definition
+ * DECLARES, so the grant fits the dataset instead of always naming `public.rows`. A CSV/JSON push
+ * has no definition and keeps that single table, which is the one it exposes. A definition that does
+ * not parse is not diagnosed here — local validation and the server both say so about the source
+ * itself, and a second wording of the same fault is one more thing to learn.
+ */
+function declaredTables(source?:ResourceSource):Array<{schema:string;name:string}>|undefined{
+ if(!source||extname(source.path).toLowerCase()!=='.jsx')return undefined;
+ const text=Buffer.from(source.bytes,'base64').toString();
+ if(!text.trimStart().startsWith('<Dataset'))return undefined;
+ try{
+  const tables=parseDatasetDefinition(text).tables.map(table=>({schema:table.schema,name:table.name}));
+  return tables.length?tables:undefined;
+ }catch{return undefined;}
+}
 function metadataInput(metadata:DocumentMetadata):Record<string,unknown>{return Object.fromEntries(metadataFields.filter(key=>metadata[key]!==undefined).map(key=>[fieldMap[key]??key,metadata[key]]));}
 export async function planPush(workspace:Workspace,paths?:string[],options:PushOptions={}):Promise<PushPlan[]>{
  const localIds=await localIdentities(workspace);
@@ -72,7 +89,7 @@ export async function planPush(workspace:Workspace,paths?:string[],options:PushO
   }
   const access=datasetFile?(resource?.type==='dataset'?resource.access??requestedAccess:requestedAccess):undefined;
   // `undefined` means the flag said nothing; `null` is the flag asking for no policy at all.
-  const flagPolicy=!datasetFile||options.policy===undefined?undefined:options.policy==='none'?null:viewersWritePolicy();
+  const flagPolicy=!datasetFile||options.policy===undefined?undefined:options.policy==='none'?null:viewersWritePolicy(declaredTables(resourceSource));
   if(flagPolicy!==undefined&&resource?.type==='dataset'&&resource.policy!==undefined&&!isDeepStrictEqual(resource.policy,flagPolicy))throw new CliError('policy_mismatch',`--policy ${options.policy} disagrees with the policy declared in ${file.path}.`,'Drop the flag to publish the file\'s own policy, or remove policy: from the YAML.');
   const flagPolicyChanged=flagPolicy!==undefined&&!isDeepStrictEqual(flagPolicy,file.tracked?.snapshot.dataset_policy??null);
   const deferrable=flagPolicyChanged?{policy:flagPolicy,policyName:String(options.policy)}:{};

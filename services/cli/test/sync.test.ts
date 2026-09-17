@@ -640,6 +640,60 @@ test('push --policy viewers-write publishes a dataset the link audience can writ
  }finally{await rm(root,{recursive:true,force:true});}
 });
 
+/**
+ * THE SHORTHAND HAS TO FIT THE DATASET IT IS AIMED AT.
+ *
+ * `viewers-write` used to be spelled for `public.rows` whatever was pushed, so a multi-table
+ * `<Dataset>` definition got a grant on a table it does not have: `invalid_policy: Policy table is
+ * not in this dataset`, answered AFTER the content was already published — a live dataset with no
+ * policy, and nothing in the message to do about it. The grant names the dataset's OWN tables.
+ */
+test('push --policy viewers-write grants every table a multi-table dataset declares',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'afbin-policy-tables-'));const home=join(root,'home');const cwd=join(root,'work');await mkdir(home);await mkdir(cwd);
+ const calls:Array<{method:string;path:string;body:any}>=[];
+ let head:any;
+ const curated=({dataset_policy:_policy,policy_revision:_revision,...rest}:any)=>rest;
+ const request:typeof fetch=async(input,init)=>{
+  const path=new URL(String(input)).pathname;const method=init?.method??'GET';
+  const body=init?.body?JSON.parse(String(init.body)):{};
+  calls.push({method,path,body});
+  if(path==='/api/artifacts'&&method==='POST'){
+   head={id:'people01',version:1,edit_id:'e1',state:digest('people-1'),format:'dataset',access:body.access??'read',policy_revision:0,dataset_policy:null};
+   return Response.json(curated(head),{status:201,headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='PATCH'){
+   head={...head,edit_id:'e2',state:digest('people-2'),dataset_policy:body.policy??null,policy_revision:(head.policy_revision??0)+1};
+   return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  }
+  if(method==='GET')return Response.json(head,{headers:{'X-Artifactbin-Account':'usr_one'}});
+  throw new Error(`Unexpected ${method} ${path}`);
+ };
+ try{
+  await saveTestConnection({server:'https://example.com',token:'mx_test'},home);await seedIdentityPool(home,cwd,['people01']);
+  await writeFile(join(cwd,'people.jsx'),`<Dataset kind="stored">
+  <Table schema="public" name="people" columns={["name"]} rows={[]} />
+  <Table schema="public" name="shifts" columns={["person","day"]} rows={[]} />
+</Dataset>
+`);
+  await writeFile(join(cwd,'people.yaml'),'type: dataset\nsource: people.jsx\n');
+  const out:string[]=[];
+  const code=await runCli(['push','people.yaml','--policy','viewers-write','--json'],{cwd,home,interactive:false,fetch:request,stdout:x=>out.push(x),stderr:()=>{}});
+  const result=JSON.parse(out.join(''));
+  assert.equal(code,0,JSON.stringify(result));
+  const patch=calls.filter(call=>call.method==='PATCH').at(-1)!;
+  assert.deepEqual(patch.body.policy.tables.map((table:any)=>table.table),[{schema:'public',name:'people'},{schema:'public',name:'shifts'}]);
+  // Every declared table is WRITABLE, not merely named: the grant is the one `public.rows` gets.
+  for(const table of patch.body.policy.tables){
+   assert.deepEqual(table.insert_permissions,[{role:'viewer',permission:{columns:'*',check:{}}}]);
+   assert.deepEqual(table.update_permissions,[{role:'viewer',permission:{columns:'*',filter:{},check:{}}}]);
+   assert.deepEqual(table.delete_permissions,[{role:'viewer',permission:{filter:{}}}]);
+  }
+  // The shape the server will parse, proven against the shared parser rather than by hand.
+  assert.deepEqual(parseDatasetPolicy(patch.body.policy),patch.body.policy);
+  assert.equal(result.operations[0].policy,'viewers-write');
+ }finally{await rm(root,{recursive:true,force:true});}
+});
+
 test('--policy viewers-write refuses an explicit --access read, before any request',async()=>{
  const root=await mkdtemp(join(tmpdir(),'afbin-policy-clash-'));
  try{

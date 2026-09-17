@@ -54,7 +54,7 @@ Cells query qualified raw tables such as `public.events` and reference **earlier
 
 The final whitelist selects physical columns or model output columns independently of notebook inputs. The example exposes only `models.activity`; its `raw_events` helper and `public.events` source remain unavailable to readers. To expose physical columns directly, add a table such as `<Table schema="public" name="events" sourceSchema="public" sourceTable="events" columns={["user_id"]} />`. In the UI, a cell's Expose checkbox and its whitelist tree entry control the same selection.
 
-Structured `CatalogInput` objects remain accepted in `dataset`, including `kind:"stored"` tables with `rows`. Omit rows on an existing table to retain its data. Arrays/CSV remain the single-table `public.rows` case.
+Structured `CatalogInput` objects remain accepted in `dataset`, including `kind:"stored"` tables with `rows`. Omit rows on an existing table to retain its data. Arrays/CSV remain the single-table `public.rows` case. A stored `<Table>` that declares its `columns` may start with `rows={[]}`: a sheet the people using the page fill in later publishes empty, with its shape, and needs no seed row. Zero rows with no declared columns is still refused — a CSV or JSON push infers its columns from the rows, so there would be nothing to publish.
 
 The default schema is fixed after creation. A bare `events` resolves only there; adding another schema/table never changes its meaning. New catalog versions retain ordinary optimistic concurrency (`expectedVersion`) and artifact version history.
 
@@ -73,6 +73,8 @@ The default schema is fixed after creation. A bare `events` resolves only there;
 `source` is a literal dataset ID. Runtime SQL names only final-whitelist schema/table identifiers. Parameters come from declared scalar Values, with explicit Postgres type binding.
 
 Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.items set status=$_value where id=$_row.id\`}</Mutation>`. Publish the dataset those writes land in with `afbin push tasks.csv --type dataset --access readwrite --policy viewers-write`: everyone who can view the dataset may then insert, update and delete rows, which is what a page anyone with the link can work needs. Owner-only writes need no policy — `--access readwrite` alone keeps writes to editors. Sharing sets the audience; one policy covers all of it (Hasura role `viewer`). Finer rules — column lists, row filters, presets — are a `policy:` block in the dataset YAML: `afbin pull <id> --type dataset --output tasks.yaml` writes that YAML beside the rows the dataset was published from and tracks it in their place. `--policy none` removes the grant. Postgres writes are unavailable.
+
+A dataset that carries a policy stays its OWNER's to re-push: replacing its rows and columns keeps the policy and its revision, as long as the new tables still have the columns the policy names — a replacement that drops one is refused as `policy_mismatch`, naming it. Anyone else with edit access is refused with `policy_locked`, and nobody reverts a governed dataset, because the rows viewers wrote are in it: read an earlier version with `afbin pull <id>@<v> --output -`, or take a copy with `afbin fork <id>@<v>`, and push the content you want.
 
 ## Preview and freshness
 

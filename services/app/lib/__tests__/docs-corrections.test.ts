@@ -145,6 +145,22 @@ describe('the publishing skill', () => {
     // And how to GET that YAML for a dataset already published from a CSV.
     expect(databases).toContain('afbin pull <id> --type dataset --output tasks.yaml');
   });
+  /*
+   * Measured on a multi-user page: `--policy viewers-write` is taught as the normal way to make a
+   * dataset writable, and every re-push of one then answered a bare 404 — so the docs taught a
+   * one-way door. They now say whose the re-push is, that the grant survives it, and how to read an
+   * old version, because a governed dataset is the one thing that cannot be reverted.
+   */
+  it('the dataset docs say a governed dataset is still the owner’s to re-push, and how to read an old version', () => {
+    for (const path of ['artifactbin/references/databases.md', 'artifactbin/references/publishing-datasets.md']) {
+      const doc = renderDoc(path, BASE);
+      expect(doc).toMatch(/owner/i);
+      expect(doc).toContain('afbin pull <id>@<v> --output -');
+      expect(doc).toContain('afbin fork <id>@<v>');
+      // An empty table is a real starting state — the alternative authors reached for was a fake row.
+      expect(doc).toContain('rows={[]}');
+    }
+  });
 });
 
 /*

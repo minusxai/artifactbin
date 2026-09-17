@@ -57,7 +57,7 @@ export async function preparePull(workspace:Workspace,args:string[],force=false,
    const bytes=await readOptional(await confinedPath(workspace.root,adopt));
    if(bytes&&digest(bytes)!==prior![1].file&&!force)throw new CliError('local_changed',`${adopt} has local changes.`,`Push them first, or pull --force to replace them with the published rows.`);
   }
-  if(!adopt&&path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity. To inspect the published head instead, run afbin diff --remote <path> or afbin export <id> --format html.');
+  if(!adopt&&path&&prior&&prior[0]!==path&&await readOptional(join(workspace.root,prior[0])))throw new CliError('duplicate_identity',`${prior[0]} already tracks ${id}.`,'Pull the tracked path; do not create another working copy with the same identity. To inspect the published head instead, run afbin diff --remote <path>. To read one VERSION: afbin pull <id>@<v> --output - or afbin export <id>@<v> --format original --output <file>; to keep working on it, afbin fork <id>@<v>.');
   if(path&&workspace.tracking?.files[path]&&workspace.tracking.files[path].id!==id)throw new CliError('identity_mismatch',`${path} tracks a different artifact.`);
   const before=path?await readOptional(await confinedPath(workspace.root,path)):null;
   const tracked=path?workspace.tracking?.files[path]:undefined;

@@ -159,6 +159,14 @@ const CONTENT_ERRORS: OperationError[] = [
 
 const NOT_FOUND: OperationError = { status: 404, code: 'not_found', fix: 'the id is wrong OR this token cannot reach it — existence is never revealed; list_artifacts shows what you can reach' };
 
+/**
+ * A DATASET UNDER A WRITE POLICY. Both of these exist because the answer used
+ * to be `not_found` for a dataset the caller was looking straight at: once a
+ * policy was set, nobody could replace its content and nothing said why.
+ */
+const POLICY_LOCKED: OperationError = { status: 409, code: 'policy_locked', fix: "this dataset has a write policy — only its OWNER may replace its content, and nobody may revert it (viewers' rows are in it). Fork it, or ask the owner" };
+const POLICY_MISMATCH: OperationError = { status: 400, code: 'policy_mismatch', fix: 'the replacement no longer has a table or column the dataset policy grants — detail names it. Keep that column, or change the policy first with set_dataset_policy' };
+
 const createArtifactOp: Operation = {
   name: 'create_artifact',
   title: 'Create an artifact',
@@ -198,6 +206,8 @@ const updateArtifactOp: Operation = {
     // the data tiers answer; the FIX has to be different, because "replace it
     // whole instead" is the thing that just failed.
     { status: 400, code: 'not_editable', fix: 'a folder has no content — send title, visibility or parent_id instead; its page is its listing' },
+    POLICY_LOCKED,
+    POLICY_MISMATCH,
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
@@ -356,6 +366,7 @@ const revertArtifactOp: Operation = {
     NOT_FOUND,
     { status: 409, code: 'version_not_archived', fix: 'that checkpoint was never archived (save-less edits coalesce) — list_versions shows the real ones' },
     { status: 400, code: 'version_required', fix: 'version must be a positive integer from list_versions' },
+    POLICY_LOCKED,
   ],
   async run(ctx, input) {
     if (typeof input.version !== 'number' || !Number.isInteger(input.version) || input.version < 1) {
