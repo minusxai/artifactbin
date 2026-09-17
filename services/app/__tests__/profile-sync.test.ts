@@ -135,6 +135,28 @@ describe('profile sync at the bearer door', () => {
   });
 
   /**
+   * ANYTHING THAT IS NOT THAT FAULT STILL PROPAGATES — the swallow is one named condition wide, not
+   * "whatever went wrong". A database that cannot take the row cannot serve the artifact either, so
+   * hiding it would turn an outage into an empty listing that reads like a permission problem.
+   */
+  it('lets an unrelated database failure out, rather than hiding it behind the reach the caller lost', async () => {
+    const token = await mintToken('cli');
+    await claimToken('usr_cli0000000009', token.token);
+    const db = await harness.db();
+    const real = db.query.bind(db);
+    const spy = vi.spyOn(db, 'query').mockImplementation(((text: string, params?: unknown[]) =>
+      /INSERT INTO users/.test(text)
+        ? Promise.reject(new Error('connection terminated unexpectedly'))
+        : real(text, params)) as typeof db.query);
+    try {
+      await expect(ok(cliRequest(token, { credential: 'bearer', tokenId: token.id, userId: 'usr_cli0000000009', email: 'blip@example.com', emailVerified: true })))
+        .rejects.toThrow(/connection terminated unexpectedly/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  /**
    * A DRY RUN IS A QUESTION, NOT A VISIT. `withTokenAuth` already withholds `touchToken` from an
    * explicit `X-Artifactbin-Dry-Run` GET — the convention being that a caller asking "would this
    * work?" leaves no trace — so the profile upsert, which is the other write on that path, obeys it

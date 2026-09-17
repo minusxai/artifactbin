@@ -267,15 +267,24 @@ export async function syncProfileForToken(request: Request, scope: TokenActor): 
        */
       throw error;
     }
-    if (!warnedDuplicateProfile.has(claimed.userId)) {
-      warnedDuplicateProfile.add(claimed.userId);
-      console.warn(error.message);
-    }
+    warnDuplicateOnce(claimed.userId, error.message);
   }
 }
 
-/** User ids already reported as duplicate-address faults; the warning is per person, not per call. */
+/**
+ * User ids already reported as duplicate-address faults: the warning is per person, not per call, and
+ * it is PROCESS-LIFETIME, exactly like lib/profiles' `seen` — a restart says it again, and a test that
+ * reuses an id across cases sees it once in total. Bounded the same way, so a long-lived process with
+ * a long-lived fault cannot grow a set out of it.
+ */
+const WARNED_MAX = 5000;
 const warnedDuplicateProfile = new Set<string>();
+function warnDuplicateOnce(userId: string, message: string): void {
+  if (warnedDuplicateProfile.has(userId)) return;
+  warnedDuplicateProfile.add(userId);
+  if (warnedDuplicateProfile.size > WARNED_MAX) warnedDuplicateProfile.delete(warnedDuplicateProfile.keys().next().value!);
+  console.warn(message);
+}
 
 /** Enrich an authenticated token scope only from matching proxy claims. */
 export function tokenActorForRequest(request: Request, scope: TokenActor): TokenActor {
