@@ -133,10 +133,7 @@ async function main(): Promise<void> {
   let human: Awaited<ReturnType<typeof createHumanAuth>> | undefined;
   let reader: ReturnType<typeof createTokenReader> | undefined;
   if (!appOnly) {
-    /*
-     * HUMAN LOGIN (Better Auth), composed from env exactly as the old
-     * assembleProxy did — the options from the ONE pure builder.
-     */
+    /* HUMAN LOGIN (Better Auth), composed from env — the options from the ONE pure builder. */
     authSecret = readEnv(env, 'AUTH__SECRET') ?? generatedAuthSecret();
     const authSchema = readEnv(env, 'AUTH__SCHEMA') ?? 'auth';
     await ensureAuthSchema(queryable, authSchema);
@@ -213,8 +210,7 @@ async function main(): Promise<void> {
    * THE HTTP SERVER — the Vite chain (dev only) in FRONT of the listener for
    * its own assets: Vite runs `appType: 'custom'`, so it claims /@vite/*, /@fs/*,
    * /@id/*, /node_modules/.vite/* and web/ sources and calls next() for
-   * everything else. (One behaviour change from the old Node runner: Vite's
-   * asset paths are matched BEFORE the door check rather than after. Dev only.)
+   * everything else — so in dev its asset paths are matched BEFORE the door check.
    */
   const server = http.createServer(
     vite ? (req, res) => vite!.middlewares(req, res, () => void listener(req, res)) : listener,

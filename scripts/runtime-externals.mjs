@@ -4,9 +4,9 @@
  * `scripts/build-server.mjs` leaves these out of the bundle (native addons,
  * packages that resolve their own files from real paths, and vite, which is
  * dev only), and the image must therefore ship exactly these as real
- * `node_modules` (`scripts/prune-runtime-deps.mjs` keeps them when it prunes
- * each image's copy of the installed tree). The Dockerfile used to name them a second time
- * by hand, and the two drifted: the bundle stopped carrying vega, nothing told
+ * `node_modules`; `services/cli/scripts/build-host.mjs` reads the same list to
+ * install them beside the standalone host. Naming them a second time
+ * by hand is what drifted once: the bundle stopped carrying vega, nothing told
  * the copy step, and the image's server died at its first line with
  * `Cannot find package 'vega-lite'`.
  */

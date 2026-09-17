@@ -4,8 +4,9 @@ on:
   pull_request:
   push:
     branches: [ main ]
-  # The "Release afbin" workflow opens its PR with the repository token, whose events start no
-  # workflow; it dispatches this one on the release branch instead, and the checks land on the PR.
+  # The "Release afbin" workflow dispatches this one on the release branch when it pushed with the
+  # repository token, whose events start no workflow; the checks land on the PR. With a PAT its own
+  # pull_request event starts this workflow and no dispatch happens.
   workflow_dispatch:
 
 # New commits supersede earlier checks on the same PR. Main runs stay independent.
@@ -314,9 +315,6 @@ jobs:
         run: npx playwright install chromium
       - run: npx vitest run --project=api --shard=${{ matrix.shard }}/5
 
-  # A real coding agent, end to end: mints a start document, loads local skills,
-  # publishes, and the served document passes the render guards — the manual
-  # pre-merge hole the gates leave. It runs the CI-ONLY tasks (comment, data,
   gates:
     needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
@@ -372,12 +370,12 @@ jobs:
       # which costs more wall clock than the build it replaces and adds a cross-job dependency.
       - run: npm run build
       # The runner boots the servers with one protected per-run mail outbox.
-      # Four servers within the runner, three runners across the set. The
+      # Two servers within the runner, four runners across the set. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so no one runner
-      # ends up holding every slow gate (scripts/gates.shard.mjs). THREE shards,
-      # not two: the set ran 213s and ~170s of gate work in two shards on main run
-      # 34697938970, and a third divides that work rather than the machine.
+      # ends up holding every slow gate (scripts/gates.shard.mjs). More than two
+      # shards: the set ran 213s and ~170s of gate work in two shards on main run
+      # 34697938970, and further shards divide that work rather than the machine.
       #
       # postgres-datasets drives a real Dockerised Postgres; pulling the image
       # before the run keeps that cost out of the gate's own timeout budget.
@@ -512,8 +510,6 @@ jobs:
       - if: always()
         run: docker rm -f ab || true
 
-  # Build each lean image once, check its contents/size/standalone behavior,
-  # then boot those exact images together and walk the service boundaries.
   test:
     name: test
     runs-on: ubuntu-latest

@@ -3,7 +3,7 @@
  *
  * What only a browser (and a raw fetch) can prove:
  *   1. a session-less fetch of /a/<id> — a crawler — gets html carrying the
- *      document's text: it is served the DOCUMENT itself (proxy.ts), not a
+ *      document's text: it is served the DOCUMENT itself, not a
  *      shell around an iframe whose content would never be attributed to it
  *   2. the same html carries the unfurl tags (title + og:image)
  *   3. it is the SAME markup for everyone — no user-agent branch
@@ -57,9 +57,9 @@ check(/property="og:title"|name="og:title"/.test(pageHtml), 'og:title is present
 const asBot = await (await fetch(`${BASE}/a/${doc.id}`, {
   headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' },
 })).text();
-// Compare the MARKUP, not the framework payload: Next stamps a fresh render
-// id and dev-only chunks into <script> on every request, which differ between
-// any two fetches — including two by the same agent.
+// Compare the MARKUP, not the framework payload: the <script> tags carry
+// per-request state that differs between any two fetches — including two by
+// the same agent.
 //
 // Scanned, not regexped, and NOT a sanitizer: this drops script elements from
 // two responses so the rest can be compared. A regexp of this shape reads as
