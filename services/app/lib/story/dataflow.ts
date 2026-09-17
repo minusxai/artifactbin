@@ -16,10 +16,10 @@
  * This module is PURE (no DB, no engine, no React) and is the ONLY place that
  * knows the reference syntax: helmet.ts calls
  * `parseValueDecl`/`parseQueryDecl`/`parseMutationDecl` for the three Helmet
- * data children, jsx-tier.ts calls `validateDataflow` in its
+ * data children, local-validation.ts calls `validateDataflow` in its
  * always-run error array (so /api/preview and publish agree), refs.ts asks
- * `datasetRefsInSql` for the datasets a query reads, and the runtime + engine
- * consume the same `Dataflow`/`DataflowState` shapes off the JSON island.
+ * `datasetRefsInDataflow` for the datasets a document reads, and the runtime +
+ * engine consume the same `Dataflow`/`DataflowState` shapes off the JSON island.
  *
  * Reference grammar (deliberately narrow — the string stays inert data):
  *  - an attribute reference is the WHOLE value, `^\$[A-Za-z_]\w*$`, so
@@ -28,8 +28,11 @@
  *    a `$…` string is a literal;
  *  - inside SQL, `$name` is a parameter naming a SCALAR value; a table (query
  *    or table-Value) is referenced by its bare name, like any table;
- *  - a dataset artifact is the table `ref_<id>` — collected here so
- *    `meta.refs` (dependents, ownership checks) keeps working.
+ *  - a dataset artifact is named by `source="ref:<id>"` on the declaration —
+ *    collected here so `meta.refs` (dependents, ownership checks) keeps
+ *    working. A `ref_<id>` table written into the SQL itself is refused
+ *    (`removedSqlReferenceTokens`), because the source attribute is the one
+ *    place a document says which dataset it reads.
  */
 import type { JsonValue, JsxAttribute, JsxElement, JsxNode, ValidationError } from '@/lib/jsx';
 import {parseDatasetColumn} from '@artifactbin/utils/shape';
@@ -44,12 +47,13 @@ import { ARTIFACT_ID_PATTERN, ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/co
 export const VALUE_TAG = 'Value';
 export const QUERY_TAG = 'Query';
 /**
- * `<Mutation name>{`insert into public.rows … values ($a)`}</Mutation>` — a
- * Query that WRITES. Same SQL dialect, same `$param` binding, same
- * `ref_<id>` table naming; the differences are exactly three: the statement
+ * `<Mutation name source>{`insert into public.rows … values ($a)`}</Mutation>` —
+ * a Query that WRITES. Same SQL dialect, same `$param` binding, same
+ * `source="ref:<id>"` naming; the differences are exactly three: the statement
  * is INSERT/UPDATE/DELETE (judged by type, lib/sql/engine write mode), it
- * names exactly ONE dataset (the one it writes), and it runs on demand — from
- * `<Button run="$name">` or `mx.mutate(name)` — never at render.
+ * names exactly ONE dataset (the one it writes) or a local table, and it runs
+ * on demand — from `<Button run="$name">` or `mx.mutate(name)` — never at
+ * render.
  */
 export const MUTATION_TAG = 'Mutation';
 
@@ -159,7 +163,6 @@ export interface DataflowState {
 const REF_NAME_RE = /^\$([A-Za-z_]\w*)$/;
 /** A SQL parameter: `$region` (not `$$…` dollar-quoting, not `$1`). */
 const SQL_PARAM_RE = /(?<![\w$])\$([A-Za-z_]\w*)/g;
-/** A dataset table inside SQL: `ref_<id>` (ids are 6–12 alnum, lib/ids.ts). */
 /** A declared name: an identifier that is not shaped like a dataset table. */
 export const DECL_NAME_RE = /^[A-Za-z_]\w*$/;
 
@@ -491,13 +494,14 @@ export function parseQueryDecl(el: JsxElement): ParseDeclResult<QueryDecl> {
 }
 
 /**
- * `<Mutation name>{`sql`}</Mutation>` → a declaration, or the errors. The
- * Query rules (name only, one template-literal child, non-empty) plus one of
- * its own: the SQL names exactly ONE `ref_<id>` — the dataset it writes. A
- * statement that names two would either read a second dataset into the
- * first (the engine registers only the target, so it would fail at run
- * time anyway) or be ambiguous about which one is being written, and a
- * write must never be ambiguous.
+ * `<Mutation name source? expectedAffected?>{`sql`}</Mutation>` → a
+ * declaration, or the errors. The Query rules (one template-literal child,
+ * non-empty) plus one of its own: it names exactly ONE target — the dataset
+ * `source="ref:<id>"` points at, or a local table the SQL writes directly.
+ * Naming two would either read a second dataset into the first (the engine
+ * registers only the target, so it would fail at run time anyway) or be
+ * ambiguous about which one is being written, and a write must never be
+ * ambiguous.
  */
 export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl> {
   const tag = MUTATION_TAG;
@@ -756,9 +760,8 @@ export function initialValues(flow: Dataflow): Record<string, Scalar> {
  *
  * Their rows are written in the source, so they travel with the declarations
  * and are a fact about the document rather than a result of running anything.
- * The server used to copy them into state while running the dataflow, which
- * hid that — and with paint-first, where nobody runs a dataflow for a reader,
- * a chart bound to an inline table drew nothing at all.
+ * That matters under paint-first, where nobody runs a dataflow for a reader:
+ * a chart bound to an inline table has its rows without one.
  */
 export function initialTables(flow: Dataflow): DataflowState['tables'] {
   const out: DataflowState['tables'] = {};

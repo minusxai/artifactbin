@@ -1,6 +1,7 @@
 /**
  * `<Mutation>` — a `<Query>` that writes. The pure contract: how the Helmet
- * child parses (one DML statement, exactly one `ref_<id>` target, `$params`),
+ * child parses (one DML statement, exactly one `source="ref:<id>"` or local
+ * target, `$params`),
  * how it joins the document's namespace (`run="$add"` on a Button names it;
  * nothing else may), and what a write to a dataset invalidates (every query
  * reading that dataset, and everything downstream of those).

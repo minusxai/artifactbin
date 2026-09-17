@@ -137,7 +137,7 @@ export function validateHelmet(nodes: JsxNode[]): ValidationError[] {
   const seen = new Set<HelmetChildTag>();
   const seenMetaNames = new Set<string>();
   for (const child of contentChildren(helmet)) {
-    // The two DATA declarations (lib/story/dataflow.ts owns their shape; the
+    // The three DATA declarations (lib/story/dataflow.ts owns their shape; the
     // grammar here only knows they exist and repeat). Graph-level rules —
     // duplicate names, undeclared `$refs`, cycles — involve the body and run
     // in publishJsx's always-on pass, not here.

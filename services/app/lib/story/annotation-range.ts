@@ -3,7 +3,7 @@ import { parseCommentTarget, type CommentTarget } from './comment-target';
  * WHAT A COMMENT WAS ABOUT, BESIDE THE NODE IT IS ON — the quote and the
  * anchor-relative range.
  *
- * The durable anchor stays exactly one node (`data-annotation-anchor`, one CAS
+ * The durable anchor stays exactly one node (the node's `id`, one CAS
  * stamp, one pin, one rect). This module owns the SECOND thing a comment
  * carries: the words the person actually selected. That is DATA, never a
  * second identity — stored verbatim on create, never recomputed, and re-found

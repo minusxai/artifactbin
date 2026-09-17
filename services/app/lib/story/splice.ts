@@ -1,6 +1,5 @@
 /**
- * The pure conflict kernel for concurrent artifact edits (see
- * ~/projects/concurrent-artifacts-edits.md).
+ * The pure conflict kernel for concurrent artifact edits.
  *
  * Every edit is a SPLICE — replace `[start, start+removed.length)` of the base
  * text with `inserted` — and conflicts are decided by SOURCE SPANS, not node

@@ -4,7 +4,7 @@ import {fixHtmlNesting} from './nesting';
 
 /**
  * Store markup in the serializer's canonical form — the invariant the edit
- * protocol rests on (concurrent-artifacts-edits.md). `serializeJsx` normalizes
+ * protocol rests on (lib/story/splice.ts). `serializeJsx` normalizes
  * expression values to JSON (`{{kind:"x"}}` → `{{"kind":"x"}}`), so a
  * non-canonical stored doc would make the WYSIWYG's first whole-tree
  * re-serialize differ far outside the edited node, and every derived splice

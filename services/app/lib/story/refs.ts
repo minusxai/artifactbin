@@ -26,7 +26,7 @@ import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
 interface RefUse {
   id: string;
   kind: 'dataset' | 'viz' | 'image' | 'pdf' | 'file' | 'asset';
-  /** Datasets are only ever reached as `ref_<id>` tables inside a <Query>'s or <Mutation>'s SQL. */
+  /** A `<Query>`/`<Mutation>` reaching its dataset through `source="ref:<id>"`, not a rendered position. */
   via?: 'sql';
   /**
    * The use WRITES the dataset (a `<Mutation>` target). Reads resolve by the
@@ -93,10 +93,10 @@ export function collectRefUses(source: string): RefUse[] | null {
   const uses: RefUse[] = [];
   walk(parsed.nodes, (el) => {
     const tag = el.tag;
-    // A <Query> reads datasets as `ref_<id>` tables (lib/story/dataflow.ts) —
-    // the ONLY way a document reaches a dataset now. Real refs: they resolve
-    // through the loader like any other and land in meta.refs (dependents
-    // warnings), but their rows go through the engine, never onto the page.
+    // A <Query> names its dataset with `source="ref:<id>"`
+    // (lib/story/dataflow.ts). Real refs: they resolve through the loader like
+    // any other and land in meta.refs (dependents warnings), but their rows go
+    // through the engine, never onto the page.
     if (el.isComponent && tag === QUERY_TAG) {
       const q = parseQueryDecl(el);
       if (q.ok) for (const id of q.decl.refs) uses.push({ id, kind: 'dataset', via: 'sql' });
@@ -200,11 +200,11 @@ export function findExternalSubresources(source: string): ValidationError[] {
          * …and a BOUND image source is neither external nor self-contained —
          * it is a binding, and this rule has nothing to say about it.
          *
-         * `<img src="$pick">` used to reach the rejection above by
+         * Without this line `<img src="$pick">` reaches the rejection above by
          * FALL-THROUGH: it is not a ref, not a data: URL and not an http(s)
-         * one, so the door called `$pick` an "External URL" and told the author
-         * to publish it as an image artifact — advice that cannot be followed,
-         * about a value that does not exist yet. What the name means is settled
+         * one, so the door would call `$pick` an "External URL" and tell the
+         * author to publish it as an image artifact — advice that cannot be
+         * followed, about a value that does not exist yet. What the name means is settled
          * where every other reference is settled: `validateDataflow` reports an
          * undeclared or wrong-kind `$name` BY NAME, in the same always-on error
          * array, so nothing here is being waved through.
@@ -314,7 +314,7 @@ export async function validateRefs(source: string, load: RefLoader): Promise<
  * The same encoding check against ANY table's columns — a dataset's, or a
  * `<Query>` result's (its columns come from the publish-time dry run, so a
  * chart bound to `data="$sales"` is checked against what `sales` really
- * yields, exactly as a `ref:` chart is checked against its dataset).
+ * yields).
  */
 export function validateVizAgainstColumns(viz: Record<string, unknown>, columns: DatasetColumn[], label: string): string[] {
   const kind = viz.kind;

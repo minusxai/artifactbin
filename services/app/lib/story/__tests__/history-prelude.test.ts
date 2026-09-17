@@ -52,10 +52,10 @@ describe('the history prelude', () => {
 });
 
 /*
- * SPIKE S2 (F2 — `<Value>` selections in the URL, risk R5).
+ * THE ONE WINDOW IN THE FREEZE — `<Value>` selections in the URL.
  *
  * The freeze above is what makes a served document's URL bar trustworthy, and
- * F2 needs the URL to change anyway: a reader who picks "west" should be able
+ * reader selections need the URL to change anyway: someone who picks "west" should be able
  * to copy the address bar and hand someone that document. So the prelude keeps
  * every door shut and opens ONE window: a function bound to the NATIVE
  * `replaceState` before the overwrite, exposed as a frozen, non-writable own
