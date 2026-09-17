@@ -15,7 +15,7 @@
  *  - the *Control primitives take RESOLVED props + onChange and are what the
  *    runtime adapters wire to the store (lib/story-runtime/StoryRuntimeApp).
  *
- * The dropdown is our own searchable listbox, portaled into its ownerDocument: the SSR string is deterministic (closed), nothing needs `useId`,
+ * The dropdown is our own searchable listbox, portaled into its ownerDocument — into the nearest `<dialog>` when it has one (popupHost): the SSR string is deterministic (closed), nothing needs `useId`,
  * and it works unchanged inside the sandboxed document and the canvas's
  * nested-root iframe (outside-click listens on `ownerDocument`, never the
  * module's global — the canvas renders into another realm's document).
@@ -28,6 +28,23 @@ import { refName, type TableResult } from '@/lib/story/dataflow';
 import { cn } from './cn';
 
 interface ControlOption { value: string; label: string }
+
+/**
+ * Where a popup is portaled: the nearest `<dialog>` ancestor, else the body.
+ *
+ * The body portal exists to escape a scrolling table's clipping, but a dialog
+ * is a layer the body cannot reach into. On the artifact-scoped path the open
+ * dialog and its backdrop sit at the top of the artifact's z-index range, so a
+ * body-portaled popup paints BEHIND the dialog and the backdrop eats the click;
+ * on the unscoped path (`showModal()`, the raw and exported renders) the dialog
+ * is in the top layer and everything outside it is inert, so no z-index would
+ * rescue the popup at all. Portaling into the dialog puts the popup in the same
+ * layer as the control that opened it. Positioning stays `fixed` with viewport
+ * coordinates, which a dialog ancestor does not disturb.
+ */
+function popupHost(root: HTMLElement): HTMLElement {
+  return root.closest('dialog') ?? root.ownerDocument.body;
+}
 
 const SELECT_POPUP_TOKENS = [
   '--background', '--foreground', '--popover', '--popover-foreground',
@@ -408,7 +425,7 @@ export function SelectControl({ appearance = 'field', children, multiple = false
             {children ? <div className="border-t border-border p-1.5" onClick={cancelDraft}>{children}</div> : null}
             {multiple ? <div className="flex justify-end border-t border-border p-1.5"><button type="button" aria-label="Done" onClick={() => commitDraft()} className="rounded-sm px-2 py-1 text-sm font-medium hover:bg-accent">Done</button></div> : null}
           </div>;
-        })(), rootRef.current.ownerDocument.body) : null}
+        })(), popupHost(rootRef.current)) : null}
       </div>
     </ControlShell>
   );

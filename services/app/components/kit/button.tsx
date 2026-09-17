@@ -74,4 +74,7 @@ function Button({
   )
 }
 
-export { Button }
+// `buttonVariants` is exported for the kit's own buttons that are not this
+// component — DialogTrigger draws a plain `<button>` (it takes the author's
+// className verbatim when there is one) and wants the same default look.
+export { Button, buttonVariants }

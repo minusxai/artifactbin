@@ -40,7 +40,9 @@ their old rows and show “updating…”; failures show the engine message.
 `DialogTrigger` sets the bound boolean true. `DialogClose`, Escape, or a
 successful submit sets it false and restores focus to the trigger. A failed
 Mutation leaves the dialog open and shows the server message. `DialogContent`
-uses normal form validity before running its Mutation.
+uses normal form validity before running its Mutation. The dialog is padded,
+framed and scrollable by default (your `className` still wins), and controls
+such as `Select` and `DatePicker` open inside it.
 
 For scalar-only state, update the implicit one-row `_signals` table:
 

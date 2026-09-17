@@ -38,6 +38,25 @@ describe.each([
     fireEvent.click(screen.getByRole('option', {name: 'Bo'}));
     expect(onChange).toHaveBeenCalledWith('bo');
   });
+
+  it('collects a multiple Select’s draft inside the dialog and commits it', () => {
+    const onChange = vi.fn();
+    const tree = (
+      <Dialog defaultOpen>
+        <DialogContent aria-label="Split with">
+          <SelectControl label="Members" multiple value="[]" options={PAYERS} onChange={onChange} />
+        </DialogContent>
+      </Dialog>
+    );
+    render(scoped ? <ArtifactDialogScope>{tree}</ArtifactDialogScope> : tree);
+    const dialog = screen.getByRole('dialog', {name: 'Split with'});
+    fireEvent.click(screen.getByLabelText('Members'));
+    expect(dialog).toContainElement(screen.getByRole('listbox'));
+    fireEvent.click(screen.getByRole('option', {name: 'Ann'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Bo'}));
+    fireEvent.click(screen.getByLabelText('Done'));
+    expect(onChange).toHaveBeenCalledWith('["ann","bo"]');
+  });
 });
 
 it('still portals to the body outside a dialog, so table clipping is escaped', () => {
