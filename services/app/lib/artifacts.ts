@@ -52,7 +52,7 @@ import { nodeIndex, stampNodeIds } from './story/node-ids';
 import { finalizeArtifactMetadata, readParsedArtifactMetadata } from './story/parsed-artifact-metadata';
 import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
-import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
+import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, scalarMatches, scalarParamTypes, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { dryRunDataflow } from '@/lib/story/data-checks';
 import { mutationUsesRow, mutationUsesValue } from '@/lib/story/row-scope';
 import { compileStoredMutation } from '@/lib/datasets/stored-mutation';
@@ -1993,7 +1993,16 @@ export async function runDocumentMutation(
   let flow: Dataflow = { values: content.values, queries: content.queries, mutations: content.mutations };
   try {flow=await resolveUserValues(flow,refLoaderForActor(writer));}catch(error){return {ok:false,reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid user binding'};}
   const bound = initialValues(flow);
-  for (const [k, v] of Object.entries(values)) if (k in bound) bound[k] = v;
+  const paramTypes = scalarParamTypes(flow);
+  for (const [k, v] of Object.entries(values)) {
+    if (!(k in bound)) continue;
+    // TYPE AT THE DOOR, as the read catalog already does. The statement is
+    // planned and bound under the DECLARED type, so a value of another JS type
+    // is not a statement the engine should be asked to make sense of — it is a
+    // caller error, and the message names the parameter. `null` always clears.
+    if (!scalarMatches(v, paramTypes[k]!)) return { ok: false, reason: 'invalid_sql', detail: `parameter $${k} does not match its declared type` };
+    bound[k] = v;
+  }
 
   bound._me=actor.userId;
   let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
@@ -2032,7 +2041,7 @@ export async function runDocumentMutation(
       return {ok: false, reason: 'invalid_sql', detail: error instanceof Error ? error.message : 'Local mutation failed'};
     }
   }
-  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}) });
+  const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, paramTypes, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}) });
   if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
@@ -2143,7 +2152,9 @@ export async function dataflowForRow(
   return result;
 }
 
-/** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions. */
+/** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions.
+ * The preview analyzes the statement under the DECLARED param types too, so the button the page
+ * draws and the write the click attempts are judged on one plan. */
 async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
   return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
     if(m.scope==='local')return [m.name,null];
@@ -2156,7 +2167,7 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleA
       const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name):null;
       const columns=compiled?.table.columns??dataset.meta.columns as DatasetColumn[];
       const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},true);
-      const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:initialValues(flow),policy,policyPreview:true,
+      const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:initialValues(flow),paramTypes:scalarParamTypes(flow),policy,policyPreview:true,
         ...(mutationUsesRow(m.sql)?{row:{columns,values:Object.fromEntries(columns.map(c=>[c.name,null]))}}:{})});
       return [m.name,'error' in out?out.error:null];
     }catch(error){return [m.name,error instanceof Error?error.message:'Dataset policy does not permit this action.'];}
@@ -2310,7 +2321,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
         return queryRows(table, q.sql, values, page);
       }
       usedSources.set(q.source!, JSON.stringify(catalog));
-      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:{...Object.fromEntries(flow.values.filter(v=>v.kind==='scalar').map(v=>[v.name,v.type])),_me:'user'},authorize:async()=>{
+      return executeCatalog(catalog,q.sql,values,{datasetId:q.source!,limit:page?.limit,offset:page?.offset,sort:page?.sort,signal:opts.signal,paramTypes:scalarParamTypes(flow),authorize:async()=>{
         await opts.authorize?.();
         const current=await resolve(q.source!);
         if(!current || JSON.stringify((current as RefTable).catalog)!==JSON.stringify(catalog))throw new DatasetError('Dataset source is unavailable',404);

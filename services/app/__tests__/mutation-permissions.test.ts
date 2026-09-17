@@ -106,3 +106,46 @@ it('a viewer completes their own row through a $_row row action',async()=>{
  const capability=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
  expect((await capability.json()).mutationAccess.complete).toBe(null);
 });
+
+/*
+ * DECLARED TYPES ON THE WRITE PATH. A `<Value type="date">` travels as the
+ * string '2026-09-01', so the policy analysis used to plan it as VARCHAR and
+ * refuse `coalesce($d, current_date)` for every reader who picked a date —
+ * while publish, which binds NULLs, stayed green. The plan now follows the
+ * DECLARED type, so this commits, and the mistyped twin below fails the push.
+ */
+it('a declared date Value is planned as a date, so a viewer writes one through a policed insert',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
+ const doc=await f.publish({markup:`<Helmet><Value name="d" type="date" /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due) select 2, coalesce($d, current_date)\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ await f.share(ds,'viewer');
+ await f.grantFor(ds);
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{d:'2026-09-01'}}}),ctx(doc));
+ expect(r.status,await r.clone().text()).toBe(200);
+ const rows=await anonymousQuery(request(`/a/${doc}/query?q=%7B%7D`),ctx(doc));
+ expect((await rows.json()).tables.rows.rows).toEqual([{id:1,due:'2026-01-01'},{id:2,due:'2026-09-01'}]);
+});
+
+it('a string Value used where a date is required fails the push, naming the mutation',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,due:'2026-01-01'}],access:'readwrite'});
+ await f.grantFor(ds);
+ const r=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{markup:`<Helmet><Value name="d" type="string" /><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, due) select 2, coalesce($d, current_date)\`}</Mutation></Helmet><Button run="$add">Add</Button>`}}));
+ expect(r.status,await r.clone().text()).toBe(400);
+ const body=await r.json();
+ expect(body.error).toBe('invalid_sql');
+ expect(body.details.join(' ')).toMatch(/<Mutation name="add">/);
+});
+
+it('refuses a value whose type is not the one it was declared with, naming the parameter',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,amount:1.5}],access:'readwrite'});
+ const doc=await f.publish({markup:`<Helmet><Value name="n" type="number" default={0} /><Query name="rows" source="ref:${ds}">{\`select * from public.rows order by id\`}</Query><Mutation name="add" source="ref:${ds}">{\`insert into public.rows (id, amount) select 2, $n\`}</Mutation></Helmet><Button run="$add">Add</Button><DataTable data="$rows" />`});
+ await f.share(ds,'viewer');
+ await f.grantFor(ds);
+ const send=(n:unknown)=>mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{n}}}),ctx(doc));
+ const bad=await send('12.5');
+ expect(bad.status).toBe(400);
+ expect((await bad.json()).detail).toMatch(/\$n/);
+ expect((await send(12.5)).status,'the same value, correctly typed, writes').toBe(200);
+});

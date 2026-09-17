@@ -51,4 +51,21 @@ describe.each<[string, SqlService]>([['local', local], ['HTTP', remote]])('typed
     const result = await svc.mutate({ table, sql: 'update rows set body = $body where id = 1', params: { body: 'changed' }, policy: open });
     expect(result).toMatchObject({ affected: 1, rows: [{ id: 1, body: 'changed', due: '2026-01-01' }] });
   });
+
+  // Function refusals are collected from the PARSED statement precisely because
+  // a call over placeholders folds out of the serialized plan. Typing those
+  // placeholders changes what folds, so the net has to hold either way.
+  it('keeps refusing a denied or unlisted function whose arguments are declared parameters', async () => {
+    const denied = { ...open, execution: { functions: { deny: ['coalesce'] } } };
+    expect(String((await svc.mutate({ table, sql: INSERT, params: { due: '2026-09-01' }, paramTypes: { due: 'date' }, policy: denied }) as { error?: unknown }).error))
+      .toMatch(/function coalesce is not permitted/);
+    const allowed = { ...open, execution: { functions: { allow: ['current_date'] } } };
+    expect(String((await svc.mutate({ table, sql: INSERT, params: { due: null }, paramTypes: { due: 'date' }, policy: allowed }) as { error?: unknown }).error))
+      .toMatch(/function coalesce is not permitted/);
+  });
+
+  it('names the parameter when a value cannot be held by its declared type', async () => {
+    const result = await svc.mutate({ table, sql: INSERT, params: { due: 'the 1st of May' }, paramTypes: { due: 'date' }, policy: open });
+    expect(String((result as { error?: unknown }).error)).toMatch(/\$due/);
+  });
 });

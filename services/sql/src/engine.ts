@@ -193,37 +193,54 @@ function bindParams(prepared: { parameterCount: number; parameterName: (i: numbe
  * described by trusted dataset metadata; field names and values never become
  * SQL text. Dates travel as ISO strings, then the same DuckDB DATE cast used
  * by dataset registration produces native date fields (also for date functions).
+ *
+ * A DECLARED scalar (`paramTypes`) binds the same way, so what executes is
+ * what `plannedSql` analyzed: a `date` Value arrives as 'YYYY-MM-DD' and binds
+ * as a native DATE, and a null one binds a DATE-typed NULL rather than an
+ * untyped one. A value the declared type cannot hold is an error naming the
+ * parameter, not a statement DuckDB analyzes into something else.
  */
 async function bindMutationParams(
   conn: DuckDBConnection,
   prepared: DuckDBPreparedStatement,
   params: Record<string, Scalar>,
   row?: { columns: DatasetColumn[]; values?: Record<string, Scalar> },
+  paramTypes?: Record<string, ColumnType>,
 ): Promise<void> {
-  if (!row) { bindParams(prepared, params); return; }
+  if (!row && !paramTypes) { bindParams(prepared, params); return; }
   const { BOOLEAN, DATE, DOUBLE, STRUCT, VARCHAR } = await duckdb();
-  const rowType = STRUCT(Object.fromEntries(row.columns.map((column) => [
-    column.name,
-    column.type === 'number' ? DOUBLE : column.type === 'boolean' ? BOOLEAN : column.type === 'date' ? DATE : VARCHAR,
-  ])));
-  const rowValues: Record<string, DuckDBValue> = Object.fromEntries(row.columns.map((column) => [column.name, row.values?.[column.name] ?? null]));
-  for (const column of row.columns) {
-    const value = row.values?.[column.name];
-    if (column.type === 'date' && value != null) {
-      const converted = await conn.runAndReadAll('SELECT CAST($value AS DATE) AS value', { value });
-      rowValues[column.name] = converted.getRows()[0][0];
-    }
+  const duckType = (type: ColumnType) =>
+    type === 'number' ? DOUBLE : type === 'boolean' ? BOOLEAN : type === 'date' ? DATE : VARCHAR;
+  const asDate = async (value: Scalar): Promise<DuckDBValue> =>
+    (await conn.runAndReadAll('SELECT CAST($value AS DATE) AS value', { value })).getRows()[0][0] as DuckDBValue;
+  const rowType = row && STRUCT(Object.fromEntries(row.columns.map((column) => [column.name, duckType(column.type)])));
+  const rowValues: Record<string, DuckDBValue> = Object.fromEntries((row?.columns ?? []).map((column) => [column.name, row!.values?.[column.name] ?? null]));
+  for (const column of row?.columns ?? []) {
+    const value = row!.values?.[column.name];
+    if (column.type === 'date' && value != null) rowValues[column.name] = await asDate(value);
   }
   for (let i = 1; i <= prepared.parameterCount; i++) {
     const name = prepared.parameterName(i);
-    if (name === '_row') prepared.bindStruct(i, rowValues, rowType);
-    else {
-      const value = params[name];
-      if (value === undefined || value === null) prepared.bindNull(i);
+    const declared = name === '_row' ? undefined : paramTypes?.[name];
+    const value = params[name];
+    if (name === '_row') {
+      if (rowType) prepared.bindStruct(i, rowValues, rowType);
+      else prepared.bindNull(i);
+    } else if (declared && Object.hasOwn(COLUMN_SQL_TYPES, declared)) {
+      if (value === undefined || value === null) prepared.bindValue(i, null, duckType(declared));
+      else if (declared === 'date') {
+        let converted: DuckDBValue;
+        try { converted = await asDate(value); }
+        catch { throw new Error(`parameter $${name} is not a date the dataset can hold (expected YYYY-MM-DD)`); }
+        prepared.bindValue(i, converted, DATE);
+      }
       else if (typeof value === 'number') prepared.bindDouble(i, value);
       else if (typeof value === 'boolean') prepared.bindBoolean(i, value);
       else prepared.bindVarchar(i, value);
-    }
+    } else if (value === undefined || value === null) prepared.bindNull(i);
+    else if (typeof value === 'number') prepared.bindDouble(i, value);
+    else if (typeof value === 'boolean') prepared.bindBoolean(i, value);
+    else prepared.bindVarchar(i, value);
   }
 }
 
@@ -420,7 +437,7 @@ export async function runMutation(input: MutationInput, caps: SqlCaps, extension
     await registerTable(conn, input.table.name, input.table);
     const guarded = await prepareGuarded(conn, input.sql, 'write');
     if (guarded.error !== undefined) return { error: guarded.error };
-    await bindMutationParams(conn, guarded.prepared, input.params, input.row);
+    await bindMutationParams(conn, guarded.prepared, input.params, input.row, input.paramTypes);
     // The ceiling is applied again AT the timer: `queryBounds` already did it,
     // but the bound belongs where the resource is taken, so no future caller
     // can reach this line around it (and CodeQL can see it here).
@@ -434,7 +451,7 @@ export async function runMutation(input: MutationInput, caps: SqlCaps, extension
         delete_permissions:[{role:'writer',permission:{filter:{}}}]}
     }} : input;
     const applied = input.policy || hasUsers
-      ? await runPolicyMutation(conn,checkedInput as MutationInput,(statement,params)=>bindMutationParams(conn,statement,params,input.row))
+      ? await runPolicyMutation(conn,checkedInput as MutationInput,(statement,params)=>bindMutationParams(conn,statement,params,input.row,input.paramTypes))
       : {affected:(await guarded.prepared.run()).rowsChanged};
     const {affected}=applied;
     if (input.expectedAffected !== undefined && affected !== input.expectedAffected) {
@@ -490,7 +507,7 @@ export async function dryRunMutations(input: DryRunMutationsInput, extensions:Sq
       if (target) await registerTable(conn, tableName, { rows: [], columns: target.columns });
       const guarded = await prepareGuarded(conn, m.sql, 'write');
       if (guarded.error !== undefined) { errors.push({ name: m.name, error: guarded.error }); continue; }
-      await bindMutationParams(conn, guarded.prepared, params, m.row);
+      await bindMutationParams(conn, guarded.prepared, params, m.row, input.paramTypes);
       // Execute against the EMPTY table: binding alone leaves runtime casts
       // unchecked, and a write that fails on its first real click is the
       // failure an author cannot see coming.

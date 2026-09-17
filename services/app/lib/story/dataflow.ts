@@ -752,6 +752,20 @@ export function datasetRefsInDataflow(flow: Dataflow): string[] {
   return dedupe([...flow.queries.flatMap(q=>q.refs),...flow.values.flatMap(v=>v.kind==='scalar'&&v.source?[v.source]:[])]);
 }
 
+/**
+ * The DECLARED type of every `$param` a statement may bind — what the SQL
+ * service plans and binds with instead of guessing from the JavaScript value
+ * (a `date` Value travels as a 'YYYY-MM-DD' string). ONE expression, shared by
+ * the read path, the publish-time checks and the write door, so a statement is
+ * never analyzed under one typing and executed under another.
+ */
+export function scalarParamTypes(flow: Dataflow): Record<string, ColumnType> {
+  const out: Record<string, ColumnType> = {};
+  for (const v of flow.values) if (v.kind === 'scalar') out[v.name] = v.type;
+  out._me = 'user';
+  return out;
+}
+
 /** The initial `values` map: every scalar at its declared default. */
 export function initialValues(flow: Dataflow): Record<string, Scalar> {
   const out: Record<string, Scalar> = {};
