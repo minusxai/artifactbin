@@ -1,6 +1,6 @@
 /**
- * One dataset-editor fixture for the four files that split out of
- * `web/__tests__/dataset-catalog.ui.test.tsx`: the same PostgreSQL catalog,
+ * One dataset-editor fixture for the four
+ * `web/__tests__/dataset-{catalog-viewer,editor-*}.ui.test.tsx` files: the same PostgreSQL catalog,
  * the same routed `DatasetEditorPage`, and one fetch stub standing in for
  * discovery, secrets, notebook previews, sharing, policy and save.
  *

@@ -1,5 +1,5 @@
 /**
- * F3 — a comment keeps the exact selection (SEEDED RED by the orchestrator).
+ * A comment keeps the exact selection.
  *
  * The anchor stays one node. Beside it the row keeps the QUOTE (the selected
  * text) and a RANGE addressed relative to the anchor: a hint for repainting the
@@ -42,11 +42,8 @@ async function setup() {
 const head = async (token: string, id: string) => {
   const res = await getArtifactRoute(request(`/api/artifacts/${id}`, { token }), params({ id }));
   expect(res.status).toBe(200);
-  // CORRECTED BY THE IMPLEMENTER (F3): the artifact GET inlines the open set
-  // under `annotations`; `open_annotations` is the write echo's COUNT
-  // (lib/artifact-wire.ts, and __tests__/annotations.test.ts:165 pins it as a
-  // number). The assertion below is unchanged in strength — the owner read
-  // must carry the same quote and range — only the field name is the product's.
+  // The artifact GET inlines the open set under `annotations`;
+  // `open_annotations` is the write echo's COUNT (lib/artifact-wire.ts).
   return (await res.json()) as { edit_id: string; markup: string; annotations: Wire[]; open_annotations: number };
 };
 const list = async (token: string, id: string): Promise<Wire[]> => {
@@ -165,10 +162,10 @@ describe('a comment keeps its quote and range', () => {
 });
 
 /*
- * ADDED BY THE IMPLEMENTER (F3). The seeds cannot see either of these: their
- * fixture's anchored paragraph opens with its `<strong>`, so the element child
- * and the AST child happen to be the same index, and every part of it is
- * separated by real spaces, so a joiner between tags is invisible too.
+ * A FIXTURE THAT CAN SEE TWO OFF-BY-ONES. A paragraph opening with its
+ * `<strong>` hides them: the element child and the AST child are then the same
+ * index, and with every part separated by real spaces a joiner between tags is
+ * invisible too. This one opens with text instead.
  */
 const RE_ANCHOR_DOC =
   '<p>An intro paragraph here.</p>'
@@ -250,11 +247,10 @@ describe('resolving a range against the SOURCE', () => {
 
 describe('what "found" means', () => {
   /*
-   * ADDED BY THE IMPLEMENTER (F3). The seeds only ever remove ALL of a quote,
-   * so they cannot say whether one surviving part is enough. It is not: a
-   * quote is the words a person selected, and half of them is not those words.
-   * The gate leg this phase adds depends on the same reading — it rewords only
-   * the first of two paragraphs and expects `quote_found` false.
+   * Removing ALL of a quote cannot say whether one surviving part is enough.
+   * It is not: a quote is the words a person selected, and half of them is not
+   * those words. The browser gate reads it the same way — it rewords only the
+   * first of two paragraphs and expects `quote_found` false.
    */
   it('one part written away is enough to say the quote is gone', async () => {
     const w = await setup();

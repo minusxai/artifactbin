@@ -5,8 +5,8 @@ const sheet=buildQuickSheet('https://artifactbin.dev');
 describe('the installed short skill',()=>{
  it('fits its reading budget and uses local guidance',()=>{
   expect(sheet).toContain('afbin help');
-  // The retired vocabulary (MCP, /docs/, token, mint, /raw, …) is banned across all
-  // nine agent-facing surfaces at once by agent-starter-consistency.test.ts, case (c).
+  // The retired vocabulary (MCP, /docs/, token, mint, /raw, …) is banned across every
+  // agent-facing surface at once by agent-starter-consistency.test.ts, case (c).
  });
  /**
   * A person is waiting on a blank page. The FIRST wording of this rule was exhortative ("publish a

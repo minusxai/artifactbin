@@ -2,8 +2,8 @@
  * `<File>` — the one position in a document that names a PDF.
  *
  * A CARD, not an embed: the title, the size and the page count under a link
- * that opens the file in a new tab. That shape is what the spike measured
- * working (S4) — with the served document's own sandbox flags
+ * that opens the file in a new tab. That shape was measured
+ * working — with the served document's own sandbox flags
  * (`allow-popups allow-popups-to-escape-sandbox`) and a REAL click, the popup
  * opened at the PDF and the browser's own viewer rendered it — and it needs no
  * CSP change at all, because a link is navigation rather than a subresource.
@@ -228,7 +228,7 @@ describe('a web URL in the same position', () => {
     expect(res.status).toBe(201);
     const body = await res.json();
     // Losing a whole document over one dead link is the worse answer — the
-    // milestone-1 rule, and the same key an image's refusal comes back under.
+    // warn-don't-refuse rule, and the same key an image's refusal comes back under.
     const warnings = body.asset_warnings as Array<{ code: string; url: string; fix: string }>;
     expect(warnings.map((w) => w.url)).toContain(url);
     expect(warnings.find((w) => w.url === url)!.code).toBe('bad_status');

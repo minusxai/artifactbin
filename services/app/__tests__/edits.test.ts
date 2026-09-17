@@ -1,9 +1,8 @@
 import {patchMetadata} from '@/__tests__/conditional-request';
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
- * The concurrent-edit protocol end to end through the real route handlers
- * (concurrent-artifacts-edits.md, "Resolution, step by step"): canonicalized
- * storage, the edit_id read-proof, node-scoped accept/reject on stale bases,
+ * The concurrent-edit protocol end to end through the real route handlers:
+ * canonicalized storage, the edit_id read-proof, node-scoped accept/reject on stale bases,
  * full-replace/revert participation, version coalescing, and the NOTIFY
  * wakeup — all against in-memory PGLite.
  */

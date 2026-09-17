@@ -5,8 +5,6 @@
  * rides in the payload), any other verb's subject is the user when known;
  * `fork` is recorded against the ORIGINAL with the copy as `fork_id`; and
  * `sse_connect` is not a moment anyone cares about, so it emits nothing.
- *
- * Seeded RED by the orchestrator.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';

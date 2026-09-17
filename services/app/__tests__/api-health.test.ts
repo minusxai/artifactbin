@@ -7,8 +7,6 @@
  * the hop the app owns — sql, browser and events on their own `/health`.
  * The body is `{ok}` and nothing else: which service failed is the
  * operator's business (one log line), not the public's (topology).
- *
- * Seeded RED by the orchestrator.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { request } from '@/__tests__/harness';
@@ -36,7 +34,7 @@ afterEach(async () => {
 
 /**
  * A throwaway service whose `/health` answers `status` after `delayMs`. The
- * socket belongs to `__tests__/net` (process-socket rule 1): a slow leg here
+ * socket belongs to `@artifactbin/test-support/net` (process-socket rule 1): a slow leg here
  * is abandoned mid-flight by the probe's deadline, and only that fixture's
  * close tears the live connection down instead of waiting on it.
  */

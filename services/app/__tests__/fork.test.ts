@@ -1,5 +1,5 @@
 /**
- * F1 (API half) — fork an artifact (SEEDED RED by the orchestrator).
+ * Fork an artifact, through the API.
  *
  * A fork is the same artifact under a new owner and a new id; everything else
  * stays the same. Bytes are shared by content-addressed key, never re-uploaded.

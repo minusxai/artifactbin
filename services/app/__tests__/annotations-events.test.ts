@@ -9,10 +9,6 @@
  *
  * The subject is the acting ACCOUNT when there is one and the acting TOKEN
  * when there is not — an anonymous agent's comment is still somebody's.
- *
- * Written by the implementer (the phase brief leaves this file to the
- * annotation fixtures) and seen RED against the seed's annotation-free
- * `lib/annotations.ts`.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';

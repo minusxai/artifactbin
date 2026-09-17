@@ -10,8 +10,6 @@
  * The last describe is the pair of dashboard aggregate cases that lived in
  * analytics.test.ts before the queries moved here — the same assertions, over
  * the same analytics_events rows, now reached through the backfill.
- *
- * Seeded RED by the orchestrator.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Queryable } from '@artifactbin/contracts';

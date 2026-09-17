@@ -1,7 +1,7 @@
 /**
- * THE HARNESS CONTRACT (testmig-2), seeded RED by the orchestrator. One PGLite per file; every table wiped per test in
- * FK-safe order derived from the schema; the rate limiter reset; nothing hand-listed. These pins are what let the nine
- * PGLite-per-test files (209 s of summed worker time) share one boot without order dependence.
+ * THE HARNESS CONTRACT. One PGLite per file; every table wiped per test in
+ * FK-safe order derived from the schema; the rate limiter reset; nothing hand-listed. These pins are what let route
+ * tests that would each boot their own PGLite share one boot without order dependence.
  */
 import { describe, expect, it } from 'vitest';
 import { createArtifact } from '@/lib/artifacts';

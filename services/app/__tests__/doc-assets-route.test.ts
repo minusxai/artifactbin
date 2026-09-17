@@ -17,7 +17,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * And it never returns the upstream body: the answer is a redirect to
  * `/assets/<hash>`, so only sniffer-approved bytes are ever served.
  *
- * WHO PAYS (R10): the DOCUMENT'S OWNER. They named the source; a reader who
+ * WHO PAYS: the DOCUMENT'S OWNER. They named the source; a reader who
  * merely opens a page — possibly an anonymous stranger — spends no storage.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';

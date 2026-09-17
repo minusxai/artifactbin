@@ -1,7 +1,6 @@
 import {observedRequest} from '@/__tests__/conditional-request';
 /**
- * P1 (seeded RED by the orchestrator) — folders are artifacts: the doors.
- * Over the real routes in-process. Plan: ~/projects/artifactbin-folders.md.
+ * Folders are artifacts: the doors, over the real routes in-process.
  */
 import { describe, expect, it } from 'vitest';
 import { agentCookie, request, useAppHarness } from './harness';

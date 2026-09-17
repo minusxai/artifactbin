@@ -1,6 +1,6 @@
 /**
  * The docs say what the code does — pinned by NAME, one assertion per error
- * the docs audit (~/projects/docs-improvement.md §1, §8, §9) reproduced live.
+ * a docs audit reproduced live.
  *
  * Every line here was a wrong claim an agent acted on: `data="ref:<id>"` is
  * refused at the door but taught as a rule; `PATCH /api/my/...` under a bearer
@@ -52,7 +52,7 @@ describe('the publishing skill', () => {
     expect(doc).not.toContain('for the full reference before authoring');
   });
   /*
-   * ADDED (F3). `snippet` is the ANNOTATED NODE's text, recomputed on every
+   * `snippet` is the ANNOTATED NODE's text, recomputed on every
    * read; the words the person selected are `quote`, stored once and never
    * recomputed. The doc called the snippet "the text they selected", which sent
    * an agent looking for a sentence in a paragraph's worth of text.
@@ -73,7 +73,7 @@ describe('the publishing skill', () => {
     expect(text).toContain('New comments do not add it');
   });
   /*
-   * ADDED (F8). Forking became an AGENT verb, and the thing an agent needs is
+   * Forking is an AGENT verb, and the thing an agent needs is
    * not the address — the registry renders that — but WHEN to reach for it:
    * the create/edit loop is where a document that already exists gets adapted.
    */
@@ -83,11 +83,10 @@ describe('the publishing skill', () => {
     expect(doc).not.toContain('afbin api');
   });
   /*
-   * ADDED (workstream F, round 2). The social preview's mechanism lives here,
-   * beside export, where markup.md's link has pointed all along.
+   * The social preview's mechanism lives here,
+   * beside export, where markup.md's link points.
    *
-   * And the screenshot copy this file used to carry taught the two loops the
-   * progressive-publish brief exists to stop: "only export if you can view
+   * The screenshot copy it replaced taught two loops: "only export if you can view
    * images; otherwise read the stored markup" sent an agent back to re-read
    * what it had just written, and `--page 2` "for one deck slide" turned a
    * five-slide deck into five exports. The push receipt is the check; one
@@ -132,9 +131,9 @@ describe('the publishing skill', () => {
     expect(renderDoc('artifactbin/references/errors.md', BASE)).toContain('--access readwrite');
   });
   /*
-   * The tracker leg (pi, 14 Sep): the brief asked for a page "anyone opening the link" can update,
-   * the catalogs doc named a data policy with no CLI path to it, and the agent spent 24 messages
-   * reverse-engineering the YAML field and fighting a pull before it could set one. One command.
+   * Measured on a tracker task: asked for a page "anyone opening the link" can update, an agent
+   * spent 24 messages reverse-engineering the YAML field and fighting a pull, because the catalogs
+   * doc named a data policy with no CLI path to it. One command sets it.
    */
   it('the catalogs doc names the one command that publishes a dataset viewers can write', () => {
     const databases = renderDoc('artifactbin/references/databases.md', BASE);
@@ -149,7 +148,7 @@ describe('the publishing skill', () => {
 });
 
 /*
- * ADDED (folders, P4). Three claims the folders work made load-bearing, each
+ * Three claims folders make load-bearing, each
  * one an agent acts on rather than reads past.
  *
  * `unlisted` promises the document is listed NOWHERE, and a folder's page IS a
@@ -178,10 +177,9 @@ describe('folders and the trash', () => {
   });
   /*
    * THE THREE CONSEQUENCES OF HAVING NO PURGE. Each is a promise an agent may
-   * repeat to its user, and each was previously the opposite: there is no
-   * retention, deleting frees no quota, and the only real erasure is an
-   * operator's, outside this API. A doc that stops saying one of them is a doc
-   * that lets an agent promise something untrue.
+   * repeat to its user: there is no retention, deleting frees no quota, and the
+   * only real erasure is an operator's, outside this API. A doc that stops
+   * saying one of them is a doc that lets an agent promise something untrue.
    */
   it('§P5.2 a deleted COMMENT is not erased either — and an agent cannot undo one', () => {
     expect(flat(doc)).toContain('A deleted thread is not erased');
@@ -197,7 +195,7 @@ describe('folders and the trash', () => {
     expect(flat(doc)).toContain('A restore can land a row deeper than the 6-level cap');
   });
   /*
-   * ADDED (the folder page). A folder was a DOCUMENT — created with a two-line
+   * A folder was once a DOCUMENT — created with a two-line
    * scaffold as its stored source — and the docs said so: "A folder's page is
    * its own stored markup … so you edit one like any document." It carries no
    * content now, and its page is rendered by the app. That sentence is the
@@ -238,13 +236,11 @@ describe('the markup skill', () => {
     expect(doc).not.toContain('the one URL its CSP admits');
   });
   /*
-   * ADDED (F8 round 2). The JSX MICRO-RULES — a tag closes, a comment is
-   * `{/* … *\/}`, and there is no document shell — were carried by
-   * publishing.md's orientation bullet and were DELETED with it rather than
-   * folded into their owner. They are the two mistakes an HTML-habit model
-   * makes on its first write (`<br>`, `<!-- -->`), and the only thing left to
-   * catch them was a 400 round trip. They live in markup.md, which owns the
-   * vocabulary.
+   * The JSX MICRO-RULES — a tag closes, a comment is
+   * `{/* … *\/}`, and there is no document shell — are the two mistakes an
+   * HTML-habit model makes on its first write (`<br>`, `<!-- -->`), and without
+   * them the only thing that catches one is a 400 round trip. They live in
+   * markup.md, which owns the vocabulary.
    */
   it('§F8 the JSX micro-rules are documented: closing tags, JSX comments, no document shell', () => {
     expect(doc).toContain('every tag closes (`<br />`)');
@@ -252,8 +248,7 @@ describe('the markup skill', () => {
     expect(doc).toContain('`<html>`');
   });
   /*
-   * ADDED (workstream F — the agent-actionability audit). Two sentences an
-   * afbin agent could not act on.
+   * Two sentences an afbin agent could not act on.
    *
    * "top-level fields of the publish call" is the HTTP body's name for them.
    * The agent writes theme/template/colorMode in the file's YAML fence and
@@ -265,7 +260,7 @@ describe('the markup skill', () => {
    * source), documented nowhere. A pointer to a doc that does not answer costs
    * the turns of reading it and still leaves the agent without the mechanism.
    *
-   * The explanation now lives WHERE THE OLD LINK POINTED — the generated
+   * The explanation lives WHERE THAT LINK POINTS — the generated
    * publishing-versions.md, beside export — because markup.md is at its 8 KB
    * reading budget and this is publication, not authoring grammar. markup.md
    * keeps a pointer that still names the metas, so an agent grepping the
@@ -283,12 +278,11 @@ describe('the markup skill', () => {
 });
 
 /*
- * ADDED (the external-assets batch, milestone 5). A web URL in an image
- * position is no longer REWRITTEN to `ref:<id>` — publish stores a copy and
- * the author's URL stays in the source, byte for byte, because an agent reads
- * back what it wrote. Three files promised the rewrite in three wordings
- * (markup.md, markup-video.md, publishing-datasets.md) and the MCP schema
- * promised it in a fourth; a doc that teaches a retired mechanic is worse than
+ * A web URL in an image position is never REWRITTEN to `ref:<id>` — publish
+ * stores a copy and the author's URL stays in the source, byte for byte,
+ * because an agent reads back what it wrote. Four surfaces promised the
+ * rewrite in four wordings (markup.md, markup-video.md, publishing-datasets.md
+ * and the tool schema); a doc that teaches a retired mechanic is worse than
  * none, and this one an agent would act on by hunting for an id that is never
  * echoed.
  */
@@ -351,10 +345,9 @@ describe('URL-kept external assets', () => {
 });
 
 /*
- * ADDED (milestone 5). An agent answering a comment reads
- * publishing-annotations.md and nothing else — measured in the eval spike,
- * where every MCP reply signed itself "Agent". The auth reference owns the
- * header; the file an agent is actually in has to NAME it.
+ * An agent answering a comment reads publishing-annotations.md and nothing
+ * else — measured, on a run where every reply signed itself "Agent". The auth
+ * reference owns the header; the file an agent is actually in has to NAME it.
  */
 describe('the design skill', () => {
   const doc = buildDesignDoc(BASE);
@@ -406,7 +399,7 @@ describe('the quick sheet', () => {
 });
 
 /**
- * F2 — the docs teach the reader's link, because it is the whole point of the
+ * The docs teach the reader's link, because it is the whole point of the
  * feature: an agent that knows `?$name=value` can hand its user a document
  * already narrowed to what they asked about, instead of one they must narrow
  * themselves.

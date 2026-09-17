@@ -1,9 +1,7 @@
 /**
- * THE APP TEST HARNESS (cleanup/testmig-2 → 4). One deep module behind every route-level test: one PGLite per FILE,
+ * THE APP TEST HARNESS. One deep module behind every route-level test: one PGLite per FILE,
  * every table wiped before each test (FK-safe order derived from the schema, never a hand-written list), the
- * rate limiter reset, the database released at the end. Later milestones add the typed request/actor/cookie helpers.
- *
- * Seeded skeleton (testmig-2): signatures and doc-comments are the contract; bodies throw.
+ * rate limiter reset, the database released at the end, and the typed request/actor/cookie helpers.
  */
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { attachActor, decodeAgentSession as decodeAgentSessionEnvelope } from '@artifactbin/utils';
@@ -40,8 +38,8 @@ export interface RequestOptions {
 }
 
 /**
- * Build a Request for a route handler on the harness's base URL (testmig-3). ONE place for the bearer header, the
- * attached actor, the cookie and the origin, so the 65 hand-written `req` builders can go. Throws when `token` and
+ * Build a Request for a route handler on the harness's base URL. ONE place for the bearer header, the
+ * attached actor, the cookie and the origin, so no test file hand-rolls a `req` builder. Throws when `token` and
  * `actor` are both given — one credential per request, by construction.
  */
 export function request(path: string, opts: RequestOptions = {}): Request {

@@ -1,12 +1,10 @@
-// The cwd contract (P3 §B.4): the app's cwd is its package dir. Eight modules
-// read process.cwd() — lib/story/document.ts, lib/story/runtime-asset.ts,
-// lib/skills/tree.ts, lib/data/story/story-guidance.ts, lib/data/story/story-css.server.ts,
-// server/app.ts — so the runners (scripts/dev.mjs, scripts/gates.mjs, evals/lib/server.ts)
-// and this setup all hand them services/app as the cwd.
+// The cwd contract: the app's cwd is its package dir, because several modules
+// resolve files relative to process.cwd() — lib/skills/tree.ts,
+// lib/story/runtime-asset.ts, lib/story/ssr.server.ts, server/app.ts among
+// them — so the runners (scripts/dev.mjs, scripts/gates.mjs) and this setup
+// all hand them services/app as the cwd.
 process.chdir(process.env.APP_PACKAGE_ROOT ?? path.resolve(import.meta.dirname, '../..')); // cwd = services/app
 
-// Trimmed from minusx test/setup/vitest.setup.ts — the engine has no DB or
-// orchestrator here.
 import os from 'node:os';
 import path from 'node:path';
 

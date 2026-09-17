@@ -9,10 +9,6 @@
  * source, persisting them through the save-less protocol, and telling the
  * document what to show.
  *
- * Replaces the editor-* suite that drove the canvas directly (chart edit, code
- * mode, draft css, dataflow refresh, delete, image insert, number edit,
- * versions, template chip, exit drain).
- *
  * The four `vi.mock`s live here because they must install before
  * `InPlaceEditor` is imported — which only happens through `mount()` below, so
  * no test file can get the ordering wrong. Per-case knobs (`live`, and the

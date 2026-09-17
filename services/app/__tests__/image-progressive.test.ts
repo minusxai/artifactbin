@@ -3,7 +3,7 @@
  *
  * A 1 MB photograph is a blank space for as long as it takes to arrive, and on
  * production that was seconds. The publish pipeline (lib/images/optimise) has
- * been computing a ~95-byte blurred copy of every image since #157 and storing
+ * been computing a ~95-byte blurred copy of every image and storing
  * it in `meta.placeholder` — and rendering it NOWHERE, because the tests there
  * assert that a placeholder is PRODUCED and nothing asserted that anything
  * CONSUMES one. The suite stayed green while the feature did not exist.
@@ -96,8 +96,8 @@ describe('a stored blur reaches the reader', () => {
 describe('an upload wide enough to be worth it is stored at two widths', () => {
   /*
    * CHARGED WITH THE ORIGINAL, ONCE — on THIS door as well as the URL cache's.
-   * `meta.bytes` is the column lib/asset-quota sums for an upload (R9's own
-   * column), so a variant left out of it is bytes stored and never billed. The
+   * `meta.bytes` is the column lib/asset-quota sums for an upload, so a
+   * variant left out of it is bytes stored and never billed. The
    * `web_assets` twin of this assertion lives in web-assets.test.ts; the two
    * doors do not share a code path, and a review found this half unguarded.
    */

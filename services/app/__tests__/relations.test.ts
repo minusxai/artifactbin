@@ -3,8 +3,6 @@
  * a revival clears it on the SAME row; a change is said to the log in the past
  * tense and a non-change says nothing; counts are live edges; the vocabulary
  * is closed.
- *
- * Seeded RED by the orchestrator.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { fakeEvents, type FakeEvents } from '@artifactbin/utils';

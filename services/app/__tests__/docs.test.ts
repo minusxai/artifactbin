@@ -17,8 +17,8 @@ it('the bundled auth guide teaches local setup without self-minting or legacy co
  // tokens/anonymous, MCP and the old dotfile spelling are retired-surfaces.test.ts's row for
  // the bundle's auth guide.
 });
-// From publishing-doc-tokens.test.ts: the publishing guide ROUTES authentication to that
-// guide instead of answering it itself, and so never teaches self-minting.
+// The publishing guide ROUTES authentication to the auth guide instead of answering it
+// itself, and so never teaches self-minting.
 it('the bundled publishing guide sends authentication to the auth guide',()=>{
  const publishing=teaching.files['references/publishing.md'];
  expect(publishing).toContain('publishing-auth.md');

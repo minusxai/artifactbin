@@ -1,6 +1,6 @@
 /**
  * Three lines and one budget, each MEASURED before it was written
- * (~/projects/improved-skills-v2.md §15, pi + OpenCode, 3 runs per arm):
+ * (pi + OpenCode, 3 runs per arm):
  *
  * - The brief's deck bullet shows the whole FRAME — `<Helmet>` first at top
  *   level, the `px-6 @2xl:px-12` wrapper, `<Slide className="py-14">`. With
@@ -12,9 +12,8 @@
  *   "safety orange" five times and never a class.
  * - "Every `/api` call, `GET` included, sends the bearer" — two harnesses read
  *   their own artifact back without it, got a 401 and retried, on four tasks.
- * - The four template pages fit the 8,192 B always-read cap by EDITING (no
- *   rule dropped — `skills-v2-validation/trimmed/REPORT.md`), corpus −8.9%,
- *   OpenCode −44% cost, pi −23%.
+ * - The four template pages fit the 8,192 B always-read cap by EDITING, with
+ *   no rule dropped: corpus −8.9%, OpenCode −44% cost, pi −23%.
  */
 import { describe, it, expect } from 'vitest';
 import { buildQuickSheet, renderDoc } from '../skills';
@@ -67,8 +66,8 @@ describe('every theme page names the token class its accent means', () => {
 });
 
 // That the brief teaches automatic sign-in — no `afbin setup`, browser approval,
-// the private configuration location — is brief-auth-rule.test.ts's case, on the
-// same text (buildQuickSheet is renderDoc of artifactbin/SKILL.md) with three
+// the private configuration location — is agent-starter-consistency.test.ts's case,
+// on the same text (buildQuickSheet is renderDoc of artifactbin/SKILL.md) with three
 // further assertions this copy lacked.
 
 describe('the four template pages fit the always-read cap by editing', () => {
@@ -85,5 +84,5 @@ describe('the four template pages fit the always-read cap by editing', () => {
  * JSX. Two problems, neither about the product: it depends on a python interpreter being on the
  * host, and a doc edit then breaks the unit suite in a way that reads like a code failure. What it
  * proved — that the documented snippet still produces publishable markup — needs a real
- * interpreter, so it belongs in a gate rather than here. Recorded in the report as a coverage gap.
+ * interpreter, so it belongs in a gate rather than here.
  */

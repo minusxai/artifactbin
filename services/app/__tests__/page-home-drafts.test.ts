@@ -1,12 +1,10 @@
 /**
- * THE ANONYMOUS "MY DRAFTS" LISTING (tok-p2) — GET /api/page/home through the REAL handler.
+ * THE ANONYMOUS "MY DRAFTS" LISTING — GET /api/page/home through the REAL handler.
  *
  * A browser that holds tokens in its agent cookie is shown what those tokens created and nobody has claimed,
  * newest first — in BOTH shapes: the actor the proxy attaches (heldTokenIds) and the in-process cookie.
  * A claimed artifact is not a draft. A browser holding nothing gets exactly today's answer. A signed-in
  * account's answer does not change.
- *
- * Seeded RED by the orchestrator; make it green without changing an expectation.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as homePage } from '@/app/api/page/home/route';

@@ -4,9 +4,7 @@
  * acting account as subject when there is one, and never when nothing
  * changed. The share list (emails) and a raw URL (ids) never travel.
  *
- * Seeded RED by the orchestrator. The annotation moments have their own file
- * (annotations-events.test.ts), written by the implementer against the
- * annotation fixtures.
+ * The annotation moments have their own file (annotations-events.test.ts).
  */
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,8 +1,6 @@
 /**
- * UI test setup — runs before all *.ui.test.* files (jsdom project).
- * Trimmed from minusx test/setup/vitest.setup.ui.ts: the polyfills the ported
- * engine/kit tests need; app-only mocks (Monaco, Chakra, navigation) arrive
- * with the editor port if their tests need them.
+ * UI test setup — runs before all *.ui.test.* files (jsdom project): the
+ * polyfills the engine and kit tests need, and nothing else.
  */
 import '@testing-library/jest-dom';
 import { vi, beforeAll, afterAll, afterEach } from 'vitest';

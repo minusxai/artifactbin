@@ -1,6 +1,6 @@
 /**
- * SERVING A PDF from `/a/<id>/raw` — the shape the spike measured and the only
- * one it recommends (S4): `application/pdf`, `Content-Disposition: inline`,
+ * SERVING A PDF from `/a/<id>/raw` — the one shape measured to work:
+ * `application/pdf`, `Content-Disposition: inline`,
  * `Content-Security-Policy: sandbox`, `nosniff`, immutable by version.
  *
  * What each header is for, since four of the five look like decoration:
