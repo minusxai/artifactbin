@@ -34,10 +34,12 @@ describe('FollowButton', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /^follow$/i })).toBeTruthy());
     expect(calls[1]).toEqual({ url: '/api/users/usr_a/follow', method: 'DELETE', credentials: 'same-origin' });
   });
-  it('an anonymous viewer sees the count and a link to /login; the door is never asked', () => {
+  it('an anonymous viewer sees the count and a link to /login that returns here; the door is never asked', async () => {
+    window.history.replaceState(null, '', '/@sam?tab=stars');
     render(<MemoryRouter><FollowButton userId="usr_a" following={false} count={7} signedIn={false} /></MemoryRouter>);
     const link = screen.getByRole('link', { name: /follow/i });
-    expect(link.getAttribute('href')).toBe('/login');
+    await waitFor(() => expect(link.getAttribute('href')).toBe(`/login?callbackUrl=${encodeURIComponent('/@sam?tab=stars')}`));
+    window.history.replaceState(null, '', '/');
     expect(link.textContent).toContain('7');
     expect(calls).toEqual([]);
   });

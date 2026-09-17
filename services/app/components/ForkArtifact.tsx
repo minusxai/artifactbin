@@ -21,7 +21,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { Tooltip } from './Tooltip';
 import { GitFork } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { withIntent } from '@/lib/intent';
+import { loginHref } from '@/lib/login-href';
 import { useRouter } from '@/lib/navigation';
 
 /** What the last attempt produced: the refusal lines, or nothing. */
@@ -43,8 +43,7 @@ const CONTROL_ROW = 'flex w-full cursor-pointer items-center gap-2 rounded-[5px]
  * point is the address bar the person would otherwise have to find again —
  * including the `$` values of whatever they had narrowed the document to.
  */
-const loginBack = (): string =>
-  `/login?callbackUrl=${encodeURIComponent(window.location.pathname + withIntent(window.location.search, 'fork') + window.location.hash)}`;
+const loginBack = (): string => loginHref(window.location, 'fork');
 
 /**
  * The request, its outcomes and the two navigations, as a hook so both

@@ -11,7 +11,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import { NotFoundPage } from '@/web/pages/NotFound';
@@ -43,8 +43,11 @@ describe('the 404 page', () => {
       vi.stubGlobal('fetch', (async () => new Response(JSON.stringify(s), { headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch);
       return <SessionProvider><NotFoundPage /></SessionProvider>;
     };
+    window.history.replaceState(null, '', '/a/ab12cd?$region=EU');
     render(withSession(signedOut));
-    expect(await screen.findByLabelText('Sign in')).toHaveAttribute('href', '/login');
+    const signIn = await screen.findByLabelText('Sign in');
+    await waitFor(() => expect(signIn).toHaveAttribute('href', `/login?callbackUrl=${encodeURIComponent('/a/ab12cd?$region=EU')}`));
+    window.history.replaceState(null, '', '/');
     vi.unstubAllGlobals();
   });
 
