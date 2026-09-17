@@ -21,7 +21,10 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The bundle is ~1 GB (four Chromium archives of ~170 MB each), uploaded one asset at a time. Ten
+    # minutes cut afbin-v0.1.37 off mid-upload four times running, leaving a draft that blocked every
+    # production deploy behind it (run 35247592662); a slow upload is not a hung job.
+    timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
