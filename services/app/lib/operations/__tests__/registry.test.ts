@@ -121,6 +121,20 @@ describe('browser_session viewer', () => {
     expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
   });
 
+  it('mints a throwaway second person for a test-user session and never hands its secret back', async () => {
+    const seen = record();
+    const result = await operation.run(context, { ...script, viewer: 'test-user' });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ viewer: 'test-user', actor: { tokenId: 'tok_owner', userId: 'usr_owner' } });
+    const page = seen[0]!.pageActor!;
+    expect(page.credential).toBe('bearer');
+    expect(page.userId).toMatch(/^usr_/);
+    expect(page.userId).not.toBe('usr_owner');
+    expect(page.tokenId).toMatch(/^tok_|^[A-Za-z0-9_-]+$/);
+    expect(JSON.stringify(result.body)).not.toContain(page.tokenId!);
+  });
+
   // runOperation hands the body to run() unparsed, so the refusal has to live in the operation itself.
   it('refuses a viewer it cannot browse as, without reaching the session service', async () => {
     const seen = record();
