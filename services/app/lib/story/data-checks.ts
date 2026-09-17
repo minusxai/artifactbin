@@ -181,9 +181,9 @@ async function validateQueryBindings(body: JsxNode[], columns: Record<string, Da
     // STRUCTURE FIRST, with Vega-Lite's own normaliser, HERE and not in refs.ts: this module is
     // server-only, while refs.ts is bundled into afbin for `afbin validate` and vega-lite is
     // ESM-with-top-level-await that the CJS binary build refuses. A spec the normaliser rejects (a
-    // top-level `facet` beside `mark`/`encoding`, where it wants a `spec` wrapper) passed every field
-    // check, published, and threw in the reader's browser — "Cannot destructure property 'transform'
-    // of 'spec'" on a dashboard tile (eval run 34703431814, pi). Refused before publish now.
+    // top-level `facet` beside `mark`/`encoding`, where it wants a `spec` wrapper) passes every field
+    // check and throws in the reader's browser instead — "Cannot destructure property 'transform'
+    // of 'spec'" on a dashboard tile. Refused before publish.
     const structural = viz.kind === 'vega-lite' && viz.spec && typeof viz.spec === 'object' ? vegaLiteStructureError(viz.spec as Record<string, unknown>) : null;
     if (structural) { out.push(`query $${name}: viz is not a Vega-Lite spec the renderer can read — ${structural}`); continue; }
     out.push(...validateVizAgainstColumns(viz, columns[name], `query $${name}`));

@@ -1,8 +1,9 @@
 /**
  * The pure half of importing: WHICH external URLs a document names. Positions
  * are scoped on purpose — `<img src>` and `<Video poster>` are the two places
- * refs.ts already treats as image refs, and an `@font-face` `src` is the one
- * css position that may name one; a web URL anywhere else stays whatever the
+ * refs.ts already treats as image refs, `<File src>` is the one that holds a
+ * PDF (its own list, under its own cap), and an `@font-face` `src` is the one
+ * css position that may name a face; a web URL anywhere else stays whatever the
  * validator says it is.
  *
  * There is no rewrite half any more: the URL an author wrote STAYS in the

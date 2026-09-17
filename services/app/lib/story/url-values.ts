@@ -10,8 +10,9 @@
  * Why `$name` and not a bare name: it is the document's OWN binding syntax
  * (`value="$season"`, `$season` inside SQL — lib/story/dataflow), so a reader
  * who sees the address bar sees the thing the author declared; and it cannot
- * collide with the keys the server itself reads on `/a/<id>` (`key`, `chrome`,
- * `edit`, `comment`, `v`), none of which may ever be shadowed by a Value name.
+ * collide with the keys the server itself reads on `/a/<id>` (`key`, `w`, `v`,
+ * `chrome`, `edit`, `comment` — app/a/[id]/raw/route.ts), none of which may
+ * ever be shadowed by a Value name.
  *
  * Three rules the tests pin, each of them a link that must not break:
  *  - a MALFORMED link never throws and never blanks a document. An undeclared

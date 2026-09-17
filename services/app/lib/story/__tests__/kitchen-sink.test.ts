@@ -1,8 +1,9 @@
 /**
  * Kitchen-sink drift gate: the doc must instantiate EVERY registry component
- * (plus the three data embeds) and pass the full story publish gate. If a
- * component is added to the registry without a kitchen-sink appearance, this
- * fails — same enforcement pattern as registry-names.test.ts.
+ * (plus `<Question>` and `<Number>`, which are not in that list, and the
+ * `<Query>`/`<Value>` declarations they bind) and pass the full story publish
+ * gate. If a component is added to the registry without a kitchen-sink
+ * appearance, this fails — same enforcement pattern as registry-names.test.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { kitchenSinkMarkup } from '../kitchen-sink';

@@ -2,9 +2,13 @@
  * The served markup document's Content-Security-Policy — the response header
  * that IS the sandbox (app/a/[id]/raw). One function, because the policy is
  * per document: `connect-src` admits that document's own query endpoint
- * (`<origin>/a/<id>/query`), its own live stream (`<origin>/a/<id>/events`),
- * its own write endpoint (`<origin>/a/<id>/mutate`), the static `/geojson/`
- * boundary files, and its anonymous asset resolver — and nothing else on the origin.
+ * (`<origin>/a/<id>/query`), its own live stream (`<origin>/a/<id>/events`) and
+ * that stream's `/frame` sub-path, its own write endpoint
+ * (`<origin>/a/<id>/mutate`), its anonymous asset resolver
+ * (`<origin>/a/<id>/resolve`), the static `/geojson/` boundary files, and
+ * `blob:`/`data:` for the local URLs GLB loaders build — and nothing else on the
+ * origin. A configured asset origin adds itself and that document's own
+ * `<origin>/a/<id>/assets` endpoint, and nothing else again.
  *
  * Why a path, not 'self': 'self' would open every `/api/*` route to the
  * author's script (minting tokens from a viewer's IP, for one). A CSP source
@@ -15,8 +19,11 @@
  * (lib/http baseUrl: the public origin behind the proxy).
  *
  * Everything else is content-independent: opaque origin
- * (`sandbox` without allow-same-origin), no form navigation, no base, no third-party
- * destinations of any kind. Guarded by __tests__/raw-document.test.ts.
+ * (`sandbox` without allow-same-origin), no form navigation, no base, no
+ * third-party destinations of any kind. The two additions to the fixed source
+ * directives are the pinned library directory on `script-src` and, when one is
+ * configured, the asset origin on `script`/`img`/`font`/`media-src`. Guarded by
+ * __tests__/raw-document.test.ts.
  */
 /** Where each kind of subresource may come from — content-independent. */
 const SOURCE_DIRECTIVES = [

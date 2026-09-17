@@ -163,7 +163,7 @@ describe('buildStoryDocument', () => {
 
   it('escapes `<` in the island JSON so row content cannot close the script element', async () => {
     const html = await doc({
-      // A query RESULT carries reader-visible strings into the island now.
+      // A query RESULT carries reader-visible strings into the island.
       dataflow: {
         flow: { values: [], queries: [{ name: 'q', sql: 'select 1', params: [], refs: [], start: 0, end: 0 }] },
         state: { values: {}, tables: { q: { rows: [{ note: '</script><script>alert(1)</script>' }], columns: [{ name: 'note', type: 'string' }] } }, errors: {} },
@@ -177,15 +177,16 @@ describe('buildStoryDocument', () => {
     expect(islandBody).toContain('\\u003c');
   });
 
-  it('drops (never emits) an author script carrying `</script`', async () => {
+  it('keeps a concat-spelled author script, and emits the token `undefined` nowhere', async () => {
     // Stored rows are validated at the door, but render must not trust that —
-    // the interpreter-style second gate.
+    // the interpreter-style second gate. The RAW `</script` sequence cannot be
+    // written into a fixture (the Helmet grammar refuses it at parse time), so
+    // the builder's own `safeScript` guard has no case here; what is pinned is
+    // that the legal, concat-spelled form survives.
     const html = await doc({ source: '<Helmet><script>{`var s = "</scr" + "ipt>";`}</script></Helmet><p>x</p>' });
     expect(html).toContain('var s =');
     const smuggled = await doc({ source: '<p>x</p>' });
-    // Build a forged input by bypassing parse-time checks: parseable script text
-    // with the sequence spelled via concat is FINE (above); the raw sequence is
-    // exercised through the builder's own guard below.
+    // The history prelude writes `x==null` rather than spelling `undefined`.
     expect(smuggled).not.toContain('undefined');
   });
 
@@ -193,7 +194,7 @@ describe('buildStoryDocument', () => {
     expect(await doc({ runtimeSrc: null })).not.toContain('story-runtime.js');
   });
 
-  it('stamps theme and mode like the engine: html class + body data-theme + --mx-vh', async () => {
+  it('stamps theme and mode like the engine: html class + html data-theme + --mx-vh', async () => {
     const html = await doc({ theme: null, colorMode: 'dark' });
     expect(html).toContain('<html class="dark">');
     expect(html).toContain('--mx-vh');
