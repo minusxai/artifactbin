@@ -45,6 +45,9 @@ it('lets the owner replace the rows and add a column while the policy still fits
   const row = (await getArtifactById(f.ds))!;
   expect(row.version).toBe(2);
   expect(row.dataset_policy).toMatchObject({ enforcement: 'enabled' });
+  // The REVISION too: `canUseDataPolicy` and `recheckMutation` both compare it, so moving it on a
+  // content write would revoke every viewer's permission mid-session.
+  expect(row.policy_revision).toBe(1);
 });
 
 it('refuses, by name, a replacement that the policy no longer fits', async () => {

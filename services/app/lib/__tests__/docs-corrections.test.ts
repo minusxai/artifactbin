@@ -152,14 +152,17 @@ describe('the publishing skill', () => {
    * old version, because a governed dataset is the one thing that cannot be reverted.
    */
   it('the dataset docs say a governed dataset is still the owner’s to re-push, and how to read an old version', () => {
-    for (const path of ['artifactbin/references/databases.md', 'artifactbin/references/publishing-datasets.md']) {
-      const doc = renderDoc(path, BASE);
-      expect(doc).toMatch(/owner/i);
-      expect(doc).toContain('afbin pull <id>@<v> --output -');
-      expect(doc).toContain('afbin fork <id>@<v>');
-      // An empty table is a real starting state — the alternative authors reached for was a fake row.
-      expect(doc).toContain('rows={[]}');
-    }
+    const doc = renderDoc('artifactbin/references/publishing-datasets.md', BASE);
+    expect(doc).toMatch(/owner/i);
+    expect(doc).toContain('policy_locked');
+    expect(doc).toContain('afbin pull <id>@<v> --output -');
+    expect(doc).toContain('afbin fork <id>@<v>');
+    // An empty table is a real starting state — the alternative authors reached for was a fake row.
+    expect(doc).toContain('rows={[]}');
+    // Said in the DATASETS reference and not in the catalogs one, because
+    // `databases.md` renders 18 bytes under the per-file reading budget that
+    // skill-tree.test.ts sweeps (SKILL_FILE_MAX_BYTES). Whoever frees space
+    // there should carry these two facts across; until then this is the copy.
   });
 });
 
