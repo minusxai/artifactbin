@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm} from 'node:fs/promises';
+import {mkdtemp,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {resolveReference} from '../src/reference';
@@ -58,6 +58,7 @@ function world(answers:Record<string,unknown>){
   const answer=answers[`${url.origin}${url.pathname}`]??answers[url.origin];
   if(answer===undefined)return new Response('not found',{status:404});
   if(typeof answer==='number')return new Response('refused',{status:answer});
+  if(typeof answer==='function')return (answer as ()=>Response)();
   return Response.json(answer);
  }) as typeof fetch;
  return {seen,fetch:fetcher};
@@ -242,5 +243,27 @@ test('browser approval at a verified alias of the selected server is not an orig
   await assert.rejects(deviceAuthenticate(ALIAS,{home,env:{},interactive:false,fetch:pairing('https://evil.example'),
    notify:()=>{},open:async()=>{},sleep:async()=>{}}),
    (error:Error&{code?:string})=>{assert.equal(error.code,'approval_origin_mismatch');return true;});
+ });
+});
+
+test('preview binds a folder tracked against a verified alias to the canonical origin',async()=>{
+ await withHome(async home=>{
+  await saveConnection({server:CANONICAL,token:'test-token'},home,{});
+  await trackWorkspace(home,home,ALIAS);
+  await writeFile(join(home,'doc.jsx'),'<p>Draft</p>');
+  const net=world({
+   [`${CANONICAL}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]},
+   [`${CANONICAL}/api/artifacts`]:()=>Response.json({artifacts:[]},{headers:{'X-Artifactbin-Account':'usr_seed'}}),
+   [`${CANONICAL}/api/artifacts/reservations`]:()=>Response.json({ids:Array.from({length:100},(_,index)=>'S'+String(index).padStart(5,'0'))},{headers:{'X-Artifactbin-Account':'usr_seed'}}),
+  });
+  let served:{server?:string}|undefined;
+  const out:string[]=[];
+  const code=await runCli(['preview','doc.jsx','--server',CANONICAL,'--json'],{cwd:home,home,env:{},interactive:false,color:false,
+   stdout:(value:string)=>out.push(value),stderr:()=>{},fetch:net.fetch,
+   preview:async(options:{server?:string})=>{served=options;return 0;},
+   auth:{open:async()=>{throw new Error('a test must not open a browser');}}} as never);
+  assert.equal(code,0,out.join(''));
+  assert.equal(served?.server,CANONICAL);
+  assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS),[]);
  });
 });

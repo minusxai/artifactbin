@@ -39,7 +39,7 @@ import {validateMarkupStructure} from '../../app/lib/story/local-validation';
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnection,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault} from './config';
+import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
@@ -76,11 +76,15 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const port=Number(flags.port??0);if(!Number.isInteger(port)||port<0||port>65535)throw new CliError('invalid_arguments','--port must be an integer from 0 to 65535.');
    const workspace=await loadWorkspace(context.cwd,home),known=await localIdentities(workspace);
    const paths=await previewFiles(workspace.root,workspace.cwd,positionals.map(path=>known[path]?resolve(workspace.root,known[path]):path));
-   const server=typeof flags.server==='string'?flags.server:workspace.tracking?.server??defaults.host??DEFAULT_SERVER;
-   if(workspace.tracking&&workspace.tracking.server!==server&&!sameServer(await serverIdentity(server,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})}),workspace.tracking.server))
-    throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; preview selected ${server}.`,`Run preview from another directory, or pass --server ${workspace.tracking.server}.`);
-   const connection=await loadConnection(server,home,context.env)??(workspace.tracking?{server,token:''}:await browserAuthenticate(server,{...context.auth,home,env:context.env,interactive,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')}));
-   await addFiles(workspace,paths.map(path=>resolve(workspace.root,path)),new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account}));
+   // Preview registers local files against a server, so it crosses the same boundary the rest of the
+   // CLI does: one identity, then the canonical origin for the binding, the credential and approval.
+   const selected=typeof flags.server==='string'?flags.server:workspace.tracking?.server??defaults.host??DEFAULT_SERVER;
+   const previewIdentity=await serverIdentity(selected,{home,env:context.env,...(context.fetch?{fetch:context.fetch}:{})});
+   const server=previewIdentity.canonical;const previewAliases=serverAddresses(previewIdentity);
+   if(workspace.tracking&&!sameServer(previewIdentity,workspace.tracking.server))
+    throw new CliError('wrong_server',`wrong_server: this directory is tracked against ${workspace.tracking.server}; preview selected ${selected}.`,`Run preview from another directory, or pass --server ${workspace.tracking.server}.`);
+   const connection=await loadConnectionFor(previewIdentity,home,context.env)??(workspace.tracking?{server,token:''}:await browserAuthenticate(server,{...context.auth,home,env:context.env,interactive,aliases:previewAliases,fetch:context.fetch,notify:message=>stderr(approvalMessage(message,style)+'\n')}));
+   await addFiles(workspace,paths.map(path=>resolve(workspace.root,path)),new HttpClient({connection,home,env:context.env,fetch:context.fetch,account:workspace.tracking?.account,aliases:previewAliases}));
    return await(context.preview??servePreview)({cwd:workspace.root,home,paths,port,share:!!flags.share,json,server});
   }
   if(command==='config'&&!flags.help){

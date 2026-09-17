@@ -21,7 +21,7 @@ export async function addFiles(workspace:Workspace,paths:string[],client:HttpCli
  return withLock(home,HOME_SCOPE,()=>withLock(home,root,async()=>{
   await recoverFiles(home,root);await recoverMove(workspace);
   workspace=await loadWorkspace(workspace.cwd,home);
-  if(workspace.tracking&&workspace.tracking.server!==client.connection.server)throw Error('Wrong server for workspace');
+  if(workspace.tracking&&!client.sameServer(workspace.tracking.server))throw Error('Wrong server for workspace');
   if(!client.account)await client.request('/artifacts?limit=1');
   const account=client.account;if(!account||account==='anonymous')throw Error('Account required');
   if(workspace.tracking&&workspace.tracking.account!==account)throw Error('Wrong account for workspace');
