@@ -23,11 +23,19 @@ Client defaults and host credentials live under `~/.artifactbin`, separately
 from server data. `afbin config set host URL` changes the client's default;
 `--server URL` overrides it for one command. Neither configures the server.
 
-A hosted server needs a stable `AUTH__SECRET`, the correct
-`APP__PUBLIC_BASE_URL`, and a configured email provider for login. Local login
-uses a protected development outbox; read a code with `npm run dev:otp -- EMAIL`.
-Use `.env.example` for the supported settings and
-[serving and security](serving-and-security.md) for trust boundaries.
+A hosted server needs a stable `AUTH__SECRET`, the correct `APP__PUBLIC_BASE_URL`
+and a login method; `afbin serve` refuses to start without them. With a loopback
+`APP__PUBLIC_BASE_URL`, login never uses mail at all: each code is printed by the
+running server as `[dev-mail] otp email=… code=…` and appended to
+`<dir>/data/outbox.jsonl`. (`npm run dev:otp -- EMAIL` reads the *source*
+development outbox at `.artifactbin/dev-mail.jsonl` in this repository, not a
+served directory, so it is for `npm run dev` only.)
+
+The team host accepts its own settings, not the repository's `.env.example`:
+copying that one fails with `Unsupported team setting: OBJECT_STORE__LOCAL_DIR`.
+Use [`docs/extraction/server.env.example`](extraction/server.env.example) for the
+settings `afbin serve` accepts, [team hosting](extraction/team.md) for a shared
+host, and [serving and security](serving-and-security.md) for trust boundaries.
 
 The OSS host includes authentication, authorization, the reader/editor,
 comments, sharing, query execution and export. It does not contain a request

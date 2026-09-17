@@ -4,8 +4,10 @@ import {mkdtemp,writeFile,readFile,rm,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {prepareServe} from '../src/serve-config';
-import {teamSettings} from '../src/team-config';
-const settings='APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://team.example.test\nAUTH__SECRET='+ 's'.repeat(48)+'\n';
+import {teamSettings,serverInstructions} from '../src/team-config';
+import {startupFailure} from '../src/operator-error';
+// A network origin now needs a login method teammates can actually use, so the shared fixture carries one.
+const settings='APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://team.example.test\nAUTH__SECRET='+ 's'.repeat(48)+'\nEMAIL__RESEND_API_KEY=re_fixture_key\n';
 test('team operator settings isolate database, objects, identity and service cache from the client and shell',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'afbin-team-'));
  try{
@@ -48,6 +50,63 @@ test('database overrides leave uploaded objects and client state in their own di
   assert.equal(embedded.env.DATABASE_URL,'pglite://'+join(embedded.directory,'custom-db'));
   await assert.rejects(teamSettings(file,{}, {dbUrl:'sqlite://data'}),/database URL/);
  }finally{await rm(directory,{recursive:true,force:true});}
+});
+
+/**
+ * Each case supplies everything the OTHER refusals want, so exactly one of them can fire and the
+ * matched substring proves which. A server that starts is a server whose login page can be used.
+ */
+test('team settings refuse the network shapes teammates cannot sign in through, and keep the proxy and loopback ones',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-team-network-'));
+ try{
+  const file=join(directory,'server.env'),secret='AUTH__SECRET='+'s'.repeat(48)+'\n',login='EMAIL__RESEND_API_KEY=re_test_key\n';
+  const network=(origin:string,host='0.0.0.0')=>`APP__HOST=${host}\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=${origin}\n`;
+  await writeFile(file,network('http://artifacts.example.test')+secret+login);
+  await assert.rejects(teamSettings(file),/only connect over HTTPS/);
+  await writeFile(file,network('http://127.0.0.1:7445')+secret+login);
+  await assert.rejects(teamSettings(file),/URL teammates use/);
+  await writeFile(file,network('https://artifacts.example.test')+secret);
+  await assert.rejects(teamSettings(file),/EMAIL__RESEND_API_KEY/);
+  for(const provider of ['AUTH__GOOGLE_CLIENT_ID=id\nAUTH__GOOGLE_CLIENT_SECRET=shh\n','AUTH__OIDC_PROVIDER_ID=corp\n']){
+   await writeFile(file,network('https://artifacts.example.test')+secret+provider);
+   assert.equal((await teamSettings(file)).origin,'https://artifacts.example.test',provider);
+  }
+  // A TLS proxy in front legitimately terminates elsewhere: --port picks the listener, the public URL still advertises.
+  await writeFile(file,network('https://artifacts.example.test')+secret+login);
+  const proxied=await teamSettings(file,{},{port:9000});
+  assert.equal(proxied.port,9000);assert.equal(proxied.origin,'https://artifacts.example.test');
+  // The generated single-machine default keeps working without any mail provider.
+  await writeFile(file,network('http://127.0.0.1:7445','127.0.0.1')+secret);
+  assert.equal((await teamSettings(file)).origin,'http://127.0.0.1:7445');
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('startup instructions name the host teammates set, the installer, and where login codes appear',async()=>{
+ const directory=await mkdtemp(join(tmpdir(),'afbin-team-instructions-'));
+ try{
+  const file=join(directory,'server.env'),secret='AUTH__SECRET='+'s'.repeat(48)+'\n';
+  await writeFile(file,'APP__HOST=127.0.0.1\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=http://127.0.0.1:7445\n'+secret);
+  const single=await teamSettings(file),local=serverInstructions(single);
+  assert.ok(local.every(line=>!line.includes('\n')),'one line each');
+  assert.ok(local.some(line=>line.includes('afbin config set host http://127.0.0.1:7445')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('curl -fsSL http://127.0.0.1:7445/chat/install.sh | sh')),local.join('\n'));
+  assert.ok(local.some(line=>line.includes('[dev-mail] otp')&&line.includes(single.env.EMAIL__DEV_OUTBOX_PATH!)),local.join('\n'));
+  await writeFile(file,'APP__HOST=0.0.0.0\nAPP__PORT=7445\nAPP__PUBLIC_BASE_URL=https://artifacts.example.test\nEMAIL__RESEND_API_KEY=re_test_key\n'+secret);
+  const published=serverInstructions(await teamSettings(file));
+  assert.ok(published.some(line=>line.includes('afbin config set host https://artifacts.example.test')),published.join('\n'));
+  assert.ok(published.some(line=>line.includes('curl -fsSL https://artifacts.example.test/chat/install.sh | sh')),published.join('\n'));
+  assert.ok(!published.some(line=>line.includes('[dev-mail]')),published.join('\n'));
+  assert.ok(published.some(line=>/mail provider/.test(line)),published.join('\n'));
+ }finally{await rm(directory,{recursive:true,force:true});}
+});
+test('expected serve startup failures become one actionable line; anything else keeps its own report',()=>{
+ const context={directory:'/srv/team',port:7445};
+ const busy=startupFailure(new Error('workspace_busy: another afbin operation is using this directory. Retry when it finishes.'),context);
+ assert.equal((busy as Error).message,'Another afbin serve is already using /srv/team.');
+ const taken=startupFailure(Object.assign(new Error('listen EADDRINUSE: address already in use 0.0.0.0:7445'),{code:'EADDRINUSE'}),context);
+ assert.equal((taken as Error).message,'Port 7445 is already in use; choose another with --port.');
+ for(const failure of [busy,taken])assert.equal((failure as Error).name,'OperatorError');
+ const unrelated=new Error('team application failed to boot');
+ assert.equal(startupFailure(unrelated,context),unrelated);
 });
 
 test('first serve creates private persistent operator settings without client defaults',async()=>{

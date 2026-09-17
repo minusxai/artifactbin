@@ -3,11 +3,17 @@ import {createServer} from 'node:http';
 import {mkdir,lstat} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {getRequestListener} from '@hono/node-server';
-import {teamSettings,type TeamOverrides} from './team-config';
+import {teamSettings,serverInstructions,type TeamOverrides,type TeamSettings} from './team-config';
+import {startupFailure} from './operator-error';
 import {withLock} from './state';
 
+/** A taken port and an owned directory are operating conditions, so they leave here as operator text, not stacks. */
 export async function startTeamHost(configFile:string,assets:string,overrides:TeamOverrides={}):Promise<void>{
  const settings=await teamSettings(configFile,process.env,overrides),runtime=resolve(assets),data=join(settings.directory,'data');
+ try{await listen(settings,runtime,data);}
+ catch(error){throw startupFailure(error,{directory:settings.directory,port:settings.port});}
+}
+async function listen(settings:TeamSettings,runtime:string,data:string):Promise<void>{
  await mkdir(data,{recursive:true,mode:0o700});
  for(const path of [data,join(data,'pglite'),join(data,'objects')]){
   try{if((await lstat(path)).isSymbolicLink())throw new Error('Team storage must use its own directory, not a symlink.');}
@@ -25,6 +31,7 @@ export async function startTeamHost(configFile:string,assets:string,overrides:Te
   try{
    await new Promise<void>((resolve,reject)=>{server.once('error',reject);server.listen(settings.port,settings.host,()=>{server.off('error',reject);resolve();});});
    process.stdout.write(`Team server listening on ${settings.host}:${settings.port}; public URL ${settings.origin}\n`);
+   for(const line of serverInstructions(settings))process.stdout.write(line+'\n');
    await stopped;
   }finally{
    // Terminal signals can reach both supervisor and child; repeated delivery only resolves stop again.
