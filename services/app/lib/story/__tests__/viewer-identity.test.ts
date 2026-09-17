@@ -14,6 +14,7 @@ import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
 import { STORY_HTML_TAGS } from '@/lib/story-ui/component-names';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { validateMarkupStructure } from '@/lib/story/local-validation';
 
 const nodes = (source: string): JsxNode[] => parseJsxOrThrow(source).nodes;
 const EMPTY = { values: [], queries: [], mutations: [] } as unknown as Dataflow;
@@ -47,5 +48,26 @@ describe('the kit can show a person and ask a guest to sign in', () => {
   it('accepts them at publish', () => {
     const source = '<div data-design="tw">{$_me ? <p>Paid by <User id="$_me" /></p> : <SignIn>Sign in to add an expense</SignIn>}</div>';
     expect(validateJsxSource(source, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style')).toEqual([]);
+  });
+});
+
+/**
+ * THE PUBLISH DOOR, not just the unit. `validateDataflow` above is the rule;
+ * this is the door every write goes through (lib/story/local-validation, which
+ * /api/preview and publish share), so a refusal proved in one is the refusal an
+ * author actually gets.
+ */
+describe('the publish door', () => {
+  const refusals = (source: string) => validateMarkupStructure(source).errors.map((e) => e.message);
+
+  it('accepts reading the viewer and refuses binding or declaring it', () => {
+    expect(refusals('<div>{$_me ? <p>in</p> : <SignIn>Join</SignIn>}</div>')).toEqual([]);
+    expect(refusals('<div><User id="$_me" /></div>')).toEqual([]);
+    expect(refusals('<div><input aria-label="Who" value="$_me" /></div>').join(' ')).toMatch(/\$_me/);
+    expect(refusals('<Helmet><Value name="_me" type="user" /></Helmet><p>x</p>').join(' ')).toMatch(/_me/);
+  });
+
+  it('still refuses a typo that only LOOKS like the viewer', () => {
+    expect(refusals('<div>{$_mee ? <p>in</p> : <p>out</p>}</div>').join(' ')).toMatch(/_mee/);
   });
 });
