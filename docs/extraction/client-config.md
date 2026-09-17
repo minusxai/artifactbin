@@ -6,12 +6,12 @@ migration reader for an older layout.
 
 Public commands:
 - `afbin config set host <origin>` saves the value only — no server boot and no authentication.
-- `afbin config get host` returns the saved value, falling back to artifactbin.dev.
+- `afbin config get host` returns the saved value, falling back to app.artifactbin.dev.
 - `afbin config set output json|text` and `updates true|false` set client defaults only.
 - Explicit command flags take precedence; connection persistence never changes defaults.
 
 Behaviour this pins:
-- The first command defaults to artifactbin.dev, and a read creates no files.
+- The first command defaults to app.artifactbin.dev, and a read creates no files.
 - A first login to an explicitly selected custom origin saves only that profile and credential; the
   next unbound command still defaults to cloud.
 - `config set host <origin>` performs no fetch or launch and creates no server directory; a global
