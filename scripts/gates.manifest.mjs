@@ -29,7 +29,7 @@ export const GATE_SPECS = Object.freeze([
   { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
   { name: 'comment-targets', needsMail: false, timeoutMs: 60_000 },
   { name: 'dataset-policies', needsMail: true, timeoutMs: 60_000 },
-  { name: 'public-home-stars', needsMail: false, serialGroup: 'clipboard', timeoutMs: 120_000 },
+  { name: 'app-home', needsMail: false, serialGroup: 'clipboard', timeoutMs: 120_000 },
   { name: 'seamless-navigation', needsMail: true, timeoutMs: 60_000 },
   { name: 'managed-iframe', needsMail: false, timeoutMs: 60_000 },
   { name: 'libraries', needsMail: false, timeoutMs: 60_000 },

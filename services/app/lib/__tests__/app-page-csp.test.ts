@@ -29,7 +29,7 @@ describe('the app CSP', () => {
     expect(APP_CSP).toContain("frame-ancestors 'self'");
     expect(APP_CSP).toContain("object-src 'none'");
     expect(APP_CSP).toContain("base-uri 'self'");
-    for (const path of ['/', '/login', '/docs-human', '/account']) {
+    for (const path of ['/login', '/docs-human', '/account']) {
       const res = await app.request(path);
       expect(res.headers.get('content-security-policy'), path).toBe(APP_CSP);
       expect(res.headers.get('x-content-type-options'), path).toBe('nosniff');
@@ -56,7 +56,7 @@ describe('the app CSP', () => {
   });
 
   it('admits local media previews and GLTF texture fetches without admitting blob scripts or frames', async () => {
-    const response = await app.request('/');
+    const response = await app.request('/login');
     const directives = response.headers.get('content-security-policy')!.split('; ');
     expect(directives.find(d => d.startsWith('media-src'))).toBe("media-src 'self' blob:");
     expect(directives.find(d => d.startsWith('connect-src'))?.split(' ')).toContain('blob:');
@@ -71,11 +71,11 @@ describe('the app CSP', () => {
       ['http://localhost:3040', 'ws://localhost:3041'],
       ['https://dev.example:3040', 'wss://dev.example:3041'],
     ]) {
-      const response = await dev.request(origin + '/');
+      const response = await dev.request(origin + '/login');
       const connections = response.headers.get('content-security-policy')!.split('; ').find(d => d.startsWith('connect-src'))!.split(' ');
       expect(connections.filter(source => /^wss?:/.test(source))).toEqual([socket]);
     }
-    expect((await app.request('/')).headers.get('content-security-policy')).not.toMatch(/wss?:/);
+    expect((await app.request('/login')).headers.get('content-security-policy')).not.toMatch(/wss?:/);
   });
 
   it('allows only the known app and development bootstrap scripts inline', () => {
@@ -98,7 +98,7 @@ describe('the app CSP', () => {
     expect(APP_INLINE_SCRIPT_HASHES).toContain(`'sha256-${hash}'`);
   });
 
-  it('serves homepage posters under the same-origin image policy', () => {
+  it('serves app images under the same-origin image policy', () => {
     expect(APP_CSP.split('; ').find(d => d.startsWith('img-src'))).toBe("img-src 'self' data: blob:");
   });
 

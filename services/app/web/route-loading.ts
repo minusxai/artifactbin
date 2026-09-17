@@ -21,7 +21,6 @@ export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity:
     // Custom fallback/error loaders stay with their pages. Copying those here
     // would change retry semantics; code loading still overlaps their route.
     '/assets': { code: routePages.AssetsPage }, '/chat': { code: routePages.ChatPage },
-    '/privacy': { code: routePages.PrivacyPage }, '/terms': { code: routePages.TermsPage },
     '/login': { code: routePages.LoginPage },
     '/docs-human': { code: routePages.DocsPage },
   };

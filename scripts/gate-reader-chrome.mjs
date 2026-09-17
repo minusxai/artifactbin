@@ -279,7 +279,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
    * 6b. THE LOGO ACTUALLY GOES HOME (last on this page — it leaves the
    * document). The reader's journey is staged as the real one: they arrived
    * from the app, so the logo returns them there — which is also where its
-   * href points, and both branches land on `/`. A Playwright page cannot stage
+   * href points; logged-out readers arrive at `/login`. A Playwright page cannot stage
    * the other case: `newPage()` already has about:blank in its history, so
    * "nothing to go back to" is not a state this harness can produce, and the
    * jsdom test beside this one is where that branch is pinned.
@@ -290,7 +290,7 @@ for (const [name, viewport] of [['phone', PHONE], ['desktop', DESKTOP]]) {
   await trip.waitForSelector('[data-mx-reader-chrome]', { state: 'attached', timeout: 30_000 });
   await revealReaderChrome(trip);
   await Promise.all([
-    trip.waitForURL((u) => u.pathname === '/', { timeout: 20_000 }),
+    trip.waitForURL((u) => u.pathname === '/login', { timeout: 20_000 }),
     trip.locator('[data-mx-reader-logo]').click(),
   ]).then(() => check(true, `${name}: pressing the logo takes the reader home`))
     .catch(() => check(false, `${name}: pressing the logo takes the reader home (stayed at ${trip.url()})`));

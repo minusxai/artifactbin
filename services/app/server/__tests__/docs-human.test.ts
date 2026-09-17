@@ -80,7 +80,7 @@ describe('docs addresses', () => {
   });
 
   it('the shell carries the help link with a title and the agent meta', async () => {
-    const html = await (await app.request('/')).text();
+    const html = await (await app.request('/login')).text();
     expect(html).toMatch(/<link rel="help" href="[^"]+\/llms.txt" title="[^"]+"/);
     expect(html).toMatch(/<meta name="afbin" content="[^"]*afbin[^"]*"/);
   });

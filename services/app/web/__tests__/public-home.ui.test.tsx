@@ -1,67 +1,18 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router';
-import { Suspense } from 'react';
-import { HomePage } from '../pages/Home';
-import { SessionProvider, useSession } from '../session';
-import { captureInitialStory, clearInitialStory, clearInitialStoryOnRoute } from '../initial-story';
-
-vi.mock('@/components/viz/VegaChart', () => ({ VegaChart: () => <div /> }));
-afterEach(() => { cleanup(); clearInitialStory(); clearInitialStoryOnRoute('/away'); vi.unstubAllGlobals(); });
-const markInitial = () => {
-  const element = document.createElement('div');
-  element.setAttribute('data-mx-initial-home', '');
-  element.textContent = 'server landing';
-  document.body.append(element);
-  captureInitialStory();
-  return element;
-};
-it('preserves public eligibility when React retries an uncommitted render', async () => {
-  const initial = markInitial();
-  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
-  let resume!: () => void;
-  let pending = true;
-  const ready = new Promise<void>(resolve => { resume = () => { pending = false; resolve(); }; });
-  function DelayedSibling() { if (pending) throw ready; return null; }
-  render(<MemoryRouter><SessionProvider><Suspense fallback={null}><HomePage /><DelayedSibling /></Suspense></SessionProvider></MemoryRouter>);
-  expect(initial.isConnected).toBe(true);
-  await act(async () => resume());
-  expect(initial.isConnected).toBe(false);
-  expect(screen.getByRole('region', { name: 'About Artifactbin' })).toBeInTheDocument();
-  expect(screen.queryByLabelText('Loading workspace')).toBeNull();
+import {cleanup,render,screen} from '@testing-library/react';
+import {afterEach,expect,it,vi} from 'vitest';
+import {MemoryRouter,Route,Routes} from 'react-router';
+import {HomePage} from '../pages/Home';
+import {SessionProvider} from '../session';
+vi.mock('@/components/viz/VegaChart',()=>({VegaChart:()=> <div/>}));
+afterEach(()=>{cleanup();vi.unstubAllGlobals();});
+function show(){render(<MemoryRouter><SessionProvider><Routes><Route path="/" element={<HomePage/>}/><Route path="/login" element={<h1>Log in</h1>}/></Routes></SessionProvider></MemoryRouter>);}
+it('waits for session identity without showing a marketing page',()=>{
+ vi.stubGlobal('fetch',vi.fn(()=>new Promise<Response>(()=>{})));show();
+ expect(screen.getByLabelText('Loading workspace')).toBeInTheDocument();
+ expect(screen.queryByRole('region',{name:'About Artifactbin'})).not.toBeInTheDocument();
 });
-it('removes server sibling only when real Home commits, keeping Landing through slow session and home', async () => {
-  const initial = markInitial();
-  let resolve!: (value: Response) => void;
-  vi.stubGlobal('fetch', vi.fn((url: string) => url.includes('/session') ? new Promise<Response>(r => { resolve = r; }) : new Promise<Response>(() => {})));
-  expect(initial.isConnected).toBe(true);
-  render(<MemoryRouter><SessionProvider><HomePage /></SessionProvider></MemoryRouter>);
-  expect(initial.isConnected).toBe(false);
-  expect(screen.getByRole('region', { name: 'About Artifactbin' })).toBeInTheDocument();
-  expect(screen.queryByLabelText('Loading workspace')).toBeNull();
-  await act(async () => resolve(new Response(JSON.stringify({ kind: 'none', user: null }))));
-  expect(screen.getByRole('region', { name: 'About Artifactbin' })).toBeInTheDocument();
-  expect(screen.queryByLabelText('Loading workspace')).toBeNull();
-});
-it('clears the server sibling on navigation before Home ever loads', () => {
-  const initial = markInitial();
-  clearInitialStoryOnRoute('/login');
-  expect(initial.isConnected).toBe(false);
-  vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})));
-  render(<MemoryRouter><SessionProvider><HomePage /></SessionProvider></MemoryRouter>);
-  expect(screen.getByLabelText('Loading workspace')).toBeInTheDocument();
-});
-it('never reuses initial public eligibility after an account has replaced it', async () => {
-  markInitial();
-  let answer = true;
-  vi.stubGlobal('fetch', vi.fn((url: string) => url.includes('/session') && answer
-    ? Promise.resolve(new Response(JSON.stringify({ kind: 'account', user: { id: 'one', email: null } })))
-    : new Promise<Response>(() => {})));
-  function Reload() { const { reload } = useSession(); return <button onClick={reload}>Reload identity</button>; }
-  render(<MemoryRouter><SessionProvider><Reload /><HomePage /></SessionProvider></MemoryRouter>);
-  await screen.findByLabelText('Loading workspace');
-  answer = false;
-  fireEvent.click(screen.getByText('Reload identity'));
-  expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
-  expect(screen.getByLabelText('Loading workspace')).toBeInTheDocument();
+it.each(['none','anon'])('redirects %s sessions during client navigation, including held drafts',async kind=>{
+ vi.stubGlobal('fetch',vi.fn((url:string)=>Promise.resolve(Response.json(url.includes('/session')?{kind,user:null}:{signedIn:false,drafts:[{id:'AbC123',title:'Private draft'}]}))));
+ show();await screen.findByRole('heading',{name:'Log in'});
+ expect(screen.queryByText('Private draft')).not.toBeInTheDocument();
 });

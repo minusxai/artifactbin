@@ -127,9 +127,8 @@ const unlock = async (id) => {
 console.log('█ AUTH');
 const EMAIL = `mxmx_test_appflows_${Date.now().toString(36)}@example.com`;
 await p.goto(B, { waitUntil: 'load' });
-const signIn = p.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Sign in', exact: true });
-check(await signIn.getAttribute('href') === '/login', 'the OSS homepage exposes its login link directly');
-await signIn.click(); await p.waitForURL('**/login**');
+await p.getByRole('textbox', {name: 'Email', exact: true}).waitFor();
+check(new URL(p.url()).pathname === '/login', 'logged-out home visits reach the login page');
 // One flow for both: a verified code for an unknown address creates the account.
 await loginViaEmail(p, B, sink, EMAIL);
 const signedIn = () => isSignedInAs(p, EMAIL);
@@ -159,8 +158,8 @@ if (await revoke.count()) {
 } else check(false, 'the connections panel offers revoke');
 await openMenu(p);
 await p.click('[aria-label="Sign out"]'); await p.waitForTimeout(3000);
-await p.getByRole('region', { name: 'About Artifactbin' }).waitFor();
-check(!(await signedIn()) && await p.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Sign in', exact: true }).isVisible(), 'sign out clears the session and returns the public homepage');
+await p.waitForURL(`${B}/login`);
+check(!(await signedIn()) && await p.getByRole('textbox', { name: 'Email', exact: true }).isVisible(), 'sign out clears the session and returns to login');
 // Logging back in to the SAME address must reuse the account, not make a second.
 await loginViaEmail(p, B, sink, EMAIL);
 check(await signedIn(), 'log back in with a fresh code works');

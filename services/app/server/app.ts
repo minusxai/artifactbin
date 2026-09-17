@@ -44,7 +44,6 @@ import { mountRoutes } from './api';
 import { ROUTES } from './routes.generated';
 import { authorFrameResponse } from './author-frame';
 import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
-import { withInitialHome } from './public-home';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
@@ -199,7 +198,7 @@ export function candidateDocument(pathname: string): { id: string } | null {
 
 
 /** Every static address web/App.tsx routes: a direct load or a reload of one missing here is a 404. */
-const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/examples|\/privacy|\/terms|\/datasets\/new|\/files\/new)$/;
+const SPA_PATHS = /^(\/|\/login|\/account|\/chat|\/assets|\/trash|\/tokens|\/docs-human|\/datasets\/new|\/files\/new)$/;
 
 /**
  * A guessed machine address is answered in the machine's language. A path
@@ -284,16 +283,12 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // gets the refusal that names the way on.
     if (code === 404 && !(c.req.raw.headers.get('accept') ?? '').includes('text/html')) return apiNotFound(c);
     const surface = (data?.artifact as { surface?: { id: string; runtime?: PreparedStoryRuntime }; description?: string | null } | undefined);
-    const publicHome = new URL(c.req.url).pathname === '/' && await runWithRequest(c.req.raw, async () => {
-      const actor = await sessionActor(c.req.raw);
-      return actor.credential === 'none';
-    });
     // The agent pointer is injected here, on the request base, for EVERY shell
     // — the static index.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
     const shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw))
-      : withGenericSocial(publicHome ? withInitialHome(discovered) : discovered, baseUrl(c.req.raw));
+      : withGenericSocial(discovered, baseUrl(c.req.raw));
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
@@ -402,6 +397,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
   if(existsSync(cliReleaseDir)) app.use('/chat/releases/*', serveStatic({ root: path.relative(process.cwd(), cliReleaseDir) || '.', rewriteRequestPath: (p) => p.replace(/^\/chat\/releases\/[^/]+\//, '/'), onFound: () => {}, onNotFound: () => {} }));
   app.use('/*', serveStatic({ root: path.relative(process.cwd(), publicDir) || '.', onFound: () => {}, onNotFound: () => {} }));
 
+  app.on(['GET', 'HEAD'], '/', async c => {
+    const signedIn = await runWithRequest(c.req.raw, async () => {
+      const actor = await sessionActor(c.req.raw);
+      return actor.credential === 'session' && !!actor.viewer?.userId;
+    });
+    if (signedIn) return page(c);
+    c.header('Cache-Control', 'no-store');
+    return c.redirect('/login', 302);
+  });
   // The tour for people.
   app.get('/docs-human', (c) => page(c));
   // The app's API and document handlers.

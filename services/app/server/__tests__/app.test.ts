@@ -117,7 +117,7 @@ describe('the app\'s paths', () => {
   // but a crawler and a `curl` read the status, and a caller that never asked
   // for HTML gets the JSON refusal instead of the page.
   it('serve the SPA under the app CSP, and anything else is a 404', async () => {
-    for (const p of ['/', '/login', '/account', '/chat', '/assets', '/trash', '/tokens', '/docs-human', '/examples', '/privacy', '/terms', '/datasets/new', '/files/new']) {
+    for (const p of ['/login', '/account', '/chat', '/assets', '/trash', '/tokens', '/docs-human', '/datasets/new', '/files/new']) {
       const res = await app.request(p);
       expect(res.status, p).toBe(200);
       expect(res.headers.get('content-security-policy'), p).toContain('frame-ancestors');
@@ -154,7 +154,7 @@ describe('the app\'s paths', () => {
    */
   it('names the generic unfurl card on a non-artifact page, absolute, and never beside an artifact\'s own', async () => {
     const forwarded = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'artifactbin.test' };
-    for (const p of ['/', '/login']) {
+    for (const p of ['/account', '/login']) {
       const html = await (await app.request(p, { headers: forwarded })).text();
       expect(html, p).toContain('<meta property="og:image" content="https://artifactbin.test/og.png">');
       expect(html, p).toContain('<meta name="twitter:card" content="summary_large_image">');

@@ -184,7 +184,7 @@ describe('navigation retains the editor until persistence finishes', () => {
    * know reloads the whole shell instead — and, for a path the server does not
    * list in `SPA_PATHS` either, reloads it under a 404.
    */
-  it.each(['/', '/login', '/account', '/assets', '/chat', '/trash', '/privacy', '/terms', '/docs-human', '/tokens', '/datasets/new', '/files/new', '/a/a1', '/a/a1/edit', '/@user', '/@user/doc'])('keeps app route %s client-side', (path) => {
+  it.each(['/', '/login', '/account', '/assets', '/chat', '/trash', '/docs-human', '/tokens', '/datasets/new', '/files/new', '/a/a1', '/a/a1/edit', '/@user', '/@user/doc'])('keeps app route %s client-side', (path) => {
     expect(isClientRoute(new URL(path, window.location.origin))).toBe(true);
   });
 

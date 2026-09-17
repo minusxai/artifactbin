@@ -181,7 +181,7 @@ describe('the surviving vocabulary', () => {
   });
 
   it('points every human link at /docs-human', () => {
-    for (const file of ['components/Landing.tsx', 'components/PageChrome.tsx', 'web/App.tsx', 'lib/story/reader-chrome.ts']) {
+    for (const file of ['components/PageChrome.tsx', 'web/App.tsx', 'lib/story/reader-chrome.ts']) {
       expect(codeOf(readFileSync(path.join(APP_ROOT, file), 'utf8')), file).toContain('/docs-human');
     }
   });

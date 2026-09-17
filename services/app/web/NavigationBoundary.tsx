@@ -21,7 +21,7 @@ function documentIdentity(path: string): string {
 
 /** Explicit app routes only. Stored bytes, API, auth callbacks and docs retain native navigation. */
 export function isClientRoute(url: Pick<URL, 'pathname'>): boolean {
-  return /^\/(?:$|(?:account|assets|chat|login|privacy|terms|trash|docs-human|tokens)\/?$|(?:datasets|files)\/new\/?$|a\/[^/]+(?:\/edit)?\/?$|@[^/]+(?:\/[^/]+(?:\/edit)?)?\/?$)/.test(url.pathname);
+  return /^\/(?:$|(?:account|assets|chat|login|trash|docs-human|tokens)\/?$|(?:datasets|files)\/new\/?$|a\/[^/]+(?:\/edit)?\/?$|@[^/]+(?:\/[^/]+(?:\/edit)?)?\/?$)/.test(url.pathname);
 }
 
 export function NavigationBoundary({ children }: { children: ReactNode }): ReactNode {
