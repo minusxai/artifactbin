@@ -10,6 +10,8 @@ next-env.d.ts
 # node_modules, so already ignored — named explicitly because it is a build
 # input the tsconfigs point at, not a stray artifact.
 node_modules/.cache/tsc/
+# the standalone CLI build's Chromium archive cache (scripts/chromium-native.mjs), ~170 MB
+/services/cli/.cache/
 # vendored runtime assets — copied from node_modules on postinstall
 **/public/monaco/
 .artifact-objects/
