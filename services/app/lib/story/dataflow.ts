@@ -275,6 +275,10 @@ export const REF_ATTRS: {
     Button: { run: 'mutation' },
     Dialog: {open: 'scalar'},
     DialogContent: {run: 'mutation'},
+    // A person, shown by name (components/kit/user.tsx). `id` READS its
+    // reference and never writes it back, which is what lets the viewer's own
+    // `$_me` sit there — see VIEWER_REF below.
+    User: { id: 'scalar' },
   },
   html: {
     input: { value: 'scalar', checked: 'scalar', run: 'mutation' },
@@ -316,12 +320,40 @@ export const isTemplateRefPosition = (tag: string, attr: string, isComponent: bo
   !!(isComponent ? TEMPLATE_REF_ATTRS.components[tag] : TEMPLATE_REF_ATTRS.html[tag.toLowerCase()])
     ?.has(isComponent ? attr : attr.toLowerCase());
 
+/**
+ * THE VIEWER, READ-ONLY — `$_me`.
+ *
+ * It is the account id of whoever is looking, and `null` for a guest. SQL has
+ * always bound it (lib/sql/dataflow-core binds `_me` from the request's user);
+ * markup reads the SAME name, so a page can branch on who is reading it
+ * (`{$_me ? <form/> : <SignIn/>}`) without a script and without a `<Value>`
+ * that would stick in the link.
+ *
+ * It is admitted WITHOUT a declaration, and it can never BE declared: `_`
+ * names are reserved (checkName above), so no author can shadow it. It is
+ * equally never WRITTEN — not by a control, not from a URL, not by
+ * `mx.set` — so it is admitted only where a reference is READ: inside a
+ * reactive expression, and in the read-only attributes below. Every other
+ * reference position is a two-way binding or a data source, and refuses it by
+ * name: who is reading a page is not something the page may set.
+ */
+export const VIEWER_REF = '_me';
+
+/**
+ * The REF_ATTRS positions that only READ their reference — where `$_me` is
+ * therefore legal. Deliberately tiny and opt-in: a binding position added to
+ * REF_ATTRS later must not silently become a place the viewer can be written.
+ */
+const READ_ONLY_REF_ATTRS: Record<string, ReadonlySet<string>> = { User: new Set(['id']) };
+
 /** One `$name` occurrence in the body. */
 interface RefNameUse extends Span {
   name: string;
   tag: string;
   attr: string;
   expects: RefKind;
+  /** True where the reference is only READ — the positions `$_me` may sit in. */
+  readOnly?: boolean;
 }
 
 // ── parsing the two Helmet children ─────────────────────────────────────────
@@ -583,7 +615,8 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
 export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
   const out: RefNameUse[] = [];
   const expressionUses = (expression: ReactiveExpression | undefined, span: Span, tag: string, attr: string) => {
-    if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', start: span.start, end: span.end});
+    // A reactive expression only reads: `{$_me ? … : …}` never writes anything.
+    if (expression) for (const name of reactiveNames(expression).signals) out.push({name, tag, attr, expects: 'scalar', readOnly: true, start: span.start, end: span.end});
   };
   const visit = (nodes: JsxNode[]) => {
     for (const n of nodes) {
@@ -599,13 +632,14 @@ export function collectRefNameUses(body: JsxNode[]): RefNameUse[] {
         for (const a of n.attributes) {
           const expects = table[n.isComponent ? a.name : a.name.toLowerCase()];
           if (!expects || !a.value.static) continue;
+          const readOnly = !!(n.isComponent && READ_ONLY_REF_ATTRS[n.tag]?.has(a.name));
           const name = refName(a.value.json);
-          if (name) { out.push({ name, tag: n.tag, attr: a.name, expects, start: a.start, end: a.end }); continue; }
+          if (name) { out.push({ name, tag: n.tag, attr: a.name, expects, readOnly, start: a.start, end: a.end }); continue; }
           // …and, in the one position that reads it, every `{$name}` inside the
           // string. Same kind, same checks, same refusal — one use per name.
           if (!isTemplateRefPosition(n.tag, a.name, n.isComponent)) continue;
           for (const templated of templateRefNames(a.value.json)) {
-            out.push({ name: templated, tag: n.tag, attr: a.name, expects, start: a.start, end: a.end });
+            out.push({ name: templated, tag: n.tag, attr: a.name, expects, readOnly, start: a.start, end: a.end });
           }
         }
       }
@@ -707,6 +741,17 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
   const describe = (kind: RefKind): string =>
     kind === 'scalar' ? 'a scalar <Value>' : kind === 'table' ? 'a table' : 'a <Mutation>';
   for (const u of uses) {
+    // The one name nobody declares (VIEWER_REF): admitted where a reference is
+    // only read, refused by name anywhere it would be bound or written.
+    if (u.name === VIEWER_REF) {
+      if (!u.readOnly || u.expects !== 'scalar') {
+        errors.push(err(
+          `<${u.tag} ${u.attr}="$_me"> cannot bind $_me — it is the viewer's account id and read-only. Read it in a condition ({$_me ? … : …}) or show the person with <User id="$_me" />`,
+          u, u.tag, u.attr,
+        ));
+      }
+      continue;
+    }
     const kind = kinds.get(u.name);
     if (!kind) {
       errors.push(err(`<${u.tag} ${u.attr}="$${u.name}"> refers to nothing declared${u.expects === 'mutation' ? ' — declare it in <Helmet> as <Mutation name="…">{`insert into public.rows …`}</Mutation>' : hint}`, u, u.tag, u.attr));

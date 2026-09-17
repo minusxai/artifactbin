@@ -5,6 +5,7 @@ import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
 import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
+import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -64,7 +65,7 @@ import { runMutation } from '@/lib/sql/engine';
 import { runLocalStateMutation, type LocalMutationResult } from '@/lib/story/local-state';
 import { localTableOverrides } from '@/lib/story/local-tables';
 import { ancestorsForMove, childrenTableFor, CHILDREN_COLUMNS, notifyParent, parentOf } from '@/lib/folders';
-import type { RanDataflow, StoryIslandDataflow } from '@/lib/story-runtime/contract';
+import type { RanDataflow, StoryIslandDataflow, StoryViewer } from '@/lib/story-runtime/contract';
 import type { RefLoader, ResolvedRef } from '@/lib/story/refs';
 import type { DatasetColumn } from '@/lib/story/data-tiers';
 import { checkDocumentData } from '@/lib/story/data-checks';
@@ -2011,7 +2012,13 @@ export const writerFor = (doc: ArtifactRow): TokenActor => ({ tokenId: doc.token
 type DocumentMutationOutcome =
   | { ok: true; dataset: ArtifactRow; affected: number; rowCount: number }
   | { ok: true; local: LocalMutationResult }
-  | { ok: false; reason: 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row'; detail?: string };
+  | {
+      ok: false;
+      reason: 'policy_denied' | 'unknown_mutation' | WriteRefusal | 'dataset_full' | 'invalid_sql' | 'contended' | 'row_changed' | 'row_not_unique' | 'invalid_row';
+      detail?: string;
+      /** The machine-readable half of the one refusal a reader can act on (lib/story/sign-in-required). */
+      code?: typeof SIGN_IN_REQUIRED;
+    };
 
 export async function runDocumentMutation(
   doc: ArtifactRow,
@@ -2083,7 +2090,7 @@ export async function runDocumentMutation(
   if (decl.scope === 'local') {
     try {
       const tables = localTableOverrides(flow, localTables);
-      if(decl.params.includes('_me')&&!actor.userId)return {ok:false,reason:'policy_denied',detail:'$_me requires a logged-in user'};
+      if(decl.params.includes('_me')&&!actor.userId)return {ok:false,reason:'policy_denied',detail:'$_me requires a logged-in user',code:SIGN_IN_REQUIRED};
       const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate:async input=>{
         const columns=input.table.columns.map(c=>c.constraints?.memberOf?{...c,constraints:{...c.constraints,memberOf:c.constraints.memberOf.map(ref=>ref==='current'?`ref:${doc.id}`:ref)}}:c);
         const out=await runMutation({...input,table:{...input.table,columns},params:{...input.params,_me:actor.userId}});
@@ -2096,7 +2103,7 @@ export async function runDocumentMutation(
     }
   }
   const result = await mutateDataset(dataset!, actor, decl.sql, bound, { row: rowBinding, paramTypes, expectedAffected: decl.expectedAffected, source:!!decl.source, document:{id:doc.id,editId:doc.edit_id}, ...(receipt ? { receipt } : {}) });
-  if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail };
+  if (isMutationRefused(result)) return { ok: false, reason: result.reason, detail: result.detail, ...(result.code ? { code: result.code } : {}) };
   return { ok: true, dataset: result.row, affected: result.affected, rowCount: result.rowCount };
 }
 
@@ -2178,9 +2185,14 @@ export async function dataflowForRow(
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
   const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
-  if(result&&(result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
+  // A document NAMES people when a user-typed value or column reaches it, and
+  // now also when it draws a <User> — which a document with no user data at all
+  // may do (`<User id="$_me" />`). The viewer's own id is added for both,
+  // because the one person a page can always name is the one reading it.
+  if(result&&(drawsPeople(row.source)||result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
     const db=await getDb(), options:NonNullable<DataflowState['userOptions']>={}, ids=new Set<string>();
     const viewer=opts.viewer??null;
+    if(viewer?.userId)ids.add(viewer.userId);
     const permitted=async(column:DatasetColumn)=>{
       const refs=column.constraints?.memberOf;
       if(!refs)return column;
@@ -2208,14 +2220,24 @@ export async function dataflowForRow(
 
 /** Viewer capabilities use the same dataset ACL as execution; no authored permission expressions.
  * The preview analyzes the statement under the DECLARED param types too, so the button the page
- * draws and the write the click attempts are judged on one plan. */
+ * draws and the write the click attempts are judged on one plan.
+ *
+ * A statement binding `$_me` additionally needs a PERSON, and a guest pressing
+ * it would otherwise learn that from the raw refusal ("$_me requires a
+ * logged-in user") after the click. That answer is decided last, on a
+ * capability that is otherwise PERMITTED — "unavailable only because the viewer
+ * is a guest" — so a dataset that refuses this actor for its own reasons keeps
+ * saying so, and only the reader who could proceed by signing in is asked to.
+ */
 async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+  const guestOf = (m: {params: string[]}, answer: string|null): string|null =>
+    answer === null && m.params.includes('_me') && !viewer?.userId ? SIGN_IN_REQUIRED : answer;
   return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
-    if(m.scope==='local')return [m.name,null];
+    if(m.scope==='local')return [m.name,guestOf(m,null)];
     const actor=viewer??{userId:null,tokenId:null};
     const dataset=await getArtifactFor(writerFor(doc),m.target);
     if(!dataset||await canWriteDataset(dataset,actor,true))return [m.name,'This action requires dataset view access and a writable dataset with a matching data policy.'];
-    if(!dataset.dataset_policy)return [m.name,null];
+    if(!dataset.dataset_policy)return [m.name,guestOf(m,null)];
     try {
       const name=`ref_${dataset.id}`,catalog=catalogOf(dataset);
       const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name):null;
@@ -2223,7 +2245,7 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleA
       const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},true);
       const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:initialValues(flow),paramTypes:scalarParamTypes(flow),policy,policyPreview:true,
         ...(mutationUsesRow(m.sql)?{row:{columns,values:Object.fromEntries(columns.map(c=>[c.name,null]))}}:{})});
-      return [m.name,'error' in out?out.error:null];
+      return [m.name,guestOf(m,'error' in out?out.error:null)];
     }catch(error){return [m.name,error instanceof Error?error.message:'Dataset policy does not permit this action.'];}
   })));
 }
@@ -2243,6 +2265,40 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
     const { flow } = readParsedArtifactMetadata(row.meta, row.source);
     return isEmptyDataflow(flow) ? null : { flow };
   } catch { return null; }
+}
+
+/**
+ * A document DRAWS A PERSON — a conservative hint, not a parse.
+ *
+ * `<User …>` is the only spelling the markup validator admits for the
+ * component, so a document that draws one always matches; a match inside a
+ * string or a comment costs exactly one indexed lookup and nothing else. It is
+ * deliberately a hint rather than a parse because the answer is only used to
+ * decide whether to SPEND a query, never to decide what a viewer may see.
+ */
+const drawsPeople = (source: string | null | undefined): boolean => /<User[\s/>]/.test(source ?? '');
+
+/**
+ * WHO IS READING, as the document may show them (lib/story-runtime/contract
+ * StoryViewer): the viewer's own account id — `$_me` — and, only for a document
+ * that draws a `<User>`, their display name.
+ *
+ * The name comes from the SAME `userLabels` lookup a DataTable cell has always
+ * used, so nothing new about anyone is exposed: one row, by id, for the person
+ * who is already logged in and asking. A guest gets null and no query at all,
+ * and a document that never names a person pays nothing beyond the id it
+ * already had in hand.
+ */
+export async function viewerIdentityFor(
+  row: Pick<ArtifactRow, 'source'>,
+  userId: string | null | undefined,
+): Promise<StoryViewer | null> {
+  if (!userId) return null;
+  if (!drawsPeople(row.source)) return { id: userId };
+  try {
+    const labels = await userLabels(await getDb(), [userId]);
+    return { id: userId, label: labels[userId] ?? null };
+  } catch { return { id: userId }; }
 }
 
 interface DataflowRunOptions {

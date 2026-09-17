@@ -266,6 +266,31 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
   }
 
+  /*
+   * `<User id=…>` — the one tag whose `id` names a PERSON rather than an
+   * element, so it needs a seam of its own.
+   *
+   * Everywhere else `id` is a DOM id, and inside a `<For>`/`<Column>` it is
+   * deliberately the ONE attribute not substituted from the row and then
+   * rewritten per instance (scopeProps → instanceDomId), so labels, comment
+   * anchors and node identity survive repetition. Both of those are exactly
+   * wrong for a person: the value comes out of the row (`$_row.paid_by`) and
+   * nothing addresses it. So the attribute is taken out of the props here —
+   * it never reaches scopeProps, and no element id is minted for it — and
+   * handed to the component as the person it names. A `$name`/`$_me`
+   * reference is passed through verbatim; the runtime adapter resolves it
+   * against the store and the island (lib/story-runtime/StoryRuntimeApp).
+   */
+  if (node.tag === 'User' && Component) {
+    const authored = node.attributes.find((a) => a.name === 'id');
+    const person = authored?.value.static
+      ? (options.row ? substituteRow(authored.value.json, options.row) : authored.value.json)
+      : null;
+    const props = buildProps(node.attributes.filter((a) => a !== authored), true, node.tag, path, options.row, options.values);
+    const element = React.createElement(Component, { ...props, id: person, key: options.keyFor?.(path) ?? path });
+    return options.decorateElement ? options.decorateElement(element, node, path) : element;
+  }
+
   const run = node.attributes.find((a) => a.name === 'run');
   if (options.row && node.tag === 'Button' && run?.value.static && refName(run.value.json)) {
     if (node.attributes.some(a => ['value', 'checked', 'options'].includes(a.name))) return React.createElement('span', {role:'alert',key:path}, 'Row action buttons do not accept editor bindings');

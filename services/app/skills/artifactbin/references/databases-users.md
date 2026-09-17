@@ -103,3 +103,40 @@ computed text such as `upper(assigned_to)` is ordinary text. `$_me` is reserved
 and bound by the server to the actual caller, never a client-supplied Value or
 the report owner. Mutations using it require login. In queries it is null for
 anonymous readers. PostgreSQL catalogs remain read-only.
+
+## Who is reading
+
+`$_me` is the reader's account ID and `null` for a guest. Read it in any
+condition or reactive expression; it is never declared, never bindable
+(`value="$_me"`, `open="$_me"` and `<Value name="_me">` are rejected at publish)
+and never carried in the link.
+
+```jsx
+{$_me && <Button run="$claim">Claim this</Button>}
+{!$_me && <SignIn>Sign in to claim one</SignIn>}
+```
+
+`<User id=… />` shows a person by display name. `id` takes a literal account ID,
+`$_me`, a scalar `user` Value, or a row field inside `<For>`/`<Column>`. Add
+`avatar` for an initial avatar and `fallback` for what an unset field reads as;
+an ID this reader cannot see renders "Unknown person", never the raw ID.
+
+```jsx
+<p>Signed in as <User id="$_me" avatar /></p>
+<Column col="paid_by"><User id="$_row.paid_by" fallback="nobody" /></Column>
+```
+
+`$_row.<field>` only resolves inside a `<For>` or a `<Column>`; written anywhere
+else it is an ordinary string and renders "Unknown person".
+
+`<SignIn>` is a button-styled link to login that returns to this address. It
+renders nothing for a signed-in reader, so it needs no condition of its own.
+
+```jsx
+<SignIn />
+<SignIn className="w-full">Join to add an expense</SignIn>
+```
+
+A `<Mutation>` binding `$_me` needs a signed-in reader. A guest's `<Button run>`
+or `<DialogContent run>` then offers "Sign in to do this" instead of running,
+and a direct POST answers `403 {"error":"policy_denied","code":"sign_in_required"}`.
