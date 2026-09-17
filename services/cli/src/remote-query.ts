@@ -41,7 +41,7 @@ export async function discoverTables(workspace:Workspace,parsed:ParsedCommand,cl
 /** A read runs on the engine its own target allows; one unavailable input never moves the others. */
 export async function mixedQuery(workspace:Workspace,parsed:ParsedCommand,sql:string|undefined,client:HttpClient){
  return batchCommand(parsed.positionals,async target=>{
-  const local=await localQuery(workspace,{...parsed,positionals:[target]},sql,client.connection.server);
+  const local=await localQuery(workspace,{...parsed,positionals:[target]},sql,client.connection.server,client.aliases);
   return local??remoteQueryTarget(workspace,parsed,sql,client,target);
  });
 }

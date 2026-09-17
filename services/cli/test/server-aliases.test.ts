@@ -267,3 +267,35 @@ test('preview binds a folder tracked against a verified alias to the canonical o
   assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS),[]);
  });
 });
+
+// Found with the released binary against production: the pre-flight took the alias list, the two
+// functions that DO the pull did not, so a link pasted from the other hostname was still wrong_server.
+for(const [name,args] of [['to a file',['--output','doc.jsx','--json']],['to stdout',['--output','-']]] as const)test(`pull accepts a link at a verified alias of the selected server (${name}), and asks the canonical origin for it`,async()=>{
+ await withHome(async home=>{
+  await saveConnection({server:CANONICAL,token:'test-token'},home,{});
+  const head={id:'abc123',version:1,edit_id:'one',state:'a'.repeat(64),format:'markup',markup:'<p>Hello</p>',title:'Doc'};
+  const net=world({
+   [`${CANONICAL}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]},
+   [`${CANONICAL}/api/artifacts/abc123`]:()=>Response.json(head,{headers:{'X-Artifactbin-Account':'usr_seed'}}),
+  });
+  const run=await cli(['pull',`${ALIAS}/@sam/abc123-doc?$x=1`,...args,'--server',CANONICAL],home,net.fetch);
+  assert.equal(run.code,0,run.err.join('')+run.out.join(''));
+  const api=net.seen.filter(call=>call.path!=='/api/server');
+  assert.deepEqual([...new Set(api.map(call=>call.origin))],[CANONICAL]);
+  assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS).map(call=>call.path),[]);
+ });
+});
+
+// Every OTHER command that takes a link: none may call a verified alias a wrong server, and none may
+// send a byte to it. The fake canonical origin answers only the identity question, so a command may
+// fail for its own reasons (not_found) — what is pinned is that the LINK was understood.
+for(const args of [['query'],['log'],['comment'],['open'],['export','--format','original','--output','out.jsx'],['fork','--output','copy.jsx'],['delete','--dry-run']] as const)test(`${args[0]} understands a link at a verified alias of the selected server`,async()=>{
+ await withHome(async home=>{
+  await saveConnection({server:CANONICAL,token:'test-token'},home,{});
+  const net=world({[`${CANONICAL}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]}});
+  const [command,...rest]=args;
+  const run=await cli([command,`${ALIAS}/a/abc123?$x=1`,...rest,'--server',CANONICAL,'--json'],home,net.fetch);
+  assert.doesNotMatch(run.out.join('')+run.err.join(''),/wrong_server/);
+  assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS).map(call=>call.path),[]);
+ });
+});
