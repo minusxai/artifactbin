@@ -5,16 +5,10 @@
  * name must be visible in the document, never a silent hole. Chrome is a small
  * default footprint (`size-4`) that an authored size-* class overrides via cn().
  *
- * Every one of those promises is unchanged. What changed is WHO resolves the glyph:
- * the component used to hold all ~1600 of them, which every reader downloaded
- * (148 KB gz) to serve the 2-in-155 documents that draw an icon — and paid again on
- * every visit, since a sandboxed document cannot reuse its cache. Now the server
- * resolves the handful a document uses and they arrive in the island
- * (lib/story/icon-glyphs), while the EDIT CANVAS — which renders a draft with no
- * server round trip — keeps the full set in its own on-demand chunk.
- *
- * So the contract below is exercised through BOTH renderers, because a document is
- * read through one and written through the other and they must not drift.
+ * The SERVER resolves the handful of glyphs a document uses and they arrive in the
+ * island (lib/story/icon-glyphs), so the ~1600-glyph set never reaches a reader's
+ * bundle. Editing is a mode the served document enters in place, so a draft resolves
+ * its icons the same way: one renderer, exercised below.
  */
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/react';
@@ -34,22 +28,12 @@ function served(props: { name: string } & Record<string, unknown>) {
   );
 }
 
-/*
- * ONE renderer now. There used to be two — the served document and the edit
- * canvas, which kept the whole ~1600-glyph lucide map so a draft could resolve
- * a name with no round trip. Editing happens in the served document, so a draft
- * resolves its icons exactly the way every other version does, and the second
- * renderer (with its map) is gone.
- */
-
 describe('<Icon>', () => {
   it('is registered under both the registry and the names-only module', () => {
     expect(KitIcon).toBeTruthy();
     expect(STORY_UI_COMPONENT_NAME_LIST).toContain('Icon');
   });
 
-  // A `describe.each` over an array of ONE entry: the second renderer (the draft canvas with its
-  // own ~1600-glyph map) is gone, so the parameterisation was a loop with one iteration.
   describe('served document', () => {
     const renderIcon = served;
     it('renders the named lucide icon as inline svg (kebab-case name)', () => {

@@ -13,10 +13,10 @@
  * There are two constructed URLs per source, because there is NO embedded
  * player: the served document's sandbox propagates to nested browsing
  * contexts, so a third-party player iframe inherits the opaque origin and
- * refuses to run (readers saw a dead black frame). `videoEmbedUrl` survives
- * as the publish-door "is this a supported source" gate; `videoWatchUrl` is
- * what the card actually links to — the video's own page, opened in a new
- * tab through the sandbox's allow-popups flags.
+ * refuses to run (readers saw a dead black frame). `videoEmbedUrl` is the
+ * publish-door "is this a supported source" gate; `videoWatchUrl` is what the
+ * card actually links to — the video's own page, opened in a new tab through
+ * the sandbox's allow-popups flags.
  *
  * Pure and DOM-free, so the same rule is testable in the node project and
  * usable server-side (the snapshot renders through the same component).
@@ -94,9 +94,9 @@ function parseVideoSrc(src: unknown): ParsedVideo | null {
 
 /**
  * The canonical embed-player URL, or null for an unsupported source. Nothing
- * renders this in a frame anymore (see the module comment) — it survives as
- * the publish door's supported-source check (lib/story/refs) and the one
- * spelling of the allowlist.
+ * renders it in a frame (see the module comment): it is the publish door's
+ * supported-source check (lib/story/refs) and the one spelling of the
+ * allowlist.
  */
 export function videoEmbedUrl(src: unknown): string | null {
   const v = parseVideoSrc(src);

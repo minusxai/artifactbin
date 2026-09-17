@@ -38,12 +38,10 @@ describe('interactive elements a script can drive', () => {
   });
 
   /**
-   * `<audio>`/`<video>` are deliberately NOT here. A self-contained document
-   * could only carry media as inline `data:` bytes, and the ported URL gate
-   * admits `data:image/` alone — widening a security denylist in the vendored
-   * engine buys a clip that barely fits under the 2 MB document cap anyway.
-   * Hosted video has a real answer already: the `<Video>` component, a
-   * click-to-open card for the three allowlisted hosts (video-embed.ts).
+   * `<audio>`/`<video>` are in the tag allowlist, but their SOURCE is not free:
+   * the URL gate admits `data:image/` alone, so inline media bytes are refused.
+   * Hosted video has its own door: the `<Video>` component, a click-to-open
+   * card for the three allowlisted hosts (video-embed.ts).
    */
   it('does not pretend to support media it cannot serve self-contained', () => {
     expect(validate('<video src="data:video/mp4;base64,AAAA"></video>').length).toBeGreaterThan(0);

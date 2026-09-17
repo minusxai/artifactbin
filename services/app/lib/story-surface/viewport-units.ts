@@ -1,72 +1,45 @@
 /**
- * Viewport-HEIGHT units, rewritten to resolve against the READER's viewport.
+ * Viewport-HEIGHT units, rewritten to resolve against `--mx-vh`.
  *
- * This is the height half of the surface's sizing contract, and the reason it
- * cannot be left to convention. The story iframe is CONTENT-SIZED: its height
- * is whatever `autoSizeStorySurface` last measured the content to be. So inside
- * that iframe `100vh` does not mean "the reader's screen" — it means "the whole
- * story", and the sizer's own output is the input to the next measurement:
+ * `--mx-vh` is the document's own height custom property, declared in the
+ * served document's base CSS (`:root { --mx-vh: 100vh; }`,
+ * lib/story/prepare-runtime.server.ts) and authored against by the slide kit
+ * and the deck templates (`min-h-[var(--mx-vh,760px)]`). Rewriting a `vh`
+ * length to it puts authored CSS on that same property instead of on the raw
+ * unit, so one declaration governs the height a document sizes against.
  *
- *     contentHeight = N * iframeHeight        (N = count of `h-screen` sections)
- *     iframeHeight  = contentHeight           (what the sizer writes)
- *
- * That recurrence has NO fixed point except 0. Observed on a real published
- * deck (six `h-screen` sections): the iframe settled at 289px while its content
- * measured 1803px, every section laid out at the full 1803px, and the first
- * slide's centered `<h1>` sat at -69px — clipped above the surface. The page
- * rendered blank. It is not a runaway to infinity; it is a contract that simply
- * cannot be satisfied, so the surface stops wherever the observers go quiet.
- *
- * The surface already publishes the right number: `--mx-vh`, the HOST window's
- * innerHeight, stamped on the story root every sync. Until now using it was the
- * AUTHOR's job (`min-h-[var(--mx-vh,760px)]`) — which works when you control the
- * agent writing the markup, and fails the moment anyone else's agent writes the
- * obvious thing. Every agent reaches for `h-screen`. So the substitution moves
- * here, into the render path: authored `vh` is rewritten to `--mx-vh` on the way
- * into the iframe, and `h-screen` simply means what it says.
- *
- * Applied to the compiled sheet at injection rather than at compile time,
- * deliberately: `meta.compiledCss` is frozen into the row at publish time and
- * nothing recompiles on read, so a compile-time fix would strand every artifact
- * already stored. Rewriting where the sheet is injected heals all of them with
- * no migration — which is also the house rule (additive DDL, never a migration
- * script).
- *
- * Authored `<style>` blocks (allowed since the `no-inline-style` policy) are
- * the OTHER place vh can hide, and they render straight through the
- * interpreter — no injection hook. Those are remapped at SAVE instead
- * (`story/managed-iframe-source.remapMarkupStyleViewportUnits`, wired into
- * the publish door beside the
- * banned-css sanitizer): the stored source is already the sanitized form, and
+ * The caller is the publish door: authored `<style>` blocks (the
+ * `no-inline-style` policy allows them) render straight through the
+ * interpreter, so their `vh` lengths are remapped at SAVE
+ * (`story/managed-iframe-source.remapMarkupStyleViewportUnits`, beside the
+ * banned-css sanitizer). The stored source is already the sanitized form and
  * the remap is idempotent, so the canonical-fixpoint contract holds.
  */
 
-/** The custom property carrying the host viewport height into the surface. */
+/** The custom property carrying the viewport height the surface sizes against. */
 export const STORY_VH_VAR = '--mx-vh';
 
 /**
- * Fallback for the headless/pre-stamp case (deterministic capture, first paint
- * before `sync()` runs). Matches the value the authored convention has always
- * used: `min-h-[var(--mx-vh,760px)]`.
+ * Fallback for a render whose base CSS never declared the property. Matches the
+ * value the authored convention uses: `min-h-[var(--mx-vh,760px)]`.
  */
 export const STORY_VH_FALLBACK = '760px';
 
 /**
  * Rewrite viewport-height lengths in CSS *declaration values* so they resolve
- * against the host viewport instead of the content-sized iframe.
+ * against `--mx-vh` instead of the unit's own viewport.
  *
  * - `100vh` → `var(--mx-vh,760px)`; any other length → `calc(...*N/100)`, which
  *   nests correctly inside an authored `calc()`.
  * - Covers the whole vertical family — `vh`, `dvh`, `svh`, `lvh` — because
- *   Tailwind v4 emits `h-dvh`/`min-h-svh` and agents write them.
- * - Leaves `vw`/`vmin`/`vmax` ALONE: the iframe is exactly as wide as its
- *   container, so viewport-width units are already correct and rewriting them
- *   would break layout.
- * - Touches values only, never selectors or at-rule preludes. The compiled
- *   sheet contains `.h-\[100vh\]{...}` and `@media (min-height:100vh)`; rewriting
- *   the first would break the class match and silently unstyle the document,
- *   and `var()` does not work in a media query at all.
- * - Idempotent, so a re-injection cannot compound.
+ *   authors write all four.
+ * - Leaves `vw`/`vmin`/`vmax` ALONE: there is no width counterpart to
+ *   `--mx-vh`, and rewriting them would break layout.
+ * - Touches values only, never selectors or at-rule preludes. An escaped
+ *   selector (`.h-\[100vh\]`) and `@media (min-height:100vh)` both carry the
+ *   text: rewriting the first would break the class match and silently unstyle
+ *   the document, and `var()` does not work in a media query at all.
+ * - Idempotent, so a repeated save cannot compound.
  */
 export function remapViewportHeightUnits(css: string): string {
   let out = '';

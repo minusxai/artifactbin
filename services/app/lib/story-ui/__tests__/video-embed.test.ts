@@ -1,9 +1,10 @@
 /**
- * videoEmbedUrl — the trust boundary that lets stories embed video WITHOUT the
+ * videoEmbedUrl — the trust boundary that lets stories carry video WITHOUT the
  * validator giving up its iframe ban. Raw <iframe> stays rejected everywhere;
- * the <Video> component renders the iframe itself, and this function decides
- * what it may point at: a small allowlist of video hosts, each normalized to
- * ONE canonical embed URL built from the parsed video id — never echoed input.
+ * `<Video>` draws a card that opens the video on its own page, and this module
+ * decides what it may point at: a small allowlist of video hosts, each
+ * normalized to ONE canonical URL built from the parsed video id — never
+ * echoed input.
  */
 import { describe, it, expect } from 'vitest';
 

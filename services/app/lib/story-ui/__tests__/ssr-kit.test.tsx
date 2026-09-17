@@ -7,7 +7,7 @@
  * document until fixed or excluded.
  *
  * Subject: the kitchen-sink document (the registry drift gate guarantees it
- * instantiates every kit component). Embeds (`Question`/`Number`/`Param`) are
+ * instantiates every kit component). Embeds (`Question`/`Number`) are
  * NOT in `STORY_UI_COMPONENTS` — unknown component tags render nothing — and
  * get their own server-render story (the data island + runtime hydration);
  * this test pins the kit.

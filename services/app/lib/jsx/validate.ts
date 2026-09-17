@@ -24,13 +24,6 @@ import type { JsxNode, JsxElement, ValidationError, ValidateOptions } from './ty
 // the same legacy tags.
 const LEGACY_STORY_COMPONENT_NAMES = immutableSet(STORY_COMPONENT_NAMES);
 
-// Lowercase HTML tags that can introduce active content / navigation hijacking.
-// Shared with the read-time gates (see lib/jsx/dangerous-tags.ts) — the same
-// no-second-copy rule as URL_ATTRS above it.
-
-// Attributes whose value is a URL — checked against dangerous schemes. `srcset` and `ping`
-// carry URL lists with different separators and are checked per URL.
-
 // Attributes rejected by NAME on every tag: HTML injection (dangerouslySetInnerHTML, srcdoc),
 // React internals (ref/key — never serializable data), and customized built-ins (is).
 const DENIED_ATTRS = DENIED_JSX_ATTRS;

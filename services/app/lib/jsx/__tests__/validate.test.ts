@@ -86,10 +86,9 @@ describe('validateJsx — no-inline-style policy', () => {
   };
 
   /**
-   * Authored CSS is still in-distribution vocabulary — custom keyframes and all
-   * — it just has ONE home now. This used to assert the body spelling; the
-   * document-level door (see below) is what replaced it, and `/docs/llm` had
-   * already been telling agents `<Helmet><style>` for a while.
+   * Authored CSS is in-distribution vocabulary — custom keyframes and all — and
+   * it has exactly ONE home: `<Helmet><style>`, which is what the agent docs
+   * teach and what the document-level door (see below) enforces.
    */
   it('sends an authored <style> block to the Helmet rather than the body', () => {
     const errs = errors('<div><style>{`@keyframes rise { from { opacity: 0 } }`}</style></div>', noInlineStyle);
