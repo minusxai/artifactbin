@@ -283,10 +283,12 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   const byline = `<div class="mx-reader-byline" data-mx-reader-byline${input.ownerBreadcrumb ? ' data-mx-owner-breadcrumb' : ''}>`
     + '<a class="mx-reader-brand-crumb" href="/" target="_top">artifactbin</a>'
     + (username ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
-    + authorFace
+    // The author's face rides INSIDE the handle's link, before the `@`: one
+    // target, and a phone byline that wraps can never strand the face on the
+    // line above its handle. Decorative — the link's aria-label is its name.
     + (username
       ? `<a class="mx-reader-author" href="/@${escapeHtml(username)}" target="_top"`
-        + ` aria-label="View @${escapeHtml(username)}'s profile">@${escapeHtml(username)}</a>`
+        + ` aria-label="View @${escapeHtml(username)}'s profile">${authorFace}@${escapeHtml(username)}</a>`
       : '')
     // FOLLOW rides right beside the handle it follows, and only when there is
     // one: an anonymous document has nobody to follow.

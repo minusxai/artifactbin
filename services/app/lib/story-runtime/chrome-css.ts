@@ -281,7 +281,8 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   width: 100% !important; height: 100% !important; max-width: none !important;
   margin: 0 !important; border: 0 !important; border-radius: 999px !important; object-fit: cover !important;
 }
-.mx-reader-face--author { width: 18px !important; height: 18px !important; }
+.mx-reader-face--author { width: 18px !important; height: 18px !important; margin-right: 6px !important; vertical-align: middle !important; }
+.mx-reader-byline > a:has(> .mx-reader-face) { display: inline-flex !important; align-items: center !important; }
 .mx-reader-face--author .mx-reader-face-initial { font-size: 9px !important; }
 /* Open, the face stays and an accent ring says so — offset by the rail's own
    ground, so it reads on the light rail and the dark one alike. */
@@ -544,7 +545,6 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
   .mx-reader-action svg, .mx-reader-trigger svg { width: 24px !important; height: 24px !important; }
   /* The reader's face sits on the content like the glyphs do, with the same halo. */
   .mx-reader-face--viewer { box-shadow: 0 0 0 1.5px var(--mx-reader-bg), 0 1px 6px color-mix(in srgb, var(--mx-reader-fg) 30%, transparent) !important; }
-  .mx-reader-byline > .mx-reader-face { order: 1 !important; }
   /* The badge on a 44px target with a 24px glyph. */
   .mx-reader-count { top: 2px !important; right: 1px !important; }
   .mx-reader-home {
