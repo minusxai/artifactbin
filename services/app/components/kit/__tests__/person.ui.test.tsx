@@ -9,7 +9,7 @@
  * viewer a neutral "Unknown person" rather than a lookup.
  */
 import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render } from '@testing-library/react';
 import type { PersonCard } from '@artifactbin/contracts';
 import { UserImage } from '@/components/kit/user-image';
 import { UserHandle } from '@/components/kit/user-handle';
@@ -44,6 +44,32 @@ describe('<UserImage>', () => {
     expect(box.style.backgroundColor).toBe(asDrawn(personFaceBackground('usr_ada')));
     // The picture is painted OVER it, not beside it.
     expect(view.container.querySelector('img')!.className).toContain('absolute');
+  });
+
+  /*
+   * Underneath is not enough on its own: Chromium paints its broken-image icon
+   * over a sized `<img>` whose address fails, even with an empty alt. A failed
+   * picture is taken away, and its name moves to the circle it leaves.
+   */
+  it('takes a failed picture away, leaving the initial and the name', () => {
+    const view = render(<UserImage id="usr_ada" card={ADA} />);
+    fireEvent.error(view.container.querySelector('img')!);
+    expect(view.container.querySelector('img')).toBeNull();
+    expect(view.container.querySelector('[data-slot="avatar-fallback"]')!.textContent).toBe('A');
+    expect(view.getByRole('img', { name: 'Ada Lovelace' })).toBeTruthy();
+  });
+
+  it('takes away a picture that had already failed before it was wired', () => {
+    const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete');
+    Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true });
+    try {
+      const view = render(<UserImage id="usr_ada" card={ADA} decorative />);
+      expect(view.container.querySelector('img')).toBeNull();
+      expect(view.container.querySelector('[data-slot="avatar-fallback"]')!.textContent).toBe('A');
+    } finally {
+      if (complete) Object.defineProperty(HTMLImageElement.prototype, 'complete', complete);
+      else delete (HTMLImageElement.prototype as { complete?: boolean }).complete;
+    }
   });
 
   it('is decorative beside a name: an empty alt and hidden from the accessibility tree', () => {
