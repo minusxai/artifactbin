@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AppBar, PageMenu } from '@/components/PageChrome';
 import { SessionProvider } from '@/web/session';
-import { pageDataChanged } from '@/web/page-data-events';
+import UsernameCard from '@/components/UsernameCard';
+import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 import { router, resetRouter } from '@/test/setup/router';
 
 beforeEach(resetRouter);
@@ -95,6 +96,7 @@ describe('the menu button draws who is signed in', () => {
   beforeEach(() => {
     sessionReads = 0;
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (String(url).includes('/api/my/profile')) return new Response(JSON.stringify({ username: 'zoe' }), { headers: { 'content-type': 'application/json' } });
       if (String(url).includes('/api/page/session')) sessionReads++;
       return new Response(JSON.stringify(answer), { headers: { 'content-type': 'application/json' } });
     }));
@@ -154,16 +156,40 @@ describe('the menu button draws who is signed in', () => {
     expect(screen.getByRole('button', { name: 'Open menu' })).toHaveTextContent('B');
   });
 
-  it('picks up a new picture when page data changes, without flashing back to the glyph', async () => {
+  it('picks up a new picture when the profile changes, without flashing back to the glyph', async () => {
     answer = account({ image: null });
     bar();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open menu' })).toHaveTextContent('B'));
 
     answer = account({ image: '/api/users/usr_bar/avatar?v=new' });
-    act(() => pageDataChanged());
+    act(() => profileChanged());
     // The old session stays up while the new one is read: never a glyph in between.
     expect(screen.getByRole('button', { name: 'Open menu' }).querySelector('svg')).toBeNull();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Open menu' }).querySelector('img')).toHaveAttribute('src', '/api/users/usr_bar/avatar?v=new'));
+    expect(sessionReads).toBe(2);
+  });
+
+  it('does not re-read the session when unrelated page data changes', async () => {
+    answer = account({ image: null });
+    bar();
+    await waitFor(() => expect(sessionReads).toBe(1));
+    answer = account({ image: '/api/users/usr_bar/avatar?v=new' });
+    act(() => pageDataChanged());
+    act(() => pageDataChanged());
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sessionReads).toBe(1);
+    expect(screen.getByRole('button', { name: 'Open menu' }).querySelector('img')).toBeNull();
+  });
+
+  it('draws the new handle\'s initial once the handle is saved', async () => {
+    answer = account({ username: 'barperson' });
+    render(<SessionProvider><AppBar /><PageMenu authed triggerless /><UsernameCard username="barperson" /></SessionProvider>);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open menu' })).toHaveTextContent('B'));
+
+    answer = account({ username: 'zoe' });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'zoe' } });
+    fireEvent.click(screen.getByLabelText('Save username'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Open menu' })).toHaveTextContent('Z'));
     expect(sessionReads).toBe(2);
   });
 });

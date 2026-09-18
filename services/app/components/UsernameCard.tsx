@@ -9,7 +9,7 @@
  */
 import { useState } from 'react';
 import { Button, Input, MicroLabel, PANEL } from '@/components/ui';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 
 /**
  * Why a handle was refused, in words. Exported because the WELCOME page saves
@@ -39,6 +39,8 @@ export default function UsernameCard({ username }: { username: string | null }) 
     const body = (await res.json().catch(() => ({}))) as { username?: string; error?: string };
     if (res.ok && body.username) {
       pageDataChanged();
+      // The app bar draws the handle's initial: the session must re-read it.
+      profileChanged();
       // Show what the server STORED (it lowercases and trims), not what was typed.
       setValue(body.username);
       setStatus('saved');

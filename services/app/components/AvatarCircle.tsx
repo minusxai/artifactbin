@@ -23,7 +23,7 @@
  */
 import { useRef, useState } from 'react';
 import Avatar from '@/components/Avatar';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 
 /** The three refusals `lib/avatars` makes, as sentences. */
 const REFUSALS: Record<string, string> = {
@@ -64,8 +64,10 @@ export default function AvatarCircle({ image, initial, userId, onChange, onRemov
     if (!res) { setStatus('could not reach the server'); return null; }
     const body = (await res.json().catch(() => ({}))) as { image?: string | null; error?: string };
     if (!res.ok) { setStatus(REFUSALS[body.error ?? ''] ?? 'could not save that picture'); return null; }
-    // Anything that draws this person elsewhere is now stale.
+    // Anything that draws this person elsewhere is now stale — the app bar's
+    // face included, which is the session's to re-read.
     pageDataChanged();
+    profileChanged();
     return body;
   };
 
