@@ -24,7 +24,7 @@ export const TESTUSER_OPERATIONS: Operation[] = [
     description: `Mint a throwaway SECOND PERSON to verify a multi-person page with — the other member of a tab, the other voter, the second RSVP. It is a real user toward the artifacts test users own and exactly a guest toward everything else: it can read what a link grants and it can never like, comment on, fork or write a row into YOUR data. Bring a page into its sandbox by forking that page as it (fork_artifact with as: {testuser: <id>}), then act as the test user with the bearer token this answers — handed back once and never readable again. An account holds ${TESTUSER_LIMITS.perAccount} at a time and each one dies after ${TESTUSER_LIMITS.ttlMs / 3600000} hours; deleting it ERASES everything it owns, which is what makes it safe to make one.`,
     input: {},
     annotations: {},
-    example: { input: {}, note: 'take id for --as/viewer and token to act as that person' },
+    example: { input: {}, note: 'take id for --as (fork) and viewer (a session); a test user acts only through a browser session, never with a credential of its own' },
     errors: [
       account,
       { status: 409, code: TESTUSER_ERRORS.limit, fix: `You hold ${TESTUSER_LIMITS.perAccount} test users. Delete one (testuser_delete) — it erases what that person made — and mint again.` },
@@ -33,8 +33,11 @@ export const TESTUSER_OPERATIONS: Operation[] = [
       await sweepTestUsers();
       const minted = await createTestUser(ctx.actor);
       if (!minted.ok) return { status: minted.status, body: { error: minted.error, message: minted.message } };
-      const { ok, userId, ...wire } = minted;
-      void ok; void userId;
+      // The token is the session service's to use, never the caller's: a test
+      // user acts through a browser session, and a secret in this reply would
+      // be printed into an agent's context.
+      const { ok, userId, tokenId, token, ...wire } = minted;
+      void ok; void userId; void tokenId; void token;
       return { status: 201, body: { ...wire } };
     },
   },

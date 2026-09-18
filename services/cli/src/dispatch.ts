@@ -380,7 +380,7 @@ export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed.
  */
 function publishedNext(verified:Awaited<ReturnType<typeof verifiedSummary>>):string{
  const writes=[...new Set((verified??[]).flatMap(file=>file.writes??[]))];
- return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each once in a live session, as yourself and with --as guest (afbin help live-sessions), fix and push again before handing it over.`:PUBLISHED_NEXT;
+ return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each once in a live session — as yourself, --as guest, and as a test user on a fork of this page (afbin help live-sessions, afbin help apps) — fix and push again before handing it over.`:PUBLISHED_NEXT;
 }
 /** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
 async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>|undefined>{
