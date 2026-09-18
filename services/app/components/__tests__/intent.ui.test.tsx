@@ -106,7 +106,10 @@ describe('?intent=fork asks before it writes', () => {
     await screen.findByRole('dialog');
     fireEvent.click(screen.getByLabelText('Cancel fork'));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(fetch).not.toHaveBeenCalledWith('/api/my/artifacts/story1/fork', expect.anything());
+    // The dialog's dry run (what a fork WOULD copy) is the one POST allowed here: it creates nothing.
+    const writes = (fetch as unknown as { mock: { calls: Array<[string, RequestInit | undefined]> } }).mock.calls
+      .filter(([url, init]) => url === '/api/my/artifacts/story1/fork' && !String(init?.body ?? '').includes('dry_run'));
+    expect(writes).toEqual([]);
   });
 
   it('Escape cancels it too, and the confirm holds focus', async () => {
