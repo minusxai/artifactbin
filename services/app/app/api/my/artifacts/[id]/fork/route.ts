@@ -1,4 +1,4 @@
-import { forkArtifact, getArtifactById } from '@/lib/artifacts';
+import { forkArtifact, forkDatasetPreview, getArtifactById } from '@/lib/artifacts';
 import { browserActor } from '@/lib/auth';
 import { canRead } from '@/lib/share-roles';
 import { roleFor } from '@/lib/viewer';
@@ -29,6 +29,12 @@ import { baseUrl, json } from '@/lib/http';
  * every other browser create does), and the URL handed back is the canonical
  * one for its NEW owner — where the operation answers the create reply, since
  * an agent's next call is the edit loop rather than a navigation.
+ *
+ * `{"dry_run": true}` answers what forking would COPY — the datasets this page
+ * writes and the forker does not own — and creates nothing. The dialog asks
+ * before it offers the button, because "fork this" and "fork this and take
+ * three datasets of your own" are different acts and only one of them is what
+ * the word alone promises.
  */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const actor = await browserActor(request);
@@ -38,10 +44,16 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!row || !canRead(await roleFor(row, actor))) return json({ error: 'not_found' }, 404);
   const userId = actor.viewer?.userId;
   if (!userId) return json({ error: 'sign_in_required' }, 409);
+  const tokenId = await ensureUserToken(userId);
+  // A body is optional here (the control row sends none), so an unreadable one
+  // is simply "no options" rather than a 400: this door has no overrides to
+  // silently drop, which is the hazard the operation's door answers 400 for.
+  const body = (await request.json().catch(() => null)) as { dry_run?: unknown } | null;
+  if (body?.dry_run === true) return json({ datasets: await forkDatasetPreview({ tokenId, userId }, row) }, 200);
 
-  const copy = await forkArtifact({ tokenId: await ensureUserToken(userId), userId }, row);
+  const copy = await forkArtifact({ tokenId, userId }, row);
   // A publish refusal (an unownable <Mutation> target, an unreadable ref) is
   // passed through by name — it tells the forker exactly what stopped it.
   if (copy instanceof Response) return copy;
-  return json({ id: copy.id, url: `${baseUrl(request)}${canonicalArtifactPath(copy, await ownerUsername(userId))}` }, 201);
+  return json({ id: copy.artifact.id, url: `${baseUrl(request)}${canonicalArtifactPath(copy.artifact, await ownerUsername(userId))}` }, 201);
 }

@@ -70,7 +70,7 @@ describe('fork_artifact on the operations registry', () => {
     expect(op!.http).toEqual({ method: 'POST', path: '/api/artifacts/{id}/fork' });
     expect(op!.annotations.readOnly ?? false).toBe(false);
     expect(op!.annotations.destructive ?? false).toBe(false);
-    expect(Object.keys(op!.input).sort()).toEqual(['id', 'parent_id', 'title', 'visibility']);
+    expect(Object.keys(op!.input).sort()).toEqual(['dry_run', 'id', 'parent_id', 'title', 'visibility']);
     const codes = op!.errors.map((e) => e.code);
     expect(codes).toContain('not_found');
     expect(codes).toContain('quota_exceeded');
@@ -163,15 +163,48 @@ describe('POST /api/artifacts/:id/fork (bearer)', () => {
     expect(copy.visibility).toBe('private');
   });
 
-  it('a document that writes another owner\'s dataset is refused by name, not copied broken', async () => {
+  /*
+   * A document that WRITES another owner's dataset used to be refused here by
+   * name ("not yours to write"), which meant an app could not be forked by
+   * anybody but its author. It is copied instead: the dataset comes along under
+   * the forker, and the answer says which copies it made.
+   */
+  it('a document that writes another owner\'s dataset is copied WITH that dataset, and the answer names the copies', async () => {
     const w = await world();
     const ds = await create(w.ta.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite', visibility: 'public' });
     const doc = await create(w.ta.token, { markup: MUTATING(ds.id), visibility: 'public' });
     const res = await fork(doc.id, w.tb.token);
-    expect(res.status).toBe(400);
-    const text = await res.text();
-    expect(text).toMatch(/invalid_refs/);
-    expect(text).toMatch(/not yours to write/);
+    expect(res.status, await res.clone().text()).toBe(201);
+    const body = (await res.json()) as { id: string; forked_from: string; datasets: Array<{ id: string; forked_from: string }> };
+    expect(body.forked_from).toBe(doc.id);
+    expect(body.datasets).toHaveLength(1);
+    expect(body.datasets[0]!.forked_from).toBe(ds.id);
+    const copiedDataset = await head(body.datasets[0]!.id);
+    expect(copiedDataset.user_id).toBe(w.bob.id);
+    expect(copiedDataset.access).toBe('readwrite');
+    // The page is repointed at the copy, and nothing still names the original.
+    const copy = await head(body.id);
+    expect(copy.source).toContain(`ref:${body.datasets[0]!.id}`);
+    expect(copy.source).not.toContain(`ref:${ds.id}`);
+    expect((copy.meta.refs as Array<{ id: string }>).map((r) => r.id)).toEqual([body.datasets[0]!.id]);
+  });
+
+  it('dry_run answers what the fork would copy and creates nothing', async () => {
+    const w = await world();
+    const ds = await create(w.ta.token, { dataset: [{ choice: 'ramen' }], access: 'readwrite', visibility: 'public', title: 'votes' });
+    const doc = await create(w.ta.token, { markup: MUTATING(ds.id), visibility: 'public' });
+    const before = (await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).length;
+    const res = await fork(doc.id, w.tb.token, { dry_run: true });
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect(await res.json()).toEqual({ datasets: [{ id: ds.id, title: 'votes' }] });
+    expect((await listArtifactsFor({ tokenId: w.tb.id, userId: w.bob.id })).length).toBe(before);
+  });
+
+  it('an ordinary document copies no datasets: the answer says so with an empty list', async () => {
+    const w = await world();
+    const res = await fork(w.doc.id, w.tb.token);
+    expect(res.status, await res.clone().text()).toBe(201);
+    expect(((await res.json()) as { datasets: unknown[] }).datasets).toEqual([]);
   });
 
   /*

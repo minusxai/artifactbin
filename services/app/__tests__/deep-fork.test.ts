@@ -5,11 +5,11 @@
  * under the forker's account and rewrites the refs, in one operation. Datasets the page only reads
  * keep their reference: a read is permitted, and copying it would freeze a live source.
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { agentCookie, useAppHarness } from './harness';
 import { POST as forkRoute } from '@/app/api/my/artifacts/[id]/fork/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
-import { getArtifactById } from '@/lib/artifacts';
+import { getArtifactById, setArtifactQuotaForTests } from '@/lib/artifacts';
 import { setDatasetPolicy } from '@/lib/datasets/policy';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { mintToken } from '@/lib/tokens';
@@ -17,11 +17,31 @@ import { claimToken, createUser } from '@/lib/users';
 import { viewersWritePolicy } from '@artifactbin/utils';
 
 const BASE = 'http://localhost:3000';
-useAppHarness();
+const harness = useAppHarness();
 const sessionUser = { id: '', email: '' };
 vi.mock('@/auth', () => ({
   auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null),
 }));
+/**
+ * THE FAULT INJECTOR for the atomicity case. The copies and the page are one
+ * transaction, and the only honest way to show that is to break it in the
+ * middle: `onClaim` fails the Nth id claim of the run, which is the second
+ * dataset copy's. Inert (0) for every other test in this file.
+ */
+const fault = vi.hoisted(() => ({ onClaim: 0, claims: 0 }));
+vi.mock('@/lib/artifact-identities', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/artifact-identities')>();
+  return {
+    ...real,
+    claimArtifactId: async (...args: Parameters<typeof real.claimArtifactId>) => {
+      fault.claims += 1;
+      if (fault.onClaim && fault.claims === fault.onClaim) throw new Error('injected failure mid-transaction');
+      return real.claimArtifactId(...args);
+    },
+  };
+});
+const ownedBy = async (userId: string): Promise<number> =>
+  Number((await (await harness.db()).query<{ n: string }>('SELECT count(*) n FROM artifacts WHERE user_id = $1', [userId])).rows[0]!.n);
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const jreq = (path: string, method: string, body?: unknown, token?: string, cookie?: string) =>
   new Request(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(cookie ? { Cookie: cookie, Origin: BASE } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
@@ -30,7 +50,8 @@ const create = async (token: string, body: Record<string, unknown>) => {
   expect(res.status, await res.clone().text()).toBe(201);
   return (await res.json()) as { id: string };
 };
-beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
+beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; fault.onClaim = 0; fault.claims = 0; });
+afterEach(() => { setArtifactQuotaForTests(null); });
 
 async function world() {
   const ta = await mintToken('a'); const owner = await createUser({ email: 'owner@x.com' }); await claimToken(owner.id, ta.token);
@@ -84,5 +105,74 @@ describe('forking a page that writes a dataset', () => {
     expect(res.status, await res.clone().text()).toBe(200);
     const body = await res.json();
     expect(body.datasets).toEqual([{ id: w.written.id, title: 'tab' }]);
+  });
+});
+
+/** A page that writes TWO of someone else's datasets and reads a third. */
+async function twoWriters() {
+  const ta = await mintToken('a'); const owner = await createUser({ email: 'two-owner@x.com' }); await claimToken(owner.id, ta.token);
+  const tb = await mintToken('b'); const bob = await createUser({ email: 'two-bob@x.com' }); await claimToken(bob.id, tb.token);
+  const expenses = await create(ta.token, { dataset: [{ id: 1, item: 'Groceries' }], access: 'readwrite', visibility: 'unlisted', title: 'expenses' });
+  const people = await create(ta.token, { dataset: [{ id: 1, name: 'Ada' }], access: 'readwrite', visibility: 'unlisted', title: 'people' });
+  const rates = await create(ta.token, { dataset: [{ code: 'USD', rate: 1 }], visibility: 'unlisted', title: 'rates' });
+  const page = await create(ta.token, {
+    visibility: 'unlisted', title: 'Two writers',
+    markup: `<Helmet><Query name="rows" source="ref:${expenses.id}">{\`select * from public.rows\`}</Query>`
+      + `<Query name="rates" source="ref:${rates.id}">{\`select * from public.rows\`}</Query>`
+      + `<Mutation name="spend" source="ref:${expenses.id}">{\`insert into public.rows (id, item) select 2, 'Taxi'\`}</Mutation>`
+      + `<Mutation name="join" source="ref:${people.id}">{\`insert into public.rows (id, name) select 2, 'Grace'\`}</Mutation></Helmet>`
+      + '<div><Button run="$spend">Spend</Button><DataTable data="$rows" /></div>',
+  });
+  const cookie = await agentCookie([tb.id]);
+  sessionUser.id = bob.id; sessionUser.email = bob.email;
+  return { ta, tb, owner, bob, expenses, people, rates, page, cookie };
+}
+
+describe('a page that writes two foreign datasets', () => {
+  it('copies both, leaves the read-only one shared, and lists the new ids in meta.refs', async () => {
+    const w = await twoWriters();
+    const res = await forkRoute(jreq(`/api/my/artifacts/${w.page.id}/fork`, 'POST', undefined, undefined, w.cookie), params(w.page.id));
+    expect(res.status, await res.clone().text()).toBe(201);
+    const copy = (await getArtifactById((await res.json()).id))!;
+    const refs = (copy.meta.refs as Array<{ id: string }>).map((r) => r.id);
+    expect(refs).toContain(w.rates.id);
+    expect(refs).not.toContain(w.expenses.id);
+    expect(refs).not.toContain(w.people.id);
+    expect(refs).toHaveLength(3);
+    const copies = refs.filter((id) => id !== w.rates.id);
+    for (const id of copies) expect((await getArtifactById(id))!.user_id).toBe(w.bob.id);
+    // Titles identify WHICH original each copy came from — both, once each.
+    const from = await Promise.all(copies.map(async (id) => (await getArtifactById(id))!.forked_from));
+    expect([...from].sort()).toEqual([w.expenses.id, w.people.id].sort());
+    // The one dataset that is only READ is still the original's: a copy would
+    // have frozen a live source the moment somebody forked the page.
+    expect((await getArtifactById(w.rates.id))!.user_id).toBe(w.owner.id);
+    expect(await ownedBy(w.bob.id)).toBe(3);
+  });
+
+  it('the dry run lists both, in the order the page writes them', async () => {
+    const w = await twoWriters();
+    const res = await forkRoute(jreq(`/api/my/artifacts/${w.page.id}/fork`, 'POST', { dry_run: true }, undefined, w.cookie), params(w.page.id));
+    expect(res.status, await res.clone().text()).toBe(200);
+    expect((await res.json()).datasets).toEqual([{ id: w.expenses.id, title: 'expenses' }, { id: w.people.id, title: 'people' }]);
+  });
+
+  it('the quota counts the page PLUS its copies, and a refusal creates nothing', async () => {
+    const w = await twoWriters();
+    // Two copies and a page is three rows; a cap of two must refuse the whole
+    // act rather than take the first dataset and stop.
+    setArtifactQuotaForTests(2);
+    const res = await forkRoute(jreq(`/api/my/artifacts/${w.page.id}/fork`, 'POST', undefined, undefined, w.cookie), params(w.page.id));
+    expect(res.status, await res.clone().text()).toBe(403);
+    expect((await res.json()).error).toBe('quota_exceeded');
+    expect(await ownedBy(w.bob.id)).toBe(0);
+  });
+
+  it('a failure on the SECOND copy rolls the first one back: one transaction, nothing half-done', async () => {
+    const w = await twoWriters();
+    fault.claims = 0; fault.onClaim = 2;
+    await expect(forkRoute(jreq(`/api/my/artifacts/${w.page.id}/fork`, 'POST', undefined, undefined, w.cookie), params(w.page.id)))
+      .rejects.toThrow('injected failure mid-transaction');
+    expect(await ownedBy(w.bob.id)).toBe(0);
   });
 });

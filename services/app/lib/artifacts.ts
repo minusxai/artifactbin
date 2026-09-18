@@ -1,4 +1,5 @@
-import {claimArtifactId} from './artifact-identities';
+import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
+import {collectRefUses} from '@/lib/story/refs';
 import {hasDocumentEditorAccess,type VerifiedAccount} from './document-policy';
 import {isQueryFailure} from '@artifactbin/contracts';
 import {resolveUserValues} from '@/lib/story/user-values';
@@ -334,8 +335,16 @@ export function setArtifactQuotaForTests(cap: number | null): void {
   quotaOverride = cap;
 }
 
-/** True when the token is at its artifact cap (0 ⇒ unlimited). Creation-time only — edits never block. */
-export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
+/**
+ * True when the token is at its artifact cap (0 ⇒ unlimited). Creation-time
+ * only — edits never block.
+ *
+ * `creating` is how many rows the caller is about to make, which is 1 for every
+ * ordinary create and more for the ONE call that makes several at once: a fork
+ * of an app creates the page PLUS a copy of each dataset it writes, and a cap
+ * that only saw the page would let the quota be walked past a dataset at a time.
+ */
+export async function artifactQuotaExceeded(tokenId: string, creating = 1): Promise<boolean> {
   const cap = quotaOverride ?? ARTIFACT_QUOTA_PER_TOKEN;
   if (!cap) return false;
   const db = await getDb();
@@ -349,7 +358,7 @@ export async function artifactQuotaExceeded(tokenId: string): Promise<boolean> {
    * you to publish another one.
    */
   const r = await db.query<{ n: number }>('SELECT COUNT(*)::int AS n FROM artifacts WHERE token_id = $1', [tokenId]);
-  return (r.rows[0]?.n ?? 0) >= cap;
+  return (r.rows[0]?.n ?? 0) + creating > cap;
 }
 
 /** First owning report attachment freezes unresolved memberOf scopes atomically. */
@@ -390,10 +399,18 @@ export async function createArtifact(
    *                FORK carries the source's, exactly as it carries visibility
    *                and access — the same axis, and carrying the tier while
    *                resetting the role would be incoherent.
+   *   datasetPolicy— the stored write policy, copied WITH the dataset it
+   *                governs (a fork of an app copies both). Every other route to
+   *                a policy is lib/datasets/policy `setDatasetPolicy`, which
+   *                needs the row to exist first; a copy has no "first".
+   *   tx         — run inside the caller's OPEN transaction instead of opening
+   *                one. The caller then owns the post-commit effects
+   *                (`afterCreated`): reaching trackEvent/notifyParent from
+   *                inside a transaction would enqueue a query behind the
+   *                transaction that holds PGLite's one connection.
    */
-  atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[] } = {},
+  atCreation: { reservedId?:string; forkedFrom?: string; linkRole?: ShareRole | null; operation?: CreationOperation | null; shares?:ShareEntry[]; datasetPolicy?: { policy: unknown; revision: number }; tx?: Queryable } = {},
 ): Promise<ArtifactRow> {
-  const db = await getDb();
   if (input.format === 'markup' && input.source) {
     input = { ...input, source: stampNodeIds(input.source, { retireLegacyAliases: true }).source };
   }
@@ -402,84 +419,112 @@ export async function createArtifact(
   if(input.format==='markup'&&input.source) {
     sourceIds=[...nodeIndex(input.source).keys()];
   }
+  // INSIDE THE CALLER'S TRANSACTION: no retry (a PK violation has already
+  // poisoned it — the ids are reserved beforehand instead) and no post-commit
+  // effects, which are the caller's to run once its own transaction commits.
+  if (atCreation.tx) return insertArtifact(atCreation.tx, atCreation.reservedId ?? generateFileId(), tokenId, userId, input, sourceIds, atCreation);
+  const db = await getDb();
   // Birthday collisions at 62^6 are routine once the table is large, so the
   // PK-violation retry is a working path, not a theoretical one.
   const ID_MINT_ATTEMPTS = 5;
   for (let attempt = 0; ; attempt++) {
     const id = atCreation.reservedId ?? generateFileId();
     try {
-      const r = await db.transaction(async tx=>{
-        if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
-        await claimArtifactId(tx,id,{tokenId,userId},!!atCreation.reservedId);
-        await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
-        const catalog=catalogOf(input);
-        if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
-        const guestDefault = input.visibility === undefined && userId
-          ? (await tx.query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [userId])).rows.length > 0
-          : false;
-        const created = await tx.query<ArtifactRow>(
-        // The genesis edit row makes the creation's edit_id resolvable like any
-        // other: an agent that creates and then edits against that id is on an
-        // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
-        // always execute, so the log row lands even though nothing reads it.
-        `WITH created AS (
-           INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2) RETURNING *
-         ), genesis AS (
-           INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
-           SELECT id, edit_id, 0, '', COALESCE(source, content), 0, 0, $3, $2 FROM created
-         ), reserved AS (
-           INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
-           SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($16::jsonb)
-         )
-         SELECT * FROM created`,
-        [
-          id,
-          tokenId,
-          userId,
-          input.title ?? null,
-          input.description ?? null,
-          input.format,
-          input.content,
-          input.source,
-          JSON.stringify(input.meta),
-          // Guest identities retain anonymous public defaults. Registered
-          // accounts create private documents, except assets, born
-          // unlisted: a public document reaches them at read time, and a
-          // born-private ref bakes a 404 into every shared document that uses
-          // it. Routes validate an explicit ask upstream.
-          input.visibility ??
-            (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
-              : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
-          // NULL reads as 'viewer' (linkRoleOf), which is what every ordinary
-          // creation grants whoever holds the link.
-          atCreation.linkRole ?? null,
-          input.ancestor_ids ?? [],
-          newEditId(),
-          // Read-only unless the caller asked otherwise: a dataset that could
-          // be written by default would make every existing document's data
-          // mutable without anyone choosing it.
-          input.access ?? 'read',
-          atCreation.forkedFrom ?? null,
-          JSON.stringify(sourceIds),
-        ],
-        );
-        Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
-        await bindCurrentUserScopes(tx,created.rows[0]);
-        if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
-        return created;
-      });
-      void trackEvent('create', r.rows[0].id, { userId, parentId: parentOf(r.rows[0]) });
-      // A child arriving wakes the folder it landed in, so an open listing
-      // re-runs its own query with no reload.
-      await notifyParent(parentOf(r.rows[0]));
-      return r.rows[0];
+      const row = await db.transaction((tx) => insertArtifact(tx, id, tokenId, userId, input, sourceIds, atCreation));
+      await afterCreated(row, userId);
+      return row;
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (!atCreation.reservedId && code === '23505' && attempt < ID_MINT_ATTEMPTS) continue;
       throw error;
     }
   }
+}
+
+/** What a creation says to the rest of the system, AFTER its transaction committed. */
+async function afterCreated(row: ArtifactRow, userId: string | null): Promise<void> {
+  void trackEvent('create', row.id, { userId, parentId: parentOf(row) });
+  // A child arriving wakes the folder it landed in, so an open listing
+  // re-runs its own query with no reload.
+  await notifyParent(parentOf(row));
+}
+
+/** The creation itself: every row one artifact is born with, and nothing outside the transaction. */
+async function insertArtifact(
+  tx: Queryable,
+  id: string,
+  tokenId: string,
+  userId: string | null,
+  input: ArtifactInput,
+  sourceIds: string[],
+  atCreation: Parameters<typeof createArtifact>[3] = {},
+): Promise<ArtifactRow> {
+  if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
+  await claimArtifactId(tx,id,{tokenId,userId},!!atCreation.reservedId);
+  await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
+  const catalog=catalogOf(input);
+  if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
+  const guestDefault = input.visibility === undefined && userId
+    ? (await tx.query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [userId])).rows.length > 0
+    : false;
+  const created = await tx.query<ArtifactRow>(
+  // The genesis edit row makes the creation's edit_id resolvable like any
+  // other: an agent that creates and then edits against that id is on an
+  // ordinary (if empty) base, not an unknown one. Data-modifying CTEs
+  // always execute, so the log row lands even though nothing reads it.
+  `WITH created AS (
+     INSERT INTO artifacts (id, token_id, user_id, title, description, format, content, source, meta, visibility, link_role, ancestor_ids, edit_id, access, forked_from, actor_user_id, actor_token_id, dataset_policy, policy_revision)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $3, $2, $17::jsonb, $18::int) RETURNING *
+   ), genesis AS (
+     INSERT INTO artifact_edits (artifact_id, edit_id, splice_start, removed, inserted, span_start, span_end, actor_user_id, actor_token_id)
+     SELECT id, edit_id, 0, '', COALESCE(source, content), 0, 0, $3, $2 FROM created
+   ), reserved AS (
+     INSERT INTO artifact_source_ids (artifact_id, source_id, provenance, first_version)
+     SELECT $1, value #>> '{}', 'authored', 1 FROM jsonb_array_elements($16::jsonb)
+   ), policy_audit AS (
+     INSERT INTO dataset_policy_audit (dataset_id, revision, policy, actor_user_id, actor_token_id)
+     SELECT $1, $18::int, $17::jsonb, $3, $2 WHERE $17::jsonb IS NOT NULL
+   )
+   SELECT * FROM created`,
+  [
+    id,
+    tokenId,
+    userId,
+    input.title ?? null,
+    input.description ?? null,
+    input.format,
+    input.content,
+    input.source,
+    JSON.stringify(input.meta),
+    // Guest identities retain anonymous public defaults. Registered
+    // accounts create private documents, except assets, born
+    // unlisted: a public document reaches them at read time, and a
+    // born-private ref bakes a 404 into every shared document that uses
+    // it. Routes validate an explicit ask upstream.
+    input.visibility ??
+      (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
+        : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
+    // NULL reads as 'viewer' (linkRoleOf), which is what every ordinary
+    // creation grants whoever holds the link.
+    atCreation.linkRole ?? null,
+    input.ancestor_ids ?? [],
+    newEditId(),
+    // Read-only unless the caller asked otherwise: a dataset that could
+    // be written by default would make every existing document's data
+    // mutable without anyone choosing it.
+    input.access ?? 'read',
+    atCreation.forkedFrom ?? null,
+    JSON.stringify(sourceIds),
+    // A DATASET carried whole, policy included. NULL for every other
+    // creation, which is also what makes the audit CTE above a no-op.
+    atCreation.datasetPolicy ? JSON.stringify(atCreation.datasetPolicy.policy) : null,
+    atCreation.datasetPolicy?.revision ?? 0,
+  ],
+  );
+  Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
+  await bindCurrentUserScopes(tx,created.rows[0]);
+  if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
+  return created.rows[0];
 }
 
 /**
@@ -513,12 +558,19 @@ export interface ForkOverrides {
  *
  * `overrides` are applied to the copy's stored state rather than written afterwards: a post-hoc
  * title would be a second write, rotating the `edit_id` the create reply just handed back.
+ *
+ * FORKING AN APP. A page that WRITES a dataset may only be published by someone who owns that
+ * dataset (lib/story/refs `validateRefs`), so a fork that kept the original's `ref:` was refused
+ * for everyone but its owner — an app could not be forked at all. So the fork COPIES each dataset
+ * the page writes and cannot write as the forker, under the forker's account, and repoints every
+ * `ref:` to the copy (`writtenDatasetForkPlan`). Datasets the page only READS keep their id: a read
+ * is already permitted, and copying a live source would freeze it at the moment of the fork.
  */
 export async function forkArtifact(
   actor: TokenActor,
   source: ArtifactRow,
   overrides: ForkOverrides = {},
-): Promise<ArtifactRow | Response> {
+): Promise<ForkResult | Response> {
   /*
    * A FOLDER IS NOT FORKABLE, and the refusal lives HERE so both doors — the
    * one a person clicks and the `fork_artifact` operation — inherit it from the
@@ -529,18 +581,148 @@ export async function forkArtifact(
   if (source.format === 'folder') {
     return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
   }
-  if (await artifactQuotaExceeded(actor.tokenId)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  const copying = await writtenDatasetForkPlan(actor, source);
+  // The page PLUS its dataset copies: one cap, counted against what this call
+  // will really create rather than against the page alone.
+  if (await artifactQuotaExceeded(actor.tokenId, copying.length + 1)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
+  if (copying.length) return deepFork(actor, source, overrides, copying);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
   const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
-  return row;
+  return { artifact: row, datasets: [] };
+}
+
+/** What one fork made: the copy, and a copied dataset per `ref:` it had to repoint. */
+export interface ForkResult {
+  artifact: ArtifactRow;
+  /** Empty for everything but an app — `forked_from` is the ORIGINAL dataset this copy was taken from. */
+  datasets: Array<{ id: string; forked_from: string }>;
+}
+
+/**
+ * The datasets a fork by `actor` would COPY: every distinct dataset this page
+ * declares a `<Mutation>` over that the forker could not write as it stands.
+ *
+ * In source order, which is the order the dry run reports and the order the
+ * copies are created in. Four things are deliberately NOT planned, because each
+ * one is an existing refusal that must keep its own words rather than become a
+ * silent copy:
+ *   - a dataset the forker already reaches through their own scope — the write
+ *     is admitted exactly as it is, and re-copying it would fork their own data;
+ *   - a `ref:` that does not resolve for them, or is not a dataset at all (a
+ *     FOLDER's children are computed; there is nothing to copy);
+ *   - a POSTGRES-backed dataset, whose credentials stay bound to the original
+ *     (`postgresForkRefusal`), so the copy could not answer a single query.
+ * Each falls through to `validateRefs`, which names it at the publish door.
+ */
+async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow): Promise<ArtifactRow[]> {
+  if (source.format !== 'markup' || !source.source) return [];
+  const uses = collectRefUses(sourceWithoutAnchors(source.source));
+  if (!uses) return [];
+  const plan: ArtifactRow[] = [];
+  const seen = new Set<string>();
+  for (const use of uses) {
+    if (!use.write || seen.has(use.id)) continue;
+    seen.add(use.id);
+    // The loader's OWN rule, asked the same way round: their scope first, then
+    // anything the link reads. A dataset they cannot read is never copied —
+    // that would hand them rows the original never shared.
+    const own = actor.userId ? await getArtifactFor({ userId: actor.userId, tokenId: '' }, use.id) : await getArtifact(actor.tokenId, use.id);
+    if (own) continue;
+    const row = await getLinkReadableArtifact(use.id);
+    if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres') continue;
+    plan.push(row);
+  }
+  return plan;
+}
+
+/** What a fork of this page would copy, for the DRY RUN — the plan, as titles. */
+export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow): Promise<Array<{ id: string; title: string | null }>> {
+  if (source.format === 'folder') return [];
+  return (await writtenDatasetForkPlan(actor, source)).map((row) => ({ id: row.id, title: row.title }));
+}
+
+/**
+ * The app fork: the dataset copies and the page, in ONE transaction.
+ *
+ * Everything that can REFUSE happens before it opens — the ids are reserved,
+ * the source is repointed and the whole document is re-validated against a
+ * loader that answers for the copies as though they already existed. So the
+ * transaction is inserts only, and a failure halfway leaves no orphan dataset
+ * sitting in the forker's account under a page that was never created.
+ */
+async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[]): Promise<ForkResult | Response> {
+  const ids = await reserveArtifactIds(actor, copying.length);
+  const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
+  const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
+  const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
+  const loader = refLoaderForActor(actor);
+  const input = await forkInput(actor, source, overrides, {
+    source: repointRefs(sourceWithoutAnchors(source.source ?? ''), rewrite),
+    // A planned copy resolves as the forker's OWN dataset, with the original's
+    // columns, access and policy — which is what it will be a moment from now.
+    loadRef: async (id) => {
+      const original = planned.get(id);
+      return original ? { ...rowToResolvedRef(original, true), id } : loader(id);
+    },
+  });
+  if (input instanceof Response) return input;
+  const visibility = input.visibility ?? source.visibility;
+  const created = await (await getDb()).transaction(async (tx) => {
+    const datasets: ArtifactRow[] = [];
+    for (const copy of copies) {
+      datasets.push(await createArtifact(actor.tokenId, actor.userId, {
+        title: copy.row.title,
+        description: copy.row.description,
+        format: 'dataset',
+        // The same content and the same object key: dataset bytes are
+        // content-addressed, so a copy of a million rows re-uploads nothing.
+        content: copy.row.content,
+        source: copy.row.source,
+        meta: copy.row.meta,
+        // The copy is as reachable as the page that writes it — no more.
+        visibility,
+        access: copy.row.access,
+      }, {
+        tx,
+        reservedId: copy.id,
+        forkedFrom: copy.row.id,
+        linkRole: copy.row.link_role,
+        // The write policy travels WITH the dataset: a copy whose policy had to
+        // be set afterwards would be, for that moment, a writable dataset with
+        // no rules, and the fork would need a second call to be usable at all.
+        ...(copy.row.dataset_policy ? { datasetPolicy: { policy: copy.row.dataset_policy, revision: copy.row.policy_revision ?? 0 } } : {}),
+      }));
+    }
+    return { artifact: await createArtifact(actor.tokenId, actor.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
+  });
+  // After the commit, never inside it (PGLite deadlock).
+  for (const row of [...created.datasets, created.artifact]) await afterCreated(row, actor.userId);
+  void trackEvent('fork', source.id, { userId: actor.userId, forkId: created.artifact.id });
+  return { artifact: created.artifact, datasets: created.datasets.map((row) => ({ id: row.id, forked_from: row.forked_from! })) };
+}
+
+/**
+ * EVERY `ref:<id>` occurrence of a copied dataset, repointed at its copy — one
+ * pass, so a `<Query>` reading the same dataset the `<Mutation>` writes, a
+ * `<Value source>` and any position added later all move together. A page that
+ * kept one old id would read the original's rows and write its own copy.
+ */
+function repointRefs(source: string, rewrite: Map<string, string>): string {
+  return source.replace(/ref:([A-Za-z0-9]{6,12})/g, (whole, id: string) => (rewrite.has(id) ? `ref:${rewrite.get(id)}` : whole));
 }
 
 /** The copy's stored state, as the forker would have published it. */
-async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides): Promise<ArtifactInput | Response> {
+async function forkInput(
+  actor: TokenActor,
+  source: ArtifactRow,
+  overrides: ForkOverrides,
+  /** An APP fork: the repointed source and the loader that answers for its planned dataset copies. */
+  deep?: { source: string; loadRef: RefLoader },
+): Promise<ArtifactInput | Response> {
   // Everything the copy keeps that is not the content itself, with the
   // forker's overrides winning. `link_role` is carried too, but through
   // createArtifact's creation-only argument rather than here: it is not part
@@ -565,12 +747,12 @@ async function forkInput(actor: TokenActor, source: ArtifactRow, overrides: Fork
   // nobody could act on.
   const design = resolveStoredStoryDesign(meta.theme, meta.colorMode ?? null);
   const parsed = await parseContentInput({
-    markup: sourceWithoutAnchors(source.source ?? ''),
+    markup: deep?.source ?? sourceWithoutAnchors(source.source ?? ''),
     theme: design.theme,
     template: meta.template ?? null,
     colorMode: design.colorMode,
   }, {
-    loadRef: refLoaderForActor(actor),
+    loadRef: deep?.loadRef ?? refLoaderForActor(actor),
     importAsset: assetImporterFor(actor.tokenId, actor.userId),
     resolveFont: fontResolver(),
     overByteQuota: byteQuotaFor(actor.tokenId),
