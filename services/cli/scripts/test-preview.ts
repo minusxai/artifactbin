@@ -146,7 +146,7 @@ try{
  const blue=await color('blue.jpg');assert.ok(blue[2]!>blue[0]!+60,`Latest blue local edit missing: ${blue}`);
  });
  if(phase!=='export-basic'){
- // Independent sources let two warm workers keep running without batch barriers.
+ // Independent sources let three warm workers keep running without batch barriers.
  // The edit proof above stays ordered, and cold installation was already proved.
  await writeFile(join(root,'card.jsx'),red.replace('bg-red-500','bg-blue-500'));
  await writeFile(join(root,'pixel.png'),await sharp({create:{width:100,height:100,channels:3,background:'#ff0000'}}).png().toBuffer());
@@ -162,7 +162,7 @@ try{
   async()=>{await imageExport(['card.jsx','--output','interrupted.png'],false,true);await assert.rejects(readFile(join(root,'interrupted.png')),/ENOENT/);},
  );
  }
- const workers=await Promise.allSettled(Array.from({length:2},async()=>{for(let proof;(proof=proofs.shift());)await proof();}));
+ const workers=await Promise.allSettled(Array.from({length:3},async()=>{for(let proof;(proof=proofs.shift());)await proof();}));
  for(const worker of workers)if(worker.status==='rejected')throw worker.reason;
  if(packaged)assert.equal(downloads,3,'Runtime, SQL and Chromium are downloaded once, then reused');
  console.log(`PASS local image export proof (${phase}); sources unchanged and lazy caches reused`);

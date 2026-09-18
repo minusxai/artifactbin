@@ -577,6 +577,8 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: afbin-${{ matrix.os }}
+          # Release assets include large gzip archives; avoid compressing them again.
+          compression-level: 0
           path: |
             services/cli/dist/afbin-*
             services/cli/dist/afbin.1
