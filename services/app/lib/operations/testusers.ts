@@ -57,7 +57,7 @@ export const TESTUSER_OPERATIONS: Operation[] = [
     name: 'testuser_delete',
     title: 'Erase a test user',
     http: { method: 'DELETE', path: '/api/testusers/{id}' },
-    description: 'ERASE a test user and everything it owns — its artifacts and their datasets, rows, comments, likes and follows, its tokens and its live browser sessions. Hard: nothing is trashed, nothing is recoverable, and the artifact quota those copies used returns to you. Nothing of yours is touched, because a test user can never have written to it. Deleting one that is already gone answers 404.',
+    description: 'ERASE a test user and everything it owns — its artifacts and their datasets, rows, comments, likes and follows, its tokens and its live browser sessions. Hard: nothing is trashed, nothing is recoverable, and the artifact quota those copies used returns to you. Nothing of yours is touched, because a test user can never have written to it. Answers { deleted: true, erased: { artifacts, sessions } } — what that person was holding. Deleting one that is already gone answers 404.',
     input: { id: z.string().describe('the test user id (testuser_create answered it, testuser_list lists them)') },
     annotations: { destructive: true, idempotent: true },
     example: { input: { id: 'usr_9f3k2a' } },
@@ -78,8 +78,11 @@ export const TESTUSER_OPERATIONS: Operation[] = [
       const row = await getTestUserRow(id);
       if (!row) return { status: 404, body: { error: 'not_found', message: 'This test user has already been erased.' } };
       if (row.parent_user_id !== ctx.actor.userId) return { status: 403, body: { error: TESTUSER_ERRORS.notYours, message: notYours.fix } };
-      await eraseTestUser(id);
-      return { status: 200, body: { ok: true, id, label: row.label } };
+      const gone = await eraseTestUser(id);
+      // An OBJECT body, and it says what went: the count is the only record
+      // that the copies ever existed, and a caller that is about to tell a
+      // person "three artifacts deleted" has to be told first.
+      return { status: 200, body: { deleted: true, id, label: row.label, erased: { artifacts: gone.artifacts, sessions: gone.sessions } } };
     },
   },
 ];

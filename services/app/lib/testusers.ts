@@ -36,6 +36,9 @@ export const TESTUSER_LABEL = 'Test user';
 const TESTUSER_TOKEN_PREFIX = 'mxmx_test_';
 
 export interface TestUserRefusal { ok: false; status: number; error: string; message: string }
+
+/** What an erase removed — what the person was holding at the moment it ran. */
+export interface TestUserErased { erased: boolean; artifacts: number; sessions: number }
 export interface TestUserMinted extends TestUser {
   ok: true;
   /** The `users` row — the same value as `id`, spelled as what it is for callers holding an actor. */
@@ -193,14 +196,17 @@ const ERASE_BY_USER = TABLES.flatMap((table) =>
  *
  * Idempotent: erasing an id that is gone deletes nothing and answers false.
  */
-export async function eraseTestUser(testUserId: string, database?: Database): Promise<boolean> {
+export async function eraseTestUser(testUserId: string, database?: Database): Promise<TestUserErased> {
+  // Read the register BEFORE the sessions are closed: closing is what empties
+  // it, and the caller's answer is what this person WAS holding.
+  const sessions = testUserSessionCount(testUserId);
   await closeTestUserSessions(testUserId);
   const db = database ?? (await getDb());
   return db.transaction(async (tx) => {
     const user = await tx.query<{ id: string }>(
       "SELECT id FROM users WHERE id = $1 AND kind = 'testuser' FOR UPDATE", [testUserId],
     );
-    if (!user.rows.length) return false;
+    if (!user.rows.length) return { erased: false, artifacts: 0, sessions };
     const owned = await tx.query<{ id: string }>('SELECT id FROM artifacts WHERE user_id = $1', [testUserId]);
     const ids = owned.rows.map((row) => row.id);
     if (ids.length) {
@@ -216,7 +222,7 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
     );
     await tx.query('DELETE FROM annotations WHERE author_user_id = $1', [testUserId]);
     await tx.query('DELETE FROM users WHERE id = $1', [testUserId]);
-    return true;
+    return { erased: true, artifacts: ids.length, sessions };
   });
 }
 
@@ -236,7 +242,7 @@ export async function sweepTestUsers(now: number = Date.now()): Promise<number> 
       "SELECT id FROM users WHERE kind = 'testuser' AND expires_at IS NOT NULL AND expires_at < $1", [cutoff],
     );
     let erased = 0;
-    for (const row of stale.rows) if (await eraseTestUser(row.id)) erased++;
+    for (const row of stale.rows) if ((await eraseTestUser(row.id)).erased) erased++;
     return erased;
   } catch {
     return 0;

@@ -18,7 +18,7 @@ import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import {
-  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, forkDatasetPreview, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
+  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, forkDatasetPreview, forkRefusal, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
 } from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/folders';
@@ -627,13 +627,23 @@ const forkArtifactOp: Operation = {
       return reply({ error: 'not_found' }, 404);
     }
 
-    // Asked and answered: what a fork WOULD copy, before anything exists to
-    // undo. The overrides above are still parsed first, so a dry run refuses
-    // exactly what the real call would refuse.
-    if (input.dry_run === true) return { status: 200, body: { datasets: await forkDatasetPreview(ctx.actor, source) } };
-
+    // WHO WOULD OWN IT is resolved before the dry run as well as before the
+    // copy: `as` naming a test user that is not yours, or one that has expired,
+    // must refuse the PREFLIGHT too — otherwise a caller is told what a fork
+    // would copy and then refused when it asks for it.
     const owner = await forkOwner(ctx.actor, input.as);
     if ('error' in owner) return reply({ error: owner.error, message: owner.message }, owner.status);
+
+    // Asked and answered: what a fork WOULD copy, before anything exists to
+    // undo. The overrides above are still parsed first, and the unforkable
+    // kinds are refused here rather than at the copy, so a dry run refuses
+    // exactly what the real call would refuse.
+    if (input.dry_run === true) {
+      const unforkable = forkRefusal(source);
+      if (unforkable) return fromResponse(unforkable);
+      return { status: 200, body: { datasets: await forkDatasetPreview(ctx.actor, source, owner.actor), ...(owner.testuser ? { owner: owner.testuser } : {}) } };
+    }
+
     const copy = await forkArtifact(ctx.actor, source, overrides, owner.actor);
     if (copy instanceof Response) return fromResponse(copy);
     return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };

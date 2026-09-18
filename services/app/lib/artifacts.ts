@@ -624,10 +624,9 @@ export async function forkArtifact(
    * would faithfully list the original's children; and re-pointing it at the
    * copy would silently rewrite a document the forker never wrote.
    */
-  if (source.format === 'folder') {
-    return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
-  }
-  const copying = await writtenDatasetForkPlan(actor, source);
+  const unforkable = forkRefusal(source);
+  if (unforkable) return unforkable;
+  const copying = await writtenDatasetForkPlan(actor, source, owner);
   // The page PLUS its dataset copies: one cap, counted against what this call
   // will really create rather than against the page alone.
   if (await artifactQuotaExceeded(actor.tokenId, copying.length + 1)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
@@ -639,6 +638,23 @@ export async function forkArtifact(
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
   return { artifact: row, datasets: [] };
+}
+
+/**
+ * WHAT CANNOT BE FORKED AT ALL, decided before anything is copied — and before
+ * a DRY RUN answers, so "what would this copy?" and "copy it" refuse the same
+ * things in the same words.
+ *
+ * A FOLDER's source names its OWN children table by id, so a copy would
+ * faithfully list the original's children and re-pointing it would silently
+ * rewrite a document the forker never wrote. A live POSTGRES catalog keeps its
+ * credentials bound to the original, so the copy could not answer one query.
+ */
+export function forkRefusal(source: ArtifactRow): Response | null {
+  if (source.format === 'folder') {
+    return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
+  }
+  return source.format === 'markup' ? null : postgresForkRefusal(source);
 }
 
 /** What one fork made: the copy, and a copied dataset per `ref:` it had to repoint. */
@@ -664,7 +680,7 @@ export interface ForkResult {
  *     (`postgresForkRefusal`), so the copy could not answer a single query.
  * Each falls through to `validateRefs`, which names it at the publish door.
  */
-async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow): Promise<ArtifactRow[]> {
+async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, owner: TokenActor = actor): Promise<ArtifactRow[]> {
   if (source.format !== 'markup' || !source.source) return [];
   const uses = collectRefUses(sourceWithoutAnchors(source.source));
   if (!uses) return [];
@@ -676,9 +692,18 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow): P
     // The loader's OWN rule, asked the same way round: their scope first, then
     // anything the link reads. A dataset they cannot read is never copied —
     // that would hand them rows the original never shared.
-    const own = actor.userId ? await getArtifactFor({ userId: actor.userId, tokenId: '' }, use.id) : await getArtifact(actor.tokenId, use.id);
+    //
+    // "Theirs" is the COPY'S OWNER, not the forker: an account forking `as` one
+    // of its test users owns the page's datasets already, and skipping them on
+    // that ground would hand the test user a page pointed at the account's real
+    // data — the exact write this whole kind exists to prevent. The test user
+    // owns nothing, so every dataset the page writes is copied.
+    const own = owner.userId ? await getArtifactFor({ userId: owner.userId, tokenId: '' }, use.id) : await getArtifact(owner.tokenId, use.id);
     if (own) continue;
-    const row = await getLinkReadableArtifact(use.id);
+    // Read AS THE FORKER when the copy is for someone else: the account may
+    // hand its test user a copy of a dataset only the account can read, because
+    // the copy lands inside that test user's sandbox and nowhere else.
+    const row = (owner.userId !== actor.userId ? await getArtifactFor(actor, use.id) : null) ?? await getLinkReadableArtifact(use.id);
     if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres') continue;
     plan.push(row);
   }
@@ -686,9 +711,9 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow): P
 }
 
 /** What a fork of this page would copy, for the DRY RUN — the plan, as titles. */
-export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow): Promise<Array<{ id: string; title: string | null }>> {
+export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow, owner: TokenActor = actor): Promise<Array<{ id: string; title: string | null }>> {
   if (source.format === 'folder') return [];
-  return (await writtenDatasetForkPlan(actor, source)).map((row) => ({ id: row.id, title: row.title }));
+  return (await writtenDatasetForkPlan(actor, source, owner)).map((row) => ({ id: row.id, title: row.title }));
 }
 
 /**
@@ -701,7 +726,10 @@ export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow)
  * sitting in the forker's account under a page that was never created.
  */
 async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[], owner: TokenActor = actor): Promise<ForkResult | Response> {
-  const ids = await reserveArtifactIds(actor, copying.length);
+  // Reserved for whoever will OWN the copies: `claimArtifactId` consumes a
+  // reservation only for the actor creating the row, so reserving as the forker
+  // and inserting as its test user would refuse its own fork.
+  const ids = await reserveArtifactIds(owner, copying.length);
   const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
   const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
   const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
