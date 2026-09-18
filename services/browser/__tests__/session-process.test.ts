@@ -1,6 +1,8 @@
 import {expect,it,vi} from 'vitest';
 import {ACTOR_HEADER,ANONYMOUS,BROWSER_SESSION_HEADER,type Actor} from '@artifactbin/contracts';
-import {forwardSessionFetch,sessionSandboxPlan} from '../src/session-process';
+import {createEnv} from '@artifactbin/utils';
+import {createSessionProcess,forwardSessionFetch,sessionPlainPlan,sessionSandboxPlan} from '../src/session-process';
+import {sessionProcessPaths,sessionSandboxChoice} from '../src/session-config';
 import {createBrowserSessions} from '../src/sessions';
 it('launches SEA through its trusted selector with only the executable and browser tree mounted',()=>{
  const plan=sessionSandboxPlan('/tmp/private-session','/cache/chromium/chrome-linux64','/home/operator/bin/afbin',['--internal-browser-worker']);
@@ -60,4 +62,55 @@ it('carries the anonymous actor from a guest session into the forwarded page req
   expect(options.seen[0]!.request.headers.get('cookie')).toBeNull();
   expect(options.seen[1]!.actor).toMatchObject({userId:'usr_owner'});
  }finally{await sessions.close();}
+});
+
+/**
+ * BROWSER__SANDBOX=none — live sessions on a development host that is not Linux.
+ * The Linux plan above is unchanged and stays the default; this is the one escape
+ * hatch, it is refused in production and for any other value, and it keeps the same
+ * worker, the same stdio protocol and the same private HOME — only bubblewrap and the
+ * cgroup are gone, and the browsers come from the host's real Playwright directory.
+ */
+it('runs the same worker as a plain child, with the sandbox mounts replaced by real paths',()=>{
+ const plan=sessionPlainPlan('/tmp/private-session','/usr/bin/node',{browsers:'/Users/dev/Library/Caches/ms-playwright',path:'/usr/bin:/bin',tmp:'/var/tmp'});
+ expect(plan.command).toBe('/usr/bin/node');
+ expect(plan.args).toEqual(['--max-old-space-size=128','/tmp/private-session/worker.mjs']);
+ // Same keys as the sandbox plan; no /runtime, /browsers or /home/session mount point survives.
+ expect(Object.keys(plan.env).sort()).toEqual(Object.keys(sessionSandboxPlan('/r','/b','/e').env).sort());
+ expect(plan.env).toEqual({HOME:'/tmp/private-session/home',TMPDIR:'/var/tmp',PATH:'/usr/bin:/bin',PLAYWRIGHT_BROWSERS_PATH:'/Users/dev/Library/Caches/ms-playwright',NODE_OPTIONS:'--max-old-space-size=128'});
+ expect(JSON.stringify(plan)).not.toMatch(/\/runtime|\/browsers"|home\/session/);
+ // A SEA composition keeps its own worker selector, exactly as the sandbox plan does.
+ expect(sessionPlainPlan('/tmp/s','/home/operator/bin/afbin',{workerArgs:['--internal-browser-worker']}).args).toEqual(['--internal-browser-worker']);
+});
+
+it('reads the switch at the browser service env boundary and refuses it in production',()=>{
+ expect(sessionSandboxChoice({})).toEqual({mode:'bubblewrap'});
+ expect(sessionSandboxChoice({BROWSER__SANDBOX:'none',NODE_ENV:'development'})).toEqual({mode:'none'});
+ expect(sessionSandboxChoice({BROWSER__SANDBOX:'none'})).toEqual({mode:'none'});
+ const production=sessionSandboxChoice({BROWSER__SANDBOX:'none',NODE_ENV:'production'});
+ expect(production.mode).toBe('bubblewrap');
+ expect(production.refusal).toMatch(/BROWSER__SANDBOX/);
+ expect(production.refusal).toMatch(/production/);
+ const wrong=sessionSandboxChoice({BROWSER__SANDBOX:'bwrap',NODE_ENV:'development'});
+ expect(wrong.mode).toBe('bubblewrap');
+ expect(wrong.refusal).toMatch(/BROWSER__SANDBOX/);
+ // The setting travels with the other session paths, so one composition reads it once.
+ expect(sessionProcessPaths({BROWSER__SANDBOX:'none',BROWSER__SESSION_CGROUP_ROOT:'/sys/fs/cgroup/x'})).toMatchObject({cgroupRoot:'/sys/fs/cgroup/x',sandbox:{mode:'none'}});
+ // It is one of OUR names, and the boundary is the only reader: a composition that asks
+ // sessionProcessPaths for its session settings never leaves it in the env audit's unknown list.
+ const audit=createEnv({BROWSER__SANDBOX:'none'});
+ audit.env('BROWSER','SANDBOX');
+ expect(audit.unknownNames()).toEqual([]);
+});
+
+it('spawns without bubblewrap when the sandbox is off, and refuses a production switch before spawning',async()=>{
+ // No worker is started here: the refusal happens before any process or cgroup exists.
+ await expect(createSessionProcess({credential:'bearer',userId:'usr_owner'},{
+  baseURL:'http://app',request:async()=>new Response('page'),
+  sandbox:sessionSandboxChoice({BROWSER__SANDBOX:'none',NODE_ENV:'production'}),
+ })).rejects.toThrow(/BROWSER__SANDBOX/);
+ await expect(createSessionProcess({credential:'bearer',userId:'usr_owner'},{
+  baseURL:'http://app',request:async()=>new Response('page'),
+  sandbox:sessionSandboxChoice({BROWSER__SANDBOX:'nope'}),
+ })).rejects.toThrow(/BROWSER__SANDBOX/);
 });

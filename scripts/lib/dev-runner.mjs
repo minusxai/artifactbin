@@ -40,6 +40,18 @@ export async function runDev({ appOnly, args = [] }) {
     // else owns the dev-server terminal. Never persisted in .env.
     EMAIL__DEV_OUTBOX_PATH: path.join(ROOT, '.artifactbin', 'dev-mail.jsonl'),
 
+    /*
+     * LIVE SESSIONS ON THIS HOST. The session worker is contained by Linux
+     * bubblewrap and a cgroup, which a macOS dev machine has neither of — so
+     * `afbin sessions` could not run outside CI at all, and every change to the
+     * CLI or the skill waited on a release and a deploy to be tried. Off the
+     * Linux host, and only in development, the switch defaults on so the local
+     * loop simply works. An explicit setting always wins, and production is
+     * refused at the service's own boundary regardless of what is written here.
+     */
+    ...(process.platform !== 'linux' && process.env.BROWSER__SANDBOX === undefined && process.env.NODE_ENV !== 'production'
+      ? { BROWSER__SANDBOX: 'none' }
+      : {}),
   };
   delete env.EMAIL__RESEND_BASE_URL;
   if (appOnly) {
