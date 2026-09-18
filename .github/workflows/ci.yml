@@ -10,9 +10,6 @@ on:
   # install caches stay warm on the default branch, which is most of what makes a release build fast.
   schedule:
     - cron: '17 9 * * *'
-  # The "Release afbin" workflow dispatches this one on the release branch when it pushed with the
-  # repository token, whose events start no workflow; the checks land on the PR. With a PAT its own
-  # pull_request event starts this workflow and no dispatch happens.
   workflow_dispatch:
 
 # New commits supersede earlier checks on the same PR. Main runs stay independent.
@@ -157,23 +154,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
-      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
-      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
-      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
-      # serves every document with missing fonts. They derive from node_modules alone, so they
-      # belong in the same entry under the same lockfile key; caching node_modules by itself is
-      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
-      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
-      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
-      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
-      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
-      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
-      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
-      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
-      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
-      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
-      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -241,23 +223,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
-      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
-      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
-      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
-      # serves every document with missing fonts. They derive from node_modules alone, so they
-      # belong in the same entry under the same lockfile key; caching node_modules by itself is
-      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
-      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
-      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
-      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
-      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
-      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
-      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
-      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
-      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
-      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
-      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -290,23 +257,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
-      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
-      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
-      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
-      # serves every document with missing fonts. They derive from node_modules alone, so they
-      # belong in the same entry under the same lockfile key; caching node_modules by itself is
-      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
-      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
-      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
-      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
-      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
-      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
-      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
-      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
-      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
-      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
-      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -375,23 +327,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
-      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
-      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
-      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
-      # serves every document with missing fonts. They derive from node_modules alone, so they
-      # belong in the same entry under the same lockfile key; caching node_modules by itself is
-      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
-      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
-      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
-      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
-      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
-      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
-      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
-      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
-      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
-      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
-      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -442,23 +379,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # Cache THE WHOLE INSTALL, not just npm's download cache: `npm ci` costs ~23s in every job
-      # even with a warm ~/.npm. The install's products are not all inside node_modules — the app
-      # workspace's postinstall (copy-assets.mjs) writes the content-hashed webfonts under
-      # public/fonts and the manifest lib/data/story/story-fonts reads, and a build without them
-      # serves every document with missing fonts. They derive from node_modules alone, so they
-      # belong in the same entry under the same lockfile key; caching node_modules by itself is
-      # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
-      # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
-      # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
-      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
-      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
-      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
-      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
-      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
-      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
-      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
-      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
@@ -607,14 +529,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
-      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
-      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
-      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
-      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
-      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
-      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
-      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
-      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
       - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
