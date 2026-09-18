@@ -15,7 +15,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-import { afbinPort, cliBuildStale, devHome, healthRefusal, runAfbin } from '../lib/afbin-run.mjs';
+import { afbinPort, cliBuildStale, devHome, healthRefusal, runAfbin, serverFlag } from '../lib/afbin-run.mjs';
 import { containmentExpectation, containmentObserved } from '../lib/session-containment.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../..');
@@ -103,6 +103,21 @@ describe('npm run afbin', () => {
       expect(child.options.env.ARTIFACTBIN_TOKEN).toBeUndefined();
       expect(child.options.env.ARTIFACTBIN_URL).toBeUndefined();
       expect(child.options.stdio).toBe('inherit');
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('leaves a caller\'s own --server alone, in either spelling', async () => {
+    const root = await fakeCheckout();
+    const run = recorder();
+    try {
+      for (const chosen of [['--server', 'http://localhost:7701'], ['--server=http://localhost:7701']]) {
+        run.spawned.length = 0;
+        await runAfbin({ argv: ['status', ...chosen], env: { APP__PORT: '7601' }, root, home: '/home/owner', ...run.options });
+        expect(run.spawned[0].args.slice(1)).toEqual(['status', ...chosen]);
+        // The throwaway home still follows this checkout's port: only the destination moved.
+        expect(run.spawned[0].options.env.ARTIFACTBIN_HOME).toBe(devHome(7601, '/home/owner'));
+      }
+      expect(serverFlag(['status'], 7601)).toEqual(['--server', 'http://localhost:7601']);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

@@ -108,9 +108,20 @@ export async function runAfbin({
   if (!await serverHealthy(port, fetchImpl)) { log(healthRefusal(port)); return 1; }
   if (await cliBuildStale(root)) await build(root);
   const childEnv = afbinChildEnv(env, port, home);
-  // A `--server` of our own, appended: the dev loop never talks to the default server.
-  const args = [distEntry(root), ...argv, '--server', `http://localhost:${port}`];
+  const args = [distEntry(root), ...argv, ...serverFlag(argv, port)];
   return spawnImpl(execPathOf(env), args, { stdio: 'inherit', env: childEnv });
+}
+
+/**
+ * This checkout's server, UNLESS the caller named one. Pointing the branch CLI at another
+ * checkout's server (or a throwaway) is a legitimate thing to ask for, and an appended flag
+ * that silently overrode it would make the request look honoured while it was not.
+ * @param {readonly string[]} argv
+ * @param {number} port
+ */
+export function serverFlag(argv, port) {
+  const chosen = argv.some((arg) => arg === '--server' || arg.startsWith('--server='));
+  return chosen ? [] : ['--server', `http://localhost:${port}`];
 }
 
 /** The Node that runs this script runs the CLI too; nothing else is on the path for sure. */
