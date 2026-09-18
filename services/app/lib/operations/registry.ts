@@ -9,6 +9,9 @@ import {DATASET_OPERATIONS} from '@/lib/datasets/operations';
 import {ACCOUNT_OPERATIONS} from './account';
 import {SESSION_OPERATIONS} from './sessions';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
+import { TESTUSER_OPERATIONS } from './testusers';
+import { resolveTestUser } from '@/lib/testusers';
+import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
  */
@@ -73,6 +76,31 @@ export interface Operation {
   /** The refusals this operation can answer, each with the fix for it. */
   errors: OperationError[];
   run(ctx: OpContext, input: Record<string, unknown>): Promise<OpReply>;
+}
+
+/**
+ * WHO OWNS THE COPY: the forker, or one of its test users when the call names
+ * `as: {testuser}`. Both fork doors resolve it the same way, because "is this
+ * one of MY live test users" is one rule — an account's own, not expired, with
+ * a live credential to act through.
+ */
+export async function forkOwner(
+  actor: TokenActor,
+  as: unknown,
+): Promise<{ actor: TokenActor; testuser?: string } | { status: number; error: string; message: string }> {
+  if (as === undefined || as === null) return { actor };
+  const named = (as as { testuser?: unknown }).testuser;
+  if (typeof named !== 'string' || !named) {
+    return { status: 400, error: 'invalid_as', message: 'as names a test user of yours: { "testuser": "<id>" }' };
+  }
+  const resolved = await resolveTestUser(actor.userId, named);
+  if (resolved === TESTUSER_ERRORS.expired) {
+    return { status: 403, error: TESTUSER_ERRORS.expired, message: `Test user ${named} has expired and has been erased. Mint another with testuser_create.` };
+  }
+  if (resolved === TESTUSER_ERRORS.notYours) {
+    return { status: 403, error: TESTUSER_ERRORS.notYours, message: `${named} is not one of your live test users. List them with testuser_list, or mint one with testuser_create.` };
+  }
+  return { actor: { tokenId: resolved.tokenId, userId: resolved.id }, testuser: resolved.id };
 }
 
 /** A lib pipeline already answers a Response; an OpReply is that, transport-free. */
@@ -551,6 +579,11 @@ const forkArtifactOp: Operation = {
     // visibility a forker has to know.
     visibility: CONTENT_FIELDS.visibility.describe("read ACL for the COPY: 'public' = anyone with the link, and it lists on your public profile; 'unlisted' = anyone with the link, listed nowhere; 'private' = you plus the emails you share it with (needs a logged-in account). Omit to keep the source's."),
     parent_id: CONTENT_FIELDS.parent_id.describe("the id of a folder of YOURS to file the COPY under; omit to file it at your root"),
+    // THE ONE DOOR INTO THE SANDBOX. A test user cannot reach an account's
+    // artifact to fork it — that is the whole point of the kind — so the
+    // ACCOUNT forks on its behalf: read, refs and quota are still the
+    // account's, and only the owner of the copy is the test user.
+    as: z.object({ testuser: z.string() }).optional().describe('own the COPY as one of your test users (testuser_create) instead of yourself: { "testuser": "<id>" }. This is how a real page gets into a test user\'s sandbox — it is charged to YOUR artifact quota, and deleting that test user erases the copy'),
   },
   // A plain write: not destructive (the source is untouched) and NOT
   // idempotent — two calls make two copies.
@@ -563,6 +596,7 @@ const forkArtifactOp: Operation = {
     NOT_FOUND,
     { status: 403, code: 'quota_exceeded', fix: 'a cap was reached — either the artifact COUNT for this token, or the stored BYTES for its account (an upload or an imported url); the message names which. Delete what you no longer need' },
     NOT_FORKABLE,
+    { status: 403, code: 'not_your_testuser', fix: 'The `as` id is not one of your live test users — list them with testuser_list, or mint one with testuser_create.' },
     ...CONTENT_ERRORS,
   ],
   async run(ctx, input) {
@@ -598,9 +632,11 @@ const forkArtifactOp: Operation = {
     // exactly what the real call would refuse.
     if (input.dry_run === true) return { status: 200, body: { datasets: await forkDatasetPreview(ctx.actor, source) } };
 
-    const copy = await forkArtifact(ctx.actor, source, overrides);
+    const owner = await forkOwner(ctx.actor, input.as);
+    if ('error' in owner) return reply({ error: owner.error, message: owner.message }, owner.status);
+    const copy = await forkArtifact(ctx.actor, source, overrides, owner.actor);
     if (copy instanceof Response) return fromResponse(copy);
-    return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined), forked_from: source.id, datasets: copy.datasets } };
+    return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined), forked_from: source.id, datasets: copy.datasets, ...(owner.testuser ? { owner: owner.testuser } : {}) } };
   },
 };
 
@@ -653,7 +689,7 @@ const queryResourceOp:Operation={
 };
 
 export const OPERATIONS: Operation[] = [
-  ...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...SESSION_OPERATIONS,...BROWSER_SESSION_OPERATIONS,queryResourceOp,
+  ...DATASET_OPERATIONS,...ACCOUNT_OPERATIONS,...SESSION_OPERATIONS,...BROWSER_SESSION_OPERATIONS,...TESTUSER_OPERATIONS,queryResourceOp,
   createArtifactOp, updateArtifactOp, editArtifactOp, forkArtifactOp, getArtifactOp, listArtifactsOp,
   listVersionsOp, getVersionOp, updateMetadataOp, revertArtifactOp, deleteArtifactOp, restoreArtifactOp, annotateOp, getDatasetPolicyOp, setDatasetPolicyOp, mutateDatasetOp,
   exportArtifactOp, refreshAssetOp,

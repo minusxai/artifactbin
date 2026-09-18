@@ -121,6 +121,19 @@ export async function getOwnTestUser(userId: string, testUserId: string): Promis
   return row.rows[0] ?? null;
 }
 
+/**
+ * One test user row by id, WHOEVER it belongs to — the only reader that does
+ * not filter by parent, so a delete can tell "not yours" from "already gone"
+ * without either answer becoming an existence oracle for the other.
+ */
+export async function getTestUserRow(testUserId: string): Promise<{ id: string; label: string; parent_user_id: string | null } | null> {
+  const db = await getDb();
+  const row = await db.query<{ id: string; label: string; parent_user_id: string | null }>(
+    "SELECT id, name AS label, parent_user_id FROM users WHERE id = $1 AND kind = 'testuser'", [testUserId],
+  );
+  return row.rows[0] ?? null;
+}
+
 /** Why a named test user is not usable, in the vocabulary the wire speaks. */
 export type TestUserRefusalCode = typeof TESTUSER_ERRORS.notYours | typeof TESTUSER_ERRORS.expired;
 

@@ -13,26 +13,37 @@ import { refusesCrossSite } from '@/lib/auth';
 import { json, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/relations';
 import { getUserById } from '@/lib/users';
+import { can, capabilityRefusal, type CapabilityActor } from '@/lib/capabilities';
+import { userKindOf } from '@/lib/user-kinds';
 import { sessionActor } from '@/lib/viewer';
 
 type Ctx = { params: Promise<{ id: string }> };
 
 /** Who is asking about which existing account — or the Response that refuses them. */
-async function opened(request: Request, ctx: Ctx): Promise<{ id: string; userId: string | null } | Response> {
+async function opened(request: Request, ctx: Ctx): Promise<{ id: string; actor: CapabilityActor } | Response> {
   const { id } = await ctx.params;
   const actor = await sessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
-  if (!(await getUserById(id))) return json({ error: 'not_found' }, 404);
+  const target = await getUserById(id);
+  // A TEST USER is nobody's to follow from outside its sandbox, and a listing
+  // that named one would be the sandbox leaking into a real account's page:
+  // unknown and invisible are the same 404, as everywhere else.
+  if (!target || (target.kind === 'testuser' && actor.viewer?.userId !== target.parent_user_id && (await userKindOf(actor.viewer?.userId ?? null)) !== 'testuser')) return json({ error: 'not_found' }, 404);
   const userId = actor.viewer?.userId ?? null;
   if (userId === id) return json({ error: 'cannot_follow_self' }, 400);
-  return { id, userId };
+  return { id, actor: { userId, tokenId: actor.tokenId } };
 }
 
-/** The same door, for the two verbs that CHANGE something: an account is required. */
+/**
+ * The same door, for the two verbs that CHANGE something. A guest holds a
+ * userId and may still not follow anybody — `can` is what says so, and the
+ * refusal it produces is the sign-in door (lib/capabilities).
+ */
 async function acting(request: Request, ctx: Ctx): Promise<{ id: string; userId: string } | Response> {
   const opening = await opened(request, ctx);
   if (opening instanceof Response) return opening;
-  return opening.userId ? { id: opening.id, userId: opening.userId } : unauthorized(request);
+  if (!(await can(opening.actor, 'follow', { userId: opening.id }))) return capabilityRefusal(opening.actor);
+  return opening.actor.userId ? { id: opening.id, userId: opening.actor.userId } : unauthorized(request);
 }
 
 /** The state of the button after whatever just happened. */
@@ -42,7 +53,7 @@ async function state(id: string, userId: string | null): Promise<Response> {
 
 export async function GET(request: Request, ctx: Ctx): Promise<Response> {
   const opening = await opened(request, ctx);
-  return opening instanceof Response ? opening : state(opening.id, opening.userId);
+  return opening instanceof Response ? opening : state(opening.id, opening.actor.userId);
 }
 
 export async function POST(request: Request, ctx: Ctx): Promise<Response> {

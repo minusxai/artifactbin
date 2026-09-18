@@ -50,9 +50,13 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         // Not the caller's fault and not permanent: say so, and say when.
         return json({ error: 'dataset_busy', detail: result.detail }, 503, { ...CORS, 'Retry-After': '1' });
       case 'policy_denied':
-        // Same status, same `error`. `code` is the machine-readable half, and
-        // today it has exactly one value: a guest pressed a write that binds
-        // `$_me` (lib/story/sign-in-required).
+        // A KIND refused (a guest, or a test user outside its sandbox) answers
+        // as ITSELF: the door's own status and its own top-level error, which
+        // is what the like/follow/fork controls already navigate on.
+        if (result.capability) return json(result.capability.body, result.capability.status, CORS);
+        // Otherwise: same status, same `error`. `code` is the machine-readable
+        // half, and today it has exactly one value: an anonymous reader pressed
+        // a write that binds `$_me` (lib/story/sign-in-required).
         return json({error:'policy_denied',...(result.code?{code:result.code}:{}),detail:result.detail},403,CORS);
       case 'invalid_sql':
         return json({ error: 'mutation_failed', detail: result.detail }, 400, CORS);

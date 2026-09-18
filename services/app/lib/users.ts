@@ -15,17 +15,14 @@ import { generateInternalId } from './ids';
 import { LIVE_TOKEN_SQL, sha256 } from './tokens';
 
 /**
- * A user row, whatever KIND it is. The kind is the discriminator every
- * permission decision reads (through `lib/capabilities`, never here): an
- * `account` has an email, a `guest` and a `testuser` have none. The row shape
- * is ONE interface rather than a union on the kind, because every caller that
- * loads a user by id has to handle all three and the narrowing that a union
- * forced was always `user.kind === …` anyway.
+ * AN ACCOUNT ROW: a person with a login identity. The KIND is on every row now
+ * (`users.kind`, lib/user-kinds) and it is what every permission decision reads
+ * — through `lib/capabilities`, never from here. This file only says what a row
+ * IS.
  */
 export interface UserRow {
   id: string;
-  /** NULL for a guest and for a test user: neither has a login identity. */
-  email: string | null;
+  email: string;
   kind: UserKind;
   /** The ACCOUNT that minted this test user; null for an account or a guest. */
   parent_user_id: string | null;
@@ -38,19 +35,20 @@ export interface UserRow {
 }
 
 /**
- * An ACCOUNT: the kind with a login identity. The narrowing every caller that
- * needs the email does (`isAccountRow`), in one place.
+ * A row with NO login identity: a guest, or a test user. One shape for both,
+ * because the difference between them is the KIND and what that kind may do,
+ * never the columns.
  */
-export type AccountUserRow = UserRow & { email: string; kind: 'account' };
+export interface GuestUserRow extends Omit<UserRow, 'email'> {
+  email: null;
+}
 
-export const isAccountRow = (user: UserRow | null | undefined): user is AccountUserRow =>
+/** Whatever `getUserById` finds: any of the three kinds. */
+export type AnyUserRow = UserRow | GuestUserRow;
+
+/** The narrowing every caller that needs the address does, in one place. */
+export const isAccountRow = (user: AnyUserRow | null | undefined): user is UserRow =>
   !!user && user.kind === 'account' && !!user.email;
-
-/**
- * Kept as a name because callers still say "a guest row"; it is the same row
- * with the guest kind.
- */
-export type GuestUserRow = UserRow & { email: null; kind: 'guest' };
 
 const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, created_at';
 
@@ -103,7 +101,7 @@ function randomSuffix(): string {
  * successful login, so existing accounts pick one up with no migration.
  * Retries on the unique index — a suffix collision is possible, just rare.
  */
-export async function ensureUsername<T extends UserRow>(user: T): Promise<T> {
+export async function ensureUsername<T extends AnyUserRow>(user: T): Promise<T> {
   if (user.username || !isAccountRow(user)) return user;
   const db = await getDb();
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -184,9 +182,9 @@ export async function getUserByEmail(email: string): Promise<UserRow | null> {
   return r.rows[0] ?? null;
 }
 
-export async function getUserById(id: string,query?:Queryable,lock=false): Promise<UserRow | null> {
+export async function getUserById(id: string,query?:Queryable,lock=false): Promise<AnyUserRow | null> {
   const db = query??await getDb();
-  const r = await db.query<UserRow>(`SELECT ${USER_COLS} FROM users WHERE id = $1${lock?' FOR UPDATE':''}`, [id]);
+  const r = await db.query<AnyUserRow>(`SELECT ${USER_COLS} FROM users WHERE id = $1${lock?' FOR UPDATE':''}`, [id]);
   return r.rows[0] ?? null;
 }
 

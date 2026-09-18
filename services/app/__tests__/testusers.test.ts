@@ -49,8 +49,6 @@ describe('minting', () => {
   it('a guest cannot mint one', async () => {
     const { createGuestOwner } = await import('@/lib/guest-owner');
     const g = await createGuestOwner();
-    const { getTokenById } = await import('@/lib/tokens');
-    void g; void getTokenById;
     const cookie = await agentCookie([g.tokenId]);
     const r = await newTestUser(jreq('/api/testusers', 'POST', {}, undefined, cookie));
     expect([401, 403]).toContain(r.status);

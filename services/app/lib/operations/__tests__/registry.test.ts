@@ -33,7 +33,7 @@ describe('the registry is curated, not generated', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
       'annotate', 'browser_session', 'create_artifact', 'create_dataset_secret', 'delete_artifact', 'discover_dataset_source', 'edit_artifact', 'export_artifact', 'fork_artifact', 'get_artifact',
       'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'query_resource', 'refresh_asset', 'restore_artifact', 'revert_artifact',
-      'set_dataset_policy', 'terminate_remote_session', 'update_artifact', 'update_metadata',
+      'set_dataset_policy', 'terminate_remote_session', 'testuser_create', 'testuser_delete', 'testuser_list', 'update_artifact', 'update_metadata',
     ]);
   });
 
@@ -54,15 +54,17 @@ describe('the registry is curated, not generated', () => {
 
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'preview_dataset_notebook', 'query_resource']);
+    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'preview_dataset_notebook', 'query_resource', 'testuser_list']);
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 
   it('every operation names its HTTP address, and its path params are input fields', () => {
     for (const op of OPERATIONS) {
       // /api/artifacts is the bearer surface; export is the one op whose HTTP
-      // twin is the document's own sub-path (a page can't return bytes).
-      expect(op.http.path, op.name).toMatch(/^\/api\/(artifacts|datasets|secrets|sessions|browser-sessions)(\/|$)|^\/a\/\{id\}\/export$/);
+      // twin is the document's own sub-path (a page can't return bytes); and
+      // /api/testusers is the throwaway-people family, which is about the
+      // CALLER rather than about any one artifact.
+      expect(op.http.path, op.name).toMatch(/^\/api\/(artifacts|datasets|secrets|sessions|browser-sessions|testusers)(\/|$)|^\/a\/\{id\}\/export$/);
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(op.http.method);
       for (const [, param] of op.http.path.matchAll(/\{(\w+)\}/g)) {
         expect(Object.keys(op.input), `${op.name}: path param ${param}`).toContain(param);

@@ -1,6 +1,6 @@
 import { artifactIdFromPathPrefix } from '@artifactbin/utils/artifact-reference';
 import { randomUUID } from 'node:crypto';
-import type { Actor, BrowserSessionRequest, BrowserSessionResult, BrowserSessions } from '@artifactbin/contracts';
+import type { Actor, BrowserSessionRequest, BrowserSessionResult, BrowserSessions, ViewerChoice } from '@artifactbin/contracts';
 import { ANONYMOUS, SESSION_LIMITS } from '@artifactbin/contracts';
 
 export interface SessionWorker {
@@ -11,8 +11,13 @@ export interface SessionWorker {
 export type SessionWorkerFactory = (actor: Actor) => Promise<SessionWorker>;
 interface Session {
   owner: string;
-  /** Who its PAGES browse as, fixed when the session is created; undefined is its owner. */
-  viewer: 'guest' | 'test-user' | undefined;
+  /**
+   * Who its PAGES browse as, fixed when the session is created; undefined is
+   * its owner. Held as the KEY rather than the choice, because a `{testuser}`
+   * is an object: comparing the values by identity would make every resume of a
+   * test-user session look like a change of viewer.
+   */
+  viewer: string | undefined;
   worker: Promise<SessionWorker>;
   queue: Promise<void>;
   executions: Map<string, { code: string; result: BrowserSessionResult }>;
@@ -21,6 +26,11 @@ interface Session {
   touched: number;
 }
 const ownerOf = (actor: Actor) => actor.userId ? `user:${actor.userId}` : actor.tokenId ? `token:${actor.tokenId}` : null;
+/** A viewer as one comparable, printable value: 'guest', or `testuser:<id>`. */
+const viewerKey = (viewer: ViewerChoice | undefined): string | undefined =>
+  viewer === 'guest' ? 'guest'
+    : viewer && typeof viewer === 'object' && typeof viewer.testuser === 'string' ? `testuser:${viewer.testuser}`
+    : undefined;
 const idValid = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,80}$/.test(id);
 
 /** Owns leases, execution receipts, and serialization; workers own live browser objects. */
@@ -50,7 +60,7 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
       if (!idValid(input.session_id)) return empty('', 'INVALID_REQUEST', 'Invalid session ID');
       let session = sessions.get(input.session_id);
       // Anything but a viewer named here is absent: the viewer a session browses as is one fixed decision.
-      const viewer = input.op === 'script' && (input.viewer === 'guest' || input.viewer === 'test-user') ? input.viewer : undefined;
+      const viewer = input.op === 'script' ? viewerKey(input.viewer) : undefined;
       if (input.op === 'script') {
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {

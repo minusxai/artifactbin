@@ -8,6 +8,11 @@ import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/
 import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
 import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/user-kinds';
+// A CYCLE, deliberately: the capability table reads `effectiveRole` from here
+// and this file asks it who may act. Both sides use the other only at call
+// time, and the alternative — a second place that decides what a KIND may do —
+// is the thing lib/capabilities exists to prevent.
+import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from '@/lib/capabilities';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -600,6 +605,17 @@ export async function forkArtifact(
   actor: TokenActor,
   source: ArtifactRow,
   overrides: ForkOverrides = {},
+  /**
+   * WHO THE COPY BELONGS TO, when that is not the forker: an account forking
+   * one of its readable artifacts `as` one of its TEST USERS (lib/testusers).
+   *
+   * Only ownership moves. The source is still read, the refs are still
+   * re-validated and the artifact COUNT quota is still charged AS THE ACCOUNT
+   * — a test user has no reach of its own to fork through and no quota of its
+   * own to spend, and this door is the single way anything real gets into its
+   * sandbox.
+   */
+  owner: TokenActor = actor,
 ): Promise<ForkResult | Response> {
   /*
    * A FOLDER IS NOT FORKABLE, and the refusal lives HERE so both doors — the
@@ -615,10 +631,10 @@ export async function forkArtifact(
   // The page PLUS its dataset copies: one cap, counted against what this call
   // will really create rather than against the page alone.
   if (await artifactQuotaExceeded(actor.tokenId, copying.length + 1)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
-  if (copying.length) return deepFork(actor, source, overrides, copying);
+  if (copying.length) return deepFork(actor, source, overrides, copying, owner);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
-  const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
+  const row = await createArtifact(owner.tokenId, owner.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
@@ -684,7 +700,7 @@ export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow)
  * transaction is inserts only, and a failure halfway leaves no orphan dataset
  * sitting in the forker's account under a page that was never created.
  */
-async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[]): Promise<ForkResult | Response> {
+async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[], owner: TokenActor = actor): Promise<ForkResult | Response> {
   const ids = await reserveArtifactIds(actor, copying.length);
   const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
   const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
@@ -706,7 +722,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
     created = await (await getDb()).transaction(async (tx) => {
     const datasets: ArtifactRow[] = [];
     for (const copy of copies) {
-      datasets.push(await createArtifact(actor.tokenId, actor.userId, {
+      datasets.push(await createArtifact(owner.tokenId, owner.userId, {
         title: copy.row.title,
         description: copy.row.description,
         format: 'dataset',
@@ -729,7 +745,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
         ...(copy.row.dataset_policy ? { datasetPolicy: { policy: copy.row.dataset_policy, revision: copy.row.policy_revision ?? 0 } } : {}),
       }));
     }
-    return { artifact: await createArtifact(actor.tokenId, actor.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
+    return { artifact: await createArtifact(owner.tokenId, owner.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
     });
   } catch (error) {
     // A dataset rule refusing a copy is the forker's answer, never a 500.
@@ -737,7 +753,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
     throw error;
   }
   // After the commit, never inside it (PGLite deadlock).
-  for (const row of [...created.datasets, created.artifact]) await afterCreated(row, actor.userId);
+  for (const row of [...created.datasets, created.artifact]) await afterCreated(row, owner.userId);
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: created.artifact.id });
   return { artifact: created.artifact, datasets: created.datasets.map((row) => ({ id: row.id, forked_from: row.forked_from! })) };
 }
@@ -2253,6 +2269,14 @@ type DocumentMutationOutcome =
       detail?: string;
       /** The machine-readable half of the one refusal a reader can act on (lib/story/sign-in-required). */
       code?: typeof SIGN_IN_REQUIRED;
+      /**
+       * The KIND was refused, not the statement: a guest or a test user that
+       * may not write `$_me` at all. The door answers this verbatim — its own
+       * status and its own top-level `error` — because "sign in" and "you are
+       * outside your sandbox" are answers about the CALLER, not verdicts about
+       * the data (lib/capabilities).
+       */
+      capability?: CapabilityRefusal;
     };
 
 export async function runDocumentMutation(
@@ -2270,6 +2294,34 @@ export async function runDocumentMutation(
   const { content, body } = splitHelmet(parsed.nodes);
   const decl = content.mutations.find((m) => m.name === name);
   if (!decl) return { ok: false, reason: 'unknown_mutation' };
+
+  /*
+   * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
+   *
+   * A statement that binds `$_me` has one honest answer for a signed-out
+   * caller, and it is a door (lib/story/sign-in-required). A ROW action that
+   * binds it — a membership button a `<For>` draws for exactly the people who
+   * have not joined — used to be told "this row mutation requires its original
+   * row snapshot" instead: true, useless, and about the wrong problem, because
+   * the page never drew that button for a guest and so never gave them a row to
+   * send. Deciding sign-in here makes the refusal the same whatever shape the
+   * press arrives in: a stale tab, an agent posting at the door directly, a row
+   * snapshot or none.
+   *
+   * It is the same judgement `mutateDataset` makes for the calls that never
+   * come through here, and the same one `mutationAccessFor` previews for the
+   * button; this is only about the ORDER the three checks run in.
+   */
+  const me: CapabilityActor = { userId: actor.userId ?? null, tokenId: actor.tokenId ?? null };
+  if (decl.params.includes('_me') && !(await can(me, 'write_as_me', doc))) {
+    // ANONYMOUS keeps the answer it always had: there is no identity to refuse,
+    // only a statement that needs a person, and the code is what draws the
+    // door. A guest or a test user HAS an identity, and the honest answer names
+    // it — the sign-in door for one, the sandbox for the other.
+    return me.userId
+      ? { ok: false, reason: 'policy_denied', detail: '$_me writes belong to the person signed in; this credential may not make them here', code: SIGN_IN_REQUIRED, capability: await refusalFor(me, doc.id) }
+      : { ok: false, reason: 'policy_denied', detail: '$_me requires a logged-in user', code: SIGN_IN_REQUIRED };
+  }
 
   // Resolved by the DOCUMENT's own scope — never the link-readable fallback,
   // which exists for reads. An unresolvable target reads as read-only, which
@@ -2305,26 +2357,6 @@ export async function runDocumentMutation(
   }
 
   bound._me=actor.userId;
-  /*
-   * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
-   *
-   * A statement that binds `$_me` has one honest answer for a signed-out
-   * caller, and it is a door (lib/story/sign-in-required). A ROW action that
-   * binds it — a membership button a `<For>` draws for exactly the people who
-   * have not joined — used to be told "this row mutation requires its original
-   * row snapshot" instead: true, useless, and about the wrong problem, because
-   * the page never drew that button for a guest and so never gave them a row to
-   * send. Deciding sign-in here makes the refusal the same whatever shape the
-   * press arrives in: a stale tab, an agent posting at the door directly, a row
-   * snapshot or none.
-   *
-   * It is the same judgement `mutateDataset` makes for the calls that never
-   * come through here, and the same one `mutationAccessFor` previews for the
-   * button; this is only about the ORDER the three checks run in.
-   */
-  if (decl.params.includes('_me') && !actor.userId) {
-    return { ok: false, reason: 'policy_denied', detail: '$_me requires a logged-in user', code: SIGN_IN_REQUIRED };
-  }
   let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
   if (mutationUsesRow(decl.sql)) {
     if (!row) return { ok: false, reason: 'invalid_row', detail: 'this row mutation requires its original row snapshot' };
@@ -2497,8 +2529,14 @@ export async function dataflowForRow(
  * saying so, and only the reader who could proceed by signing in is asked to.
  */
 async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+  // ONE capability question for the whole document, asked once: may this
+  // reader write as themselves here at all? A guest is answered exactly as an
+  // anonymous reader is — with the code the page turns into `<SignIn>` — so the
+  // button a guest sees is the door rather than a control that will refuse.
+  const me: CapabilityActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null };
+  const meRefusal = await can(me, 'write_as_me', doc) ? null : (await refusalFor(me, doc.id)).body.hint ?? SIGN_IN_REQUIRED;
   const guestOf = (m: {params: string[]}, answer: string|null): string|null =>
-    answer === null && m.params.includes('_me') && !viewer?.userId ? SIGN_IN_REQUIRED : answer;
+    answer === null && m.params.includes('_me') && meRefusal ? meRefusal : answer;
   return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
     if(m.scope==='local')return [m.name,guestOf(m,null)];
     const actor=viewer??{userId:null,tokenId:null};

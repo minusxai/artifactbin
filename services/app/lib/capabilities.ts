@@ -27,6 +27,7 @@
  * `sandbox_only` refusal below names.
  */
 import type { Capability } from '@artifactbin/contracts';
+import { json } from './http';
 import { canRead, canEdit } from './share-roles';
 import { effectiveRole, ownsArtifact, type ArtifactRow } from './artifacts';
 import { userKindOf } from './user-kinds';
@@ -137,4 +138,10 @@ export async function refusalFor(actor: CapabilityActor, artifactId?: string): P
     };
   }
   return { status: 401, body: { error: SIGN_IN_REQUIRED_ERROR } };
+}
+
+/** The refusal as a Response, for the routes that answer one directly. */
+export async function capabilityRefusal(actor: CapabilityActor, artifactId?: string): Promise<Response> {
+  const refusal = await refusalFor(actor, artifactId);
+  return json(refusal.body, refusal.status);
 }
