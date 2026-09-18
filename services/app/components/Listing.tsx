@@ -2,6 +2,7 @@
  * The public profile listing — the pretty-URL page's chrome, rendered
  * in the browser from /api/page/profile.
  */
+import Avatar from '@/components/Avatar';
 import { FollowButton } from '@/components/FollowButton';
 import PageChrome from '@/components/PageChrome';
 import { PAGE_COLUMN, MicroLabel } from '@/components/ui';
@@ -32,14 +33,16 @@ export function ListingShell({ authed = false, anon = false, children }: {
  * `ancestor_ids` is drawn on the folder's own page. There is nothing here to
  * segment.
  */
-export function ListingHero({ handle, label, count, noun, image, follow }: {
+export function ListingHero({ handle, label, count, noun, owner, follow }: {
   handle: string; label: string; count: number; noun: string;
   /**
-   * The owner's picture (lib/avatars), or null for none. DECORATIVE here: the
-   * handle is right beside it in text, so naming the image as well would make
-   * a screen reader say this person's name twice.
+   * Whose listing: their id (the face's colour) and picture (lib/avatars, or
+   * null for none). Known → a face, always — the initial of the handle, with
+   * the picture painted over it when there is one. Absent → no face at all.
+   * DECORATIVE: the handle is right beside it in text, so naming the face as
+   * well would make a screen reader say this person's name twice.
    */
-  image?: string | null;
+  owner?: { id: string; image: string | null };
   /**
    * The follow control, on a STRANGER's profile only — the page route ships
    * `follow` on that branch alone, so an absent prop is exactly the
@@ -51,9 +54,7 @@ export function ListingHero({ handle, label, count, noun, image, follow }: {
     <header className="reveal mb-8">
       <MicroLabel>{label}</MicroLabel>
       <div className="mt-2 flex items-center gap-3">
-        {image && (
-          <img src={image} alt="" className="size-12 shrink-0 rounded-full border border-edge object-cover" />
-        )}
+        {owner && <Avatar userId={owner.id} image={owner.image} initial={handle} size={48} />}
         <h1 className="flex flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg">
           <a href={`/@${handle}`} aria-label="Profile root" className="no-underline transition-colors hover:text-accent">
             <span className="text-accent">@</span>{handle}

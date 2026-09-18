@@ -14,6 +14,10 @@ import type { PersonCard } from '@artifactbin/contracts';
 import { UserImage } from '@/components/kit/user-image';
 import { UserHandle } from '@/components/kit/user-handle';
 import { User, UNKNOWN_PERSON } from '@/components/kit/user';
+import { personFaceBackground } from '@/lib/person-face';
+
+/** The colour as the DOM stores it: jsdom normalises `hsl(...)` to `rgb(...)`. */
+const asDrawn = (css: string) => { const probe = document.createElement('span'); probe.style.backgroundColor = css; return probe.style.backgroundColor; };
 
 const ADA: PersonCard = { name: 'Ada Lovelace', handle: 'ada', image: '/api/users/usr_ada/avatar?v=abc' };
 const NAMELESS: PersonCard = { name: 'Grace', handle: null, image: null };
@@ -37,7 +41,7 @@ describe('<UserImage>', () => {
     const fallback = view.container.querySelector('[data-slot="avatar-fallback"]')!;
     expect(fallback.textContent).toBe('A');
     const box = view.container.querySelector('[data-slot="avatar"]') as HTMLElement;
-    expect(box.style.getPropertyValue('--mx-person-hue')).not.toBe('');
+    expect(box.style.backgroundColor).toBe(asDrawn(personFaceBackground('usr_ada')));
     // The picture is painted OVER it, not beside it.
     expect(view.container.querySelector('img')!.className).toContain('absolute');
   });
@@ -60,12 +64,11 @@ describe('<UserImage>', () => {
     expect(view.container.querySelector('img')).toBeNull();
     const fallback = view.container.querySelector('[data-slot="avatar-fallback"]')!;
     expect(fallback.textContent).toBe('G');
-    const hue = (view.container.querySelector('[data-slot="avatar"]') as HTMLElement).style.getPropertyValue('--mx-person-hue');
-    expect(hue).not.toBe('');
-    const again = render(<UserImage id="usr_grace" card={NAMELESS} />);
-    expect((again.container.querySelector('[data-slot="avatar"]') as HTMLElement).style.getPropertyValue('--mx-person-hue')).toBe(hue);
-    const other = render(<UserImage id="usr_ada" card={NAMELESS} />);
-    expect((other.container.querySelector('[data-slot="avatar"]') as HTMLElement).style.getPropertyValue('--mx-person-hue')).not.toBe(hue);
+    const face = (node: ReturnType<typeof render>) => (node.container.querySelector('[data-slot="avatar"]') as HTMLElement).style.backgroundColor;
+    // The colour is person-face's, the same one the app bar draws for this id.
+    expect(face(view)).toBe(asDrawn(personFaceBackground('usr_grace')));
+    expect(face(render(<UserImage id="usr_grace" card={NAMELESS} />))).toBe(face(view));
+    expect(face(render(<UserImage id="usr_ada" card={NAMELESS} />))).not.toBe(face(view));
   });
 
   it('shows a neutral mark for an id it cannot name, and never the id itself', () => {
