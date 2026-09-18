@@ -14,6 +14,7 @@ import {canAnnotate} from '@/lib/share-roles';
 import { createAnnotationFor, listAnnotationPageFor } from '@/lib/annotations';
 import {decodePage, encodeCursor} from '@/lib/pagination';
 import { withTokenAuth } from '@/lib/auth';
+import { capabilityGuard } from '@/lib/capabilities';
 import { annotationAuthorForRequest } from '@/lib/annotation-author';
 import { notifyRemoteComment } from '@/lib/remote/mentions';
 import { json, readJson } from '@/lib/http';
@@ -51,6 +52,11 @@ export const POST = withTokenAuth(async (request, {tokenId, userId, params, clie
     (body.node_id === undefined) === (body.quote === undefined))
     return json({error: 'invalid_annotation_body', hint: 'Supply the comment text with --body (or --input) and exactly one anchor: --node ID or --quote TEXT.'}, 400);
   const actor={tokenId,userId};
+  // Commenting is an act attributed to a PERSON: a guest is sent to sign in and
+  // a test user is held inside its sandbox, at this door exactly as at the
+  // browser's (lib/capabilities).
+  const refusal = await capabilityGuard(actor, 'comment', params.id);
+  if (refusal) return refusal;
   const key=request.headers.get('Idempotency-Key');
   const work=async(receipt?:MutationReceipt)=>{
   const made = await createAnnotationFor({tokenId, userId}, params.id, {

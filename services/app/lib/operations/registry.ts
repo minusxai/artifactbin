@@ -11,6 +11,7 @@ import {SESSION_OPERATIONS} from './sessions';
 import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { TESTUSER_OPERATIONS } from './testusers';
 import { resolveTestUser } from '@/lib/testusers';
+import { capabilityGuard } from '@/lib/capabilities';
 import { TESTUSER_ERRORS } from '@artifactbin/contracts';
 /** Shared HTTP operations and schemas.
  * Routes translate HTTP; each operation receives an actor and delegates domain behavior.
@@ -302,6 +303,10 @@ const annotateOp: Operation = {
     { status: 400, code: 'invalid_annotation_action', fix: 'send at least one of reply/resolve/reopen, and never resolve with reopen' },
   ],
   async run(ctx, input) {
+    // The same gate the browser's comment door has: a guest is sent to sign in,
+    // a test user is held inside its sandbox (lib/capabilities).
+    const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
+    if (refusal) return fromResponse(refusal);
     return fromResponse(await respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt));
   },
 };

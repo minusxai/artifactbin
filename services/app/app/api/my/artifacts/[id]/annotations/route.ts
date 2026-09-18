@@ -16,6 +16,7 @@ import { respondToAnnotationList } from '@/app/api/artifacts/[id]/annotations/ro
 import { createAnnotationFor, type CreateAnnotationInput } from '@/lib/annotations';
 import { isAreaRange, refinementRange, parseAnnotationRange } from '@/lib/story/annotation-range';
 import { browserActor } from '@/lib/auth';
+import { capabilityGuard } from '@/lib/capabilities';
 import { json, readJson, unauthorized } from '@/lib/http';
 import { ownerUsername } from '@/lib/users';
 import { actorForArtifacts } from '@/lib/viewer';
@@ -70,6 +71,11 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   const scoped = await scopeFor(request);
   if (scoped instanceof Response) return scoped;
   const { id } = await ctx.params;
+  // A GUEST may read a thread and may not start one: commenting is an act
+  // attributed to a person, and an anonymous cookie is not one. A TEST USER
+  // comments inside its sandbox and nowhere else (lib/capabilities).
+  const refusal = await capabilityGuard(scoped, 'comment', id);
+  if (refusal) return refusal;
   const body = await readJson(request);
   if (!body) return json({ error: 'invalid_json' }, 400);
   const parsed = parseCreateBody(body);
