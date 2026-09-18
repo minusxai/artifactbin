@@ -12,21 +12,28 @@
  * every reader before their session arrived), and /welcome, /login and /start
  * are exempt or the redirect is an infinite loop.
  */
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-router';
 import { OnboardingGate } from '@/web/OnboardingGate';
 
 type Session = { user: { id: string; email: string | null } | null; kind: string; onboarded: boolean } | null;
 const session = { value: null as Session };
 vi.mock('@/web/session', () => ({ useSession: () => ({ session: session.value, reload: () => {}, pages: null, sessionError: null }) }));
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); go = null; });
+
+/** The router's own `navigate`, so a test can move WITHIN one MemoryRouter. */
+let go: ((to: string, options?: { replace?: boolean }) => void) | null = null;
 
 function Where() {
   const { pathname, search } = useLocation();
+  go = useNavigate();
   return <p data-testid="where">{`${pathname}${search}`}</p>;
 }
+
+/** Where the app actually is, exactly — never a substring match. */
+const here = () => screen.getByTestId('where').textContent;
 
 const at = (entry: string) =>
   render(
@@ -95,6 +102,23 @@ describe('the onboarding gate', () => {
     expect(screen.getByTestId('where')).toHaveTextContent(
       `/welcome?callbackUrl=${encodeURIComponent('/@someone/doc?intent=whatever')}`,
     );
+  });
+
+  it('holds the exemption for the whole stay on the address, then owes the welcome page on the next one', () => {
+    session.value = newAccount;
+    at('/@someone/doc?intent=fork');
+    expect(here()).toBe('/@someone/doc?intent=fork');
+
+    // lib/intent consumes the instruction ON MOUNT and strips it from the
+    // address with a replace. That re-render must NOT become a divert: it would
+    // unmount the fork dialog under the person who just asked for it.
+    act(() => go!('/@someone/doc', { replace: true }));
+    expect(here()).toBe('/@someone/doc');
+
+    // Leaving the address ends the exemption — the fork opens the copy at its
+    // own path, and THAT is where the welcome page is owed, carrying it back.
+    act(() => go!('/@someone/other'));
+    expect(here()).toBe(`/welcome?callbackUrl=${encodeURIComponent('/@someone/other')}`);
   });
 
   it('waits for the session rather than guessing at it', () => {

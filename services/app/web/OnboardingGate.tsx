@@ -17,21 +17,34 @@
  *  - the current route must not be one the person cannot leave without help:
  *    `/welcome` itself (the loop), `/login` (they may be mid-sign-in) and
  *    `/start`.
- *  - the address must not carry a PENDING INTENT (lib/intent). A person who
- *    pressed Fork on a document they were signed out of is sent through
- *    /login and back with `?intent=fork`, and that instruction is consumed ON
- *    MOUNT — so diverting here would consume nothing, land them on the welcome
- *    page, and quietly lose the thing they actually asked for. The first person
- *    ever to press Fork is by definition a new account, so this is the common
- *    case and not an edge. They finish what they came for; the gate fires on
- *    their NEXT navigation with that address as the callback, which is one
- *    screen later and costs nothing.
+ *  - the address must not be one where a PENDING INTENT (lib/intent) is being
+ *    carried out. Somebody who pressed Fork on a document they were signed out
+ *    of is sent through /login and back with `?intent=fork`; diverting there
+ *    would land them on the welcome page having quietly lost the thing they
+ *    asked for. The first person ever to press Fork is by definition a new
+ *    account, so this is the common case and not an edge.
+ *
+ * THE EXEMPTION LASTS FOR THE WHOLE STAY ON THAT ADDRESS, not for as long as
+ * the parameter is there, and that is the entire subtlety. An intent is an
+ * INSTRUCTION: the document consumes it on mount — opening the fork dialog —
+ * and immediately strips it from the address with a replace navigation. That
+ * strip re-renders this gate with an ordinary-looking address, and a gate that
+ * only asked "is there an intent right now" would divert on it and unmount the
+ * dialog under the person who had just asked for it. Measured doing exactly
+ * that: the browser ended on `/welcome?callbackUrl=%2F%40owner%2F<id>-fork-gate`
+ * with the dialog gone.
+ *
+ * So the PATHNAME an instruction was seen on is remembered, and while we are
+ * still on it the person is left alone to finish. The moment they leave — the
+ * fork opens the copy at its own address — the memory is dropped and the gate
+ * decides normally, so the welcome page is owed one screen later with that new
+ * address as the callback. Nothing is skipped; it is deferred.
  *
  * `readIntent` rather than a hand-read query parameter, so the strict allowlist
  * is what decides: `?intent=fork` defers the welcome page, `?intent=anything`
  * on a shared link does not.
  */
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router';
 import { readIntent } from '@/lib/intent';
 import { useSession } from './session';
@@ -43,8 +56,20 @@ export function OnboardingGate({ children }: { children: ReactNode }): ReactNode
   const { session } = useSession();
   const location = useLocation();
   const path = location.pathname.replace(/\/+$/, '') || '/';
+
+  /*
+   * The address an instruction was seen on, held until we leave it. Derived
+   * DURING RENDER rather than in an effect because it has to be right on the
+   * very render that decides — an effect would run after this one had already
+   * returned a `<Navigate>`. The write is idempotent for a given location, so
+   * rendering the same address twice computes the same answer.
+   */
+  const carryingOut = useRef<string | null>(null);
+  if (readIntent(location.search)) carryingOut.current = location.pathname;
+  else if (carryingOut.current !== location.pathname) carryingOut.current = null;
+
   if (!session?.user || session.onboarded !== false || EXEMPT.has(path)) return children;
-  if (readIntent(location.search)) return children;
+  if (carryingOut.current === location.pathname) return children;
   const here = `${location.pathname}${location.search}${location.hash}`;
   return <Navigate to={`/welcome?callbackUrl=${encodeURIComponent(here)}`} replace />;
 }
