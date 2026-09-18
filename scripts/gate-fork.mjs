@@ -32,7 +32,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, passTheWelcomePage } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -134,6 +134,9 @@ const copyRow = await forker.evaluate(
 );
 check(copyRow.forked_from === doc.id, `the copy records its source (forked_from = ${copyRow.forked_from})`);
 check(copyRow.id !== doc.id, 'a new id — the original is untouched');
+
+// A brand-new forker meets the welcome page once on this next navigation; confirm through it like a person.
+await passTheWelcomePage(forker, FORKER_EMAIL);
 
 await openArtifactControls(forker);
 const credit = forker.locator('[data-mx-forked-from]');
