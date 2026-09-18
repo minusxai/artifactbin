@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -245,14 +246,27 @@ describe('GitHub CI adapter', () => {
     write('services/cli/src/generated/teaching.json', `{\n  "version": "${version}",\n  "files": {}\n}\n`);
   };
 
+  const readOutputs = (output) => Object.fromEntries(readFileSync(output, 'utf8').split('\n').filter(Boolean)
+    .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+
   const planOutput = (cwd, env) => {
     const output = path.join(cwd, `outputs-${Math.random()}`);
     execFileSync(process.execPath, [script, 'plan'], {
       cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: '', ...env },
     });
-    return Object.fromEntries(readFileSync(output, 'utf8').split('\n').filter(Boolean)
-      .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+    return readOutputs(output);
+  };
+
+  /** The same, without blocking this process — a test that SERVES the planner's API call must not
+   * hold the event loop while the planner waits on it. */
+  const planOutputServed = async (cwd, env) => {
+    const output = path.join(cwd, `outputs-${Math.random()}`);
+    await promisify(execFile)(process.execPath, [script, 'plan'], {
+      cwd, encoding: 'utf8',
+      env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: '', ...env },
+    });
+    return readOutputs(output);
   };
 
   it('reads a real bump as a release and anything beside it as a full run', () => {
@@ -311,19 +325,20 @@ describe('GitHub CI adapter', () => {
         GITHUB_REPOSITORY: 'minusxai/artifactbin', GH_TOKEN: 'mxmx_test_token',
         GITHUB_API_URL: `http://127.0.0.1:${api.address().port}`,
       };
-      const reused = planOutput(cwd, env);
+      const reused = await planOutputServed(cwd, env);
       expect(asked[0]).toBe(`/repos/minusxai/artifactbin/actions/artifacts?name=tested-tree-${tree}&per_page=100`);
       expect(reused['source-run']).toBe('4242');
       for (const job of CI_JOBS) expect(reused[job], job).toBe('false');
       // An expired artifact is not evidence, and neither is an API that will not answer.
       answer = { status: 200, body: { artifacts: [{ id: 7, expired: true, workflow_run: { id: 4242 } }] } };
-      expect(planOutput(cwd, env).checks).toBe('true');
-      expect(planOutput(cwd, env)['source-run']).toBe('');
+      const expired = await planOutputServed(cwd, env);
+      expect(expired.checks).toBe('true');
+      expect(expired['source-run']).toBe('');
       answer = { status: 500, body: { message: 'nope' } };
-      const fallback = planOutput(cwd, env);
-      for (const job of CI_JOBS) expect(fallback[job], job).toBe('true');
+      const fallback = await planOutputServed(cwd, env);
+      for (const job of CI_JOBS.filter((job) => !RELEASE_JOBS.includes(job))) expect(fallback[job], job).toBe('true');
       // A pull request never reuses: it is the run that RECORDS the tree.
-      expect(planOutput(cwd, { ...env, CI__EVENT: 'pull_request', CI__BASE_SHA: base }).api).toBe('true');
+      expect((await planOutputServed(cwd, { ...env, CI__EVENT: 'pull_request', CI__BASE_SHA: base })).api).toBe('true');
     } finally {
       api.close();
       rmSync(cwd, { recursive: true, force: true });

@@ -80,16 +80,10 @@ Run these from the repository root. Keep this list current.
 ## Change checks
 
 - CLI releases require `npm run release:cli`, then `npm run generate:teaching -w services/cli`;
-  without the bump the live installer serves the old binary, and `checks` refuses a PR that changes
-  `services/cli/src/**` or `services/cli/scripts/**` without one (prose and CLI tests exempt). A change
-  whose whole diff is those version lines selects only `checks` and the four binary builds; anything
-  else beside them makes it an ordinary run. What each step rewrites is in
-  [services/cli/README.md](services/cli/README.md). Successful main CI publishes the tested assets on a version change; downstream deployments
-  must advance their source pin and verify release availability before serving its installer.
-- A tree is tested once: PR CI records the tree it passed (`tested-tree-<hash>`), and the push that
-  merges it selects no job and points consumers at that run. A conflicted merge, a direct push or an
-  expired record runs the full matrix as before. On a pull request, a job over its budget fails the
-  run (`timings`) — fix the cause; do not raise the budget to meet the job.
+  `checks` refuses a CLI PR without it. A version-only diff builds only the binaries, and a tree PR
+  CI passed is not re-tested on merge. What each step rewrites is in
+  [services/cli/README.md](services/cli/README.md). Successful main CI publishes the tested assets; deploys
+  must advance their source pin and verify the release before serving its installer.
 - Schema changes update `services/app/lib/schema.ts`, schema ownership tests, and generated SQL via
   `npm run render:schema`. Settings changes update the owning config module, `.env.example`, and the
   setup planner's `.env.example` snapshot via `npm run generate:env-snapshot` (its test fails when it has drifted).
