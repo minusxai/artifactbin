@@ -108,11 +108,16 @@ describe('browser_session viewer', () => {
   };
   afterEach(() => setServices({ browser: previous }));
 
-  it('accepts guest and test-user, and parses a script without a viewer', () => {
+  it('accepts guest and a NAMED test user, and parses a script without a viewer', () => {
     const input = z.object(operation.input);
     expect(input.safeParse({ ...script, viewer: 'guest' }).success).toBe(true);
+    expect(input.safeParse({ ...script, viewer: { testuser: 'usr_second' } }).success).toBe(true);
     expect(input.safeParse(script).success).toBe(true);
-    for (const viewer of ['owner', 'anonymous', 'GUEST', '', true]) expect(input.safeParse({ ...script, viewer }).success, String(viewer)).toBe(false);
+    // `test-user` is RETIRED: a session names one of the test users the account
+    // already holds (testuser_create) instead of minting a person of its own.
+    for (const viewer of ['owner', 'anonymous', 'GUEST', 'test-user', '', true, {}, { testuser: 7 }]) {
+      expect(input.safeParse({ ...script, viewer }).success, JSON.stringify(viewer)).toBe(false);
+    }
   });
 
   it('passes the viewer to the session service and sends none when the caller named none', async () => {
@@ -126,24 +131,25 @@ describe('browser_session viewer', () => {
     expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
   });
 
-  it('mints a throwaway second person for a test-user session and never hands its secret back', async () => {
+  /**
+   * A session MINTS NOTHING. It names a test user the account already holds, so
+   * one that is not the caller's is refused here — before the session service
+   * is reached, and without ever confirming whether that id exists.
+   * `testusers-sessions.test.ts` is where the happy path lives, with a database.
+   */
+  it('refuses a test user that is not the caller\'s, without reaching the session service', async () => {
     const seen = record();
-    const result = await operation.run(context, { ...script, viewer: 'test-user' });
-    expect(result.status, JSON.stringify(result.body)).toBe(200);
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ viewer: 'test-user', actor: { tokenId: 'tok_owner', userId: 'usr_owner' } });
-    const page = seen[0]!.pageActor!;
-    expect(page.credential).toBe('bearer');
-    expect(page.userId).toMatch(/^usr_/);
-    expect(page.userId).not.toBe('usr_owner');
-    expect(page.tokenId).toMatch(/^tok_|^[A-Za-z0-9_-]+$/);
-    expect(JSON.stringify(result.body)).not.toContain(page.tokenId!);
+    const result = await operation.run(context, { ...script, viewer: { testuser: 'usr_someone_elses' } });
+    expect(result.status, JSON.stringify(result.body)).toBe(403);
+    expect(result.body.error).toBe('not_your_testuser');
+    expect(String(result.body.message)).toContain('testuser_create');
+    expect(seen).toHaveLength(0);
   });
 
   // runOperation hands the body to run() unparsed, so the refusal has to live in the operation itself.
   it('refuses a viewer it cannot browse as, without reaching the session service', async () => {
     const seen = record();
-    for (const viewer of ['owner', 'anonymous', 'GUEST', true]) {
+    for (const viewer of ['owner', 'anonymous', 'GUEST', 'test-user', true, {}]) {
       const reply = await operation.run(context, { ...script, viewer });
       expect(reply.status, String(viewer)).toBe(400);
       expect(String(reply.body.error), String(viewer)).toBe('invalid_viewer');
