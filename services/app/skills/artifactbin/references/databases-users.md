@@ -47,12 +47,6 @@ identity fields in an existing report's YAML fence when editing it; publish the
 report with `afbin push report.jsx --yes --json`. CSV infers ordinary columns;
 the Dataset definition above declares native user types and constraints.
 
-`memberOf:["_likes"]` selects this page's current likers. On a stored column it
-binds to the first owning page at attachment; a fork copies that scope to its
-new page. On a page Value it is relative to the current page. Unliking removes
-future eligibility, without deleting historical rows or hiding their people.
-The internal frozen spelling `likes:<documentId>` may appear in pulled schemas.
-
 `memberOf` is always a nonempty array of unique references. Membership in ANY
 listed document is sufficient; other constraints combine with AND. Eligible
 members are its owner and registered users explicitly shared on it, including
@@ -103,7 +97,11 @@ the query result; it needs no stored dataset field.
 
 The standalone Value inherits its user type and constraints from `public.rows`'s
 named column. Names such as `person` and `assign` are author-chosen. User Selects
-get searchable choices from field metadata; no `options` query is needed.
+get searchable choices from field metadata when `options` is omitted.
+For app-defined participants, use `options="$members"` with a query whose first
+column contains user IDs. Explicit options determine the visible choices; server
+constraints still validate every write. See [apps](apps.md) for an ordinary Join
+button that populates that table.
 Direct SQL projections, aliases, filters and ordering preserve user metadata;
 computed text such as `upper(assigned_to)` is ordinary text. `$_me` is reserved
 and bound by the server to the actual caller, never a client-supplied Value or
@@ -123,7 +121,7 @@ and never carried in the link.
 ```
 
 `<User userId=… />` shows a person: their picture, then the handle they chose,
-linked to their profile. `id` takes a literal account ID, `$_me`, a scalar
+linked to their profile. `userId` takes a literal account ID, `$_me`, a scalar
 `user` Value, or a row field inside `<For>`/`<Column>`. `avatar={false}` drops
 the picture; `fallback` is what an unset field reads as. An ID this reader
 cannot see renders "Unknown person", never the raw ID.

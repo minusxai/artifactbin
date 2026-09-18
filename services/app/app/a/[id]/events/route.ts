@@ -1,4 +1,3 @@
-import {LIKES_TABLE} from '@artifactbin/contracts';
 /**
  * GET /a/:id/events — Server-Sent Events carrying this artifact's document
  * as it changes, so an open page (viewing OR editing) stays live.
@@ -137,7 +136,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     if (!row) return void close();
     if (!(await canReadArtifact(row, viewer))) return void close();
     const dataset = await getArtifactById(datasetId);
-    void sendData({ datasets: [datasetId===id && row.format==='markup'?LIKES_TABLE:datasetId], version: dataset?.version ?? 0 });
+    void sendData({ datasets: [datasetId], version: dataset?.version ?? 0 });
   };
 
   /**
@@ -229,7 +228,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   };
 
   try {
-    unsubscribe = await subscribeToArtifact(artifactId, payload => payload==='likes'?void wakeDataset(artifactId):void pushCurrent());
+    unsubscribe = await subscribeToArtifact(artifactId, () => void pushCurrent());
     // The document's DATA dependencies are subscribed at CONNECT, from the row
     // this handler opened with — not from the first frame. The opening frame is
     // queued rather than awaited (see below), so waiting for it would leave a

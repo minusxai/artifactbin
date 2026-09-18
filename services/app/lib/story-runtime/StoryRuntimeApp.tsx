@@ -56,6 +56,19 @@ import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from
 import { createPreviewIdentityAllocator } from './preview-identity';
 import { Tooltip } from '@/components/Tooltip';
 
+/** Authored options choose rows; user labels only use already-visible person cards.
+ * Without options, retain the server's field-scoped choices. This is presentation,
+ * never authorization: user constraints remain enforced at the write boundary. */
+function selectOptions(state: DataflowState, raw: unknown, field: string, isUser: boolean) {
+  if (raw === undefined && isUser) return state.userOptions?.[field] ?? [];
+  const name = refName(raw);
+  const table = name ? state.tables[name] : undefined;
+  const options = normalizeControlOptions(raw, table);
+  return isUser && (!table || table.columns.length === 1)
+    ? options.map(option => ({...option, label: option.label === option.value ? state.people?.[option.value]?.name ?? option.label : option.label}))
+    : options;
+}
+
 /** The disabled input cannot receive focus; its stable wrapper explains why. */
 function MutationCellHint({reason,children}:{reason:string|null;children:ReactNode}) {
   const [open,setOpen]=useState(false);
@@ -116,8 +129,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
   if(needsSignIn(unavailable))return <SignIn {...runtimeTargetIdentity(props)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   if (tag === 'Select') {
-    const optsName = refName(props.options);
-    const options = (valueType==='user' ? ctx.state.userOptions?.[`${tableName}.${valueField}`]??[] : normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined))
+    const options = selectOptions(ctx.state, props.options, `${tableName}.${valueField}`, valueType === 'user')
       .filter((option) => props.exclude === undefined || option.value !== String(props.exclude));
     return <MutationCellHint reason={refusalText(unavailable)}><SelectControl
       appearance="cell" label={label} placeholder={str(props.placeholder) ?? 'None'} className={str(props.className)} options={options}
@@ -505,9 +517,8 @@ function TextareaAdapter(props: Record<string, unknown>) {
 function SelectAdapter(props: Record<string, unknown>) {
   const { state } = useContext(RuntimeEmbedContext);
   const bind = useScalarControl(refName(props.value));
-  const optsName = refName(props.options);
   const userControl=Object.hasOwn(state.userOptions??{},refName(props.value)??'');
-  const options = state.userOptions?.[refName(props.value)??''] ?? normalizeControlOptions(props.options, optsName ? state.tables[optsName] : undefined);
+  const options = selectOptions(state, props.options, refName(props.value) ?? '', userControl);
   return (
     <SelectControl
       label={str(props.label)} placeholder={str(props.placeholder)} className={str(props.className)}

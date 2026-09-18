@@ -68,7 +68,7 @@ it('acts as a full person inside the sandbox and is refused by name outside it',
   // matters here is that the KIND is never what refuses it.
   const own = await inside(copy.id);
   expect(own.like.status, await own.like.clone().text()).toBe(200);
-  expect(await own.like.clone().json()).toMatchObject({ liked: true, count: 0 });
+  expect(await own.like.clone().json()).toMatchObject({ liked: true, count: 1 });
   expect([201, 400], 'a comment is admitted; only its anchor can refuse it').toContain(own.comment.status);
   expect(own.fork.status, await own.fork.clone().text()).toBe(201);
 

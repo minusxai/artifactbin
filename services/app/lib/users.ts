@@ -1,4 +1,3 @@
-import {seedOwnerLike} from './relations';
 /**
  * Accounts + ownership. A user is the durable owner; tokens are machine
  * credentials that may be anonymous (user_id NULL) until claimed. Claiming a
@@ -253,10 +252,9 @@ async function claimWhere(
       // tell which, and re-claiming your own still backfills, because that step
       // is safe to repeat and must not be skipped.
       const backfilled = await tx.query(
-        'UPDATE artifacts SET user_id = $1 WHERE token_id = $2 AND user_id IS NULL RETURNING id',
+        'UPDATE artifacts SET user_id = $1 WHERE token_id = $2 AND user_id IS NULL',
         [userId, token.id],
       );
-      for(const row of backfilled.rows as Array<{id:string}>)await seedOwnerLike(tx,userId,row.id);
       return { tokenId: token.id, claimedArtifacts: backfilled.rowCount, name: token.name };
     });
     if (!claimed) return null;

@@ -1,4 +1,3 @@
-import {LIKES_TABLE} from '@artifactbin/contracts';
 import {COLUMN_SQL_TYPES} from './column-types';
 import type {
   DuckDBConnection,
@@ -250,7 +249,7 @@ async function analysis(conn: DuckDBConnection, input: MutationInput) {
     if (
       node.type === 'LOGICAL_GET' &&
       (node.name !== 'seq_scan' ||
-        (node.function_data?.table !== input.table.name && !(input.likes!==undefined && node.function_data?.table===LIKES_TABLE)))
+        node.function_data?.table !== input.table.name)
     )
       refuse('opaque or external table functions are not supported');
     if (

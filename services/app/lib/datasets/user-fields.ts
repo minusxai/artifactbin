@@ -1,4 +1,3 @@
-import {likers} from '@/lib/relations';
 import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
 import type {DatasetColumn, PersonCard, Queryable, Row, UserOption} from '@artifactbin/contracts';
 import {avatarUrl} from '@/lib/avatars';
@@ -6,16 +5,13 @@ import {DatasetError} from './errors';
 
 /** Membership is explicit sharing plus ownership, never public-link readership. */
 async function memberIds(db:Queryable, refs:string[],lock=false):Promise<string[]> {
- const ids=refs.filter(ref=>ref.startsWith('ref:')).map(ref=>ref.slice(4));
- const likeIds=refs.filter(ref=>ref.startsWith('likes:')).map(ref=>ref.slice(6));
- const liked:string[]=[];
- if(lock){const scopes=[...new Set([...ids,...likeIds])].sort();if(scopes.length)await db.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[scopes]);}
- for(const id of likeIds)liked.push(...await likers(db,id));
- if(!ids.length)return [...new Set(liked)];
+ const ids=refs.filter(ref=>ref!=='current').map(ref=>ref.slice(4));
+ if(!ids.length)return [];
+ if(lock)await db.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[ids]);
  const result=await db.query<{id:string}>(`SELECT DISTINCT u.id FROM users u JOIN artifacts a ON
    (a.user_id=u.id OR EXISTS (SELECT 1 FROM artifact_shares s WHERE s.artifact_id=a.id AND (s.user_id=u.id OR (s.user_id IS NULL AND s.email=u.email))))
    WHERE a.id=ANY($1::text[]) AND a.deleted_at IS NULL`,[ids]);
- return [...new Set([...liked,...result.rows.map(row=>row.id)])];
+ return result.rows.map(row=>row.id);
 }
 
 /** Check actual assigned fields at the transaction boundary. Null is an unset user. */
@@ -27,7 +23,7 @@ export async function validateUserWrites(db:Queryable, columns:DatasetColumn[], 
   if(column.constraints?.self && (!userId || values.some(value=>value!==userId)))throw new DatasetError(`User field ${column.name} must be the logged-in user`,403);
   const valid=new Set((await db.query<{id:string}>('SELECT id FROM users WHERE id=ANY($1::text[])',[values])).rows.map(row=>row.id));
   if(values.some(value=>!valid.has(value as string)))throw new DatasetError(`User field ${column.name} contains an unknown user`,403);
-  if(column.constraints?.memberOf?.some(ref=>ref==='current'||ref==='_likes'))throw new DatasetError(`User field ${column.name} must remain unset until its report is attached`,403);
+  if(column.constraints?.memberOf?.includes('current'))throw new DatasetError(`User field ${column.name} must remain unset until its report is attached`,403);
   if(column.constraints?.memberOf) {
    const allowed=new Set(await memberIds(db,column.constraints.memberOf,true));
    if(values.some(value=>!allowed.has(value as string)))throw new DatasetError(`User field ${column.name} requires membership in one of its documents`,403);
@@ -72,7 +68,7 @@ export async function people(db:Queryable,ids:string[]):Promise<Record<string,Pe
 
 /** Resolve shorthand consistently in both the executable catalog and authored source. */
 export function resolveUserColumnScope(columns:DatasetColumn[],scope:string):DatasetColumn[] {
- return columns.map(c=>c.constraints?.memberOf?.some(ref=>ref==='current'||ref==='_likes')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${scope}`:ref==='_likes'?`likes:${scope}`:ref))]}}:c);
+ return columns.map(c=>c.constraints?.memberOf?.includes('current')?{...c,constraints:{...c.constraints,memberOf:[...new Set(c.constraints.memberOf.map(ref=>ref==='current'?`ref:${scope}`:ref))]}}:c);
 }
 
 /** A schema round-trip must not turn a frozen current scope back into a wildcard. */
@@ -87,15 +83,4 @@ export function retainUserScope<T extends {meta:Record<string,unknown>;source?:s
   source=serializeDatasetDefinition({...definition,tables:definition.tables.map(t=>({...t,columns:t.columns?.map(c=>typeof c==='string'?c:resolve([c])[0]!)}))});
  }
  return {...input,...(source!==undefined?{source}:{}),meta:{...input.meta,userScopeDocument:scope,...(Array.isArray(input.meta.columns)?{columns:resolve(input.meta.columns as DatasetColumn[])}:{}),...(catalog?{catalog:{...catalog,tables:catalog.tables.map(t=>({...t,columns:resolve(t.columns)}))}}:{})}};
-}
-
-/** A copied dataset's page-relative membership belongs to the new page. */
-export function remapLikesScope<T extends {meta:Record<string,unknown>;source:string|null}>(input:T,from:string,to:string):T{
- const columns=(items:DatasetColumn[])=>items.map(column=>column.constraints?.memberOf?{...column,constraints:{...column.constraints,memberOf:column.constraints.memberOf.map(ref=>ref===`likes:${from}`?`likes:${to}`:ref)}}:column);
- const catalog=input.meta.catalog as {tables:Array<{columns:DatasetColumn[]}>}|undefined;
- return {...input,source:input.source?.replaceAll(`likes:${from}`,`likes:${to}`)??null,meta:{...input.meta,
-  ...(input.meta.userScopeDocument===from?{userScopeDocument:to}:{}),
-  ...(Array.isArray(input.meta.columns)?{columns:columns(input.meta.columns)}:{}),
-  ...(catalog?{catalog:{...catalog,tables:catalog.tables.map(table=>({...table,columns:columns(table.columns)}))}}:{}),
- }};
 }
