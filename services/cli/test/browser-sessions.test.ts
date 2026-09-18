@@ -57,9 +57,39 @@ test('--as guest creates a session that browses signed out; a session viewer is 
   } finally { await h.cleanup(); }
 });
 
+/**
+ * The SECOND person. `--as guest` shows what a signed-out reader sees; `--as
+ * test-user` browses as a fresh account that exists only for the session, which
+ * is the only way an agent can be somebody else on a page it already joined.
+ */
+test('--as test-user creates a session that browses as a second person, and is refused on an existing one', async () => {
+  const h = await cliHarness('afbin-test-user-session-');
+  try {
+    await writeFile(join(h.root, 'actions.js'), 'const page=await context.newPage(); return page.url();');
+    const done = (call: RecordedCall) => Response.json({ session_id: String((call.body as Record<string, unknown>).session_id), execution_id: String((call.body as Record<string, unknown>).execution_id ?? 'e'), status: 'completed', result: 1, pages: [], attachments: [] });
+
+    const created = await h.invoke(['sessions', 'script', 'new', '--as', 'test-user', '--input', 'actions.js', '--json'], done);
+    assert.equal(created, 0, JSON.stringify(h.last()));
+    const body = h.calls.map(call => call.body as Record<string, unknown>).find(sent => sent.op === 'script')!;
+    assert.equal(body.viewer, 'test-user');
+    assert.equal(body.create, true);
+    // The identity is the app's to mint: the CLI never names or carries one.
+    assert.equal('pageActor' in body, false);
+
+    // An existing session already has the viewer it was created with.
+    h.calls.length = 0;
+    const attempted = h.network();
+    const resumed = await h.invoke(['sessions', 'script', 'session_id', '--as', 'test-user', '--input', 'actions.js', '--json'], done);
+    assert.notEqual(resumed, 0);
+    assert.equal(h.network(), attempted, 'refused before any request');
+    assert.match(String(h.last().error.message), /fixed|created/i);
+  } finally { await h.cleanup(); }
+});
+
 test('--as names a viewer afbin can browse as, only where it can be chosen', () => {
   assert.equal(parseCommand(['sessions', 'script', 'new', '--as', 'GUEST', '--input', 'a.js']).flags.as, 'guest');
-  for (const args of [['sessions', 'script', 'new', '--as', 'owner', '--input', 'a.js'], ['sessions', 'status', 'abc', '--as', 'guest'], ['sessions', 'close', 'abc', '--as', 'guest'], ['push', 'a.jsx', '--as', 'guest']]) {
+  assert.equal(parseCommand(['sessions', 'script', 'new', '--as', 'Test-User', '--input', 'a.js']).flags.as, 'test-user');
+  for (const args of [['sessions', 'script', 'new', '--as', 'owner', '--input', 'a.js'], ['sessions', 'script', 'new', '--as', 'testuser', '--input', 'a.js'], ['sessions', 'status', 'abc', '--as', 'guest'], ['sessions', 'close', 'abc', '--as', 'test-user'], ['push', 'a.jsx', '--as', 'guest']]) {
     assert.throws(() => parseCommand(args), Error, args.join(' '));
   }
 });

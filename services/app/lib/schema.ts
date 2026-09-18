@@ -596,6 +596,34 @@ const ARTIFACT_ID_REGISTRY: Table = {
  indexes:[{name:'idx_reservation_batch_ordinal',columns:['owner','batch','ordinal'],unique:true}],
 };
 /**
+ * The LIVE throwaway second people: one row per browser session created with
+ * `viewer: 'test-user'`. The row IS the lease — closing the session or sweeping
+ * a lost one revokes the token and deletes the row, so "does this owner already
+ * have a test user?" is a row count and a token can never outlive its record.
+ * The guest `users` row it names is left behind like any unclaimed guest's.
+ *
+ * Keyed by (session_id, owner) because a session id is the CALLER's choice: two
+ * owners naming the same id must not collide on this table.
+ */
+const BROWSER_TEST_USERS: Table = {
+ name:'browser_test_users',
+ columns:[
+  {name:'session_id',type:'TEXT',notNull:true},
+  // The session service's own owner key: `user:<userId>` or `token:<tokenId>`.
+  {name:'owner',type:'TEXT',notNull:true},
+  {name:'user_id',type:'TEXT',notNull:true},
+  {name:'token_id',type:'TEXT',notNull:true},
+  {name:'created_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+  // The sweep's clock, stamped on every call the owner makes about this
+  // session — the SAME quantity the session service ages its own leases by
+  // (`touched`). Aging the record by `created_at` instead would revoke the
+  // identity out from under a session that is still being worked in.
+  {name:'touched_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ ],
+ primaryKey:['session_id','owner'],
+ indexes:[{name:'idx_browser_test_users_owner',columns:['owner']}],
+};
+/**
  * The app's tables, in the order boot applies them — and the shape
  * scripts/render-schema.mjs prefers, so `SCHEMA.sql` is rendered by the SAME
  * renderer with the deployment's schema qualifier rather than by re-writing
@@ -603,7 +631,7 @@ const ARTIFACT_ID_REGISTRY: Table = {
  * re-qualify (a rename's DO block names its own schema twice) is exactly what
  * such an indirection cannot survive.
  */
-export const TABLES: Table[] = [EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY];
+export const TABLES: Table[] = [EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

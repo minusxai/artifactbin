@@ -31,10 +31,23 @@ Every write a signed-out reader could not make is refused in a guest session
 exactly as it would be for a real guest; that refusal is the answer you came for,
 not a broken session.
 
+`--as test-user` is the other half of the same idea: the session's pages browse
+as a fresh account that exists only for this session, so open the link, press
+Join, and you are the second person — `$_me` is somebody else and a `user`
+column records two distinct people. It is nobody's real account: it is never
+listed, invited or followed, it reads only what the link already grants, and
+closing the session ends it. Creating one needs an account of your own, and one
+lives at a time — close that session before starting another.
+
+```sh
+afbin sessions script new --as test-user --input actions.js --json
+```
+
 Who a session browses as is fixed when it is created. `--as` on an existing
 session ID is refused locally, and resuming with `afbin sessions script
-SESSION_ID` keeps the viewer that session was created with. To compare the two
-views, open one session with `--as guest` and another without.
+SESSION_ID` keeps the viewer that session was created with. To compare views,
+open one session with `--as guest` and another without; to be two people on one
+page, open one as yourself and another with `--as test-user`.
 
 A script is a **strict async JavaScript function body**: use top-level `await`
 and `return`, without exporting or wrapping a function. Each call gets:
