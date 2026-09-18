@@ -10,6 +10,7 @@ import path from 'node:path';
 import type { Actor, BrowserSessionResult } from '@artifactbin/contracts';
 import { BROWSER_SESSION_HEADER, SESSION_LIMITS } from '@artifactbin/contracts';
 import { SESSION_WORKER_SOURCE } from './session-worker';
+import type { SessionSandboxChoice } from './session-config';
 import type { SessionWorker } from './sessions';
 
 export interface SessionProcessOptions {
@@ -22,6 +23,8 @@ export interface SessionProcessOptions {
   workerArgs?: readonly string[];
   /** Prepare the pinned Linux Chromium distribution; only its executable directory enters the sandbox. */
   browserExecutable?: () => Promise<string>;
+  /** Read once at the service's env boundary (`session-config`); bubblewrap unless told otherwise. */
+  sandbox?: SessionSandboxChoice;
 }
 const require = createRequire(import.meta.url);
 
@@ -76,11 +79,48 @@ export function sessionSandboxPlan(runtime: string, browsers: string, executable
   return {args, env: {HOME: '/home/session', TMPDIR: '/tmp', PATH: '/usr/bin:/bin', PLAYWRIGHT_BROWSERS_PATH: '/browsers', NODE_OPTIONS: '--max-old-space-size=128'}};
 }
 
+/**
+ * THE SAME WORKER WITHOUT THE SANDBOX — `BROWSER__SANDBOX=none`, development only.
+ *
+ * The plan above describes mount points; this one describes the real paths they stood
+ * for, key for key: the private session directory instead of `/runtime`, the host's own
+ * Playwright directory instead of `/browsers`, a private HOME inside that directory
+ * instead of the tmpfs at `/home/session`. Everything else — the worker source, the
+ * newline-JSON protocol, the memory ceiling — is unchanged, because a loop that runs a
+ * DIFFERENT worker locally proves nothing about the one that ships.
+ */
+export function sessionPlainPlan(runtime: string, executable: string, options: { browsers?: string; path?: string; tmp?: string; workerArgs?: readonly string[] } = {}) {
+  const args = options.workerArgs ? [...options.workerArgs] : ['--max-old-space-size=128', path.join(runtime, 'worker.mjs')];
+  return {
+    command: executable,
+    args,
+    env: {
+      HOME: path.join(runtime, 'home'), TMPDIR: options.tmp ?? tmpdir(), PATH: options.path ?? '/usr/bin:/bin',
+      ...(options.browsers ? { PLAYWRIGHT_BROWSERS_PATH: options.browsers } : {}), NODE_OPTIONS: '--max-old-space-size=128',
+    },
+  };
+}
+
+/**
+ * Playwright's own default browser directory for this host. The worker runs with a
+ * private HOME, so it cannot find that directory itself — the parent has to name it.
+ */
+export function playwrightBrowsersDir(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
+  if (env.PLAYWRIGHT_BROWSERS_PATH) return env.PLAYWRIGHT_BROWSERS_PATH;
+  if (process.platform === 'darwin') return path.join(home, 'Library/Caches/ms-playwright');
+  if (process.platform === 'win32') return path.join(env.LOCALAPPDATA ?? path.join(home, 'AppData/Local'), 'ms-playwright');
+  return path.join(home, '.cache/ms-playwright');
+}
+
 /** Linux namespace isolation is mandatory. Unsupported hosts fail closed. */
 export async function createSessionProcess(actor: Actor, options: SessionProcessOptions): Promise<SessionWorker> {
-  if (process.platform !== 'linux' || !existsSync('/usr/bin/bwrap')) throw new Error('Browser sessions require Linux with bubblewrap and unprivileged user namespaces');
+  const sandbox = options.sandbox ?? { mode: 'bubblewrap' as const };
+  // A refused setting fails before a directory, a cgroup or a process exists.
+  if (sandbox.refusal) throw new Error(sandbox.refusal);
+  const plain = sandbox.mode === 'none';
+  if (!plain && (process.platform !== 'linux' || !existsSync('/usr/bin/bwrap'))) throw new Error('Browser sessions require Linux with bubblewrap and unprivileged user namespaces. On a development host, set BROWSER__SANDBOX=none to run the session worker unsandboxed (never in production).');
   const browserExecutable = options.browserExecutable ? await realpath(await options.browserExecutable()) : undefined;
-  const resources = await createSessionResources(options.cgroupRoot ?? '/sys/fs/cgroup/afbin-sessions');
+  const resources = plain ? undefined : await createSessionResources(options.cgroupRoot ?? '/sys/fs/cgroup/afbin-sessions');
   const root = await mkdtemp(path.join(tmpdir(), 'afbin-session-'));
   let child: ChildProcess | undefined;
   let stopped = false;
@@ -93,7 +133,7 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
     for (const listener of closedListeners) listener();
     closedListeners.clear();
     if (child?.pid) { try { process.kill(-child.pid, 'SIGKILL'); } catch { /* Already exited. */ } }
-    try { await resources.close(); } finally { await rm(root, { recursive: true, force: true }); }
+    try { await resources?.close(); } finally { await rm(root, { recursive: true, force: true }); }
   };
   try {
     for (const name of ['playwright', 'playwright-core']) {
@@ -103,14 +143,27 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
     await mkdir(path.join(root, 'home'));
     await writeFile(path.join(root, 'worker.mjs'), SESSION_WORKER_SOURCE);
     await writeFile(path.join(root, 'worker-bootstrap.cjs'), "module.exports = () => import('./worker.mjs');\n");
-    const browsers = browserExecutable ? path.dirname(browserExecutable) : await realpath(options.browsersPath ?? path.join(homedir(), '.cache/ms-playwright'));
     const node = await realpath(process.execPath);
-    const plan = sessionSandboxPlan(root, browsers, node, options.workerArgs);
-    child = spawn('/bin/sh', ['-c', 'read -r start; exec "$@"', 'session-launch', '/usr/bin/bwrap', ...plan.args], { detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: plan.env });
+    // Same launch shape either way: `sh` holds the worker until the parent releases it with
+    // one line, so the process group exists before anything runs inside it and `close()`
+    // can still kill the whole group. Only what follows `sh` differs.
+    const launch = ['-c', 'read -r start; exec "$@"', 'session-launch'];
+    if (plain) {
+      // No mount to name a pinned executable under: the host's own Playwright
+      // directory is what the worker resolves Chromium from, exactly as any other
+      // Playwright process on this machine does.
+      const unsandboxed = sessionPlainPlan(root, node, { browsers: playwrightBrowsersDir(process.env), ...(process.env.PATH ? { path: process.env.PATH } : {}), ...(options.workerArgs ? { workerArgs: options.workerArgs } : {}) });
+      child = spawn('/bin/sh', [...launch, unsandboxed.command, ...unsandboxed.args], { detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: unsandboxed.env });
+    } else {
+      const browsers = browserExecutable ? path.dirname(browserExecutable) : await realpath(options.browsersPath ?? path.join(homedir(), '.cache/ms-playwright'));
+      const plan = sessionSandboxPlan(root, browsers, node, options.workerArgs);
+      child = spawn('/bin/sh', [...launch, '/usr/bin/bwrap', ...plan.args], { detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: plan.env });
+    }
     const processChild = child;
     await new Promise<void>((resolve, reject) => { processChild.once('spawn', resolve); processChild.once('error', reject); });
     if (!processChild.pid) throw new Error('Worker did not start');
-    await resources.attach(processChild.pid);
+    // No cgroup exists when the sandbox is off; the group is killed on close either way.
+    await resources?.attach(processChild.pid);
     let rejectTask: ((error: Error) => void) | undefined;
     let resolveTask: ((value: Pick<BrowserSessionResult, 'result' | 'pages' | 'attachments' | 'error'>) => void) | undefined;
     const send = (message: unknown) => { if (!stopped && processChild.stdin?.writable) processChild.stdin.write(JSON.stringify(message) + '\n'); };
@@ -125,7 +178,7 @@ export async function createSessionProcess(actor: Actor, options: SessionProcess
       const receive = async (raw: unknown) => {
         if (!raw || typeof raw !== 'object') return;
         const message = raw as Record<string, unknown>;
-        if (message.type === 'hello') send({ type: 'init', baseURL: options.baseURL, ...(browserExecutable ? {executablePath: '/browsers/' + path.basename(browserExecutable)} : {}) });
+        if (message.type === 'hello') send({ type: 'init', baseURL: options.baseURL, ...(browserExecutable && !plain ? {executablePath: '/browsers/' + path.basename(browserExecutable)} : {}) });
         if (message.type === 'ready') { rejectTask = undefined; resolve(); }
         if (message.type === 'fatal') rejectTask?.(new Error(String(message.error)));
         if (message.type === 'result') { resolveTask?.(message.value as Parameters<NonNullable<typeof resolveTask>>[0]); resolveTask = undefined; rejectTask = undefined; }

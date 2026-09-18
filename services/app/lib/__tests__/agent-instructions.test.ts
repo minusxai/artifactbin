@@ -11,7 +11,15 @@ describe('agent instructions', () => {
     expect(read('CLAUDE.md')).toBe('@AGENTS.md\n');
     const instructions = read('AGENTS.md');
     expect(instructions.trim()).not.toBe('');
-    expect(Buffer.byteLength(instructions)).toBeLessThan(8192);
+    /*
+     * A CEILING, NOT A TARGET: these files are read in full at the start of every
+     * session, so they have to stay something a reader finishes. Raised from 8 KiB
+     * when the routine-checks bullet gained the local loop (`npm run dev` → `npm run
+     * afbin` → `npm run eval`), which is the instruction that stops agents testing
+     * CLI and skill changes against production. Adding to these files means earning
+     * the room — say what changed here before moving this number again.
+     */
+    expect(Buffer.byteLength(instructions)).toBeLessThan(9728);
     for (const match of instructions.matchAll(/\]\(([^)]+)\)/g)) {
       const target = match[1];
       if (!target.includes('://') && !target.startsWith('#')) {

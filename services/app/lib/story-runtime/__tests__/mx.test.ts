@@ -177,3 +177,35 @@ it('initializes and mutates over internal HTTP without crypto.randomUUID', async
     expect(second.operationId).not.toBe(first.operationId);
   } finally { store.dispose(); vi.unstubAllGlobals(); }
 });
+
+describe('mutate waits for the permission answer', () => {
+  const writes: Dataflow = { values: [{ kind: 'scalar', name: 'item', type: 'string', default: '', start: 0, end: 0 }], queries: [],
+    mutations: [{ name: 'join', sql: 'insert into ref_abc123 (who) select $_me', target: 'abc123', params: ['_me'], scope: 'dataset', start: 0, end: 0 } as never] };
+  it('a mutate issued before the first query lands waits, then runs with the real answer', async () => {
+    let answer!: (r: unknown) => void;
+    const run = vi.fn().mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    const mutate = vi.fn().mockResolvedValue({ dataset: 'abc123' });
+    const store = createDataflowStore({ flow: writes }, { transport: { run, mutate, page: vi.fn() } });
+    const mx = createMx(store);
+    store.start();
+    const call = mx.mutate('join', {});
+    await tick();
+    expect(mutate).not.toHaveBeenCalled();
+    answer({ tables: {}, errors: {}, mutationAccess: { join: null } });
+    await expect(call).resolves.toMatchObject({ status: 'committed' });
+    expect(mutate).toHaveBeenCalled();
+    store.dispose();
+  });
+  it('a refusal that arrives with the answer is reported by its reason, not the placeholder', async () => {
+    let answer!: (r: unknown) => void;
+    const run = vi.fn().mockImplementation(() => new Promise(resolve => { answer = resolve; }));
+    const store = createDataflowStore({ flow: writes }, { transport: { run, mutate: vi.fn(), page: vi.fn() } });
+    const mx = createMx(store);
+    store.start();
+    const call = mx.mutate('join', {});
+    await tick();
+    answer({ tables: {}, errors: {}, mutationAccess: { join: 'a test user acts only inside its sandbox' } });
+    await expect(call).rejects.toThrow('a test user acts only inside its sandbox');
+    store.dispose();
+  });
+});

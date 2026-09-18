@@ -15,6 +15,12 @@ export interface BrowserSessionResult {
   pages: BrowserSessionPage[];
   attachments: BrowserSessionAttachment[];
   error?: MxError;
+  /**
+   * Development only, and only when `BROWSER__SANDBOX=none`: this session ran with NO OS
+   * containment. Said on the wire because the checks that assert containment are Linux
+   * facts — a gate has to know to skip them by name rather than quietly weaken them.
+   */
+  sandbox?: 'none';
 }
 /** `pageActor`: who the PAGES browse as when the app decided it (a throwaway second person); never the owner's credential. */
 export type BrowserSessionRequest = { actor: Actor; pageActor?: Actor } & (

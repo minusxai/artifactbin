@@ -38,6 +38,27 @@ started. Browser gates run in one agent at a time; other agents may run isolated
 After merging lockfile changes, regenerate the lock if needed and run `npm ci --dry-run`. Read install
 output unfiltered: an already populated `node_modules` can hide a missing lock entry.
 
+## Local loop
+
+Work up the tiers, and stop at the cheapest one that can still be wrong:
+
+1. Unit tests — `npm test -- --files <paths>`.
+2. The local stack — `npm run dev` on this checkout's `APP__PORT`; verify the change in the app.
+3. The branch's CLI — `npm run afbin -- <args>` builds `services/cli` when it is stale and runs it
+   against that same server, with its state in `~/.artifactbin-dev/<port>` and
+   `ARTIFACTBIN_SKILLS=off`, so the released `afbin`, `~/.artifactbin` and `~/.claude/skills` are
+   untouched. A dev server that is not answering `/api/health` is refused in one line.
+4. Browser gates — `node scripts/gate-*.mjs http://localhost:<port>`, one agent at a time.
+5. The agent itself — `npm run eval -- --tasks <name>`, against the same server.
+6. Docker and Postgres — pre-release only, not a routine loop.
+
+Live sessions (tiers 3–5) need Linux bubblewrap. `BROWSER__SANDBOX=none` runs the session worker as
+a plain child process instead — no containment at all, refused under `NODE_ENV=production`, and
+defaulted by `npm run dev` on a non-Linux development host so the loop works on macOS. A gate whose
+assertions are Linux containment facts skips those by name when a session reports `sandbox: none`.
+
+Every tier takes `APP__PORT=<n>`, so a worktree's own port block keeps it off another agent's server.
+
 ## Exercising the agent policy
 
 Run `node scripts/agent-dev-flow.mjs` to create a disposable checkout with the current

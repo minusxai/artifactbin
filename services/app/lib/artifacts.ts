@@ -2539,8 +2539,10 @@ export async function dataflowForRow(
       }
       return {...column,constraints:{...column.constraints,memberOf:allowed}};
     };
-    for(const [name,table] of Object.entries(result.state.tables))for(const column of table.columns.filter(c=>c.type==='user')) {
-      options[`${name}.${column.name}`]=await userOptions(db,await permitted(column),viewer?.userId??null);
+    const drawn=personColumnsDrawn(row.source);
+    for(const [name,table] of Object.entries(result.state.tables))for(const column of table.columns) {
+      if(column.type!=='user'&&!drawn.has(column.name))continue;
+      if(column.type==='user')options[`${name}.${column.name}`]=await userOptions(db,await permitted(column),viewer?.userId??null);
       for(const item of table.rows)if(typeof item[column.name]==='string')ids.add(item[column.name] as string);
     }
     for(const value of result.flow.values)if(value.kind==='scalar'&&value.type==='user') {
@@ -2620,6 +2622,15 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
  * never to decide what a viewer may see.
  */
 const drawsPeople = (source: string | null | undefined): boolean => /<User(?:Image|Handle)?[\s/>]/.test(source ?? '');
+/**
+ * The row columns a document draws a person FROM — `<User id="$_row.person">`,
+ * `<UserImage …>` or `<UserHandle …>` — whatever the query typed them as. A
+ * computed column (a join's `person`, a group-by's `who`) reaches DuckDB as
+ * text, so it is not a `user` column, yet every id in it is a person the page
+ * will name; without this, anyone who appears only there renders "Unknown person".
+ */
+const personColumnsDrawn = (source: string | null | undefined): Set<string> =>
+  new Set([...(source ?? '').matchAll(/<User(?:Image|Handle)?\b[^>]*\bid=["']\$_row\.([A-Za-z_][A-Za-z0-9_]*)["']/g)].map((m) => m[1]!));
 
 /**
  * WHO IS READING, as the document may show them (lib/story-runtime/contract

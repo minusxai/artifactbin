@@ -14,7 +14,14 @@
   plan-changing risks and finish with runnable checks.
 - **Routine checks: `npm run validate` and `npm test`.** For TDD, use
   `npm test -- --files <paths>`. Run affected checks before handoff; repeat after relevant changes
-  or failures, not after every edit. Verify user-facing changes on the task's running app.
+  or failures, not after every edit. Verify user-facing changes on the task's running app (`npm run
+  dev`, port from `APP__PORT` in `.env`; a worktree has its own block). If you changed `services/cli`
+  or the skill, test it with `npm run afbin -- <args>`: it builds the branch's CLI and runs it against
+  that same dev server, with its own state in `~/.artifactbin-dev/<port>`, so the released `afbin` and
+  your home are untouched. To see an agent use that CLI and skill, `npm run eval -- --tasks <name>`
+  runs the eval against the same server. Both take `APP__PORT=<n>` to target another checkout's
+  server, exactly like `npm run dev`. Never test or iterate on production — it is confirmed after a
+  deploy, not explored.
 - **50 test files TOTAL across Vitest + CLI.** Above 50, `npm test` runs neither suite and exits 2:
   **DEFERRED TO CI, NOT PASSED**. No affected tests also means unverified (exit 2); discovery errors
   fail visibly. Do not count/preview tests, raise the cap, use `--all`, bypass the wrapper, or split
@@ -62,6 +69,9 @@ Run these from the repository root. Keep this list current.
 - `npm run setup` — create or repair local settings.
 - `npm run dev` — full local composition; default http://localhost:3030.
 - `npm run dev:app` — app with local SQL/browser, without the proxy; same default port.
+- `npm run afbin -- <args>` — the branch's CLI against this checkout's dev server.
+- `npm run eval -- --tasks <name>` — the agent eval against this checkout's dev server
+  (`--deployment` to point elsewhere).
 - `npm run dev:otp -- <email>` — a local login code from the protected outbox.
 - `npm run validate` — name guard and incremental TypeScript, including unused declarations;
   shared utils/contracts also use `noUncheckedIndexedAccess` for downstream compatibility.

@@ -72,6 +72,22 @@ describe('agent-worktree', () => {
       expect(last).toContain('.agent/REPORT.md');
       expect(last).toContain('===CONCISE===');
 
+      /*
+       * THE .env THE NEXT AGENT INHERITS. `.env` is gitignored, so a wrong block here is
+       * invisible in review and costs the implementer their first hour: a public base URL
+       * on a port nothing binds makes the CLI resolve this deployment to the wrong
+       * address, and three service URLs nothing serves make /api/health answer 503 while
+       * `npm run dev` looks like it started. Both were observed.
+       */
+      const seededEnv = fs.readFileSync(path.join(DIR, '.env'), 'utf8');
+      const value = (name) => seededEnv.split('\n').find((l) => l.startsWith(`${name}=`))?.slice(name.length + 1);
+      expect(new URL(value('APP__PUBLIC_BASE_URL')).port).toBe(value('APP__PORT'));
+      for (const name of ['SQL__SERVICE_URL', 'BROWSER__SERVICE_URL', 'EVENTS__SERVICE_URL']) {
+        expect(value(name), `${name} must not be live: single-process dev is the default`).toBeUndefined();
+        expect(seededEnv).toContain(`# ${name}=`);
+      }
+      expect(seededEnv).toMatch(/single process is the default/i);
+
       // A resume adopts the existing tree rather than reseeding it.
       fs.appendFileSync(path.join(DIR, '.env'), '\nFIXTURE__PRESERVE=yes\n');
       const resumed = run(['--phase', PHASE, '--dir', DIR, '--reuse']);

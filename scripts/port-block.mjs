@@ -35,10 +35,16 @@ for (const base of found) {
   console.log(`# port block ${base}–${base + SIZE - 1}: every port this agent may bind
 APP__PORT=${p(1)}
 APP__HMR_PORT=${p(2)}
+# Every link this checkout emits. It MUST name the port the server binds, or the CLI
+# resolves this deployment's identity to an address nothing is listening on.
 APP__PUBLIC_BASE_URL=http://localhost:${p(1)}
-SQL__SERVICE_URL=http://127.0.0.1:${p(10)}
-BROWSER__SERVICE_URL=http://127.0.0.1:${p(11)}
-EVENTS__SERVICE_URL=http://127.0.0.1:${p(12)}
+# SINGLE PROCESS IS THE DEFAULT: npm run dev runs sql, browser and events in process.
+# Uncomment these three only when those services really are listening on these ports
+# (docker compose, or node services/<name>/dist/server.mjs); a URL nothing serves makes
+# /api/health answer 503 and every document query die with nothing saying why.
+# SQL__SERVICE_URL=http://127.0.0.1:${p(10)}
+# BROWSER__SERVICE_URL=http://127.0.0.1:${p(11)}
+# EVENTS__SERVICE_URL=http://127.0.0.1:${p(12)}
 POSTGRES_PORT=${p(32)}
 MINIO_PORT=${p(90)}
 MINIO_CONSOLE_PORT=${p(91)}

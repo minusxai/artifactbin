@@ -13,6 +13,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:otp": "node scripts/dev-otp.mjs",
     "dev:app": "node scripts/dev-app.mjs",
+    "afbin": "node scripts/afbin.mjs",
     "build": "npm run build -w services/app && node scripts/build-server.mjs dist/server.mjs",
     "validate": "node scripts/check-local.mjs validate",
     "test": "node scripts/check-local.mjs test",

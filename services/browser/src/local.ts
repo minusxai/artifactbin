@@ -1,4 +1,4 @@
-export { sessionProcessPaths } from './session-config';
+export { sessionEnvNamesRead, sessionProcessPaths } from './session-config';
 import { createBrowserSessions } from './sessions';
 import { createSessionProcess, type SessionProcessOptions } from './session-process';
 /**
@@ -11,7 +11,7 @@ import { chromium, type Browser } from 'playwright';
 import sharp from 'sharp';
 import {admittedUploadUrl,uploadImage,type UploadOptions} from './upload';
 import {browserUploadOptions} from './upload-config';
-import type { BrowserService, RenderRequest, RenderResult } from '@artifactbin/contracts';
+import type { BrowserService, BrowserSessions, RenderRequest, RenderResult } from '@artifactbin/contracts';
 import { internalAssetResponse } from './internal-assets';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -215,10 +215,22 @@ export function createBrowser(opts: { idleShutdownMs?: number; executablePath?: 
     }
   }
 
-  const sessions = createBrowserSessions(actor => {
+  const started = createBrowserSessions(actor => {
     if (!opts.sessions) throw new Error('Browser session forwarding is not configured');
     return createSessionProcess(actor, opts.sessions);
   });
+  /*
+   * SAID OUT LOUD, TWICE. `BROWSER__SANDBOX=none` is a development escape hatch, so the
+   * boot says so once in the log for whoever started this process, and every session
+   * result carries `sandbox:'none'` for whoever is reading over HTTP — a gate asserting
+   * OS containment must be able to see that there is none and skip those checks by name
+   * instead of being rewritten into something weaker.
+   */
+  const unsandboxed = opts.sessions?.sandbox?.mode === 'none';
+  if (unsandboxed) console.warn('[browser] BROWSER__SANDBOX=none — browser sessions run as plain child processes with NO OS containment (development only)');
+  const sessions: BrowserSessions = unsandboxed
+    ? { close: () => started.close(), async request(input) { return { ...await started.request(input), sandbox: 'none' }; } }
+    : started;
   const service:BrowserService & {close():Promise<void>} = {
     sessions,
     async render(req): Promise<RenderResult> {

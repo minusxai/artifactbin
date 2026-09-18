@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
+import { containmentExpectation, containmentObserved } from './lib/session-containment.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const token = (await connectAgent(base)).token;
@@ -37,6 +38,8 @@ const saveImage = async (name, attachment) => {
   await writeFile(path.join(evidence, name+'.png'), bytes);
 };
 const ids = [];
+/** Which of the probe's four facts this host can be asked about; see lib/session-containment.mjs. */
+let skipped = [];
 try {
   const markup = count => `<Helmet><Value name="count" type="number" default={${count}}/><Query name="result">{\`select $count as n\`}</Query></Helmet><h1>Session counter</h1><Number data="$result" col="n"/><Iframe title="Counter widget" height={120}><button id="add">Add one</button><p id="value">Waiting</p><script>{\`const stop=mx.subscribe(['count'],s=>document.getElementById('value').textContent=String(s.signals.count.value));document.getElementById('add').onclick=async()=>{const s=await mx.read(['count']);await mx.set({count:s.signals.count.value+1})};addEventListener('pagehide',stop);\`}</script></Iframe>`;
   const artifacts = [];
@@ -79,7 +82,10 @@ try {
     await fs.writeFile('own.txt','ok');
     return {checkout,network,own:await fs.readFile('own.txt','utf8'),credentials:Object.keys(process.env).filter(key=>/SECRET|TOKEN|API_KEY/.test(key))};
   `);
-  assert.deepEqual(probe.result, {checkout:false,network:false,own:'ok',credentials:[]},JSON.stringify(probe));
+  // The SERVER says whether it ran this session sandboxed; the host's own opinion is not consulted.
+  const containment = containmentExpectation(first.sandbox);
+  skipped = containment.skipped;
+  assert.deepEqual(containmentObserved(probe.result, containment.expected), containment.expected, JSON.stringify(probe));
   const stranger = (await connectAgent(base)).token;
   assert.equal((await request({op:'status',session_id:first.session_id},stranger)).error.code,'SESSION_NOT_FOUND');
   const receipt = await cli(['status',first.session_id,'--execution',resumed.execution_id]);
@@ -127,7 +133,8 @@ try {
   assert.equal(widget.result.signals.taskTitle.value,'untouched');
   assert.equal(widget.attachments.length,1);
   await saveImage('pi-fireworks-widget', widget.attachments[0]);
-  console.log('browser-sessions: multi-artifact, iframe/API parity, resume, image, errors, receipt recovery, ownership, filesystem/network containment, and hard deadline passed');
+  console.log(`browser-sessions: multi-artifact, iframe/API parity, resume, image, errors, receipt recovery, ownership, ${skipped.length ? 'credential-free worker environment' : 'filesystem/network containment'}, and hard deadline passed`);
+  if (skipped.length) console.log(`browser-sessions: SKIPPED on this host (server reports sandbox: none): ${skipped.join(', ')} — Linux CI asserts them.`);
 } finally {
   for (const session_id of ids) await request({op:'close',session_id}).catch(() => {});
   await rm(scratch,{recursive:true,force:true});
