@@ -75,3 +75,11 @@ it("flips the menu trigger's name with the page's drawer, the reader's face draw
  expect(trigger()).toHaveAttribute('aria-expanded','false');
  expect(screen.getByLabelText('Open menu')).toBe(trigger());
 });
+
+it('shows the initial when a face fails to load',()=>{
+ const view=render(<InlineReaderChrome input={{artifactId:'story1',title:'Title',author:null,viewer:{id:'usr_me',name:'me',image:'/gone.png'}}} onAction={vi.fn()} />);
+ const face=view.container.querySelector<HTMLElement>('[data-mx-reader-trigger="menu"] .mx-reader-face')!;
+ act(()=>{face.querySelector('img')!.dispatchEvent(new Event('error'));});
+ expect(face.querySelector('img')).toBeNull();
+ expect(face.querySelector('.mx-reader-face-initial')).toHaveTextContent('M');
+});

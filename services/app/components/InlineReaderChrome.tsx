@@ -5,6 +5,7 @@ import { chromeAfterSample,type ChromeState } from '@/lib/story-runtime/reader-c
 import { subscribePageChrome } from './PageChrome';
 import { wireReaderSharing } from '@/lib/story-runtime/reader-share';
 import { wireGithubStar } from '@/lib/github-star';
+import { wireFaceFallback } from '@/lib/story-runtime/reader-chrome-actions';
 
 /** Reconcile only our generated chrome, retaining live browser-owned state.
  * Preserve the fetched GitHub count across reaction/title updates. */
@@ -50,6 +51,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     if(!root)return;
     sharing.current=wireReaderSharing(window,document,root);
     const stopGithubStar=wireGithubStar(root);
+    const stopFaces=wireFaceFallback(root);
     let queued=false;let raf=0;
     const mark=(which:'menu'|'controls',open:boolean)=>{
       const trigger=root.querySelector<HTMLElement>(`[data-mx-reader-trigger="${which}"]`);
@@ -74,7 +76,7 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     });
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();
-    return ()=>{stopGithubStar();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
+    return ()=>{stopGithubStar();stopFaces();stop();sharing.current?.dispose();sharing.current=null;window.cancelAnimationFrame(raf);window.removeEventListener('scroll',schedule);window.removeEventListener('resize',schedule);};
   },[html,pinned,input.artifactId]);
   return <>
     <style>{STORY_CHROME_CSS}</style>

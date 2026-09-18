@@ -114,6 +114,17 @@ describe('wireReaderChrome — visibility', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 
+  it('shows the initial, never a broken picture, when a face fails to load', () => {
+    mount(4000, { viewer: { id: 'usr_ada', name: 'ada', image: '/gone.png' }, author: { username: 'ada', id: 'usr_ada', image: '/gone-too.png' } });
+    const faces = Array.from(document.querySelectorAll<HTMLElement>('.mx-reader-face'));
+    expect(faces).toHaveLength(2);
+    for (const face of faces) face.querySelector('img')!.dispatchEvent(new Event('error'));
+    for (const face of faces) {
+      expect(face.querySelector('img')).toBeNull();
+      expect(face.querySelector('.mx-reader-face-initial')!.textContent).toBe('A');
+    }
+  });
+
   it('destroys cleanly', () => {
     const { root, handle } = mount();
     handle?.destroy();

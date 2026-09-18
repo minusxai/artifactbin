@@ -255,14 +255,16 @@ describe('renderReaderChrome', () => {
     it("puts the author's face before their handle, decorative, and only when there is an account", () => {
       const html = chrome({ author: { username: 'ada', id: 'usr_ada', image: '/api/users/usr_ada/avatar?v=1' } });
       const byline = html.match(/<div class="mx-reader-byline".*?<\/div>/)?.[0] ?? '';
-      const face = byline.indexOf('class="mx-reader-face');
+      // Inside the handle's link, before the @: one target, never wrapped apart.
+      const link = byline.match(/<a class="mx-reader-author".*?<\/a>/)?.[0] ?? '';
+      const face = link.indexOf('class="mx-reader-face');
       expect(face).toBeGreaterThan(-1);
-      expect(face).toBeLessThan(byline.indexOf('class="mx-reader-author"'));
+      expect(face).toBeLessThan(link.indexOf('@ada</a>'));
       expect(byline).toContain(`style="background:${personFaceBackground('usr_ada')}"`);
       expect(byline).toContain('<img src="/api/users/usr_ada/avatar?v=1" alt="" aria-hidden="true"');
       expect(byline).toMatch(/<span class="mx-reader-face[^"]*" aria-hidden="true">/);
       // The link keeps its name.
-      expect(byline).toContain('<a class="mx-reader-author" href="/@ada" target="_top" aria-label="View @ada\'s profile">@ada</a>');
+      expect(link).toMatch(/^<a class="mx-reader-author" href="\/@ada" target="_top" aria-label="View @ada's profile"><span class="mx-reader-face/);
       // No account id (legacy callers, an anonymous document): no face.
       expect(chrome({ author: { username: 'ada' } })).not.toContain('mx-reader-face');
       expect(chrome({ author: null })).not.toContain('mx-reader-face');

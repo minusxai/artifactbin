@@ -52,6 +52,25 @@ export function applyReaderChoice(win: Window, doc: Document, mode: 'light' | 'd
 }
 
 /**
+ * A FACE WHOSE PICTURE FAILS SHOWS ITS INITIAL (lib/person-face). The rail's
+ * faces are server strings, so there is no React `onError` to do what
+ * components/Avatar does: a browser paints a broken-image glyph over a sized
+ * `<img alt="">` (measured in Chromium), so the picture is removed instead and
+ * the initial underneath shows. A picture that already failed before this ran
+ * (`complete` with no pixels) goes at once. Returns the unwiring.
+ */
+export function wireFaceFallback(root: ParentNode): () => void {
+  const undo: Array<() => void> = [];
+  for (const img of Array.from(root.querySelectorAll<HTMLImageElement>('.mx-reader-face img'))) {
+    if (img.complete && img.naturalWidth === 0) { img.remove(); continue; }
+    const drop = () => img.remove();
+    img.addEventListener('error', drop, { once: true });
+    undo.push(() => img.removeEventListener('error', drop));
+  }
+  return () => { for (const u of undo) u(); };
+}
+
+/**
  * Wire the chrome found in `doc` (rendered by lib/story/reader-chrome).
  * Returns null only when the document carries no chrome (for example a
  * capture). Framed chrome is still wired so it can relay actions.
@@ -60,7 +79,7 @@ export function wireReaderChrome(win: Window, doc: Document): ReaderChromeHandle
   const root = doc.querySelector<HTMLElement>('[data-mx-reader-chrome]');
   if (!root) return null;
 
-  const cleanups: Array<() => void> = [wireGithubStar(root)];
+  const cleanups: Array<() => void> = [wireGithubStar(root), wireFaceFallback(root)];
   const on = <T extends EventTarget>(target: T, type: string, handler: EventListener, options?: AddEventListenerOptions) => {
     target.addEventListener(type, handler, options);
     cleanups.push(() => target.removeEventListener(type, handler, options));

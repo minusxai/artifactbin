@@ -68,13 +68,14 @@ describe('the served document', () => {
     expect(trigger).toContain(`<img src="${w.readerImage.replace(/&/g, '&amp;')}" alt="" aria-hidden="true"`);
   });
 
-  it("puts the author's face before the handle, and none on an anonymous document or a capture", async () => {
+  it("puts the author's face in the handle's link, before the @, and none on an anonymous document or a capture", async () => {
     const w = await world();
     const html = await (await rawRoute(request(`/a/${w.id}/raw`), params({ id: w.id }))).text();
     const line = byline(html);
     expect(line).toContain(`style="background:${personFaceBackground(w.author.id)}"`);
     expect(line).toContain(`<img src="${w.authorImage}" alt="" aria-hidden="true"`);
-    expect(line.indexOf('mx-reader-face')).toBeLessThan(line.indexOf('class="mx-reader-author"'));
+    expect(line.indexOf('mx-reader-face')).toBeGreaterThan(line.indexOf('class="mx-reader-author"'));
+    expect(line.indexOf('mx-reader-face')).toBeLessThan(line.indexOf(`@${w.author.username}</a>`));
 
     const anonymous = await (await rawRoute(request(`/a/${w.anonId}/raw`), params({ id: w.anonId }))).text();
     expect(byline(anonymous)).not.toContain('mx-reader-face');
