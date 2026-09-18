@@ -14,6 +14,7 @@ import {PATCH as patchArtifact} from '@/app/api/artifacts/[id]/route';
 import {POST as mutate} from '@/app/a/[id]/mutate/route';
 import {GET as anonymousQuery,POST as query} from '@/app/a/[id]/query/route';
 import {getArtifactById} from '@/lib/artifacts';
+import {link,unlink} from '@/lib/relations';
 import {mintToken} from '@/lib/tokens';
 import {claimToken,createUser} from '@/lib/users';
 import {observedRequest} from '@/__tests__/conditional-request';
@@ -40,9 +41,8 @@ async function tab(){
  // `afbin push tab.yaml --policy viewers-write`: the definition, readwrite, then the grant.
  const ds=await publish({dataset:DATASET,access:'readwrite'});
  const head=await getArtifactById(ds);
- // The shorthand takes the dataset's OWN tables: this one declares two, and a grant naming a
- // table it does not have is refused after the content is already published.
- const policy=viewersWritePolicy([{schema:'public',name:'people'},{schema:'public',name:'expenses'}]);
+ // The shorthand grants only the dataset's own expenses table.
+ const policy=viewersWritePolicy([{schema:'public',name:'expenses'}]);
  const granted=await patchArtifact(await observedRequest(`/api/artifacts/${ds}`,{method:'PATCH',token:owner.token,json:{policy,expectedPolicyRevision:head!.policy_revision??0}}),ctx(ds));
  expect(granted.status,await granted.clone().text()).toBe(200);
  const doc=await publish({markup:PAGE.replaceAll('ref:tab123',`ref:${ds}`)});
@@ -56,66 +56,37 @@ async function tab(){
  return {owner,friend,user,ds,doc,cookie,run,read};
 }
 
-/**
- * The tab, as the reference tells an agent to build it: nobody in it, then a person joins by
- * pressing one button, and their expense lands under THEIR account and a real date.
- */
-it('publishes the reference’s dataset and page, and a signed-in viewer joins and adds an expense',async()=>{
+it('publishes the reference and uses Like to participate and add an expense',async()=>{
  const f=await tab();
- // It starts genuinely empty: no seed row, no invented person.
  expect((await f.read()).tables.balances.rows).toEqual([]);
-
- // The join button is drawn by `<For each={$to_join}>`, so the page offers it
- // only while that query has a row — and a press carries that row, exactly as
- // the runtime's row action does.
+ expect((await f.read(f.cookie)).tables.participant.rows).toEqual([]);
+ await link(f.user.id,'like',f.doc);
  const ready=await f.read(f.cookie);
- const offered=ready.tables.to_join.rows;
- expect(offered).toMatchObject([{person:f.user.id}]);
- // …and the button WORKS for them. A row action whose capability came back as a
- // refusal still DRAWS (the runtime guards the click, not the rendering), so a
- // newcomer would get an ordinary-looking button that silently does nothing —
- // the exact failure a hidden-until-needed button exists to avoid.
- expect(ready.mutationAccess.join).toBe(null);
- const joined=await f.run('join',{row:offered[0]},f.cookie);
- expect(joined.status,await joined.clone().text()).toBe(200);
- expect(await joined.json()).toMatchObject({affected:1});
- // Having joined, the button is gone: the query that drew it is empty.
- expect((await f.read(f.cookie)).tables.to_join.rows).toEqual([]);
- // …and `where not exists` is what makes pressing a stale one harmless.
- const again=await f.run('join',{row:offered[0]},f.cookie);
- expect(again.status,await again.clone().text()).toBe(200);
- expect(await again.json()).toMatchObject({affected:0});
-
- const added=await f.run('add',{values:{item:'Taxi',amount:48.5,spent_on:'2026-09-14'}},f.cookie);
+ expect(ready.tables.participant.rows).toEqual([{person:f.user.id}]);
+ expect(ready.mutationAccess.add).toBe(null);
+ const added=await f.run('add',{row:{person:f.user.id},values:{item:'Taxi',amount:48.5,spent_on:'2026-09-14'}},f.cookie);
  expect(added.status,await added.clone().text()).toBe(200);
  expect(await added.json()).toMatchObject({affected:1});
-
  const state=await f.read();
  expect(state.tables.tab.rows).toMatchObject([{item:'Taxi',amount:48.5,spent_on:'2026-09-14',paid_by:f.user.id}]);
  expect(state.tables.balances.rows).toMatchObject([{person:f.user.id,net:0}]);
+ await unlink(f.user.id,'like',f.doc);
+ const left=await f.read(f.cookie);
+ expect(left.tables.participant.rows).toEqual([]);
+ expect(left.tables.tab.rows).toHaveLength(1);
 });
 
-/**
- * THE GUEST BRANCH the page draws `<SignIn>` from. A `$_me` write has one honest answer for a
- * signed-out reader, and it is a door, not a stack trace.
- */
-it('offers a guest the sign-in door instead of a refusal an agent has to translate',async()=>{
+it('offers guests sign-in and refuses direct writes before row validation',async()=>{
  const f=await tab();
  const capability=await f.read();
- expect(capability.mutationAccess.join).toBe('sign_in_required');
  expect(capability.mutationAccess.add).toBe('sign_in_required');
- // A guest is never OFFERED the button: the query that draws it is empty for
- // someone with no account, which is what keeps a null row key off the page.
- expect((await f.read()).tables.to_join.rows).toEqual([]);
- // Pressed anyway — a stale tab, an agent posting straight at the door, with or
- // without the row snapshot a row action normally carries — the answer is the
- // DOOR, not a lecture about row snapshots: sign-in is the one refusal a reader
- // can act on, so it is decided before the shape of the call is judged.
+ expect(capability.tables.participant.rows).toEqual([]);
  for(const body of [{},{row:{person:f.user.id}},{row:{nonsense:'x'}}]){
-  const refused=await f.run('join',body);
+  const refused=await f.run('add',body);
   expect(refused.status,await refused.clone().text()).toBe(403);
   expect(await refused.json()).toMatchObject({error:'policy_denied',code:'sign_in_required'});
  }
- // The same page, for the person who is signed in, simply works.
+ expect((await f.read()).tables.tab.rows).toEqual([]);
+ await link(f.user.id,'like',f.doc);
  expect((await f.read(f.cookie)).mutationAccess.add).toBe(null);
 });
