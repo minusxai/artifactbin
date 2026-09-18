@@ -68,6 +68,21 @@ try {
  await guest.waitForFunction(()=>[...document.querySelectorAll('#root [aria-label="Gallery"] img')].length===2&&[...document.querySelectorAll('#root [aria-label="Gallery"] img')].every(i=>i.naturalWidth>0));
  check(true,'signed-out reader decodes both permitted images');await guest.close();
 
+ // Captures use the standalone opaque-origin document, without a parent asset relay.
+ const capture=await browser.newPage();const captureErrors=[];
+ capture.on('console',m=>{if(m.type()==='error')captureErrors.push(m.text());});
+ capture.on('requestfailed',r=>captureErrors.push(`${new URL(r.url()).pathname}: ${r.failure()?.errorText}`));
+ await capture.goto(`${base}/a/${doc.id}/raw?chrome=0`);
+ await capture.waitForFunction(()=>[...document.querySelectorAll('[aria-label="Gallery"] img')].length===2&&[...document.querySelectorAll('[aria-label="Gallery"] img')].every(i=>i.naturalWidth>0),null,{timeout:5000}).catch(()=>{});
+ check(await capture.locator('[aria-label="Gallery"] img').evaluateAll(images=>images.length===2&&images.every(i=>i.naturalWidth>0)),`standalone capture resolves row images: ${captureErrors.join('; ')}`);
+ await capture.close();
+ const exported=await fetch(`${base}/a/${doc.id}/export?format=png&refresh=1`,{headers:{Authorization:`Bearer ${token}`}});
+ if(!exported.ok)throw new Error(`export: ${exported.status}`);
+ const pixels=await sharp(Buffer.from(await exported.arrayBuffer())).removeAlpha().raw().toBuffer({resolveWithObject:true});
+ let red=0,blue=0;
+ for(let i=0;i<pixels.data.length;i+=pixels.info.channels){if(pixels.data[i]>220&&pixels.data[i+1]<30&&pixels.data[i+2]<30)red++;if(pixels.data[i]<30&&pixels.data[i+1]<30&&pixels.data[i+2]>220)blue++;}
+ check(red>100&&blue>100,'PNG export contains both uploaded cover colors');
+
  // Distinct assets distinguish metadata resolution from original-byte downloads.
  const distinct=[];
  for(let i=0;i<32;i++){
