@@ -174,10 +174,25 @@ describe('cli-export', () => {
     expect(refused.result.error.fix).toBe('push the draft, or export csv/json/yaml/original');
     await expect(stat(join(root,'edited.html'))).rejects.toThrow();
 
-    // A historical version has no rendering: the renderer only ever photographs the head.
-    const historical=await run(['export',`${id}@1`,'--format','png','--output','v1.png'],async()=>{throw new Error('a version was sent to the renderer');});
-    expect(historical.code).not.toBe(0);
-    expect(historical.result.error.code).toBe('unsupported_version_export');
+    /*
+     * A VERSION RENDERS. The served document can show an older one
+     * (`/a/<id>/raw?version=N` — lib/archived-version), so the renderer
+     * photographs that page exactly as it photographs the head, and the whole
+     * round trip runs here: the reference, the export door's version ACL and
+     * the capture.
+     */
+    calls.length=0;
+    const historical=await run(['export',`${id}@1`,'--format','png','--output','v1.png']);
+    expect(historical.code,JSON.stringify(historical.result)).toBe(0);
+    expect(addressesCalled(calls)[0]).toBe(`GET /a/${id}/export?format=png&version=1`);
+    // …and the page the browser was actually sent to is that version's.
+    expect((browser.calls.at(-1) as RenderRequest).url).toContain('version=1');
+    expect(new Uint8Array(await readFile(join(root,'v1.png')))).toEqual(EXPORT_BYTES);
+
+    // A LOCAL FILE still has no history: the tracked bytes on disk ARE the head.
+    const localAtVersion=await run(['export','deck.jsx@2','--format','png','--output','local-v2.png'],async()=>{throw new Error('a local draft was sent to the renderer');});
+    expect(localAtVersion.code).not.toBe(0);
+    expect(localAtVersion.result.error.code).toBe('unsupported_version_export');
    }finally{await cli.cleanup();}
   });
 

@@ -80,6 +80,10 @@ describe('the allowlist is the whole parser', () => {
     expect(stripIntent('?%24team=LA+Lakers&intent=comment')).toBe('?%24team=LA+Lakers');
     expect(stripIntent('?intent=fork')).toBe('');
     expect(stripIntent('?$a=1')).toBe('?$a=1');
+    // `version` selects WHICH VERSION of the document is being read
+    // (lib/archived-version); consuming an instruction must never send the
+    // reader back to the head.
+    expect(stripIntent('?version=2&intent=like')).toBe('?version=2');
     expect(withIntent('?$region=west', 'fork')).toBe('?$region=west&intent=fork');
     expect(withIntent('', 'comment')).toBe('?intent=comment');
     // Asking twice is asking once.

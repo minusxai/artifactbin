@@ -14,6 +14,7 @@ import { ASSETS_ORIGIN, EXPORT_INTERNAL_ORIGIN } from '@/lib/config';
 import { services } from '@/lib/services';
 import { ArtifactRow, declarationsForRow, getArtifactById, referencedArtifactForRow } from './artifacts';
 import { CARD_HEIGHT, CARD_RENDER_GENERATION, CARD_WIDTH } from './export-card';
+import { VERSION_PARAM } from './archived-version';
 import { mintExportKey } from './export-key';
 import { json } from './http';
 import { objectStore } from './object-store';
@@ -72,13 +73,21 @@ export function parseExportSlide(value: string | null): number | null {
  * carries its slide number, and the whole-document shot carries the renderer
  * generation.
  */
-function exportCaptureKey(capture: ExportCapture, slide: number, selection = ''): string {
+function exportCaptureKey(capture: ExportCapture, slide: number, selection = '', version: number | null = null): string {
   // Only canonical document selections split the cache, never arbitrary query parameters.
   const pick = selection ? `-p${createHash('sha256').update(selection).digest('hex').slice(0, 12)}` : '';
-  if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}`;
-  if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-r${CARD_RENDER_GENERATION}-g${EXPORT_RENDER_GENERATION}${pick}`;
-  if (capture === 'preview') return `preview-v${SOCIAL_PREVIEW_OVERVIEW_GENERATION}-g${EXPORT_RENDER_GENERATION}`;
-  return `full-g${EXPORT_RENDER_GENERATION}${pick}`;
+  /*
+   * WHICH VERSION WAS PHOTOGRAPHED, as an ADDITIVE segment — absent, byte for
+   * byte, for the head. A shot of `?version=1` and a shot of the document are
+   * two pictures under one artifact id and one revision, so they must never
+   * share a key; and the head's key must not MOVE, or a deploy orphans every
+   * cached export it already has and re-renders the lot.
+   */
+  const at = version === null ? '' : `-v${version}`;
+  if (slide > 0) return `slide-${slide}-g${EXPORT_RENDER_GENERATION}${pick}${at}`;
+  if (capture === 'card') return `card-${CARD_WIDTH}x${CARD_HEIGHT}-r${CARD_RENDER_GENERATION}-g${EXPORT_RENDER_GENERATION}${pick}${at}`;
+  if (capture === 'preview') return `preview-v${SOCIAL_PREVIEW_OVERVIEW_GENERATION}-g${EXPORT_RENDER_GENERATION}${at}`;
+  return `full-g${EXPORT_RENDER_GENERATION}${pick}${at}`;
 }
 
 type ExportIdentity = Pick<ArtifactRow, 'id' | 'version'> & Partial<Pick<ArtifactRow, 'edit_id'>>;
@@ -99,8 +108,10 @@ export function exportCacheKey(
   slide = 0,
   /** The CANONICAL selection token (lib/story/url-values urlSelection), never raw params. */
   selection = '',
+  /** The ARCHIVED version this shot is of (`?version=N`), or null for the head. */
+  version: number | null = null,
 ): string {
-  return `${artifact.id}:${exportCaptureKey(capture, slide, selection)}:${format}`;
+  return `${artifact.id}:${exportCaptureKey(capture, slide, selection, version)}:${format}`;
 }
 
 export type RenderResult =
@@ -215,6 +226,8 @@ async function renderOnce(input:RenderInput,format:ExportFormat,capture:ExportCa
 interface ImageOptions {
  pageUrl:()=>string;target:string;capture?:ExportCapture;slide?:number;selection?:string;
  crop?:SocialPreviewCrop;volatile?:boolean;refresh?:boolean;
+ /** The ARCHIVED version being photographed (`?version=N`), absent for the head. */
+ version?:number|null;
 }
 async function renderWithRetry(input:RenderInput,format:ExportFormat,capture:ExportCapture,slide=0,crop?:SocialPreviewCrop):Promise<Shot>{
  const started=Date.now();let result=await renderOnce(input,format,capture,slide,crop);
@@ -235,7 +248,7 @@ async function resolveArtifactImage(artifact:ExportIdentity,format:ExportFormat,
  const capture=opts.capture??'full',slide=opts.slide??0;
  try {
   const image=await (await sharedCache()).read({
-   cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection),
+   cacheKey:exportCacheKey(artifact,format,capture,slide,opts.selection,opts.version??null),
    artifactId:artifact.id,revision:exportRevision(artifact),refresh:opts.refresh,
   },async id=>{
    const input={urlFor:opts.pageUrl,target:opts.target},store=objectStore(),browser=services().browser;
@@ -293,7 +306,16 @@ export async function exportImageResponse(
   // `source` is here so the SELECTION can be read the way the document itself
   // reads it — through its own declarations. See `selection` below.
   artifact: ExportIdentity & Pick<ArtifactRow, 'format' | 'source'>,
-  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null; refresh?: string | null },
+  q: { format?: string | null; mode?: string | null; slide?: string | null; crop?: string | null; image?: string | null; search?: string | null; refresh?: string | null;
+    /**
+     * The ARCHIVED version to photograph (`?version=N`), already AUTHORIZED by
+     * the calling door under the served document's own rule
+     * (lib/archived-version). Absent — every ordinary export — shoots the head.
+     * It splits the cache key and travels on the photographed URL. The signed
+     * key is scoped to the ARTIFACT and not to a version, which is why the door
+     * and never this module decides who may ask for one.
+     */
+    version?: number | null },
   base: string,
   delivery:'bytes'|'redirect'='bytes',
 ): Promise<Response> {
@@ -346,9 +368,11 @@ export async function exportImageResponse(
   if (imageOverview) return json({ error: 'image_unavailable' }, 404);
   const selection = capture === 'card' || capture === 'preview' ? { search: '', token: '' } : urlSelection(q.search ?? '', flow);
 
+  const version = q.version ?? null;
   const options:ImageOptions = {
     refresh:q.refresh==='1',
     capture,
+    ...(version === null ? {} : { version }),
     ...(draftCrop
       ? { crop: draftCrop, volatile: true }
       : capture === 'card' && isDocument
@@ -365,7 +389,11 @@ export async function exportImageResponse(
     // document of their own and render inside the app's <main>.
     pageUrl: () => new URL(
       isDocument
-        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${selection.search ? `&${selection.search}` : ''}`
+        // `version` rides on the SAME address the document validates it on: the
+        // raw route resolves it under the exporter's verified key, so the shot
+        // is of that version or it is the uniform 404 — never of the head
+        // wearing an archived version's number.
+        ? `/a/${artifact.id}/raw?chrome=0&key=${mintExportKey(artifact.id)}${version === null ? '' : `&${VERSION_PARAM}=${version}`}${selection.search ? `&${selection.search}` : ''}`
         : `/a/${artifact.id}?key=${mintExportKey(artifact.id)}`,
       EXPORT_INTERNAL_ORIGIN ?? base,
     ).toString(),

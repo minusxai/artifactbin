@@ -25,11 +25,10 @@ over:
 afbin sessions script new --as guest --input actions.js --json
 ```
 
-The session is still yours: only you can run scripts in it, read its status or
-close it, and it counts against your session limit. Only the pages are anonymous.
-Every write a signed-out reader could not make is refused in a guest session
-exactly as it would be for a real guest; that refusal is the answer you came for,
-not a broken session.
+The session is still yours: only you run scripts in it, read its status or close
+it, and it counts against your limit. Only the pages are anonymous. A write a
+signed-out reader could not make is refused exactly as it would be for a real
+guest; that refusal is the answer you came for, not a broken session.
 
 `--as test-user` is the other half of the same idea: the session's pages browse
 as a fresh account that exists only for this session, so open the link, press
@@ -72,21 +71,26 @@ const snapshot = await page.evaluate(() => window.mx.read(['count'], {wait:true}
 return {description, snapshot};
 ```
 
+An OLDER version is the same address plus `?version=N`:
+`page.goto('/a/abc123?version=2')` renders version 2 under a "Version 2 of 7 ·
+read-only" line — no editing, no commenting, every `<Mutation>` refused — for
+whoever may read the history (its owner and editors); everyone else gets
+not-found. `afbin export <id>@2 --format png` shoots that same page.
+
 `--json` returns `{session_id, execution_id, status, result, pages, attachments, error?}`.
 Images are `{mime, base64}` attachments. Scripts can open several artifacts,
-including multiple copies of one artifact. Returned page IDs remain stable until
+including multiple copies of one. Returned page IDs remain stable until
 those pages close. In the next script use `const page = pages['PAGE_ID']`.
-For a session containing one page, standard Playwright also gives
-`const [page] = context.pages()`. Call `sessions script SESSION_ID`, not `new`,
-to resume it. Values inside your own `return` do not name pages or sessions;
-the outer response supplies those IDs.
-Page IDs distinguish duplicate artifact URLs without changing application data.
-Do not write unrelated signals as page labels or bookkeeping; use those IDs.
-Capture images only when needed, using `await output.image(await page.screenshot())`.
-Image attachments can make JSON responses large. Redirect `--json > result.json`
-and read the IDs/results from that file instead of printing base64 into the agent's
-text context. A truncated tool display is not a failed execution; recover the saved
-response or use `sessions status`, without resubmitting `new`.
+With one page, `const [page] = context.pages()` also works. Resume with
+`sessions script SESSION_ID`, not `new`. Values inside your own `return` do not
+name pages or sessions; the outer response supplies those IDs.
+Page IDs distinguish duplicate artifact URLs without changing application data;
+do not use unrelated signals as page labels or bookkeeping.
+Capture images only when needed: `await output.image(await page.screenshot())`.
+Image attachments make JSON responses large: redirect `--json > result.json` and
+read the IDs/results from it rather than printing base64 into the agent's text
+context. A truncated display is not a failed execution; recover the saved response
+or use `sessions status`, without resubmitting `new`.
 The JavaScript heap and DOM remain live between calls; script variables do not.
 Independent operations may use `await Promise.all([...])`; scripts in one session
 run sequentially. Playwright functions passed to `page.evaluate()` run in the page:
@@ -104,15 +108,14 @@ stop();
 ```
 
 Call these inside `page.evaluate()`. `set` takes one object patch. `subscribe`
-returns a synchronous stop function; snapshots contain only the requested names.
-Subscribe to all signals needed by one renderer together. Wait for `window.mx`
-after navigation before calling it. On a script error, resume the existing page
-IDs; opening another page loses continuity.
-Write a separate recovery script that uses those pages. Do not rerun the original
-page-creation or mutation script just to inspect its result.
+returns a synchronous stop function; snapshots hold only the requested names.
+Subscribe to all signals one renderer needs together. Wait for `window.mx` after
+navigation before calling it. On a script error, resume the existing page IDs;
+opening another loses continuity. Write a recovery script that uses those pages;
+do not rerun the original script just to inspect its result.
 
 Catch API errors inside the page to return their structured fields: Playwright
-does not preserve custom Error properties across its evaluation boundary.
+drops custom Error properties across its evaluation boundary.
 
 ```js
 return await page.evaluate(async () => {
@@ -121,20 +124,20 @@ return await page.evaluate(async () => {
 });
 ```
 
-The same [five-method mx API](markup-scripts.md) is exposed on `window.mx` in the
+The same [five-method mx API](markup-scripts.md) is on `window.mx` in the
 artifact page and managed iframe. Read names from `describe()`. Use
 `page.evaluate(() => window.mx.read(['count','results'], {wait:true}))`; selected
 values are at `snapshot.signals.NAME.value`. `set` changes scalar signals;
 `mutate` runs declared row writes. Neither changes artifact source. A local-table
 mutation belongs to this live instance; a dataset mutation persists in the dataset.
-Use ordinary Playwright locators for user interactions. Managed content has its
+Use ordinary Playwright locators for interactions. Managed content has its
 own inner frame: `page.frameLocator('iframe[title="Widget"]').frameLocator('iframe')`.
-Inspect the actual controls and their accessible names; use `selectOption` for
-native selects, or click a custom select trigger and its option. A native artifact
-control is in the main page; it does not require entering a widget frame.
+Inspect the controls and their accessible names; use `selectOption` for native
+selects, or click a custom select trigger and its option. A native artifact
+control is in the main page; no widget frame is needed.
 
 Inspect controls with Playwright's accessibility snapshot before choosing a
-locator; raw HTML often buries controls beneath styles and application chrome:
+locator; raw HTML buries controls beneath styles and chrome:
 
 ```js
 const [page] = context.pages();
@@ -142,10 +145,10 @@ return await page.locator('body').ariaSnapshot();
 ```
 
 The kit's `<Select label="Region">` is a button with a listbox, not an HTML
-`<select>`. The following example assumes its label is exactly Region; replace
-the label with the actual accessible name from the snapshot. To change a known
-scalar directly, `page.evaluate(() => mx.set({region: 'West'}))` needs no locator.
-To exercise the UI instead:
+`<select>`. The example below assumes the label is exactly Region; use the
+accessible name from the snapshot. To change a known scalar directly,
+`page.evaluate(() => mx.set({region: 'West'}))` needs no locator. To exercise
+the UI:
 
 ```js
 const [page] = context.pages();
@@ -155,14 +158,14 @@ return await page.evaluate(() => mx.read(['region'], {wait: true}));
 ```
 
 A script error preserves pages. A timeout that destroys the worker returns
-`SESSION_LOST`; create a new session explicitly. Never rerun an uncertain mutation
+`SESSION_LOST`; create a new session. Never rerun an uncertain mutation
 blindly: the CLI prints session/execution IDs before waiting, and `status` recovers
 the receipt. A committed dataset write is not rolled back by a later error.
 
-Actions default to 5 seconds, navigation to 10 seconds, and an entire script to
-20 seconds. Keep scripts short; move long workflows across calls. Sessions expire
-after 30 idle minutes. A session has at most 8 pages and 16 execution receipts;
-close it when finished. There is no suspended-to-disk browser heap.
+Actions default to 5 s, navigation to 10 s, a whole script to 20 s. Keep scripts
+short; move long workflows across calls. Sessions expire after 30 idle minutes.
+A session holds at most 8 pages and 16 receipts; close it when finished. There is
+no suspended-to-disk browser heap.
 
 ## Testing a page you built
 

@@ -137,6 +137,17 @@ interface CreateStoreOptions {
   /** Debounce before a re-run (default 150 ms) — a slider must not fire per pixel. */
   debounceMs?: number;
   transport?: QueryTransport | null;
+  /**
+   * ONE reason that refuses EVERY write on this render, whatever the datasets
+   * would have said (StoryIslandData.readOnly): a SNAPSHOT render — today
+   * `?version=N`, the archived view — is not the document a write could land
+   * on, so it says so by name instead of letting the missing transport answer
+   * "This view cannot save changes", which is true and about the wrong thing.
+   *
+   * It wins over the transport check and over per-mutation access, because it
+   * is a fact about the RENDER rather than about the data.
+   */
+  writesUnavailable?: string | null;
 }
 
 /** Empty declarations + state, for a document that declares nothing. */
@@ -375,6 +386,10 @@ export function createDataflowStore(
   };
 
   const mutationUnavailable = (name: string): string | null => {
+    // A fact about the RENDER beats every fact about the data: a snapshot
+    // refuses even a `local` write, which would otherwise mutate a document
+    // the reader cannot save (see CreateStoreOptions.writesUnavailable).
+    if (options.writesUnavailable) return options.writesUnavailable;
     if (!transport?.mutate) return 'This view cannot save changes.';
     if (flow.mutations?.some(m => m.name === name && m.scope === 'local')) return null;
     return Object.hasOwn(state.mutationAccess ?? {}, name)

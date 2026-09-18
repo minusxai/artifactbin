@@ -20,15 +20,16 @@ import type {Workspace,Snapshot} from './workspace';
 interface Renderer {
  /** The shareable published view; derivable offline, which is why open never needs the network. */
  viewUrl(id:string):string;
- image(id:string,options:{format:'png'|'jpg';page?:number;og?:boolean;refresh?:boolean}):Promise<{bytes:Buffer;contentType:string}>;
- html(id:string):Promise<{bytes:Buffer;contentType:string}>;
+ /** `version` photographs that ARCHIVED version's page instead of the head; the server runs its own ACL on it. */
+ image(id:string,options:{format:'png'|'jpg';page?:number;og?:boolean;refresh?:boolean;version?:number}):Promise<{bytes:Buffer;contentType:string}>;
+ html(id:string,version?:number):Promise<{bytes:Buffer;contentType:string}>;
 }
 export function serverRenderer(server:string,client?:HttpClient):Renderer{
  const rendering=():HttpClient=>{if(!client)throw new CliError('renderer_unavailable','Rendering runs on the server and needs credentials for it.',RENDERER_FIX);return client;};
  return {
   viewUrl:id=>`${server}/a/${id}`,
-  image:(id,options)=>rendering().view(`/a/${id}/export?format=${options.format}${options.page!==undefined?`&slide=${options.page}`:''}${options.og?'&mode=card':''}${options.refresh?'&refresh=1':''}`),
-  html:id=>rendering().view(`/a/${id}/raw`),
+  image:(id,options)=>rendering().view(`/a/${id}/export?format=${options.format}${options.version!==undefined?`&version=${options.version}`:''}${options.page!==undefined?`&slide=${options.page}`:''}${options.og?'&mode=card':''}${options.refresh?'&refresh=1':''}`),
+  html:(id,version)=>rendering().view(`/a/${id}/raw${version!==undefined?`?version=${version}`:''}`),
  };
 }
 
@@ -60,10 +61,20 @@ export async function exportResources(workspace:Workspace,refs:string[],options:
  for(const input of refs){
   const ref=await resolveReference(input,{root:workspace.root,cwd:workspace.cwd,server:options.server,aliases:[...options.aliases??[]]});
   if(rendered(format)){
-   // Historical content is not the current head, and the renderer only ever photographs the head.
-   if(ref.version!==undefined)throw new CliError('unsupported_version_export',`${input} names version ${ref.version}; rendering photographs the current head.`,'Export csv, json, yaml or original for a historical version.');
-   const path=ref.kind==='path'?ref.path:/^https?:\/\//.test(input)?undefined:localFiles[ref.id];
-   targets.push({ref:input,format,render:true,...(path!==undefined?{path,...(format==='html'?{id:publishedHead(workspace,path)}:{})}:{id:ref.kind==='id'?ref.id:undefined})});
+   /*
+    * `<id>@N` RENDERS. The document can be SERVED at an older version now
+    * (`/a/<id>/raw?version=N`), so the renderer photographs that page exactly
+    * as it photographs the head — which is what an agent checking the page it
+    * just changed was missing.
+    *
+    * A LOCAL PATH still has no history: `report.jsx@2` names bytes nobody
+    * stored, and the tracked file on disk IS the head. So a version pins the
+    * target to the published id and never to the local render.
+    */
+   const atVersion=ref.version!==undefined;
+   const path=ref.kind==='path'?ref.path:atVersion||/^https?:\/\//.test(input)?undefined:localFiles[ref.id];
+   if(atVersion&&path!==undefined)throw new CliError('unsupported_version_export',`${input} names a local file and a version.`,`Export the published id at that version, e.g. afbin export <id>@${ref.version} --format ${format}, or the file as it stands.`);
+   targets.push({ref:input,format,render:true,...(ref.version!==undefined?{version:ref.version}:{}),...(path!==undefined?{path,...(format==='html'?{id:publishedHead(workspace,path)}:{})}:{id:ref.kind==='id'?ref.id:undefined})});
   }else targets.push({ref:input,format,render:false,...(ref.kind==='id'?{id:ref.id,...(ref.version?{version:ref.version}:{})}:{path:ref.path,...(ref.version?{version:ref.version}:{})})});
  }
  const destinations=await plan(workspace,targets,options);
@@ -119,7 +130,9 @@ async function unchangedHead(workspace:Workspace,path:string):Promise<void>{
 async function renderTarget(workspace:Workspace,target:ExportTarget,options:ExportOptions):Promise<Buffer>{
  if(target.path!==undefined&&(target.format==='png'||target.format==='jpg'))return (options.localImage??renderLocalImage)({cwd:workspace.root,home:workspace.home,path:target.path,server:options.server,format:target.format,page:options.page,og:options.og});
  const renderer=serverRenderer(options.server,options.client);
- const result=target.format==='html'?await renderer.html(target.id!):await renderer.image(target.id!,{format:target.format as 'png'|'jpg',og:options.og,refresh:options.refresh,...(options.page!==undefined?{page:options.page}:{})});
+ const result=target.format==='html'
+  ?await renderer.html(target.id!,target.version)
+  :await renderer.image(target.id!,{format:target.format as 'png'|'jpg',og:options.og,refresh:options.refresh,...(options.page!==undefined?{page:options.page}:{}),...(target.version!==undefined?{version:target.version}:{})});
  return result.bytes;
 }
 

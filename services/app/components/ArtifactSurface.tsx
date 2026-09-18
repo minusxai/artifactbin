@@ -111,6 +111,19 @@ export interface ArtifactSurfaceProps {
   /** An ANONYMOUS session (agent cookie, no account) — the bar offers Disconnect. */
   anonSession?: boolean;
   version: number;
+  /**
+   * THIS RENDER IS AN OLDER VERSION — `/a/<id>?version=2`, resolved and
+   * authorized by the page endpoint (lib/archived-version) and handed down
+   * beside `surface` the way `like` is: the surface's other props are what the
+   * DOCUMENT is, and this is what the RENDER is.
+   *
+   * Everything it turns off turns off because the thing that affordance acts on
+   * is not what is on screen: an edit writes to the HEAD, a comment anchors to
+   * a node in the head, and like, fork and share belong to the artifact rather
+   * than to this snapshot. The mounted runtime's writes are refused from the
+   * island instead (`readOnly`), so a button names the version it cannot save.
+   */
+  archived?: { version: number; head: number } | null;
   /** Open-annotation count at render time (viewers who may annotate) — seeds the annotate button's badge; live updates keep it current. */
   openAnnotations?: number;
   /**
@@ -216,9 +229,17 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const [sessionNonce, setSessionNonce] = useState<string | null>(null);
   // The shell's role signal: the owner's affordances (share, dataset ref
   // copy) and the writer's (edit — an owner or a named editor) hang off it.
-  const owner = useArtifactOwner();
-  const canEdit = useCanEditArtifact();
-  const canAnnotate = useCanAnnotateArtifact();
+  /*
+   * AN ARCHIVED RENDER HAS NO ROLE AFFORDANCES. The reader's role is unchanged
+   * — they are still the owner, still an editor — but every control here acts
+   * on the HEAD, and this is not the head. Folded in at the three signals
+   * rather than at each of the dozen controls that read them, so a control
+   * added later is off by default instead of on.
+   */
+  const archived = props.archived ?? null;
+  const owner = useArtifactOwner() && !archived;
+  const canEdit = useCanEditArtifact() && !archived;
+  const canAnnotate = useCanAnnotateArtifact() && !archived;
   /** The layer's own list, when it is mounted: it moves the instant a thread
    * is resolved or opened here, where the stream's copy waits for the ping. */
   const [layerAnnotations, setLayerAnnotations] = useState<AnnotationWire[] | null>(null);
@@ -262,7 +283,10 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   useEffect(() => {
     if (intentDone.current) return;
     intentDone.current = true;
-    const intent = readIntent(search || window.location.search);
+    // An ARCHIVED render performs none of them: every one of these acts on the
+    // artifact as it is now, and a stale link that still carries an intent must
+    // not make this snapshot do it. The parameter is still stripped below.
+    const intent = archived ? null : readIntent(search || window.location.search);
     if (intent === 'fork') setForkAsked(true);
     // Exactly the comments row's effect, and gated by exactly its capability:
     // opening a rail for someone who may not comment is an empty panel.
@@ -707,7 +731,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing} input={{artifactId:id, share:owner, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing} input={{artifactId:id, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
           else if (action === 'fork') setForkAsked(true);

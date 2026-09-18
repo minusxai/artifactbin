@@ -134,6 +134,21 @@ export interface StoryIslandData {
    */
   assetsUrl?: string | null;
   managedAssets?: ManagedAssetsConfig;
+  /**
+   * WHY THIS RENDER CAN NEVER WRITE, in the words a person reads on the button.
+   *
+   * Absent for every ordinary document. Present for a render that is a
+   * SNAPSHOT rather than the document — today that is `?version=N`, the
+   * archived view (lib/archived-version), where the reason is "Version N is
+   * read-only". It refuses every `<Mutation>` up front, whatever the datasets
+   * would have said, so a button is disabled before it is pressed and
+   * `mx.describe()` reports it as the unavailable reason.
+   *
+   * It is not the absence of `mutateUrl`: that is already true here, and on its
+   * own it makes the runtime say "This view cannot save changes" — accurate,
+   * and about the wrong thing.
+   */
+  readOnly?: string;
 }
 
 /** The GET query endpoint's one parameter: the JSON of a QueryRequest (lib/story/query-request). */

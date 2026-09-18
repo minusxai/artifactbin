@@ -250,3 +250,48 @@ describe.each(['For', 'DataTable'])('%s row actions', (kind) => {
     expect((v.getByRole('button',{name:'Complete 1'}) as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+/**
+ * AN ARCHIVED RENDER (`?version=N`) refuses every write, and says WHICH version
+ * cannot be written.
+ *
+ * Dropping the write transport already disabled the button — with "This view
+ * cannot save changes", which is true and about the wrong thing: the reader is
+ * looking at version 2 of a document they may very well edit. The reason
+ * travels on the island instead (StoryIslandData.readOnly, from
+ * lib/archived-version `archivedReadOnly`) and the store hands it to the
+ * control, so the button carries it BEFORE it is pressed. The literal is
+ * spelled here because this file must not import the server graph; the route
+ * that produces it is pinned in __tests__/archived-version-render.test.ts.
+ */
+describe('a Button on an archived render', () => {
+  const readOnly = 'Version 2 is read-only';
+  const archivedStore = (writesUnavailable: string | null) => {
+    const { dataflow } = build();
+    // No `mutate`: an archived render carries no mutateUrl either.
+    const transport: QueryTransport = {
+      run: () => Promise.resolve({ tables: {}, errors: {}, mutationAccess: { vote: null } }),
+      page: () => Promise.reject(new Error('unused')),
+    };
+    return createDataflowStore(dataflow, { transport, debounceMs: 0, writesUnavailable });
+  };
+
+  it('is disabled, and names the version rather than "this view"', () => {
+    const { nodes, dataflow } = build();
+    const store = archivedStore(readOnly);
+    const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />);
+    const button = getByRole('button', { name: 'Vote' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-description')).toBe(readOnly);
+    expect(store.mutationUnavailable('vote')).toBe(readOnly);
+  });
+
+  it('still says the old, vaguer thing when no version is being shown', () => {
+    const { nodes, dataflow } = build();
+    const store = archivedStore(null);
+    const { getByRole } = render(<StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} colorMode="light" chrome={true} store={store} />);
+    const button = getByRole('button', { name: 'Vote' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-description')).toBe('This view cannot save changes.');
+  });
+});

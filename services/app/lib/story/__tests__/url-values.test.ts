@@ -55,6 +55,20 @@ describe('writeUrlValues', () => {
       .toBe('?ref=2&key=k&$season=2024-25&$team=LAL');
   });
 
+  /*
+   * `version` is the SERVER's key, not a Value: it selects WHICH VERSION of the
+   * document is being read (lib/archived-version), and a reader moving a slider
+   * on an archived render must not lose it and land silently on the head. It is
+   * safe for the same reason `key` and `ref` above are — it carries no `$`, and
+   * a Value can never be named with one — and it is pinned here because an
+   * address quietly becoming the head's is invisible until the link is shared.
+   */
+  it('never touches `version`, which selects the document rather than a value in it', () => {
+    expect(writeUrlValues('?version=2', flow, { season: '2024-25' })).toBe('?version=2&$season=2024-25');
+    expect(writeUrlValues('?version=2&$season=2024-25', flow, { season: '2026-27' })).toBe('?version=2');
+    expect(readUrlValues('?version=2', flow)).toEqual({});
+  });
+
   it('writes null as an empty value when the default is not null, and drops a $ param that returned to default', () => {
     expect(writeUrlValues('?$season=2024-25&$team=LAL', flow, { season: '2026-27', team: 'LAL' })).toBe('?$team=LAL');
     expect(writeUrlValues('', flow, { season: null })).toBe('?$season=');

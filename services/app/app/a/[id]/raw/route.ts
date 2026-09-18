@@ -18,6 +18,7 @@
  *   though it is same-host. Verified live: reading localStorage throws.
  */
 import {agentDiscovery} from '@/lib/agent-discovery';
+import { archivedReadOnly, archivedVersionFor, rowAtVersion } from '@/lib/archived-version';
 import { canReadArtifact, dataflowForRow, declarationsForRow, getArtifactById, linkRoleOf, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { withIntent, type Intent } from '@/lib/intent';
 import { count, has } from '@/lib/relations';
@@ -235,6 +236,19 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
      */
     case 'markup': {
       /*
+       * `?version=N` — THIS document as it was, read-only, for whoever may
+       * read its history (lib/archived-version). Decided before anything is
+       * read or rendered: a reader without history access, an invalid number
+       * and a version that was never archived all get the SAME uniform 404 the
+       * rest of this route answers, so nobody learns the parameter exists.
+       */
+      const at = await archivedVersionFor(request, artifact, { capture: byExportKey });
+      if (at === 'not_found') return notFound();
+      // Everything below renders THIS row: the artifact wearing that version's
+      // bytes when one was asked for, the artifact itself otherwise. One
+      // substitution rather than a conditional at every read.
+      const row = at ? rowAtVersion(artifact, at) : artifact;
+      /*
        * Explicit raw document reads still count here. Ordinary app readers
        * render inline and report through /api/page/artifact/:id/view instead;
        * they do not fetch this route. Both use the same daily visitor hash.
@@ -245,12 +259,12 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        */
       if (!key && request.method !== 'HEAD') void trackEvent('view', artifact.id, { userId: viewer?.userId ?? null });
 
-      const meta = artifact.meta as { theme?: StoryThemeName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
+      const meta = row.meta as { theme?: StoryThemeName | null; template?: string | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null; cssCompileVersion?: string | null };
       // Stored rows may still carry a retired theme name (aliased forward) and
       // a sheet compiled under an older registry (recompiled) — both resolve
       // at the door so the served document always speaks the live vocabulary.
       const design = resolveStoredStoryDesign(meta.theme, meta.colorMode);
-      const compiledCss = await currentStoryCss(meta, artifact.source);
+      const compiledCss = await currentStoryCss(meta, row.source);
       // ?chrome=0 — the capture path (lib/export screenshots this frame, so the
       // document's own rail/present bar and attribution footer would land in
       // every OG card).
@@ -265,7 +279,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * edit costs one message instead of a reload. Grants nothing: the read
        * ACL above has already decided who may see this at all.
        */
-      const editable = new URL(request.url).searchParams.get('edit') === '1';
+      // Never on an archived render: there is nothing here to write back TO —
+      // the head has moved on — so the editor would be an invitation to lose work.
+      const editable = !at && new URL(request.url).searchParams.get('edit') === '1';
       /*
        * ?comment=1 — a COMMENTER's copy. Commenting happens in the frame (only
        * the document can see a Selection at an opaque origin) but needs no
@@ -273,7 +289,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        * on a page of prose, to draw a tint. Grants nothing either — the read
        * ACL above has already decided who may see this at all.
        */
-      const commenting = new URL(request.url).searchParams.get('comment') === '1';
+      // Nor on an archived render: a comment anchors to text in the CURRENT
+      // document, and these paragraphs may not be there any more.
+      const commenting = !at && new URL(request.url).searchParams.get('comment') === '1';
       // `none` whenever the link grants no more than a guest already has, which
       // is every ordinary public document — see lib/share-roles roleBehindLogin.
       const behindLogin = roleBehindLogin(linkRoleOf(artifact));
@@ -309,7 +327,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
        *    than fast — /export photographs it — so its selection is threaded
        *    into the run itself and the rows it carries are the selected ones.
        */
-      const declared = declarationsForRow(artifact);
+      const declared = declarationsForRow(row);
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;
@@ -317,11 +335,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         // Our copies of the web URLs this document names (lib/web-assets): the
         // served <img> points at them, with the box and the blur the row
         // recorded, and the reader's browser reaches no third party.
-        webAssetsForSource(artifact.source),
+        webAssetsForSource(row.source),
         // A capture takes the full copy of every image: /export photographs
         // this frame, and a `sizes` hint against a headless viewport is how an
         // og card ends up showing the 640px one.
-        refDataForRow(artifact, { capture: !chrome }),
+        refDataForRow(row, { capture: !chrome }),
         chrome
           ? Promise.resolve(declared && hasUrlValues ? { ...declared, values: urlValues } : declared)
           // The CAPTURE's run carries whoever asked for it, which matters for
@@ -330,7 +348,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // sessionActor answers an account session as a viewer and the agent
           // cookie as a bare token, and an unclaimed row is owned by its token
           // — the viewer alone would photograph a stranger's view of it.
-          : dataflowForRow(artifact, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
+          : dataflowForRow(row, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
         chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
         /*
@@ -357,7 +375,13 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const viewerId = viewer?.userId ?? null;
       const role = await roleFor(artifact, actor);
       const ownerBreadcrumb = chrome && role === 'owner';
-      const reactions = chrome
+      /*
+       * AN ARCHIVED RENDER HAS NO DOORS. Like, follow and comment all act on
+       * the artifact as it is now, and offering them beside bytes that are no
+       * longer the document is how a reader ends up commenting on a paragraph
+       * nobody can see. The rail draws none of them (lib/story/reader-chrome).
+       */
+      const reactions = chrome && !at
         ? {
           like: { count: await count('like', artifact.id), liked: viewerId ? await has(viewerId, 'like', artifact.id) : false, href: door('like') },
           follow: artifact.user_id && artifact.user_id !== viewerId
@@ -375,12 +399,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         chrome,
         editable,
         commenting,
+        // The one line an archived render carries: which version this is, out
+        // of how many, and that it cannot be changed.
+        archived: at ? { version: at.version, head: at.head } : null,
         // Unfurl cards, for the reader path where this document IS the page.
         // Never on a capture render: that is the exporter shooting this frame.
         social: chrome
           ? {
-            title: displayTitle(artifact),
-            description: artifact.description,
+            title: displayTitle(row),
+            description: row.description,
             // ABSOLUTE: this document IS the page a crawler fetches, and a
             // relative og:image is resolved by some scrapers against the page
             // URL and by others not at all. baseUrl reads the forwarding
@@ -402,7 +429,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * sign in, effectiveRole finds the link role by itself and the shell
          * follows — the path a signed-in stranger takes.
          */
-        signIn: chrome && !viewer && signInUnlocks
+        signIn: chrome && !at && !viewer && signInUnlocks
           // Back to the document AND back to what the door offered: someone who
           // logged in to comment returns to an open conversation rather than to
           // a document that has forgotten why they left (lib/intent).
@@ -421,15 +448,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          */
         edit: chrome && editable,
         login: chrome && !viewer ? { href: `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}`)}` } : null,
-        fork: chrome ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
-        source: artifact.source ?? '',
+        // Forking an archived version is a copy of something that is not this
+        // document — out of scope for the read-only view, so the door is shut.
+        fork: chrome && !at ? { href: viewer ? `/a/${artifact.id}${withIntent('', 'fork')}` : `/login?callbackUrl=${encodeURIComponent(`/a/${artifact.id}${withIntent('', 'fork')}`)}` } : null,
+        source: row.source ?? '',
         compiledCss,
         theme: design.theme,
         template: meta.template ?? null,
         colorMode: design.colorMode,
         refData,
         dataflow,
-        title: ownerBreadcrumb ? displayTitle(artifact) : artifact.title,
+        title: ownerBreadcrumb ? displayTitle(row) : row.title,
         // Content-addressed, from the build's own manifest: the URL has to
         // change when the bytes do, because services/app/server/app.ts caches everything
         // under /story/ for a year. Null when there is no build — a document
@@ -462,11 +491,23 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
         assetsUrl: byExportKey ? `${assetsPath(artifact.id)}?key=${encodeURIComponent(key!)}` : assetsPath(artifact.id),
         // Only a document that declares a write gets a write URL: a document
         // that cannot write should not carry the address of a door it never
-        // opens.
-        ...(declaresMutations(artifact.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
+        // opens. An ARCHIVED render never does — it is not the document any
+        // write would land on — and it says so by name instead (`readOnly`).
+        ...(!at && declaresMutations(row.source) ? { mutateUrl: mutatePath(artifact.id) } : {}),
+        /*
+         * WHY EVERY WRITE IS REFUSED HERE, in the words the button shows.
+         * Dropping `mutateUrl` alone leaves the runtime saying "This view
+         * cannot save changes" — true, and about the wrong thing. This travels
+         * on the island instead, so a `<Button run=…>` is disabled with
+         * "Version N is read-only" before anyone presses it and `mx.describe()`
+         * reports it as the unavailable reason.
+         */
+        ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
         // A capture gets none: it has no reader, and a document that adopted an
         // edit mid-shot would be photographed halfway between two versions.
-        live: chrome ? { id: artifact.id, editId: artifact.edit_id } : null,
+        // Nor does an archived render: the live stream carries the HEAD's
+        // edits, and adopting them would quietly turn version N into version M.
+        live: chrome && !at ? { id: artifact.id, editId: artifact.edit_id } : null,
         viewer: readerIdentity,
       });
       return new Response(html, {
