@@ -118,6 +118,19 @@ export interface StoryDocumentInput {
    */
   assetsUrl?: string | null;
   managedAssets?: StoryIslandData['managedAssets'];
+  /**
+   * WHY every `<Mutation>` on this render is refused (StoryIslandData.readOnly)
+   * — set by the serving route for a SNAPSHOT render (`?version=N`). Absent
+   * for a document that is the document.
+   */
+  readOnly?: string | null;
+  /**
+   * THIS RENDER IS AN OLDER VERSION — `{version, head}`, the whole of what the
+   * chrome line says ("Version N of M · read-only"). Null for the head, which
+   * is every other render. It carries no doors of its own: the route has
+   * already shut edit, comment, fork and the live stream.
+   */
+  archived?: { version: number; head: number } | null;
   /** Absolute scoped asset transport, usable from opaque-origin scripts. */
   resolveUrl?: string | null;
   libraryOrigin?: string;
@@ -380,6 +393,8 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       edit: !!input.edit,
       ownerBreadcrumb: input.ownerBreadcrumb,
       reactions: input.reactions ?? null,
+      // An older version: the rail keeps only the line that says which one.
+      archived: input.archived ?? null,
     })
     : '';
 

@@ -94,6 +94,9 @@ describe('browser_session viewer', () => {
   const context = { actor: { tokenId: 'tok_owner', userId: 'usr_owner' }, base: 'http://app', request: new Request('http://app/api/browser-sessions', { method: 'POST' }), author: {} } as unknown as OpContext;
   const previous = services().browser;
   const record = () => {
+    // `viewer` and `pageActor` ride on the union's `script` member, so the
+    // recorder reads a request as one shape rather than making every assertion
+    // below narrow the op first.
     const seen: BrowserSessionRequest[] = [];
     setServices({ browser: { ...previous, sessions: {
       async request(input: BrowserSessionRequest): Promise<BrowserSessionResult> { seen.push(input); return { session_id: input.session_id, status: 'queued', pages: [], attachments: [] }; },
@@ -103,7 +106,7 @@ describe('browser_session viewer', () => {
   };
   afterEach(() => setServices({ browser: previous }));
 
-  it('accepts only guest, and parses a script without a viewer', () => {
+  it('accepts guest and test-user, and parses a script without a viewer', () => {
     const input = z.object(operation.input);
     expect(input.safeParse({ ...script, viewer: 'guest' }).success).toBe(true);
     expect(input.safeParse(script).success).toBe(true);
@@ -119,6 +122,20 @@ describe('browser_session viewer', () => {
     expect(seen[1]).not.toHaveProperty('viewer');
     // A guest session still belongs to the caller who created it.
     expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
+  });
+
+  it('mints a throwaway second person for a test-user session and never hands its secret back', async () => {
+    const seen = record();
+    const result = await operation.run(context, { ...script, viewer: 'test-user' });
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ viewer: 'test-user', actor: { tokenId: 'tok_owner', userId: 'usr_owner' } });
+    const page = seen[0]!.pageActor!;
+    expect(page.credential).toBe('bearer');
+    expect(page.userId).toMatch(/^usr_/);
+    expect(page.userId).not.toBe('usr_owner');
+    expect(page.tokenId).toMatch(/^tok_|^[A-Za-z0-9_-]+$/);
+    expect(JSON.stringify(result.body)).not.toContain(page.tokenId!);
   });
 
   // runOperation hands the body to run() unparsed, so the refusal has to live in the operation itself.

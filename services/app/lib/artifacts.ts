@@ -1884,6 +1884,22 @@ export function getVersionFor(actor: TokenActor, id: string, version: number): P
   return getVersionScoped(editorScope(actor), id, version);
 }
 
+/**
+ * The version a CAPTURE photographs, in the ROW OWNER's own scope.
+ *
+ * The exporter shoots the served document in a headless browser that holds no
+ * session: it carries the short-lived signed key instead (lib/export-key), and
+ * the version ACL for that shot already ran at the export door, on the actor
+ * who asked, BEFORE the key was minted. So the render has nothing left to
+ * prove with, and this resolves the version as the artifact's own owner —
+ * never as the requester, and never without a scope.
+ *
+ * Only a caller that has verified an export key for THIS row may use it.
+ */
+export function versionForCapture(row: Pick<ArtifactRow, 'id' | 'user_id' | 'token_id'>, version: number): Promise<VersionContent | null> {
+  return getVersionScoped(editorScope({ userId: row.user_id, tokenId: row.token_id }), row.id, version);
+}
+
 export function revertArtifactFor(actor: TokenActor, id: string, version: number, opts: ReplaceOpts = {}): Promise<ArtifactRow | null | VersionNotArchived> {
   return revertScoped(actor, id, version, opts);
 }
@@ -2083,7 +2099,14 @@ export async function runDocumentMutation(
     })) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
     if (mutationUsesValue(decl.sql)) {
       if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
-      bound._value = values._value;
+      // `$_value` is typed by the column its editor sits in, like a declared Value: an empty
+      // string is "no value" for anything but text, and a value the column cannot hold is a
+      // caller error named here, never a statement for the engine to make sense of.
+      const valueType = checked.valueTypes[name];
+      const cell = valueType && values._value === '' && valueType !== 'string' ? null : values._value;
+      if (valueType && !scalarMatches(cell as Scalar, valueType)) return { ok: false, reason: 'invalid_row', detail: 'parameter $_value does not match the edited column\'s type' };
+      bound._value = cell;
+      if (valueType) paramTypes._value = valueType;
     } else if (Object.hasOwn(values, '_value')) {
       return { ok: false, reason: 'invalid_row', detail: 'this row action does not accept _value' };
     }

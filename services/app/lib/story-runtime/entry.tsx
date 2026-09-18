@@ -78,7 +78,9 @@ if (island?.textContent && root) {
     // reader's document) the document GETs its own `queryUrl` — its CSP
     // admits exactly that. Neither: values still change, tables stay.
     const transport = createDocumentTransport(window, data.queryUrl, appOrigin, undefined, data.mutateUrl);
-    const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport });
+    // `readOnly` is a SNAPSHOT render's refusal, carried on the island so every
+    // button says which version cannot be written rather than "this view".
+    const store: DataflowStore = createDataflowStore(data.dataflow ?? { flow: EMPTY_DATAFLOW }, { transport, writesUnavailable: data.readOnly ?? null });
     authorSession = createAuthorScriptSession(store);
     window.addEventListener('pagehide', event => { if (!event.persisted) authorSession?.dispose(); });
     /*

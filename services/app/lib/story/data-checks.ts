@@ -46,7 +46,7 @@ export async function checkDocumentData(source: string, load: RefLoader): Promis
 /** Prepare every query against the shapes its refs resolve to. */
 export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxNode[] = []): Promise<
   | { kind: 'sql'; details: string[] }
-  | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]> }
+  | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]>; /** `$_value`'s declared type per cell-editing mutation: the type of the column its editor sits in. */ valueTypes: Record<string, DatasetColumn['type']> }
 > {
   try {flow=await resolveUserValues(flow,load);}catch(error){return {kind:'sql',details:[error instanceof Error?error.message:'Invalid user binding']};}
   const tables: Record<string, { columns: DatasetColumn[] }> = {};
@@ -85,6 +85,14 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
     else if (shapes.some((s) => JSON.stringify(s) !== JSON.stringify(shapes[0]))) details.push(`row mutation "${mutation.name}" has incompatible table scopes`);
     else rowSchemas[mutation.name] = shapes[0];
   }
+  // A cell editor's `$_value` is typed by the column it sits in — the one parameter whose type is
+  // not a declared Value's. Typed here it is planned as that column, at publish and at the click.
+  const valueTypes: Record<string, DatasetColumn['type']> = {};
+  for (const [name, col] of Object.entries(scoped.cellColumns)) {
+    const type = rowSchemas[name]?.find((c) => c.name === col)?.type;
+    if (type) valueTypes[name] = type;
+  }
+  const typesFor = (name: string) => valueTypes[name] ? { ...paramTypes, _value: valueTypes[name] } : paramTypes;
   // Every <Mutation> prepares and executes against its (empty) target too —
   // a non-DML statement or an unknown column is a publish error, never a
   // button that fails on its first click.
@@ -101,17 +109,17 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
             if(!policy)throw new Error(`Dataset policy: no policy permits writes to ${compiled.table.schema}.${compiled.table.name}`);
             // A row action with no row to bind has ALREADY been named above ("must be invoked inside…").
             // Planning `$_row.id` with no struct behind it only adds the engine's own crash text to that answer.
-            if(!mutationUsesRow(m.sql)||rowSchemas[m.name])policed.push({name:m.name,sql,columns:compiled.table.columns,policy,...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
+            if(!mutationUsesRow(m.sql)||rowSchemas[m.name])policed.push({name:m.name,sql,columns:compiled.table.columns,policy,paramTypes:typesFor(m.name),...(rowSchemas[m.name]?{row:rowSchemas[m.name]}:{})});
           }
         }catch(error){details.push(`<Mutation name="${m.name}">: ${error instanceof Error?error.message:'Invalid mutation'}`);continue;}}
-        prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
+        prepared.push({...m,sql,tableName: m.scope === 'local' ? m.target : 'dataset_rows',...(valueTypes[m.name]?{paramTypes:{_value:valueTypes[m.name]}}:{}),...(rowSchemas[m.name]?{row:{columns:rowSchemas[m.name]}}:{})});
       }
       if(prepared.length){const wet=await dryRunMutations({tables:inputTables,mutations:prepared,paramNames:[...paramNames,'_value','_me'],paramTypes});details.push(...wet.errors.map(e=>`<Mutation name="${e.name}">: ${e.error}`));}
     }
-    details.push(...await policyRefusals(policed,[...paramNames,'_value'],paramTypes));
+    details.push(...await policyRefusals(policed,[...paramNames,'_value']));
   }
   if (details.length) return { kind: 'sql', details };
-  return { kind: 'ok', columns, rowSchemas };
+  return { kind: 'ok', columns, rowSchemas, valueTypes };
 }
 
 interface PolicedMutation {
@@ -121,6 +129,8 @@ interface PolicedMutation {
   policy: DatasetMutationPolicy;
   /** The shape of `$_row` where the button sits inside a row scope. */
   row?: DatasetColumn[];
+  /** Declared types, with `_value` typed by the edited column where there is one. */
+  paramTypes: Record<string, DatasetColumn['type']>;
 }
 
 /**
@@ -141,7 +151,7 @@ interface PolicedMutation {
  * Analysis ONLY (`policyPreview`): nothing is written, and the target table is
  * empty, so this costs one throwaway instance per policed mutation.
  */
-async function policyRefusals(mutations: PolicedMutation[], paramNames: string[], paramTypes: Record<string, DatasetColumn['type']>): Promise<string[]> {
+async function policyRefusals(mutations: PolicedMutation[], paramNames: string[]): Promise<string[]> {
   const out: string[] = [];
   const params = Object.fromEntries(paramNames.map((n) => [n, null]));
   for (const m of mutations) {
@@ -149,7 +159,7 @@ async function policyRefusals(mutations: PolicedMutation[], paramNames: string[]
       table: { name: 'dataset_rows', rows: [], columns: m.columns },
       sql: m.sql,
       params,
-      paramTypes,
+      paramTypes: m.paramTypes,
       policy: m.policy,
       policyPreview: true,
       ...(m.row ? { row: { columns: m.row, values: {} } } : {}),

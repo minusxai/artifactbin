@@ -15,9 +15,10 @@ export interface BrowserSessionResult {
   attachments: BrowserSessionAttachment[];
   error?: MxError;
 }
-export type BrowserSessionRequest = { actor: Actor } & (
+/** `pageActor`: who the PAGES browse as when the app decided it (a throwaway second person); never the owner's credential. */
+export type BrowserSessionRequest = { actor: Actor; pageActor?: Actor } & (
   /** `viewer: 'guest'` on the creating request makes the session browse signed out; who a session browses as never changes. */
-  | { op: 'script'; session_id: string; execution_id: string; create: boolean; code: string; viewer?: 'guest' }
+  | { op: 'script'; session_id: string; execution_id: string; create: boolean; code: string; viewer?: 'guest' | 'test-user' }
   | { op: 'status'; session_id: string; execution_id?: string }
   | { op: 'close'; session_id: string }
 );

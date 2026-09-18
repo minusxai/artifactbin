@@ -795,6 +795,30 @@ ALTER TABLE app.artifact_id_registry ADD COLUMN IF NOT EXISTS consumed BOOLEAN N
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reservation_batch_ordinal ON app.artifact_id_registry (owner, batch, ordinal);
 
+CREATE TABLE IF NOT EXISTS app.browser_test_users (
+  session_id TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  token_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  touched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (session_id, owner)
+);
+
+ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS session_id TEXT NOT NULL;
+
+ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS owner TEXT NOT NULL;
+
+ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL;
+
+ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
+
+ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+ALTER TABLE app.browser_test_users ADD COLUMN IF NOT EXISTS touched_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS idx_browser_test_users_owner ON app.browser_test_users (owner);
+
 -- schema "auth" — owned by the auth role; tables declared by the auth's schema module
 
 CREATE TABLE IF NOT EXISTS auth.clients (

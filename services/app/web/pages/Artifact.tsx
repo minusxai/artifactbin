@@ -31,7 +31,10 @@ import { useArtifactView } from '../use-artifact-view';
  */
 type Page =
   | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; folder: Parameters<typeof FolderPage>[0]['folder']; workspace?: AccountWorkspace; ownerUsername?: string | null; surface?: undefined }
-  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null; surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
+  | { canonical: string; role: Parameters<typeof ArtifactShell>[0]['role']; kind: string; like?: { liked: boolean; count: number }; follow?: { userId: string; following: boolean; count: number } | null;
+      /** `?version=N` on this page's own address, resolved by the endpoint (lib/archived-version). Absent for the head. */
+      archived?: { version: number; head: number };
+      surface: Parameters<typeof ArtifactSurface>[0]; folder?: undefined };
 
 type TransportPage = Extract<Page, { folder: unknown }> | (Omit<Extract<Page, { surface: object }>, 'surface'> & { surface: CompactSurface<Parameters<typeof ArtifactSurface>[0]> });
 function decodePage(page: TransportPage): Page {
@@ -88,7 +91,12 @@ function ArtifactDocument({ id }: { id: string }) {
           props are what the DOCUMENT is, and this is what the viewer is to
           it — one fetch either way, and the export capture (which has no
           viewer) never carries it. */}
-      <ArtifactSurface {...page.surface} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} />
+      {/* `archived` rides beside `surface` for the same reason `like` does: the
+          surface's own props are what the DOCUMENT is, and this is what this
+          RENDER is — an older version, read-only. `version=N` stays in the
+          address (it is not a `$` value, and the intent strip keeps every other
+          byte), so a refresh and a copied link both show the same version. */}
+      <ArtifactSurface {...page.surface} search={search} {...(page.like ? { like: page.like } : {})} {...(page.follow !== undefined ? { follow: page.follow } : {})} {...(page.archived ? { archived: page.archived } : {})} />
     </ArtifactShell>
   );
 }

@@ -216,7 +216,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(['comment','log'].includes(command)||command==='delete'&&flags.type!=='session'&&flags.type!=='comment')for(const ref of positionals)await artifactReference(workspace,ref,selectedServer,command!=='log',selectedAddresses);
   if(command==='push'&&!account)for(const path of positionals)if(/@\d+$/.test(path))await resolveReference(path,{root:workspace.root,cwd:workspace.cwd,server:selectedServer,aliases:selectedAddresses,writable:true});
   if(command==='push'&&!account&&flags['dry-run']){const plans=await planPush(workspace,positionals,{force:!!flags.force,dryRun:true,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(plans.every(plan=>plan.mode==='missing')){emit({dry_run:true,operations:plans.map(plan=>({path:plan.file.path,status:'skipped',reason:'missing_file'}))});return 0;}}
-  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin());if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
+  if(command==='push'&&!account&&!flags['dry-run']){recoveredRequest=await finishSavedRequest(workspace,serverOrigin(),serverAddresses(await identity()));if(recoveredRequest)workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   if(command==='push'&&!account&&!flags['dry-run']&&!await readPendingRequest(workspace.home,workspace.root)){
    const result=await finishLocalPush(workspace,positionals,{force:!!flags.force,access:flags.access as 'read'|'readwrite'|undefined,policy:flags.policy as 'viewers-write'|'none'|undefined});if(result){emit(result);return 0;}
   }
@@ -265,7 +265,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
   if(command==='sessions'){
    const code=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
-   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(flags.as==='guest'?{viewer:'guest' as const}:{}),progress:stderr});
+   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(flags.as==='guest'||flags.as==='test-user'?{viewer:flags.as as 'guest'|'test-user'}:{}),progress:stderr});
    emit(result);return result.error?1:0;
   }
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}

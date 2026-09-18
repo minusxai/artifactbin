@@ -12,7 +12,7 @@ export type SessionWorkerFactory = (actor: Actor) => Promise<SessionWorker>;
 interface Session {
   owner: string;
   /** Who its PAGES browse as, fixed when the session is created; undefined is its owner. */
-  viewer: 'guest' | undefined;
+  viewer: 'guest' | 'test-user' | undefined;
   worker: Promise<SessionWorker>;
   queue: Promise<void>;
   executions: Map<string, { code: string; result: BrowserSessionResult }>;
@@ -49,8 +49,8 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
       if (!owner) return empty(input.session_id, 'AUTH_REQUIRED', 'Authenticate before using browser sessions');
       if (!idValid(input.session_id)) return empty('', 'INVALID_REQUEST', 'Invalid session ID');
       let session = sessions.get(input.session_id);
-      // Anything but exactly 'guest' is absent: the viewer a session browses as is one fixed decision.
-      const viewer = input.op === 'script' && input.viewer === 'guest' ? 'guest' : undefined;
+      // Anything but a viewer named here is absent: the viewer a session browses as is one fixed decision.
+      const viewer = input.op === 'script' && (input.viewer === 'guest' || input.viewer === 'test-user') ? input.viewer : undefined;
       if (input.op === 'script') {
         if (!idValid(input.execution_id) || typeof input.code !== 'string' || Buffer.byteLength(input.code) > SESSION_LIMITS.scriptBytes) return empty(input.session_id, 'INVALID_REQUEST', 'Invalid execution ID or script exceeds 64 KiB');
         if (!session && input.create) {
@@ -59,8 +59,11 @@ export function createBrowserSessions(factory: SessionWorkerFactory): BrowserSes
             if (ended) sessions.delete(ended[0]);
           }
           if ([...sessions.values()].filter(s => s.status === 'idle').length >= SESSION_LIMITS.sessions) return empty(input.session_id, 'CAPACITY', 'Browser session capacity reached; close an existing session');
-          // PAGES browse as the guest; ownership above stays the creator's.
-          const worker = Promise.resolve().then(() => factory(viewer === 'guest' ? ANONYMOUS : input.actor));
+          // PAGES browse as whoever the viewer names; ownership above stays the creator's.
+          // `pageActor` is the APP's decision (a throwaway second person it minted and can
+          // revoke); this service never invents an identity, it only obeys the one it is handed.
+          const pageActor = input.pageActor ?? (viewer === 'guest' ? ANONYMOUS : input.actor);
+          const worker = Promise.resolve().then(() => factory(pageActor));
           // Failure is recorded on the execution, including failures before the first script.
           void worker.catch(() => {});
           session = { owner, viewer, worker, queue: Promise.resolve(), executions: new Map(), pages: [], status: 'idle', touched: Date.now() };

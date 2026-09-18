@@ -60,3 +60,17 @@ it('never changes who an existing session browses as', async () => {
     expect(seen[0]).toMatchObject({ userId: 'usr_owner' });
   } finally { await sessions.close(); }
 });
+
+/** A second person: the app decides who the pages browse as and says so; the service only obeys it. */
+it('hands the worker the page actor the app supplied for a test-user session, and still owns it as the creator', async () => {
+  const seen: Actor[] = [];
+  const sessions = createBrowserSessions(async (actor) => { seen.push(actor); return worker(); });
+  const testUser: Actor = { credential: 'bearer', tokenId: 'tok_test', userId: 'usr_test' };
+  try {
+    await sessions.request({ actor: owner, op: 'script', session_id: 'second', execution_id: 'e1', create: true, code: 'return 1', viewer: 'test-user', pageActor: testUser });
+    await vi.waitFor(() => expect(seen).toHaveLength(1));
+    expect(seen[0]).toEqual(testUser);
+    expect((await sessions.request({ actor: { credential: 'bearer', tokenId: 'stranger' }, op: 'status', session_id: 'second' })).error?.code).toBe('SESSION_NOT_FOUND');
+    expect((await sessions.request({ actor: owner, op: 'script', session_id: 'second', execution_id: 'e2', create: false, code: 'return 2', viewer: 'guest' })).error?.code).toBe('VIEWER_CONFLICT');
+  } finally { await sessions.close(); }
+});

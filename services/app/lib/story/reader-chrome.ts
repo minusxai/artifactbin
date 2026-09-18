@@ -105,7 +105,24 @@ export interface ReaderChromeInput {
   ownerBreadcrumb?: boolean;
   /** Counts, the viewer's own state, and the doors. Absent: the rail is inert (tests, previews). */
   reactions?: ReaderReactions | null;
+  /**
+   * THIS IS AN OLDER VERSION (`?version=N` — lib/archived-version): the rail
+   * draws ONE fixed line, "Version N of M · read-only", and NONE of the
+   * actions. Like, comment and fork all act on the artifact as it is now, and
+   * an inert copy of them beside bytes that are no longer the document is worse
+   * than their absence — a reader presses comment and anchors a thread to a
+   * paragraph nobody else can see.
+   */
+  archived?: { version: number; head: number } | null;
 }
+
+/**
+ * The ONE line an archived render carries, in one place — the served
+ * document's rail and the app page's own chrome draw the same words, and a
+ * reader who follows `?version=2` from one to the other must not be told two
+ * different things about what they are looking at.
+ */
+export const archivedBanner = (version: number, head: number): string => `Version ${version} of ${head} · read-only`;
 
 /** The class the visibility policy toggles; the root is rendered with it. */
 export const READER_CHROME_HIDDEN_CLASS = 'mx-reader-chrome--hidden';
@@ -205,7 +222,10 @@ const renderForkedFrom = (forkedFrom: ReaderForkedFrom): string => {
  * the title, the provenance label, the hrefs — is HTML-escaped on the way out.
  */
 export function renderReaderChrome(input: ReaderChromeInput): string {
-  const { artifactId, title, author, signIn = null, fork = null, login = null, edit = false, reactions = null } = input;
+  const { artifactId, title, author, signIn = null, login = null, reactions = null, archived = null } = input;
+  // An archived render has no doors at all — see ReaderChromeInput.archived.
+  const fork = archived ? null : input.fork ?? null;
+  const edit = !archived && (input.edit ?? false);
   const sharingIcon = sharingIconFor({ visibility: input.visibility ?? 'private', hasInvitedUsers: input.hasInvitedUsers ?? false });
   const username = author?.username ?? null;
   const forkedFrom = author?.forkedFrom ?? null;
@@ -241,7 +261,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + '<img src="/logo-128.png" alt=""></a>'
     + '<div class="mx-reader-rail" data-mx-reader-rail>'
     + `<span data-mx-github-star class="mx-reader-github">${githubStarMarkup()}</span>`
-    + action(
+    + (archived ? '' : action(
       'like',
       reactions?.like.liked ? 'Unlike' : 'Like',
       ICON_HEART,
@@ -249,21 +269,26 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
       // The count is everyone's; empty (and so hidden) at zero. The entry
       // rewrites it when the page answers a press.
       `<span class="mx-reader-count" data-mx-reader-count="like">${reactions && reactions.like.count > 0 ? reactions.like.count : ''}</span>`,
-    )
-    + action(
+    ))
+    + (archived ? '' : action(
       'comment',
       'Comment',
       ICON_COMMENT,
       reactions ? ` data-mx-href="${escapeHtml(reactions.comment.href)}"` : '',
       `<span class="mx-reader-count" data-mx-reader-count="comment">${reactions && reactions.comment.count > 0 ? reactions.comment.count : ''}</span>`,
-    )
-    + (input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
+    ))
+    + (archived ? '' : input.panels === false ? action('fork', 'Fork artifact', ICON_FORK, input.forkBusy ? ' disabled aria-busy="true"' : '') : fork ? renderFork(fork) : '')
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + (input.share ? action('share', 'Share', `<span data-mx-visibility="${input.visibility ?? 'private'}" data-mx-sharing-icon="${sharingIcon}">${ICON(visibilityIconPaths(sharingIcon))}</span>`, '', '<span class="mx-reader-share-text">Share</span>') : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
     + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
     + '</div>'
     + byline
+    // WHICH VERSION THIS IS — fixed, never a control, and the only thing an
+    // archived render adds to the rail.
+    + (archived
+      ? `<span class="mx-reader-archived" data-mx-archived-version="${archived.version}" data-mx-archived-head="${archived.head}">${escapeHtml(archivedBanner(archived.version, archived.head))}</span>`
+      : '')
     + '<span class="mx-reader-toast" data-mx-reader-toast hidden>link copied</span>'
     + '<input class="mx-reader-copy" data-mx-reader-copy type="text" readonly tabindex="-1" aria-hidden="true">'
     + (input.panels === false ? '' : '<button type="button" class="mx-reader-scrim" data-mx-reader-scrim aria-label="Close page controls" hidden></button>'
