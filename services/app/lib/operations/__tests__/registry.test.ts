@@ -33,7 +33,7 @@ describe('the registry is curated, not generated', () => {
     expect(OPERATIONS.map((o) => o.name).sort()).toEqual([
       'annotate', 'browser_session', 'create_artifact', 'create_dataset_secret', 'delete_artifact', 'discover_dataset_source', 'edit_artifact', 'export_artifact', 'fork_artifact', 'get_artifact',
       'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'mutate_dataset', 'preview_dataset_notebook', 'query_resource', 'refresh_asset', 'restore_artifact', 'revert_artifact',
-      'set_dataset_policy', 'terminate_remote_session', 'update_artifact', 'update_metadata',
+      'set_dataset_policy', 'terminate_remote_session', 'testuser_create', 'testuser_delete', 'testuser_list', 'update_artifact', 'update_metadata',
     ]);
   });
 
@@ -54,15 +54,17 @@ describe('the registry is curated, not generated', () => {
 
   it('read/write/destructive is annotated, and the reads are the reads', () => {
     const readOnly = OPERATIONS.filter((o) => o.annotations.readOnly).map((o) => o.name).sort();
-    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'preview_dataset_notebook', 'query_resource']);
+    expect(readOnly).toEqual(['discover_dataset_source', 'export_artifact', 'get_artifact', 'get_dataset_policy', 'get_remote_session', 'get_version', 'list_artifacts', 'list_remote_sessions', 'list_versions', 'preview_dataset_notebook', 'query_resource', 'testuser_list']);
     expect(OPERATIONS.find((o) => o.name === 'delete_artifact')!.annotations.destructive).toBe(true);
   });
 
   it('every operation names its HTTP address, and its path params are input fields', () => {
     for (const op of OPERATIONS) {
       // /api/artifacts is the bearer surface; export is the one op whose HTTP
-      // twin is the document's own sub-path (a page can't return bytes).
-      expect(op.http.path, op.name).toMatch(/^\/api\/(artifacts|datasets|secrets|sessions|browser-sessions)(\/|$)|^\/a\/\{id\}\/export$/);
+      // twin is the document's own sub-path (a page can't return bytes); and
+      // /api/testusers is the throwaway-people family, which is about the
+      // CALLER rather than about any one artifact.
+      expect(op.http.path, op.name).toMatch(/^\/api\/(artifacts|datasets|secrets|sessions|browser-sessions|testusers)(\/|$)|^\/a\/\{id\}\/export$/);
       expect(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']).toContain(op.http.method);
       for (const [, param] of op.http.path.matchAll(/\{(\w+)\}/g)) {
         expect(Object.keys(op.input), `${op.name}: path param ${param}`).toContain(param);
@@ -106,11 +108,16 @@ describe('browser_session viewer', () => {
   };
   afterEach(() => setServices({ browser: previous }));
 
-  it('accepts guest and test-user, and parses a script without a viewer', () => {
+  it('accepts guest and a NAMED test user, and parses a script without a viewer', () => {
     const input = z.object(operation.input);
     expect(input.safeParse({ ...script, viewer: 'guest' }).success).toBe(true);
+    expect(input.safeParse({ ...script, viewer: { testuser: 'usr_second' } }).success).toBe(true);
     expect(input.safeParse(script).success).toBe(true);
-    for (const viewer of ['owner', 'anonymous', 'GUEST', '', true]) expect(input.safeParse({ ...script, viewer }).success, String(viewer)).toBe(false);
+    // `test-user` is RETIRED: a session names one of the test users the account
+    // already holds (testuser_create) instead of minting a person of its own.
+    for (const viewer of ['owner', 'anonymous', 'GUEST', 'test-user', '', true, {}, { testuser: 7 }]) {
+      expect(input.safeParse({ ...script, viewer }).success, JSON.stringify(viewer)).toBe(false);
+    }
   });
 
   it('passes the viewer to the session service and sends none when the caller named none', async () => {
@@ -124,24 +131,25 @@ describe('browser_session viewer', () => {
     expect(seen[0]!.actor).toMatchObject({ tokenId: 'tok_owner', userId: 'usr_owner' });
   });
 
-  it('mints a throwaway second person for a test-user session and never hands its secret back', async () => {
+  /**
+   * A session MINTS NOTHING. It names a test user the account already holds, so
+   * one that is not the caller's is refused here — before the session service
+   * is reached, and without ever confirming whether that id exists.
+   * `testusers-sessions.test.ts` is where the happy path lives, with a database.
+   */
+  it('refuses a test user that is not the caller\'s, without reaching the session service', async () => {
     const seen = record();
-    const result = await operation.run(context, { ...script, viewer: 'test-user' });
-    expect(result.status, JSON.stringify(result.body)).toBe(200);
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ viewer: 'test-user', actor: { tokenId: 'tok_owner', userId: 'usr_owner' } });
-    const page = seen[0]!.pageActor!;
-    expect(page.credential).toBe('bearer');
-    expect(page.userId).toMatch(/^usr_/);
-    expect(page.userId).not.toBe('usr_owner');
-    expect(page.tokenId).toMatch(/^tok_|^[A-Za-z0-9_-]+$/);
-    expect(JSON.stringify(result.body)).not.toContain(page.tokenId!);
+    const result = await operation.run(context, { ...script, viewer: { testuser: 'usr_someone_elses' } });
+    expect(result.status, JSON.stringify(result.body)).toBe(403);
+    expect(result.body.error).toBe('not_your_testuser');
+    expect(String(result.body.message)).toContain('testuser_create');
+    expect(seen).toHaveLength(0);
   });
 
   // runOperation hands the body to run() unparsed, so the refusal has to live in the operation itself.
   it('refuses a viewer it cannot browse as, without reaching the session service', async () => {
     const seen = record();
-    for (const viewer of ['owner', 'anonymous', 'GUEST', true]) {
+    for (const viewer of ['owner', 'anonymous', 'GUEST', 'test-user', true, {}]) {
       const reply = await operation.run(context, { ...script, viewer });
       expect(reply.status, String(viewer)).toBe(400);
       expect(String(reply.body.error), String(viewer)).toBe('invalid_viewer');

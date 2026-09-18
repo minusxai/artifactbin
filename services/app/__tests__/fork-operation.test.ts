@@ -70,7 +70,7 @@ describe('fork_artifact on the operations registry', () => {
     expect(op!.http).toEqual({ method: 'POST', path: '/api/artifacts/{id}/fork' });
     expect(op!.annotations.readOnly ?? false).toBe(false);
     expect(op!.annotations.destructive ?? false).toBe(false);
-    expect(Object.keys(op!.input).sort()).toEqual(['dry_run', 'id', 'parent_id', 'title', 'visibility']);
+    expect(Object.keys(op!.input).sort()).toEqual(['as', 'dry_run', 'id', 'parent_id', 'title', 'visibility']);
     const codes = op!.errors.map((e) => e.code);
     expect(codes).toContain('not_found');
     expect(codes).toContain('quota_exceeded');

@@ -4,6 +4,7 @@ import {previewFiles,type PreviewOptions} from './preview-options';
 import {serveTeam} from './host-runtime';
 import type {ServeOptions} from './serve-config';
 import { browserSessionCommand } from './browser-sessions';
+import {testUserCommand,viewerChoice} from './testuser';
 import {scheduleBackgroundUpdate} from './background-update';
 import {compareVersions,validVersion} from './version-order';
 import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
@@ -205,7 +206,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const selectedServer=serverOrigin()??declaredServer;
   // Resolved once here, and only when a URL argument makes it necessary; the remote boundary below resolves it anyway.
   const selectedAddresses=await addresses();
-  const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses});
+  const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,
+   ...(typeof flags.as==='string'?{as:{testuser:flags.as}}:{})});
   const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
   if(command==='open'){
@@ -265,9 +267,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
   if(command==='sessions'){
    const code=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
-   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(flags.as==='guest'||flags.as==='test-user'?{viewer:flags.as as 'guest'|'test-user'}:{}),progress:stderr});
+   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(typeof flags.as==='string'?{viewer:viewerChoice(flags.as)}:{}),progress:stderr});
    emit(result);return result.error?1:0;
   }
+  if(command==='testuser'){emit(await testUserCommand(client,positionals[0],positionals[1],{all:!!flags.all}));return 0;}
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
   if(command==='export'){await exportResources(workspace,positionals,{...exportOptions(),client});return 0;}
@@ -377,7 +380,7 @@ export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed.
  */
 function publishedNext(verified:Awaited<ReturnType<typeof verifiedSummary>>):string{
  const writes=[...new Set((verified??[]).flatMap(file=>file.writes??[]))];
- return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each once in a live session, as yourself and with --as guest (afbin help live-sessions), fix and push again before handing it over.`:PUBLISHED_NEXT;
+ return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each once in a live session — as yourself, --as guest, and as a test user on a fork of this page (afbin help live-sessions, afbin help apps) — fix and push again before handing it over.`:PUBLISHED_NEXT;
 }
 /** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
 async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>|undefined>{

@@ -67,7 +67,7 @@ it('hands the worker the page actor the app supplied for a test-user session, an
   const sessions = createBrowserSessions(async (actor) => { seen.push(actor); return worker(); });
   const testUser: Actor = { credential: 'bearer', tokenId: 'tok_test', userId: 'usr_test' };
   try {
-    await sessions.request({ actor: owner, op: 'script', session_id: 'second', execution_id: 'e1', create: true, code: 'return 1', viewer: 'test-user', pageActor: testUser });
+    await sessions.request({ actor: owner, op: 'script', session_id: 'second', execution_id: 'e1', create: true, code: 'return 1', viewer: { testuser: 'usr_test' }, pageActor: testUser });
     await vi.waitFor(() => expect(seen).toHaveLength(1));
     expect(seen[0]).toEqual(testUser);
     expect((await sessions.request({ actor: { credential: 'bearer', tokenId: 'stranger' }, op: 'status', session_id: 'second' })).error?.code).toBe('SESSION_NOT_FOUND');

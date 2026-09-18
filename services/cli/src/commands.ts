@@ -20,7 +20,8 @@ export const flags: Record<string,Flag> = {
  'secret-env':{value:'NAME',description:'Read a secret value from this environment variable; it is never written to YAML, journals or output.'},
  page:{value:'N',description:'One slide or page only; without it the image is the whole document, every slide stacked.'},
  execution:{value:'ID',description:'Read a browser session execution receipt without replaying the script.'},
- as:{value:'VIEWER',description:'Browse a new session as this viewer: guest browses signed out, the way a reader with the link sees the page; test-user browses as a fresh account that exists only for this session, so you can be the second person on a page you have already joined. Fixed names ignore case; a session\'s viewer is chosen when it is created.'},
+ as:{value:'WHO',description:'Act as somebody else: a test user id from afbin testuser new, or guest on a session. fork --as <testuser-id> gives the copy to that test user, inside its sandbox; sessions script new --as guest|<testuser-id> chooses who a NEW session\'s pages browse as, once, when it is created. Omit --as and everything runs as you.'},
+ all:{description:'Erase every test user this account holds; testuser delete only.'},
  session:{value:'REF',description:'Attach to an existing authorized remote session instead of launching a command.'},
  output:{short:'o',value:'PATH',description:'Write resulting content to this file or directory.'},
  format:{value:'FORMAT',description:'Select a supported content representation; fixed format names ignore case.'},
@@ -63,7 +64,7 @@ export const commands: Command[] = [
  {name:'preview',usage:'<path> [<path> ...]',description:'Preview and edit local JSX files without publishing. Directories select their JSX files.',min:1,max:Infinity,flags:['port','share'],examples:['afbin preview report.jsx appendix.jsx','afbin preview . --share']},
  {name:'query',usage:'<ref> [<ref> ...]',description:'Read dataset rows or execute a declared query; local files run locally.',min:1,max:Infinity,flags:['input','name','param','limit','cursor','remote','write','dry-run','output','format'],examples:['afbin query sales.csv','afbin query sales.csv --input report.sql --param minimum=10']},
  {name:'pull',usage:'[<ref> ...]',description:'Retrieve artifacts or account resources and reconcile tracked files.',min:0,max:Infinity,flags:['type','output','format','dry-run','force'],examples:['afbin pull abc123 --output report.jsx','afbin pull report.jsx@2','afbin pull --type profile']},
- {name:'fork',usage:'<ref> [<ref> ...]',description:'Create a distinct private local draft from a resource; publish it later with push.',min:1,max:Infinity,flags:['type','output','dry-run'],examples:['afbin fork abc123 --output copy.jsx','afbin fork report.jsx --dry-run']},
+ {name:'fork',usage:'<ref> [<ref> ...]',description:'Create a distinct private local draft from a resource; publish it later with push. --as gives the copy to a test user instead.',min:1,max:Infinity,flags:['type','output','as','dry-run'],examples:['afbin fork abc123 --output copy.jsx','afbin fork report.jsx --dry-run','afbin fork abc123 --as tu_9fA2b --json']},
  {name:'export',usage:'<ref> [<ref> ...]',description:'Export one image of the whole document, every slide stacked; --page picks one slide; data and original bytes too.',min:1,max:Infinity,flags:['type','format','output','name','page','og','refresh','force','dry-run'],examples:['afbin export abc123 --output report.png','afbin export sales.csv --format json --output -']},
  {name:'push',usage:'[<ref> ...]',description:'Create, update or upload; no paths pushes changed tracked files. Markdown converts once to adjacent JSX.',min:0,max:Infinity,flags:['type','access','policy','restore','refresh','secret-env','dry-run','force'],examples:['afbin push report.jsx','afbin push tasks.csv --type dataset --access readwrite','afbin push --dry-run','afbin push --restore abc123']},
  {name:'validate',usage:'[path ...]',description:'Check local files without network access; --remote adds read-only server checks.',min:0,max:Infinity,flags:['fix','remote'],examples:['afbin validate report.jsx','afbin validate --fix report.jsx']},
@@ -81,9 +82,29 @@ export const commands: Command[] = [
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in.',min:0,max:0,flags:['harness','service'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
- {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions script new --as test-user --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
+ {name:'sessions',usage:'script new|<id> | status <id> | close <id>',description:'Run async Playwright scripts in a persistent isolated browser session. Read afbin help live-sessions for context, pages and output.image.',min:2,max:2,flags:['input','execution','as'],examples:['afbin sessions script new --input actions.js --json','afbin sessions script new --as guest --input actions.js --json','afbin sessions script new --as tu_9fA2b --input actions.js --json','afbin sessions status session_id --execution execution_id --json','afbin sessions close session_id --json']},
+ {name:'testuser',usage:'new | list | delete <id> | delete --all',description:'Mint, list and erase throwaway test users: the other person on a page you are verifying. Deleting one erases everything it owns.',min:1,max:2,flags:['all'],examples:['afbin testuser new --json','afbin testuser list --json','afbin testuser delete tu_9fA2b --json','afbin testuser delete --all --json']},
  {name:'remote',usage:'[command [args ...]]',description:'Run a local terminal with browser access, or attach to an existing session.',min:0,max:Infinity,flags:['name','session'],examples:['afbin remote pi','afbin remote --name Backend codex','afbin remote --session rs_123']},
 ];
+/**
+ * `--as` NAMES A PERSON, NEVER A KIND. It used to take `test-user` and the server minted a fresh
+ * throwaway account per session — nothing an agent could list, reuse across two sessions, or
+ * erase. Now it takes the id of a test user this account minted, so the id is DATA: normalized
+ * only for the one fixed name (`guest`), and otherwise carried with its exact spelling.
+ */
+const VIEWER_KINDS=['testuser','test-user','test_user','testusers'];
+const VIEWER_FIX='Mint one with afbin testuser new and pass the id it prints (afbin testuser list shows the ones you hold); on a session --as guest browses signed out instead.';
+export function viewerArgument(value:unknown,command:string):string {
+ if(typeof value!=='string')throw new CliError('invalid_viewer','--as names who to act as.',VIEWER_FIX);
+ const normalized=value.replace(/[A-Z]/g,character=>character.toLowerCase());
+ if(VIEWER_KINDS.includes(normalized))throw new CliError('invalid_viewer',`--as takes a test user id, not the word ${value}.`,VIEWER_FIX);
+ if(normalized==='guest'){
+  if(command!=='sessions')throw new CliError('invalid_viewer',`afbin ${command} --as guest is meaningless: a guest owns nothing, so the copy would have no owner. A test user does.`,'Mint one with afbin testuser new, then afbin fork <ref> --as <testuser-id>.');
+  return 'guest';
+ }
+ if(!/^[A-Za-z0-9_-]{1,128}$/.test(value))throw new CliError('invalid_viewer',`--as: ${value} is not a test user id.`,VIEWER_FIX);
+ return value;
+}
 export interface ParsedCommand {command:string;positionals:string[];flags:Record<string,string|boolean|string[]>}
 export function parseCommand(argv:string[]):ParsedCommand {
  const result:ParsedCommand={command:'',positionals:[],flags:{}};
@@ -142,9 +163,21 @@ export function parseCommand(argv:string[]):ParsedCommand {
   if(!['script','status','close'].includes(op)|| (target==='new'&&op!=='script') || (op==='script'&&!f.input) || (op!=='script'&&f.input) || (op!=='status'&&f.execution))throw new CliError('invalid_arguments','Use sessions script new|session_id --input actions.js, status session_id [--execution id], or close session_id.');
   // Who a session browses as is one decision, made when it is created; nothing later changes it.
   if(f.as!==undefined){
-   f.as=enumArgument(f.as,['guest','test-user'],'as');
-   if(target!=='new')throw new CliError('invalid_viewer',`--as chooses who a NEW session browses as; session ${target} already has the viewer it was created with.`,'Run afbin sessions script new --as guest --input actions.js for a signed-out session, or --as test-user to be a second person, or drop --as to continue this one.');
+   f.as=viewerArgument(f.as,'sessions');
+   if(target!=='new')throw new CliError('invalid_viewer',`--as chooses who a NEW session browses as; session ${target} already has the viewer it was created with.`,'Run afbin sessions script new --as guest --input actions.js for a signed-out session, or --as <testuser-id> to be a second person, or drop --as to continue this one.');
   }
+ }
+ if(command.name==='fork'&&f.as!==undefined){
+  f.as=viewerArgument(f.as,'fork');
+  // A fork --as is the TEST USER's copy, on the server: this workspace is tracked against your own
+  // account, and erasing the test user erases the copy, so nothing is written or tracked here.
+  if(f.output!==undefined)throw new CliError('unsupported_output','A fork --as <testuser-id> is that test user\'s own published copy, not a local draft.','Drop --output; fork without --as when you want an editable local file.');
+ }
+ if(command.name==='testuser'){
+  const [op,target]=result.positionals;
+  if(!['new','list','delete'].includes(op))throw new CliError('invalid_arguments','Use testuser new, testuser list, testuser delete <id>, or testuser delete --all.');
+  if(op!=='delete'&&(target!==undefined||f.all))throw new CliError('invalid_arguments',`testuser ${op} takes no target.`,'Name a test user only when deleting one: afbin testuser delete <id>.');
+  if(op==='delete'&&(f.all?target!==undefined:target===undefined))throw new CliError('invalid_arguments','testuser delete takes one id, or --all for every test user this account holds.','Run afbin testuser list for the ids you hold.');
  }
  if(command.name==='remote'&&f.session!==undefined&&(result.positionals.length||f.name!==undefined))throw new CliError('invalid_arguments','--session attaches to an existing session; omit the command and --name.');
  if(command.name==='delete'&&f.in!==undefined&&f.type!=='comment')throw new CliError('invalid_arguments','--in identifies the containing artifact for --type comment only.');

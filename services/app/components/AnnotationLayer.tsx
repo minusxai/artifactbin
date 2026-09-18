@@ -40,6 +40,8 @@ import {readAnnotationPages} from '@/lib/annotation-pages';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
+import { loginHref } from '@/lib/login-href';
+import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import MarkdownField from '@/components/MarkdownField';
 import MarkdownLite from '@/components/MarkdownLite';
 import MobileSheet, { useIsPhoneViewport } from '@/components/MobileSheet';
@@ -1179,6 +1181,13 @@ export default function AnnotationLayer({
           ...(selection.range ? { range: selection.range } : {}),
         }),
       });
+      // A guest may READ a thread and may not start one, and the door says so
+      // by name: the login page, and back to this document with the ask — the
+      // same move the heart and the fork button make (lib/story/sign-in-required).
+      if (await refusedForSignIn(res)) {
+        window.location.assign(loginHref(window.location, 'comment'));
+        return;
+      }
       if (!res.ok) {
         setFailure(await annotationFailure(res));
         return;

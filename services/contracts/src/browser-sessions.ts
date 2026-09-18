@@ -1,5 +1,6 @@
 import type { Actor } from './actor';
 import type { MxError } from './mx';
+import type { ViewerChoice } from './testusers';
 
 /** Forces revalidation of the captured session credential on every app request. */
 export const BROWSER_SESSION_HEADER = 'x-mx-browser-session';
@@ -17,8 +18,8 @@ export interface BrowserSessionResult {
 }
 /** `pageActor`: who the PAGES browse as when the app decided it (a throwaway second person); never the owner's credential. */
 export type BrowserSessionRequest = { actor: Actor; pageActor?: Actor } & (
-  /** `viewer: 'guest'` on the creating request makes the session browse signed out; who a session browses as never changes. */
-  | { op: 'script'; session_id: string; execution_id: string; create: boolean; code: string; viewer?: 'guest' | 'test-user' }
+  /** `viewer` on the creating request: 'guest' browses signed out, `{testuser}` browses as one of the owner's test users; who a session browses as never changes. */
+  | { op: 'script'; session_id: string; execution_id: string; create: boolean; code: string; viewer?: ViewerChoice }
   | { op: 'status'; session_id: string; execution_id?: string }
   | { op: 'close'; session_id: string }
 );

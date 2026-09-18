@@ -123,12 +123,18 @@ describe('creating (browser door, owner only)', () => {
     expect((await db.query<{source:string}>('SELECT source FROM artifacts WHERE id=$1',[doc.id])).rows[0].source).toBe('<p style="color:red">pre-existing</p>');
   });
 
-  it('a stranger\'s cookie gets the uniform 404; a cross-site owner cookie is refused', async () => {
+  it('a stranger\'s cookie is sent to sign in; a cross-site owner cookie is refused', async () => {
     const { doc, cookie } = await publish();
     const stranger = await mintToken('other');
     const strangerCookie = await agentCookie([stranger.id]);
+    // The document is READABLE to this stranger (it holds the link), so the
+    // honest answer is the door rather than the uniform 404: commenting is an
+    // act attributed to a person, and there is one two inches away
+    // (lib/capabilities). An id this credential could NOT read still answers
+    // 404 — the gate speaks only to someone the artifact is visible to.
     const foreign = await annotate(doc.id, strangerCookie, { path: '1', edit_id: doc.edit_id, body: 'x' });
-    expect(foreign.status).toBe(404);
+    expect(foreign.status).toBe(401);
+    expect((await foreign.json()).error).toBe('sign_in_required');
     const crossSite = await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'x' }, 'https://evil.example');
     expect(crossSite.status).toBe(403);
   });
@@ -264,7 +270,10 @@ describe('reply / resolve — the agent\'s one mutation', () => {
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: stranger.token, json: { resolve: true } }),
       params({ id: doc.id, annId: a.id }),
     );
-    expect(foreign.status).toBe(404);
+    // A readable document answers the sign-in door; an unreadable one is still
+    // the uniform 404 (lib/capabilities capabilityGuard).
+    expect(foreign.status).toBe(401);
+    expect((await foreign.json()).error).toBe('sign_in_required');
 
     const empty = await actOnAnnotationRoute(
       request(`/api/artifacts/${doc.id}/annotations/${a.id}`, { method: 'POST', token: t.token, json: {} }),

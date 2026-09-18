@@ -6,6 +6,7 @@ import { getArtifactFor, getSharingFor, updateSharingFor, type SharingPatch } fr
 import { parseAccessValue, parseLinkRoleValue, parseShareEntries, parseVisibilityValue } from '@/lib/artifact-wire';
 import { browserActor } from '@/lib/auth';
 import { json, readJson, unauthorized } from '@/lib/http';
+import { capabilityGuard } from '@/lib/capabilities';
 import { actorForArtifacts } from '@/lib/viewer';
 import { catalogOf } from '@/lib/datasets/catalog';
 
@@ -40,6 +41,11 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   // code ends up with two different refusals.
   const current = await getArtifactFor(scoped, id);
   if (!current) return json({ error: 'not_found' }, 404);
+  // Sharing is how an artifact reaches a PERSON by address, so it is one of the
+  // acts a guest is sent to sign in for; a test user shares only inside its own
+  // sandbox, where the addresses it could name are its own (lib/capabilities).
+  const refusal = await capabilityGuard(scoped, 'share', id);
+  if (refusal) return refusal;
 
   const patch: SharingPatch = {};
   const visibility = parseVisibilityValue(body.visibility, !!current.user_id);

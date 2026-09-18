@@ -16,7 +16,25 @@ const USERS: Table = {
   columns: [
     { name: 'id', type: 'TEXT', notNull: true }, // 'usr_' + base36
     { name: 'email', type: 'TEXT', relaxNotNull: true },
-    { name: 'is_guest', type: 'BOOLEAN', notNull: true, default: 'false' },
+    /*
+     * THE KIND. One column answers what a user IS, and every permission
+     * decision reads it through `lib/capabilities` rather than re-deriving it:
+     *   'account'  — a signed-in person;
+     *   'guest'    — an anonymous browser that saved something, claimable at login;
+     *   'testuser' — a throwaway second person an account minted (parent_user_id),
+     *                erased with everything it owns.
+     * The default is 'account' so the additive ALTER is legal on a non-empty
+     * table; boot backfills the guests from `is_guest` (lib/user-kinds).
+     */
+    { name: 'kind', type: 'TEXT', notNull: true, default: "'account'" },
+    /** The ACCOUNT that minted a test user; NULL for everyone else. */
+    { name: 'parent_user_id', type: 'TEXT' },
+    /** A test user's death date; NULL for an account or a guest, which do not expire. */
+    { name: 'expires_at', type: 'TIMESTAMPTZ' },
+    // Retired: `kind` says it, and it says more (a test user is not a guest).
+    // Existing rows keep the flag; boot reads it ONCE to backfill `kind` and
+    // nothing reads it afterwards.
+    { name: 'is_guest', type: 'BOOLEAN', default: 'false', retired: true },
     // Verified guest adoption preserves the identity pinned by existing CLI workspaces.
     { name: 'merged_into_user_id', type: 'TEXT' },
     { name: 'name', type: 'TEXT' },
@@ -36,6 +54,9 @@ const USERS: Table = {
   indexes: [
     { name: 'idx_users_email', columns: ['email'], unique: true },
     { name: 'idx_users_username', columns: ['username'], unique: true },
+    // "How many live test users does this account hold?" and "erase them all"
+    // are both this index; the cap is read on every mint.
+    { name: 'idx_users_parent', columns: ['parent_user_id'] },
   ],
 };
 
@@ -596,14 +617,14 @@ const ARTIFACT_ID_REGISTRY: Table = {
  indexes:[{name:'idx_reservation_batch_ordinal',columns:['owner','batch','ordinal'],unique:true}],
 };
 /**
- * The LIVE throwaway second people: one row per browser session created with
- * `viewer: 'test-user'`. The row IS the lease — closing the session or sweeping
- * a lost one revokes the token and deletes the row, so "does this owner already
- * have a test user?" is a row count and a token can never outlive its record.
- * The guest `users` row it names is left behind like any unclaimed guest's.
+ * RETIRED. A test user is a `users` row (`kind='testuser'`, `parent_user_id`,
+ * `expires_at`) with a life of its own, not a lease on a browser session: it is
+ * minted by `lib/testusers`, named by `viewer: {testuser}`, and erased with
+ * everything it owns. Nothing reads or writes this table any more; the rows an
+ * older build left behind are kept so a database rolled back to it still works.
  *
- * Keyed by (session_id, owner) because a session id is the CALLER's choice: two
- * owners naming the same id must not collide on this table.
+ * It was keyed by (session_id, owner) because a session id is the CALLER's
+ * choice: two owners naming the same id must not collide on this table.
  */
 const BROWSER_TEST_USERS: Table = {
  name:'browser_test_users',

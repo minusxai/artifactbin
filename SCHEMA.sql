@@ -144,7 +144,10 @@ ALTER TABLE app.dataset_usage ADD COLUMN IF NOT EXISTS calls INTEGER NOT NULL DE
 CREATE TABLE IF NOT EXISTS app.users (
   id TEXT NOT NULL,
   email TEXT,
-  is_guest BOOLEAN NOT NULL DEFAULT false,
+  kind TEXT NOT NULL DEFAULT 'account',
+  parent_user_id TEXT,
+  expires_at TIMESTAMPTZ,
+  is_guest BOOLEAN DEFAULT false,
   merged_into_user_id TEXT,
   name TEXT,
   username TEXT,
@@ -157,7 +160,13 @@ ALTER TABLE app.users ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS email TEXT;
 
-ALTER TABLE app.users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'account';
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS parent_user_id TEXT;
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN DEFAULT false;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS merged_into_user_id TEXT;
 
@@ -171,11 +180,15 @@ ALTER TABLE app.users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL D
 
 ALTER TABLE app.users ALTER COLUMN email DROP NOT NULL;
 
+ALTER TABLE app.users ALTER COLUMN is_guest DROP NOT NULL;
+
 ALTER TABLE app.users ALTER COLUMN password_hash DROP NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON app.users (email);
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON app.users (username);
+
+CREATE INDEX IF NOT EXISTS idx_users_parent ON app.users (parent_user_id);
 
 CREATE TABLE IF NOT EXISTS app.tokens (
   id TEXT NOT NULL,

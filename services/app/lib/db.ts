@@ -290,6 +290,7 @@ async function createDb(): Promise<Db> {
     pg.types.setTypeParser(TIMESTAMP_OID, (v: string) => toIso(v.replace(' ', 'T') + 'Z'));
     const db = new PostgresDb(new pg.Pool({ connectionString: target.url }));
     await db.initializeSchema();
+    await applyBackfills(db);
     return db;
   }
 
@@ -307,7 +308,24 @@ async function createDb(): Promise<Db> {
   const raw = target.dataDir ? new PGlite(target.dataDir, { parsers }) : new PGlite({ parsers });
   const db = new PgliteDb(raw as unknown as ConstructorParameters<typeof PgliteDb>[0]);
   await db.initializeSchema();
+  await applyBackfills(db);
   return db;
+}
+
+/**
+ * The DATA half of the boot migration, beside the DDL half: statements that
+ * move existing rows onto a new shape, idempotent, run on every start.
+ *
+ * `lib/testusers` is reached by a DYNAMIC import, and it is the one exception
+ * to top-level imports in this file: that module reads the schema and mints
+ * tokens, both of which reach the database, so importing it at the top would
+ * close a cycle through the module that is being constructed here. The open
+ * adapter is handed in for the same reason — `getDb()` would wait on the
+ * promise this very call resolves.
+ */
+async function applyBackfills(db: Db): Promise<void> {
+  const { backfillUserKinds } = await import('./testusers');
+  await backfillUserKinds(db);
 }
 
 /**

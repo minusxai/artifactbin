@@ -18,7 +18,7 @@ export interface GuestOwnerOptions {
 export async function createGuestOwner(options: GuestOwnerOptions = {}): Promise<{ userId: string; tokenId: string; cookie: string }> {
   const userId = 'usr_' + generateInternalId();
   const tokenId = await (await getDb()).transaction(async tx => {
-    await tx.query('INSERT INTO users (id, email, is_guest, name) VALUES ($1, NULL, true, $2)', [userId, options.name ?? null]);
+    await tx.query("INSERT INTO users (id, email, kind, name) VALUES ($1, NULL, 'guest', $2)", [userId, options.name ?? null]);
     return (await mintToken(options.tokenName ?? 'guest-browser', userId, tx, { expiresInMs: options.expiresInMs ?? MAX_TOKEN_TTL_MS })).id;
   });
   return { userId, tokenId, cookie: agentSessionSetCookie(await encodeAgentSession({ tokenIds: [tokenId] })) };
@@ -29,9 +29,11 @@ export async function createGuestOwner(options: GuestOwnerOptions = {}): Promise
 export async function mergeGuestUsers(userId: string, heldTokenIds: string[]): Promise<void> {
   if (!heldTokenIds.length) return;
   await (await getDb()).transaction(async tx => {
-    const account = await tx.query('SELECT 1 FROM users WHERE id = $1 AND is_guest = false AND email IS NOT NULL', [userId]);
+    const account = await tx.query("SELECT 1 FROM users WHERE id = $1 AND kind = 'account' AND email IS NOT NULL", [userId]);
     if (!account.rows.length) return;
-    const guests = await tx.query<{ id: string }>(`SELECT users.id FROM users WHERE is_guest = true AND EXISTS
+    // GUESTS ONLY. A test user is not claimable by logging in — it is erased,
+    // not adopted — so the merge names the kind rather than "not an account".
+    const guests = await tx.query<{ id: string }>(`SELECT users.id FROM users WHERE kind = 'guest' AND EXISTS
       (SELECT 1 FROM tokens WHERE tokens.user_id = users.id AND tokens.id = ANY($1::text[]) AND ${LIVE_TOKEN_SQL}) FOR UPDATE`, [heldTokenIds]);
     for (const guest of guests.rows) {
       await tx.query('UPDATE artifacts SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
@@ -49,6 +51,6 @@ export async function mergeGuestUsers(userId: string, heldTokenIds: string[]): P
 export async function matchesWorkspaceAccount(expected: string, current: string): Promise<boolean> {
   if (expected === current) return true;
   const result = await (await getDb()).query(
-    'SELECT 1 FROM users WHERE id = $1 AND is_guest = true AND merged_into_user_id = $2', [expected, current]);
+    "SELECT 1 FROM users WHERE id = $1 AND kind = 'guest' AND merged_into_user_id = $2", [expected, current]);
   return result.rows.length > 0;
 }

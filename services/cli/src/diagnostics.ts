@@ -51,6 +51,18 @@ export const diagnosticCatalog:Record<string,{meaning:string;fix:string}>={
  dataset_error:{meaning:'The dataset itself could not be published, refreshed or restored: rows or columns the tier rejects, an unreadable stored table, or a connection the server could not use.',fix:'The detail names the fault. Correct the rows, columns or connection in the source file and push again; afbin validate checks the local definition first and afbin help data shows the Dataset and Table forms.'},
  version_not_writable:{meaning:'Historical selectors are read-only.',fix:'Use @version with pull, diff or log. To restore old content, pull that version into the tracked file and push the file without a suffix.'},
  invalid_reference:{meaning:'The value is not an artifact reference.',fix:'Use <url|id|path>[@version] at the command line, ref:<id> in published markup, and $query for result bindings.'},
+ /*
+  * THE SANDBOX REFUSALS. A test user is a full user toward artifacts test users own and exactly a
+  * guest toward everything else, so an agent verifying an app meets these holding nothing but this
+  * CLI. `sandbox_only` names the one door into the sandbox, because the thing an agent otherwise
+  * reaches for — pressing Join on the real page as a test user — is what can never work.
+  */
+ testuser_limit:{meaning:'This account already holds as many live test users as it may at once.',fix:'Erase one you are finished with: afbin testuser list shows them, then delete one with afbin testuser delete <id>, or afbin testuser delete --all. Mint the next with afbin testuser new.'},
+ testuser_expired:{meaning:'The named test user is past its 24-hour life; the sweep erases an expired test user and everything it owned.',fix:'Mint another with afbin testuser new, give it the page again with afbin fork <id> --as <testuser>, and rerun the session against that copy.'},
+ not_your_testuser:{meaning:'That test user belongs to another account or has already been erased; a test user is only ever its own account\'s.',fix:'Run afbin testuser list for the ids this account holds, and afbin testuser new if there is none.'},
+ testuser_requires_account:{meaning:'Only a signed-in account mints test users: a guest or a test user has no account to own the sandbox.',fix:'Run afbin auth to sign in as yourself, then afbin testuser new.'},
+ sandbox_only:{meaning:'A test user may act on artifacts test users own and on other test users, and is a guest everywhere else: on an account\'s artifact it reads what the link grants and nothing more — no $_me write, like, follow, comment or fork.',fix:'Give the test user its own copy to act on: afbin fork <id> --as <testuser>, then point the session at that copy. Nothing a test user does reaches the original.'},
+ sign_in_required:{meaning:'The page ran a <Mutation> binding $_me and the reader is signed out, so there is no account to record in the row.',fix:'Sign in, or verify with a test user: afbin testuser new, then afbin fork <id> --as <testuser> and browse the copy with afbin sessions script new --as <testuser>.'},
  invalid_markup:{meaning:'Static JSX does not satisfy the local authoring grammar.',fix:'Run afbin help markup and correct the indicated source. afbin validate --fix applies mechanical formatting only.'},
  invalid_dataset:{meaning:'A local dataset is not supported tabular data.',fix:'Use CSV or a JSON array of row objects. Use afbin help data for Query and Mutation examples.'},
  unsupported_file_type:{meaning:'This local format cannot be published through native push.',fix:'Use a .jsx document, CSV/JSON rows, or an allowed media/file format. See afbin help publishing-datasets.'},

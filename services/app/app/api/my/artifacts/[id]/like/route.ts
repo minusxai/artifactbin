@@ -22,7 +22,8 @@
  * missing one are the same 404, so the door never confirms that a private id
  * exists.
  */
-import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
+import { canReadArtifact, getArtifactById, type ArtifactRow } from '@/lib/artifacts';
+import { can, capabilityRefusal, type CapabilityActor } from '@/lib/capabilities';
 import { refusesCrossSite } from '@/lib/auth';
 import { json, unauthorized } from '@/lib/http';
 import { count, has, link, unlink } from '@/lib/relations';
@@ -31,20 +32,28 @@ import { sessionActor } from '@/lib/viewer';
 type Ctx = { params: Promise<{ id: string }> };
 
 /** Who is asking about which readable artifact — or the Response that refuses them. */
-async function opened(request: Request, ctx: Ctx): Promise<{ id: string; userId: string | null } | Response> {
+async function opened(request: Request, ctx: Ctx): Promise<{ artifact: ArtifactRow; actor: CapabilityActor } | Response> {
   const { id } = await ctx.params;
   const actor = await sessionActor(request);
   if (refusesCrossSite(request, actor)) return json({ error: 'forbidden' }, 403);
   const artifact = await getArtifactById(id);
   if (!artifact || !(await canReadArtifact(artifact, actor.viewer))) return json({ error: 'not_found' }, 404);
-  return { id, userId: actor.viewer?.userId ?? null };
+  return { artifact, actor: { userId: actor.viewer?.userId ?? null, tokenId: actor.tokenId } };
 }
 
-/** The same door, for the two verbs that CHANGE something: an account is required. */
+/**
+ * The same door, for the two verbs that CHANGE something.
+ *
+ * `can(…, 'like', …)` rather than "is there a userId": a GUEST has one and may
+ * not like anything (it is sent to sign in), and a TEST USER may like only
+ * inside its own sandbox. One table decides that, for every door
+ * (lib/capabilities).
+ */
 async function acting(request: Request, ctx: Ctx): Promise<{ id: string; userId: string } | Response> {
   const opening = await opened(request, ctx);
   if (opening instanceof Response) return opening;
-  return opening.userId ? { id: opening.id, userId: opening.userId } : unauthorized(request);
+  if (!(await can(opening.actor, 'like', opening.artifact))) return capabilityRefusal(opening.actor, opening.artifact.id);
+  return opening.actor.userId ? { id: opening.artifact.id, userId: opening.actor.userId } : unauthorized(request);
 }
 
 /** The state of the button after whatever just happened. */
@@ -54,7 +63,7 @@ async function state(id: string, userId: string | null): Promise<Response> {
 
 export async function GET(request: Request, ctx: Ctx): Promise<Response> {
   const opening = await opened(request, ctx);
-  return opening instanceof Response ? opening : state(opening.id, opening.userId);
+  return opening instanceof Response ? opening : state(opening.artifact.id, opening.actor.userId);
 }
 
 export async function POST(request: Request, ctx: Ctx): Promise<Response> {

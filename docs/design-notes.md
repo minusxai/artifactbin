@@ -27,6 +27,17 @@ The app shell is Vite/React (`web/`), served by `server/app.ts`; there is no Nex
 `web/NavigationBoundary.tsx` coordinates navigation with pending edits. Reader documents use the
 shared story runtime for SSR and hydration. Author scripts do not run in the app's origin.
 
+### Settings vs constants
+
+A per-deployment SETTING is an environment variable, namespaced `MODULE__NAME`, and it is read in
+exactly one place: `lib/config.ts` for the app, and each other service's own audited config/env
+module (CLI scripts and eval harnesses have their own boundaries). A COMPILE-TIME CONSTANT that the
+CLI and the app must agree on is not a setting: it lives in `services/contracts` — `SESSION_LIMITS`,
+`TESTUSER_LIMITS` — so one number is shipped in the binary, the server and the teaching at once.
+Nothing else reads `process.env`, and nothing hard-codes a limit beside a second copy of it: a
+limit an operator can change is a setting in the owning config module, and a limit a client must
+predict is a contract constant.
+
 ## Persistence and access
 
 `lib/db.ts` owns the app database adapter. PGLite queries are serialized because it has one connection;

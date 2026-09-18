@@ -7,6 +7,12 @@ import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
 import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
 import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
+import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/user-kinds';
+// A CYCLE, deliberately: the capability table reads `effectiveRole` from here
+// and this file asks it who may act. Both sides use the other only at call
+// time, and the alternative — a second place that decides what a KIND may do —
+// is the thing lib/capabilities exists to prevent.
+import { can, refusalFor, type CapabilityActor, type CapabilityRefusal } from '@/lib/capabilities';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -219,7 +225,11 @@ export async function roleWithoutLink(
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
-  if (await isGuestActor(actor)) return 'none';
+  // A NAMED share can never reach a guest or a test user: neither has an email
+  // for an invitation to be addressed to, and neither is the kind of identity
+  // an account invites. They reach a stranger's document through the LINK or
+  // not at all (lib/user-kinds).
+  if (await isLinkOnlyActor(actor.userId)) return 'none';
   if (row.format === 'markup' && hasDocumentEditorAccess(actor)) return 'editor';
   return namedRoleFor(row, actor);
 }
@@ -244,13 +254,23 @@ export async function effectiveRole(
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
-  const byLink = actor.userId && !await isGuestActor(actor) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
+  const byLink = actor.userId && await reachesAsAccount(row, actor) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
   return maxRole(byLink, held);
 }
 
-async function isGuestActor(actor: RoleActor): Promise<boolean> {
-  if (!actor.userId) return false;
-  return (await (await getDb()).query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [actor.userId])).rows.length > 0;
+/**
+ * Does the LINK grant this actor its full role, or only the anonymous ceiling?
+ *
+ * An ACCOUNT: yes. A guest: never — holding a URL is not an account-shaped act.
+ * A TEST USER: only inside the sandbox, toward an artifact another test user
+ * owns, which is what makes it a full user in there and a guest out here
+ * (lib/user-kinds, the same rule the SQL scopes read).
+ */
+async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: RoleActor): Promise<boolean> {
+  const kind = await userKindOf(actor.userId);
+  if (kind === null || kind === 'account') return true;
+  if (kind !== 'testuser') return false;
+  return await userKindOf(row.user_id) === 'testuser';
 }
 
 /**
@@ -468,9 +488,21 @@ async function insertArtifact(
   if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
   const catalog=catalogOf(input);
   if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
-  const guestDefault = input.visibility === undefined && userId
-    ? (await tx.query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [userId])).rows.length > 0
-    : false;
+  const ownerKind = await userKindOf(userId, tx);
+  const guestDefault = input.visibility === undefined && ownerKind === 'guest';
+  /*
+   * THE SANDBOX CEILING. A test user's work never lists anywhere and is never
+   * `public`: it exists to be looked at by the account that minted it and by
+   * the other throwaway people in there, and it is ERASED with its owner. A
+   * `public` ask is stored as `unlisted` rather than refused — the copy is
+   * still reachable by link, which is what the asker wanted it for — and the
+   * create reply carries the visibility it really got.
+   */
+  const visibility = ownerKind === 'testuser'
+    ? (input.visibility === 'public' || input.visibility === undefined ? 'unlisted' : input.visibility)
+    : input.visibility ??
+      (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
+        : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   const created = await tx.query<ArtifactRow>(
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -504,10 +536,9 @@ async function insertArtifact(
     // accounts create private documents, except assets, born
     // unlisted: a public document reaches them at read time, and a
     // born-private ref bakes a 404 into every shared document that uses
-    // it. Routes validate an explicit ask upstream.
-    input.visibility ??
-      (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
-        : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
+    // it. Routes validate an explicit ask upstream. Decided above, because a
+    // test user's ceiling is part of the same one decision.
+    visibility,
     // NULL reads as 'viewer' (linkRoleOf), which is what every ordinary
     // creation grants whoever holds the link.
     atCreation.linkRole ?? null,
@@ -574,7 +605,27 @@ export async function forkArtifact(
   actor: TokenActor,
   source: ArtifactRow,
   overrides: ForkOverrides = {},
+  /**
+   * WHO THE COPY BELONGS TO, when that is not the forker: an account forking
+   * one of its readable artifacts `as` one of its TEST USERS (lib/testusers).
+   *
+   * Only ownership moves. The source is still read, the refs are still
+   * re-validated and the artifact COUNT quota is still charged AS THE ACCOUNT
+   * — a test user has no reach of its own to fork through and no quota of its
+   * own to spend, and this door is the single way anything real gets into its
+   * sandbox.
+   */
+  owner: TokenActor = actor,
 ): Promise<ForkResult | Response> {
+  /*
+   * WHO CREATES vs WHO OWNS. The copy is created BY the forker's token and FOR
+   * the owner's account, which is how the artifact COUNT quota lands on the
+   * parent: the cap is per TOKEN, a test user has no quota of its own, and rows
+   * carrying the test user's token would have been free. Ownership is `user_id`
+   * (ownsArtifact reads it first), so the test user owns the copy outright —
+   * and erasing it takes the rows, and the parent's count, away again.
+   */
+  const creator: TokenActor = { tokenId: actor.tokenId, userId: owner.userId };
   /*
    * A FOLDER IS NOT FORKABLE, and the refusal lives HERE so both doors — the
    * one a person clicks and the `fork_artifact` operation — inherit it from the
@@ -582,21 +633,37 @@ export async function forkArtifact(
    * would faithfully list the original's children; and re-pointing it at the
    * copy would silently rewrite a document the forker never wrote.
    */
-  if (source.format === 'folder') {
-    return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
-  }
-  const copying = await writtenDatasetForkPlan(actor, source);
+  const unforkable = forkRefusal(source);
+  if (unforkable) return unforkable;
+  const copying = await writtenDatasetForkPlan(actor, source, owner);
   // The page PLUS its dataset copies: one cap, counted against what this call
   // will really create rather than against the page alone.
   if (await artifactQuotaExceeded(actor.tokenId, copying.length + 1)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
-  if (copying.length) return deepFork(actor, source, overrides, copying);
+  if (copying.length) return deepFork(actor, source, overrides, copying, creator);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
-  const row = await createArtifact(actor.tokenId, actor.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
+  const row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
   return { artifact: row, datasets: [] };
+}
+
+/**
+ * WHAT CANNOT BE FORKED AT ALL, decided before anything is copied — and before
+ * a DRY RUN answers, so "what would this copy?" and "copy it" refuse the same
+ * things in the same words.
+ *
+ * A FOLDER's source names its OWN children table by id, so a copy would
+ * faithfully list the original's children and re-pointing it would silently
+ * rewrite a document the forker never wrote. A live POSTGRES catalog keeps its
+ * credentials bound to the original, so the copy could not answer one query.
+ */
+export function forkRefusal(source: ArtifactRow): Response | null {
+  if (source.format === 'folder') {
+    return json({ error: 'not_forkable', hint: "a folder cannot be forked — create one with format: 'folder' and file documents under it with parent_id" }, 400);
+  }
+  return source.format === 'markup' ? null : postgresForkRefusal(source);
 }
 
 /** What one fork made: the copy, and a copied dataset per `ref:` it had to repoint. */
@@ -622,7 +689,7 @@ export interface ForkResult {
  *     (`postgresForkRefusal`), so the copy could not answer a single query.
  * Each falls through to `validateRefs`, which names it at the publish door.
  */
-async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow): Promise<ArtifactRow[]> {
+async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow, owner: TokenActor = actor): Promise<ArtifactRow[]> {
   if (source.format !== 'markup' || !source.source) return [];
   const uses = collectRefUses(sourceWithoutAnchors(source.source));
   if (!uses) return [];
@@ -634,9 +701,18 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow): P
     // The loader's OWN rule, asked the same way round: their scope first, then
     // anything the link reads. A dataset they cannot read is never copied —
     // that would hand them rows the original never shared.
-    const own = actor.userId ? await getArtifactFor({ userId: actor.userId, tokenId: '' }, use.id) : await getArtifact(actor.tokenId, use.id);
+    //
+    // "Theirs" is the COPY'S OWNER, not the forker: an account forking `as` one
+    // of its test users owns the page's datasets already, and skipping them on
+    // that ground would hand the test user a page pointed at the account's real
+    // data — the exact write this whole kind exists to prevent. The test user
+    // owns nothing, so every dataset the page writes is copied.
+    const own = owner.userId ? await getArtifactFor({ userId: owner.userId, tokenId: '' }, use.id) : await getArtifact(owner.tokenId, use.id);
     if (own) continue;
-    const row = await getLinkReadableArtifact(use.id);
+    // Read AS THE FORKER when the copy is for someone else: the account may
+    // hand its test user a copy of a dataset only the account can read, because
+    // the copy lands inside that test user's sandbox and nowhere else.
+    const row = (owner.userId !== actor.userId ? await getArtifactFor(actor, use.id) : null) ?? await getLinkReadableArtifact(use.id);
     if (!row || row.format !== 'dataset' || catalogOf(row)?.kind === 'postgres') continue;
     plan.push(row);
   }
@@ -644,9 +720,9 @@ async function writtenDatasetForkPlan(actor: TokenActor, source: ArtifactRow): P
 }
 
 /** What a fork of this page would copy, for the DRY RUN — the plan, as titles. */
-export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow): Promise<Array<{ id: string; title: string | null }>> {
+export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow, owner: TokenActor = actor): Promise<Array<{ id: string; title: string | null }>> {
   if (source.format === 'folder') return [];
-  return (await writtenDatasetForkPlan(actor, source)).map((row) => ({ id: row.id, title: row.title }));
+  return (await writtenDatasetForkPlan(actor, source, owner)).map((row) => ({ id: row.id, title: row.title }));
 }
 
 /**
@@ -658,8 +734,11 @@ export async function forkDatasetPreview(actor: TokenActor, source: ArtifactRow)
  * transaction is inserts only, and a failure halfway leaves no orphan dataset
  * sitting in the forker's account under a page that was never created.
  */
-async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[]): Promise<ForkResult | Response> {
-  const ids = await reserveArtifactIds(actor, copying.length);
+async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkOverrides, copying: ArtifactRow[], owner: TokenActor = actor): Promise<ForkResult | Response> {
+  // Reserved for whoever will OWN the copies: `claimArtifactId` consumes a
+  // reservation only for the actor creating the row, so reserving as the forker
+  // and inserting as its test user would refuse its own fork.
+  const ids = await reserveArtifactIds(owner, copying.length);
   const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
   const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
   const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
@@ -680,7 +759,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
     created = await (await getDb()).transaction(async (tx) => {
     const datasets: ArtifactRow[] = [];
     for (const copy of copies) {
-      datasets.push(await createArtifact(actor.tokenId, actor.userId, {
+      datasets.push(await createArtifact(owner.tokenId, owner.userId, {
         title: copy.row.title,
         description: copy.row.description,
         format: 'dataset',
@@ -703,7 +782,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
         ...(copy.row.dataset_policy ? { datasetPolicy: { policy: copy.row.dataset_policy, revision: copy.row.policy_revision ?? 0 } } : {}),
       }));
     }
-    return { artifact: await createArtifact(actor.tokenId, actor.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
+    return { artifact: await createArtifact(owner.tokenId, owner.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
     });
   } catch (error) {
     // A dataset rule refusing a copy is the forker's answer, never a 500.
@@ -711,7 +790,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
     throw error;
   }
   // After the commit, never inside it (PGLite deadlock).
-  for (const row of [...created.datasets, created.artifact]) await afterCreated(row, actor.userId);
+  for (const row of [...created.datasets, created.artifact]) await afterCreated(row, owner.userId);
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: created.artifact.id });
   return { artifact: created.artifact, datasets: created.datasets.map((row) => ({ id: row.id, forked_from: row.forked_from! })) };
 }
@@ -935,7 +1014,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  */
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(user_id = ${p} OR (NOT EXISTS (SELECT 1 FROM users WHERE id = ${p} AND is_guest = true) AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
+    ? live({ where: (p) => `(user_id = ${p} OR (${ACCOUNT_REACH_SQL(p)} AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
@@ -2227,6 +2306,14 @@ type DocumentMutationOutcome =
       detail?: string;
       /** The machine-readable half of the one refusal a reader can act on (lib/story/sign-in-required). */
       code?: typeof SIGN_IN_REQUIRED;
+      /**
+       * The KIND was refused, not the statement: a guest or a test user that
+       * may not write `$_me` at all. The door answers this verbatim — its own
+       * status and its own top-level `error` — because "sign in" and "you are
+       * outside your sandbox" are answers about the CALLER, not verdicts about
+       * the data (lib/capabilities).
+       */
+      capability?: CapabilityRefusal;
     };
 
 export async function runDocumentMutation(
@@ -2244,6 +2331,34 @@ export async function runDocumentMutation(
   const { content, body } = splitHelmet(parsed.nodes);
   const decl = content.mutations.find((m) => m.name === name);
   if (!decl) return { ok: false, reason: 'unknown_mutation' };
+
+  /*
+   * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
+   *
+   * A statement that binds `$_me` has one honest answer for a signed-out
+   * caller, and it is a door (lib/story/sign-in-required). A ROW action that
+   * binds it — a membership button a `<For>` draws for exactly the people who
+   * have not joined — used to be told "this row mutation requires its original
+   * row snapshot" instead: true, useless, and about the wrong problem, because
+   * the page never drew that button for a guest and so never gave them a row to
+   * send. Deciding sign-in here makes the refusal the same whatever shape the
+   * press arrives in: a stale tab, an agent posting at the door directly, a row
+   * snapshot or none.
+   *
+   * It is the same judgement `mutateDataset` makes for the calls that never
+   * come through here, and the same one `mutationAccessFor` previews for the
+   * button; this is only about the ORDER the three checks run in.
+   */
+  const me: CapabilityActor = { userId: actor.userId ?? null, tokenId: actor.tokenId ?? null };
+  if (decl.params.includes('_me') && !(await can(me, 'write_as_me', doc))) {
+    // ANONYMOUS keeps the answer it always had: there is no identity to refuse,
+    // only a statement that needs a person, and the code is what draws the
+    // door. A guest or a test user HAS an identity, and the honest answer names
+    // it — the sign-in door for one, the sandbox for the other.
+    return me.userId
+      ? { ok: false, reason: 'policy_denied', detail: '$_me writes belong to the person signed in; this credential may not make them here', code: SIGN_IN_REQUIRED, capability: await refusalFor(me, doc.id) }
+      : { ok: false, reason: 'policy_denied', detail: '$_me requires a logged-in user', code: SIGN_IN_REQUIRED };
+  }
 
   // Resolved by the DOCUMENT's own scope — never the link-readable fallback,
   // which exists for reads. An unresolvable target reads as read-only, which
@@ -2279,26 +2394,6 @@ export async function runDocumentMutation(
   }
 
   bound._me=actor.userId;
-  /*
-   * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
-   *
-   * A statement that binds `$_me` has one honest answer for a signed-out
-   * caller, and it is a door (lib/story/sign-in-required). A ROW action that
-   * binds it — a membership button a `<For>` draws for exactly the people who
-   * have not joined — used to be told "this row mutation requires its original
-   * row snapshot" instead: true, useless, and about the wrong problem, because
-   * the page never drew that button for a guest and so never gave them a row to
-   * send. Deciding sign-in here makes the refusal the same whatever shape the
-   * press arrives in: a stale tab, an agent posting at the door directly, a row
-   * snapshot or none.
-   *
-   * It is the same judgement `mutateDataset` makes for the calls that never
-   * come through here, and the same one `mutationAccessFor` previews for the
-   * button; this is only about the ORDER the three checks run in.
-   */
-  if (decl.params.includes('_me') && !actor.userId) {
-    return { ok: false, reason: 'policy_denied', detail: '$_me requires a logged-in user', code: SIGN_IN_REQUIRED };
-  }
   let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
   if (mutationUsesRow(decl.sql)) {
     if (!row) return { ok: false, reason: 'invalid_row', detail: 'this row mutation requires its original row snapshot' };
@@ -2471,8 +2566,14 @@ export async function dataflowForRow(
  * saying so, and only the reader who could proceed by signing in is asked to.
  */
 async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+  // ONE capability question for the whole document, asked once: may this
+  // reader write as themselves here at all? A guest is answered exactly as an
+  // anonymous reader is — with the code the page turns into `<SignIn>` — so the
+  // button a guest sees is the door rather than a control that will refuse.
+  const me: CapabilityActor = { userId: viewer?.userId ?? null, tokenId: viewer?.tokenId ?? null };
+  const meRefusal = await can(me, 'write_as_me', doc) ? null : (await refusalFor(me, doc.id)).body.hint ?? SIGN_IN_REQUIRED;
   const guestOf = (m: {params: string[]}, answer: string|null): string|null =>
-    answer === null && m.params.includes('_me') && !viewer?.userId ? SIGN_IN_REQUIRED : answer;
+    answer === null && m.params.includes('_me') && meRefusal ? meRefusal : answer;
   return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
     if(m.scope==='local')return [m.name,guestOf(m,null)];
     const actor=viewer??{userId:null,tokenId:null};

@@ -139,7 +139,9 @@ renders nothing for a signed-in reader, so it needs no condition of its own.
 
 A `<Mutation>` binding `$_me` needs a signed-in reader. A guest's `<Button run>`
 or `<DialogContent run>` then offers "Sign in to do this" instead of running,
-and a direct POST answers `403 {"error":"policy_denied","code":"sign_in_required"}`.
+and a direct POST answers `sign_in_required` (403 `policy_denied` for a signed-out
+reader; 401 for a guest browser that only saved a draft). Test users act on the
+copy they own, never here: [apps](apps.md).
 
 For a page people JOIN by themselves — an empty dataset, a `$_me` insert guarded
 by `where not exists`, rows that record who added them and a guest branch, end to
