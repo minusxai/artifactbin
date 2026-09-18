@@ -107,7 +107,7 @@ else. Likes are social feedback and do not change these rows or grant access.
   {$_me ? <Card><CardContent className="space-y-3 p-4">
       <Input value="$item" label="What was it?" />
       <Input value="$amount" type="number" label="Amount" />
-      <DatePicker value="$spent_on" label="Spent on (blank = today UTC)" />
+      <DatePicker value="$spent_on" label="Spent on (blank = today)" />
       <For each={$participant} keyBy="person"><Button run="$add">Add expense</Button></For>
     </CardContent></Card> : null}
   <DataTable data="$tab" />
@@ -125,7 +125,7 @@ access rule: the server checks the row shape and enforces `self` and the dataset
 policy. Its SQL also rejects empty descriptions and nonpositive
 amounts. `expectedAffected={1}` makes a rejected insert an error, not a silent
 success. Input placeholders are hints, never submitted values. Here an unset
-date means today (UTC), as the label explains; choosing a date overrides it.
+date means today, as the label explains; choosing a date overrides it.
 
 `$_me` is the signed-in account, or null. A mutation using it automatically
 offers Sign in to a guest; server checks still refuse a direct guest write.
