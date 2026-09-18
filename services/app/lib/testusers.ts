@@ -89,7 +89,7 @@ export async function createTestUser(parent: { tokenId: string; userId: string |
   if (!minted) {
     return {
       ok: false, status: 409, error: TESTUSER_ERRORS.limit,
-      message: `An account holds ${TESTUSER_LIMITS.perAccount} test users at once. Delete one you are finished with (afbin testuser rm <id>) and mint again.`,
+      message: `An account holds ${TESTUSER_LIMITS.perAccount} test users at once. Delete one you are finished with (afbin testuser delete <id>) and mint again.`,
     };
   }
   return {
