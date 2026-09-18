@@ -68,8 +68,14 @@ it('publishes the reference’s dataset and page, and a signed-in viewer joins a
  // The join button is drawn by `<For each={$to_join}>`, so the page offers it
  // only while that query has a row — and a press carries that row, exactly as
  // the runtime's row action does.
- const offered=(await f.read(f.cookie)).tables.to_join.rows;
+ const ready=await f.read(f.cookie);
+ const offered=ready.tables.to_join.rows;
  expect(offered).toMatchObject([{person:f.user.id}]);
+ // …and the button WORKS for them. A row action whose capability came back as a
+ // refusal still DRAWS (the runtime guards the click, not the rendering), so a
+ // newcomer would get an ordinary-looking button that silently does nothing —
+ // the exact failure a hidden-until-needed button exists to avoid.
+ expect(ready.mutationAccess.join).toBe(null);
  const joined=await f.run('join',{row:offered[0]},f.cookie);
  expect(joined.status,await joined.clone().text()).toBe(200);
  expect(await joined.json()).toMatchObject({affected:1});
