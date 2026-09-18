@@ -566,28 +566,14 @@ jobs:
       - name: Build compact standalone CLI
         run: npm run build:binary -w services/cli
       - run: npm run test:binary -w services/cli
+      # One home reuses verified runtime/SQL/Chromium caches across all proofs.
+      # Intel's three separate cold homes took 290s sequentially (run 35376111509);
+      # concurrent cold exports timed out. The harness closes preview before export.
       - name: File preview from the actual executable
-        if: matrix.os != 'macos-15-intel'
         working-directory: services/cli
         run: |
           npx playwright install chromium
           node --import tsx scripts/test-preview.ts
-      # Reuse the built executable, but run Intel's phases sequentially. In run 35359103223,
-      # both concurrent cold export workers exhausted their 120s deadline while preview passed.
-      # Separate homes isolate state, not CPU/memory or simultaneous Chromium startup.
-      # Keep the existing deadlines and all three proofs; retain each phase's failure output.
-      - name: Intel preview and export proofs, from the executable just built
-        if: matrix.os == 'macos-15-intel'
-        working-directory: services/cli
-        run: |
-          set -uo pipefail
-          npx playwright install chromium
-          status=0
-          for phase in preview export-basic export-variants; do
-            node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 "--phase=$phase" > "$RUNNER_TEMP/$phase.log" 2>&1 || status=1
-            echo "::group::$phase"; cat "$RUNNER_TEMP/$phase.log"; echo '::endgroup::'
-          done
-          exit "$status"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: afbin-${{ matrix.os }}

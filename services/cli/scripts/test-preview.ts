@@ -51,7 +51,7 @@ async function launch(port=0){
 const phase=process.argv.find(value=>value.startsWith('--phase='))?.slice(8)??'all';
 if(!['all','preview','export-basic','export-variants'].includes(phase))throw new Error('Unknown preview proof phase');
 let server=phase.startsWith('export-')?undefined:await launch();
-const browser=phase.startsWith('export-')?undefined:await chromium.launch();
+let browser=phase.startsWith('export-')?undefined:await chromium.launch();
 const errors:string[]=[];
 try{
  if(server&&browser){
@@ -104,7 +104,9 @@ try{
  assert.equal((await a.request.get(server.url+'/document?file=home/preview-comments.sqlite')).status(),403);
  assert.equal((await a.request.post(server.url+'/save',{headers:{origin:'https://unrelated.example'},data:{}})).status(),403);
  assert.deepEqual(errors,[]);if(packaged)assert.equal(downloads,2,'Runtime and DuckDB each download once and reuses verified cache after process restart');console.log('PASS scope/origin restrictions; no browser exceptions'+(packaged?'; SEA ran outside checkout with lazy runtime and engine downloads':''));
-
+ // Export owns another browser. Release preview resources while retaining the
+ // same home so cold runtime and SQL installation is not repeated for exports.
+ await browser.close();browser=undefined;await server.close();server=undefined;
  }
  if(phase!=='preview'){
  // Same proof runs against installed npm and all four standalone executables.
