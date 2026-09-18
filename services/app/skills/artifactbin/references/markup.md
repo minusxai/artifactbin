@@ -126,10 +126,11 @@ Social preview: `<Helmet>` metas `artifactbin:og-image` and
 <!--/bundle:skip-->
 ## Images and icons
 
-- `<img src="ref:<imageId>" />` — an uploaded image
-  ([publishing-datasets.md](publishing-datasets.md)) — or write the web URL
-  itself: publish stores a copy, YOUR URL STAYS as written, readers are served
-  ours, and a URL that will not fetch is a warning, not a failed publish.
+Repeated galleries: use [dataset image bindings](markup-repeat.md).
+
+- `<img src="ref:<imageId>" />` — an [uploaded image](publishing-datasets.md).
+  Web URLs also work: publish stores a copy, keeps your URL in the source,
+  and warns if fetching fails.
 - In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
 <!--bundle:skip-->

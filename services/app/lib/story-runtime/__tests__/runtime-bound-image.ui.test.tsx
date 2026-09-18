@@ -25,6 +25,7 @@ import type { StoryIslandDataflow } from '../contract';
 import type { DataflowState } from '@/lib/story/dataflow';
 import { urlHash } from '@/lib/story/asset-url';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import {createDataflowStore} from '../store';
 
 const CAT = 'https://cdn.example.com/cat.png';
 const DOG = 'https://cdn.example.com/dog.png';
@@ -55,6 +56,48 @@ const app = (body: string, values: Record<string, string | null>) => {
 };
 
 const img = (container: HTMLElement) => container.querySelector('img')!;
+
+describe('row image bindings',()=>{
+ const rows=[{id:'a',title:'Red book',cover_ref:'ref:red123'},{id:'b',title:'Blue book',cover_ref:'ref:blue12'}];
+ const template='<For each={$books} keyBy="id"><article><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={180} height={240}/><h2>{$_row.title}</h2></article></For>';
+ const setup=(initial:Record<string,unknown>[]=rows)=>{
+  const parsed=parseJsxOrThrow('<Helmet><Value name="books" type="table" value={'+JSON.stringify(initial)+'}/></Helmet>'+template);
+  const split=splitHelmet(parsed.nodes);
+  const flow={values:split.content.values,queries:split.content.queries};
+  const store=createDataflowStore({flow});
+  return {store,nodes:split.body};
+ };
+ it('uses each row source, preserves native image props, and keeps images paired after replacement and sorting',()=>{
+  const {store,nodes}=setup();
+  const {container}=render(<StoryRuntimeApp nodes={nodes} refData={{}} store={store} colorMode="light" assetsUrl={ASSETS_URL}/>);
+  const check=(expected:typeof rows)=>{
+   const articles=[...container.querySelectorAll('article')];expect(articles).toHaveLength(expected.length);
+   expected.forEach((row,i)=>{
+    const image=articles[i]!.querySelector('img')!;
+    expect(image.getAttribute('src')).toBe(endpointFor(row.cover_ref));
+    expect(image.alt).toBe(row.title);expect(articles[i]!.textContent).toBe(row.title);
+    expect(image.getAttribute('loading')).toBe('lazy');expect(image.width).toBe(180);expect(image.height).toBe(240);
+   });
+  };
+  check(rows);
+  const replacement=[{...rows[1]!,cover_ref:'ref:other1'},rows[0]!];
+  act(()=>store.replaceFlow({flow:setup(replacement).store.flow}));check(replacement);
+ });
+ it('omits empty and invalid sources without requesting the document or literal binding',()=>{
+  const {store,nodes}=setup([null,'','ref:bad','javascript:alert(1)',false,42].map((cover_ref,i)=>({id:String(i),title:'missing',cover_ref})));
+  const {container}=render(<StoryRuntimeApp nodes={nodes} refData={{}} store={store} colorMode="light" assetsUrl={ASSETS_URL}/>);
+  for(const image of container.querySelectorAll('img')){expect(image.hasAttribute('src')).toBe(false);expect(image.hasAttribute('srcset')).toBe(false);}
+ });
+ it('renders 1,000 paired items using the same small template in SSR',()=>{
+  const thousand=Array.from({length:1000},(_,i)=>({...rows[i%2]!,id:String(i)}));
+  const {store,nodes}=setup(thousand);
+  const html=renderToString(<StoryRuntimeApp nodes={nodes} refData={{}} store={store} colorMode="light" assetsUrl={ASSETS_URL}/>);
+  const container=document.createElement('div');container.innerHTML=html;
+  expect(container.querySelectorAll('article')).toHaveLength(1000);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  [...container.querySelectorAll('img')].forEach((image,i)=>{expect(image.alt).toBe(thousand[i]!.title);expect(image.getAttribute('src')).toBe(endpointFor(thousand[i]!.cover_ref));});
+ });
+});
 
 describe('a bound <img src>', () => {
   it('renders the document asset endpoint for the bound value, keeping everything else the author wrote', () => {

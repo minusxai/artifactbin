@@ -12,7 +12,7 @@ Declare the data first: [Document data](markup-data.md).
 
 ## Contents
 
-Repeating a template · Identity and comments.
+Repeating a template · Dataset images · Identity and comments.
 
 ## Repeating a template
 
@@ -40,6 +40,68 @@ DataTable, and Iframe inside For templates are not supported. Use DataTable for
 large virtualized tabular results, sorting, and paging. For renders a block wrapper accepting class and style, providing an owner
 surface for comments even when a row disappears. Bound editors inside For are not supported; use editable DataTable columns.
 Row mutation buttons are supported when For has a stable keyBy.
+
+## Dataset images
+
+Rule of thumb: for fewer than 10 images, write literal `src="ref:ID"`
+references directly in the markup. For 10 or more repeated items, upload a
+dataset with image references and metadata, then write one `<For>` template
+using the image column. A dataset is useful even below 10 when the page needs
+filtering, sorting or a shared selected-item detail view. This is authoring
+guidance, not a platform limit; a composed page of distinct illustrations can
+still use literal references at any count.
+
+Store uploaded image references such as `ref:abc123` in an ordinary string
+column. No special column type or dataset migration is required. Use the exact
+string binding `src="$_row.cover_ref"` on a native `<img>`:
+
+```jsx
+<Helmet>
+  <Query name="books" source="ref:DATASET_ID">{`
+    select id, title, cover_ref, has_photo from public.rows order by position
+  `}</Query>
+</Helmet>
+<For each={$books} keyBy="id">
+  <article>
+    {($_row.has_photo) && (
+      <img src="$_row.cover_ref" alt="$_row.title"
+           loading="lazy" width={180} height={240} />
+    )}
+    {!($_row.has_photo) && (<p>No photograph available</p>)}
+    <h2>{$_row.title}</h2>
+  </article>
+</For>
+```
+
+Replace DATASET_ID with the uploaded dataset ID. A selected-book detail query
+can return one row and feed another `<For>` with the same image template.
+Filtering, sorting and refreshed rows update the image with the row. Keep
+`keyBy="id"` so the item retains its identity. Literal `src="ref:abc123"` still
+works. This syntax is for `<img>`, not `AvatarImage`; JavaScript attribute
+expressions such as `src={$_row.cover_ref}` are not supported.
+
+Null and empty strings omit the image source. Malformed, wrong-kind, deleted
+or inaccessible references show an unavailable image/alt text without stopping
+the gallery. `has_photo` only controls your own placeholder; it does not grant access
+or guarantee the image is available. A public document or dataset never makes
+a private image public. The viewer needs the image's existing read permission.
+Sessionless captures can resolve public/unlisted images; a document export key
+does not grant access to private cover images, which remain unavailable.
+Resolved web URLs use the existing guarded image importer, never direct hotlinks.
+
+Keep `loading="lazy"` and dimensions on the image. Reference resolution may
+read image metadata, but original image downloads remain browser-lazy.
+Changing a stored dataset's cover strings takes effect on normal query refresh;
+the template does not need republishing. Replacing an image uses its current
+versioned URL when resolved again. Existing export-cache refresh rules apply.
+
+Deletion checks discover exact `ref:ID` strings in persisted dataset cells and
+report owned datasets and their dependent documents. They read current stored
+rows, including existing datasets, without a separate index or backfill.
+Forced deletion can break covers; soft-deleted assets and their history retain
+the existing storage policy. Connected-database values and references assembled
+by SQL have no persisted-cell dependency guarantee. Source/data exports keep
+references rather than bundling image files; capture exports render permitted images.
 
 ## Identity and comments
 

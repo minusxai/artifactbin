@@ -67,3 +67,19 @@ it('teaches row buttons in both shipped references',()=>{
   expect(doc).toContain('click');
  }
 });
+
+it('teaches dataset image strings, missing covers and the separate media permission boundary',()=>{
+ const doc=renderDoc('artifactbin/references/markup-repeat.md','https://example.test');
+ expect(doc).toContain('src="$_row.cover_ref"');
+ expect(doc).toContain('No photograph available');
+ expect(doc).toContain('does not grant access');
+ expect(doc).toContain('fewer than 10');
+ expect(doc).toContain('not a platform limit');
+});
+
+it('accepts image row bindings only in a declared row scope and keeps braced JS rejected',async()=>{
+ for(const body of ['<img src="$_row.cover_ref"/>','<For each={$books}><img src="$_row.missing"/></For>','<For each={$books}><img src={$_row.cover_ref}/></For>']){
+  const result=await publishJsx({loadRef:async()=>null},'<Helmet><Value name="books" type="table" value={[{cover_ref:"ref:abc123"}]}/></Helmet>'+body);
+  expect(result).toBeInstanceOf(Response);expect((result as Response).status).toBe(400);
+ }
+});

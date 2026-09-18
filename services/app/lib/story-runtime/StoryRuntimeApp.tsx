@@ -18,7 +18,7 @@ import {Dialog, DialogContent} from '@/components/kit/dialog';
 import { useNodeKeys } from '@/lib/story-ui/use-node-keys';
 import { AST_PATH_ATTR } from '@/lib/story-ui/ast-path';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
-import { resolveRefProps, type RefDataMap } from '@/lib/story/ref-data';
+import { resolveRefProps, type RefDataMap, type ImageAssetAnswer } from '@/lib/story/ref-data';
 import { IconGlyphProvider } from '@/components/kit/icon';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 // The leaf module, not story-viz: the <Question> write-back also imports the
@@ -34,7 +34,7 @@ import { createRowActions } from './row-actions';
 import { createCellSessions, type CellSessions } from './cell-sessions';
 import type { ColumnTemplate } from '@/components/kit/data-table';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
-import { EMPTY_DATAFLOW, VIEWER_REF, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
+import { EMPTY_DATAFLOW, VIEWER_REF, coerceScalarInput, refName, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
 import { User } from '@/components/kit/user';
 import { UserImage } from '@/components/kit/user-image';
 import { UserHandle } from '@/components/kit/user-handle';
@@ -42,6 +42,7 @@ import type { PersonCard } from '@artifactbin/contracts';
 import { SIGN_IN_TO_DO_THIS, needsSignIn, refusalText } from '@/lib/story/sign-in-required';
 import { SignIn } from '@/components/kit/sign-in';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
+import {boundImageValue,imageReferenceId} from '@/lib/story/image-source';
 import { Button } from '@/components/kit/button';
 import { cn } from '@/components/kit/cn';
 import { DataTable } from '@/components/kit/data-table';
@@ -234,7 +235,8 @@ interface RuntimeAssetContextValue {
    * skipped; a document transport relay is one caller, especially for opaque
    * framed child realms.
    */
-  importAsset?: (url: string) => Promise<{ url: string } | { refused: string }>;
+  importAsset?: (url: string) => Promise<ImageAssetAnswer>;
+  images?: Map<string,Promise<ImageAssetAnswer>>;
 }
 
 const RuntimeAssetContext = createContext<RuntimeAssetContextValue>({ endpoint: null, seen: new Set() });
@@ -257,14 +259,46 @@ const RuntimeAssetContext = createContext<RuntimeAssetContextValue>({ endpoint: 
  * something else and come back, and the answer for a URL does not change
  * within a view.
  */
-function RuntimeBoundSource({ props, template }: BoundSourceProps) {
+function RuntimeBoundSource(input:BoundSourceProps) {
+  const {state}=useContext(RuntimeEmbedContext);
+  const value=boundImageValue(input.template,state.values,input.row);
+  return value && imageReferenceId(value)
+    ? <RuntimeReferenceImage key={value} value={value} props={input.props}/>
+    : <RuntimeWebSource {...input}/>;
+}
+
+/** Resolve metadata once per reference/query snapshot. Original bytes remain browser-lazy. */
+function RuntimeReferenceImage({value,props}:{value:string;props:Record<string,unknown>}) {
+  const {endpoint,importAsset,images}=useContext(RuntimeAssetContext);
+  const [result,setResult]=useState<{cache:typeof images;answer:ImageAssetAnswer}|null>(null);
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>{
+    if(!importAsset)return;
+    let live=true;
+    let pending=images?.get(value);
+    if(!pending){pending=Promise.resolve().then(()=>importAsset(value)).catch(()=>({refused:'unavailable'}));images?.set(value,pending);}
+    void pending.then(answer=>{if(live){setResult({cache:images,answer});setFailed(false);}});
+    return ()=>{live=false;};
+  },[value,importAsset,images]);
+  const answer=result?.cache===images ? result?.answer : undefined;
+  const unavailable=failed || (answer && 'refused' in answer);
+  const {srcSet: authoredSrcSet,srcset: authoredLowerSrcSet,...rest}=props;
+  const mapped=unavailable?null:answer&&'url' in answer?answer.url:runtimeAssetUrl(value,()=>false,endpoint);
+  if(!mapped)return <img {...rest} data-mx-asset={unavailable?'refused':undefined}/>;
+  const image=answer&&'url' in answer ? answer.image??{kind:'image' as const,url:answer.url} : undefined;
+  const sourceProps:Record<string,unknown>={...rest,...(authoredSrcSet!==undefined?{srcSet:authoredSrcSet}:{}),...(authoredLowerSrcSet!==undefined?{srcset:authoredLowerSrcSet}:{}),src:value};
+  const patch=image?resolveRefProps({tag:'img',isComponent:false},sourceProps,{[imageReferenceId(value)!]:image}):{src:mapped};
+  return <img {...sourceProps} {...patch} onError={()=>setFailed(true)}/>;
+}
+
+function RuntimeWebSource({ props, template, row }: BoundSourceProps) {
   const { state } = useContext(RuntimeEmbedContext);
   const { endpoint, seen, importAsset } = useContext(RuntimeAssetContext);
   const [refused, setRefused] = useState<ReadonlySet<string>>(EMPTY_REFUSED);
   /** Addresses the PAGE resolved for us — the relay's answers, url → /assets/<hash>. */
   const [relayed, setRelayed] = useState<ReadonlyMap<string, string>>(EMPTY_RELAYED);
   const el = useRef<HTMLImageElement | null>(null);
-  const url = resolveRefTemplate(template, (name) => state.values[name]);
+  const url = boundImageValue(template, state.values, row);
   /*
    * The image the SERVER rendered has usually finished — or failed — before
    * React hydrates, and an event that already fired is one no listener will
@@ -298,7 +332,7 @@ function RuntimeBoundSource({ props, template }: BoundSourceProps) {
   useEffect(() => {
     // `isWebUrl` here for the same reason `runtimeAssetUrl` refuses one: a value
     // we would not import is not a value to ask the page about either.
-    if (!importAsset || !url || !isWebUrl(url) || relayed.has(url) || refused.has(url)) return;
+    if (!importAsset || !url || (!isWebUrl(url) && !imageReferenceId(url)) || relayed.has(url) || refused.has(url)) return;
     let live = true;
     void importAsset(url).then((answer) => {
       if (!live) return;
@@ -1235,7 +1269,8 @@ export function StoryRuntimeApp({ nodes, refData, glyphs, dataflow, viewer = nul
   // not state: see RuntimeAssetContext — recording a load must not re-render.
   const seen = useRef<Set<string>>(null as unknown as Set<string>);
   if (seen.current === null) seen.current = new Set();
-  const assets = useMemo(() => ({ endpoint: assetsUrl, seen: seen.current, importAsset }), [assetsUrl, importAsset]);
+  const images = useMemo(()=>new Map<string,Promise<ImageAssetAnswer>>(),[state.tables,importAsset]);
+  const assets = useMemo(() => ({ endpoint: assetsUrl, seen: seen.current, importAsset, images }), [assetsUrl, importAsset, images]);
 
   const body = (
     <RuntimeAssetContext.Provider value={assets}>
