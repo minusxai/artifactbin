@@ -86,13 +86,7 @@ export interface RunInput {
   page?: { name: string } & QueryPage;
 }
 
-/** A server-owned page table. Authors cannot declare or write this namespace. */
-export const LIKES_TABLE = '_likes';
-export const LIKES_COLUMNS: DatasetColumn[] = [{name:'user',type:'user'}];
-
 export interface MutationInput {
-  /** Trusted page participants; never accepted from a browser mutation payload. */
-  likes?: string[];
   policy?: DatasetMutationPolicy;
   /** Internal capability preview: analyze only, never execute effects. */
   policyPreview?: boolean;

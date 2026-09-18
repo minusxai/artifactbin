@@ -42,7 +42,7 @@ describe('GET /api/page/artifact/[id]', () => {
     const asBob = await (await artifactPage(request(`/api/page/artifact/${pubA}`, { actor: session(bob) }), ctx)).json();
     expect(asBob.like).toEqual({ liked: true, count: 2 });
     const asAlice = await (await artifactPage(request(`/api/page/artifact/${pubA}`, { actor: session(alice) }), ctx)).json();
-    expect(asAlice.like).toEqual({ liked: true, count: 2 });
+    expect(asAlice.like).toEqual({ liked: false, count: 2 });
     const anonymous = await (await artifactPage(request(`/api/page/artifact/${pubA}`), ctx)).json();
     expect(anonymous.like).toEqual({ liked: false, count: 2 });
   });

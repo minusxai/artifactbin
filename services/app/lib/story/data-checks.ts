@@ -1,4 +1,3 @@
-import {LIKES_TABLE,LIKES_COLUMNS} from '@artifactbin/contracts';
 import {resolveUserValues} from './user-values';
 import {compileStoredMutation} from '@/lib/datasets/stored-mutation';
 /**
@@ -50,7 +49,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
   | { kind: 'ok'; columns: Record<string, DatasetColumn[]>; rowSchemas: Record<string, DatasetColumn[]>; /** `$_value`'s declared type per cell-editing mutation: the type of the column its editor sits in. */ valueTypes: Record<string, DatasetColumn['type']> }
 > {
   try {flow=await resolveUserValues(flow,load);}catch(error){return {kind:'sql',details:[error instanceof Error?error.message:'Invalid user binding']};}
-  const tables: Record<string, { columns: DatasetColumn[] }> = {[LIKES_TABLE]:{columns:LIKES_COLUMNS}};
+  const tables: Record<string, { columns: DatasetColumn[] }> = {};
   for (const v of flow.values) if (v.kind === 'table') tables[v.name] = { columns: v.columns };
   const signalColumns = flow.values.filter(v => v.kind === 'scalar').map(v => ({name: v.name, type: v.type}));
   if (signalColumns.length) tables[SIGNALS_TABLE] = {columns: signalColumns};
@@ -104,7 +103,7 @@ export async function dryRunDataflow(flow: Dataflow, load: RefLoader, body: JsxN
       const inputTables={...tables};const prepared=[];
       for(const m of group){
         let sql=m.sql;
-        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,'dataset_rows',true);sql=compiled.sql;inputTables.dataset_rows={columns:compiled.table.columns};
+        if(m.source){try{const ref=await load(m.source);if(!ref?.catalog)throw new Error('Dataset source is unavailable');const compiled=compileStoredMutation(ref.catalog,sql,'dataset_rows');sql=compiled.sql;inputTables.dataset_rows={columns:compiled.table.columns};
           if(ref.datasetPolicy){
             const policy=viewerMutationPolicy(ref.datasetPolicy,compiled.table,placeholderSession(ref.datasetPolicy));
             if(!policy)throw new Error(`Dataset policy: no policy permits writes to ${compiled.table.schema}.${compiled.table.name}`);
@@ -156,7 +155,7 @@ async function policyRefusals(mutations: PolicedMutation[], paramNames: string[]
   const out: string[] = [];
   const params = Object.fromEntries(paramNames.map((n) => [n, null]));
   for (const m of mutations) {
-    const result = await runMutation({likes:[],
+    const result = await runMutation({
       table: { name: 'dataset_rows', rows: [], columns: m.columns },
       sql: m.sql,
       params,

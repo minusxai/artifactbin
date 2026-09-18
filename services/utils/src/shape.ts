@@ -44,7 +44,7 @@ export function parseDatasetColumn(raw: unknown): DatasetColumn {
     if (Object.keys(constraints).some(k => !['memberOf','self'].includes(k))) throw new Error('Unknown user constraint');
     if (constraints.self !== undefined && typeof constraints.self !== 'boolean') throw new Error('self must be boolean');
     const scopes = constraints.memberOf;
-    if (scopes !== undefined && (!Array.isArray(scopes) || !scopes.length || scopes.some(s => typeof s !== 'string' || (s !== 'current' && s !== '_likes' && !/^(?:ref|likes):[A-Za-z0-9]{6,12}$/.test(s))) || new Set(scopes).size !== scopes.length)) throw new Error('memberOf must be a nonempty array of unique document references, current or _likes');
+    if (scopes !== undefined && (!Array.isArray(scopes) || !scopes.length || scopes.some(s => typeof s !== 'string' || (s !== 'current' && !/^ref:[A-Za-z0-9]{6,12}$/.test(s))) || new Set(scopes).size !== scopes.length)) throw new Error('memberOf must be a nonempty array of unique document references or current');
     column.constraints = {...(scopes !== undefined ? {memberOf:[...(scopes as string[])]} : {}), ...(constraints.self !== undefined ? {self:constraints.self as boolean} : {})};
   }
   return column;

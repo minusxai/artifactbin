@@ -56,12 +56,8 @@ describe.each<[string, SqlService]>([
 ])('dataset policy %s', (_, svc) => {
   const run = (sql: string, p = policy) =>
     svc.mutate({ table, sql, params: { body: 'changed' }, policy: p });
-  it('allows trusted likes reads but never writes or exposes an undeclared likes table',async()=>{
-    const sql='insert into rows select 3, "user", \'open\' from _likes';
-    const result=await svc.mutate({table,sql,params:{},likes:['usr_friend']});
-    expect(result).toMatchObject({affected:1});
-    expect(await svc.mutate({table,sql:'delete from _likes',params:{},likes:['usr_friend']})).toMatchObject({code:'policy_denied'});
-    expect(await svc.mutate({table,sql,params:{}})).toHaveProperty('error');
+  it('does not expose an undeclared likes table',async()=>{
+    expect(await svc.mutate({table,sql:'insert into rows select 3, "user", \'open\' from _likes',params:{}})).toHaveProperty('error');
   });
   it('applies trusted presets and insert checks', async () => {
     expect(

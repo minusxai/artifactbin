@@ -1,4 +1,3 @@
-import {LIKES_TABLE,LIKES_COLUMNS} from '@artifactbin/contracts';
 import {normalizeTimestamp} from '@artifactbin/utils/shape';
 import {COLUMN_SQL_TYPES} from './column-types';
 import {prepareReadCatalog} from './read-catalog';
@@ -450,11 +449,6 @@ export async function runMutation(input: MutationInput, caps: SqlCaps, extension
   let continuation:(()=>QueryFailure['continuation'])|void = undefined;
   try {
     continuation=extensions.setupMutation?.(conn,await duckdb(),{input,dryRun:false});
-    if(input.table.name===LIKES_TABLE)return {error:'_likes is read-only'};
-    if(input.likes!==undefined){
-      if(!Array.isArray(input.likes)||input.likes.some(id=>typeof id!=='string'))return {error:'Invalid trusted likes table'};
-      await registerTable(conn,LIKES_TABLE,{columns:LIKES_COLUMNS,rows:input.likes.map(user=>({user}))});
-    }
     await registerTable(conn, input.table.name, input.table);
     const guarded = await prepareGuarded(conn, input.sql, 'write');
     if (guarded.error !== undefined) return { error: guarded.error };
@@ -464,14 +458,14 @@ export async function runMutation(input: MutationInput, caps: SqlCaps, extension
     // can reach this line around it (and CodeQL can see it here).
     timer = setTimeout(() => { timedOut = true; conn.interrupt(); }, Math.min(timeoutMs, caps.timeoutMs));
     const hasUsers = input.table.columns.some(c => c.type === 'user');
-    const checkedInput = (hasUsers || input.likes!==undefined) && !input.policy ? {...input, policy: {
+    const checkedInput = hasUsers && !input.policy ? {...input, policy: {
       role:'writer', session:{}, operations:['insert','update','delete'] as const,
       table:{table:{schema:'public',name:input.table.name},
         insert_permissions:[{role:'writer',permission:{columns:'*' as const,check:{}}}],
         update_permissions:[{role:'writer',permission:{columns:'*' as const,filter:{}}}],
         delete_permissions:[{role:'writer',permission:{filter:{}}}]}
     }} : input;
-    const applied = input.policy || hasUsers || input.likes!==undefined
+    const applied = input.policy || hasUsers
       ? await runPolicyMutation(conn,checkedInput as MutationInput,(statement,params)=>bindTypedParams(conn,statement,params,input.row,input.paramTypes))
       : {affected:(await guarded.prepared.run()).rowsChanged};
     const {affected}=applied;
@@ -526,7 +520,6 @@ export async function dryRunMutations(input: DryRunMutationsInput, extensions:Sq
       const tableName = m.tableName ?? `ref_${m.target}`;
       const target = input.tables[tableName];
       if (target) await registerTable(conn, tableName, { rows: [], columns: target.columns });
-      if(tableName!==LIKES_TABLE && input.tables[LIKES_TABLE])await registerTable(conn,LIKES_TABLE,{rows:[],columns:LIKES_COLUMNS});
       const guarded = await prepareGuarded(conn, m.sql, 'write');
       if (guarded.error !== undefined) { errors.push({ name: m.name, error: guarded.error }); continue; }
       await bindTypedParams(conn, guarded.prepared, params, m.row, {...input.paramTypes, ...m.paramTypes});

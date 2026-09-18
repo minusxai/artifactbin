@@ -1,4 +1,3 @@
-import {LIKES_TABLE} from '@artifactbin/contracts';
 import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
 /**
  * The document's DATAFLOW — the pure contract behind `$name` references.
@@ -909,7 +908,6 @@ export function queriesDependingOn(flow: Dataflow, valueNames: Iterable<string>)
  */
 export function queriesReadingDatasets(flow: Dataflow, datasetIds: Iterable<string>): string[] {
   const changed = new Set(datasetIds);
-  if(changed.has(LIKES_TABLE))return queryOrder(flow)??flow.queries.map(q=>q.name);
   const graph = depGraph(flow);
   const order = queryOrder(flow) ?? flow.queries.map((q) => q.name);
   const dirty = new Set<string>();

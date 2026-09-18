@@ -315,6 +315,15 @@ describe('<Dialog> bound to the store', () => {
 const card=(name:string,extra:Partial<PersonCard>={}):PersonCard=>({name,handle:null,image:null,...extra});
 
 describe('native user controls',()=>{
+ it('uses explicit participant query choices and visible names for a user dropdown',()=>{
+  const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /><Query name="members">{`select person from participants`}</Query></Helmet><Select label="Participant" value="$person" options="$members" />').nodes);
+  const flow={values:content.values,queries:content.queries};
+  const state:DataflowState={values:{person:null},errors:{},tables:{members:{columns:[{name:'person',type:'user'}],rows:[{person:'usr_ada'}]}},userOptions:{person:[]},people:{usr_ada:card('Ada'),usr_grace:card('Grace')}};
+  const view=render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{flow,state}} colorMode="light" />);
+  fireEvent.click(view.getByLabelText('Participant'));
+  expect(view.getByRole('option',{name:'Ada'})).toBeTruthy();
+  expect(view.queryByRole('option',{name:'Grace'})).toBeNull();
+ });
  it('uses server-scoped choices and renders user labels without authored options',()=>{
   const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /></Helmet><Select label="Assignee" value="$person" /><DataTable data="$tasks" />').nodes);
   const flow={values:content.values,queries:[]};

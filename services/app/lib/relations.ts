@@ -12,8 +12,7 @@
  * Never inside a `db.transaction` callback (the emit would deadlock PGLite).
  */
 import { RELATION_EVENTS, RELATION_VERBS, type RelationVerb } from '@artifactbin/contracts';
-import { getDb } from '@/lib/db';
-import type {Queryable} from '@artifactbin/contracts';
+import { getDb,type Queryable } from '@/lib/db';
 import { emit } from '@/lib/events';
 
 /** What the subject of every relation is today: an account. */
@@ -84,8 +83,6 @@ export async function link(userId: string, verb: RelationVerb, objectId: string)
    */
   const changed = await db.transaction(async tx=>{
     await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
-    await lockLike(tx,verb,objectId);
-    await notifyLike(tx,verb,objectId);
     return tx.query(
     `INSERT INTO relations (subject_kind, subject_id, verb, object_kind, object_id)
      VALUES ('${RELATION_SUBJECT_KIND}', $1, '${verb}', '${entry.object}', $2)
@@ -105,8 +102,6 @@ export async function unlink(userId: string, verb: RelationVerb, objectId: strin
   const db = await getDb();
   const changed = await db.transaction(async tx=>{
     await tx.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[userId]);
-    await lockLike(tx,verb,objectId);
-    await notifyLike(tx,verb,objectId);
     return tx.query(
     `UPDATE relations SET deleted_at = now() WHERE ${subjectWhere(verb, entry)} AND object_id = $2 AND deleted_at IS NULL RETURNING 1`,
     [userId, objectId],
@@ -132,7 +127,7 @@ export async function count(verb: RelationVerb, objectId: string): Promise<numbe
   const entry = vocabulary(verb);
   const db = await getDb();
   const total = await db.query<{ n: string | number }>(
-    `SELECT COUNT(*) AS n FROM relations WHERE verb = '${verb}' AND object_kind = '${entry.object}' AND object_id = $1 AND deleted_at IS NULL ${verb==='like'?"AND subject_id IS DISTINCT FROM (SELECT user_id FROM artifacts WHERE id=$1)":''}`,
+    `SELECT COUNT(*) AS n FROM relations WHERE verb = '${verb}' AND object_kind = '${entry.object}' AND object_id = $1 AND deleted_at IS NULL`,
     [objectId],
   );
   // COUNT() comes back as a bigint, which both drivers hand over as a string.
@@ -146,7 +141,7 @@ export async function linked(userId: string, verb: RelationVerb,query?:Queryable
   const out = await db.query<{ object_id: string }>(
     // Newest first, then by id: two edges made in the same millisecond still
     // come back in ONE order, so a feed built on this never shuffles.
-    `SELECT object_id FROM relations WHERE ${subjectWhere(verb, entry)} AND deleted_at IS NULL ${verb==='like'?"AND NOT EXISTS (SELECT 1 FROM artifacts a WHERE a.id=object_id AND a.user_id=$1)":''} ORDER BY created_at DESC, object_id`,
+    `SELECT object_id FROM relations WHERE ${subjectWhere(verb, entry)} AND deleted_at IS NULL ORDER BY created_at DESC, object_id`,
     [userId],
   );
   return out.rows.map((row) => row.object_id);
@@ -155,31 +150,9 @@ export async function linked(userId: string, verb: RelationVerb,query?:Queryable
 /** The caller holds the subject's user-row lock. Effects are announced only after commit. */
 export async function replaceLinked(query:Queryable,userId:string,verb:RelationVerb,ids:string[]){
  const entry=vocabulary(verb);
- if(verb==='like'){
-  const affected=[...new Set([...await linked(userId,verb,query),...ids])].sort();
-  for(const id of affected){await lockLike(query,verb,id);await notifyLike(query,verb,id);}
- }
- const removed=await query.query<{object_id:string}>(`UPDATE relations SET deleted_at=now() WHERE ${subjectWhere(verb,entry)} AND deleted_at IS NULL AND NOT (object_id=ANY($2::text[])) ${verb==='like'?"AND NOT EXISTS (SELECT 1 FROM artifacts a WHERE a.id=object_id AND a.user_id=$1)":''} RETURNING object_id`,[userId,ids]);
+ const removed=await query.query<{object_id:string}>(`UPDATE relations SET deleted_at=now() WHERE ${subjectWhere(verb,entry)} AND deleted_at IS NULL AND NOT (object_id=ANY($2::text[])) RETURNING object_id`,[userId,ids]);
  const added=await query.query<{object_id:string}>(`INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id)
  SELECT '${RELATION_SUBJECT_KIND}',$1,'${verb}','${entry.object}',id FROM unnest($2::text[]) AS id
  ON CONFLICT(subject_kind,subject_id,verb,object_kind,object_id) DO UPDATE SET deleted_at=NULL WHERE relations.deleted_at IS NOT NULL RETURNING object_id`,[userId,ids]);
  return async()=>{for(const row of removed.rows)await say(entry,'unlinked',userId,row.object_id);for(const row of added.rows)await say(entry,'linked',userId,row.object_id);};
-}
-
-/** Creation participates without adding a social engagement event. Uses the caller's transaction. */
-export async function seedOwnerLike(query:Queryable,userId:string,artifactId:string):Promise<void>{
- await query.query("INSERT INTO relations(subject_kind,subject_id,verb,object_kind,object_id) VALUES ('user',$1,'like','artifact',$2) ON CONFLICT DO NOTHING",[userId,artifactId]);
-}
-
-/** Current page participants, also used under a document lock at the write commit boundary. */
-export async function likers(query:Queryable,artifactId:string,lock=false):Promise<string[]>{
- if(lock)await query.query('SELECT id FROM artifacts WHERE id=$1 FOR SHARE',[artifactId]);
- const result=await query.query<{subject_id:string}>("SELECT r.subject_id FROM relations r JOIN artifacts a ON a.id=r.object_id JOIN users u ON u.id=r.subject_id WHERE r.verb='like' AND r.object_kind='artifact' AND r.subject_kind='user' AND r.object_id=$1 AND r.deleted_at IS NULL AND a.deleted_at IS NULL ORDER BY r.subject_id",[artifactId]);
- return result.rows.map(row=>row.subject_id);
-}
-async function lockLike(query:Queryable,verb:RelationVerb,id:string){
- if(verb==='like')await query.query('SELECT id FROM artifacts WHERE id=$1 FOR UPDATE',[id]);
-}
-async function notifyLike(query:Queryable,verb:RelationVerb,id:string){
- if(verb==='like')await query.query("SELECT pg_notify('artifact_' || lower($1), 'likes')",[id]);
 }

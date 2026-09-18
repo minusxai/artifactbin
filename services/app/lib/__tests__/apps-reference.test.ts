@@ -81,3 +81,11 @@ it('keeps successful test writes on the test-user fork and explains the mutation
  expect(text).toContain('$_me writes must offer Sign in and change no data');
  expect(text).toContain('A Mutation can read only the stored table it writes');
 });
+
+it('teaches ordinary participant rows without a platform likes table',()=>{
+ const text=reference();
+ expect(text).not.toContain('_likes');
+ expect(text).toContain('insert into public.members');
+ expect(text).toContain('options="$members"');
+ expect(text).toContain('where not exists');
+});

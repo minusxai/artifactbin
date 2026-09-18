@@ -1,4 +1,3 @@
-import {LIKES_TABLE} from '@artifactbin/contracts';
 import type { DatasetCatalog, DatasetTable } from './types';
 
 interface Token { start: number; end: number; value: string; kind: 'identifier' | 'quoted' | 'literal' | 'symbol' }
@@ -52,7 +51,7 @@ function tokens(sql: string): Token[] {
 /** Resolve one stored write target without translating expressions or bindings.
  * Explicit aliases survive unchanged; UPDATE/DELETE get the logical table's
  * implicit alias so existing `rows.id` references still resolve after renaming. */
-export function compileStoredMutation(catalog: DatasetCatalog, sql: string, targetName: string, allowLikes = false): { sql: string; table: DatasetTable; readsLikes: boolean } {
+export function compileStoredMutation(catalog: DatasetCatalog, sql: string, targetName: string): { sql: string; table: DatasetTable } {
   if (catalog.kind !== 'stored') fail('only stored datasets are writable');
   if (!targetName || targetName.includes('\0')) fail('invalid physical target');
   if (typeof sql !== 'string' || sql.length > 100_000) fail('invalid or oversized SQL');
@@ -87,7 +86,6 @@ export function compileStoredMutation(catalog: DatasetCatalog, sql: string, targ
   const replacements = [{ start: first.start, end: last.end, text: quote(targetName) + alias }];
   // Self-reads use the same isolated physical table as the write. Preserve
   // expression tokens, strings and comments; only FROM/JOIN relations resolve.
-  let readsLikes = false;
   const contexts = [{query:true,relations:false}];
   const boundary = () => fail(`writes ${schema}.${name} and can only read ${schema}.${name}`);
   for (let i = index; i < parts.length - 1; i++) {
@@ -107,7 +105,6 @@ export function compileStoredMutation(catalog: DatasetCatalog, sql: string, targ
     if (parts[i + 2]?.value === '.' && ['identifier', 'quoted'].includes(parts[i + 3]?.kind)) {
       tail = parts[i + 3]; readSchema = head.value; readName = tail.value;
     }
-    if (allowLikes && head === tail && readName === LIKES_TABLE) {readsLikes=true;continue;}
     if (readSchema !== schema || readName !== name) boundary();
     replacements.push({ start: head.start, end: tail.end, text: quote(targetName) });
   }
@@ -115,5 +112,5 @@ export function compileStoredMutation(catalog: DatasetCatalog, sql: string, targ
   for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
     compiled = compiled.slice(0, replacement.start) + replacement.text + compiled.slice(replacement.end);
   }
-  return { sql: compiled, table, readsLikes };
+  return { sql: compiled, table };
 }
