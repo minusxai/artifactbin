@@ -74,14 +74,26 @@ describe('exporting and opening a published artifact', () => {
    }finally{await h.cleanup();}
   });
 
-  test('HTML still requires a published head and historical image rendering is refused, with actionable codes',async()=>{
+  test('HTML still requires a published head, a published version renders, and a local file has no version',async()=>{
    const h=await harness('afbin-seed-export-refuse-');
    try{
     await writeFile(join(h.root,'report.jsx'),tracked('abc123','<p>Edited locally</p>'));
     assert.notEqual(await h.invoke(['export','report.jsx','--format','html','--json']),0);
     assert.equal(h.last().error.code,'renderer_unavailable');assert.equal(h.network(),0);
-    assert.notEqual(await h.invoke(['export','abc123@2','--format','html','--json'],()=>Response.json({})),0);
-    assert.equal(h.last().error.code,'unsupported_version_export');
+    // A LOCAL FILE is a draft, not a history: the bytes on disk are the head.
+    assert.notEqual(await h.invoke(['export','report.jsx@2','--format','png','--json'],()=>Response.json({})),0);
+    assert.equal(h.last().error.code,'unsupported_version_export');assert.equal(h.network(),0);
+    // A PUBLISHED id at a version renders that version's own served document.
+    const html=Buffer.from('<!doctype html><p>Version two</p>');
+    assert.equal(await h.invoke(['export','abc123@2','--format','html','--output','v2.html','--json'],()=>new Response(html,{headers:{'Content-Type':'text/html'}})),0,h.out.join(''));
+    assert.ok(h.paths.includes('/a/abc123/raw?version=2'),h.paths.join(','));
+    assert.deepEqual(await readFile(join(h.root,'v2.html')),html);
+    // …and an IMAGE of a version is photographed on the server, never from the
+    // tracked local copy (which is the head, whatever number was asked for).
+    const png=Buffer.from([137,80,78,71]);
+    assert.equal(await h.invoke(['export','abc123@1','--format','png','--output','v1.png','--json'],({path})=>path.startsWith('/a/abc123/export')?new Response(png,{headers:{'Content-Type':'image/png'}}):Response.json({id:'abc123',version:3,format:'markup',capabilities:{read:true}})),0,h.out.join(''));
+    assert.ok(h.paths.some(c=>/^\/a\/abc123\/export\?.*format=png/.test(c)&&/version=1/.test(c)),h.paths.join(','));
+    assert.deepEqual(await readFile(join(h.root,'v1.png')),png);
     assert.notEqual(await h.invoke(['export','abc123','--format','png','--output','-','--json']),0,'stdout bytes and a JSON envelope cannot share stdout');
    }finally{await h.cleanup();}
   });

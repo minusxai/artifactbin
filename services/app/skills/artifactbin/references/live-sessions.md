@@ -59,6 +59,14 @@ const snapshot = await page.evaluate(() => window.mx.read(['count'], {wait:true}
 return {description, snapshot};
 ```
 
+To drive an OLDER version, add `?version=N` to the same address:
+`await page.goto('/a/abc123?version=2')`. That page renders version 2 read-only
+— no editing, no commenting, and every `<Mutation>` refused with "Version 2 is
+read-only" — under a fixed "Version 2 of 7 · read-only" line. It answers only to
+whoever may read the artifact's history (its owner and its editors); anyone else
+gets the same not-found the address gives for an artifact they cannot see.
+`afbin export <id>@2 --format png` photographs that same page.
+
 `--json` returns `{session_id, execution_id, status, result, pages, attachments, error?}`.
 Images are `{mime, base64}` attachments. Scripts can open several artifacts,
 including multiple copies of one artifact. Returned page IDs remain stable until
