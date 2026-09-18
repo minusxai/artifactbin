@@ -125,6 +125,12 @@ Line by line, this is the whole pattern:
   they were.
 - **Balances are computed in SQL**, never typed. The page holds no arithmetic.
 
+## Forking one
+
+Forking a page copies the datasets it WRITES under your account — rows, columns,
+access and write policy — and repoints the page at your copies; datasets it only
+reads keep their `ref:`, because copying a live source would freeze it.
+
 ## Three mistakes to skip
 
 1. **Typed names.** A `person` column of strings, or a `<Select>` of names you

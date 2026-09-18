@@ -4,6 +4,16 @@ import {CliError} from './commands';
 import {CLI_VERSION} from './version';
 import {configDir,loadConnection,saveConnection,normalizeServer,type Connection} from './config';
 interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv;fetch?:typeof fetch;readOnly?:boolean;account?:string;aliases?:readonly string[];authenticate?:()=>Promise<Connection>}
+/**
+ * THE SECOND READ-ONLY PREFLIGHT. A dry run may send nothing that writes, which is why the
+ * gate below allows exactly one POST — /api/artifacts/preflight. The fork door has the same
+ * shape: `{dry_run:true}` answers which datasets a fork WOULD copy and creates nothing, and
+ * `afbin fork --dry-run` cannot report them without asking. Narrow on purpose: this one path,
+ * this one body, and a body with anything else in it is a write again.
+ */
+const isForkPreflight=(pathname:string,method:string,body:unknown):boolean=>
+ method==='POST'&&/^\/api\/artifacts\/[A-Za-z0-9]{6,12}\/fork$/.test(pathname)
+ &&!!body&&typeof body==='object'&&JSON.stringify(body)==='{"dry_run":true}';
 export class HttpClient {
  connection:Connection;
  account?:string;
@@ -37,7 +47,7 @@ export class HttpClient {
  }
  private async perform(path:string,method:string,body:unknown,headers:Record<string,string>,binary:boolean,timeoutMs=30000,readOnly=false,address:(path:string,server:string)=>URL=apiUrl,signal?:AbortSignal):Promise<unknown>{
   const url=address(path,this.connection.server);
-  if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight')throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
+  if(this.options.readOnly&&!['GET','HEAD'].includes(method)&&url.pathname!=='/api/artifacts/preflight'&&!isForkPreflight(url.pathname,method,body))throw new CliError('unsupported_dry_run','This request has no read-only preflight.');
   const imageExport=address===viewerUrl&&/^\/a\/[A-Za-z0-9]{6}\/export$/.test(url.pathname);
   let refreshed=false,authenticated=false;
   for(let attempt=0;attempt<3;attempt++){

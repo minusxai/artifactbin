@@ -8,6 +8,7 @@ import {parseDocument,writeDocument,identityFields,type DocumentMetadata} from '
 import {parseResourceFile,writeResourceFile} from './resource-file';
 import {snapshotDocument} from './local';
 import {rowsCsv} from './tabular';
+import {endLine} from './dataset-source';
 import type {HttpClient} from './http';
 import type {Workspace,Snapshot} from './workspace';
 import type {ArtifactResourceFile} from '@artifactbin/contracts';
@@ -16,6 +17,14 @@ import type {ArtifactResourceFile} from '@artifactbin/contracts';
  * A fork is a NEW local draft, never a server copy: the source's write identity and its
  * invitations are removed, lineage is recorded once, and sharing restarts at private. The
  * first push sends `forked_from` on create; nothing here publishes or tracks anything.
+ *
+ * FORKING AN APP is the one case that has to ask the server first. A page whose <Mutation>
+ * writes somebody else's dataset may be published by nobody but its owner, so a draft that kept
+ * the original `ref:` would be a file `push` always refuses. The server's fork door already
+ * copies those datasets under this account and repoints the page, so the CLI has it do exactly
+ * that, takes the copy's markup as the draft, strips the five identity fields, and DELETES the
+ * page the server made. What remains is what `afbin fork` has always meant — datasets of your
+ * own, and one local file that push publishes.
  */
 const strippedFields=[...identityFields,'shares','folder','link'] as const;
 /** Folders have no content of their own and a Postgres dataset's secret stays bound to the original. */
@@ -23,7 +32,11 @@ const NOT_FORKABLE_FIX='Fork a document, dataset rows or a file; a folder names 
 
 interface ForkOptions {type?:string;output?:string;dryRun?:boolean;server:string;/** Verified other addresses of `server`; a URL at one of them names the same artifact. */aliases?:readonly string[];client?:HttpClient}
 interface ForkFile {path:string;bytes:Buffer}
-interface ForkDraft {kind:'artifact'|'dataset'|'file';forkedFrom:string;base:string;extension:string;render:(paths:{draft:string;source?:string})=>Buffer;source?:{extension:string;bytes:Buffer};dependencies:string[]}
+interface ForkDraft {kind:'artifact'|'dataset'|'file';forkedFrom:string;base:string;extension:string;render:(paths:{draft:string;source?:string})=>Buffer;source?:{extension:string;bytes:Buffer};dependencies:string[];
+ /** The datasets this fork copies: `{id,title}` on a dry run (what WOULD be copied), `{id,forked_from}` once they exist. */
+ datasets?:Array<Record<string,unknown>>;
+ /** A server-side page copy that could not be removed afterwards, named so it can be deleted by hand. */
+ leftBehind?:string}
 
 function forkMetadata(metadata:DocumentMetadata,forkedFrom:string):DocumentMetadata{
  const carried=Object.fromEntries(Object.entries(metadata).filter(([key])=>!strippedFields.includes(key as never)));
@@ -49,7 +62,7 @@ export async function forkResources(workspace:Workspace,refs:string[],options:Fo
  const taken=new Set<string>(resolved.filter(entry=>entry.ref.kind==='path').map(entry=>(entry.ref as {path:string}).path));
  const files:ForkFile[]=[];const operations:Record<string,unknown>[]=[];
  for(const {input,ref} of resolved){
-  const draft=ref.kind==='path'?await localDraft(workspace,ref.path,options.type):await remoteDraft(options.client!,ref.id,ref.version,options.type);
+  const draft=ref.kind==='path'?await localDraft(workspace,ref.path,options.type):await remoteDraft(options.client!,ref.id,ref.version,options.type,!!options.dryRun);
   const explicit=outputPath&&!directory?relative(workspace.root,outputPath):undefined;
   if(explicit&&extname(explicit).toLowerCase()!==draft.extension)throw new CliError('invalid_output',`A ${draft.kind} fork of ${input} is a ${draft.extension} file.`,`Choose an --output path ending in ${draft.extension}.`);
   const path=explicit??await freePath(workspace,directory,draft.base,draft.extension,taken);
@@ -58,7 +71,8 @@ export async function forkResources(workspace:Workspace,refs:string[],options:Fo
   if(sourcePath)await reserve(workspace,sourcePath,taken,false);
   files.push({path,bytes:draft.render({draft:path,...(sourcePath?{source:sourcePath}:{})})});
   if(draft.source&&sourcePath)files.push({path:sourcePath,bytes:draft.source.bytes});
-  operations.push({ref:input,path,type:draft.kind,forked_from:draft.forkedFrom,visibility:'private',shares:[],dependencies:draft.dependencies,...(sourcePath?{source:sourcePath}:{}),status:options.dryRun?'would_create':'created'});
+  operations.push({ref:input,path,type:draft.kind,forked_from:draft.forkedFrom,visibility:'private',shares:[],dependencies:draft.dependencies,...(sourcePath?{source:sourcePath}:{}),
+   ...(draft.datasets?.length?{datasets:draft.datasets}:{}),...(draft.leftBehind?{server_copy:draft.leftBehind}:{}),status:options.dryRun?'would_create':'created'});
  }
  if(options.dryRun)return {dry_run:true,operations};
  for(const file of files){
@@ -135,7 +149,7 @@ async function connectedDataset(workspace:Workspace,resource:ArtifactResourceFil
 }
 
 /** Remote sources take the pull retrieval path: one snapshot read, plus content for the data tiers. */
-async function remoteDraft(client:HttpClient,id:string,version:number|undefined,type:string|undefined):Promise<ForkDraft>{
+async function remoteDraft(client:HttpClient,id:string,version:number|undefined,type:string|undefined,dryRun:boolean):Promise<ForkDraft>{
  const head=await client.request<Snapshot>(`/artifacts/${id}`);
  if(head.id!==id||!Number.isSafeInteger(head.version))throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');
  const snapshot=version&&version!==head.version?{...head,...await client.request<Record<string,unknown>>(`/artifacts/${id}/versions/${version}`),id:head.id,version} as Snapshot:head;
@@ -143,14 +157,45 @@ async function remoteDraft(client:HttpClient,id:string,version:number|undefined,
  if(snapshot.format==='dataset'&&String((snapshot.catalog as {kind?:unknown}|undefined)?.kind??snapshot.dataset_kind??'stored')==='postgres')throw new CliError('not_forkable',`${id} is a connected dataset.`,NOT_FORKABLE_FIX);
  if(snapshot.format==='markup'){
   conflictingType(type,'artifact',id);
-  const document=snapshotDocument(snapshot);
-  return {kind:'artifact',forkedFrom:id,base:id,extension:'.jsx',dependencies:[],render:()=>Buffer.from(writeDocument({metadata:forkMetadata(document.metadata,id),body:document.body}))};
+  const asDraft=(from:Snapshot):ForkDraft=>{
+   const document=snapshotDocument(from);
+   return {kind:'artifact',forkedFrom:id,base:id,extension:'.jsx',dependencies:[],render:()=>Buffer.from(writeDocument({metadata:forkMetadata(document.metadata,id),body:document.body}))};
+  };
+  // What forking this page would COPY. A read-only preflight: it creates nothing, so it runs
+  // on a dry run too (services/cli/src/http isForkPreflight).
+  const copies=(await client.request<{datasets?:Array<{id:string;title:string|null}>}>(`/artifacts/${id}/fork`,'POST',{dry_run:true})).datasets??[];
+  if(!copies.length)return asDraft(snapshot);
+  if(dryRun)return {...asDraft(snapshot),datasets:copies};
+  // The server fork takes the HEAD, because the datasets it copies are the ones the page
+  // writes NOW. Repointing an older version's refs by hand here would be a second
+  // implementation of the server's rewrite, in the place least able to test it.
+  if(version&&version!==head.version)throw new CliError('unsupported_fork_version',`Forking ${id}@${version} would copy ${copies.length} dataset${copies.length===1?'':'s'}, which is done from the published head.`,`Fork the head with afbin fork ${id}, or read the version with afbin pull ${id}@${version} --output - and repoint its ref: ids yourself.`);
+  const made=await client.request<{id:string;datasets?:Array<Record<string,unknown>>}>(`/artifacts/${id}/fork`,'POST',{});
+  if(typeof made.id!=='string')throw new CliError('invalid_response','The server did not return the forked artifact.');
+  const copy=await client.request<Snapshot>(`/artifacts/${made.id}`);
+  if(copy.id!==made.id||typeof copy.markup!=='string')throw new CliError('invalid_response','The server did not return a complete artifact snapshot.');
+  // The datasets are the point and they STAY; the page the server made was only the way to get
+  // the repointed markup, and leaving it published would make `afbin fork` publish something.
+  // It is a TRASH, not an erase, and the artifact COUNT quota deliberately counts trashed rows
+  // (lib/artifacts artifactQuotaExceeded), so this fork spends one slot nobody ever sees again.
+  // Named here rather than hidden: it is the price of the draft staying unregistered.
+  let leftBehind:string|undefined;
+  try{await client.request(`/artifacts/${made.id}`,'DELETE');}catch{leftBehind=made.id;}
+  return {...asDraft(copy),datasets:made.datasets??[],...(leftBehind?{leftBehind}:{})};
  }
  const content=await client.content(`/artifacts/${id}/content?version=${snapshot.version}`);
  const kind=snapshot.format==='dataset'?'dataset':'file';
  conflictingType(type,kind,id);
  const metadata=forkMetadata(snapshotDocument(snapshot).metadata,id);
  if(kind==='dataset'){
+  // A dataset is EITHER rows or a <Dataset> definition, and the served representation is the
+  // only discriminator every actor can see (the same rule as resource-pull). A definition used
+  // to reach the row parser below and be refused as "not JSON"; it forks as what `afbin pull
+  // <ref> --format yaml` writes — the typed resource plus its .jsx definition.
+  if(!content.contentType.startsWith('application/json')){
+   return {kind,forkedFrom:id,base:id,extension:'.yaml',dependencies:[],source:{extension:'.jsx',bytes:Buffer.from(endLine(content.bytes.toString()))},
+    render:({draft,source})=>Buffer.from(writeResourceFile({...metadata,type:'dataset',source:relativeSource(draft,source!)} as ArtifactResourceFile))};
+  }
   let rows:unknown;try{rows=JSON.parse(content.bytes.toString());}catch{throw new CliError('invalid_response','Dataset content is not JSON.');}
   if(!Array.isArray(rows)||!rows.every(row=>row&&typeof row==='object'&&!Array.isArray(row)))throw new CliError('invalid_response','Dataset content must contain row objects.');
   return {kind,forkedFrom:id,base:id,extension:'.yaml',dependencies:[],source:{extension:'.csv',bytes:Buffer.from(rowsCsv(rows as Record<string,unknown>[]))},
