@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 import { afbinPort, cliBuildStale, devHome, healthRefusal, runAfbin } from '../lib/afbin-run.mjs';
+import { containmentExpectation, containmentObserved } from '../lib/session-containment.mjs';
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '../..');
 
@@ -130,5 +131,34 @@ describe('npm run afbin', () => {
       expect(run.logged[0]).toMatch(/7601/);
       expect(run.logged[0]).not.toMatch(/\n/);
     } finally { await rm(root, { recursive: true, force: true }); }
+  });
+});
+
+/**
+ * The sessions gate asks the SERVER whether it ran the session contained, and drops
+ * exactly the two assertions no unsandboxed host can answer — by name, and never by
+ * softening the four-fact comparison Linux CI still makes.
+ */
+describe('session containment on a host with no sandbox', () => {
+  it('asserts all four facts by default and skips only the sandbox\'s two, by name', () => {
+    const contained = containmentExpectation(undefined);
+    expect(contained.expected).toEqual({ checkout: false, network: false, own: 'ok', credentials: [] });
+    expect(contained.skipped).toEqual([]);
+
+    const unsandboxed = containmentExpectation('none');
+    expect(unsandboxed.expected).toEqual({ own: 'ok', credentials: [] });
+    expect(unsandboxed.skipped).toEqual(['filesystem containment (probe.checkout)', 'network containment (probe.network)']);
+  });
+
+  it('still fails an unsandboxed host on the facts the parent owns, and on the sandbox\'s facts when it is on', () => {
+    const leaky = { checkout: true, network: true, own: 'ok', credentials: [] };
+    const unsandboxed = containmentExpectation('none');
+    // Reading the checkout is bubblewrap's job, so it is not asked about here...
+    expect(containmentObserved(leaky, unsandboxed.expected)).toEqual(unsandboxed.expected);
+    // ...but a credential in the worker's environment is OURS, and still fails.
+    expect(containmentObserved({ ...leaky, credentials: ['ADMIN__SECRET'] }, unsandboxed.expected)).not.toEqual(unsandboxed.expected);
+    // With the sandbox on, the same leaky probe fails on the two facts that were skipped.
+    const contained = containmentExpectation(undefined);
+    expect(containmentObserved(leaky, contained.expected)).not.toEqual(contained.expected);
   });
 });

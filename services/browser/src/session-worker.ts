@@ -17,7 +17,11 @@ const rpc = payload => new Promise((resolve, reject) => {
 // The raw URL only: artifact identity is derived on the trusted side (src/sessions.ts) from the
 // shared reference grammar, so the sandbox never carries a second copy of it.
 const pageList = () => [...pages].filter(([,page]) => !page.isClosed()).map(([page_id,page]) => ({page_id,url:page.url()}));
-readline.createInterface({input:process.stdin}).on('line', async line => {
+// DIE WITH THE PARENT. Under bubblewrap --die-with-parent does this; a worker started
+// as a plain child (BROWSER__SANDBOX=none) has no such flag, and Chromium keeps the
+// event loop alive forever — a dev server stopped with the browser open left orphaned
+// browsers on the machine. The control pipe closing IS the parent going away.
+readline.createInterface({input:process.stdin}).on('close', () => process.exit(0)).on('line', async line => {
   const message = JSON.parse(line);
   if (message.type === 'fetched') {
     const task = requests.get(message.id); if (!task) return;

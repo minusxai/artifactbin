@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fixtureFetch as fetch } from './lib/fixture-http.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
+import { containmentExpectation, containmentObserved } from './lib/session-containment.mjs';
 
 const base = process.argv[2] ?? 'http://localhost:3030';
 const token = (await connectAgent(base)).token;
@@ -37,16 +38,8 @@ const saveImage = async (name, attachment) => {
   await writeFile(path.join(evidence, name+'.png'), bytes);
 };
 const ids = [];
-/**
- * WHAT A HOST WITHOUT A SANDBOX CANNOT BE ASKED. Two of the probe's four facts —
- * that the session cannot read this checkout and cannot reach the network — are
- * bubblewrap's doing, not this code's. Under `BROWSER__SANDBOX=none` (the macOS
- * development loop) there is no namespace to enforce them, so they are skipped BY
- * NAME and printed, never softened; Linux CI still asserts all four. The two facts
- * the PARENT owns — a writable private directory and an environment carrying no
- * credential — are asserted on every host.
- */
-const skipped = [];
+/** Which of the probe's four facts this host can be asked about; see lib/session-containment.mjs. */
+let skipped = [];
 try {
   const markup = count => `<Helmet><Value name="count" type="number" default={${count}}/><Query name="result">{\`select $count as n\`}</Query></Helmet><h1>Session counter</h1><Number data="$result" col="n"/><Iframe title="Counter widget" height={120}><button id="add">Add one</button><p id="value">Waiting</p><script>{\`const stop=mx.subscribe(['count'],s=>document.getElementById('value').textContent=String(s.signals.count.value));document.getElementById('add').onclick=async()=>{const s=await mx.read(['count']);await mx.set({count:s.signals.count.value+1})};addEventListener('pagehide',stop);\`}</script></Iframe>`;
   const artifacts = [];
@@ -89,13 +82,10 @@ try {
     await fs.writeFile('own.txt','ok');
     return {checkout,network,own:await fs.readFile('own.txt','utf8'),credentials:Object.keys(process.env).filter(key=>/SECRET|TOKEN|API_KEY/.test(key))};
   `);
-  const unsandboxed = first.sandbox === 'none';
-  if (unsandboxed) {
-    skipped.push('filesystem containment (probe.checkout)', 'network containment (probe.network)');
-    assert.deepEqual({own:probe.result.own,credentials:probe.result.credentials}, {own:'ok',credentials:[]}, JSON.stringify(probe));
-  } else {
-    assert.deepEqual(probe.result, {checkout:false,network:false,own:'ok',credentials:[]},JSON.stringify(probe));
-  }
+  // The SERVER says whether it ran this session sandboxed; the host's own opinion is not consulted.
+  const containment = containmentExpectation(first.sandbox);
+  skipped = containment.skipped;
+  assert.deepEqual(containmentObserved(probe.result, containment.expected), containment.expected, JSON.stringify(probe));
   const stranger = (await connectAgent(base)).token;
   assert.equal((await request({op:'status',session_id:first.session_id},stranger)).error.code,'SESSION_NOT_FOUND');
   const receipt = await cli(['status',first.session_id,'--execution',resumed.execution_id]);
