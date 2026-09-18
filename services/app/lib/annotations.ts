@@ -20,6 +20,7 @@ import {
 } from '@/lib/artifacts';
 import { canGovern } from '@/lib/share-roles';
 import { ANNOTATION_ANCHOR_ATTR } from '@/lib/annotation-anchors';
+import { avatarUrl } from '@/lib/avatars';
 import { getDb, type Queryable } from '@/lib/db';
 import { actorSubject, emit } from '@/lib/events';
 import { generateInternalId } from '@/lib/ids';
@@ -64,10 +65,23 @@ export interface AnnotationAuthor {
   transport: 'browser' | 'http' | 'mcp' | 'unknown';
 }
 
+/**
+ * An author as a reader receives it: who wrote it, plus the face to draw. Both
+ * are READ, never written — the id is the row's `author_user_id`, the picture
+ * the account's current one — so a caller creating a comment never names them.
+ * Null for an agent (drawn as its product mark) and for a person without an
+ * account; public by construction (the handle is already a /@link, the avatar
+ * route is public by id) and never the email or the token.
+ */
+export interface AnnotationWireAuthor extends AnnotationAuthor {
+  user_id: string | null;
+  image: string | null;
+}
+
 export interface AnnotationCommentWire {
   id: string;
   body: string;
-  author: AnnotationAuthor;
+  author: AnnotationWireAuthor;
   created_at: string;
 }
 
@@ -144,6 +158,8 @@ interface AnnotationRowDb {
   /** Who wrote it, when they had an account — the only thing that can say "your own". */
   author_user_id: string | null;
   author_transport: AnnotationAuthor['transport'];
+  /** The author account's picture key, JOINED in the read (`ANNOTATIONS_READ`) — never stored here. */
+  author_image_key: string | null;
   status: 'open' | 'resolved';
   resolved_at: string | null;
   anchor_key: string | null;
@@ -168,16 +184,32 @@ const snippetOf = (markup: string): string =>
 const notify = (q: Queryable, artifactId: string, annotationId: string) =>
   q.query('SELECT pg_notify($1, $2)', [channelForAnnotations(artifactId), annotationId]);
 
-const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => ({
-  id: row.id,
-  body: row.body,
-  author: {
-    kind: row.author_kind === 'agent' ? 'agent' : 'human',
-    label: row.author_label,
-    transport: row.author_transport,
-  },
-  created_at: row.created_at,
-});
+/**
+ * Every read that builds the wire goes through this relation instead of the
+ * bare table: the rows plus their author's picture key, in the SAME statement
+ * that fetches the comments — never a lookup per comment. A subquery aliased
+ * back to `annotations`, so each reader's WHERE/ORDER stays as written.
+ */
+const ANNOTATIONS_READ =
+  '(SELECT a.*, u.image_key AS author_image_key FROM annotations a LEFT JOIN users u ON u.id = a.author_user_id) annotations';
+
+const commentWire = (row: AnnotationRowDb): AnnotationCommentWire => {
+  const kind = row.author_kind === 'agent' ? 'agent' : 'human';
+  // Agents are drawn as their product; a token's account says nothing about whose face that is.
+  const userId = kind === 'human' ? row.author_user_id : null;
+  return {
+    id: row.id,
+    body: row.body,
+    author: {
+      kind,
+      label: row.author_label,
+      transport: row.author_transport,
+      user_id: userId,
+      image: userId ? avatarUrl({ id: userId, image_key: row.author_image_key }) : null,
+    },
+    created_at: row.created_at,
+  };
+};
 
 // ── the anchor attribute, read and written against the parsed source ─────────
 
@@ -340,16 +372,17 @@ export async function createAnnotationFor(
     const anchorKey = anchorKeyOf(node);
     if (!anchorKey) return { refused: 'bad_path' };
     if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
-    const inserted = await tx.query<AnnotationRowDb>(
+    await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
         status, anchor_key, anchor_version, snippet, quote, range)
-     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13)
-     RETURNING *`,
+     VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, 'open', $9, $10, $11, $12, $13)`,
     [id, artifactId, input.body, author.kind, actor.tokenId, actor.userId, author.label, author.transport,
       anchorKey, row.version, snippetOf(source.slice(node.start, node.end)),
       quote, input.range ? JSON.stringify(input.range) : null],
     );
+    // Read back through the join, not RETURNING: the echo draws the author's face too.
+    const inserted = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [id]);
     await notify(tx, artifactId, id);
     const [wire] = await wireFor(tx, row, inserted.rows);
     if(wire&&receipt)await completeMutationReceipt(tx,receipt,{status:201,body:wire as unknown as Record<string,unknown>});
@@ -379,7 +412,7 @@ const LIVE_ANNOTATION_SQL = 'deleted_at IS NULL';
 async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[]): Promise<AnnotationWire[]> {
   if (roots.length === 0) return [];
   const replies = await db.query<AnnotationRowDb>(
-    `SELECT * FROM annotations WHERE artifact_id = $1 AND root_id IS NOT NULL AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
+    `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id IS NOT NULL AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [head.id],
   );
   const byRoot = new Map<string, AnnotationRowDb[]>();
@@ -430,7 +463,7 @@ export async function listAnnotationPageFor(actor: TokenActor, artifactId: strin
   const row = await scopedRow(db, annotationScope(actor), artifactId);
   if (!row) return null;
   const roots = await db.query<AnnotationRowDb>(
-    `SELECT * FROM annotations WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
+    `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id=$1 AND root_id IS NULL AND ${LIVE_ANNOTATION_SQL}
       AND ($2::text='all' OR status=$2) AND ($3::bigint IS NULL OR seq>$3)
       AND ($5::text IS NULL OR author_user_id=$5 OR author_token_id=$5)
       ORDER BY seq LIMIT $4`, [artifactId, opts.status, opts.after ?? null, opts.limit + 1,opts.author??null]);
@@ -464,7 +497,7 @@ export async function annotationsWireForRow(
   const status = opts?.status ?? 'open';
   const filter = status === 'all' ? '' : `AND status = '${status === 'open' ? 'open' : 'resolved'}'`;
   const roots = await db.query<AnnotationRowDb>(
-    `SELECT * FROM annotations WHERE artifact_id = $1 AND root_id IS NULL ${filter} AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
+    `SELECT * FROM ${ANNOTATIONS_READ} WHERE artifact_id = $1 AND root_id IS NULL ${filter} AND ${LIVE_ANNOTATION_SQL} ORDER BY seq`,
     [row.id],
   );
   return wireFor(db, row, roots.rows);
@@ -521,7 +554,7 @@ export async function actOnAnnotationFor(
       await tx.query("UPDATE annotations SET status = 'resolved', resolved_at = now() WHERE id = $1", [root.id]);
       resolved = true;
     }
-    const fresh = await tx.query<AnnotationRowDb>('SELECT * FROM annotations WHERE id = $1', [root.id]);
+    const fresh = await tx.query<AnnotationRowDb>(`SELECT * FROM ${ANNOTATIONS_READ} WHERE id = $1`, [root.id]);
     // A vanished row stays the null: wrapping it in the result object would
     // make every miss truthy.
     if (!fresh.rows[0]) return null;

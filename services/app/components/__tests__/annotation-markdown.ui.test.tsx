@@ -44,8 +44,8 @@ const ANN: AnnotationWire = {
   range: null,
   quote_found: null,
   thread: [
-    { id: 'ann_1', body: 'why is the cap 5?', author: { kind: 'human', label: 'vivek', transport: 'browser' }, created_at: '2026-09-01T00:00:00Z' },
-    { id: 'ann_2', body: AGENT_BODY, author: { kind: 'agent', label: 'Claude Code', transport: 'mcp' }, created_at: '2026-09-01T01:00:00Z' },
+    { id: 'ann_1', body: 'why is the cap 5?', author: { kind: 'human', label: 'vivek', transport: 'browser', user_id: 'usr_vivek', image: null }, created_at: '2026-09-01T00:00:00Z' },
+    { id: 'ann_2', body: AGENT_BODY, author: { kind: 'agent', label: 'Claude Code', transport: 'mcp', user_id: null, image: null }, created_at: '2026-09-01T01:00:00Z' },
   ],
   created_at: '2026-09-01T00:00:00Z',
   resolved_at: null,

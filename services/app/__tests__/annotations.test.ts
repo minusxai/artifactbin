@@ -13,7 +13,7 @@ import {observedRequest} from '@/__tests__/conditional-request';
  * reported — the fixture carries a <Helmet> on purpose, because the
  * body→source first-index offset is invisible in pure prose.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { agentCookie, useAppHarness, request } from '@/__tests__/harness';
 import { POST as actOnAnnotationRoute } from '@/app/api/artifacts/[id]/annotations/[annId]/route';
 import { GET as listAnnotationsRoute } from '@/app/api/artifacts/[id]/annotations/route';
@@ -24,6 +24,7 @@ import { GET as myListAnnotationsRoute, POST as myCreateAnnotationRoute } from '
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, setUsername } from '@/lib/users';
 import { countOpenAnnotations } from '@/lib/annotations';
+import { avatarUrl } from '@/lib/avatars';
 
 const harness = useAppHarness();
 const params = <T extends Record<string, string>>(p: T) => ({ params: Promise.resolve(p) });
@@ -55,7 +56,7 @@ interface AnnotationWire {
   orphaned: boolean;
   anchor: { path: string; spanStart: number; spanEnd: number } | null;
   snippet: string;
-  thread: Array<{ body: string; author: { kind: string; label: string | null; transport: string } }>;
+  thread: Array<{ body: string; author: { kind: string; label: string | null; transport: string; user_id: string | null; image: string | null } }>;
 }
 
 const annotate = (id: string, cookie: string, body: Record<string, unknown>, origin?: string) =>
@@ -238,6 +239,63 @@ describe('reply / resolve — the agent\'s one mutation', () => {
     await claimToken(user.id, t.token);
     const named = (await (await annotate(doc.id, cookie, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'from viv' })).json()) as AnnotationWire;
     expect(named.thread[0].author).toMatchObject({ kind: 'human', label: 'viv_tester', transport: 'browser' });
+  });
+
+  it('a person\'s comments carry their account id and picture, read fresh with the comments; agents and account-less people carry neither', async () => {
+    const { t, doc, cookie } = await publish();
+    const anon = (await (await annotate(doc.id, cookie, { path: '1', edit_id: doc.edit_id, body: 'from nobody' })).json()) as AnnotationWire;
+    expect(anon.thread[0].author).toMatchObject({ kind: 'human', user_id: null, image: null });
+
+    const user = await createUser({ email: 'mxmx_test_face@example.com' });
+    expect('ok' in (await setUsername(user.id, 'face_tester'))).toBe(true);
+    await claimToken(user.id, t.token);
+    // No picture yet: the id (the colour key) and no address.
+    const plain = (await (await annotate(doc.id, cookie, { path: '0', edit_id: await headEditId(t.token, doc.id), body: 'no face yet' })).json()) as AnnotationWire;
+    expect(plain.thread[0].author).toMatchObject({ kind: 'human', label: 'face_tester', user_id: user.id, image: null });
+
+    const db = await harness.db();
+    const imageKey = `avatar/${user.id}/abc123`;
+    await db.query('UPDATE users SET image_key = $2 WHERE id = $1', [user.id, imageKey]);
+    const image = avatarUrl({ id: user.id, image_key: imageKey });
+    expect(image).toBeTruthy();
+
+    // The create echo, a human reply and an agent reply all read the picture on the write path too.
+    const withFace = (await (await annotate(doc.id, cookie, { path: '1', edit_id: await headEditId(t.token, doc.id), body: 'with a face' })).json()) as AnnotationWire;
+    expect(withFace.thread[0].author).toMatchObject({ kind: 'human', user_id: user.id, image });
+    const humanReply = (await (await myActOnAnnotationRoute(
+      request(`/api/my/artifacts/${doc.id}/annotations/${withFace.id}`, { method: 'POST', cookie: cookie, json: { reply: 'me again' } }),
+      params({ id: doc.id, annId: withFace.id }),
+    )).json()) as AnnotationWire;
+    expect(humanReply.thread[1].author).toMatchObject({ kind: 'human', user_id: user.id, image });
+    const agentReply = (await (await actOnAnnotationRoute(
+      request(`/api/artifacts/${doc.id}/annotations/${withFace.id}`, { method: 'POST', token: t.token, json: { reply: 'on it' }, headers: { 'Artifactbin-Agent': 'codex' } }),
+      params({ id: doc.id, annId: withFace.id }),
+    )).json()) as AnnotationWire;
+    expect(agentReply.thread[2].author).toEqual({ kind: 'agent', label: 'Codex', transport: 'http', user_id: null, image: null });
+
+    // Every read that builds the wire: the owner's list, the bearer page and the GET's inline field.
+    const query = vi.spyOn(db, 'query');
+    try {
+      const my = (await (await myListAnnotationsRoute(request(`/api/my/artifacts/${doc.id}/annotations`, { cookie: cookie }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
+      const page = (await (await listAnnotationsRoute(request(`/api/artifacts/${doc.id}/annotations`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
+      const inline = (await (await getArtifactRoute(request(`/api/artifacts/${doc.id}`, { token: t.token }), params({ id: doc.id }))).json()) as { annotations: AnnotationWire[] };
+      for (const annotations of [my.annotations, page.annotations, inline.annotations]) {
+        const byBody = new Map(annotations.flatMap((a) => a.thread).map((c) => [c.body, c.author]));
+        expect(byBody.get('from nobody')).toMatchObject({ user_id: null, image: null });
+        // Written before the picture existed, drawn with it now: the address is read, never snapshotted.
+        expect(byBody.get('no face yet')).toMatchObject({ user_id: user.id, image });
+        expect(byBody.get('with a face')).toMatchObject({ user_id: user.id, image });
+        expect(byBody.get('me again')).toMatchObject({ user_id: user.id, image });
+        expect(byBody.get('on it')).toMatchObject({ user_id: null, image: null });
+        expect(JSON.stringify(annotations)).not.toContain('mxmx_test_face@example.com');
+      }
+      // Joined in the reads that fetch the comments — the roots and the replies,
+      // two statements per read however many people wrote — never a picture
+      // looked up on its own, per comment.
+      const pictureReads = query.mock.calls.map(([sql]) => String(sql)).filter((sql) => sql.includes('image_key'));
+      expect(pictureReads.every((sql) => /FROM annotations a LEFT JOIN users u ON u\.id = a\.author_user_id/.test(sql))).toBe(true);
+      expect(pictureReads).toHaveLength(3 * 2);
+    } finally { query.mockRestore(); }
   });
 
   it('the owner replies through the /api/my twin, attributed owner', async () => {
