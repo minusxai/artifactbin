@@ -126,7 +126,11 @@ function useForkArtifact(id: string): ForkState {
         if (!current()) return;
         if (res.status === 201 && body.url) {
           leaving = true;
-          router.push(body.url);
+          // By PATH, on the origin this page is already on: the reply's host is
+          // derived from the request's headers, which a browser reaching the
+          // app through an internal hostname (a live session) does not share.
+          const copy = new URL(body.url, window.location.href);
+          router.push(copy.pathname + copy.search);
           return;
         }
         if (res.status === 401 || (res.status === 409 && body.error === 'sign_in_required')) {

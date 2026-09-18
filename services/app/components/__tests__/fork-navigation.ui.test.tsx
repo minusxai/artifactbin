@@ -40,6 +40,19 @@ it('commits a successful copy through the router', async () => {
   expect(fetchMock.mock.calls[0][0]).toBe('/api/my/artifacts/abcdef/fork');
 });
 
+it('opens the copy by PATH when the reply names a host this browser did not use', async () => {
+  // A live session's browser reaches the app through an internal hostname, and the
+  // reply's url is derived from that request's headers (production, 2026-09-18:
+  // `http://artifactbin-app:3000/a/Y61zpe`). The copy is on THIS origin; go there.
+  vi.stubGlobal('fetch', vi.fn(async () => Response.json({url:'http://artifactbin-app:3000/@owner/copy01-document?x=1'}, {status:201})));
+  const router=createMemoryRouter([{path:'*',element:<ForkArtifact id="abcdef"/>}]);
+  render(<RouterProvider router={router}/>);
+  fireEvent.click(screen.getByLabelText('Fork artifact'));
+  fireEvent.click(screen.getByLabelText('Confirm fork'));
+  await waitFor(() => expect(router.state.location.pathname).toBe('/@owner/copy01-document'));
+  expect(router.state.location.search).toBe('?x=1');
+});
+
 it('keeps a forbidden response visible rather than sending the user to login', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => Response.json({error:'forbidden'}, {status:403})));
   const router=createMemoryRouter([{path:'*',element:<ForkArtifact id="abcdef"/>}]);
