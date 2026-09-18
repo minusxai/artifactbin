@@ -31,6 +31,17 @@ describe('<UserImage>', () => {
     expect(img.getAttribute('aria-hidden')).toBeNull();
   });
 
+  /* A face is written inside a sentence ("paid by <UserImage/>"), so it flows with the text. */
+  it('sits inline in a sentence rather than breaking it, known or not', () => {
+    for (const card of [ADA, null]) {
+      const view = render(<UserImage id="usr_ada" card={card} />);
+      const tokens = (view.container.querySelector('[data-slot="avatar"]') as HTMLElement).className.split(/\s+/);
+      expect(tokens).toContain('inline-flex');
+      expect(tokens).not.toContain('flex');
+      view.unmount();
+    }
+  });
+
   /*
    * A picture is an ADDRESS, and an address can fail. The initial stays
    * underneath it, so a 404 reveals a person rather than a browser's broken
