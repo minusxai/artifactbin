@@ -2,7 +2,7 @@
  * Dependencies include test/composition edges, not just package dependencies.
  * Unknown paths and shared configuration must select everything.
  */
-export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'image', 'cli', 'reference-compatibility'];
+export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 'reference-compatibility'];
 
 /**
  * THE FILES `npm run release:cli` (and the `generate:teaching` that follows it) REWRITE, and nothing
@@ -111,7 +111,7 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
     const module = /^services\/([^/]+)\//.exec(path)?.[1];
     if (!Object.hasOwn(CI_MODULES, module ?? '')
       || module === 'contracts' || module === 'utils' || module === 'test-support'
-      || path.endsWith('/package.json') || path.endsWith('/Dockerfile')
+      || path.endsWith('/package.json')
       || path === 'services/cli/scripts/prepare-pty.mjs') {
       full = true;
     } else changed.add(module);
@@ -133,7 +133,7 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   jobs.checks = true;
   if (!full) {
     jobs.node = affected.size > 0;
-    for (const job of ['ui', 'build', 'api', 'gates', 'image']) jobs[job] = app;
+    for (const job of ['ui', 'build', 'api', 'gates']) jobs[job] = app;
   }
   // Release-only, full run or not: the binaries are proved where they are published.
   jobs.cli = cliRelease;

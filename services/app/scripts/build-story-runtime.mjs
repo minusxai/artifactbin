@@ -220,8 +220,8 @@ const manifest = {
 /*
  * The manifest is only useful if the files it names are really there, and the
  * serving path deliberately degrades rather than throwing over a missing one —
- * so this is where it has to be loud. The image re-checks the same thing after
- * the copy (Dockerfile).
+ * so this is where it has to be loud. The serving accessor re-checks the same
+ * thing (lib/story/runtime-asset.ts).
  */
 for (const url of [manifest.entry, manifest.anchor, manifest.comment, ...manifest.lazy]) {
   const file = path.join(root, 'public', url.replace(/^\//, ''));

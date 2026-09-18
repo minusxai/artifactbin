@@ -135,8 +135,8 @@ export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TO
  * Reading the wrong end lets a caller pick their own rate-limit bucket, which
  * is the same as having no limit.
  *
- * 1 matches the shape docker-compose.yml documents (one TLS-terminating proxy —
- * Caddy/Traefik/your host's). Raise it when another trusted hop is added in
+ * 1 matches the documented deployment shape (one TLS-terminating proxy in front
+ * of the server — Caddy/Traefik/your host's). Raise it when another trusted hop is added in
  * front (a CDN, say); never raise it past the number of proxies that actually
  * rewrite the header, or the extra hops start reading caller-controlled values
  * again.

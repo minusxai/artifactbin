@@ -1,8 +1,8 @@
 /**
  * `orchestrator/prompts/story-guidance.yaml`, parsed once at first use. A
  * runtime read rather than a bundler loader: the file is the truth the docs
- * and the validator project, and it ships beside the server (Dockerfile
- * copies `orchestrator/`), not inside a bundle.
+ * and the validator project, and it ships beside the server as a file on disk,
+ * not inside a bundle.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

@@ -2,10 +2,10 @@
 /**
  * Regenerate the `.env.example` snapshot inside `scripts/lib/setup-plan.mjs`.
  *
- * The planner cannot read `.env.example` at runtime: the runtime image ships
- * only the setup modules (Dockerfile COPYs `scripts/setup.mjs`,
- * `scripts/lib/setup-plan.mjs` and `scripts/lib/dev-ports.mjs`, nothing else),
- * and `npm run setup` inside that image must still render a complete file. So
+ * The planner cannot read `.env.example` at runtime: what ships is the setup
+ * modules alone (`scripts/setup.mjs`, `scripts/lib/setup-plan.mjs` and
+ * `scripts/lib/dev-ports.mjs`), with no repository beside them, and planning a
+ * host's settings must still render a complete file. So
  * the example is carried as a base64 constant — which is a SECOND COPY of a
  * tracked file, and a second copy drifts unless a machine writes it.
  *
