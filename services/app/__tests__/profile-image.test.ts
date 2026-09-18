@@ -53,7 +53,9 @@ describe('PUT /api/my/profile/image', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const row = await getUserById(user.id);
-    expect(row?.image_key).toMatch(/^avatar\/[0-9a-f]{32}$/);
+    // The key is scoped to the person (lib/avatars); the ADDRESS still carries
+    // only the hash, because `avatarVersion` reads the last segment.
+    expect(row?.image_key).toBe(`avatar/${user.id}/${avatarVersion(row!.image_key!)}`);
     expect(body).toEqual({ image: `/api/users/${user.id}/avatar?v=${avatarVersion(row!.image_key!)}` });
   });
 
@@ -140,6 +142,25 @@ describe('GET /api/users/<id>/avatar', () => {
       expect(stale.status).toBe(200);
       expect(stale.headers.get('Cache-Control')).toBe('no-cache');
     }
+  });
+
+  it('keeps answering for one person after another with the same picture removed theirs', async () => {
+    const one = await signedIn('mxmx_test_shared_one@example.com');
+    const bytes = await png(120, 120);
+    await putImage(bytes);
+    const two = await signedIn('mxmx_test_shared_two@example.com');
+    await putImage(bytes);
+
+    // The first person takes theirs off. Under one shared object this deleted
+    // the bytes the second person's row still named, and their picture 404'd.
+    sessionUser.id = one.id;
+    expect((await deleteImage()).status).toBe(200);
+
+    const version = avatarVersion((await getUserById(two.id))!.image_key!);
+    const served = await getAvatar(request(`/api/users/${two.id}/avatar?v=${version}`), avatarCtx(two.id));
+    expect(served.status).toBe(200);
+    expect(served.headers.get('Content-Type')).toBe('image/webp');
+    expect((await getAvatar(request(`/api/users/${one.id}/avatar`), avatarCtx(one.id))).status).toBe(404);
   });
 
   it('404s for an unknown id and for a person who has no picture', async () => {

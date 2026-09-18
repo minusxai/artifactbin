@@ -42,7 +42,10 @@ describe('setAvatar', () => {
     const user = await createUser({ email: 'mxmx_test_avatar@example.com' });
     const { key } = await setAvatar(user.id, await jpeg(900, 400), 'image/jpeg', store);
 
-    expect(key).toMatch(/^avatar\/[0-9a-f]{32}$/);
+    // `avatar/<userId>/<sha256>` — the person is in the key, and the version the
+    // address carries is still the last segment.
+    expect(key).toMatch(/^avatar\/usr_[a-z0-9]+\/[0-9a-f]{32}$/);
+    expect(key).toBe(`avatar/${user.id}/${avatarVersion(key)}`);
     expect((await getUserById(user.id))?.image_key).toBe(key);
     const stored = await store.get(key);
     const meta = await sharp(stored).metadata();
@@ -95,6 +98,27 @@ describe('setAvatar', () => {
     expect((await getUserById(user.id))?.image_key).toBe(second.key);
     await expect(store.get(first.key)).rejects.toBeInstanceOf(ObjectUnavailable);
     await expect(store.get(second.key)).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('gives two people who upload the same picture their own object, so one clearing it leaves the other whole', async () => {
+    const store = await scratchStore();
+    const one = await createUser({ email: 'mxmx_test_twin_one@example.com' });
+    const two = await createUser({ email: 'mxmx_test_twin_two@example.com' });
+    // The SAME bytes — a default picture, a logo, one photograph shared twice.
+    const same = await png(64, 64);
+
+    const first = await setAvatar(one.id, same, 'image/png', store);
+    const second = await setAvatar(two.id, same, 'image/png', store);
+    expect(first.key).not.toBe(second.key);
+    // Identical bytes, so identical hashes: only the person's segment differs.
+    expect(avatarVersion(first.key)).toBe(avatarVersion(second.key));
+
+    await clearAvatar(one.id, store);
+    expect((await getUserById(one.id))?.image_key).toBeNull();
+    // The other person still has a picture, and it still resolves to bytes.
+    expect((await getUserById(two.id))?.image_key).toBe(second.key);
+    await expect(store.get(second.key)).resolves.toBeInstanceOf(Buffer);
+    await expect(store.get(first.key)).rejects.toBeInstanceOf(ObjectUnavailable);
   });
 
   it('keeps the object when the same bytes are uploaded twice (the key does not move)', async () => {

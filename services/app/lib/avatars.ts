@@ -1,7 +1,7 @@
 /**
  * THE PROFILE PICTURE, AS AN ADDRESS.
  *
- * A person's picture is one object in the store, keyed `avatar/<sha256>` and
+ * A person's picture is one object in the store, keyed `avatar/<userId>/<sha256>` and
  * recorded on their `users.image_key`. This module is the ONE place that key
  * becomes a URL, so every renderer — a DataTable cell, `<UserImage>`, the
  * account page, the public profile — agrees on it, and the serving route
@@ -99,9 +99,22 @@ const declaredType = (contentType: string): string => (contentType.split(';')[0]
  * orientation is dropped by the re-encode, so honouring it afterwards is not
  * an option.
  *
- * The key is CONTENT-ADDRESSED, so uploading the same picture twice costs one
- * object and the address does not move. The previous object is deleted only
- * when the key actually changed.
+ * The key is content-addressed WITHIN ONE PERSON — `avatar/<userId>/<sha256>`.
+ * The person is in the key deliberately: a bare `avatar/<sha256>` is shared by
+ * everyone who uploads the same bytes (a default picture, a logo, the same
+ * photograph from a shared phone), and then one of them pressing Remove, or
+ * replacing theirs, deletes an object the OTHER's row still names — their
+ * picture 404s and nothing in either flow says why. Scoping the key makes the
+ * delete below provably about this person's object and no one else's. The cost
+ * is one duplicate object per person who happens to share bytes, which is the
+ * right trade for a 3 KB headshot.
+ *
+ * Within one person it is still content-addressed, so uploading the same
+ * picture twice costs one object and the address does not move; the previous
+ * object is deleted only when the key actually changed.
+ *
+ * `avatarVersion` is unaffected: it reads the LAST path segment, which is the
+ * hash either way.
  *
  * `objects` is a seam for tests (the house pattern from lib/story/file-store);
  * every caller in the app takes the default.
@@ -129,7 +142,9 @@ export async function setAvatar(
     throw new AvatarError('image_unreadable');
   }
 
-  const key = objectKey('avatar', webp);
+  // The id is the proxy's own `usr_…` off the session, never caller text, so it
+  // is a path segment rather than something the object store has to defend.
+  const key = objectKey(`avatar/${userId}`, webp);
   await objects.put(key, webp, 'image/webp');
   const db = await getDb();
   const previous = (await db.query<{ image_key: string | null }>('SELECT image_key FROM users WHERE id = $1', [userId]))
