@@ -2086,6 +2086,26 @@ export async function runDocumentMutation(
   }
 
   bound._me=actor.userId;
+  /*
+   * THE GUEST IS ANSWERED FIRST — before the shape of the call is judged.
+   *
+   * A statement that binds `$_me` has one honest answer for a signed-out
+   * caller, and it is a door (lib/story/sign-in-required). A ROW action that
+   * binds it — a membership button a `<For>` draws for exactly the people who
+   * have not joined — used to be told "this row mutation requires its original
+   * row snapshot" instead: true, useless, and about the wrong problem, because
+   * the page never drew that button for a guest and so never gave them a row to
+   * send. Deciding sign-in here makes the refusal the same whatever shape the
+   * press arrives in: a stale tab, an agent posting at the door directly, a row
+   * snapshot or none.
+   *
+   * It is the same judgement `mutateDataset` makes for the calls that never
+   * come through here, and the same one `mutationAccessFor` previews for the
+   * button; this is only about the ORDER the three checks run in.
+   */
+  if (decl.params.includes('_me') && !actor.userId) {
+    return { ok: false, reason: 'policy_denied', detail: '$_me requires a logged-in user', code: SIGN_IN_REQUIRED };
+  }
   let rowBinding: { columns: DatasetColumn[]; values: Record<string, Scalar> } | undefined;
   if (mutationUsesRow(decl.sql)) {
     if (!row) return { ok: false, reason: 'invalid_row', detail: 'this row mutation requires its original row snapshot' };
@@ -2116,8 +2136,9 @@ export async function runDocumentMutation(
   }
   if (decl.scope === 'local') {
     try {
+      // (The guest refusal that used to sit here now runs above, for every
+      // scope and before the row snapshot is judged.)
       const tables = localTableOverrides(flow, localTables);
-      if(decl.params.includes('_me')&&!actor.userId)return {ok:false,reason:'policy_denied',detail:'$_me requires a logged-in user',code:SIGN_IN_REQUIRED};
       const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate:async input=>{
         const columns=input.table.columns.map(c=>c.constraints?.memberOf?{...c,constraints:{...c.constraints,memberOf:c.constraints.memberOf.map(ref=>ref==='current'?`ref:${doc.id}`:ref)}}:c);
         const out=await runMutation({...input,table:{...input.table,columns},params:{...input.params,_me:actor.userId}});

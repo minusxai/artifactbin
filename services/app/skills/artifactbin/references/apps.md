@@ -80,8 +80,9 @@ write. Use the returned dataset id in place of `tab123` below.
   `}</Query>
   <Mutation name="join" source="ref:tab123">{`
     insert into public.people (person, joined_on)
-    select $_row.person, current_date
-    where not exists (select 1 from public.people where person = $_row.person)
+    select $_me, current_date
+    where $_row.person = $_me
+      and not exists (select 1 from public.people where person = $_me)
   `}</Mutation>
   <Mutation name="add" source="ref:tab123" reset="item amount spent_on">{`
     insert into public.expenses (id, paid_by, spent_on, item, amount)
@@ -119,9 +120,11 @@ Line by line, this is the whole pattern:
   viewer — only for a signed-in person who has not joined (`$_me is not null`
   first, or a guest gets a row with no key), and `<For>` over an empty result
   renders nothing, so the button is there for a newcomer and gone for everyone
-  else. A `<Button run>` inside a `<For>` is a ROW action, so the Mutation writes
-  `$_row.person`, which the Query computed from `$_me`: the person who clicks it
-  IS the person who joins. `where not exists` keeps the write idempotent.
+  else. A `<Button run>` inside a `<For>` is a ROW action, so the Mutation reads
+  `$_row`; it still WRITES `$_me`, never the row — a row snapshot comes from the
+  browser, and `where $_row.person = $_me` is how the click is tied to the row it
+  came from. That is also what makes a guest's press answer `sign_in_required`
+  instead of a refusal about the data. `where not exists` keeps it idempotent.
 - **The form is kit controls**, one visual family: `<Input>` (with
   `type="number"` where it is a number), `<Textarea>`, `<DatePicker>`,
   `<Button>`. A native `<input value="$item">` still binds — and is themed now —
