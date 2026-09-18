@@ -30,10 +30,13 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
     }
     const actor = { credential: 'bearer', ...ctx.actor } as Actor;
     const sessionId = String(input.session_id);
-    // Every call is a chance to notice a session nobody will ever close. It
-    // never fails the call — `status` is the disconnect-recovery path.
-    await sweepTestUsers();
+    // This call IS proof the session is still being worked in, so it is stamped
+    // BEFORE the sweep — otherwise the very call that proves a session alive
+    // could revoke its second person on the way past. Every call is then a
+    // chance to notice a session nobody will ever close. Neither can fail the
+    // call: `status` is the disconnect-recovery path.
     await touchTestUser(sessionId, actor);
+    await sweepTestUsers();
 
     // A second person is minted for the request that CREATES the session and
     // nowhere else: a resume names the viewer the session already has, and its
