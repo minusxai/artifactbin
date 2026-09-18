@@ -1,6 +1,10 @@
 /**
  * The session the pages share: one fetch of /api/page/session per mount,
  * exposed by context. Pages that need more fetch their own /api/page/*.
+ *
+ * `PAGE_DATA_CHANGED` re-reads it too — a new picture is drawn on the app bar —
+ * WITHOUT clearing it first, so the bar keeps the old face until the new one
+ * arrives rather than flashing back to the signed-out glyph.
  */
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useRefreshable } from '@/lib/navigation';
@@ -8,7 +12,11 @@ import { createPageDataStore, type PageDataStore } from '@/web/page-data-store';
 import { PAGE_DATA_CHANGED } from '@/web/page-data-events';
 
 interface SessionState {
-  user: { id: string; email: string | null } | null;
+  /**
+   * The account, or null. `username` is the current handle (null until one is
+   * assigned) and `image` the picture's address (null draws the initial).
+   */
+  user: { id: string; email: string | null; username: string | null; image: string | null } | null;
   kind: 'account' | 'anon' | 'none';
   /**
    * Has this person been through the welcome page? FALSE only for an account
@@ -34,7 +42,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => { alive = false; };
   }, [nonce, pages]);
   useEffect(() => () => pages.clear(), [pages]);
-  useEffect(() => { const expire = () => pages.expire(); window.addEventListener(PAGE_DATA_CHANGED, expire); return () => window.removeEventListener(PAGE_DATA_CHANGED, expire); }, [pages]);
+  useEffect(() => { const expire = () => { pages.expire(); setNonce((n) => n + 1); }; window.addEventListener(PAGE_DATA_CHANGED, expire); return () => window.removeEventListener(PAGE_DATA_CHANGED, expire); }, [pages]);
   return <Ctx.Provider value={{ session, reload, pages, sessionError }}>{children}</Ctx.Provider>;
 }
 

@@ -12,8 +12,9 @@
  *
  * NOBODY EVER SEES A BROKEN IMAGE. A person with no picture gets a generated
  * initial on a colour derived from their id — stable, so it is recognisably
- * theirs, and computed here rather than stored, so a person who never uploads
- * anything costs nothing.
+ * theirs, and computed rather than stored, so a person who never uploads
+ * anything costs nothing. The drawing itself is `components/Avatar`, the same
+ * one the app bar's menu button uses.
  *
  * The bytes go straight to `PUT /api/my/profile/image` as the file's own type;
  * the server re-encodes and answers with the new address, which is swapped in
@@ -21,6 +22,7 @@
  * profile page is not something a person can act on.
  */
 import { useRef, useState } from 'react';
+import Avatar from '@/components/Avatar';
 import { pageDataChanged } from '@/web/page-data-events';
 
 /** The three refusals `lib/avatars` makes, as sentences. */
@@ -32,16 +34,6 @@ const REFUSALS: Record<string, string> = {
 
 /** What the file picker offers; the same set the server accepts, and no SVG. */
 export const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif,image/avif';
-
-/**
- * A stable hue per person. Not a hash anybody depends on — it only has to be
- * the same colour every time for the same id, and spread ids around the wheel.
- */
-function hueFor(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) % 360;
-  return hash;
-}
 
 export default function AvatarCircle({ image, initial, userId, onChange, onRemove }: {
   /** The picture's address, or null for the generated initial. */
@@ -100,17 +92,7 @@ export default function AvatarCircle({ image, initial, userId, onChange, onRemov
         onClick={() => picker.current?.click()}
         className="group relative size-24 overflow-hidden rounded-full border border-edge focus-visible:ring-2 focus-visible:ring-accent"
       >
-        {image
-          ? <img src={image} alt="" className="size-full object-cover" />
-          : (
-            <span
-              aria-hidden="true"
-              style={{ backgroundColor: `hsl(${hueFor(userId)} 55% 32%)` }}
-              className="flex size-full items-center justify-center text-3xl font-semibold text-white"
-            >
-              {(initial.trim()[0] ?? '?').toUpperCase()}
-            </span>
-          )}
+        <Avatar image={image} initial={initial} userId={userId} />
         {/* Presentation only: the button already has its name. */}
         <span
           aria-hidden="true"

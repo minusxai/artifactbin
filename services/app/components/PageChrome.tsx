@@ -19,6 +19,8 @@ import { CHROME_IDENTITY } from '@/lib/chrome-identity';
 import { crumbsFor } from '@/lib/breadcrumb';
 import { loginHref } from '@/lib/login-href';
 import { usePathname } from '@/lib/navigation';
+import Avatar from '@/components/Avatar';
+import { useSession } from '@/web/session';
 
 export type AppearanceMode = 'light' | 'dark';
 
@@ -433,6 +435,9 @@ export function AppBar({
   const pathname = usePathname() ?? '';
   const trail = hideBreadcrumb ? [] : crumbsFor(pathname, title);
   const [openPanel, setOpenPanel] = useState<'menu' | 'controls' | null>(null);
+  // Outside a SessionProvider this is `session: null`, and the glyph stays.
+  const { session } = useSession();
+  const person = session?.kind === 'account' ? session.user : null;
   useEffect(() => {
     const onState = (event: Event) => {
       const { which, open } = (event as CustomEvent<{ which: 'menu' | 'controls'; open: boolean }>).detail;
@@ -441,7 +446,7 @@ export function AppBar({
     window.addEventListener(STATE_EVENT, onState);
     return () => window.removeEventListener(STATE_EVENT, onState);
   }, []);
-  const control = (which: 'menu' | 'controls', name: string, icon: React.ReactNode) => {
+  const control = (which: 'menu' | 'controls', name: string, icon: React.ReactNode, face?: React.ReactNode) => {
     const open = openPanel === which;
     return (
       <Tooltip content={name} positioning={{ placement: 'bottom-end' }}>
@@ -452,7 +457,10 @@ export function AppBar({
           onClick={() => requestPageChrome(which)}
           className={`${BAR_BUTTON} ${open ? 'text-accent' : ''}`}
         >
-          {open ? <X size={17} strokeWidth={1.5} /> : icon}
+          {face
+            // A face stays a face when its menu opens; the ring says open.
+            ? <span className={`rounded-full ring-offset-1 ring-offset-surface ${open ? 'ring-2 ring-accent' : ''}`}>{face}</span>
+            : open ? <X size={17} strokeWidth={1.5} /> : icon}
         </button>
       </Tooltip>
     );
@@ -492,7 +500,9 @@ export function AppBar({
         {actions}
         {/* The document bar's glyphs, at its size and stroke, so the two bars read as one. */}
         {control('controls', label.toLowerCase(), <SlidersVertical size={20} strokeWidth={1.5} />)}
-        {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.5} />)}
+        {control('menu', 'menu', <CircleUser size={20} strokeWidth={1.5} />, person
+          ? <Avatar image={person.image} initial={person.username || person.email || '?'} userId={person.id} size={24} />
+          : undefined)}
       </div>
     </header>
     </>
