@@ -388,7 +388,7 @@ export const PUBLISHED_NEXT='Published: the saved local file contains the publis
  */
 function publishedNext(verified:Awaited<ReturnType<typeof verifiedSummary>>):string{
  const writes=[...new Set((verified??[]).flatMap(file=>file.writes??[]))];
- return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each on a test-user fork, once as that test user and once as yourself. On the original page, check actions --as guest: $_me writes offer Sign in and change no data; other actions follow their intended permissions. Do not run successful test writes on the original page (afbin help live-sessions, afbin help apps). Fix, push and fork again before handing it over.`:PUBLISHED_NEXT;
+ return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each in a live session on a test-user fork, once as that test user and once as yourself. On the original page, check actions --as guest: $_me writes offer Sign in and change no data; other actions follow their intended permissions. Do not run successful test writes on the original page (afbin help live-sessions, afbin help apps). Fix, push and fork again before handing it over.`:PUBLISHED_NEXT;
 }
 /** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
 async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>|undefined>{
