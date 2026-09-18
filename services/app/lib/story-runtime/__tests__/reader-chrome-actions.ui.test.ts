@@ -7,7 +7,7 @@
  * the rule and not about a timer.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { renderReaderChrome } from '@/lib/story/reader-chrome';
+import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader-chrome';
 import { wireReaderChrome } from '@/lib/story-runtime/reader-chrome-actions';
 
 // `writable` matters: vi.useFakeTimers() ASSIGNS window.requestAnimationFrame,
@@ -15,9 +15,9 @@ import { wireReaderChrome } from '@/lib/story-runtime/reader-chrome-actions';
 const set = (target: object, key: string, value: unknown) =>
   Object.defineProperty(target, key, { configurable: true, writable: true, value });
 
-function mount(documentHeight = 4000) {
+function mount(documentHeight = 4000, over: Partial<ReaderChromeInput> = {}) {
   document.body.innerHTML = '<div id="mx-story-root"><p>the document</p></div>'
-    + renderReaderChrome({ share: true, artifactId: 'ab12cd', title: 'Quarterly review', author: { username: 'ada' } });
+    + renderReaderChrome({ share: true, artifactId: 'ab12cd', title: 'Quarterly review', author: { username: 'ada' }, ...over });
   set(window, 'requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0; });
   set(window, 'innerHeight', 800);
   set(window, 'scrollY', 0);
@@ -96,6 +96,22 @@ describe('wireReaderChrome — visibility', () => {
     expect(hidden(root)).toBe(false);
     expect(document.querySelector<HTMLElement>('[data-mx-reader-panel="menu"]')!.hidden).toBe(false);
     expect(document.querySelector<HTMLElement>('[data-mx-reader-scrim]')!.hidden).toBe(false);
+  });
+
+  it("flips the menu trigger's name open and shut when it draws the reader's face", () => {
+    mount(4000, { viewer: { id: 'usr_ada', name: 'ada', image: '/api/users/usr_ada/avatar?v=1' } });
+    const trigger = document.querySelector<HTMLElement>('[data-mx-reader-trigger="menu"]')!;
+    expect(trigger.querySelector('.mx-reader-face')).not.toBeNull();
+    expect(trigger.getAttribute('aria-label')).toBe('Open menu');
+    trigger.click();
+    expect(trigger.getAttribute('aria-label')).toBe('Close menu');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector<HTMLElement>('[data-mx-reader-panel="menu"]')!.hidden).toBe(false);
+    // Open, the face is still the face.
+    expect(trigger.querySelector('.mx-reader-face')).not.toBeNull();
+    trigger.click();
+    expect(trigger.getAttribute('aria-label')).toBe('Open menu');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 
   it('destroys cleanly', () => {

@@ -1,6 +1,8 @@
 import { render,screen,fireEvent,act } from '@testing-library/react';
 import { expect,it,vi,afterEach } from 'vitest';
 import { InlineReaderChrome } from '../InlineReaderChrome';
+// What the page's drawer announces when it opens or shuts (PageChrome announcePanel).
+const announce=(which:'menu'|'controls',open:boolean)=>window.dispatchEvent(new CustomEvent('mx:page-chrome-state',{detail:{which,open}}));
 afterEach(()=>{vi.restoreAllMocks();vi.unstubAllGlobals();});
 it('shows copied-link feedback after clipboard sharing',async()=>{
  const writeText=vi.fn(async()=>{});vi.stubGlobal('navigator',{clipboard:{writeText}});
@@ -54,4 +56,22 @@ it('offers fork directly in the shared desktop and mobile rail', () => {
  fireEvent.click(screen.getByLabelText('Fork artifact'));
  expect(action).toHaveBeenCalledWith('fork');
  expect(view.container.querySelector('.mx-reader-rail [data-mx-reader-action="fork"]')).not.toBeNull();
+});
+
+it("flips the menu trigger's name with the page's drawer, the reader's face drawn on it",()=>{
+ const input={artifactId:'story1',title:'Title',author:{username:'author',id:'usr_author',image:null},viewer:{id:'usr_me',name:'me',image:'/api/users/usr_me/avatar?v=1'}};
+ const view=render(<InlineReaderChrome input={input} onAction={vi.fn()} />);
+ const trigger=()=>view.container.querySelector<HTMLElement>('[data-mx-reader-trigger="menu"]')!;
+ expect(trigger().querySelector('.mx-reader-face img')).toHaveAttribute('src','/api/users/usr_me/avatar?v=1');
+ expect(screen.getByLabelText('Open menu')).toBe(trigger());
+ act(()=>announce('menu',true));
+ expect(trigger()).toHaveAttribute('aria-expanded','true');
+ expect(screen.getByLabelText('Close menu')).toBe(trigger());
+ // A re-render (a count, a title) keeps what the drawer says.
+ view.rerender(<InlineReaderChrome input={{...input,title:'Renamed'}} onAction={vi.fn()} />);
+ expect(trigger()).toHaveAttribute('aria-expanded','true');
+ expect(trigger()).toHaveAttribute('aria-label','Close menu');
+ act(()=>announce('menu',false));
+ expect(trigger()).toHaveAttribute('aria-expanded','false');
+ expect(screen.getByLabelText('Open menu')).toBe(trigger());
 });

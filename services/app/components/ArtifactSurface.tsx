@@ -49,6 +49,7 @@ import { APP_BAR_H, EDIT_BAR_H, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import type { ArtifactFormat } from '@/lib/story/input';
 import { useLiveArtifact } from '@/lib/story/use-live-artifact';
 import { pageDataChanged } from '@/web/page-data-events';
+import { useSession } from '@/web/session';
 import { STORY_DATA_MESSAGE, STORY_DOCUMENT_MESSAGE, STORY_READER_MODE_MESSAGE, type StoryDataUpdate, isEditFrameMessage, isValuesMessage, STORY_SELECTION_ACTION_MESSAGE, STORY_SELECTION_ACTIONS_MESSAGE, type StoryEditSelection, type StorySelectionActionsMessage } from '@/lib/story-runtime/contract';
 import { readUrlValues, writeUrlValues } from '@/lib/story/url-values';
 import { displayTitle } from '@/lib/story/title';
@@ -77,7 +78,8 @@ const SocialPreviewDialog = dynamic(() => import('@/components/SocialPreviewDial
 
 export interface ArtifactSurfaceProps {
   runtime?: PreparedStoryRuntime;
-  author?: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
+  /** The author: handle, and the account id and picture their face is drawn with (null on an anonymous document). */
+  author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
   /**
    * The exporter's signed key, when this render IS a capture (server-parsed
    * from `?key=`). Null for every human render.
@@ -190,6 +192,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   const route = useLocation();
   const navigate = useNavigate();
   const [copiedRef, setCopiedRef] = useState(false);
+  // The signed-in ACCOUNT reading, for the rail's menu trigger (the app bar's
+  // rule: outside a SessionProvider, or for a guest, the glyph stays).
+  const { session } = useSession();
+  const person = session?.kind === 'account' ? session.user : null;
+  const readerFace = useMemo(() => person ? { id: person.id, name: person.username || person.email || '', image: person.image } : null, [person]);
   const { id, editId, format, title, source, content, columns, bytes: fileBytes = 0, pages: filePages = null, compiledCss, theme, colorMode, template, refs, dataflow = null, search = '', accountSession = false, anonSession = false, version, openAnnotations = 0, like = { liked: false, count: 0 }, follow = null } = props;
   const [editing, setEditing] = useState(false);
   /** A view-mode text selection asks edit mode to open on its containing node. */
@@ -738,7 +745,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     return (
       <>
         <TrustedUi overlay layer="navigation">
-        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} input={{artifactId:id, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
+        <InlineReaderChrome onShare={owner ? () => setSharingOpen(true) : undefined} pinned={editing || railOpen} input={{artifactId:id, share:owner, archived, visibility:sharingVerdict?.id === id ? sharingVerdict.visibility : props.visibility, hasInvitedUsers:sharingVerdict?.id === id ? sharingVerdict.hasInvitedUsers : props.hasInvitedUsers, title:shownTitle, forkBusy:false, author:props.author ?? null, viewer:readerFace, edit:canEdit, ownerBreadcrumb:owner, reactions:{like:{...likeRef.current,href:'#'},follow:followRef.current ? {...followRef.current,href:'#'} : null,comment:{count:openAnnotationCount,href:'#'}}}} onAction={action => {
           if (action === 'like') void toggleLike();
           else if (action === 'follow') void toggleFollow();
           else if (action === 'fork') setForkAsked(true);

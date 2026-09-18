@@ -24,12 +24,18 @@ function updateChrome(current: Element, next: Element) {
   }
 }
 
+/** What a trigger says: its panel's name, and whether pressing it opens or closes it (the served rail's words). */
+const triggerLabel=(which:'menu'|'controls',open:boolean)=>which==='menu'?(open?'Close menu':'Open menu'):(open?'Close artifact controls':'Open artifact controls');
+
 /** Identical desktop/mobile reader layout, with local handlers inside TrustedUi. */
 export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { input: ReaderChromeInput; onAction(action:string):void;onShare?:()=>void;pinned?:boolean }): ReactNode {
   const holder=useRef<HTMLDivElement>(null);
   const state=useRef<ChromeState|null>(null);
   const artifact=useRef(input.artifactId);
   const sharing=useRef<ReturnType<typeof wireReaderSharing>|null>(null);
+  // The page's panels that are open. Held across renders: the markup is always
+  // rendered shut, so a re-render (a count, a title, a face) must re-apply it.
+  const panels=useRef(new Set<'menu'|'controls'>());
   const html = renderReaderChrome({...input,panels:false}).replaceAll('target="_top"', 'target="_self"');
   useLayoutEffect(()=>{
     const container=holder.current;
@@ -44,7 +50,12 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     if(!root)return;
     sharing.current=wireReaderSharing(window,document,root);
     const stopGithubStar=wireGithubStar(root);
-    let queued=false;let raf=0;const panels=new Set<string>();
+    let queued=false;let raf=0;
+    const mark=(which:'menu'|'controls',open:boolean)=>{
+      const trigger=root.querySelector<HTMLElement>(`[data-mx-reader-trigger="${which}"]`);
+      trigger?.setAttribute('aria-expanded',String(open));trigger?.setAttribute('aria-label',triggerLabel(which,open));
+    };
+    for(const which of panels.current)mark(which,true);
     const paint=(visible:boolean)=>{
       root.classList.toggle(READER_CHROME_HIDDEN_CLASS,!visible);
       root.classList.toggle('mx-reader-chrome--pinned',pinned);
@@ -52,15 +63,14 @@ export function InlineReaderChrome({ input, onAction,onShare,pinned=false }: { i
     };
     const sample=()=>{
       queued=false;
-      if(pinned||panels.size){paint(true);return;}
+      if(pinned||panels.current.size){paint(true);return;}
       state.current=chromeAfterSample(state.current,{scrollY:Math.max(0,window.scrollY),viewportHeight:window.innerHeight,documentHeight:document.documentElement.scrollHeight});
       paint(state.current.visible);
     };
     const schedule=()=>{if(!queued){queued=true;raf=window.requestAnimationFrame(sample);}};
     const stop=subscribePageChrome((which,open)=>{
-      if(open)panels.add(which);else panels.delete(which);
-      const trigger=root.querySelector<HTMLElement>(`[data-mx-reader-trigger="${which}"]`);
-      trigger?.setAttribute('aria-expanded',String(open));sample();
+      if(open)panels.current.add(which);else panels.current.delete(which);
+      mark(which,open);sample();
     });
     window.addEventListener('scroll',schedule,{passive:true});window.addEventListener('resize',schedule);
     sample();

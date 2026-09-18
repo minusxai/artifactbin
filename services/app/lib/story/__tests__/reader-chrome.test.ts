@@ -8,6 +8,7 @@ import { renderReaderChrome, type ReaderChromeInput } from '@/lib/story/reader-c
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GitHubIcon } from '@/components/brand-icons';
+import { personFaceBackground } from '@/lib/person-face';
 
 const chrome = (over: Partial<ReaderChromeInput> = {}): string =>
   renderReaderChrome({
@@ -203,5 +204,68 @@ describe('renderReaderChrome', () => {
     const html = chrome();
     expect(html).not.toContain('mx-artifact-credits');
     expect(html).not.toContain('made with');
+  });
+  describe('faces', () => {
+    // Today's menu trigger, byte for byte: a reader with no account keeps it.
+    const GLYPH_TRIGGER = '<button type="button" class="mx-reader-trigger" data-mx-reader-trigger="menu" aria-label="Open menu" aria-expanded="false" data-mx-tip="Profile">'
+      + '<svg class="mx-rc-open" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M6.2 19a6 6 0 0 1 11.6 0"/></svg>'
+      + '<svg class="mx-rc-close" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg>'
+      + '<span class="mx-reader-label" data-mobile-label>profile</span></button>';
+    const menuTrigger = (html: string): string =>
+      html.match(/<button type="button" class="mx-reader-trigger" data-mx-reader-trigger="menu".*?<\/button>/)?.[0] ?? '';
+
+    it('keeps the glyph trigger byte-identical for a reader with no account', () => {
+      expect(menuTrigger(chrome())).toBe(GLYPH_TRIGGER);
+      expect(chrome({ viewer: null })).toBe(chrome());
+      expect(chrome()).not.toContain('mx-reader-face');
+    });
+
+    it("draws the signed-in reader's initial on their colour, with the picture over it", () => {
+      const trigger = menuTrigger(chrome({ viewer: { id: 'usr_ada', name: 'ada', image: '/api/users/usr_ada/avatar?v=abc' } }));
+      expect(trigger).toContain('data-mx-reader-trigger="menu" aria-label="Open menu" aria-expanded="false" data-mx-tip="Profile"');
+      expect(trigger).toContain(`style="background:${personFaceBackground('usr_ada')}"`);
+      expect(trigger).toMatch(/<span class="mx-reader-face-initial"[^>]*>A<\/span>/);
+      expect(trigger).toContain('<img src="/api/users/usr_ada/avatar?v=abc" alt="" aria-hidden="true"');
+      // The initial is underneath: it comes first, the picture paints over it.
+      expect(trigger.indexOf('mx-reader-face-initial')).toBeLessThan(trigger.indexOf('<img'));
+      // A face stays a face when the menu opens (the ring says open): no glyphs, no X.
+      expect(trigger).not.toContain('mx-rc-open');
+      expect(trigger).not.toContain('mx-rc-close');
+      expect(trigger).toContain('data-mobile-label>profile</span>');
+      // No picture: the initial alone.
+      const bare = menuTrigger(chrome({ viewer: { id: 'usr_ada', name: 'ada', image: null } }));
+      expect(bare).toMatch(/>A<\/span>/);
+      expect(bare).not.toContain('<img');
+    });
+
+    it('escapes everything a person supplies', () => {
+      const html = chrome({
+        viewer: { id: 'usr_"x', name: '<b>"evil"', image: '/a?x="><script>' },
+        author: { username: 'ada', id: 'usr_"y', image: '/b?"><img onerror=1>' },
+      });
+      expect(html).not.toContain('<b>');
+      expect(html).not.toContain('<script>');
+      expect(html).not.toContain('<img onerror');
+      expect(html).toContain('>&lt;</span>');
+      expect(html).toContain('src="/a?x=&quot;&gt;&lt;script&gt;"');
+      expect(html).toContain('src="/b?&quot;&gt;&lt;img onerror=1&gt;"');
+      expect(html).not.toContain('usr_"');
+    });
+
+    it("puts the author's face before their handle, decorative, and only when there is an account", () => {
+      const html = chrome({ author: { username: 'ada', id: 'usr_ada', image: '/api/users/usr_ada/avatar?v=1' } });
+      const byline = html.match(/<div class="mx-reader-byline".*?<\/div>/)?.[0] ?? '';
+      const face = byline.indexOf('class="mx-reader-face');
+      expect(face).toBeGreaterThan(-1);
+      expect(face).toBeLessThan(byline.indexOf('class="mx-reader-author"'));
+      expect(byline).toContain(`style="background:${personFaceBackground('usr_ada')}"`);
+      expect(byline).toContain('<img src="/api/users/usr_ada/avatar?v=1" alt="" aria-hidden="true"');
+      expect(byline).toMatch(/<span class="mx-reader-face[^"]*" aria-hidden="true">/);
+      // The link keeps its name.
+      expect(byline).toContain('<a class="mx-reader-author" href="/@ada" target="_top" aria-label="View @ada\'s profile">@ada</a>');
+      // No account id (legacy callers, an anonymous document): no face.
+      expect(chrome({ author: { username: 'ada' } })).not.toContain('mx-reader-face');
+      expect(chrome({ author: null })).not.toContain('mx-reader-face');
+    });
   });
 });
