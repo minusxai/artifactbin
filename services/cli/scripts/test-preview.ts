@@ -13,6 +13,8 @@ const root=await realpath(await mkdtemp(join(tmpdir(),'preview-browser-')));
 const source='<p>Draft</p>';
 await writeFile(join(root,'report.jsx'),source);await writeFile(join(root,'sales.csv'),'amount\n10\n20\n');
 await writeFile(join(root,'appendix.jsx'),'<p id="text">Unpublished appendix</p>');
+await writeFile(join(root,'covers.csv'),'id,title,cover_ref\na,Placeholder,\n');
+for(const color of ['red','blue'])await sharp({create:{width:48,height:64,channels:3,background:color}}).png().toFile(join(root,`${color}-cover.png`));
 await writeFile(join(root,'pixel.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4KsAAAAASUVORK5CYII=','base64'));
 await writeFile(join(root,'published.jsx'),'---\nid: abc123\nhead_version: 3\n---\n<p id="text">Published local draft</p>');
 const binary=resolve(process.argv[2]??`dist/afbin-${process.platform}-${process.arch}`);
@@ -31,12 +33,13 @@ const state=await State.open(root,{ARTIFACTBIN_HOME:privateHome});
 state.put(root,'workspace',root,{server:origin,account});
 state.put(HOME_SCOPE,'identity-pool',JSON.stringify([origin,account]),{ids:Array.from({length:100},(_,i)=>'P'+String(i).padStart(5,'0'))});state.close();
 await saveConnection({server:origin,token:'mxmx_test_offline_preview'},root,{ARTIFACTBIN_HOME:privateHome});
-const addArgs=['add','sales.csv','appendix.jsx','pixel.png','report.jsx','--json'];
+const addArgs=['add','sales.csv','appendix.jsx','pixel.png','report.jsx','covers.csv','red-cover.png','blue-cover.png','--json'];
 const ids=await new Promise<Record<string,string>>((resolve,reject)=>{
  const child=spawn(packaged?binary:process.execPath,packaged?addArgs:[binary,...addArgs],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,CLI__AUTO_UPDATE:'0'},stdio:['ignore','pipe','pipe']});
  let out='',err='';child.stdout.on('data',chunk=>out+=chunk);child.stderr.on('data',chunk=>err+=chunk);child.on('error',reject);child.on('exit',code=>code===0?resolve(JSON.parse(out)):reject(Error(out+err)));
 });
 const registered=(await readFile(join(root,'report.jsx'),'utf8'));
+await writeFile(join(root,'covers.csv'),'id,title,cover_ref\n'+['red','blue'].map(color=>`${color},${color},ref:${ids[color+'-cover.png']}`).join('\n')+'\n');
 await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Query name="sales" source="ref:${ids['sales.csv']}">{\`select sum(amount) as total from public.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
 async function launch(port=0){
  const args=['preview',ids['report.jsx']!,'published.jsx','--port',String(port),'--json'];
@@ -48,7 +51,7 @@ async function launch(port=0){
 const phase=process.argv.find(value=>value.startsWith('--phase='))?.slice(8)??'all';
 if(!['all','preview','export-basic','export-variants'].includes(phase))throw new Error('Unknown preview proof phase');
 let server=phase.startsWith('export-')?undefined:await launch();
-const browser=phase.startsWith('export-')?undefined:await chromium.launch();
+let browser=phase.startsWith('export-')?undefined:await chromium.launch();
 const errors:string[]=[];
 try{
  if(server&&browser){
@@ -101,7 +104,9 @@ try{
  assert.equal((await a.request.get(server.url+'/document?file=home/preview-comments.sqlite')).status(),403);
  assert.equal((await a.request.post(server.url+'/save',{headers:{origin:'https://unrelated.example'},data:{}})).status(),403);
  assert.deepEqual(errors,[]);if(packaged)assert.equal(downloads,2,'Runtime and DuckDB each download once and reuses verified cache after process restart');console.log('PASS scope/origin restrictions; no browser exceptions'+(packaged?'; SEA ran outside checkout with lazy runtime and engine downloads':''));
-
+ // Export owns another browser. Release preview resources while retaining the
+ // same home so cold runtime and SQL installation is not repeated for exports.
+ await browser.close();browser=undefined;await server.close();server=undefined;
  }
  if(phase!=='preview'){
  // Same proof runs against installed npm and all four standalone executables.
@@ -110,48 +115,55 @@ try{
    const argv=['export',...args,'--json'];
    const child=spawn(packaged?binary:process.execPath,packaged?argv:[binary,...argv],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe']});
    const cancellation=interrupt?setTimeout(()=>child.kill('SIGTERM'),500):undefined;
-   let stdout='',stderr='';const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error('Local export did not finish'));},120000);
+   let stdout='',stderr='';const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error(`Local export did not finish: ${args.join(' ')}\n${stdout.slice(-2000)}\n${stderr.slice(-2000)}`));},120000);
    child.stdout.on('data',chunk=>stdout+=chunk);child.stderr.on('data',chunk=>stderr+=chunk);child.once('error',error=>{clearTimeout(timer);clearTimeout(cancellation);reject(error);});child.once('exit',code=>{clearTimeout(timer);clearTimeout(cancellation);resolve({code,stdout,stderr});});
   });
   assert.equal(out.code===0,ok,out.stdout+out.stderr);return out;
  }
+ // Include dataset images in the existing cold export: no extra browser launch is
+ // needed to prove the shared resolver in every packaged executable.
+ await writeFile(join(root,'report.jsx'),(await readFile(join(root,'report.jsx'),'utf8')).replace('</Helmet>',`<Query name="books" source="ref:${ids['covers.csv']}">{\`select * from public.rows\`}</Query></Helmet>`)+`<For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
  const beforeExport=await readFile(join(root,'report.jsx'));
  await imageExport([ids['report.jsx']!,'--output','report.png']);
  assert.equal((await sharp(await readFile(join(root,'report.png'))).metadata()).format,'png');
  assert.deepEqual(await readFile(join(root,'report.jsx')),beforeExport);
+ const pixels=await sharp(await readFile(join(root,'report.png'))).removeAlpha().raw().toBuffer({resolveWithObject:true});
+ let redPixels=0,bluePixels=0;
+ for(let i=0;i<pixels.data.length;i+=pixels.info.channels){if(pixels.data[i]!>220&&pixels.data[i+1]!<30&&pixels.data[i+2]!<30)redPixels++;if(pixels.data[i]!<30&&pixels.data[i+1]!<30&&pixels.data[i+2]!>220)bluePixels++;}
+ assert.ok(redPixels>100&&bluePixels>100,'Local export must contain both dataset image refs');
+ console.log('PASS local export resolves red and blue dataset image refs');
  const color=async(file:string)=>{const {data,info}=await sharp(await readFile(join(root,file))).removeAlpha().raw().toBuffer({resolveWithObject:true});const at=(Math.floor(info.height/2)*info.width+Math.floor(info.width/2))*info.channels;return [data[at]!,data[at+1]!,data[at+2]!];};
  const red='<div className="h-64 bg-red-500"><p>Unpublished image</p></div>';
- if(phase!=='export-variants'){
+ const proofs:Array<()=>Promise<void>>=[];
+ if(phase!=='export-variants')proofs.push(async()=>{
  await writeFile(join(root,'capture.jsx'),red);
  await imageExport(['capture.jsx','--output','red.png']);
-
  const r=await color('red.png');assert.ok(r[0]!>r[2]!+60,`Red local content missing: ${r}`);
  assert.equal(await readFile(join(root,'capture.jsx'),'utf8'),red,'export never registers or rewrites the source');
  await writeFile(join(root,'capture.jsx'),red.replace('bg-red-500','bg-blue-500'));
  await imageExport(['capture.jsx','--output','blue.jpg']);
  assert.equal((await sharp(await readFile(join(root,'blue.jpg'))).metadata()).format,'jpeg');
  const blue=await color('blue.jpg');assert.ok(blue[2]!>blue[0]!+60,`Latest blue local edit missing: ${blue}`);
- }else await writeFile(join(root,'capture.jsx'),red.replace('bg-red-500','bg-blue-500'));
+ });
  if(phase!=='export-basic'){
- // Warm-cache exports are independent. Two browser workers bound memory while
- // retaining the cold-cache proof and the ordered red -> edited blue assertion above.
+ // Independent sources let three warm workers keep running without batch barriers.
+ // The edit proof above stays ordered, and cold installation was already proved.
+ await writeFile(join(root,'card.jsx'),red.replace('bg-red-500','bg-blue-500'));
  await writeFile(join(root,'pixel.png'),await sharp({create:{width:100,height:100,channels:3,background:'#ff0000'}}).png().toBuffer());
  await writeFile(join(root,'cover.jsx'),`<Helmet><meta name="artifactbin:og-image" content="ref:${ids['pixel.png']}" /></Helmet><p>Cover</p>`);
  await writeFile(join(root,'slides.jsx'),'<SlideDeck><Slide title="One"><p>First</p></Slide><Slide title="Two"><p>Second</p></Slide></SlideDeck>');
  await writeFile(join(root,'bad.jsx'),`<Helmet><Query name="bad" source="ref:${ids['sales.csv']}">{\`select missing from public.rows\`}</Query></Helmet><p>Bad SQL</p>`);
- await Promise.all([
-  (async()=>{await imageExport(['capture.jsx','--og','--output','card.png']);assert.deepEqual((( {width,height})=>({width,height}))(await sharp(await readFile(join(root,'card.png'))).metadata()),{width:1600,height:840});})(),
-  (async()=>{await imageExport(['cover.jsx','--og','--output','cover.png']);const cover=await color('cover.png');assert.ok(cover[0]!>240&&cover[2]!<10,'Local cover uses the same image pipeline as published exports');})(),
- ]);
- await Promise.all([
-  imageExport(['slides.jsx','--page','2','--output','slide.png']),
-  (async()=>{const missing=await imageExport(['slides.jsx','--page','3','--output','missing.png'],false);assert.match(missing.stdout,/slide_not_found/);await assert.rejects(readFile(join(root,'missing.png')),/ENOENT/);})(),
- ]);
- await Promise.all([
-  (async()=>{const failed=await imageExport(['bad.jsx','--output','bad.png'],false);assert.match(failed.stdout,/render_failed/);await assert.rejects(readFile(join(root,'bad.png')),/ENOENT/);})(),
-  (async()=>{await imageExport(['capture.jsx','--output','interrupted.png'],false,true);await assert.rejects(readFile(join(root,'interrupted.png')),/ENOENT/);})(),
- ]);
+ proofs.push(
+  async()=>{await imageExport(['card.jsx','--og','--output','card.png']);assert.deepEqual((( {width,height})=>({width,height}))(await sharp(await readFile(join(root,'card.png'))).metadata()),{width:1600,height:840});},
+  async()=>{await imageExport(['cover.jsx','--og','--output','cover.png']);const cover=await color('cover.png');assert.ok(cover[0]!>240&&cover[2]!<10,'Local cover uses the same image pipeline as published exports');},
+  async()=>{await imageExport(['slides.jsx','--page','2','--output','slide.png']);},
+  async()=>{const missing=await imageExport(['slides.jsx','--page','3','--output','missing.png'],false);assert.match(missing.stdout,/slide_not_found/);await assert.rejects(readFile(join(root,'missing.png')),/ENOENT/);},
+  async()=>{const failed=await imageExport(['bad.jsx','--output','bad.png'],false);assert.match(failed.stdout,/render_failed/);await assert.rejects(readFile(join(root,'bad.png')),/ENOENT/);},
+  async()=>{await imageExport(['card.jsx','--output','interrupted.png'],false,true);await assert.rejects(readFile(join(root,'interrupted.png')),/ENOENT/);},
+ );
  }
+ const workers=await Promise.allSettled(Array.from({length:3},async()=>{for(let proof;(proof=proofs.shift());)await proof();}));
+ for(const worker of workers)if(worker.status==='rejected')throw worker.reason;
  if(packaged)assert.equal(downloads,3,'Runtime, SQL and Chromium are downloaded once, then reused');
  console.log(`PASS local image export proof (${phase}); sources unchanged and lazy caches reused`);
  }

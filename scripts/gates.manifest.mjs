@@ -51,6 +51,8 @@ export const GATE_SPECS = Object.freeze([
   { name: 'full-kit', needsMail: false, timeoutMs: 60_000 },
   { name: 'hydration', needsMail: false, timeoutMs: 60_000 },
   { name: 'image-upload', needsMail: false, serialGroup: 'clipboard', timeoutMs: 110_000 },
+  // Measured 11s in CI, including 32 uploads and scrolling 1,000 lazy images.
+  { name: 'row-images', needsMail: false, timeoutMs: 60_000 },
   { name: 'inplace-edit', needsMail: false, timeoutMs: 180_000 },
   { name: 'layout-shift', needsMail: false, timeoutMs: 140_000 },
   { name: 'link-access', needsMail: true, timeoutMs: 60_000 },

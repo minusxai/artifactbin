@@ -28,7 +28,8 @@
  */
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { verifyExportKey } from '@/lib/export-key';
-import { sessionActor } from '@/lib/viewer';
+import { requestOrSessionActor } from '@/lib/viewer';
+import {resolveImageReference} from '@/lib/image-references';
 import { importForDocument, WebAssetRefused, WEB_ASSET_KINDS, type WebAssetKind } from '@/lib/web-assets';
 import { ASSETS_ORIGIN } from '@/lib/config';
 import {publicRefAsset} from '@/lib/public-ref-assets';
@@ -48,19 +49,26 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // answer, before any fetch, exactly as every other read of a document is.
   const artifact = await getArtifactById(id);
   if (!artifact) return missing();
-  const { viewer } = await sessionActor(request);
+  const actor = await requestOrSessionActor(request);
+  const { viewer } = actor;
   // …and the exporter's own credential, on exactly the terms `raw` admits it:
   // a signed, seconds-long key scoped to THIS artifact. The capture runs in a
   // headless browser with no session, so without this a private document's
   // export photographs alt text where its picture should be.
   const key = params.get('key');
-  const admitted = (await canReadArtifact(artifact, viewer)) || verifyExportKey(artifact.id, key ?? undefined);
+  const admitted = actor.tokenId===artifact.token_id || (await canReadArtifact(artifact, viewer)) || verifyExportKey(artifact.id, key ?? undefined);
   if (!admitted) return missing();
 
   const kind = params.get('kind') ?? 'image';
   const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
   if (managed && (!wantsJson || params.getAll('kind').length !== 1 || !WEB_ASSET_KINDS.includes(kind as WebAssetKind))) return reply({error:'invalid_asset_kind'},400);
   if (managed && !ASSETS_ORIGIN) return reply({error:'assets_origin_required'},503);
+  if(!managed && url.startsWith('ref:')) {
+    // A document export key admits the document only, never a private image.
+    const image=await resolveImageReference(url,actor,!!key);
+    if(!image)return missing();
+    return wantsJson ? reply({url:image.url,image},200) : new Response(null,{status:302,headers:{...headers,Location:image.url}});
+  }
   if(managed && url.startsWith('ref:')) {
     const row=await publicRefAsset(url.slice(4),kind as WebAssetKind);
     return row ? reply({url:ASSETS_ORIGIN+'/assets/ref/'+row.id},200) : missing();

@@ -1,6 +1,7 @@
 /** File-backed sessions: scope, revision-checked saves, SQL inputs and local comments. No publication. */
 import {previewGraph} from './graph';
 import type {RefDataMap} from '../../../app/lib/story/ref-data';
+import {imageReferenceId} from '../../../app/lib/story/image-source';
 import {fileContentType} from '../../../app/lib/story/file-types';
 import {createServer} from 'node:http';
 import {readFile,mkdir,realpath} from 'node:fs/promises';
@@ -42,6 +43,9 @@ export async function startPreview(options:{root:string;files:string[];home:stri
  const serial=<T,>(run:()=>Promise<T>):Promise<T>=>{const next=queue.then(run);queue=next.catch(()=>{});return next;};
  const pathFor=async(file:string)=>{if(!allowed.has(file))throw new Refusal(403,'File is not selected');return confinedPath(root,join(root,file));};
  const preparedCache=new Map<string,{revision:string;value:PreparedStoryRuntime}>();
+ // Only refs in selected dataset inputs extend preview's asset scope. Query SQL
+ // can synthesize arbitrary strings, so its results cannot grant this authority.
+ const datasetImages=new Map<string,Set<string>>();
  const read=async(file:string,override?:string)=>{
   const path=await pathFor(file),source=override??await readFile(path,'utf8'),doc=parseDocument(source);
   const rendered=doc.body;
@@ -54,10 +58,11 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   const authored=parseJsx(doc.body);if(!authored.ok)throw new Refusal(400,'Invalid JSX');
   const split=splitHelmet(parsed.nodes),flow={values:split.content.values,queries:split.content.queries,mutations:split.content.mutations};
   const revision=digest(source);
+  const assetsUrl='/image?file='+encodeURIComponent(file);
   const cached=preparedCache.get(file);
-  const prepared=options.assets?(cached?.revision===revision?cached.value:await prepareStoryRuntime({source:doc.body,compiledCss:await compileStoryCss(doc.body,{force:true}),theme:STORY_THEME_NAMES.includes(doc.metadata.theme as StoryThemeName)?doc.metadata.theme as StoryThemeName:null,template:doc.metadata.template??null,colorMode:doc.metadata.colorMode??null,refData,title:doc.metadata.title??file,chrome:!options.capture,dataflow:{flow}})):undefined;
+  const prepared=options.assets?(cached?.revision===revision?cached.value:await prepareStoryRuntime({source:doc.body,compiledCss:await compileStoryCss(doc.body,{force:true}),theme:STORY_THEME_NAMES.includes(doc.metadata.theme as StoryThemeName)?doc.metadata.theme as StoryThemeName:null,template:doc.metadata.template??null,colorMode:doc.metadata.colorMode??null,refData,assetsUrl,title:doc.metadata.title??file,chrome:!options.capture,dataflow:{flow}})):undefined;
   if(prepared)preparedCache.set(file,{revision,value:prepared});
-  return {prepared,source,body:doc.body,metadata:doc.metadata,revision:digest(source),flow,data:{...prepared?.data,nodes:splitHelmet(authored.nodes).body,refData,colorMode:prepared?.data.colorMode??'light' as const,chrome:!options.capture,dataflow:{flow}}};
+  return {prepared,source,body:doc.body,metadata:doc.metadata,revision:digest(source),flow,data:{...prepared?.data,nodes:splitHelmet(authored.nodes).body,refData,assetsUrl,colorMode:prepared?.data.colorMode??'light' as const,chrome:!options.capture,dataflow:{flow}}};
  };
  const remoteIds=new Set<string>();
  for(const file of allowed){const current=await read(file);for(const ref of collectRefUses(current.body)??[])remoteIds.add(ref.id);for(const query of current.flow.queries)for(const id of query.source?[query.source]:query.refs)remoteIds.add(id);}
@@ -86,6 +91,15 @@ export async function startPreview(options:{root:string;files:string[];home:stri
   if(req.method==='GET'&&target.pathname.startsWith('/remote/')){const id=target.pathname.slice(8);const local=options.localFiles?.[id];if(remoteIds.has(id)&&local&&resources.has(local)){res.setHeader('Content-Type',fileContentType(local)??'application/octet-stream');return res.end(await readFile(await confinedPath(root,join(root,local))));}if(!remoteIds.has(id)||!options.asset)throw new Refusal(403,'Remote reference is not selected');const asset=await options.asset(id);res.setHeader('Content-Type',asset.contentType);return res.end(asset.bytes);}
   if(req.method==='GET'&&target.pathname.startsWith('/fonts/')&&options.publicAssets){const path=await confinedPath(options.publicAssets,target.pathname.slice(1));res.setHeader('Content-Type',fileContentType(path)??'font/woff2');return res.end(await readFile(path));}
   if(req.method==='GET'&&target.pathname==='/files')return json([...allowed]);
+  if(req.method==='GET'&&target.pathname==='/image'){
+   const current=await read(file),id=imageReferenceId(target.searchParams.get('u')??'');
+   const sources=current.flow.queries.flatMap(query=>query.source?[query.source]:query.refs);
+   if(!id||!sources.some(source=>datasetImages.get(source)?.has(id)))throw new Refusal(403,'Image reference is not selected');
+   const local=options.localFiles?.[id];
+   const asset=local?{bytes:await readFile(await confinedPath(root,join(root,local))),contentType:fileContentType(local)??'application/octet-stream'}:await options.asset?.(id);
+   if(!asset||!asset.contentType.startsWith('image/'))throw new Refusal(404,'Image unavailable');
+   res.setHeader('Content-Type',asset.contentType);return res.end(asset.bytes);
+  }
   if(options.capture&&req.method!=='GET'&&!(req.method==='POST'&&target.pathname==='/query'))throw new Refusal(403,'Image export is read-only');
   if(req.method==='POST'){
    let bytes='';for await(const chunk of req){bytes+=chunk;if(bytes.length>1_000_000)throw new Refusal(413,'Body too large');}
@@ -120,6 +134,7 @@ export async function startPreview(options:{root:string;files:string[];home:stri
      if(!options.dataset)throw new Refusal(422,`Remote dataset ${id} requires its host connection`);
      datasets[id]=await options.dataset(id);
     }
+    for(const [id,table] of Object.entries(datasets))datasetImages.set(id,new Set(table.rows.flatMap(row=>Object.values(row).flatMap(value=>{const ref=typeof value==='string'?imageReferenceId(value):null;return ref?[ref]:[];}))));
     const sql=createSql();
     const result=await evaluateDataflow({run:args=>sql.run(args),queryRows:async(table,query,params,page)=>{
      const result=(await sql.run(tableQueryInput(table,query,params,page))).result;

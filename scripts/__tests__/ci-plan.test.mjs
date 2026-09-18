@@ -586,21 +586,20 @@ describe('CI job shape', () => {
     expect(cli.steps.some((step) => (step.run ?? '').includes('--import tsx --test'))).toBe(false);
   });
 
-  it('keeps the Intel browser proof mandatory, in the job that built the bytes', () => {
+  it('keeps preview and export proofs mandatory on every executable platform', () => {
     const { jobs } = ci();
-    // The three phases were three more macOS runners, each paying its own setup and an artifact
-    // round-trip to read back the binary the `cli` job had just written. They run here instead,
-    // concurrently, against the executable already on disk.
+    // One invocation shares its verified runtime cache across preview and exports.
     expect(jobs['cli-intel-preview'], 'the separate Intel job is gone').toBeUndefined();
     expect(CI_JOBS).not.toContain('cli-intel-preview');
     expect(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).not.toContain('afbin-macos-15-intel');
-    const intel = jobs.cli.steps.find((step) => step.name === 'Intel preview and export proofs, from the executable just built');
-    expect(intel.if).toBe("matrix.os == 'macos-15-intel'");
-    for (const phase of ['preview', 'export-basic', 'export-variants']) expect(intel.run).toContain(phase);
-    expect(intel.run).toContain('dist/afbin-darwin-x64');
-    // Ordered after the smoke, so a binary that cannot run fails before three browsers start.
-    expect(jobs.cli.steps.indexOf(intel)).toBeGreaterThan(jobs.cli.steps.findIndex((step) => step.run === 'npm run test:binary -w services/cli'));
-    expect(jobs.cli.steps.find((step) => step.name === 'File preview from the actual executable').if).toBe("matrix.os != 'macos-15-intel'");
+    const proof = jobs.cli.steps.find((step) => step.name === 'File preview from the actual executable');
+    expect(proof).toBeDefined();
+    expect(proof.if).toBeUndefined();
+    expect(proof['working-directory']).toBe('services/cli');
+    expect(proof.run).toContain('node --import tsx scripts/test-preview.ts');
+    // Omitting --phase runs preview and both export phases, including on Intel.
+    expect(proof.run).not.toContain('--phase');
+    expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex((step) => step.run === 'npm run test:binary -w services/cli'));
   });
 
   it('keeps a merged PR\'s binaries downloadable for a week after the merge', () => {

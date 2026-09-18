@@ -68,3 +68,29 @@ test('capture sessions run local queries but refuse file saves and comments',asy
   const doc=await(await fetch(session.url+'/document')).json();assert.equal(doc.data.chrome,false);
  }finally{await session?.close();await rm(root,{recursive:true,force:true});}
 });
+
+test('preview resolves image refs only from selected dataset inputs and refreshes that scope',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'preview-row-images-'));let session:Awaited<ReturnType<typeof startPreview>>|undefined;
+ const fetched:string[]=[];let cover='ref:red123';
+ try{
+  await writeFile(join(root,'report.jsx'),'<Helmet><Query name="books" source="ref:data01">{`select * from public.rows`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy"/></For>');
+  session=await startPreview({root,home:root,files:['report.jsx'],capture:true,
+   dataset:async()=>({columns:[{name:'id',type:'string'},{name:'title',type:'string'},{name:'cover_ref',type:'string'}],rows:[{id:'a',title:'Book',cover_ref:cover}]}),
+   asset:async id=>{fetched.push(id);return {bytes:Buffer.from('image bytes'),contentType:id==='wrong1'?'application/json':'image/png'};}});
+  const doc=await(await fetch(session.url+'/document')).json();
+  assert.equal(doc.data.assetsUrl,'/image?file=report.jsx');
+  const image=(ref:string)=>fetch(session!.url+doc.data.assetsUrl+'&u='+encodeURIComponent(ref));
+  assert.equal((await image('ref:red123')).status,403);
+  const query=()=>fetch(session!.url+'/query',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({file:'report.jsx',values:{}})});
+  assert.equal((await query()).status,200);assert.deepEqual(fetched,[],'query resolves no original image bytes');
+  const red=await image('ref:red123');assert.equal(red.status,200);assert.equal(red.headers.get('content-type'),'image/png');
+  for(const ref of ['ref:hidden','ref:bad','','https://example.com/a.png'])assert.equal((await image(ref)).status,403);
+  assert.deepEqual(fetched,['red123']);
+  cover='ref:blue12';await query();assert.equal((await image('ref:red123')).status,403);assert.equal((await image(cover)).status,200);
+  cover='ref:wrong1';await query();assert.equal((await image(cover)).status,404);
+  const source=await readFile(join(root,'report.jsx'),'utf8');
+  await writeFile(join(root,'report.jsx'),source.replace('select * from public.rows',"select id, title, 'ref:hidden' as cover_ref from public.rows"));
+  const computed=await(await query()).json();assert.equal(computed.tables.books.rows[0].cover_ref,'ref:hidden');
+  assert.equal((await image('ref:hidden')).status,403,'SQL cannot grant access to another reference');
+ }finally{await session?.close();await rm(root,{recursive:true,force:true});}
+});

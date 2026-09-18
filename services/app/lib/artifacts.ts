@@ -1,3 +1,4 @@
+import {storedMediaReferences} from './datasets/media-references';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
 import {collectRefUses} from '@/lib/story/refs';
 import {hasDocumentEditorAccess,type VerifiedAccount} from './document-policy';
@@ -44,7 +45,7 @@ import { actorSubject, emit } from './events';
 import { generateFileId } from './ids';
 import { isDocumentFormat, parseContentInput, type ArtifactFormat } from './story/input';
 import { canonicalizeMarkup, publishJsx, prepareJsx } from './story/jsx-tier';
-import { imageRawUrl, imageVariantUrl, pdfRawUrl } from './story/ref-data';
+import { imageRawUrl, imageRefData, pdfRawUrl } from './story/ref-data';
 import { displayTitle } from './story/title';
 import { assetWarningFor, importWebAsset, WebAssetRefused, type AssetWarning, type WebAssetKind } from './web-assets';
 import { resolveWebFont, UnknownFontError } from './webfonts';
@@ -2460,18 +2461,30 @@ async function findWritersFor(actor: TokenActor, datasetId: string): Promise<Arr
   return out;
 }
 
-/** markup artifacts in scope whose meta.refs include `refId`. */
+/** Current stored dataset cells participate in the same owner-scoped deletion graph.
+ * No persisted index: existing datasets and every write path are immediately covered.
+ * Errors reading promised objects fail closed, rather than permitting unsafe deletion.
+ */
 async function findDependentsScoped(scope: Scope, refId: string): Promise<ArtifactRow[]> {
   const db = await getDb();
+  const image=(await getArtifactById(refId))?.format==='image';
   const res = await db.query(
-    `SELECT * FROM artifacts WHERE ${scope.where('$1')} AND format = 'markup' AND meta::text LIKE $2`,
-    [scope.val, `%"${refId}"%`],
+    `SELECT * FROM artifacts WHERE ${scope.where('$1')} AND ${image ? "format IN ('markup','dataset')" : "format = 'markup' AND meta::text LIKE $2"}`,
+    image ? [scope.val] : [scope.val,`%"${refId}"%`],
   );
-  const rows = res.rows as unknown as ArtifactRow[]; // meta arrives parsed (JSONB)
-  return rows.filter((r) => {
-    const refs = (r.meta as { refs?: Array<{ id: string }> }).refs ?? [];
-    return refs.some((x) => x.id === refId);
-  });
+  const rows=res.rows as unknown as ArtifactRow[];
+  const targets=new Set([refId]);
+  const found=new Map<string,ArtifactRow>();
+  for(const row of rows){
+    if(row.format!=='dataset'||row.id===refId)continue;
+    if((await storedMediaReferences(row)).has(refId)){targets.add(row.id);found.set(row.id,row);}
+  }
+  for(const row of rows){
+    if(row.format!=='markup'||row.id===refId)continue;
+    const refs=(row.meta as {refs?:Array<{id:string}>}).refs??[];
+    if(refs.some(ref=>targets.has(ref.id)))found.set(row.id,row);
+  }
+  return [...found.values()];
 }
 
 export function findDependentsFor(actor: TokenActor, refId: string): Promise<ArtifactRow[]> {
@@ -2867,32 +2880,7 @@ export async function refDataForRow(
     if (r.format === 'viz') {
       try { out[r.id] = { kind: 'viz', recipe: JSON.parse(r.content) }; } catch { /* skip */ }
     } else if (r.format === 'image') {
-      // `/raw` is the BYTES; `/a/<id>` is the HTML page, which an <img> loads
-      // to 0×0. The interpreter renders <img src={url}>, so this must be raw.
-      // `?v=<version>` makes the URL change when the bytes do, so /raw can serve
-      // it immutable and readers stop refetching the image on every render.
-      // The intrinsic box, when the store recorded one (lib/images/optimise):
-      // the markup reserves it so nothing below jumps when the bytes land.
-      const im = r.meta as {
-        width?: unknown; height?: unknown; placeholder?: unknown; smallObjectKey?: unknown; smallWidth?: unknown;
-      } | null;
-      const box = typeof im?.width === 'number' && typeof im?.height === 'number'
-        ? { width: im.width, height: im.height }
-        : {};
-      // The blur the reader sees while the bytes travel. A `data:` URL, which
-      // the document's own CSP already admits (img-src 'self' data: blob:).
-      const blur = typeof im?.placeholder === 'string' && im.placeholder.startsWith('data:')
-        ? { blur: im.placeholder }
-        : {};
-      /*
-       * The narrow copy publish stored beside it, addressed on the same
-       * artifact — the second half of the `srcset` the markup writes. Never for
-       * a CAPTURE, which wants the full copy and nothing to choose from.
-       */
-      const widths = !opts.capture && typeof im?.smallWidth === 'number' && typeof im?.smallObjectKey === 'string'
-        ? { smallUrl: imageVariantUrl(r.id, r.version, im.smallWidth), smallWidth: im.smallWidth }
-        : {};
-      out[r.id] = { kind: 'image', url: imageRawUrl(r.id, r.version), ...box, ...blur, ...widths };
+      out[r.id] = imageRefData(r,opts.capture);
     } else if (r.format === 'file') {
       out[r.id]={kind:'file',url:imageRawUrl(r.id,r.version)};
     } else if (r.format === 'pdf') {

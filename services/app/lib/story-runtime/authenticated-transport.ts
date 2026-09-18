@@ -32,7 +32,7 @@ export function createAuthenticatedTransport(id: string, fetcher: typeof fetch =
     importAsset: async (url, kind, signal) => {
       const query = new URLSearchParams({u:url,...(kind ? {kind} : {})});
       const result = await request(`${base}/assets?${query}`, {headers:{Accept:'application/json'},signal}, true);
-      return result.url ? {url:result.url} : {refused:result.code ?? result.error ?? 'fetch_failed'};
+      return result.url ? {url:result.url,image:result.image} : {refused:result.code ?? result.error ?? 'fetch_failed'};
     },
   };
 }

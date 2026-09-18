@@ -53,6 +53,18 @@ type ResolvedRefData =
   };
 
 export type RefDataMap = Record<string, ResolvedRefData>;
+export type ImageRefData = Extract<ResolvedRefData, {kind:'image'}>;
+export type ImageAssetAnswer = {url:string; image?:ImageRefData} | {refused:string};
+
+/** Shared projection for literal and runtime-resolved images; caller owns authorization. */
+export function imageRefData(row:{id:string;version:number;meta:unknown},capture=false):ImageRefData {
+  const im=row.meta as {width?:unknown;height?:unknown;placeholder?:unknown;smallObjectKey?:unknown;smallWidth?:unknown}|null;
+  return {kind:'image',url:imageRawUrl(row.id,row.version),
+    ...(typeof im?.width==='number'&&typeof im?.height==='number'?{width:im.width,height:im.height}:{}),
+    ...(typeof im?.placeholder==='string'&&im.placeholder.startsWith('data:')?{blur:im.placeholder}:{}),
+    ...(!capture&&typeof im?.smallWidth==='number'&&typeof im?.smallObjectKey==='string'?{smallUrl:imageVariantUrl(row.id,row.version,im.smallWidth),smallWidth:im.smallWidth}:{}),
+  };
+}
 
 /**
  * Where an image artifact's BYTES live — the one place this shape is written.

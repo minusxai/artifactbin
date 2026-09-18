@@ -12,7 +12,7 @@ import type { BlockEdit } from '@/lib/editor-v2/block-edit';
 import type { AnnotationRange } from '@/lib/story/annotation-range';
 import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
-import type { RefDataMap } from '@/lib/story/ref-data';
+import type { ImageRefData, RefDataMap } from '@/lib/story/ref-data';
 import type { Dataflow, DataflowState, Row, Scalar } from '@/lib/story/dataflow';
 import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/local-state';
@@ -416,7 +416,7 @@ export interface StoryAssetRequest {
 
 export type StoryAssetResult =
   /** Where our copy lives: `/assets/<hash>`. */
-  | { type: typeof STORY_ASSET_RESULT_MESSAGE; id: number; url: string }
+  | { type: typeof STORY_ASSET_RESULT_MESSAGE; id: number; url: string; image?:ImageRefData }
   /** The importer's own code (`forbidden_address`, `too_large`, `rate_limited`, …). */
   | { type: typeof STORY_ASSET_RESULT_MESSAGE; id: number; refused: string };
 

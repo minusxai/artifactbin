@@ -123,7 +123,7 @@ describe('resolveRefTemplate — the one function both ends render from', () => 
  * not an absolute http(s) URL is not a source we can import, so the mapping
  * refuses it and the reader gets the alt text.
  */
-describe('runtimeAssetUrl refuses anything that is not a web URL', () => {
+describe('runtimeAssetUrl admits web URLs and exact uploaded references', () => {
   const known = () => false;
   const ENDPOINT = '/a/abc123/assets';
 
@@ -140,12 +140,17 @@ describe('runtimeAssetUrl refuses anything that is not a web URL', () => {
       'data:image/svg+xml;base64,PHN2Zy8+',     // admitted by img-src, still not something we import
       '/local/path.png',
       'cat.png',
-      'ref:abc123',
+      'ref:bad',
       'FILE:///etc/passwd',
       '',
     ]) {
       expect(runtimeAssetUrl(hostile, known, ENDPOINT)).toBeNull();
     }
+  });
+
+  it('sends uploaded references through authorization, never a literal ref URL or the web cache',()=>{
+    expect(runtimeAssetUrl('ref:abc123',()=>true,ENDPOINT)).toBe(`${ENDPOINT}?u=ref%3Aabc123`);
+    expect(runtimeAssetUrl('ref:abc123',known,null)).toBeNull();
   });
 
   it('still answers our own address for a URL the caller knows we hold', () => {

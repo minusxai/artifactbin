@@ -317,10 +317,10 @@ describe('URL-kept external assets', () => {
     expect(flat(markup)).not.toMatch(/rewritten to `ref:/);
   });
   it('the markup vocabulary says the copy is stored and the URL is kept', () => {
-    expect(flat(markup)).toContain('publish stores a copy, YOUR URL STAYS as written');
+    expect(flat(markup)).toContain('publish stores a copy, keeps your URL in the source');
   });
   it('…and that a URL that will not fetch is a warning, not a failed publish', () => {
-    expect(flat(markup)).toContain('a URL that will not fetch is a warning, not a failed publish');
+    expect(flat(markup)).toContain('warns if fetching fails');
   });
   it('the subresource roster names all three positions and the `$` binding', () => {
     expect(flat(markup)).toContain('In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL');
