@@ -62,7 +62,7 @@ export function ProfileListing({ data }: { data: { handle: string; owner?: { id:
         count={data.files.filter((a) => a.format === 'markup' || a.format === 'folder').length}
         noun="public artifact"
         // Everyone's, owner included: the route ships `owner` on both branches.
-        image={data.owner?.image ?? null}
+        {...(data.owner ? { owner: { id: data.owner.id, image: data.owner.image ?? null } } : {})}
         // The follow control is the STRANGER's half: the route ships `follow`
         // on that branch alone, and it needs the owner's id to act on.
         {...(data.owner && data.follow ? { follow: { userId: data.owner.id, ...data.follow, signedIn: !!data.authed } } : {})}

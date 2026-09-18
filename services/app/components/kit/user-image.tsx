@@ -17,14 +17,16 @@
  *  - a card with a picture → that picture, painted over the initial below it,
  *    so an address that stops answering reveals a person and never a browser's
  *    broken-image glyph;
- *  - a card without one → the person's initial on a hue the ID alone decides,
- *    so the server string and the hydrated tree agree and two people are told
- *    apart at a glance. Never a broken image, never a grey blank;
+ *  - a card without one → the person's initial on the colour the ID alone
+ *    decides (lib/person-face, shared with the app and the reader rail), so the
+ *    server string and the hydrated tree agree, two people are told apart at a
+ *    glance, and one person is one colour everywhere. Never a broken image,
+ *    never a grey blank;
  *  - an id we cannot name → a neutral `?`, never the raw id;
  *  - no id at all → nothing, or `fallback` when the author gave one.
  */
-import type { CSSProperties } from "react"
 import type { PersonCard } from "@artifactbin/contracts"
+import { personFaceBackground, personInitial } from "@/lib/person-face"
 import { cn } from "./cn"
 import { Avatar, AvatarFallback } from "./avatar"
 
@@ -56,20 +58,6 @@ export interface UserImageProps {
 }
 
 /**
- * A hue in 0..359 from the id — a pure function, on purpose: the colour is
- * computed on the server and again during hydration, and a random or
- * render-ordered hue would be a hydration mismatch on every page with a face.
- */
-export function personHue(id: string): number {
-  let hash = 0
-  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) % 360
-  return hash
-}
-
-/** The first letter of a display name, for the generated avatar. */
-const initialOf = (name: string): string => (name.trim()[0] ?? "?").toUpperCase()
-
-/**
  * Is there an id here AT ALL? The three person primitives share this one test
  * so they agree on the difference that matters: an UNSET field (nothing, or the
  * author's `fallback`) versus an id we simply cannot name. An id of a shape we
@@ -90,10 +78,11 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
       </Avatar>
     )
   }
-  // The generated avatar: the initial, on the id's own hue. Inline style is
+  // The generated avatar: the initial, on the colour lib/person-face decides
+  // for the id — the same colour the app draws for this person. Inline style is
   // refused in authored markup and allowed here, which is what lets a colour
   // computed per person exist at all.
-  const style = { "--mx-person-hue": String(personHue(key)), backgroundColor: "hsl(var(--mx-person-hue) 55% 45%)" } as CSSProperties
+  const style = { backgroundColor: personFaceBackground(key) }
   return (
     <Avatar
       size="default"
@@ -110,7 +99,7 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
         * grey blank. Beside a name the alt is empty, which is also what stops a
         * browser drawing its own broken-image glyph over the initial.
         */}
-      <AvatarFallback className={cn("bg-transparent font-medium text-white", GLYPH[size])}>{initialOf(card.name)}</AvatarFallback>
+      <AvatarFallback className={cn("bg-transparent font-medium text-white", GLYPH[size])}>{personInitial(card.name)}</AvatarFallback>
       {card.image ? (
         <img
           data-slot="avatar-image"

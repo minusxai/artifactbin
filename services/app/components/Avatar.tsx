@@ -1,54 +1,51 @@
 'use client';
 
 /**
- * A PERSON, DRAWN. Display only: their picture, or — when they have none, or
- * it fails to load — the generated initial on a colour derived from their id.
+ * A PERSON, DRAWN. Display only: the generated initial on the colour their id
+ * decides, and — when they have one — their picture painted OVER it.
  *
- * The ONE renderer of a person's face: `AvatarCircle` (the picture as a
- * control, on /welcome and /account) and the app bar's menu button both draw
- * through this, so the two can never show the same person differently.
+ * The ONE app-side React face: `AvatarCircle` (the picture as a control, on
+ * /welcome and /account), the app bar's menu button and the profile header all
+ * draw through this. The colour and the letter come from `lib/person-face`, the
+ * same module the document kit and the reader rail draw from, so a person is
+ * one colour and one letter everywhere.
+ *
+ * The initial is ALWAYS underneath. A picture is an address and an address can
+ * fail; one that does is taken away, revealing the initial, and never leaves a
+ * browser's broken-image glyph behind.
  *
  * Decorative by contract (`alt=""`, `aria-hidden`): whatever encloses it — a
- * button, a link — carries the name.
+ * button, a link, a heading — carries the name.
  */
 import { useState } from 'react';
-
-/**
- * A stable hue per person. Not a hash anybody depends on — it only has to be
- * the same colour every time for the same id, and spread ids around the wheel.
- */
-function hueFor(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) % 360;
-  return hash;
-}
+import { personFaceBackground, personInitial } from '@/lib/person-face';
 
 export default function Avatar({ image, initial, userId, size }: {
   /** The picture's address, or null for the generated initial. */
   image: string | null;
-  /** The text whose first letter is drawn when there is no picture. */
+  /** The name whose first letter is drawn underneath the picture. */
   initial: string;
-  /** Whose picture: the colour behind the initial comes from this. */
+  /** Whose face: the colour behind the initial comes from this. */
   userId: string;
   /** Diameter in px; omitted, it fills its container (which sets the shape). */
   size?: number;
 }) {
   // The address that failed, not a flag: a NEW address gets its own chance.
   const [failed, setFailed] = useState<string | null>(null);
-  const style = size ? { width: size, height: size } : { width: '100%', height: '100%' };
-  if (image && failed !== image) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={image} alt="" aria-hidden="true" style={style} onError={() => setFailed(image)} className="block shrink-0 rounded-full object-cover" />
-    );
-  }
+  const box = size ? { width: size, height: size } : { width: '100%', height: '100%' };
   return (
-    <span
-      aria-hidden="true"
-      style={{ ...style, backgroundColor: `hsl(${hueFor(userId)} 55% 32%)`, ...(size ? { fontSize: Math.round(size * 0.42) } : {}) }}
-      className={`${size ? '' : 'text-3xl '}flex shrink-0 items-center justify-center rounded-full font-semibold leading-none text-white`}
-    >
-      {(initial.trim()[0] ?? '?').toUpperCase()}
+    <span aria-hidden="true" style={box} className="relative block shrink-0 overflow-hidden rounded-full">
+      <span
+        data-face-initial=""
+        style={{ backgroundColor: personFaceBackground(userId), ...(size ? { fontSize: Math.round(size * 0.42) } : {}) }}
+        className={`${size ? '' : 'text-3xl '}flex size-full items-center justify-center font-semibold leading-none text-white`}
+      >
+        {personInitial(initial)}
+      </span>
+      {image && failed !== image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt="" onError={() => setFailed(image)} className="absolute inset-0 size-full object-cover" />
+      )}
     </span>
   );
 }
