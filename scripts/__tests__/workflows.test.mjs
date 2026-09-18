@@ -1,5 +1,5 @@
-/** CI image/compose contracts and immutable maintenance action pins. */
-import { readFileSync } from 'node:fs';
+/** CI job-ownership contracts and immutable maintenance action pins. */
+import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import yaml from 'yaml';
@@ -51,23 +51,67 @@ describe('dependency security', () => {
   });
 });
 
-describe('ci.yml: the image job proves what ships', () => {
-  const steps = ci.jobs.image?.steps ?? [];
-  it('boots the FULL image built from the root Dockerfile', () => {
-    const fullBuild = steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
-    expect(fullBuild?.with?.file).toBe('Dockerfile');
-    expect(fullBuild?.with?.context).toBe('.');
+/**
+ * NO COMPOSE JOB HERE, AND NO IMAGE JOB EITHER. The open-source distribution is the CLI and
+ * `afbin serve`; the container distribution was retired with its Dockerfile and compose file, and
+ * split-deployment CI belongs to the production server repository, not this one.
+ */
+describe('OSS single-host ownership', () => {
+  it('builds no container and leaves split deployment CI to production', () => {
+    expect(ci.jobs.gates).toBeDefined();
+    expect(ci.jobs).not.toHaveProperty('image');
+    expect(ci.jobs).not.toHaveProperty('compose');
+    expect(ci.jobs.plan.outputs).not.toHaveProperty('image');
+    expect(ci.jobs.plan.outputs).not.toHaveProperty('compose');
+    expect(ci.jobs.test.needs).not.toContain('image');
+    expect(ci.jobs.test.needs).not.toContain('compose');
+    expect(readFileSync(ciPath, 'utf8')).not.toContain('docker/build-push-action');
+    for (const file of ['Dockerfile', 'docker-compose.yml']) {
+      expect(existsSync(path.join(root, file)), `${file} is retired`).toBe(false);
+    }
   });
 });
 
-describe('OSS single-host image ownership', () => {
-  it('keeps the real full-image check and leaves split deployment CI to production', () => {
-    expect(ci.jobs.image).toBeDefined();
-    expect(ci.jobs.gates).toBeDefined();
-    expect(ci.jobs).not.toHaveProperty('compose');
-    expect(ci.jobs.plan.outputs).not.toHaveProperty('compose');
-    expect(ci.jobs.test.needs).toContain('image');
-    expect(ci.jobs.test.needs).not.toContain('compose');
+/**
+ * THE APPLICATION IS BUILT ONCE PER RUN. Every gate shard used to run `npm run build` and
+ * `npm run build -w services/cli` for itself — the same bytes, six times over. The `build` job
+ * already produces them, so it uploads them and the shards download them instead.
+ */
+describe('ci.yml: one build, shared with the gates', () => {
+  it('uploads the build from `build` and downloads it in `gates`, which rebuilds nothing', () => {
+    expect(ci.jobs.gates.needs).toEqual(expect.arrayContaining(['plan', 'build']));
+    const upload = ci.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-artifact'));
+    expect(upload?.with?.name).toBe('app-build');
+    // The whole of what `npm run build` (and the CLI's) writes: the SPA, the document runtime and
+    // its public assets, the generated route table, the bundled server the gates boot, the CLI.
+    const uploaded = String(upload?.with?.path ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+    expect(uploaded).toEqual(expect.arrayContaining([
+      'dist',
+      'services/app/dist',
+      'services/app/lib/story-runtime/dist',
+      'services/app/public/story',
+      'services/app/public/libraries',
+      'services/app/server/routes.generated.ts',
+      'services/cli/dist',
+    ]));
+    // The CLI build also assembles the host runtime `afbin serve` ships — 154 MB of directory and
+    // a 39 MB archive of the same bytes, next to 4 MB of bundle. No gate boots it (they run
+    // dist/server.mjs), so it must not ride along six downloads.
+    expect(uploaded.filter((line) => line.startsWith('!'))).toEqual(expect.arrayContaining([
+      '!services/cli/dist/runtime',
+      '!services/cli/dist/runtime/**',
+      '!services/cli/dist/afbin-runtime-*.gz',
+    ]));
+    // Vite writes the SPA manifest to `dist/web/.vite/manifest.json`, and the server resolves every
+    // hashed asset through it; upload-artifact drops dotfiles unless this is set.
+    expect(upload?.with?.['include-hidden-files']).toBe(true);
+    const download = ci.jobs.gates.steps.find((step) => step.uses?.startsWith('actions/download-artifact'));
+    expect(download?.with?.name).toBe('app-build');
+    for (const command of ['npm run build', 'npm run build -w services/cli']) {
+      expect(ci.jobs.gates.steps.map((step) => step.run), command).not.toContain(command);
+    }
+    // The build the CLI job would repeat is still its own; only the gates read this artifact.
+    expect(ci.jobs.build.steps.map((step) => step.run)).toContain('npm run build -w services/cli');
   });
 });
 

@@ -26,6 +26,28 @@ import { ensureUsername, getUserById } from './users';
  */
 export class DuplicateProfileEmail extends Error {}
 
+/**
+ * THE WELCOME FLAG'S WHOLE LIFE IS IN THIS MODULE. `syncProfile` below raises
+ * it on the INSERT of a brand-new row and never touches it again; these two
+ * are the only ways it is read back and put down. Keeping all three here is
+ * what stops a second door inventing its own rule for who is new.
+ */
+
+/** Is this person still owed the welcome page? Only an ACCOUNT ever is. */
+export async function welcomePending(userId: string): Promise<boolean> {
+  const db = await getDb();
+  const row = (await db.query<{ pending: boolean }>(
+    "SELECT (kind = 'account' AND welcome_pending) AS pending FROM users WHERE id = $1", [userId],
+  )).rows[0];
+  return row?.pending ?? false;
+}
+
+/** They pressed Confirm. Idempotent: pressing it twice is pressing it once. */
+export async function confirmWelcome(userId: string): Promise<void> {
+  const db = await getDb();
+  await db.query('UPDATE users SET welcome_pending = false WHERE id = $1', [userId]);
+}
+
 const LRU_MAX = 5000;
 const seen = new Map<string, string>();
 let writes = 0;

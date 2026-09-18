@@ -54,17 +54,20 @@ describe('GET /api/page/profile/@handle', () => {
     const ctx = { params: Promise.resolve({ user: '@alice' }) };
     const asCarol = await (await profilePage(request('/api/page/profile/@alice', { actor: session(carol) }), ctx)).json();
     expect(asCarol.kind).toBe('public-profile');
-    expect(asCarol.owner).toEqual({ id: alice.id });
+    // `owner` is EVERYONE's half now — it carries the picture the hero draws
+    // (lib/avatars), and the owner looking at their own page needs it too.
+    expect(asCarol.owner).toEqual({ id: alice.id, image: null });
     expect(asCarol.follow).toEqual({ following: true, count: 1 });
     const asBob = await (await profilePage(request('/api/page/profile/@alice', { actor: session(bob) }), ctx)).json();
     expect(asBob.follow).toEqual({ following: false, count: 1 });
     const anonymous = await (await profilePage(request('/api/page/profile/@alice'), ctx)).json();
-    expect(anonymous.owner).toEqual({ id: alice.id });
+    expect(anonymous.owner).toEqual({ id: alice.id, image: null });
     expect(anonymous.follow).toEqual({ following: false, count: 1 });
     const own = await (await profilePage(request('/api/page/profile/@alice', { actor: session(alice) }), ctx)).json();
     expect(own.kind).toBe('public-profile');
     expect(own.files).toEqual(asCarol.files);
-    expect(own.owner).toBeUndefined();
+    expect(own.owner).toEqual({ id: alice.id, image: null });
+    // FOLLOW stays the stranger's half: there is nobody to follow on your own page.
     expect(own.follow).toBeUndefined();
   });
 });

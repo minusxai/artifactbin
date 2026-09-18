@@ -17,7 +17,7 @@ beforeEach(() => {
     if (String(url).includes('/api/page/account')) {
       // Late, as a network answer is.
       await new Promise((r) => setTimeout(r, 5));
-      return new Response(JSON.stringify({ username: 'davidgraeber99_do01' }), { status: 200 });
+      return new Response(JSON.stringify({ username: 'davidgraeber99_do01', image: '/api/users/usr_1/avatar?v=abc123' }), { status: 200 });
     }
     return new Response(JSON.stringify({}), { status: 200 });
   }));
@@ -30,6 +30,19 @@ describe('the account page', () => {
     await waitFor(() => {
       expect((screen.getByLabelText('Username') as HTMLInputElement).value).toBe('davidgraeber99_do01');
     });
+  });
+
+  it('carries the same picture control the welcome page does, with a way to take it back off', async () => {
+    const { container } = render(<MemoryRouter><AccountPage /></MemoryRouter>);
+    // SYNCHRONOUS, before the fetch resolves: the control is there from first
+    // paint, so nothing about how loaded the machine is can make it late. A
+    // `findBy` here would pass for the wrong reason (and time out under a busy
+    // shard, which is how the keyed remount below was found).
+    expect(screen.getByLabelText('Change picture')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(container.querySelector('img')?.getAttribute('src')).toBe('/api/users/usr_1/avatar?v=abc123');
+    });
+    expect(screen.getByRole('button', { name: 'Remove picture' })).toBeInTheDocument();
   });
 
   it('keeps account utilities together by offering data upload beside connection management', () => {

@@ -74,7 +74,61 @@ export async function loginViaEmail(page, base, sink, email) {
   }, email, { timeout: 20_000 }).catch(() => {
     throw new Error(`login did not establish the session for ${email} within 20s (url ${page.url()})`);
   });
+  await passTheWelcomePage(page, email);
   return email;
+}
+
+/**
+ * A BRAND-NEW ACCOUNT MEETS THE WELCOME PAGE ONCE, so every gate does.
+ *
+ * Signing up and signing in are one flow and each gate uses a fresh
+ * `mxmx_test_<gate>_<ts>` address, which means every gate is a new account:
+ * the app shell (web/OnboardingGate) parks it on `/welcome`, carrying where it
+ * was headed. A gate that did not expect that would begin its first check on
+ * the wrong page.
+ *
+ * So do exactly what a person does — accept the handle the app assigned and
+ * press Confirm — and nothing else. No picture, no rename, so whatever follows
+ * sees the account the gate asked for and not one this helper decorated.
+ *
+ * `onboarded` is read FIRST rather than sampling the URL, because the redirect
+ * is driven by the SPA's own session read and can land after the cookie is
+ * live — a one-shot `page.url()` here would be a race. The bit is decisive: if
+ * it is false the shell WILL divert, so waiting for that is correct rather than
+ * hopeful. An account already through the welcome page returns at once and its
+ * login is otherwise untouched.
+ *
+ * The bit is read only once the session names THIS account, because a caller
+ * may arrive here straight after submitting the code (gate-fork drives the form
+ * where it already is), and a bit read before the cookie is live would read as
+ * "nothing to do".
+ */
+export async function passTheWelcomePage(page, email) {
+  const onWelcome = (u) => u.pathname.replace(/\/+$/, '') === '/welcome';
+  const state = await page.waitForFunction(async (expectedEmail) => {
+    try {
+      const response = await fetch('/api/page/session', { credentials: 'same-origin' });
+      if (!response.ok) return null;
+      const session = await response.json();
+      if (session.kind !== 'account' || session.user?.email !== expectedEmail) return null;
+      return session.onboarded === false ? 'welcome' : 'through';
+    } catch { return null; }
+  }, email, { timeout: 20_000 }).then((handle) => handle.jsonValue()).catch(() => 'through');
+  if (state !== 'welcome') return;
+
+  await page.waitForURL(onWelcome, { timeout: 20_000 }).catch(() => {
+    throw new Error(
+      `${email} has not been through the welcome page (session onboarded=false) but the app never went there within 20s (url ${page.url()})`,
+    );
+  });
+  // By its accessible name, like every other control these gates drive. It is
+  // disabled until the page has its handle, which the click waits out.
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click({ timeout: 20_000 });
+  await page.waitForURL((u) => !onWelcome(u), { timeout: 20_000 }).catch(() => {
+    throw new Error(
+      `the welcome page did not hand ${email} back within 20s: Confirm was pressed and the app stayed on ${page.url()}`,
+    );
+  });
 }
 
 /** Read the browser's authenticated identity without depending on page chrome. */

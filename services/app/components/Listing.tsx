@@ -32,11 +32,17 @@ export function ListingShell({ authed = false, anon = false, children }: {
  * `ancestor_ids` is drawn on the folder's own page. There is nothing here to
  * segment.
  */
-export function ListingHero({ handle, label, count, noun, follow }: {
+export function ListingHero({ handle, label, count, noun, image, follow }: {
   handle: string; label: string; count: number; noun: string;
   /**
+   * The owner's picture (lib/avatars), or null for none. DECORATIVE here: the
+   * handle is right beside it in text, so naming the image as well would make
+   * a screen reader say this person's name twice.
+   */
+  image?: string | null;
+  /**
    * The follow control, on a STRANGER's profile only — the page route ships
-   * `owner`/`follow` on that branch alone, so an absent prop is exactly the
+   * `follow` on that branch alone, so an absent prop is exactly the
    * owner looking at their own listing, with nobody to follow.
    */
   follow?: { userId: string; following: boolean; count: number; signedIn: boolean };
@@ -44,11 +50,16 @@ export function ListingHero({ handle, label, count, noun, follow }: {
   return (
     <header className="reveal mb-8">
       <MicroLabel>{label}</MicroLabel>
-      <h1 className="mt-2 flex flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg">
-        <a href={`/@${handle}`} aria-label="Profile root" className="no-underline transition-colors hover:text-accent">
-          <span className="text-accent">@</span>{handle}
-        </a>
-      </h1>
+      <div className="mt-2 flex items-center gap-3">
+        {image && (
+          <img src={image} alt="" className="size-12 shrink-0 rounded-full border border-edge object-cover" />
+        )}
+        <h1 className="flex flex-wrap items-baseline gap-x-1.5 text-3xl font-semibold tracking-tight text-fg">
+          <a href={`/@${handle}`} aria-label="Profile root" className="no-underline transition-colors hover:text-accent">
+            <span className="text-accent">@</span>{handle}
+          </a>
+        </h1>
+      </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <p className="font-mono text-xs text-muted">
           {count} {noun}

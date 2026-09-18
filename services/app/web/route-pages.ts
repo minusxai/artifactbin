@@ -15,5 +15,6 @@ export const routePages = {
   NotFoundPage: lazyPage<Record<string, never>>(() => import('./pages/NotFound').then(m => ({ default: m.NotFoundPage }))),
   ProfilePage: lazyPage<Record<string, never>>(() => import('./pages/Profile').then(m => ({ default: m.ProfilePage })), true),
   TrashPage: lazyPage<Record<string, never>>(() => import('./pages/Trash').then(m => ({ default: m.TrashPage }))),
+  WelcomePage: lazyPage<Record<string, never>>(() => import('./pages/Welcome').then(m => ({ default: m.WelcomePage }))),
   ArtifactPage: lazyPage<{ id?: string }>(() => import('./pages/Artifact').then(m => ({ default: m.ArtifactPage })), true),
 };

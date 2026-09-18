@@ -103,8 +103,8 @@ export function resetWebIngestRateLimit(): void {
  * END; everything left of that is text the caller typed. Reading `[0]` — the
  * intuitive choice — would hand every caller a fresh
  * bucket per request behind exactly the appending proxies (Caddy, Traefik,
- * nginx's `$proxy_add_x_forwarded_for`) that docker-compose.yml tells operators
- * to put in front.
+ * nginx's `$proxy_add_x_forwarded_for`) that a self-hosted server sits behind
+ * for TLS (docs/operations.md).
  *
  * The index is clamped at the front so a SHORT list cannot walk the selection
  * back onto a caller-supplied entry.

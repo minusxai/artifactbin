@@ -102,8 +102,8 @@ describe('the serving path degrades instead of failing', () => {
    * do with the row being served. A missing or broken runtime bundle must never
    * take the page down with it, so the serving accessor honours that: the
    * document is still SSR'd, readable and indexable; it simply does not
-   * hydrate. The build and the image are where this fails loudly
-   * (scripts/build-story-runtime.mjs, Dockerfile).
+   * hydrate. The build is where this fails loudly
+   * (scripts/build-story-runtime.mjs).
    */
   it('answers with no runtime rather than throwing', () => {
     resetStoryRuntimeManifest();

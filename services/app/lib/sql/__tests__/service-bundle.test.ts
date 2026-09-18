@@ -1,13 +1,14 @@
 /**
- * THE SERVICE AS AN IMAGE RUNS IT.
+ * THE SERVICE AS A DEPLOYMENT RUNS IT.
  *
  * `service.test.ts` drives the service through `tsx`, which is how a checkout
- * runs it and not how a container does: the image carries ONE bundled ESM file
- * and the native packages beside it. A bundle that cannot start — an import the
- * bundler inlined that had to stay external, an entry that resolves `.ts` only
- * under a loader — is a green suite and a container that exits at line one.
+ * runs it and not how anything deployed does: what ships is ONE bundled ESM
+ * file and the native packages beside it. A bundle that cannot start — an
+ * import the bundler inlined that had to stay external, an entry that resolves
+ * `.ts` only under a loader — is a green suite and a server that exits at line
+ * one.
  *
- * So this builds the bundle the Dockerfile ships (`scripts/build-server.mjs` →
+ * So this builds the bundle that ships (`scripts/build-server.mjs` →
  * `dist/sql-server.mjs`) and runs THAT.
  */
 import { spawn, execFileSync } from 'node:child_process';

@@ -14,8 +14,9 @@ and objects before upgrading. Schema additions apply at startup.
 
 The CLI downloads its versioned host runtime, DuckDB and Chromium when needed.
 For source development, follow [CONTRIBUTING.md](../CONTRIBUTING.md).
-For the container distribution, use the checked-in `docker-compose.yml` and
-`.env.example`. Chromium is included in that image.
+To self-host, `afbin serve` is the whole distribution: it owns its data
+directory and plans its settings from the same questions `npm run setup` asks
+(`.env.example` documents every name).
 
 ## Configuration and access
 
