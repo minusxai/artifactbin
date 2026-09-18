@@ -4,14 +4,30 @@
  * welcome page pending. A row that already existed keeps its flag on every
  * later sync, and a row made any other way (createUser: fixtures, test
  * people) starts with nothing pending.
+ *
+ * And what the flag is FOR: `/api/page/session` turns it into `onboarded`, the
+ * one bit the app shell reads before it sends a new account to `/welcome`.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { GET as sessionPage } from '@/app/api/page/session/route';
 import { syncProfile } from '@/lib/profiles';
-import { createUser, getUserById } from '@/lib/users';
+import { claimToken, createUser, getUserById } from '@/lib/users';
+import { setAvatar } from '@/lib/avatars';
+import { objectStore, ObjectUnavailable } from '@/lib/object-store';
+import { createTestUser, eraseTestUser } from '@/lib/testusers';
+import { mintToken } from '@/lib/tokens';
 import { getDb } from '@/lib/db';
-import { useAppHarness } from '@/__tests__/harness';
+import { agentCookie, request, useAppHarness } from '@/__tests__/harness';
+import sharp from 'sharp';
 
 useAppHarness();
+
+const sessionUser = { id: '', email: '' };
+vi.mock('@/auth', () => ({ auth: async () => (sessionUser.id ? { user: { id: sessionUser.id, email: sessionUser.email || null } } : null) }));
+
+beforeEach(() => { sessionUser.id = ''; sessionUser.email = ''; });
+
+const png = () => sharp({ create: { width: 30, height: 30, channels: 3, background: { r: 1, g: 2, b: 3 } } }).png().toBuffer();
 
 describe('welcome_pending', () => {
   it('is set when the app first creates a row from claims, and kept on later syncs', async () => {
@@ -30,5 +46,70 @@ describe('welcome_pending', () => {
     const user = await createUser({ email: 'mxmx_test_direct@example.com' });
     expect(user.welcome_pending).toBe(false);
     expect(user.image_key).toBeNull();
+  });
+});
+
+describe('GET /api/page/session — onboarded', () => {
+  const onboarded = async (cookie?: string) =>
+    (await (await sessionPage(request('/api/page/session', cookie ? { cookie } : {}))).json()).onboarded;
+
+  it('is false only for an account that still has the welcome page pending', async () => {
+    const user = await createUser({ email: 'mxmx_test_onboard@example.com' });
+    sessionUser.id = user.id; sessionUser.email = user.email;
+    expect(await onboarded()).toBe(true);
+
+    await (await getDb()).query('UPDATE users SET welcome_pending = true WHERE id = $1', [user.id]);
+    expect(await onboarded()).toBe(false);
+  });
+
+  it('is true for nobody, for a browser holding only a token, and for a guest row', async () => {
+    expect(await onboarded()).toBe(true);
+
+    // An anonymous browser: a token, no account. Nobody to send to /welcome.
+    const token = await mintToken('anon-browser');
+    const anon = await sessionPage(request('/api/page/session', { cookie: await agentCookie([token.id]) }));
+    const anonBody = await anon.json();
+    expect(anonBody.user).toBeNull();
+    expect(anonBody.onboarded).toBe(true);
+
+    // A GUEST row with the flag set: the gate is for accounts, and a kind that
+    // never sees the welcome page must never be held at it.
+    const guest = await createUser({ email: 'mxmx_test_guestrow@example.com' });
+    await (await getDb()).query("UPDATE users SET kind = 'guest', welcome_pending = true WHERE id = $1", [guest.id]);
+    sessionUser.id = guest.id; sessionUser.email = guest.email;
+    expect(await onboarded()).toBe(true);
+  });
+
+  it('stays uncacheable', async () => {
+    expect((await sessionPage(request('/api/page/session'))).headers.get('Cache-Control')).toBe('no-store');
+  });
+});
+
+describe('erasing a test user', () => {
+  it('takes its picture with it, and survives an object that has already gone', async () => {
+    const owner = await createUser({ email: 'mxmx_test_eraseowner@example.com' });
+    const token = await mintToken('eraser');
+    await claimToken(owner.id, token.token);
+
+    const mint = async () => {
+      const minted = await createTestUser({ tokenId: token.id, userId: owner.id });
+      if (!minted.ok) throw new Error(minted.error);
+      return minted;
+    };
+
+    const testuser = await mint();
+    const { key } = await setAvatar(testuser.id, await png(), 'image/png');
+    await expect(objectStore().get(key)).resolves.toBeInstanceOf(Buffer);
+
+    expect((await eraseTestUser(testuser.id)).erased).toBe(true);
+    expect(await getUserById(testuser.id)).toBeNull();
+    await expect(objectStore().get(key)).rejects.toBeInstanceOf(ObjectUnavailable);
+
+    // The object store losing the bytes first is not the erase's problem.
+    const second = await mint();
+    const stored = await setAvatar(second.id, await png(), 'image/png');
+    await objectStore().delete(stored.key);
+    expect((await eraseTestUser(second.id)).erased).toBe(true);
+    expect(await getUserById(second.id)).toBeNull();
   });
 });

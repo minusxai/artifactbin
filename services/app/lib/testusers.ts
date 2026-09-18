@@ -21,6 +21,7 @@ import type { TestUser } from '@artifactbin/contracts';
 import { TESTUSER_ERRORS, TESTUSER_LIMITS } from '@artifactbin/contracts';
 import { getDb, type Db } from './db';
 import { generateInternalId } from './ids';
+import { objectStore } from './object-store';
 import { mintToken } from './tokens';
 import { TABLES } from './schema';
 import { userKindOf } from './user-kinds';
@@ -192,7 +193,10 @@ const ERASE_BY_USER = TABLES.flatMap((table) =>
  * ONE transaction for the data. The live browser sessions are closed OUTSIDE
  * it (the session service is an HTTP call, and PGLite serialises one connection
  * — reaching out from inside the callback is the deadlock), before the rows go,
- * so a page cannot write through an identity that is about to disappear.
+ * so a page cannot write through an identity that is about to disappear. Its
+ * PICTURE goes the same way, and for the same reason: the object store is
+ * another service, so the key is read inside the transaction and the object is
+ * deleted after it commits — never a live row addressing bytes already gone.
  *
  * Idempotent: erasing an id that is gone deletes nothing and answers false.
  */
@@ -202,11 +206,13 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
   const sessions = testUserSessionCount(testUserId);
   await closeTestUserSessions(testUserId);
   const db = database ?? (await getDb());
-  return db.transaction(async (tx) => {
-    const user = await tx.query<{ id: string }>(
-      "SELECT id FROM users WHERE id = $1 AND kind = 'testuser' FOR UPDATE", [testUserId],
+  let picture: string | null = null;
+  const erased = await db.transaction(async (tx) => {
+    const user = await tx.query<{ id: string; image_key: string | null }>(
+      "SELECT id, image_key FROM users WHERE id = $1 AND kind = 'testuser' FOR UPDATE", [testUserId],
     );
     if (!user.rows.length) return { erased: false, artifacts: 0, sessions };
+    picture = user.rows[0]!.image_key;
     const owned = await tx.query<{ id: string }>('SELECT id FROM artifacts WHERE user_id = $1', [testUserId]);
     const ids = owned.rows.map((row) => row.id);
     if (ids.length) {
@@ -224,6 +230,10 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
     await tx.query('DELETE FROM users WHERE id = $1', [testUserId]);
     return { erased: true, artifacts: ids.length, sessions };
   });
+  // After the commit, and never able to fail the erase: an object the store has
+  // already lost is housekeeping nobody can do, not a reason to keep the row.
+  if (picture) await objectStore().delete(picture).catch(() => {});
+  return erased;
 }
 
 /**
