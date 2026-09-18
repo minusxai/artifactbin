@@ -26,7 +26,8 @@ import { count, has } from '@/lib/relations';
 import { loadDatasetRows } from '@/lib/story/dataset-store';
 import { ARTIFACT_FORMATS, type ArtifactFormat } from '@/lib/story/input';
 import { canonicalArtifactPath } from '@/lib/urls';
-import { ownerUsername } from '@/lib/users';
+import { getUserById, ownerUsername } from '@/lib/users';
+import { avatarUrl } from '@/lib/avatars';
 import { actorForArtifacts, browserSessionKind, roleFor, sessionActor } from '@/lib/viewer';
 import { accountWorkspaceFor } from '@/lib/workspace';
 import { canAnnotate } from '@/lib/share-roles';
@@ -113,8 +114,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const viewerId = actor.viewer?.userId ?? null;
   // Independent reads begin only after ACL admission. These values belong to
   // this request; no identity or permission answer is retained across requests.
-  const [authorUsername, forkedFrom, compiledCss, refData, assetUrls, liked, likeCount, following, followCount, openAnnotations, content] = await Promise.all([
-    ownerUsername(artifact.user_id), forkedFromCredit(artifact.forked_from),
+  const [author, forkedFrom, compiledCss, refData, assetUrls, liked, likeCount, following, followCount, openAnnotations, content] = await Promise.all([
+    // The author's row, once: the handle (byline, canonical) and their face.
+    artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null), forkedFromCredit(artifact.forked_from),
     isDoc ? currentStoryCss(meta, row.source) : Promise.resolve(meta.compiledCss ?? null),
     isDoc ? refDataForRow(row) : Promise.resolve({}),
     isDoc ? webAssetsForSource(row.source) : Promise.resolve(undefined),
@@ -125,6 +127,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     canAnnotate(role) && isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
     artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : row.content),
   ]);
+  const authorUsername = author?.username ?? null;
   const declared = isDoc && row.source ? declarationsForRow(row) : null;
   const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
   const runtime = isDoc ? await prepareStoryRuntime({
@@ -170,7 +173,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       visibility: artifact.visibility,
       ...(ownerScope ? { hasInvitedUsers } : {}),
       title: row.title,
-      author: { username: authorUsername, forkedFrom },
+      author: { username: authorUsername, id: author?.id ?? null, image: author ? avatarUrl(author) : null, forkedFrom },
       ...(runtime ? { runtime } : {}),
       source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:row.source,
       content,

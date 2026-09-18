@@ -34,7 +34,7 @@ import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } 
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
 import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
-import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
+import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderPerson, type ReaderReactions } from '@/lib/story/reader-chrome';
 import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
 import { documentFontCss } from './document-fonts';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -169,9 +169,17 @@ export interface StoryDocumentInput {
    * surface for a tier whose whole point is being listed nowhere.
    *
    * Null/absent for a capture. `username: null` is an anonymous document: the
-   * chrome then carries no author mark at all.
+   * chrome then carries no author mark at all. `id`/`image` draw the author's
+   * face before the handle (no id, no face).
    */
-  author?: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
+  author?: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
+  /**
+   * The signed-in ACCOUNT reading, drawn on the rail's menu trigger
+   * (lib/story/reader-chrome `viewer`). Distinct from `viewer` above, which is
+   * what the document's own script may know; this is only the rail's picture.
+   * Null/absent: the profile glyph.
+   */
+  readerFace?: ReaderPerson | null;
   /**
    * Link-unfurl cards for THIS document. A reader is served the document
    * itself rather than the app page, so if these are not in its head a shared
@@ -388,6 +396,7 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
       // beside the author's handle.
       title: input.title ?? null,
       author: input.author ?? null,
+      viewer: input.readerFace ?? null,
       signIn,
       fork,
       login: input.login ?? null,

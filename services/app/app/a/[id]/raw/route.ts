@@ -46,7 +46,8 @@ import { declaresMutations } from '@/lib/story/helmet';
 import { assetsPath, resolvePath, markupCsp, mutatePath, queryPath } from '@/lib/story/markup-csp';
 import { readUrlValues } from '@/lib/story/url-values';
 import { storyRuntimeAssets } from '@/lib/story/runtime-asset';
-import { ownerUsername } from '@/lib/users';
+import { getUserById } from '@/lib/users';
+import { avatarUrl } from '@/lib/avatars';
 import { displayTitle } from '@/lib/story/title';
 import { CARD_RENDER_GENERATION } from '@/lib/export-card';
 import type { StoryThemeName } from '@/lib/validation/atlas-schemas';
@@ -331,7 +332,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       const search = new URL(request.url).search;
       const urlValues = declared ? readUrlValues(search, declared.flow) : {};
       const hasUrlValues = Object.keys(urlValues).length > 0;
-      const [assetUrls, refData, dataflow, creatorUsername, forkedFrom, readerIdentity] = await Promise.all([
+      const [assetUrls, refData, dataflow, creator, forkedFrom, readerIdentity, readerRow] = await Promise.all([
         // Our copies of the web URLs this document names (lib/web-assets): the
         // served <img> points at them, with the box and the blur the row
         // recorded, and the reader's browser reaches no third party.
@@ -349,7 +350,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           // cookie as a bare token, and an unclaimed row is owned by its token
           // — the viewer alone would photograph a stranger's view of it.
           : dataflowForRow(row, { values: urlValues, viewer: { userId: viewer?.userId ?? null, tokenId: actor.tokenId ?? null, email: viewer?.email ?? null } }),
-        chrome ? ownerUsername(artifact.user_id) : Promise.resolve(null),
+        // The author's row, once: their handle (the byline) and their picture.
+        chrome && artifact.user_id ? getUserById(artifact.user_id) : Promise.resolve(null),
         chrome ? forkedFromCredit(artifact.forked_from) : Promise.resolve(null),
         /*
          * WHO IS READING — `$_me` in markup, and the name a <User> shows.
@@ -361,7 +363,15 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
          * be photographed into an image another reader is served.
          */
         chrome ? viewerIdentityFor(artifact, viewer?.userId ?? null) : Promise.resolve(null),
+        /*
+         * THE READER'S FACE on the rail's menu trigger — for a signed-in
+         * ACCOUNT only (the app bar's rule: an agent cookie or a bearer is not
+         * a person signed in), and never on a capture, for the same reason as
+         * above. It makes these bytes per-viewer; the markup is `no-store`.
+         */
+        chrome && actor.credential === 'session' && viewer?.userId ? getUserById(viewer.userId) : Promise.resolve(null),
       ]);
+      const creatorUsername = creator?.username ?? null;
       const runtime = storyRuntimeAssets();
       /*
        * THE DOORS. A top-level document holds no session, so like, follow and
@@ -417,7 +427,8 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
           }
           : null,
     help: chrome ? agentDiscovery(base) : null,
-        author: chrome ? { username: creatorUsername, forkedFrom } : null,
+        author: chrome ? { username: creatorUsername, id: creator?.id ?? null, image: creator ? avatarUrl(creator) : null, forkedFrom } : null,
+        readerFace: readerRow ? { id: readerRow.id, name: readerRow.username || viewer?.email || readerRow.email || '', image: avatarUrl(readerRow) } : null,
         /*
          * THE WAY IN. A guest — no account, so ANONYMOUS_CEILING holds them at
          * `viewer` — on a link its owner set to `can comment` or `can edit` is

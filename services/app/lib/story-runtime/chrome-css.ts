@@ -259,6 +259,35 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
 .mx-reader-trigger .mx-rc-close { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-open { display: none !important; }
 .mx-reader-trigger[aria-expanded="true"] .mx-rc-close { display: block !important; }
+/* A PERSON'S FACE (lib/story/reader-chrome face): the initial on its colour,
+   the picture painted over it, so a picture that fails shows the letter. The
+   reader's own on the menu trigger; the author's, smaller, before the handle
+   (selected by the variant, never by an author class: an anonymous document
+   carries no author mark, stylesheet included). */
+.mx-reader-face {
+  position: relative !important; display: inline-block !important; flex: 0 0 auto !important;
+  box-sizing: border-box !important; width: 22px !important; height: 22px !important;
+  margin: 0 !important; padding: 0 !important; border-radius: 999px !important; overflow: visible !important;
+  transition: box-shadow 120ms ease !important;
+}
+.mx-reader-face-initial {
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  width: 100% !important; height: 100% !important; border-radius: 999px !important;
+  color: #ffffff !important; font: 600 11px/1 system-ui, sans-serif !important; letter-spacing: 0 !important;
+  text-shadow: none !important;
+}
+.mx-reader-face img {
+  position: absolute !important; inset: 0 !important; display: block !important;
+  width: 100% !important; height: 100% !important; max-width: none !important;
+  margin: 0 !important; border: 0 !important; border-radius: 999px !important; object-fit: cover !important;
+}
+.mx-reader-face--author { width: 18px !important; height: 18px !important; }
+.mx-reader-face--author .mx-reader-face-initial { font-size: 9px !important; }
+/* Open, the face stays and an accent ring says so — offset by the rail's own
+   ground, so it reads on the light rail and the dark one alike. */
+.mx-reader-trigger[aria-expanded="true"] .mx-reader-face {
+  box-shadow: 0 0 0 2px var(--mx-reader-bg), 0 0 0 4px var(--mx-reader-accent) !important;
+}
 /* The words stay in the markup for the tests and screen readers; nobody needs
    "like" printed under a heart. */
 .mx-reader-label, .mx-reader-share-text { display: none !important; }
@@ -513,6 +542,9 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
     filter: drop-shadow(0 1px 1.5px var(--mx-reader-bg)) drop-shadow(0 0 6px color-mix(in srgb, var(--mx-reader-bg) 85%, transparent)) !important;
   }
   .mx-reader-action svg, .mx-reader-trigger svg { width: 24px !important; height: 24px !important; }
+  /* The reader's face sits on the content like the glyphs do, with the same halo. */
+  .mx-reader-face--viewer { box-shadow: 0 0 0 1.5px var(--mx-reader-bg), 0 1px 6px color-mix(in srgb, var(--mx-reader-fg) 30%, transparent) !important; }
+  .mx-reader-byline > .mx-reader-face { order: 1 !important; }
   /* The badge on a 44px target with a 24px glyph. */
   .mx-reader-count { top: 2px !important; right: 1px !important; }
   .mx-reader-home {

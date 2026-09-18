@@ -21,8 +21,11 @@
  *     the caller asked for it — then two panel triggers: `controls` ("Open
  *     artifact controls": appearance, the sign-in door, fork, provenance) and
  *     `menu` ("Open menu": the app drawer). 44px targets with tiny mono labels;
- *  3. the BYLINE: the artifactbin home crumb, the author's `@handle` (their
- *     profile), the title, and the follow pill;
+ *     The `menu` trigger draws the signed-in reader's FACE (`viewer`) in place
+ *     of the profile glyph, and an accent ring rather than the X while open;
+ *  3. the BYLINE: the artifactbin home crumb, the author's face (when the
+ *     author is an account) and `@handle` (their profile), the title, and the
+ *     follow pill;
  *  4. the share toast and the copy fallback field;
  *  5. the scrim and the two panels.
  *
@@ -43,6 +46,7 @@ import type { Visibility } from '@/lib/artifacts';
 import { REPO_URL } from '@/lib/repo';
 import { GITHUB_MARK_PATH, GITHUB_MARK_VIEWBOX } from '@/lib/github-mark';
 import { githubStarMarkup } from '@/lib/github-star';
+import { personFaceBackground, personInitial } from '@/lib/person-face';
 
 /** The login door, when a link grants more than the anonymous ceiling lets a guest use. */
 interface ReaderSignIn {
@@ -81,6 +85,13 @@ export interface ReaderReactions {
   comment: { count: number; href: string };
 }
 
+/** A person the rail draws: the account id (the colour), a name (the letter) and their picture's address. */
+export interface ReaderPerson {
+  id: string;
+  name: string;
+  image: string | null;
+}
+
 export interface ReaderChromeInput {
   /** SPA controls are mounted separately in TrustedUi; raw documents retain their own panels. */
   panels?: boolean;
@@ -92,8 +103,18 @@ export interface ReaderChromeInput {
   artifactId: string | null;
   /** The document's title, for the byline and the share sheet. Omitted when null. */
   title: string | null;
-  /** The author's handle (null on an anonymous document: no author mark at all) and where the copy came from. */
-  author: { username: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
+  /**
+   * The author's handle (null on an anonymous document: no author mark at all)
+   * and where the copy came from. `id` and `image` draw their face before the
+   * handle; without an id there is no face.
+   */
+  author: { username: string | null; id?: string | null; image?: string | null; forkedFrom?: ReaderForkedFrom | null } | null;
+  /**
+   * WHO IS READING — the signed-in account, drawn on the `menu` trigger in
+   * place of the profile glyph. Null or absent (a guest, a signed-out reader, a
+   * capture): the glyph, byte for byte.
+   */
+  viewer?: ReaderPerson | null;
   signIn?: ReaderSignIn | null;
   fork?: ReaderFork | null;
   forkBusy?: boolean;
@@ -186,6 +207,29 @@ const trigger = (name: 'controls' | 'menu', aria: string, icon: string, text: st
   `<button type="button" class="mx-reader-trigger" data-mx-reader-trigger="${name}" aria-label="${aria}" aria-expanded="false" data-mx-tip="${tip}">`
   + `${icon}${ICON_X}${label(text)}</button>`;
 
+/**
+ * A PERSON'S FACE, as a string — the rail's twin of components/Avatar, on the
+ * same rules (lib/person-face): the initial on the account's colour is ALWAYS
+ * underneath, and the picture, when there is one, is painted over it, so an
+ * address that stops answering reveals the letter. Decorative: whatever holds
+ * it carries the name. The background rides a `style` attribute, which the
+ * document's CSP admits (`style-src 'unsafe-inline'`, lib/story/markup-csp).
+ */
+const face = (person: { id: string; name: string; image: string | null }, variant: 'viewer' | 'author'): string =>
+  `<span class="mx-reader-face mx-reader-face--${variant}" aria-hidden="true">`
+  + `<span class="mx-reader-face-initial" style="background:${escapeHtml(personFaceBackground(person.id))}">${escapeHtml(personInitial(person.name))}</span>`
+  + (person.image ? `<img src="${escapeHtml(person.image)}" alt="" aria-hidden="true" decoding="async">` : '')
+  + '</span>';
+
+/**
+ * The `menu` trigger with the reader's face on it. The attributes are the
+ * glyph trigger's, unchanged — the entry flips the same aria-label — but there
+ * is no X: a face stays a face while its menu is open, and the CSS rings it.
+ */
+const faceTrigger = (viewer: ReaderPerson): string =>
+  '<button type="button" class="mx-reader-trigger" data-mx-reader-trigger="menu" aria-label="Open menu" aria-expanded="false" data-mx-tip="Profile">'
+  + `${face(viewer, 'viewer')}${label('profile')}</button>`;
+
 const SIGN_IN_LABEL: Record<'commenter' | 'editor', string> = {
   commenter: 'log in to comment',
   editor: 'log in to edit',
@@ -228,6 +272,10 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   const edit = !archived && (input.edit ?? false);
   const sharingIcon = sharingIconFor({ visibility: input.visibility ?? 'private', hasInvitedUsers: input.hasInvitedUsers ?? false });
   const username = author?.username ?? null;
+  const viewer = input.viewer ?? null;
+  // The author's face needs an account to take its colour from, and a handle
+  // to sit beside.
+  const authorFace = username && author?.id ? face({ id: author.id, name: username, image: author.image ?? null }, 'author') : '';
   const forkedFrom = author?.forkedFrom ?? null;
   const following = reactions?.follow?.following ?? false;
   const followAria = `${following ? 'Unfollow' : 'Follow'} @${escapeHtml(username ?? '')}`;
@@ -235,6 +283,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
   const byline = `<div class="mx-reader-byline" data-mx-reader-byline${input.ownerBreadcrumb ? ' data-mx-owner-breadcrumb' : ''}>`
     + '<a class="mx-reader-brand-crumb" href="/" target="_top">artifactbin</a>'
     + (username ? `<span class="mx-reader-chevron" aria-hidden="true">${ICON_CHEVRON}</span>` : '')
+    + authorFace
     + (username
       ? `<a class="mx-reader-author" href="/@${escapeHtml(username)}" target="_top"`
         + ` aria-label="View @${escapeHtml(username)}'s profile">@${escapeHtml(username)}</a>`
@@ -281,7 +330,7 @@ export function renderReaderChrome(input: ReaderChromeInput): string {
     + (edit ? action('edit', 'Edit', ICON_PENCIL) : '')
     + (input.share ? action('share', 'Share', `<span data-mx-visibility="${input.visibility ?? 'private'}" data-mx-sharing-icon="${sharingIcon}">${ICON(visibilityIconPaths(sharingIcon))}</span>`, '', '<span class="mx-reader-share-text">Share</span>') : '')
     + trigger('controls', 'Open artifact controls', ICON_SLIDERS, 'settings', 'Artifact settings')
-    + trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile')
+    + (viewer ? faceTrigger(viewer) : trigger('menu', 'Open menu', ICON_PROFILE, 'profile', 'Profile'))
     + '</div>'
     + byline
     // WHICH VERSION THIS IS — fixed, never a control, and the only thing an
