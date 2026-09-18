@@ -32,7 +32,7 @@ import { createChecker } from './lib/assert.mjs';
 import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import { chromium } from 'playwright';
 import { openArtifactControls } from './lib/reveal-chrome.mjs';
-import { startMailSink, loginViaEmail } from './lib/mail-login.mjs';
+import { startMailSink, loginViaEmail, passTheWelcomePage } from './lib/mail-login.mjs';
 import { connectAgent } from './lib/cli-connection.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:3030';
@@ -55,6 +55,11 @@ async function loginOnThisPage(page, sink, email) {
   if (!code) throw new Error(`no login code reached the development outbox for ${email}`);
   await page.fill('[aria-label="Login code"]', code);
   await page.click('[aria-label="Verify code"]');
+  // This person is brand new, so the shell shows them the welcome page once on
+  // the way back — carrying the fork ask in its own callbackUrl. Press Confirm
+  // as `loginViaEmail` does, and the ask survives BOTH hops, which is the whole
+  // point of the check below.
+  await passTheWelcomePage(page, email);
 }
 
 const sink = await startMailSink();
