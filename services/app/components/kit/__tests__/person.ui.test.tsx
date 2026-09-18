@@ -27,6 +27,21 @@ describe('<UserImage>', () => {
     expect(img.getAttribute('aria-hidden')).toBeNull();
   });
 
+  /*
+   * A picture is an ADDRESS, and an address can fail. The initial stays
+   * underneath it, so a 404 reveals a person rather than a browser's broken
+   * glyph — which is the promise `<UserImage>` makes.
+   */
+  it('keeps the initial underneath the picture, so a failed address is not a broken image', () => {
+    const view = render(<UserImage id="usr_ada" card={ADA} />);
+    const fallback = view.container.querySelector('[data-slot="avatar-fallback"]')!;
+    expect(fallback.textContent).toBe('A');
+    const box = view.container.querySelector('[data-slot="avatar"]') as HTMLElement;
+    expect(box.style.getPropertyValue('--mx-person-hue')).not.toBe('');
+    // The picture is painted OVER it, not beside it.
+    expect(view.container.querySelector('img')!.className).toContain('absolute');
+  });
+
   it('is decorative beside a name: an empty alt and hidden from the accessibility tree', () => {
     const view = render(<UserImage id="usr_ada" card={ADA} decorative />);
     const img = view.container.querySelector('img')!;
