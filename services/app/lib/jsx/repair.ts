@@ -40,7 +40,11 @@ import { balancedClose, balancedString, doubleWrapped, extraClosing, tripleOpen 
 
 /** What was changed on the way in, for the reply to carry. */
 export interface SourceRepair {
-  code: 'escaped_backtick' | 'unbalanced_braces';
+  code: 'escaped_backtick' | 'unbalanced_braces' | 'node_id';
+  path?: string;
+  from?: string | null;
+  to?: string;
+  reason?: 'duplicate' | 'invalid';
   /** Addressed to the agent that sent it: what was wrong and how to not repeat it. */
   message: string;
   /** How many characters were dropped (backslashes, or stray closing braces). */

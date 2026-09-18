@@ -12,7 +12,7 @@ import type { DatasetMutationPolicy, MutationAnalysis } from './dataset-policy';
 
 export type Scalar = string | number | boolean | null;
 export type Row = Record<string, unknown>;
-export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'user';
+export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'timestamp' | 'user';
 export interface UserConstraints { memberOf?: string[]; self?: boolean }
 export interface UserOption { value: string; label: string }
 /**
@@ -69,6 +69,7 @@ export interface SqlReadCatalog {
 }
 
 export interface RunInput {
+  paramTypes?: Record<string,ColumnType>;
   /** One catalog query; table keys are transport identities, never SQL names. */
   catalog?: SqlReadCatalog;
   /** Registered tables by SQL name — `ref_<id>` for datasets, the declared name for inline tables. */
@@ -85,7 +86,13 @@ export interface RunInput {
   page?: { name: string } & QueryPage;
 }
 
+/** A server-owned page table. Authors cannot declare or write this namespace. */
+export const LIKES_TABLE = '_likes';
+export const LIKES_COLUMNS: DatasetColumn[] = [{name:'user',type:'user'}];
+
 export interface MutationInput {
+  /** Trusted page participants; never accepted from a browser mutation payload. */
+  likes?: string[];
   policy?: DatasetMutationPolicy;
   /** Internal capability preview: analyze only, never execute effects. */
   policyPreview?: boolean;
@@ -115,6 +122,7 @@ export interface MutationResult extends TableResult {
 export type MutationOutcome = MutationResult | QueryFailure;
 
 export interface DryRunInput {
+  paramTypes?: Record<string,ColumnType>;
   tables: Record<string, { columns: DatasetColumn[] }>;
   queries: SqlQuery[];
   /** An ARRAY on the wire — a Set serialises to `{}` and binds nothing. */

@@ -1,3 +1,4 @@
+import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
 /**
  * The data file tiers: dataset (one flat table), viz (an
  * inert recipe template — minusx VizRecipeContent verbatim), image (data-url).
@@ -38,6 +39,7 @@ function valueMatches(v: unknown, t: ColumnType): boolean {
   switch (t) {
     case 'number': return typeof v === 'number' && Number.isFinite(v);
     case 'boolean': return typeof v === 'boolean';
+    case 'timestamp': return isTimestamp(v);
     case 'date': return typeof v === 'string' && DATE_RE.test(v);
     case 'user':
     case 'string': return typeof v === 'string';
@@ -98,6 +100,10 @@ export async function publishDataset(body: Record<string, unknown>, rows: unknow
     columns = inferColumns(flat);
   }
 
+  for (const row of flat) for (const column of columns) if(column.type==='timestamp' && row[column.name]!=null) {
+    try { row[column.name]=normalizeTimestamp(row[column.name],column.name); }
+    catch(error){return json({error:'invalid_dataset',details:[error instanceof Error?error.message:'Invalid timestamp']},400);}
+  }
   // The rows go to the object store; the row keeps a reference. See
   // lib/story/dataset-store.ts for why a 27 MB blob cannot live in a column.
   const located = await storeDatasetRows(flat, objects);

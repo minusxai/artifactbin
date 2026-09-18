@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * `<UserHandle id="usr_…" />` — A PERSON, BY THE NAME THEY CHOSE.
+ * `<UserHandle userId="usr_…" />` — A PERSON, BY THE NAME THEY CHOSE.
  *
  * The name half of `<User>` (components/kit/user.tsx). A handle is the one
  * public address a person has, so this is also the one place a document turns
@@ -38,7 +38,9 @@ export interface UserHandleProps {
    * adapter resolves first; `null` is an unset field, and an unresolved
    * reference (no adapter) is treated as an id we cannot name.
    */
-  id?: unknown
+  userId?: unknown
+  /** Source node identity, independent of the account. */
+  id?: string
   /** The person, as this viewer may see them. Supplied by the adapter. */
   card?: PersonCard | null
   /** `false` prints the handle as text instead of a link to the profile. */
@@ -49,7 +51,7 @@ export interface UserHandleProps {
   [key: `data-${string}`]: unknown
 }
 
-export function UserHandle({ id, card, link, fallback, className, ...props }: UserHandleProps) {
+export function UserHandle({ userId: id, card, link, fallback, className, ...props }: UserHandleProps) {
   if (!hasPersonId(id)) {
     return fallback ? <span data-slot="user-handle" className={cn("text-muted-foreground", className)} {...props}>{fallback}</span> : null
   }

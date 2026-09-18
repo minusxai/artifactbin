@@ -111,7 +111,7 @@ export interface ContentInputCtx {
   objects?: ContentObjects;
   prepareDataset?: (input:unknown,objects?:ContentObjects)=>Promise<StoredContent|Response>;
   /** Identity normalization after caller-coordinate validation, before compilation. */
-  normalizeMarkup?: (source: string) => string;
+  normalizeMarkup?: (source: string) => string | {source:string;repairs:SourceRepair[]};
   /**
    * MAY THIS BODY MAKE A FOLDER — true only where a row is being CREATED.
    *

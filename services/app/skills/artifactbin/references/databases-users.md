@@ -47,6 +47,12 @@ identity fields in an existing report's YAML fence when editing it; publish the
 report with `afbin push report.jsx --yes --json`. CSV infers ordinary columns;
 the Dataset definition above declares native user types and constraints.
 
+`memberOf:["_likes"]` selects this page's current likers. On a stored column it
+binds to the first owning page at attachment; a fork copies that scope to its
+new page. On a page Value it is relative to the current page. Unliking removes
+future eligibility, without deleting historical rows or hiding their people.
+The internal frozen spelling `likes:<documentId>` may appear in pulled schemas.
+
 `memberOf` is always a nonempty array of unique references. Membership in ANY
 listed document is sufficient; other constraints combine with AND. Eligible
 members are its owner and registered users explicitly shared on it, including
@@ -116,13 +122,13 @@ and never carried in the link.
 {!$_me && <SignIn>Sign in to claim one</SignIn>}
 ```
 
-`<User id=… />` shows a person: their picture, then the handle they chose,
+`<User userId=… />` shows a person: their picture, then the handle they chose,
 linked to their profile. `id` takes a literal account ID, `$_me`, a scalar
 `user` Value, or a row field inside `<For>`/`<Column>`. `avatar={false}` drops
 the picture; `fallback` is what an unset field reads as. An ID this reader
 cannot see renders "Unknown person", never the raw ID.
 
-`<UserImage id=… />` and `<UserHandle id=… />` are those two halves on their
+`<UserImage userId=… />` and `<UserHandle userId=… />` are those two halves on their
 own, for a row of faces or a name with no picture. `UserImage` takes
 `size="sm"`, `"md"` or `"lg"` (20, 32, 48px) and draws a generated initial for
 somebody with no picture; `UserHandle` takes `link={false}` for plain text.
@@ -130,9 +136,9 @@ Both take `fallback`. All three read the SAME card the server computed, so none
 of them can look anybody up.
 
 ```jsx
-<p>Signed in as <User id="$_me" /></p>
-<Column col="paid_by"><User id="$_row.paid_by" avatar={false} fallback="nobody" /></Column>
-<UserImage id="$_row.person" size="lg" /><UserHandle id="$_row.person" />
+<p>Signed in as <User userId="$_me" /></p>
+<Column col="paid_by"><User userId="$_row.paid_by" avatar={false} fallback="nobody" /></Column>
+<UserImage userId="$_row.person" size="lg" /><UserHandle userId="$_row.person" />
 ```
 
 `$_row.<field>` only resolves inside a `<For>` or a `<Column>`; written anywhere

@@ -61,9 +61,9 @@ async function closeCursor(cursor: Cursor): Promise<void> {
   finally { clearTimeout(timer); }
 }
 const numericOids = new Set([20, 21, 23, 26, 700, 701, 1700]);
-const dateOids = new Set([1082, 1083, 1114, 1184, 1266]);
+const timestampOids = new Set([1114, 1184]);
 function columnType(oid: number): DatasetColumn['type'] {
-  return oid === 16 ? 'boolean' : numericOids.has(oid) ? 'number' : dateOids.has(oid) ? 'date' : 'string';
+  return oid === 16 ? 'boolean' : numericOids.has(oid) ? 'number' : timestampOids.has(oid) ? 'timestamp' : oid === 1082 ? 'date' : 'string';
 }
 function bounded(value: number | undefined, fallback: number, min: number, max: number): number {
   if (value === undefined) return fallback;

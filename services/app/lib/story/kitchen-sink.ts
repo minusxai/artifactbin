@@ -74,8 +74,8 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
       <CardContent className="flex flex-col gap-4">
         <div className="flex gap-2"><Badge>default</Badge><Badge variant="secondary">secondary</Badge><Badge variant="outline">outline</Badge><Badge variant="destructive">destructive</Badge></div>
         <div className="flex items-center gap-2 text-sm"><Icon name="circle-check" /><Icon name="ChartBar" />icons by lucide name</div>
-        <div className="flex items-center gap-2 text-sm">reading as <User id="$_me" fallback="a guest" /><SignIn>Sign in to take part</SignIn></div>
-        <div className="flex items-center gap-2 text-sm"><UserImage id="$_me" size="lg" fallback="no picture" /><UserHandle id="$_me" fallback="no handle" /></div>
+        <div className="flex items-center gap-2 text-sm">reading as <User userId="$_me" fallback="a guest" /><SignIn>Sign in to take part</SignIn></div>
+        <div className="flex items-center gap-2 text-sm"><UserImage userId="$_me" size="lg" fallback="no picture" /><UserHandle userId="$_me" fallback="no handle" /></div>
         <Progress value={62} />
         <Skeleton className="h-6 w-2/3" />
       </CardContent>

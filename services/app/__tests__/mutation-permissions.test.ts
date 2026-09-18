@@ -255,3 +255,36 @@ it('answers a guest with sign_in_required for a $_me write, in the capability an
  const dataset=await anonymousQuery(request(`/a/${f.doc}/query?q=%7B%7D`),ctx(f.doc));
  expect((await dataset.json()).mutationAccess.add).not.toBe('sign_in_required');
 });
+
+// A query owns the invocation schema, including when it returns no rows.
+it.each([false,true])('previews computed row fields from the query schema (empty=%s)',async(empty)=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{id:1,amount:3}],access:'readwrite'});
+ await f.grantFor(ds);
+ const doc=await f.publish({markup:`<Helmet><Query name="balances" source="ref:${ds}">{\`select id, amount * 2 as net from public.rows ${empty?'where false':''}\`}</Query><Mutation name="settle" source="ref:${ds}">{\`update public.rows set amount = $_row.net where id = $_row.id\`}</Mutation></Helmet><For each={$balances} keyBy="id"><Button run="$settle">Settle</Button></For>`});
+ const result=await query(request(`/a/${doc}/query`,{method:'POST',cookie:f.cookie,json:{}}),ctx(doc));
+ expect(result.status).toBe(200);
+ const body=await result.json();
+ expect(body.tables.balances.columns).toEqual([{name:'id',type:'number'},{name:'net',type:'number'}]);
+ expect(body.tables.balances.rows).toEqual(empty?[]:[{id:1,net:6}]);
+ expect(body.mutationAccess.settle).toBe(null);
+ if(!empty){
+  const written=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'settle',row:{id:1,net:6}}}),ctx(doc));
+  expect(written.status,await written.clone().text()).toBe(200);
+  expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{id:1,amount:6}]);
+ }
+});
+
+it('stores forgiving timestamps as UTC instants and binds typed mutation parameters',async()=>{
+ const f=await fixture();
+ const ds=await f.publish({dataset:[{happened:'2026-09-18 15:30:00+05:30'},{happened:0}],columns:[{name:'happened',type:'timestamp'}],access:'readwrite'});
+ expect(await loadDatasetRows((await getArtifactById(ds))!)).toEqual([{happened:'2026-09-18T10:00:00.000Z'},{happened:'1970-01-01T00:00:00.000Z'}]);
+ const doc=await f.publish({markup:`<Helmet><Value name="when" type="timestamp" default="2026-09-18" /><Mutation name="add" source="ref:${ds}">{\`insert into public.rows values ($when)\`}</Mutation></Helmet><Button run="$add">Add</Button>`});
+ await f.grantFor(ds);
+ const r=await mutate(request(`/a/${doc}/mutate`,{method:'POST',cookie:f.cookie,json:{mutation:'add',values:{when:'2026-09-18T12:30:00'}}}),ctx(doc));
+ expect(r.status,await r.clone().text()).toBe(200);
+ expect((await loadDatasetRows((await getArtifactById(ds))!)).at(-1)).toEqual({happened:'2026-09-18T12:30:00.000Z'});
+ const invalid=await create(request('/api/artifacts',{method:'POST',token:f.owner.token,json:{dataset:[{happened:'2026-02-30'}],columns:[{name:'happened',type:'timestamp'}]}}));
+ expect(invalid.status).toBe(400);
+ expect(await invalid.text()).toContain('happened');
+});

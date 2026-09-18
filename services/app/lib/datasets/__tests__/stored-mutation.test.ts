@@ -41,6 +41,15 @@ describe('stored mutation target compiler', () => {
   it.each(['select * from rows', 'create table rows(id int)', 'update model set status=1', 'delete from unknown', 'delete from pg_catalog.pg_class', 'delete from rows; delete from rows', 'insert into rows values(1,\'x\'); select 1', 'with x as (select 1) delete from rows', 'delete from rows /* unclosed', 'update "rows set status=1', 'update rows set status=\'unclosed'])('rejects %s', sql => {
     expect(() => compileStoredMutation(catalog, sql, 'ref_dataset')).toThrow(/Stored mutation/);
   });
+  it.each([
+    'insert into rows select * from other.rows',
+    'update rows set status=(select status from "other"."rows" limit 1)',
+    'delete from rows using other.rows where rows.id=1',
+    'insert into rows select r.* from rows r join other.rows x on r.id=x.id',
+    'insert into rows select r.* from rows r, other.rows x',
+  ])('names the read boundary for %s', sql => {
+    expect(() => compileStoredMutation(catalog, sql, 'ref_dataset')).toThrow('writes public.rows and can only read public.rows');
+  });
   it('rejects writes to Postgres catalogs', () => {
     expect(() => compileStoredMutation({ ...catalog, kind: 'postgres' }, 'delete from rows', 'ref_dataset')).toThrow(/Stored mutation/);
   });

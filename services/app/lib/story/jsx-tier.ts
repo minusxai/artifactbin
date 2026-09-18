@@ -62,7 +62,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   const source = repaired ? repaired.source : sourceIn;
   const repairs = repaired ? [repaired.repair] : [];
   /** What the door changed, for the reply — absent when it changed nothing. */
-  const repairsEcho = repairs.length ? { repairs } : {};
+
   const theme = body.theme ?? null;
   // Retired names are rejected BY NAME with a hint naming the successor —
   // stored rows alias forward at read time (resolveStoredStoryDesign), but a
@@ -168,7 +168,9 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
   // content, then remap viewport-height units in it. Authored `<style>` renders
   // straight through the interpreter, and this save-side pass is the only place
   // its `vh` lengths are rewritten (lib/story-surface/viewport-units.ts).
-  const normalized = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
+  const normalization = ctx.normalizeMarkup?.(canonicalizeMarkup(source)) ?? source;
+  const normalized = typeof normalization === 'string' ? normalization : normalization.source;
+  if (typeof normalization !== 'string') repairs.push(...normalization.repairs);
   const sanitized = canonicalizeMarkup(remapMarkupStyleViewportUnits(transformOutsideManagedIframes(normalized, sanitizeStoryMarkupCss)));
   if (Buffer.byteLength(sanitized, 'utf8') > MAX_CONTENT_BYTES) return json({ error: 'too_large', maxBytes: MAX_CONTENT_BYTES }, 413);
 
@@ -209,7 +211,7 @@ export async function prepareJsx(body: Record<string, unknown>, sourceIn: string
     },
     derivedTitle: helmetTitle?.trim() || null,
     ...(warnings.length ? { warnings } : {}),
-    ...repairsEcho,
+    ...(repairs.length ? {repairs} : {}),
   };
   return {content, imports: wanted.slice(0, MAX_EXTERNAL_ASSETS_PER_PUBLISH), fonts: fonts.families};
 }

@@ -87,3 +87,13 @@ Use `source="ref:<id>"` to choose the dataset and its exposed table names in SQL
 Manual data migrations require server shell access (SSH or equivalent infrastructure access). Migration HTTP endpoints and remote clients are not available. No standalone migration command is shipped. Operators must back up and preview changes before using the retained database-level migration functions, validate document data, and pass reviewed snapshot fingerprints when applying dataset changes. Stop the app before opening its PGLite directory from a maintenance process. Automatic schema updates on startup remain separate from manual data migrations.
 
 Stored `Table.columns` accepts `{name,type,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. Postgres whitelist columns remain strings.
+
+## Dates and timestamps
+
+`date` is a calendar date (`YYYY-MM-DD`). `timestamp` is an instant: values are
+stored and returned as UTC ISO 8601 with `Z`, at millisecond precision. Accept
+ISO dates/datetimes with or without an offset, or epoch milliseconds; a missing
+timezone means UTC and a date means midnight UTC. Invalid values name the column.
+Use SQL `now()` for the current instant. DataTable shows timestamps in the reader's
+timezone. A DatePicker bound to a timestamp selects a date and writes midnight
+UTC; selecting a new date discards the previous time of day.

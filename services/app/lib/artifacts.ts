@@ -1,3 +1,4 @@
+import {seedOwnerLike,likers} from './relations';
 import {claimArtifactId,reserveArtifactIds} from './artifact-identities';
 import {collectRefUses} from '@/lib/story/refs';
 import {hasDocumentEditorAccess,type VerifiedAccount} from './document-policy';
@@ -5,7 +6,7 @@ import {isQueryFailure} from '@artifactbin/contracts';
 import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
-import {validateUserContent,validateUserWrites,userOptions,people,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
+import {remapLikesScope,validateUserContent,validateUserWrites,userOptions,people,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
 import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/user-kinds';
 // A CYCLE, deliberately: the capability table reads `effectiveRole` from here
@@ -62,7 +63,7 @@ import { parseJsx } from '@/lib/jsx';
 import { splitHelmet } from '@/lib/story/helmet';
 import { datasetRefsInDataflow, initialValues, isEmptyDataflow, mutationTargets, scalarMatches, scalarParamTypes, selectedQueries, type Dataflow, type Row, type Scalar } from '@/lib/story/dataflow';
 import { dryRunDataflow } from '@/lib/story/data-checks';
-import { mutationUsesRow, mutationUsesValue } from '@/lib/story/row-scope';
+import { analyzeRowScopes, mutationUsesRow, mutationUsesValue } from '@/lib/story/row-scope';
 import { compileStoredMutation } from '@/lib/datasets/stored-mutation';
 import { canUseDataPolicy, mutationPolicy } from '@/lib/datasets/policy';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
@@ -388,7 +389,7 @@ async function bindCurrentUserScopes(tx:Queryable,document:ArtifactRow):Promise<
  for(const ref of [...refs].sort((a,b)=>a.id.localeCompare(b.id))) {
   const dataset=(await tx.query<ArtifactRow>("SELECT * FROM artifacts WHERE id=$1 AND format='dataset' AND deleted_at IS NULL FOR UPDATE",[ref.id])).rows[0];
   const catalog=dataset?catalogOf(dataset):null;
-  if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.includes('current'))))continue;
+  if(!dataset||!catalog||!catalog.tables.some(t=>t.columns.some(c=>c.constraints?.memberOf?.some(ref=>ref==='current'||ref==='_likes'))))continue;
   if(document.user_id ? dataset.user_id!==document.user_id : dataset.token_id!==document.token_id)throw new DatasetError('Only the dataset owner can bind memberOf current to a report',403);
   const columns=(cs:DatasetColumn[])=>resolveUserColumnScope(cs,document.id);
   const bound={...catalog,tables:catalog.tables.map(t=>({...t,columns:columns(t.columns)}))};
@@ -556,6 +557,7 @@ async function insertArtifact(
     atCreation.datasetPolicy?.revision ?? 0,
   ],
   );
+  if(userId)await seedOwnerLike(tx,userId,id);
   Object.assign(created.rows[0],await writeShares(tx,id,atCreation.shares??[]));
   await bindCurrentUserScopes(tx,created.rows[0]);
   if (atCreation.operation) await completeCreation(tx,atCreation.operation,created.rows[0]);
@@ -738,8 +740,9 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   // Reserved for whoever will OWN the copies: `claimArtifactId` consumes a
   // reservation only for the actor creating the row, so reserving as the forker
   // and inserting as its test user would refuse its own fork.
-  const ids = await reserveArtifactIds(owner, copying.length);
-  const copies = copying.map((row, index) => ({ row, id: ids[index]! }));
+  const ids = await reserveArtifactIds(owner, copying.length+1);
+  const documentId=ids[copying.length]!;
+  const copies = copying.map((row, index) => ({ row:remapLikesScope(row,source.id,documentId), id: ids[index]! }));
   const rewrite = new Map(copies.map((copy) => [copy.row.id, copy.id]));
   const planned = new Map(copies.map((copy) => [copy.id, copy.row]));
   const loader = refLoaderForActor(actor);
@@ -782,7 +785,7 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
         ...(copy.row.dataset_policy ? { datasetPolicy: { policy: copy.row.dataset_policy, revision: copy.row.policy_revision ?? 0 } } : {}),
       }));
     }
-    return { artifact: await createArtifact(owner.tokenId, owner.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
+    return { artifact: await createArtifact(owner.tokenId, owner.userId, input, { tx, reservedId:documentId,forkedFrom: source.id, linkRole: source.link_role }), datasets };
     });
   } catch (error) {
     // A dataset rule refusing a copy is the forker's answer, never a 500.
@@ -2403,7 +2406,7 @@ export async function runDocumentMutation(
     if (!columns || Object.keys(row).length !== columns.length || columns.some((c) => {
       if (!Object.hasOwn(row, c.name)) return true;
       const value = row[c.name];
-      return value !== null && (c.type === 'date' || c.type === 'user' ? typeof value !== 'string' : typeof value !== c.type);
+      return value !== null && (c.type === 'date' || c.type === 'timestamp' || c.type === 'user' ? typeof value !== 'string' : typeof value !== c.type);
     })) return { ok: false, reason: 'invalid_row', detail: 'row fields and scalar types must match the declared table result' };
     if (mutationUsesValue(decl.sql)) {
       if (!Object.hasOwn(values, '_value')) return { ok: false, reason: 'invalid_row', detail: 'cell mutations require _value' };
@@ -2428,7 +2431,7 @@ export async function runDocumentMutation(
       // scope and before the row snapshot is judged.)
       const tables = localTableOverrides(flow, localTables);
       const local = await runLocalStateMutation(flow, decl, {values: bound, tables}, {mutate:async input=>{
-        const columns=input.table.columns.map(c=>c.constraints?.memberOf?{...c,constraints:{...c.constraints,memberOf:c.constraints.memberOf.map(ref=>ref==='current'?`ref:${doc.id}`:ref)}}:c);
+        const columns=input.table.columns.map(c=>c.constraints?.memberOf?{...c,constraints:{...c.constraints,memberOf:c.constraints.memberOf.map(ref=>ref==='current'?`ref:${doc.id}`:ref==='_likes'?`likes:${doc.id}`:ref)}}:c);
         const out=await runMutation({...input,table:{...input.table,columns},params:{...input.params,_me:actor.userId}});
         if(!isQueryFailure(out))await validateUserWrites(await getDb(),columns,out.userWrites??[],actor.userId);
         return out;
@@ -2520,10 +2523,10 @@ export async function dataflowForRow(
   // GET transport is, and it is the safe default for every caller that has no
   // session to hand over.
   const flow = declarationsForRow(row)?.flow;
-  const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), opts) : null;
+  const result = flow ? await runDeclaredDataflow(flow, datasetResolverForRow(row, opts.viewer ?? null), {...opts,likes:await likers(await getDb(),row.id)}) : null;
   // A document NAMES people when a user-typed value or column reaches it, and
   // now also when it draws a <User> — which a document with no user data at all
-  // may do (`<User id="$_me" />`). The viewer's own id is added for both,
+  // may do (`<User userId="$_me" />`). The viewer's own id is added for both,
   // because the one person a page can always name is the one reading it.
   if(result&&(drawsPeople(row.source)||result.flow.values.some(v=>v.kind==='scalar'&&v.type==='user')||Object.values(result.state.tables).some(t=>t.columns.some(c=>c.type==='user')))) {
     const db=await getDb(), options:NonNullable<DataflowState['userOptions']>={}, ids=new Set<string>();
@@ -2534,8 +2537,9 @@ export async function dataflowForRow(
       if(!refs)return column;
       const allowed:string[]=[];
       for(const ref of refs) {
-        const id=ref==='current'?row.id:ref.slice(4), scope=await getArtifactById(id);
-        if(scope&&(scope.token_id===viewer?.tokenId||await canReadArtifact(scope,viewer?.userId?{userId:viewer.userId,email:viewer.email??null}:null)))allowed.push(`ref:${id}`);
+        const likes=ref==='_likes'||ref.startsWith('likes:');
+        const id=ref==='current'||ref==='_likes'?row.id:ref.slice(likes?6:4), scope=await getArtifactById(id);
+        if(scope&&(scope.token_id===viewer?.tokenId||await canReadArtifact(scope,viewer?.userId?{userId:viewer.userId,email:viewer.email??null}:null)))allowed.push(`${likes?'likes':'ref'}:${id}`);
       }
       return {...column,constraints:{...column.constraints,memberOf:allowed}};
     };
@@ -2552,7 +2556,7 @@ export async function dataflowForRow(
     result.state.userOptions=options;
     result.state.people=await people(db,[...ids]);
   }
-  if (result?.flow.mutations?.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, opts.viewer ?? null);
+  if (result?.flow.mutations?.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, result.state, opts.viewer ?? null);
   return result;
 }
 
@@ -2567,7 +2571,7 @@ export async function dataflowForRow(
  * is a guest" — so a dataset that refuses this actor for its own reasons keeps
  * saying so, and only the reader who could proceed by signing in is asked to.
  */
-async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleActor | null): Promise<Record<string,string|null>> {
+async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, state: DataflowState, viewer: RoleActor | null): Promise<Record<string,string|null>> {
   // ONE capability question for the whole document, asked once: may this
   // reader write as themselves here at all? A guest is answered exactly as an
   // anonymous reader is — with the code the page turns into `<SignIn>` — so the
@@ -2576,7 +2580,16 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleA
   const meRefusal = await can(me, 'write_as_me', doc) ? null : (await refusalFor(me, doc.id)).body.hint ?? SIGN_IN_REQUIRED;
   const guestOf = (m: {params: string[]}, answer: string|null): string|null =>
     answer === null && m.params.includes('_me') && meRefusal ? meRefusal : answer;
+  const parsed = parseJsx(doc.source ?? '');
+  const scopes = analyzeRowScopes(parsed.ok ? splitHelmet(parsed.nodes).body : []);
+  const rowSchemaFor = (name: string): DatasetColumn[] | undefined => {
+    const names = scopes.mutationTables[name] ?? [];
+    const shapes = names.map(table => state.errors[table] ? undefined : state.tables[table]?.columns);
+    const first = shapes[0];
+    return first && shapes.every(shape => JSON.stringify(shape) === JSON.stringify(first)) ? first : undefined;
+  };
   return Object.fromEntries(await Promise.all((flow.mutations??[]).map(async m=>{
+    if(m.params.includes('_me') && meRefusal)return [m.name,meRefusal];
     if(m.scope==='local')return [m.name,guestOf(m,null)];
     const actor=viewer??{userId:null,tokenId:null};
     const dataset=await getArtifactFor(writerFor(doc),m.target);
@@ -2584,11 +2597,14 @@ async function mutationAccessFor(doc: ArtifactRow, flow: Dataflow, viewer: RoleA
     if(!dataset.dataset_policy)return [m.name,guestOf(m,null)];
     try {
       const name=`ref_${dataset.id}`,catalog=catalogOf(dataset);
-      const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name):null;
+      const compiled=m.source&&catalog?compileStoredMutation(catalog,m.sql,name,true):null;
       const columns=compiled?.table.columns??dataset.meta.columns as DatasetColumn[];
       const policy=await mutationPolicy(dataset,actor,compiled?.table??{schema:'public',name:'rows'},true);
-      const out=await runMutation({table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:initialValues(flow),paramTypes:scalarParamTypes(flow),policy,policyPreview:true,
-        ...(mutationUsesRow(m.sql)?{row:{columns,values:Object.fromEntries(columns.map(c=>[c.name,null]))}}:{})});
+      const rowColumns = mutationUsesRow(m.sql) ? rowSchemaFor(m.name) : undefined;
+      if (mutationUsesRow(m.sql) && !rowColumns) return [m.name,'This action requires an available query result with a matching row schema.'];
+      const valueType = rowColumns?.find(c => c.name === scopes.cellColumns[m.name])?.type;
+      const out=await runMutation({...(compiled?.readsLikes?{likes:await likers(await getDb(),doc.id)}:{}),table:{name,rows:[],columns},sql:compiled?.sql??m.sql,params:state.values,paramTypes:{...scalarParamTypes(flow),...(valueType?{_value:valueType}:{})},policy,policyPreview:true,
+        ...(rowColumns?{row:{columns:rowColumns,values:Object.fromEntries(rowColumns.map(c=>[c.name,null]))}}:{})});
       return [m.name,guestOf(m,'error' in out?out.error:null)];
     }catch(error){return [m.name,error instanceof Error?error.message:'Dataset policy does not permit this action.'];}
   })));
@@ -2623,14 +2639,14 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
  */
 const drawsPeople = (source: string | null | undefined): boolean => /<User(?:Image|Handle)?[\s/>]/.test(source ?? '');
 /**
- * The row columns a document draws a person FROM — `<User id="$_row.person">`,
+ * The row columns a document draws a person FROM — `<User userId="$_row.person">`,
  * `<UserImage …>` or `<UserHandle …>` — whatever the query typed them as. A
  * computed column (a join's `person`, a group-by's `who`) reaches DuckDB as
  * text, so it is not a `user` column, yet every id in it is a person the page
  * will name; without this, anyone who appears only there renders "Unknown person".
  */
 const personColumnsDrawn = (source: string | null | undefined): Set<string> =>
-  new Set([...(source ?? '').matchAll(/<User(?:Image|Handle)?\b[^>]*\bid=["']\$_row\.([A-Za-z_][A-Za-z0-9_]*)["']/g)].map((m) => m[1]!));
+  new Set([...(source ?? '').matchAll(/<User(?:Image|Handle)?\b[^>]*\buserId=["']\$_row\.([A-Za-z_][A-Za-z0-9_]*)["']/g)].map((m) => m[1]!));
 
 /**
  * WHO IS READING, as the document may show them (lib/story-runtime/contract
@@ -2656,6 +2672,8 @@ export async function viewerIdentityFor(
 }
 
 interface DataflowRunOptions {
+  /** Trusted composition only; scoped to the authorized document. */
+  likes?: string[];
   /** Request-owned admission, rerun before cache hits, after waits and SQL. */
   authorize?: () => Promise<void>;
   signal?: AbortSignal;
@@ -2762,7 +2780,7 @@ async function runDeclaredDataflow(flow: Dataflow, resolve: DatasetResolver, opt
   }
   flow=await resolveUserValues(flow,async id=>datasets[id]);
   const usedSources = new Map<string, string>();
-  const state = await runDataflow(flow, datasets, {userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
+  const state = await runDataflow(flow, datasets, {likes:opts.likes,userId:opts.viewer?.userId??null, values: opts.values, only: opts.only, page: opts.page, localTables: opts.localTables,
     sourceInput:async id=>{
       // sourceQuery authorizes first and records this same snapshot for the
       // final access check. Only a physical stored public.rows table qualifies;

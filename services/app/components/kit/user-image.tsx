@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * `<UserImage id="usr_…" />` — A PERSON'S FACE, AND NOTHING ELSE.
+ * `<UserImage userId="usr_…" />` — A PERSON'S FACE, AND NOTHING ELSE.
  *
  * The picture half of `<User>` (components/kit/user.tsx), separate so a page
  * can draw a row of faces, or a face on its own, without also taking the name.
@@ -43,7 +43,9 @@ export interface UserImageProps {
    * adapter resolves first; `null` is an unset field, and an unresolved
    * reference (no adapter) is treated as an id we cannot name.
    */
-  id?: unknown
+  userId?: unknown
+  /** Source node identity, independent of the account. */
+  id?: string
   /** The person, as this viewer may see them. Supplied by the adapter. */
   card?: PersonCard | null
   size?: UserImageSize
@@ -66,7 +68,7 @@ export interface UserImageProps {
  */
 export const hasPersonId = (id: unknown): boolean => (typeof id === "string" ? id !== "" : id !== null && id !== undefined)
 
-export function UserImage({ id, card, size = "sm", decorative, fallback, className, ...props }: UserImageProps) {
+export function UserImage({ userId: id, card, size = "sm", decorative, fallback, className, ...props }: UserImageProps) {
   if (!hasPersonId(id)) {
     return fallback ? <span data-slot="user-image" className={cn("text-muted-foreground", className)} {...props}>{fallback}</span> : null
   }

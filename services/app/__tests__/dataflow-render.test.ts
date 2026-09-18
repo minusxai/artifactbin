@@ -116,7 +116,7 @@ describe('the served document', () => {
     const user = await createUser({ email: 'mxmx_test_island_reader@example.com', name: 'Ada' });
     await claimToken(user.id, t.token);
     const cookie = await agentCookie([t.id]);
-    const doc = ((await (await create(t.token, { markup: '<p>Reading as <User id="$_me" /></p>', visibility: 'public' })).json()) as { id: string }).id;
+    const doc = ((await (await create(t.token, { markup: '<p>Reading as <User userId="$_me" /></p>', visibility: 'public' })).json()) as { id: string }).id;
 
     const signedIn = island(await (await rawRoute(request(`/a/${doc}/raw`, { cookie }), params({ id: doc }))).text());
     expect(signedIn.viewer).toEqual({ id: user.id, card: { name: 'Ada', handle: null, image: null } });

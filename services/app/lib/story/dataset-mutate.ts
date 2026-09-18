@@ -1,3 +1,4 @@
+import {likers} from '@/lib/relations';
 import {validateUserWrites} from '@/lib/datasets/user-fields';
 import {DatasetError} from '@/lib/datasets/errors';
 import {artifactState} from '@/lib/artifact-state';
@@ -130,18 +131,20 @@ export async function mutateDataset(
     const catalog=catalogOf(current);
     let selected:import('@/lib/datasets/types').DatasetTable|undefined;
     let executedSql=sql;
+    let readsLikes=false;
     {
-      try{if(!catalog)throw new Error('Dataset catalog unavailable');const compiled=compileStoredMutation(catalog,sql,table);selected=compiled.table;executedSql=compiled.sql;}
+      try{if(!catalog)throw new Error('Dataset catalog unavailable');const compiled=compileStoredMutation(catalog,sql,table,!!guard.document);selected=compiled.table;executedSql=compiled.sql;readsLikes=compiled.readsLikes;}
       catch(error){return {reason:'invalid_sql',detail:error instanceof Error?error.message:'Invalid stored mutation'};}
     }
     const columns = selected?.columns ?? ((current.meta as { columns?: DatasetColumn[] }).columns) ?? [];
     const rows = await loadDatasetRows(selected?{content:'',meta:{objectKey:selected.objectKey}}:current);
+    const likes=guard.document&&readsLikes?await likers(db,guard.document.id):undefined;
     const {source:_,document:__,...mutationGuard}=guard;
     let out:MutationOutcome;
     let policy:DatasetMutationPolicy|undefined;
     try{
       policy=await mutationPolicy(current,actor,selected??{schema:'public',name:'rows'},!!guard.document);
-      out = await invocation.run({ policy, table: { name: table, rows, columns }, sql:executedSql, params:{...params,_me:actor.userId}, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
+      out = await invocation.run({ ...(likes?{likes}:{}),policy, table: { name: table, rows, columns }, sql:executedSql, params:{...params,_me:actor.userId}, ...mutationGuard, limit: datasetRowCap() },{mutate:runMutation});
     }catch(error){return {reason:current.dataset_policy?'policy_denied':'invalid_sql',detail:error instanceof Error?error.message:'Dataset mutation failed'};}
     if (isQueryFailure(out)) {
       return { reason: out.code ?? (out.full ? 'dataset_full' : 'invalid_sql'), detail: out.error };
@@ -175,6 +178,11 @@ export async function mutateDataset(
     // are still the rows on disk, archive the previous state (coalesced, like
     // the edit protocol), and wake every document reading this dataset.
     const commit=async(tx:Queryable)=>{
+     if(guard.document && likes){
+      const scopeIds=[guard.document.id,...columns.flatMap(c=>(c.constraints?.memberOf??[]).map(ref=>ref.startsWith('likes:')?ref.slice(6):ref.startsWith('ref:')?ref.slice(4):'').filter(Boolean))];
+      await tx.query('SELECT id FROM artifacts WHERE id=ANY($1::text[]) ORDER BY id FOR SHARE',[[...new Set(scopeIds)].sort()]);
+      if(JSON.stringify(await likers(tx,guard.document.id))!==JSON.stringify(likes))return {rows:[] as ArtifactRow[]};
+     }
      await validateUserWrites(tx,columns,out.userWrites??[],actor.userId);
      if(guard.expectedState){
       const locked=(await tx.query<ArtifactRow>(`SELECT * FROM artifacts WHERE id=$1 AND ${LIVE_ARTIFACT_SQL} FOR UPDATE`,[dataset.id])).rows[0];

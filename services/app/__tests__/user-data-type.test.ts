@@ -124,7 +124,7 @@ describe('native user fields',()=>{
   */
  it('names the viewer to themselves and nobody to a guest',async()=>{
   const reader=await account('reader'), owner=await account('host');
-  const markup='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /></Helmet><p>Paid by <User id="$_me" /></p>';
+  const markup='<Helmet><Value name="rows" type="table" value={[{"n":1}]} /></Helmet><p>Paid by <User userId="$_me" /></p>';
   const report=await create(owner.token,{markup,visibility:'public'});
   const row=(await getArtifactById(report.id))!;
   const mine=await dataflowForRow(row,{viewer:{userId:reader.user.id,tokenId:null,email:reader.user.email}});
@@ -137,7 +137,7 @@ describe('native user fields',()=>{
   expect(await viewerIdentityFor({source:'<p>nobody here</p>'},reader.user.id)).toEqual({id:reader.user.id});
   expect(await viewerIdentityFor({source:markup},null)).toBeNull();
   // A face and a handle are the same person as a <User>, so they buy the card too.
-  for(const tag of ['<UserImage id="$_me" />','<UserHandle id="$_me" />'])
+  for(const tag of ['<UserImage userId="$_me" />','<UserHandle userId="$_me" />'])
    expect(await viewerIdentityFor({source:`<p>${tag}</p>`},reader.user.id)).toEqual({id:reader.user.id,card:{name:'reader',handle:null,image:null}});
  });
  /*
@@ -149,15 +149,15 @@ describe('native user fields',()=>{
  it('resolves every person tag naming the viewer, however many, in the served page',async()=>{
   const reader=await account('twice'), owner=await account('host');
   const cases=[
-   '<p><User id="$_me" /> <UserImage id="$_me" size="lg" /></p>',
-   '<p><UserImage id="$_me" /> <UserImage id="$_me" size="lg" /></p>',
-   '<p><UserHandle id="$_me" /> <UserImage id="$_me" size="lg" /></p>',
-   '<Helmet><Value name="rows" type="table" value={[{"n":1},{"n":2}]} /></Helmet><p><User id="$_me" /></p><For each={$rows}><span><UserImage id="$_me" /></span></For>',
+   '<p><User userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>',
+   '<p><UserImage userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>',
+   '<p><UserHandle userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>',
+   '<Helmet><Value name="rows" type="table" value={[{"n":1},{"n":2}]} /></Helmet><p><User userId="$_me" /></p><For each={$rows}><span><UserImage userId="$_me" /></span></For>',
   ];
   for(const markup of cases){
    const report=await create(owner.token,{markup,visibility:'public'});
    const stored=(await getArtifactById(report.id))!.source ?? '';
-   expect(stored.match(/id="\$_me"/g),stored).toHaveLength(2);
+   expect(stored.match(/userId="\$_me"/g),stored).toHaveLength(2);
    const html=await (await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id))).text();
    const body=html.slice(html.indexOf('class="mx-doc"'));
    expect(body,markup).not.toContain('data-unknown');

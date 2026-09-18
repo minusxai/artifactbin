@@ -1,10 +1,12 @@
+import {LIKES_TABLE} from '@artifactbin/contracts';
+import {normalizeTimestamp,isTimestamp} from '@artifactbin/utils/shape';
 /**
  * The document's DATAFLOW — the pure contract behind `$name` references.
  *
  * A markup document declares its data in `<Helmet>`:
  *   <Value name="region" type="string" />                    scalar, bound to inputs
  *   <Value name="tiny" type="table" value={[{a:1}]} />      inline table
- *   <Query name="sales">{`select … from ref_abc123 where $region is null or region = $region`}</Query>
+ *   <Query name="sales" source="ref:abc123">{`select … from public.rows where $region is null or region = $region`}</Query>
  * and refers to it everywhere else by NAME: `data="$sales"` on an embed,
  * `value="$region"` on a native control, `options="$regions"` on a select,
  * `$region` inside SQL (a bound parameter, never interpolated), and a bare
@@ -59,7 +61,7 @@ export const MUTATION_TAG = 'Mutation';
 
 /** `<Value type>`: the four dataset column types, plus an inline table. */
 type ValueType = ColumnType | 'table';
-const VALUE_TYPES: readonly ValueType[] = ['string', 'number', 'boolean', 'date', 'user', 'table'];
+const VALUE_TYPES: readonly ValueType[] = ['string', 'number', 'boolean', 'date', 'timestamp', 'user', 'table'];
 
 /** What a scalar Value holds at runtime (and what a SQL `$param` binds to). */
 export type Scalar = string | number | boolean | null;
@@ -241,6 +243,7 @@ export function coerceScalarInput(type: ValueType | undefined, raw: string): Sca
   if (raw === '') return null;
   if (type === 'number') { const n = Number(raw); return Number.isFinite(n) ? n : null; }
   if (type === 'boolean') return raw === 'true';
+  if (type === 'timestamp') return isTimestamp(raw) ? normalizeTimestamp(raw) : null;
   return raw;
 }
 
@@ -285,9 +288,9 @@ export const REF_ATTRS: {
     // — the face (user-image.tsx) and the handle (user-handle.tsx). `id` READS
     // its reference and never writes it back, which is what lets the viewer's
     // own `$_me` sit there — see VIEWER_REF below.
-    User: { id: 'scalar' },
-    UserImage: { id: 'scalar' },
-    UserHandle: { id: 'scalar' },
+    User: { userId: 'scalar' },
+    UserImage: { userId: 'scalar' },
+    UserHandle: { userId: 'scalar' },
   },
   html: {
     input: { value: 'scalar', checked: 'scalar', run: 'mutation' },
@@ -353,7 +356,7 @@ export const VIEWER_REF = '_me';
  * therefore legal. Deliberately tiny and opt-in: a binding position added to
  * REF_ATTRS later must not silently become a place the viewer can be written.
  */
-const READ_ONLY_REF_ATTRS: Record<string, ReadonlySet<string>> = { User: new Set(['id']), UserImage: new Set(['id']), UserHandle: new Set(['id']) };
+const READ_ONLY_REF_ATTRS: Record<string, ReadonlySet<string>> = { User: new Set(['userId']), UserImage: new Set(['userId']), UserHandle: new Set(['userId']) };
 
 /** One `$name` occurrence in the body. */
 interface RefNameUse extends Span {
@@ -415,6 +418,7 @@ export const scalarMatches = (v: unknown, t: ColumnType): boolean => {
   switch (t) {
     case 'number': return typeof v === 'number' && Number.isFinite(v);
     case 'boolean': return typeof v === 'boolean';
+    case 'timestamp': return isTimestamp(v);
     case 'date': return typeof v === 'string' && DATE_RE.test(v);
     case 'user':
     case 'string': return typeof v === 'string';
@@ -500,7 +504,7 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
       const declared = cols.json;
       const okShape = Array.isArray(declared) && declared.every((c) => c && typeof c === 'object' && !Array.isArray(c)
         && typeof (c as { name?: unknown }).name === 'string' && (VALUE_TYPES as readonly string[]).includes((c as { type?: string }).type ?? '') && (c as { type?: string }).type !== 'table');
-      if (!okShape) return { ok: false, errors: [err(`<Value name="${name}"> columns must be [{name, type: string|number|boolean|date}]`, cols.attr, tag, 'columns')] };
+      if (!okShape) return { ok: false, errors: [err(`<Value name="${name}"> columns must be [{name, type: string|number|boolean|date|timestamp|user}]`, cols.attr, tag, 'columns')] };
       let declaredCols:DatasetColumn[];
       try {declaredCols=(declared as unknown[]).map(parseDatasetColumn);}catch(error){return {ok:false,errors:[err(error instanceof Error?error.message:'Invalid columns',el,tag,'columns')]};}
       const names = new Set(declaredCols.map((c) => c.name));
@@ -516,7 +520,7 @@ export function parseValueDecl(el: JsxElement): ParseDeclResult<ValueDecl> {
     errors.push(err(`<Value name="${name}" type="${type}"> default ${JSON.stringify(dflt)} is not a ${type}${type === 'date' ? ' (use YYYY-MM-DD)' : ''}`, def.attr, tag, 'default'));
   }
   if (errors.length) return { ok: false, errors };
-  return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), ...(outOfUrl ? { url: false as const } : {}), default: dflt, start: el.start, end: el.end } };
+  return { ok: true, decl: { kind: 'scalar', name, type, ...(sourceAttr?{source:String(sourceAttr.json).slice(4),column:String(columnAttr!.json)}:{}), ...(constraints?{constraints}:{}), ...(outOfUrl ? { url: false as const } : {}), default: type==='timestamp'&&dflt!==null?normalizeTimestamp(dflt,name):dflt, start: el.start, end: el.end } };
 }
 
 /**
@@ -598,7 +602,7 @@ export function parseMutationDecl(el: JsxElement): ParseDeclResult<MutationDecl>
     return { ok: false, errors: [err('_signals allows only UPDATE; it must remain a single row', el, tag)] };
   }
   if (!local && refs.length !== 1) {
-    return { ok: false, errors: [err(`<Mutation name="${name}"> must declare source="ref:<id>" or write a local table — found ${refs.length === 0 ? 'none' : refs.map((r) => `ref_${r}`).join(', ')}`, el, tag)] };
+    return { ok: false, errors: [err(`<Mutation name="${name}"> must declare source="ref:<id>" or write a local table — found ${refs.length === 0 ? 'none' : refs.map((r) => `source="ref:${r}"`).join(', ')}`, el, tag)] };
   }
   const expected = staticAttr(el, 'expectedAffected');
   if (expected && (typeof expected.json !== 'number' || !Number.isInteger(expected.json) || expected.json < 0)) {
@@ -755,7 +759,7 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
     if (u.name === VIEWER_REF) {
       if (!u.readOnly || u.expects !== 'scalar') {
         errors.push(err(
-          `<${u.tag} ${u.attr}="$_me"> cannot bind $_me — it is the viewer's account id and read-only. Read it in a condition ({$_me ? … : …}) or show the person with <User id="$_me" />`,
+          `<${u.tag} ${u.attr}="$_me"> cannot bind $_me — it is the viewer's account id and read-only. Read it in a condition ({$_me ? … : …}) or show the person with <User userId="$_me" />`,
           u, u.tag, u.attr,
         ));
       }
@@ -769,7 +773,7 @@ export function validateDataflow(flow: Dataflow, uses: RefNameUse[]): Validation
         u.expects === 'table'
           ? `<${u.tag} ${u.attr}="$${u.name}"> needs a table (a <Query> or a <Value type="table">), but "${u.name}" is ${describe(kind)}`
           : u.expects === 'scalar'
-            ? `<${u.tag} ${u.attr}="$${u.name}"> binds a scalar value, but "${u.name}" is ${describe(kind)} — bind a <Value> (string | number | boolean | date)`
+            ? `<${u.tag} ${u.attr}="$${u.name}"> binds a scalar value, but "${u.name}" is ${describe(kind)} — bind a <Value> (string | number | boolean | date | timestamp | user)`
             : `<${u.tag} ${u.attr}="$${u.name}"> needs a <Mutation>, but "${u.name}" is ${describe(kind)} — run= names the write a click performs`,
         u, u.tag, u.attr,
       ));
@@ -905,6 +909,7 @@ export function queriesDependingOn(flow: Dataflow, valueNames: Iterable<string>)
  */
 export function queriesReadingDatasets(flow: Dataflow, datasetIds: Iterable<string>): string[] {
   const changed = new Set(datasetIds);
+  if(changed.has(LIKES_TABLE))return queryOrder(flow)??flow.queries.map(q=>q.name);
   const graph = depGraph(flow);
   const order = queryOrder(flow) ?? flow.queries.map((q) => q.name);
   const dirty = new Set<string>();

@@ -40,14 +40,13 @@ describe('persisted source node identity', () => {
     expect(result.ids).toEqual(['same','a001']);
     expect(result.repairs).toEqual([{path:'1',from:'same',to:'a001',reason:'duplicate'}]);
   });
-  it('leaves a person tag\'s id alone: it names a person, not the node, so repeats are not duplicates', () => {
-    const source='<p><User id="$_me" /> <UserImage id="$_me" size="lg" /><UserHandle id="$_me" /><User id="usr_ada" /><User id="usr_ada" /><UserImage /></p><p id="usr_ada">x</p>';
-    const result=stampNodeIds(source,{mint:mint('a001','a002')});
+  it('gives every person tag a node id independent of repeated account ids', () => {
+    const source='<p><User userId="$_me" /><UserImage userId="$_me" /><UserHandle userId="$_me" /><User userId="usr_ada" /><User userId="usr_ada" /></p>';
+    const result=stampNodeIds(source);
     expect(result.repairs).toEqual([]);
-    expect(result.ids).toEqual(['a001','usr_ada']);
-    expect(result.source).toBe(source.replace('<p>','<p id="a001">'));
-    expect([...nodeIndex(result.source).keys()]).toEqual(['a001','usr_ada']);
-    expect(nodeIndex(result.source).get('usr_ada')?.node.tag).toBe('p');
+    expect(new Set(result.ids).size).toBe(6);
+    expect(nodeIndex(result.source).size).toBe(6);
+    expect(result.source.match(/userId="usr_ada"/g)).toHaveLength(2);
   });
   it('keeps author ids containing escaped punctuation as a canonical fixpoint', () => {
     const source=canonicalizeMarkup('<p id="a&amp;b&quot;c">A</p>');

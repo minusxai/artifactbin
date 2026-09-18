@@ -24,7 +24,7 @@ const NAMELESS: PersonCard = { name: 'Grace', handle: null, image: null };
 
 describe('<UserImage>', () => {
   it('draws the picture a card carries, named by the person it shows', () => {
-    const view = render(<UserImage id="usr_ada" card={ADA} />);
+    const view = render(<UserImage userId="usr_ada" card={ADA} />);
     const img = view.container.querySelector('img')!;
     expect(img.getAttribute('src')).toBe('/api/users/usr_ada/avatar?v=abc');
     expect(img.getAttribute('alt')).toBe('Ada Lovelace');
@@ -34,7 +34,7 @@ describe('<UserImage>', () => {
   /* A face is written inside a sentence ("paid by <UserImage/>"), so it flows with the text. */
   it('sits inline in a sentence rather than breaking it, known or not', () => {
     for (const card of [ADA, null]) {
-      const view = render(<UserImage id="usr_ada" card={card} />);
+      const view = render(<UserImage userId="usr_ada" card={card} />);
       const tokens = (view.container.querySelector('[data-slot="avatar"]') as HTMLElement).className.split(/\s+/);
       expect(tokens).toContain('inline-flex');
       expect(tokens).not.toContain('flex');
@@ -48,7 +48,7 @@ describe('<UserImage>', () => {
    * glyph — which is the promise `<UserImage>` makes.
    */
   it('keeps the initial underneath the picture, so a failed address is not a broken image', () => {
-    const view = render(<UserImage id="usr_ada" card={ADA} />);
+    const view = render(<UserImage userId="usr_ada" card={ADA} />);
     const fallback = view.container.querySelector('[data-slot="avatar-fallback"]')!;
     expect(fallback.textContent).toBe('A');
     const box = view.container.querySelector('[data-slot="avatar"]') as HTMLElement;
@@ -63,7 +63,7 @@ describe('<UserImage>', () => {
    * picture is taken away, and its name moves to the circle it leaves.
    */
   it('takes a failed picture away, leaving the initial and the name', () => {
-    const view = render(<UserImage id="usr_ada" card={ADA} />);
+    const view = render(<UserImage userId="usr_ada" card={ADA} />);
     fireEvent.error(view.container.querySelector('img')!);
     expect(view.container.querySelector('img')).toBeNull();
     expect(view.container.querySelector('[data-slot="avatar-fallback"]')!.textContent).toBe('A');
@@ -74,7 +74,7 @@ describe('<UserImage>', () => {
     const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'complete');
     Object.defineProperty(HTMLImageElement.prototype, 'complete', { configurable: true, get: () => true });
     try {
-      const view = render(<UserImage id="usr_ada" card={ADA} decorative />);
+      const view = render(<UserImage userId="usr_ada" card={ADA} decorative />);
       expect(view.container.querySelector('img')).toBeNull();
       expect(view.container.querySelector('[data-slot="avatar-fallback"]')!.textContent).toBe('A');
     } finally {
@@ -84,7 +84,7 @@ describe('<UserImage>', () => {
   });
 
   it('is decorative beside a name: an empty alt and hidden from the accessibility tree', () => {
-    const view = render(<UserImage id="usr_ada" card={ADA} decorative />);
+    const view = render(<UserImage userId="usr_ada" card={ADA} decorative />);
     const img = view.container.querySelector('img')!;
     expect(img.getAttribute('alt')).toBe('');
     expect(img.getAttribute('aria-hidden')).toBe('true');
@@ -97,41 +97,41 @@ describe('<UserImage>', () => {
    * apart at a glance.
    */
   it('falls back to the initial on a hue the id alone decides', () => {
-    const view = render(<UserImage id="usr_grace" card={NAMELESS} />);
+    const view = render(<UserImage userId="usr_grace" card={NAMELESS} />);
     expect(view.container.querySelector('img')).toBeNull();
     const fallback = view.container.querySelector('[data-slot="avatar-fallback"]')!;
     expect(fallback.textContent).toBe('G');
     const face = (node: ReturnType<typeof render>) => (node.container.querySelector('[data-slot="avatar"]') as HTMLElement).style.backgroundColor;
     // The colour is person-face's, the same one the app bar draws for this id.
     expect(face(view)).toBe(asDrawn(personFaceBackground('usr_grace')));
-    expect(face(render(<UserImage id="usr_grace" card={NAMELESS} />))).toBe(face(view));
-    expect(face(render(<UserImage id="usr_ada" card={NAMELESS} />))).not.toBe(face(view));
+    expect(face(render(<UserImage userId="usr_grace" card={NAMELESS} />))).toBe(face(view));
+    expect(face(render(<UserImage userId="usr_ada" card={NAMELESS} />))).not.toBe(face(view));
   });
 
   it('shows a neutral mark for an id it cannot name, and never the id itself', () => {
-    const view = render(<UserImage id="usr_nobody" card={null} />);
+    const view = render(<UserImage userId="usr_nobody" card={null} />);
     expect(view.container.textContent).toBe('?');
     expect(view.container.textContent).not.toContain('usr_nobody');
     expect(view.container.querySelector('[data-unknown]')).toBeTruthy();
   });
 
   it('renders nothing for an unset field, or the author\'s fallback', () => {
-    expect(render(<UserImage id={null} />).container.innerHTML).toBe('');
-    expect(render(<UserImage id={null} fallback="nobody" />).container.textContent).toBe('nobody');
+    expect(render(<UserImage userId={null} />).container.innerHTML).toBe('');
+    expect(render(<UserImage userId={null} fallback="nobody" />).container.textContent).toBe('nobody');
   });
 
   it('sizes are 20 / 32 / 48, and the default is the smallest', () => {
     const box = (node: ReturnType<typeof render>) => (node.container.querySelector('[data-slot="avatar"]') as HTMLElement).className;
-    expect(box(render(<UserImage id="usr_ada" card={ADA} />))).toBe(box(render(<UserImage id="usr_ada" card={ADA} size="sm" />)));
-    expect(box(render(<UserImage id="usr_ada" card={ADA} size="sm" />))).toContain('size-5');
-    expect(box(render(<UserImage id="usr_ada" card={ADA} size="md" />))).toContain('size-8');
-    expect(box(render(<UserImage id="usr_ada" card={ADA} size="lg" />))).toContain('size-12');
+    expect(box(render(<UserImage userId="usr_ada" card={ADA} />))).toBe(box(render(<UserImage userId="usr_ada" card={ADA} size="sm" />)));
+    expect(box(render(<UserImage userId="usr_ada" card={ADA} size="sm" />))).toContain('size-5');
+    expect(box(render(<UserImage userId="usr_ada" card={ADA} size="md" />))).toContain('size-8');
+    expect(box(render(<UserImage userId="usr_ada" card={ADA} size="lg" />))).toContain('size-12');
   });
 });
 
 describe('<UserHandle>', () => {
   it('is the handle, linked to the profile, and leaves the document frame', () => {
-    const view = render(<UserHandle id="usr_ada" card={ADA} />);
+    const view = render(<UserHandle userId="usr_ada" card={ADA} />);
     const link = view.container.querySelector('a')!;
     expect(link.textContent).toBe('@ada');
     expect(link.getAttribute('href')).toBe('/@ada');
@@ -141,45 +141,45 @@ describe('<UserHandle>', () => {
   });
 
   it('is plain text when the author asked for no link', () => {
-    const view = render(<UserHandle id="usr_ada" card={ADA} link={false} />);
+    const view = render(<UserHandle userId="usr_ada" card={ADA} link={false} />);
     expect(view.container.querySelector('a')).toBeNull();
     expect(view.container.textContent).toBe('@ada');
   });
 
   it('falls back to the display name when a person has no handle', () => {
-    const view = render(<UserHandle id="usr_grace" card={NAMELESS} />);
+    const view = render(<UserHandle userId="usr_grace" card={NAMELESS} />);
     expect(view.container.textContent).toBe('Grace');
     expect(view.container.querySelector('a')).toBeNull();
   });
 
   it('reads an id it cannot name as a neutral person, never the raw id', () => {
-    const view = render(<UserHandle id="usr_nobody" card={null} />);
+    const view = render(<UserHandle userId="usr_nobody" card={null} />);
     expect(view.container.textContent).toBe(UNKNOWN_PERSON);
     expect(view.container.textContent).not.toContain('usr_nobody');
   });
 
   it('renders nothing for an unset field, or the author\'s fallback', () => {
-    expect(render(<UserHandle id={null} />).container.innerHTML).toBe('');
-    expect(render(<UserHandle id={null} fallback="nobody" />).container.textContent).toBe('nobody');
+    expect(render(<UserHandle userId={null} />).container.innerHTML).toBe('');
+    expect(render(<UserHandle userId={null} fallback="nobody" />).container.textContent).toBe('nobody');
   });
 });
 
 describe('<User>', () => {
   it('is the picture and the handle together, by default', () => {
-    const view = render(<User id="usr_ada" card={ADA} />);
+    const view = render(<User userId="usr_ada" card={ADA} />);
     expect(view.container.querySelector('img')!.getAttribute('alt')).toBe('');
     expect(view.container.querySelector('[data-slot="user-handle"]')!.textContent).toBe('@ada');
   });
 
   it('drops the picture for avatar={false}, and keeps it for every other value', () => {
-    expect(render(<User id="usr_ada" card={ADA} avatar={false} />).container.querySelector('[data-slot="avatar"]')).toBeNull();
+    expect(render(<User userId="usr_ada" card={ADA} avatar={false} />).container.querySelector('[data-slot="avatar"]')).toBeNull();
     for (const avatar of [undefined, true, '']) {
-      expect(render(<User id="usr_ada" card={ADA} avatar={avatar} />).container.querySelector('[data-slot="avatar"]')).toBeTruthy();
+      expect(render(<User userId="usr_ada" card={ADA} avatar={avatar} />).container.querySelector('[data-slot="avatar"]')).toBeTruthy();
     }
   });
 
   it('answers an id it cannot name with one neutral person, never the raw id', () => {
-    const view = render(<User id="usr_nobody" card={null} />);
+    const view = render(<User userId="usr_nobody" card={null} />);
     expect(view.container.querySelector('[data-slot="user-handle"]')!.textContent).toBe(UNKNOWN_PERSON);
     expect(view.container.textContent).not.toContain('usr_nobody');
   });
@@ -189,13 +189,13 @@ describe('<User>', () => {
    * render — is exactly an id we cannot name, and must never pretend otherwise.
    */
   it('names nobody when nothing resolved the card', () => {
-    const view = render(<User id="usr_ada" />);
+    const view = render(<User userId="usr_ada" />);
     expect(view.container.textContent).toContain(UNKNOWN_PERSON);
     expect(view.container.textContent).not.toContain('usr_ada');
   });
 
   it('renders nothing for an unset field, or the author\'s fallback', () => {
-    expect(render(<User id={null} />).container.innerHTML).toBe('');
-    expect(render(<User id={null} fallback="nobody" />).container.textContent).toBe('nobody');
+    expect(render(<User userId={null} />).container.innerHTML).toBe('');
+    expect(render(<User userId={null} fallback="nobody" />).container.textContent).toBe('nobody');
   });
 });

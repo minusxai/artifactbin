@@ -36,7 +36,7 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'Icon',
   // WHO IS READING, and what to do about it (components/kit/user.tsx,
   // components/kit/user-image.tsx, components/kit/user-handle.tsx,
-  // components/kit/sign-in.tsx). `<User id="$_me">` names a person from the
+  // components/kit/sign-in.tsx). `<User userId="$_me">` names a person from the
   // same cards a DataTable cell uses — the face and the handle it composes are
   // also tags of their own; `<SignIn>` is the guest's door.
   'User', 'UserImage', 'UserHandle', 'SignIn',

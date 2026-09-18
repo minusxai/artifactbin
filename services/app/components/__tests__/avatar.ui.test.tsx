@@ -59,7 +59,7 @@ describe('the app and the document kit draw a person in one colour', () => {
   it('uses personFaceBackground(id) in both', () => {
     const card: PersonCard = { name: 'Grace', handle: 'grace', image: null };
     const app = render(<Avatar image={null} initial="grace" userId="usr_grace" size={32} />);
-    const kit = render(<UserImage id="usr_grace" card={card} />);
+    const kit = render(<UserImage userId="usr_grace" card={card} />);
     const colour = asDrawn(personFaceBackground('usr_grace'));
     expect(colour).not.toBe('');
     expect(initialOf(app.container)!.style.backgroundColor).toBe(colour);
