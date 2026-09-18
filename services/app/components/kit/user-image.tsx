@@ -25,6 +25,7 @@
  *  - an id we cannot name → a neutral `?`, never the raw id;
  *  - no id at all → nothing, or `fallback` when the author gave one.
  */
+import { useState } from "react"
 import type { PersonCard } from "@artifactbin/contracts"
 import { personFaceBackground, personInitial } from "@/lib/person-face"
 import { cn } from "./cn"
@@ -70,6 +71,8 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
     return fallback ? <span data-slot="user-image" className={cn("text-muted-foreground", className)} {...props}>{fallback}</span> : null
   }
   const key = typeof id === "string" ? id : null
+  // The address that failed, not a flag: a NEW address gets its own chance.
+  const [failed, setFailed] = useState<string | null>(null)
   const box = cn("shrink-0 align-middle", BOX[size], className)
   if (!card || key === null) {
     return (
@@ -83,12 +86,13 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
   // refused in authored markup and allowed here, which is what lets a colour
   // computed per person exist at all.
   const style = { backgroundColor: personFaceBackground(key) }
+  const image = card.image && failed !== card.image ? card.image : null
   return (
     <Avatar
       size="default"
       className={box}
       style={style}
-      {...(decorative ? { "aria-hidden": "true" as const } : card.image ? {} : { role: "img", "aria-label": card.name })}
+      {...(decorative ? { "aria-hidden": "true" as const } : image ? {} : { role: "img", "aria-label": card.name })}
       {...props}
     >
       {/*
@@ -96,15 +100,20 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
         * A picture is an address (lib/avatars), and an address can fail — a
         * replaced object, a route not answering — so the layer below is what
         * keeps the promise this component makes: never a broken image, never a
-        * grey blank. Beside a name the alt is empty, which is also what stops a
-        * browser drawing its own broken-image glyph over the initial.
+        * grey blank. Underneath is not enough on its own — Chromium paints its
+        * broken-image icon over a sized image whose address fails, empty alt or
+        * not — so a failed picture is TAKEN AWAY: on `error`, or at once when it
+        * had already failed before hydration wired the handler (server-rendered
+        * markup loads before React arrives). Its name moves to the circle.
         */}
       <AvatarFallback className={cn("bg-transparent font-medium text-white", GLYPH[size])}>{personInitial(card.name)}</AvatarFallback>
-      {card.image ? (
+      {image ? (
         <img
+          ref={(el) => { if (el && el.complete && el.naturalWidth === 0) setFailed(image) }}
+          onError={() => setFailed(image)}
           data-slot="avatar-image"
           className="absolute inset-0 aspect-square size-full object-cover"
-          src={card.image}
+          src={image}
           alt={decorative ? "" : card.name}
           {...(decorative ? { "aria-hidden": "true" as const } : {})}
         />
