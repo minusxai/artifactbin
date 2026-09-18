@@ -113,7 +113,7 @@ try{
    const argv=['export',...args,'--json'];
    const child=spawn(packaged?binary:process.execPath,packaged?argv:[binary,...argv],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,CLI__AUTO_UPDATE:'0',CLI__SERVICE_BASE_URL:`http://127.0.0.1:${packagePort}/chat/releases`},stdio:['ignore','pipe','pipe']});
    const cancellation=interrupt?setTimeout(()=>child.kill('SIGTERM'),500):undefined;
-   let stdout='',stderr='';const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error('Local export did not finish'));},120000);
+   let stdout='',stderr='';const timer=setTimeout(()=>{child.kill('SIGTERM');reject(Error(`Local export did not finish: ${args.join(' ')}\n${stdout.slice(-2000)}\n${stderr.slice(-2000)}`));},120000);
    child.stdout.on('data',chunk=>stdout+=chunk);child.stderr.on('data',chunk=>stderr+=chunk);child.once('error',error=>{clearTimeout(timer);clearTimeout(cancellation);reject(error);});child.once('exit',code=>{clearTimeout(timer);clearTimeout(cancellation);resolve({code,stdout,stderr});});
   });
   assert.equal(out.code===0,ok,out.stdout+out.stderr);return out;

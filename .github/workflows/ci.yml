@@ -572,33 +572,19 @@ jobs:
         run: |
           npx playwright install chromium
           node --import tsx scripts/test-preview.ts
-      # INTEL'S THREE PROOFS, WHERE THE BYTES ARE. They used to be three more macOS runners behind
-      # this one (`CLI Intel preview|export-basic|export-variants`), each paying ~90s of checkout,
-      # Node, install and cache restore, and an artifact round-trip to download the binary this job
-      # had just written — 90s of setup for 2 minutes of proof, three times over, all of it on the
-      # critical path of a release. Here the executable is already on disk and the three phases run
-      # CONCURRENTLY: each builds its own temporary home, its own state directory and an
-      # OS-allocated port (services/cli/scripts/test-preview.ts), so they do not meet.
-      #
-      # Measured on run 35334967117 (a version bump, all four platforms built): the three phases
-      # together take 131s inside this job, and the job is 343s. Before, this job was 301s and the
-      # three `CLI Intel <phase>` jobs behind it 154s/148s/230s — a 531s critical path for a release.
+      # Reuse the built executable, but run Intel's phases sequentially. In run 35359103223,
+      # both concurrent cold export workers exhausted their 120s deadline while preview passed.
+      # Separate homes isolate state, not CPU/memory or simultaneous Chromium startup.
+      # Keep the existing deadlines and all three proofs; retain each phase's failure output.
       - name: Intel preview and export proofs, from the executable just built
         if: matrix.os == 'macos-15-intel'
         working-directory: services/cli
         run: |
           set -uo pipefail
           npx playwright install chromium
-          pids=''
-          for phase in preview export-basic export-variants; do
-            node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 "--phase=$phase" > "$RUNNER_TEMP/$phase.log" 2>&1 &
-            pids="$pids $!:$phase"
-          done
           status=0
-          for pid in $pids; do
-            wait "${pid%%:*}" || status=1
-          done
           for phase in preview export-basic export-variants; do
+            node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 "--phase=$phase" > "$RUNNER_TEMP/$phase.log" 2>&1 || status=1
             echo "::group::$phase"; cat "$RUNNER_TEMP/$phase.log"; echo '::endgroup::'
           done
           exit "$status"
