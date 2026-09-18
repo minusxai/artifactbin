@@ -40,6 +40,18 @@ async function main(): Promise<void> {
   // Otherwise auth rejects the guest cookie signed with the app's fallback.
   if (!appOnly && !readEnv(env, 'AUTH__SECRET')) env.AUTH__SECRET = generatedAuthSecret();
 
+  /*
+   * THE SESSION'S OWN ACTOR SECRET. In development a browser session's page requests
+   * travel over loopback HTTP so that Vite — which fronts the listener, not the app —
+   * serves them the modules a real browser gets (lib/session-bridge says why). That hop
+   * carries the actor in the same signed header a split deployment uses, so development
+   * needs a secret to sign with. Generated per boot and never written down: nothing
+   * outside this process can mint an actor with it, and a restart invalidates it.
+   * In production this stays exactly as configured — unset means the in-process hop.
+   */
+  const sessionActorSecret = readEnv(env, 'CONTRACT__ACTOR_SECRET')
+    || (dev ? randomBytes(32).toString('base64url') : undefined);
+
   const { getDb } = await import('@/lib/db');
   const { createAppServer } = await import('@/server/app');
 
@@ -76,7 +88,11 @@ async function main(): Promise<void> {
   }
   if (!BROWSER_SERVICE_URL) {
     const { createBrowser, sessionEnvNamesRead, sessionProcessPaths } = await import('@artifactbin/browser/local');
-    setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL, request: async (request, actor) => inProcess(app)(request, actor) } }) });
+    const { sessionBridge } = await import('@/lib/session-bridge');
+    // `app` is composed below; the hop is chosen once, on the first page a session opens.
+    let hop: ReturnType<typeof sessionBridge> | undefined;
+    setServices({ browser: createBrowser({ sessions: { ...sessionProcessPaths(env), baseURL,
+      request: (request, actor) => (hop ??= sessionBridge({ dev, port, secret: sessionActorSecret, app }))(request, actor) } }) });
     // The session settings are read in THAT package, so this process's audit is told about them.
     for (const name of sessionEnvNamesRead()) sessionEnvNames.add(name);
   }
@@ -175,8 +191,11 @@ async function main(): Promise<void> {
   const app = createAppServer({
     webDir: path.resolve('dist/web'),
     ...(hmrPort !== null ? { devHmrPort: hmrPort } : {}),
-    // The separate proxy transports identity in a signed header, rather than on the Request object.
-    ...(appOnly ? { actorSecret: readEnv(env, 'CONTRACT__ACTOR_SECRET') || readEnv(env, 'AUTH__SECRET') } : {}),
+    // The separate proxy transports identity in a signed header, rather than on the Request object —
+    // and so does a development browser session, whose hop is a real request on this same socket.
+    ...(appOnly
+      ? { actorSecret: readEnv(env, 'CONTRACT__ACTOR_SECRET') || readEnv(env, 'AUTH__SECRET') }
+      : dev && sessionActorSecret ? { actorSecret: sessionActorSecret } : {}),
     ...(reader ? { onTokenRevoked: (id) => reader.invalidate(id) } : {}),
     ...(vite ? { indexHtml: async (url: string) => vite!.transformIndexHtml(url, (await import('node:fs')).readFileSync(path.resolve('web/index.html'), 'utf8')) } : {}),
   });
