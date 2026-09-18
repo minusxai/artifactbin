@@ -160,6 +160,8 @@ describe('a trailing segment that looks like a file id', () => {
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     expect(await outcome(UserPage(`@${cards[owner.id]!.handle}`))).toBe('render');
+    // …and the address is the handle, not a coincidence: one character off is 404.
+    expect(await outcome(UserPage(`@${cards[owner.id]!.handle}x`))).toBe('notFound');
   });
 
   it('a real file of that id resolves, and heals to its canonical address', async () => {

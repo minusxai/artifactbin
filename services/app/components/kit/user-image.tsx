@@ -14,7 +14,9 @@
  * place a stored key becomes a URL (lib/avatars avatarUrl), never from here.
  *
  * Four answers, deliberately distinct:
- *  - a card with a picture → that picture;
+ *  - a card with a picture → that picture, painted over the initial below it,
+ *    so an address that stops answering reveals a person and never a browser's
+ *    broken-image glyph;
  *  - a card without one → the person's initial on a hue the ID alone decides,
  *    so the server string and the hydrated tree agree and two people are told
  *    apart at a glance. Never a broken image, never a grey blank;
@@ -88,19 +90,6 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
       </Avatar>
     )
   }
-  if (card.image) {
-    return (
-      <Avatar size="default" className={box} {...(decorative ? { "aria-hidden": "true" as const } : {})} {...props}>
-        <img
-          data-slot="avatar-image"
-          className="aspect-square size-full object-cover"
-          src={card.image}
-          alt={decorative ? "" : card.name}
-          {...(decorative ? { "aria-hidden": "true" as const } : {})}
-        />
-      </Avatar>
-    )
-  }
   // The generated avatar: the initial, on the id's own hue. Inline style is
   // refused in authored markup and allowed here, which is what lets a colour
   // computed per person exist at all.
@@ -110,10 +99,27 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
       size="default"
       className={box}
       style={style}
-      {...(decorative ? { "aria-hidden": "true" as const } : { role: "img", "aria-label": card.name })}
+      {...(decorative ? { "aria-hidden": "true" as const } : card.image ? {} : { role: "img", "aria-label": card.name })}
       {...props}
     >
+      {/*
+        * The initial is ALWAYS underneath, and the picture is painted over it.
+        * A picture is an address (lib/avatars), and an address can fail — a
+        * replaced object, a route not answering — so the layer below is what
+        * keeps the promise this component makes: never a broken image, never a
+        * grey blank. Beside a name the alt is empty, which is also what stops a
+        * browser drawing its own broken-image glyph over the initial.
+        */}
       <AvatarFallback className={cn("bg-transparent font-medium text-white", GLYPH[size])}>{initialOf(card.name)}</AvatarFallback>
+      {card.image ? (
+        <img
+          data-slot="avatar-image"
+          className="absolute inset-0 aspect-square size-full object-cover"
+          src={card.image}
+          alt={decorative ? "" : card.name}
+          {...(decorative ? { "aria-hidden": "true" as const } : {})}
+        />
+      ) : null}
     </Avatar>
   )
 }

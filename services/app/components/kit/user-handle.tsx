@@ -9,6 +9,11 @@
  * the TOP window (`target="_top"`, lib/story/reader-chrome), never the frame
  * the document is served in.
  *
+ * The handle is safe to paste straight into the path: `users.username` is
+ * written only through lib/users setUsername/ensureUsername, which admit
+ * `^[a-z0-9_]{3,32}$` and nothing else, so a handle can never carry a `/` or a
+ * `..` out of the profile route.
+ *
  * It resolves NOTHING itself: the runtime adapter
  * (lib/story-runtime/StoryRuntimeApp usePerson) hands it the server-computed
  * `PersonCard` for an id the server already put in front of this viewer.
