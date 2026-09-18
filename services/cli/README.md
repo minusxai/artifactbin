@@ -128,7 +128,10 @@ not download arbitrary versions: use the installer's `--version` to install a pa
 Source/npm installations remain managed by their package manager and never self-update.
 
 `afbin update` still performs an explicit foreground update of the standalone executable and selected
-skills, reporting errors and recovering interrupted installations. `afbin update --dry-run` previews
+skills, reporting errors and recovering interrupted installations. In a terminal it names the release,
+draws the download's progress on stderr, and only then asks which harnesses get the skill; `--json`,
+`--yes`, `--harness` and a non-terminal run never prompt or draw progress, and a resumed update keeps
+the selection it journaled. `afbin update --dry-run` previews
 changes. Background workers never write skills, change saved harness selections, authenticate,
 or print into the invoking command. Setup and subsequent local skill synchronization report restart
 instructions for Claude Code and Codex, which load skills at startup; running sessions do not reload.

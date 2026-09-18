@@ -25,7 +25,14 @@ interface ReleasePointer {version:string;protocol:number}
 interface ReleaseManifest {version:string;protocol:number;platform:string;arch:string;binary:{file:string;sha256:string;gzip?:{file:string;sha256:string}};skills:{file:string;sha256:string}}
 interface SkillBundle {version:string;protocol:number;files:Record<string,string>}
 interface PendingUpdate {schema:1;installation:Installation;manifest:ReleaseManifest;skills:string;selected:SkillHarness[];before?:string;mode?:number;backup?:string}
-interface UpdateOptions {background?:boolean;home:string;server:string;stallMs?:number;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
+/** What a foreground update tells the person watching: the release, the executable's download, then installation. */
+export type UpdateProgress={stage:'release';current:string;available:string}|{stage:'download';received:number;total?:number}|{stage:'downloaded';bytes:number}|{stage:'install';version:string;recovered:boolean};
+/**
+ * `chooseHarnesses` asks the person which skills to install. It runs once the release is resolved and
+ * its bytes are verified, never during recovery (the journal holds the answer) and never in the
+ * background; without it `harnesses` is the selection.
+ */
+interface UpdateOptions {report?:(event:UpdateProgress)=>void;chooseHarnesses?:()=>Promise<SkillHarness[]>;background?:boolean;home:string;server:string;stallMs?:number;env?:NodeJS.ProcessEnv;installation?:Installation;platform?:string;arch?:string;version?:string;harnesses:SkillHarness[];dryRun?:boolean;fetch?:typeof fetch;verifyExecutable?:(path:string,version:string,protocol:number)=>Promise<void>;afterReplace?:()=>void}
 interface UpdatePreview {dry_run:true;server:string;release:ReleasePointer;binary:{installation:'standalone'|'unmanaged';path?:string;current:string;available:string;change:'update'|'current'|'unavailable';reason?:string;asset?:string};skills:SkillPlan[]}
 interface UpdateResult {version:string;protocol:number;recovered:boolean;backup?:string;installations:SkillInstallation[];harnesses:SkillHarness[]}
 /** The pointer names a version and the protocol that server speaks; any other field is ignored. */
@@ -73,7 +80,7 @@ async function previewUpdate(options:UpdateOptions,platform:string,arch:string):
   dry_run:true,server:releaseOrigin(options.server),release,
   binary:{installation:installation?'standalone':'unmanaged',...(installation?{path:installation.path}:{}),current,available:release.version,change,...(reason?{reason}:{}),
    ...(installation&&change==='update'?{asset:`afbin-${platform}-${arch}`}:{})},
-  skills:await planSkills(options.harnesses,{home:options.home,env:options.env,version:release.version,origin:normalizeHost(options.server)}),
+  skills:await planSkills(options.chooseHarnesses?await options.chooseHarnesses():options.harnesses,{home:options.home,env:options.env,version:release.version,origin:normalizeHost(options.server)}),
  };
 }
 /** A backup is named for the version it holds, so a person browsing the directory can read it. */
@@ -127,18 +134,22 @@ async function updateLocked(options:UpdateOptions){
   if(pin&&release.version!==pin)throw new CliError('version_pinned','The server release differs from CLI__VERSION_PIN.');
   if(options.background&&compare(release.version,currentVersion)<=0)return {version:currentVersion,protocol:release.protocol,recovered:false,installations:[],harnesses:[]};
   if(compare(release.version,currentVersion)<0)throw new CliError('compatible_release_unavailable','The selected server names an older release than the installed CLI.','Retry after a compatible CLI release is published.');
+  options.report?.({stage:'release',current:currentVersion,available:release.version});
   const base=`${downloads}/afbin-v${release.version}`;
   const manifest=JSON.parse((await download(`${base}/afbin-${platform}-${arch}.manifest.json`,fetcher,65536,options.stallMs)).toString());verifyManifest(manifest,platform,arch);
   if(manifest.version!==release.version||manifest.protocol!==release.protocol)throw new CliError('compatible_release_unavailable','The published release does not match the protocol the selected server named.','Retry after a compatible CLI release is published.');
   const skillBytes=await download(`${base}/${manifest.skills.file}`,fetcher,4194304,options.stallMs);verifySkills(skillBytes,manifest);
   if(manifest.version!==currentVersion){
    const asset=manifest.binary.gzip??manifest.binary;
-   bytes=await download(`${base}/${asset.file}`,fetcher,268435456,options.stallMs);
+   bytes=await download(`${base}/${asset.file}`,fetcher,268435456,options.stallMs,options.report&&((received,total)=>options.report!({stage:'download',received,...(total===undefined?{}:{total})})));
+   options.report?.({stage:'downloaded',bytes:bytes.length});
    if(digest(bytes)!==asset.sha256)throw new CliError('checksum_mismatch','Download checksum mismatch; nothing was installed.');
    if(manifest.binary.gzip){try{bytes=gunzipSync(bytes,{maxOutputLength:268435456});}catch{throw new CliError('invalid_release','Invalid compressed executable; nothing was installed.');}}
    if(digest(bytes)!==manifest.binary.sha256)throw new CliError('checksum_mismatch','Executable checksum mismatch; nothing was installed.');
   }
-  pending={schema:1,installation,manifest,skills:skillBytes.toString(),selected:options.harnesses};
+  // Asked only now, so the person answers after the wait rather than before it; nothing is staged yet.
+  const selected=options.chooseHarnesses&&!options.background?await options.chooseHarnesses():options.harnesses;
+  pending={schema:1,installation,manifest,skills:skillBytes.toString(),selected};
  }
  const operation=pending;
  const commit=async()=>{
@@ -174,5 +185,6 @@ async function updateLocked(options:UpdateOptions){
   await rm(pendingPath);await rm(binaryPath,{force:true});
   return{version:operation.manifest.version,protocol:operation.manifest.protocol,recovered:!!saved,...(operation.backup?{backup:operation.backup}:{}),...installed};
  };
+ options.report?.({stage:'install',version:operation.manifest.version,recovered:!!saved});
  return options.background?commit():withLock(options.home,HOME_SCOPE,commit,{},options.env);
 }

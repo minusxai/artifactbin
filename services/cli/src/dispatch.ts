@@ -17,9 +17,10 @@ import {resultOutput} from './result-output';
 import {queryMutation} from './mutation-command';
 import {localQuery,queryParameters} from './local-query';
 import {updateCli} from './update';
+import {progressRenderer} from './update-progress';
 import {setupSkills,setupSummary,setupService} from './setup';
 import {prepareMarkdown,commitMarkdown,type MarkdownPlan} from './markdown';
-import {installSkills,planSkills,restartHints,selectSkills,type SkillChoice,type SkillHarness,skillStatus} from './skill-install';
+import {installSkills,planSkills,restartHints,selectSkills,skillsDisabled,type SkillChoice,type SkillHarness,skillStatus} from './skill-install';
 import {CLI_VERSION} from './version';
 import {CLI_PROTOCOL_VERSION} from '../../contracts/src/cli-auth';
 import {readFile,realpath} from 'node:fs/promises';
@@ -50,7 +51,7 @@ import {bindDatasetSecret} from './dataset-source';
 import {finishSavedRequest,finishLocalPush,planPush,push} from './sync';
 import {artifactReference,readCommand,commentCommand} from './read-commands';
 import {readPendingRequest} from './pending-request';
-export interface CliContext {preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
+export interface CliContext {preview?:(options:PreviewOptions)=>Promise<number>;team?:(options:ServeOptions)=>Promise<number>;auth?:Pick<AuthOptions,'open'|'now'|'sleep'>;env?:NodeJS.ProcessEnv;chooseSkills?:(choices:SkillChoice[])=>Promise<SkillHarness[]>;update?:(options:Parameters<typeof updateCli>[0])=>ReturnType<typeof updateCli>;/** Draw live progress on stderr; defaults to stderr being a terminal. */progress?:boolean;cwd?:string;home?:string;interactive?:boolean;color?:boolean;columns?:number;stdout?:(value:string)=>void;stdoutBytes?:(value:Uint8Array)=>void;stderr?:(value:string)=>void;fetch?:typeof fetch}
 export async function runCli(argv:string[],context:CliContext={}):Promise<number>{
  const stdout=context.stdout??(value=>process.stdout.write(value));const stderr=context.stderr??(value=>process.stderr.write(value));
  // Colour only reaches a real terminal: a supplied writer stays plain unless the caller asks for colour.
@@ -159,8 +160,15 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const urlArgument=()=>[...positionals,...(typeof flags.in==='string'?[flags.in]:[])].some(ref=>/^https?:\/\//.test(ref));
   const addresses=async():Promise<string[]>=>urlArgument()?serverAddresses(await identity()):[];
   if(command==='update'){
-   const selected=await selectSkills({home,env:context.env,interactive,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills});
-   const updated=await updateCli({home,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch});
+   // The saved or detected selection resolves (and a bad --harness fails) before any download. The menu,
+   // for a person at a terminal without --json, --yes or --harness, is asked only after the download.
+   const selection={home,env:context.env,yes:!!flags.yes,requested:flags.harness as string[]|undefined,choose:context.chooseSkills};
+   const selected=await selectSkills({...selection,interactive:false});
+   const ask=interactive&&!json&&!flags.yes&&!flags.harness&&!skillsDisabled(context.env);
+   const live=!json&&(context.progress??(!context.stderr&&!!process.stderr.isTTY));
+   const updated=await (context.update??updateCli)({home,server:chosenHost()??declaredServer,env:context.env,harnesses:selected,dryRun:!!flags['dry-run'],fetch:context.fetch,
+    ...(ask?{chooseHarnesses:()=>selectSkills({...selection,interactive:true})}:{}),
+    ...(live?{report:progressRenderer(stderr,createStyle(context.stderr?styleOptions:colorSupport(context.env??process.env,true)))}:{})});
    emit(updated);
    if('installations' in updated)for(const hint of restartHints(updated.installations))stderr(hint+'\n');
    return 0;
