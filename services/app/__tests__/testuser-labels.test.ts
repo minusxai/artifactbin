@@ -56,7 +56,7 @@ it('labels a test user for the account viewing the sandbox copy', async () => {
   sessionUser.id = me.id; sessionUser.email = me.email;
   const cookie = await agentCookie([t.id]);
   const r = await query(request(`/a/${copy}/query`, { method: 'POST', cookie, json: {} }), ctx(copy));
-  const body = (await r.json()) as { userLabels: Record<string, string>; tables: { balances: { rows: Array<{ person: string }> } } };
+  const body = (await r.json()) as { people: Record<string, { name: string }>; tables: { balances: { rows: Array<{ person: string }> } } };
   expect(body.tables.balances.rows.map((x) => x.person)).toEqual([tuId]);
-  expect(body.userLabels[tuId]).toBe(label);
+  expect(body.people[tuId]?.name).toBe(label);
 });
