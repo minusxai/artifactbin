@@ -1,6 +1,7 @@
 /** Authorize and resolve an image, then redirect to a scoped persistent asset.
  * Editor previews return ephemeral bytes. The operations API keeps its binary adapter. */
 import { trackEvent } from '@/lib/analytics';
+import { archivedVersionFor, rowAtVersion } from '@/lib/archived-version';
 import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { requestOrSessionActor, roleFor } from '@/lib/viewer';
 import { exportImageResponse } from '@/lib/export';
@@ -23,6 +24,16 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const authorized = tokenId === artifact.token_id || (await canReadArtifact(artifact, viewer));
   if (!authorized) return json({ error: 'not_found' }, 404);
   const q = new URL(request.url).searchParams;
+  /*
+   * `?version=N` — photograph the document AS IT WAS. The version ACL runs
+   * HERE, not in lib/export and not in the render: the signed key the headless
+   * browser carries is scoped to the ARTIFACT rather than to a version, so this
+   * is the last place an actor is in hand. Same rule as the served document
+   * (lib/archived-version) and the same uniform 404 — a reader who may see this
+   * artifact but not its history learns nothing, here either.
+   */
+  const at = await archivedVersionFor(request, artifact);
+  if (at === 'not_found') return json({ error: 'not_found' }, 404);
   // The framing overview is editing chrome, not a public export surface.
   if (q.get('mode') === 'preview') {
     if (artifact.format !== 'markup' || !canEdit(await roleFor(artifact, actor))) {
@@ -39,7 +50,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // Installed older CLIs reject redirects. They keep the streaming binary
   // adapter until they advertise support; browser/OG URLs use redirects.
   const delivery=request.headers.has('X-Artifactbin-Protocol')&&request.headers.get('X-Artifactbin-Export-Delivery')!=='redirect'?'bytes':'redirect';
-  return exportImageResponse(artifact, {
+  // The ARCHIVED shot photographs that version's own source — the selection and
+  // the social crop are read from the markup being shot, not from the head's.
+  return exportImageResponse(at ? rowAtVersion(artifact, at) : artifact, {
+    ...(at ? { version: at.version } : {}),
     refresh: q.get('refresh'),
     format: q.get('format'),
     mode: q.get('mode'),
