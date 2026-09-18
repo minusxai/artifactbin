@@ -5,7 +5,10 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,stat,lstat,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {updateCli} from '../src/update';
+import {updateCli,type UpdateProgress} from '../src/update';
+import {progressRenderer} from '../src/update-progress';
+import {runCli} from '../src/dispatch';
+import {CliError} from '../src/commands';
 import {digest} from '../src/files';
 import {skillTargets} from '../src/skill-install';
 import {cliHarness} from './harness';
@@ -52,7 +55,8 @@ test('interruption after executable replacement completes matching skills offlin
  try{
   await writeFile(exe,'old binary');const options={home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone' as const,path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:['pi' as const]};
   await assert.rejects(updateCli({...options,verifyExecutable:async()=>{},fetch:transport(),afterReplace:()=>{throw new Error('simulated interruption');}}),/interruption/);
-  const result=await updateCli({...options,fetch:async()=>assert.fail('recovery must stay offline')}) as any;assert.equal(result.recovered,true);assert.match(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),/New skill/);
+  // Recovery installs the selection the interrupted run journaled; it neither downloads nor asks again.
+  const result=await updateCli({...options,fetch:async()=>assert.fail('recovery must stay offline'),chooseHarnesses:async()=>assert.fail('recovery must not ask for harnesses')}) as any;assert.equal(result.recovered,true);assert.match(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),/New skill/);
  }finally{await rm(home,{recursive:true,force:true});}
 });
 test('dry-run resolves the release and reports skill provenance without writing',async()=>{
@@ -231,4 +235,160 @@ test('a failed update leaves the existing backup untouched',async()=>{
   assert.equal(await readFile(join(backups,'afbin-1.0.0'),'utf8'),'binary 1');
   assert.equal(await readFile(exe,'utf8'),'binary 9');
  }finally{await rm(home,{recursive:true,force:true});}
+});
+
+/** The executable arrives in several chunks with its length declared, as GitHub serves a release asset. */
+function chunkedTransport(chunks=4){return async(input:unknown)=>{
+ const path=String(input);
+ if(path.endsWith('/afbin-darwin-arm64')){
+  const size=Math.ceil(binary.length/chunks);
+  return new Response(new ReadableStream({start(controller){for(let at=0;at<binary.length;at+=size)controller.enqueue(new Uint8Array(binary.subarray(at,at+size)));controller.close();}}),{headers:{'content-length':String(binary.length)}});
+ }
+ return transport()(input);
+};}
+
+describe('foreground update ordering and progress',()=>{
+ test('the release is named, the download reports progress, and the harness menu comes after the download',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'afbin-update-order-')),exe=join(home,'afbin');
+  try{
+   await writeFile(exe,'old binary',{mode:0o755});
+   const timeline:string[]=[];const events:UpdateProgress[]=[];
+   const result=await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],verifyExecutable:async()=>{},fetch:chunkedTransport(),
+    report:event=>{events.push(event);timeline.push(event.stage);},
+    chooseHarnesses:async()=>{timeline.push('choose');assert.equal(await readFile(exe,'utf8'),'old binary','the menu is shown before anything is installed');return ['pi'];}}) as any;
+   const stages=timeline.filter((x,i)=>x!==timeline[i-1]);
+   assert.deepEqual(stages,['release','download','downloaded','choose','install']);
+   assert.deepEqual(events[0],{stage:'release',current:'1.0.0',available:'9.0.0'});
+   const downloads=events.filter(x=>x.stage==='download') as Extract<UpdateProgress,{stage:'download'}>[];
+   assert.ok(downloads.length>1,'every chunk is reported');
+   assert.ok(downloads.every((x,i)=>x.total===binary.length&&(i===0||x.received>downloads[i-1]!.received)),'progress is monotonic against the declared length');
+   assert.equal(downloads.at(-1)!.received,binary.length);
+   assert.equal(await readFile(exe,'utf8'),'new binary');
+   assert.deepEqual(result.harnesses??result.installations.flatMap((x:any)=>x.harnesses),['pi'],'the answer given after the download is the one installed');
+   assert.match(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),/New skill/);
+  }finally{await rm(home,{recursive:true,force:true});}
+ });
+
+ test('a download without a declared length still reports the bytes received',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'afbin-update-nolength-')),exe=join(home,'afbin');
+  try{
+   await writeFile(exe,'old binary',{mode:0o755});const events:UpdateProgress[]=[];
+   await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],verifyExecutable:async()=>{},fetch:transport(),report:event=>events.push(event)});
+   const downloads=events.filter(x=>x.stage==='download') as Extract<UpdateProgress,{stage:'download'}>[];
+   assert.ok(downloads.length>0);assert.equal(downloads.at(-1)!.received,binary.length);assert.ok(downloads.every(x=>x.total===undefined));
+  }finally{await rm(home,{recursive:true,force:true});}
+ });
+
+ test('cancelling the harness menu after the download installs and stages nothing',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'afbin-update-cancel-')),exe=join(home,'afbin');
+  try{
+   await writeFile(exe,'old binary',{mode:0o755});
+   await assert.rejects(updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],verifyExecutable:async()=>{},fetch:transport(),
+    chooseHarnesses:async()=>{throw new CliError('cancelled','Skill installation cancelled.');}}),{code:'cancelled'});
+   assert.equal(await readFile(exe,'utf8'),'old binary');
+   await assert.rejects(stat(skillTargets(home,{}).pi),{code:'ENOENT'});
+   for(const leftover of ['pending-update.json','update-download','binary-backups'])await assert.rejects(stat(join(home,'.artifactbin',leftover)),{code:'ENOENT'},leftover);
+  }finally{await rm(home,{recursive:true,force:true});}
+ });
+
+ test('an installation that is already current skips the executable and still asks which skills to refresh',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'afbin-update-current-')),exe=join(home,'afbin');
+  try{
+   await writeFile(exe,'new binary',{mode:0o755});const events:UpdateProgress[]=[];let asked=0;
+   const current=async(input:unknown)=>String(input).endsWith('/afbin-darwin-arm64')?assert.fail('a current executable is not downloaded'):transport()(input);
+   await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'9.0.0',harnesses:[],fetch:current,report:event=>events.push(event),chooseHarnesses:async()=>{asked++;return ['pi'];}});
+   assert.deepEqual(events.map(x=>x.stage),['release','install']);
+   assert.deepEqual(events[0],{stage:'release',current:'9.0.0',available:'9.0.0'});
+   assert.equal(asked,1);assert.match(await readFile(join(skillTargets(home,{}).pi,'SKILL.md'),'utf8'),/New skill/);
+  }finally{await rm(home,{recursive:true,force:true});}
+ });
+
+ test('dry-run asks for harnesses once the release is known, so its skill plan is not empty',async()=>{
+  const home=await mkdtemp(join(tmpdir(),'afbin-update-dry-choose-')),exe=join(home,'afbin');
+  try{
+   await writeFile(exe,'old binary',{mode:0o755});let requests=0;
+   const result=await updateCli({home,server:'https://artifactbin.dev',env:{},installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',harnesses:[],dryRun:true,
+    fetch:async(input:unknown)=>{requests++;return String(input).endsWith('/chat/release.json')?Response.json({version:'9.0.0',protocol:2}):assert.fail('dry-run downloads nothing');},
+    chooseHarnesses:async()=>{assert.equal(requests,1,'the release resolves before the menu');return ['pi'];}});
+   assert.deepEqual(result.skills.map(x=>x.harness),['pi']);
+  }finally{await rm(home,{recursive:true,force:true});}
+ });
+});
+
+describe('update progress rendering',()=>{
+ const render=(events:UpdateProgress[])=>{let out='';const draw=progressRenderer(text=>{out+=text;});for(const event of events)draw(event);return out;};
+ test('a declared length draws a bar that redraws only when the percentage moves, then ends its line',()=>{
+  const MB=1024*1024;
+  const out=render([{stage:'release',current:'0.1.46',available:'0.1.47'},...[0,1,2,3].map(x=>({stage:'download' as const,received:x,total:10*MB})),{stage:'download',received:5*MB,total:10*MB},{stage:'download',received:10*MB,total:10*MB},{stage:'downloaded',bytes:10*MB},{stage:'install',version:'0.1.47',recovered:false}]);
+  assert.match(out,/0\.1\.46 → 0\.1\.47/);
+  assert.equal(out.split('\r').length-1,3,'0%, 50% and 100%: tiny increments do not redraw');
+  assert.match(out,/50%/);assert.match(out,/100%\s+10\.0\/10\.0 MB\n/);
+  assert.match(out,/Installing afbin 0\.1\.47/);
+  assert.ok(out.endsWith('\n'));
+ });
+ test('an unknown length shows the bytes received and never divides by it',()=>{
+  const out=render([{stage:'download',received:3*1024*1024},{stage:'downloaded',bytes:3*1024*1024}]);
+  assert.match(out,/3\.0 MB/);assert.doesNotMatch(out,/NaN|Infinity|%/);assert.ok(out.endsWith('\n'));
+ });
+ test('a current installation says so instead of drawing an arrow',()=>{
+  assert.match(render([{stage:'release',current:'0.1.47',available:'0.1.47'}]),/0\.1\.47 is already current/);
+ });
+ test('resuming an interrupted update names it as such',()=>{
+  assert.match(render([{stage:'install',version:'0.1.47',recovered:true}]),/Resuming the interrupted update to afbin 0\.1\.47/);
+ });
+});
+
+describe('afbin update command',()=>{
+ /** The real update, with the standalone installation and release fixtures a test cannot get from `isSea()`. */
+ const fixture=async(prefix:string)=>{
+  const home=await mkdtemp(join(tmpdir(),prefix)),exe=join(home,'afbin');await writeFile(exe,'old binary',{mode:0o755});
+  const out:string[]=[],err:string[]=[];
+  const context={home,cwd:home,env:{PATH:''},stdout:(x:string)=>out.push(x),stderr:(x:string)=>err.push(x),fetch:async()=>assert.fail('only the update fixture may use the network'),
+   update:(options:Parameters<typeof updateCli>[0])=>updateCli({...options,installation:{kind:'standalone',path:exe},platform:'darwin',arch:'arm64',version:'1.0.0',verifyExecutable:async()=>{},fetch:options.dryRun?options.fetch!:chunkedTransport()})};
+  return {home,exe,out,err,context,cleanup:()=>rm(home,{recursive:true,force:true})};
+ };
+ test('--json in a terminal never prompts and never draws progress',async()=>{
+  const f=await fixture('afbin-update-json-');
+  try{
+   const code=await runCli(['update','--json','--server','https://artifactbin.dev'],{...f.context,interactive:true,progress:true,chooseSkills:async()=>assert.fail('--json must not prompt')});
+   assert.equal(code,0,f.out.join('')+f.err.join(''));
+   assert.equal(JSON.parse(f.out.join('')).version,'9.0.0');assert.equal(f.err.join(''),'');
+   assert.equal(await readFile(f.exe,'utf8'),'new binary');
+  }finally{await f.cleanup();}
+ });
+ test('without a terminal the update neither prompts nor writes progress',async()=>{
+  const f=await fixture('afbin-update-pipe-');
+  try{
+   const code=await runCli(['update','--server','https://artifactbin.dev'],{...f.context,interactive:false,chooseSkills:async()=>assert.fail('no terminal, no prompt')});
+   assert.equal(code,0,f.err.join(''));assert.equal(f.err.join(''),'');assert.equal(await readFile(f.exe,'utf8'),'new binary');
+  }finally{await f.cleanup();}
+ });
+ test('in a terminal the download is drawn first, then the menu, then the installation',async()=>{
+  const f=await fixture('afbin-update-tty-');
+  try{
+   let atMenu='';
+   const code=await runCli(['update','--server','https://artifactbin.dev'],{...f.context,interactive:true,progress:true,chooseSkills:async choices=>{atMenu=f.err.join('');return choices.filter(x=>x.name==='pi').map(x=>x.name);}});
+   assert.equal(code,0,f.err.join(''));
+   assert.match(atMenu,/1\.0\.0 → 9\.0\.0/);assert.match(atMenu,/100%/);assert.doesNotMatch(atMenu,/Installing/);
+   assert.match(f.err.join('').slice(atMenu.length),/Installing afbin 9\.0\.0/);
+   assert.match(await readFile(join(skillTargets(f.home,{PATH:''}).pi,'SKILL.md'),'utf8'),/New skill/);
+  }finally{await f.cleanup();}
+ });
+ test('--harness answers the menu, so a terminal update does not show it',async()=>{
+  const f=await fixture('afbin-update-harness-');
+  try{
+   const code=await runCli(['update','--harness','pi','--server','https://artifactbin.dev'],{...f.context,interactive:true,chooseSkills:async()=>assert.fail('--harness must not prompt')});
+   assert.equal(code,0,f.err.join(''));assert.match(await readFile(join(skillTargets(f.home,{PATH:''}).pi,'SKILL.md'),'utf8'),/New skill/);
+  }finally{await f.cleanup();}
+ });
+ test('an interactive --dry-run plans the skills chosen in the menu',async()=>{
+  const f=await fixture('afbin-update-dry-tty-');
+  try{
+   const code=await runCli(['update','--dry-run','--server','https://artifactbin.dev'],{...f.context,interactive:true,
+    fetch:async(input:unknown)=>String(input).endsWith('/chat/release.json')?Response.json({version:'9.0.0',protocol:2}):assert.fail(String(input)),
+    chooseSkills:async choices=>choices.filter(x=>x.name==='pi').map(x=>x.name)});
+   assert.equal(code,0,f.err.join(''));
+   assert.deepEqual(JSON.parse(f.out.join('').replace(/\x1b\[[0-9;]*m/g,'')).skills.map((x:any)=>x.harness),['pi']);
+  }finally{await f.cleanup();}
+ });
 });
