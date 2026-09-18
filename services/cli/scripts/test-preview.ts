@@ -120,50 +120,50 @@ try{
   });
   assert.equal(out.code===0,ok,out.stdout+out.stderr);return out;
  }
+ // Include dataset images in the existing cold export: no extra browser launch is
+ // needed to prove the shared resolver in every packaged executable.
+ await writeFile(join(root,'report.jsx'),(await readFile(join(root,'report.jsx'),'utf8')).replace('</Helmet>',`<Query name="books" source="ref:${ids['covers.csv']}">{\`select * from public.rows\`}</Query></Helmet>`)+`<For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
  const beforeExport=await readFile(join(root,'report.jsx'));
  await imageExport([ids['report.jsx']!,'--output','report.png']);
  assert.equal((await sharp(await readFile(join(root,'report.png'))).metadata()).format,'png');
  assert.deepEqual(await readFile(join(root,'report.jsx')),beforeExport);
+ const pixels=await sharp(await readFile(join(root,'report.png'))).removeAlpha().raw().toBuffer({resolveWithObject:true});
+ let redPixels=0,bluePixels=0;
+ for(let i=0;i<pixels.data.length;i+=pixels.info.channels){if(pixels.data[i]!>220&&pixels.data[i+1]!<30&&pixels.data[i+2]!<30)redPixels++;if(pixels.data[i]!<30&&pixels.data[i+1]!<30&&pixels.data[i+2]!>220)bluePixels++;}
+ assert.ok(redPixels>100&&bluePixels>100,'Local export must contain both dataset image refs');
+ console.log('PASS local export resolves red and blue dataset image refs');
  const color=async(file:string)=>{const {data,info}=await sharp(await readFile(join(root,file))).removeAlpha().raw().toBuffer({resolveWithObject:true});const at=(Math.floor(info.height/2)*info.width+Math.floor(info.width/2))*info.channels;return [data[at]!,data[at+1]!,data[at+2]!];};
  const red='<div className="h-64 bg-red-500"><p>Unpublished image</p></div>';
- if(phase!=='export-variants'){
+ const proofs:Array<()=>Promise<void>>=[];
+ if(phase!=='export-variants')proofs.push(async()=>{
  await writeFile(join(root,'capture.jsx'),red);
  await imageExport(['capture.jsx','--output','red.png']);
-
  const r=await color('red.png');assert.ok(r[0]!>r[2]!+60,`Red local content missing: ${r}`);
  assert.equal(await readFile(join(root,'capture.jsx'),'utf8'),red,'export never registers or rewrites the source');
  await writeFile(join(root,'capture.jsx'),red.replace('bg-red-500','bg-blue-500'));
  await imageExport(['capture.jsx','--output','blue.jpg']);
  assert.equal((await sharp(await readFile(join(root,'blue.jpg'))).metadata()).format,'jpeg');
  const blue=await color('blue.jpg');assert.ok(blue[2]!>blue[0]!+60,`Latest blue local edit missing: ${blue}`);
- }else await writeFile(join(root,'capture.jsx'),red.replace('bg-red-500','bg-blue-500'));
+ });
  if(phase!=='export-basic'){
- await writeFile(join(root,'gallery.jsx'),`<Helmet><Query name="books" source="ref:${ids['covers.csv']}">{\`select * from public.rows\`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
- await imageExport(['gallery.jsx','--output','gallery.png']);
- const pixels=await sharp(await readFile(join(root,'gallery.png'))).removeAlpha().raw().toBuffer({resolveWithObject:true});
- let redPixels=0,bluePixels=0;
- for(let i=0;i<pixels.data.length;i+=pixels.info.channels){if(pixels.data[i]!>220&&pixels.data[i+1]!<30&&pixels.data[i+2]!<30)redPixels++;if(pixels.data[i]!<30&&pixels.data[i+1]!<30&&pixels.data[i+2]!>220)bluePixels++;}
- assert.ok(redPixels>100&&bluePixels>100,'Local export must contain both dataset image refs');
- console.log('PASS local export resolves red and blue dataset image refs');
- // Warm-cache exports are independent. Two browser workers bound memory while
- // retaining the cold-cache proof and the ordered red -> edited blue assertion above.
+ // Independent sources let two warm workers keep running without batch barriers.
+ // The edit proof above stays ordered, and cold installation was already proved.
+ await writeFile(join(root,'card.jsx'),red.replace('bg-red-500','bg-blue-500'));
  await writeFile(join(root,'pixel.png'),await sharp({create:{width:100,height:100,channels:3,background:'#ff0000'}}).png().toBuffer());
  await writeFile(join(root,'cover.jsx'),`<Helmet><meta name="artifactbin:og-image" content="ref:${ids['pixel.png']}" /></Helmet><p>Cover</p>`);
  await writeFile(join(root,'slides.jsx'),'<SlideDeck><Slide title="One"><p>First</p></Slide><Slide title="Two"><p>Second</p></Slide></SlideDeck>');
  await writeFile(join(root,'bad.jsx'),`<Helmet><Query name="bad" source="ref:${ids['sales.csv']}">{\`select missing from public.rows\`}</Query></Helmet><p>Bad SQL</p>`);
- await Promise.all([
-  (async()=>{await imageExport(['capture.jsx','--og','--output','card.png']);assert.deepEqual((( {width,height})=>({width,height}))(await sharp(await readFile(join(root,'card.png'))).metadata()),{width:1600,height:840});})(),
-  (async()=>{await imageExport(['cover.jsx','--og','--output','cover.png']);const cover=await color('cover.png');assert.ok(cover[0]!>240&&cover[2]!<10,'Local cover uses the same image pipeline as published exports');})(),
- ]);
- await Promise.all([
-  imageExport(['slides.jsx','--page','2','--output','slide.png']),
-  (async()=>{const missing=await imageExport(['slides.jsx','--page','3','--output','missing.png'],false);assert.match(missing.stdout,/slide_not_found/);await assert.rejects(readFile(join(root,'missing.png')),/ENOENT/);})(),
- ]);
- await Promise.all([
-  (async()=>{const failed=await imageExport(['bad.jsx','--output','bad.png'],false);assert.match(failed.stdout,/render_failed/);await assert.rejects(readFile(join(root,'bad.png')),/ENOENT/);})(),
-  (async()=>{await imageExport(['capture.jsx','--output','interrupted.png'],false,true);await assert.rejects(readFile(join(root,'interrupted.png')),/ENOENT/);})(),
- ]);
+ proofs.push(
+  async()=>{await imageExport(['card.jsx','--og','--output','card.png']);assert.deepEqual((( {width,height})=>({width,height}))(await sharp(await readFile(join(root,'card.png'))).metadata()),{width:1600,height:840});},
+  async()=>{await imageExport(['cover.jsx','--og','--output','cover.png']);const cover=await color('cover.png');assert.ok(cover[0]!>240&&cover[2]!<10,'Local cover uses the same image pipeline as published exports');},
+  async()=>{await imageExport(['slides.jsx','--page','2','--output','slide.png']);},
+  async()=>{const missing=await imageExport(['slides.jsx','--page','3','--output','missing.png'],false);assert.match(missing.stdout,/slide_not_found/);await assert.rejects(readFile(join(root,'missing.png')),/ENOENT/);},
+  async()=>{const failed=await imageExport(['bad.jsx','--output','bad.png'],false);assert.match(failed.stdout,/render_failed/);await assert.rejects(readFile(join(root,'bad.png')),/ENOENT/);},
+  async()=>{await imageExport(['card.jsx','--output','interrupted.png'],false,true);await assert.rejects(readFile(join(root,'interrupted.png')),/ENOENT/);},
+ );
  }
+ const workers=await Promise.allSettled(Array.from({length:2},async()=>{for(let proof;(proof=proofs.shift());)await proof();}));
+ for(const worker of workers)if(worker.status==='rejected')throw worker.reason;
  if(packaged)assert.equal(downloads,3,'Runtime, SQL and Chromium are downloaded once, then reused');
  console.log(`PASS local image export proof (${phase}); sources unchanged and lazy caches reused`);
  }
