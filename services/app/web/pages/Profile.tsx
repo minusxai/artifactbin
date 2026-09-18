@@ -15,7 +15,7 @@ const { ArtifactPage } = routePages;
 type Resolved =
   | { kind: 'redirect'; to: string }
   | { kind: 'artifact'; id: string }
-  | { kind: 'public-profile'; handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; files: never[]; authed: boolean; anon: boolean };
+  | { kind: 'public-profile'; handle: string; owner?: { id: string; image: string | null }; follow?: { following: boolean; count: number }; files: never[]; authed: boolean; anon: boolean };
 
 export function ProfilePage() {
   const { user, '*': rest, id } = useParams();
@@ -51,7 +51,7 @@ function ResolvedProfile({ user, rest }: { user: string | undefined; rest: strin
  * Count documents and folders: the assets band is withheld below, so counting
  * datasets would promise rows that are not there.
  */
-export function ProfileListing({ data }: { data: { handle: string; owner?: { id: string }; follow?: { following: boolean; count: number }; authed?: boolean; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
+export function ProfileListing({ data }: { data: { handle: string; owner?: { id: string; image?: string | null }; follow?: { following: boolean; count: number }; authed?: boolean; files: Array<Record<string, unknown> & { id: string; format: string }> } }) {
   // Folders are ROWS in this listing (`format: 'folder'`), reached at their
   // own address, so there is no derived folder panel and no path crumb to draw.
   return (
@@ -61,8 +61,10 @@ export function ProfileListing({ data }: { data: { handle: string; owner?: { id:
         label="public index"
         count={data.files.filter((a) => a.format === 'markup' || a.format === 'folder').length}
         noun="public artifact"
-        // Both halves or neither: the route ships `owner` and `follow`
-        // together, on the public branch only.
+        // Everyone's, owner included: the route ships `owner` on both branches.
+        image={data.owner?.image ?? null}
+        // The follow control is the STRANGER's half: the route ships `follow`
+        // on that branch alone, and it needs the owner's id to act on.
         {...(data.owner && data.follow ? { follow: { userId: data.owner.id, ...data.follow, signedIn: !!data.authed } } : {})}
       />
       {data.files.length === 0 ? <NothingHere /> : <ProfileShelf handle={data.handle} files={data.files} />}

@@ -11,7 +11,12 @@ import { useState } from 'react';
 import { Button, Input, MicroLabel, PANEL } from '@/components/ui';
 import { pageDataChanged } from '@/web/page-data-events';
 
-const REFUSALS: Record<string, string> = {
+/**
+ * Why a handle was refused, in words. Exported because the WELCOME page saves
+ * through the same door and must say the same things — one refusal vocabulary,
+ * not two that drift.
+ */
+export const HANDLE_REFUSALS: Record<string, string> = {
   username_taken: 'that handle is taken — pick another',
   invalid_username: '3–32 characters: lowercase letters, numbers, underscore (no hyphens)',
 };
@@ -39,7 +44,7 @@ export default function UsernameCard({ username }: { username: string | null }) 
       setStatus('saved');
       return;
     }
-    setStatus(REFUSALS[body.error ?? ''] ?? 'could not save that handle');
+    setStatus(HANDLE_REFUSALS[body.error ?? ''] ?? 'could not save that handle');
   };
 
   return (

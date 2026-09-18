@@ -3,13 +3,17 @@ import { SessionProvider } from './session';
 import { Shell } from './Shell';
 import { routePages } from './route-pages';
 import { NavigationPreloads } from './navigation-preloads';
+import { OnboardingGate } from './OnboardingGate';
 
-const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, StartPage, TrashPage } = routePages;
+const { ChatPage, AccountPage, AssetsPage, DatasetEditorPage, FileUploadPage, DocsPage, HomePage, LoginPage, NotFoundPage, ProfilePage, StartPage, TrashPage, WelcomePage } = routePages;
 
 export function App() {
   return (
     <SessionProvider>
       <NavigationPreloads>
+      {/* Around the WHOLE table: a new account is intercepted wherever it
+        * landed, not only on the routes somebody remembered to guard. */}
+      <OnboardingGate>
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/start" element={<StartPage />} />
@@ -17,6 +21,7 @@ export function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/welcome" element={<WelcomePage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/datasets/new" element={<DatasetEditorPage />} />
           <Route path="/files/new" element={<FileUploadPage />} />
@@ -31,6 +36,7 @@ export function App() {
         <Route path="/a/:id" element={<ProfilePage />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>
+      </OnboardingGate>
       </NavigationPreloads>
     </SessionProvider>
   );
