@@ -265,7 +265,7 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
   if(command==='sessions'){
    const code=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
-   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(flags.as==='guest'?{viewer:'guest' as const}:{}),progress:stderr});
+   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(flags.as==='guest'||flags.as==='test-user'?{viewer:flags.as as 'guest'|'test-user'}:{}),progress:stderr});
    emit(result);return result.error?1:0;
   }
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
