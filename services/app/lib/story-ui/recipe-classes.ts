@@ -117,6 +117,7 @@ export const STORY_UI_RECIPE_CLASSES: readonly string[] = [
   "@/lib/story/data-table",
   "@/lib/story/dataflow",
   "@/lib/story/dataset-shape",
+  "@/lib/story/image-source",
   "@/lib/story/managed-iframe",
   "@/lib/story/number-aggregation",
   "@/lib/story/number-format",

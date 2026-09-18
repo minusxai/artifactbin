@@ -126,16 +126,11 @@ Social preview: `<Helmet>` metas `artifactbin:og-image` and
 <!--/bundle:skip-->
 ## Images and icons
 
-For fewer than 10 images, literal `src="ref:ID"` references are usually simplest.
-For 10 or more repeated items, upload their refs and metadata as a dataset and
-use `<For>` with `<img src="$_row.cover_ref" />`; see [dataset images](markup-repeat.md).
-Use a dataset sooner for filtering or shared detail views. This is a rule of
-thumb, not an image-count limit.
+Repeated galleries: use [dataset image bindings](markup-repeat.md).
 
-- `<img src="ref:<imageId>" />` — an uploaded image
-  ([publishing-datasets.md](publishing-datasets.md)) — or write the web URL
-  itself: publish stores a copy, YOUR URL STAYS as written, readers are served
-  ours, and a URL that will not fetch is a warning, not a failed publish.
+- `<img src="ref:<imageId>" />` — an [uploaded image](publishing-datasets.md).
+  Web URLs also work: publish stores a copy, keeps your URL in the source,
+  and warns if fetching fails.
 - In parent markup only `<img src>`, `<Video poster>` and `<File src>` take a URL;
   `srcSet`/`background` reject an external one. `href` is free.
 <!--bundle:skip-->
