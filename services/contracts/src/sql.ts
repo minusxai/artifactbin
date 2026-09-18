@@ -15,6 +15,14 @@ export type Row = Record<string, unknown>;
 export type ColumnType = 'string' | 'number' | 'boolean' | 'date' | 'user';
 export interface UserConstraints { memberOf?: string[]; self?: boolean }
 export interface UserOption { value: string; label: string }
+/**
+ * A PERSON AS A DOCUMENT MAY SHOW THEM: the display name (name, else handle,
+ * else the id), the public handle for /@handle, and the public picture URL —
+ * or null when the person has not uploaded one (the client draws a generated
+ * initial). Computed on the server under the same visibility rules a DataTable
+ * user cell has always had (lib/datasets/user-fields); never an email.
+ */
+export interface PersonCard { name: string; handle: string | null; image: string | null }
 export interface DatasetColumn { name: string; type: ColumnType; constraints?: UserConstraints }
 
 

@@ -41,7 +41,9 @@ export async function syncProfile(claims: { userId: string; email?: string }): P
   const db = await getDb();
   try {
     await db.query(
-      `INSERT INTO users (id, email) VALUES ($1, $2)
+      // A NEW person starts with the welcome page pending; an existing row keeps
+      // whatever it had (the conflict branch never touches the flag).
+      `INSERT INTO users (id, email, welcome_pending) VALUES ($1, $2, true)
        ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email WHERE users.email IS DISTINCT FROM EXCLUDED.email`,
       [claims.userId, email],
     );
