@@ -75,13 +75,13 @@ write. Use the returned dataset id in place of `tab123` below.
     order by spent_on desc
   `}</Query>
   <Query name="to_join" source="ref:tab123">{`
-    select 'join' as id
-    where not exists (select 1 from public.people where person = $_me)
+    select $_me as person where $_me is not null
+      and not exists (select 1 from public.people where person = $_me)
   `}</Query>
   <Mutation name="join" source="ref:tab123">{`
     insert into public.people (person, joined_on)
-    select $_me, current_date
-    where not exists (select 1 from public.people where person = $_me)
+    select $_row.person, current_date
+    where not exists (select 1 from public.people where person = $_row.person)
   `}</Mutation>
   <Mutation name="add" source="ref:tab123" reset="item amount spent_on">{`
     insert into public.expenses (id, paid_by, spent_on, item, amount)
@@ -92,7 +92,7 @@ write. Use the returned dataset id in place of `tab123` below.
   <h1>Trip tab</h1>
   {$_me ? <p>You are <User id="$_me" avatar />.</p>
         : <SignIn>Sign in to join this tab</SignIn>}
-  <For each={$to_join} keyBy="id"><Button run="$join">Join this tab</Button></For>
+  <For each={$to_join} keyBy="person"><Button run="$join">Join this tab</Button></For>
   <DataTable data="$balances" rowKey="person">
     <Column col="person" title="Person"><User id="$_row.person" /></Column>
     <Column col="net" title="Net" fmt="$,.2f" align="right" />
@@ -115,12 +115,13 @@ write. Use the returned dataset id in place of `tab123` below.
 
 Line by line, this is the whole pattern:
 
-- **Membership decides the UI.** The `to_join` Query returns one row only for
-  someone who has NOT joined, and `<For>` over an empty result renders nothing —
-  so the button is there for a newcomer and gone for everyone else. `where not
-  exists` in the Mutation makes the write idempotent as well. A mutation binding
-  `$_me` needs a signed-in reader, so the person who clicks it IS the person who
-  joins.
+- **Membership decides the UI.** The `to_join` Query returns ONE row — the
+  viewer — only for a signed-in person who has not joined (`$_me is not null`
+  first, or a guest gets a row with no key), and `<For>` over an empty result
+  renders nothing, so the button is there for a newcomer and gone for everyone
+  else. A `<Button run>` inside a `<For>` is a ROW action, so the Mutation writes
+  `$_row.person`, which the Query computed from `$_me`: the person who clicks it
+  IS the person who joins. `where not exists` keeps the write idempotent.
 - **The form is kit controls**, one visual family: `<Input>` (with
   `type="number"` where it is a number), `<Textarea>`, `<DatePicker>`,
   `<Button>`. A native `<input value="$item">` still binds — and is themed now —

@@ -802,7 +802,7 @@ export const shellRest = ({ label, placeholder, className, value, options, multi
  * wrapper and the field is one control answering to a name twice, and `type`
  * or `rows` on a `<div>` is a lie React would happily render.
  */
-export const textRest = ({ type, required, autoFocus, rows, readOnly, name, 'aria-label': ariaLabel, ...rest }: Authored): Record<string, unknown> => shellRest(rest);
+export const textRest = ({ type, required, autoFocus, rows, readOnly, name, run, 'aria-label': ariaLabel, ...rest }: Authored): Record<string, unknown> => shellRest(rest);
 
 /** The field's accessible name: the author's `aria-label`, else the visible label. */
 export const fieldLabel = (props: Authored): string | undefined => str(props['aria-label']) ?? str(props.label);

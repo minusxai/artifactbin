@@ -128,11 +128,16 @@ describe('kit controls — static rendering (no store)', () => {
       '<div><Input label="Item" value="$item" required autoFocus /><Textarea label="Note" value="$note" rows={3} /></div>',
       JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style',
     )).toEqual([]);
-    const { getByLabelText } = staticRender('<Input label="Item" value="$item" onChange="steal()" ref="x" required />');
+    const { getByLabelText, container } = staticRender('<Input label="Item" value="$item" onChange="steal()" ref="x" run="$add" required />');
     const field = getByLabelText('Item') as HTMLInputElement;
     expect(field.getAttribute('onchange')).toBeNull();
     expect(field.getAttribute('ref')).toBeNull();
     expect(field.required).toBe(true);
+    // `run=` is the Button's trigger, not a text field's: Enter reaches a form
+    // through the real input inside, so the attribute has nothing to do here —
+    // and a `$name` must never reach the DOM, on the field or on the shell.
+    expect(container.innerHTML).not.toContain('$add');
+    expect(container.innerHTML).not.toContain('run=');
   });
 
   it('unbound (literal) props still render the control usably static', () => {
