@@ -127,6 +127,6 @@ it('draws a test user by its label, so two people on a page are tellable apart',
   const testuser = await testUserOf(owner);
   const page = await publish(owner.token, { markup: '<p>who is here: <User id="$_me" /></p>', visibility: 'unlisted' });
   const identity = await viewerIdentityFor((await getArtifactById(page.id))!, testuser.id);
-  expect(identity).toMatchObject({ id: testuser.id, label: testuser.label });
-  expect(String(identity!.label)).toMatch(/^Test user /);
+  expect(identity).toMatchObject({ id: testuser.id, card: { name: testuser.label } });
+  expect(String(identity!.card!.name)).toMatch(/^Test user /);
 });

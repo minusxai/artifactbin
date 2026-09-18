@@ -9,6 +9,8 @@ import {getArtifactById,dataflowForRow,setMetadataFor,applyEditFor,commitNormali
 import {loadDatasetRows} from '@/lib/story/dataset-store';
 import {mintToken} from '@/lib/tokens';
 import {claimToken, createUser} from '@/lib/users';
+import {people} from '@/lib/datasets/user-fields';
+import {avatarUrl} from '@/lib/avatars';
 import {useAppHarness, request} from '@/__tests__/harness';
 
 useAppHarness();
@@ -124,14 +126,36 @@ describe('native user fields',()=>{
   const report=await create(owner.token,{markup,visibility:'public'});
   const row=(await getArtifactById(report.id))!;
   const mine=await dataflowForRow(row,{viewer:{userId:reader.user.id,tokenId:null,email:reader.user.email}});
-  expect(mine?.state.userLabels).toEqual({[reader.user.id]:'reader'});
-  expect(JSON.stringify(mine?.state.userLabels)).not.toContain('@');
-  expect((await dataflowForRow(row,{}))?.state.userLabels ?? {}).toEqual({});
+  expect(mine?.state.people).toEqual({[reader.user.id]:{name:'reader',handle:null,image:null}});
+  expect(JSON.stringify(mine?.state.people)).not.toContain('@');
+  expect((await dataflowForRow(row,{}))?.state.people ?? {}).toEqual({});
   // The island carries the same answer, so first paint needs no query at all —
   // and a document that names nobody pays for no lookup.
-  expect(await viewerIdentityFor({source:markup},reader.user.id)).toEqual({id:reader.user.id,label:'reader'});
+  expect(await viewerIdentityFor({source:markup},reader.user.id)).toEqual({id:reader.user.id,card:{name:'reader',handle:null,image:null}});
   expect(await viewerIdentityFor({source:'<p>nobody here</p>'},reader.user.id)).toEqual({id:reader.user.id});
   expect(await viewerIdentityFor({source:markup},null)).toBeNull();
+  // A face and a handle are the same person as a <User>, so they buy the card too.
+  for(const tag of ['<UserImage id="$_me" />','<UserHandle id="$_me" />'])
+   expect(await viewerIdentityFor({source:`<p>${tag}</p>`},reader.user.id)).toEqual({id:reader.user.id,card:{name:'reader',handle:null,image:null}});
+ });
+ /*
+  * THE CARD, WHOLE. A person is a name, a handle and a picture, and the picture
+  * is an ADDRESS computed in exactly one place (lib/avatars avatarUrl) — the
+  * stored key never leaves the server, and a person without one is a null the
+  * client draws an initial for rather than a broken image.
+  */
+ it('carries the handle and the picture address of the people a document already saw',async()=>{
+  const owner=await account('host'), member=await account('pictured');
+  const db=await getDb();
+  await db.query('UPDATE users SET username=$2, image_key=$3 WHERE id=$1',[member.user.id,'pictured','avatar/deadbeef']);
+  const cards=await people(db,[member.user.id,owner.user.id,'usr_missing']);
+  expect(cards[member.user.id]).toEqual({name:'pictured',handle:'pictured',image:avatarUrl({id:member.user.id,image_key:'avatar/deadbeef'})});
+  expect(cards[member.user.id]!.image).toBe(`/api/users/${member.user.id}/avatar?v=deadbeef`);
+  expect(cards[owner.user.id]).toEqual({name:'host',handle:null,image:null});
+  // Never invented: an id nobody has is simply absent, and the client says so.
+  expect(cards['usr_missing']).toBeUndefined();
+  expect(JSON.stringify(cards)).not.toContain('@');
+  expect(await people(db,[])).toEqual({});
  });
  it('refuses invalid constraint syntax instead of dropping it',async()=>{
   const a=await account('owner');

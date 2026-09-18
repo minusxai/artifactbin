@@ -15,6 +15,7 @@ import React from 'react';
 import { keyedRowsError, validRowKey, commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import type { CommentTarget } from '@/lib/story/comment-target';
 import { DENIED_JSX_ATTRS } from '@/lib/jsx/denied-attrs';
+import { PERSON_TAGS } from '@/lib/story-ui/component-names';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
@@ -267,8 +268,8 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
   }
 
   /*
-   * `<User id=…>` — the one tag whose `id` names a PERSON rather than an
-   * element, so it needs a seam of its own.
+   * `<User id=…>`, `<UserImage id=…>`, `<UserHandle id=…>` — the tags whose
+   * `id` names a PERSON rather than an element, so they need a seam of their own.
    *
    * Everywhere else `id` is a DOM id, and inside a `<For>`/`<Column>` it is
    * deliberately the ONE attribute not substituted from the row and then
@@ -281,7 +282,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
    * reference is passed through verbatim; the runtime adapter resolves it
    * against the store and the island (lib/story-runtime/StoryRuntimeApp).
    */
-  if (node.tag === 'User' && Component) {
+  if (PERSON_TAGS.has(node.tag) && Component) {
     const authored = node.attributes.find((a) => a.name === 'id');
     const person = authored?.value.static
       ? (options.row ? substituteRow(authored.value.json, options.row) : authored.value.json)

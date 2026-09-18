@@ -154,7 +154,8 @@ export interface DataflowState {
   /** Per-viewer mutation availability: null permits, a message explains refusal. Missing means not yet checked. */
   mutationAccess?: Record<string, string | null>;
   userOptions?: Record<string, import('@artifactbin/contracts').UserOption[]>;
-  userLabels?: Record<string,string>;
+  /** The people this document may name, by id (lib/datasets/user-fields people). */
+  people?: Record<string,import('@artifactbin/contracts').PersonCard>;
   values: Record<string, Scalar>;
   tables: Record<string, TableResult>;
   /** Queries that did not run, by name → the engine's message (shown in place of the embed). */
@@ -280,10 +281,13 @@ export const REF_ATTRS: {
     Button: { run: 'mutation' },
     Dialog: {open: 'scalar'},
     DialogContent: {run: 'mutation'},
-    // A person, shown by name (components/kit/user.tsx). `id` READS its
-    // reference and never writes it back, which is what lets the viewer's own
-    // `$_me` sit there — see VIEWER_REF below.
+    // A person (components/kit/user.tsx), and the two halves they are made of
+    // — the face (user-image.tsx) and the handle (user-handle.tsx). `id` READS
+    // its reference and never writes it back, which is what lets the viewer's
+    // own `$_me` sit there — see VIEWER_REF below.
     User: { id: 'scalar' },
+    UserImage: { id: 'scalar' },
+    UserHandle: { id: 'scalar' },
   },
   html: {
     input: { value: 'scalar', checked: 'scalar', run: 'mutation' },
@@ -349,7 +353,7 @@ export const VIEWER_REF = '_me';
  * therefore legal. Deliberately tiny and opt-in: a binding position added to
  * REF_ATTRS later must not silently become a place the viewer can be written.
  */
-const READ_ONLY_REF_ATTRS: Record<string, ReadonlySet<string>> = { User: new Set(['id']) };
+const READ_ONLY_REF_ATTRS: Record<string, ReadonlySet<string>> = { User: new Set(['id']), UserImage: new Set(['id']), UserHandle: new Set(['id']) };
 
 /** One `$name` occurrence in the body. */
 interface RefNameUse extends Span {

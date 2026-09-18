@@ -15,7 +15,7 @@ import type { DataflowState, TableResult } from '@/lib/story/dataflow';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-type QueryAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 'userOptions' | 'userLabels'>;
+type QueryAnswer = Pick<DataflowState, 'tables' | 'errors' | 'mutationAccess' | 'userOptions' | 'people'>;
 
 export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, init) => fetch(i, init), mutateUrl?: string): QueryTransport {
   const ask = async (request: Record<string, unknown>): Promise<QueryAnswer> => {
@@ -29,7 +29,7 @@ export function createFetchTransport(queryUrl: string, fetchFn: FetchLike = (i, 
       : await fetchFn(`${queryUrl}${sep}${QUERY_REQUEST_PARAM}=${encodeURIComponent(JSON.stringify(request))}`, { method: 'GET', credentials: 'omit' });
     if (!res.ok) throw new Error(`query failed (${res.status})`);
     const body = (await res.json()) as Partial<QueryAnswer>;
-    return {userOptions:body.userOptions,userLabels:body.userLabels, tables: body.tables ?? {}, errors: body.errors ?? {}, ...(body.mutationAccess ? {mutationAccess:body.mutationAccess} : {}) };
+    return {userOptions:body.userOptions,people:body.people, tables: body.tables ?? {}, errors: body.errors ?? {}, ...(body.mutationAccess ? {mutationAccess:body.mutationAccess} : {}) };
   };
   return {
     run: (values, only, localTables) => ask({ values, only, ...(localTables ? { localTables } : {}) }),
