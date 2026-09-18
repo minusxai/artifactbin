@@ -1,5 +1,5 @@
-/** CI image/compose contracts and immutable maintenance action pins. */
-import { readFileSync } from 'node:fs';
+/** CI job-ownership contracts and immutable maintenance action pins. */
+import { existsSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import yaml from 'yaml';
@@ -51,23 +51,24 @@ describe('dependency security', () => {
   });
 });
 
-describe('ci.yml: the image job proves what ships', () => {
-  const steps = ci.jobs.image?.steps ?? [];
-  it('boots the FULL image built from the root Dockerfile', () => {
-    const fullBuild = steps.find((s) => s.uses?.startsWith('docker/build-push-action'));
-    expect(fullBuild?.with?.file).toBe('Dockerfile');
-    expect(fullBuild?.with?.context).toBe('.');
-  });
-});
-
-describe('OSS single-host image ownership', () => {
-  it('keeps the real full-image check and leaves split deployment CI to production', () => {
-    expect(ci.jobs.image).toBeDefined();
+/**
+ * NO COMPOSE JOB HERE, AND NO IMAGE JOB EITHER. The open-source distribution is the CLI and
+ * `afbin serve`; the container distribution was retired with its Dockerfile and compose file, and
+ * split-deployment CI belongs to the production server repository, not this one.
+ */
+describe('OSS single-host ownership', () => {
+  it('builds no container and leaves split deployment CI to production', () => {
     expect(ci.jobs.gates).toBeDefined();
+    expect(ci.jobs).not.toHaveProperty('image');
     expect(ci.jobs).not.toHaveProperty('compose');
+    expect(ci.jobs.plan.outputs).not.toHaveProperty('image');
     expect(ci.jobs.plan.outputs).not.toHaveProperty('compose');
-    expect(ci.jobs.test.needs).toContain('image');
+    expect(ci.jobs.test.needs).not.toContain('image');
     expect(ci.jobs.test.needs).not.toContain('compose');
+    expect(readFileSync(ciPath, 'utf8')).not.toContain('docker/build-push-action');
+    for (const file of ['Dockerfile', 'docker-compose.yml']) {
+      expect(existsSync(path.join(root, file)), `${file} is retired`).toBe(false);
+    }
   });
 });
 

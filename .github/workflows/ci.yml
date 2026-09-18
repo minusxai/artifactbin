@@ -51,7 +51,6 @@ jobs:
       build: ${{ steps.select.outputs.build }}
       api: ${{ steps.select.outputs.api }}
       gates: ${{ steps.select.outputs.gates }}
-      image: ${{ steps.select.outputs.image }}
       cli: ${{ steps.select.outputs.cli }}
       reference-compatibility: ${{ steps.select.outputs.reference-compatibility }}
       # Not a job: whether the node job runs the CLI source suite (every CLI change, not only a release).
@@ -276,9 +275,9 @@ jobs:
   # The BUILD catches what tsc and vitest cannot: a route the generated table
   # has not seen, an import that only resolves under the bundler, a SPA module
   # that reaches for server config. It builds the story runtime, the route
-  # table, the SPA and the bundled server — everything the image runs. Master
-  # shipped a broken build once because CI never ran it: the image build did,
-  # and deploys silently stopped.
+  # table, the SPA and the bundled server — everything `afbin serve` serves.
+  # Master shipped a broken build once because CI never ran it, and deploys
+  # silently stopped.
   build:
     needs: [ plan ]
     if: needs.plan.outputs.build == 'true'
@@ -486,124 +485,6 @@ jobs:
           path: tmp/browser-session-evidence/*.png
           if-no-files-found: ignore
 
-  # THE IMAGE IS THE ARTIFACT THAT DEPLOYS, and nothing else here proves it
-  # builds or runs. `npm run build` produces the bundle from the FULL
-  # node_modules; the image ships a production install beside it, so a package
-  # the bundle left external and the image no longer carries is invisible to
-  # every other job. That exact drift shipped once: `Cannot find package
-  # 'vega-lite'` at the server's first line, discoverable only by assembling
-  # the image's own layout. Building it here means the publish workflow is
-  # never the first to try.
-  image:
-    needs: [ plan ]
-    if: needs.plan.outputs.image == 'true'
-    name: image
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
-        with:
-          context: .
-          file: Dockerfile
-          push: false
-          load: true
-          tags: artifactbin:ci
-          # THE LAYER CACHE IS AN OPTIMISATION, NOT A BUILD PRODUCT, and
-          # `ignore-error=true` is what says so on both ends. On 2026-09-05 this
-          # job went red on a green commit: the image had already been built and
-          # loaded — `#47 exporting to docker image format ... DONE 73.9s`,
-          # `#48 loading layer ... DONE 19.6s` — and then
-          # `#49 exporting to GitHub Actions Cache` answered
-          # `ERROR: Post ".../CacheService/GetCacheEntryDownloadURL": dial tcp
-          # 140.82.113.22:443: i/o timeout`, which buildx reports as
-          # `failed to build: failed to solve: DeadlineExceeded` (run
-          # 33939641406, job 101234399760; the same commit's `publish` workflow
-          # had pushed all four images minutes earlier). A merge gate must never
-          # depend on a third party being up. With the attribute a cache miss or
-          # a cache-service outage costs a warning and a colder builder next
-          # time, nothing more: measured against an unreachable backend, the
-          # build exits 1 without it and 0 with it, and against a reachable one
-          # it still exports AND restores.
-          cache-from: type=gha,ignore-error=true
-          # mode=max, and the comment that used to argue for `min` here had not
-          # been true of this line for some time. Measured rather than reasoned:
-          # two runs of this job on the same tree, one per mode, minutes apart —
-          # max 150s (run 35334961782), min 151s (run 35334964542). The export
-          # `min` was meant to save is not where this job's time goes any more;
-          # what `max` buys is the builder stage restoring too, so a colder
-          # runner does not recompile the whole install. Warm, the build step is
-          # ~90s of the job (run 35334091384), against 207s before this branch.
-          cache-to: type=gha,mode=max,ignore-error=true
-          # No provenance attestation: it is generated and attached during the
-          # export, and nothing here consumes it.
-          provenance: false
-      # It has to RUN, not merely build: the runner stage's assertions catch a
-      # missing shared library, and this catches a missing package.
-      - name: the image boots and serves
-        run: |
-          docker run -d --name ab -p 3399:3000 \
-            -e DATABASE_URL=pglite://memory -e AUTH__SECRET="$(openssl rand -base64 32)" \
-            -e APP__PUBLIC_BASE_URL=http://127.0.0.1:3399 \
-            -e ARTIFACTS__ALLOW_PUBLIC=1 \
-            artifactbin:ci
-          for i in $(seq 1 60); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3399/health || true)
-            [ "$code" = "200" ] && echo "served after ${i}s" && exit 0
-            sleep 1
-          done
-          echo '--- container log ---'; docker logs ab; exit 1
-      # And it has to LOOK right. The suite runs against the dev server, which
-      # skips the build step where a production-only break lives: the app's
-      # stylesheet once parsed to zero rules in the build alone, and every
-      # page-measuring gate would have caught it while every unit test passed.
-      # One gate that measures the page, against the CONTAINER.
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-          cache: npm
-      # The same two caches every other job here uses (see the `checks` job for what the
-      # install entry holds). This job had neither, and paid `npm ci` plus a full `--with-deps`
-      # Chromium install on every run to execute ONE gate: 47s of a job whose budget is 180s.
-      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
-      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
-      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
-      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
-      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
-      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
-      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
-      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
-      - run: node scripts/ci.mjs lock-fingerprint
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: install
-        with:
-          path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
-          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
-      - if: steps.install.outputs.cache-hit != 'true'
-        run: npm ci
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: playwright
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-      - if: steps.playwright.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-      - if: steps.playwright.outputs.cache-hit == 'true'
-        run: npx playwright install chromium
-      - name: a gate that measures the page, against the container
-        run: node scripts/gate-layout-shift.mjs http://127.0.0.1:3399
-      # What the container itself said — the gate can only report that the
-      # server answered 500, and the reason is in here.
-      - if: failure()
-        run: docker logs ab
-      - if: always()
-        run: docker rm -f ab || true
-
   # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
   #
   # A tree that passed here has been tested, and testing it again — which is exactly what the push
@@ -626,7 +507,6 @@ jobs:
         build,
         api,
         gates,
-        image,
         cli,
         reference-compatibility
       ]
@@ -802,7 +682,6 @@ jobs:
         build,
         api,
         gates,
-        image,
         cli,
         test,
         reference-compatibility

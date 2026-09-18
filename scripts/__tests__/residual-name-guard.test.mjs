@@ -215,11 +215,6 @@ describe('license', () => {
 
 /** THE ONBOARDING DEFECTS: one port story, no stale text, a generator hint for every secret. */
 describe('one port story', () => {
-  it('docker-compose.yml publishes and mints links on the same port (3030 by default)', () => {
-    const web = yaml.parse(read('docker-compose.yml')).services.web;
-    expect(web.ports.some((p) => String(p).includes('${APP__PORT:-3030}:3000'))).toBe(true);
-    expect(web.environment.APP__PUBLIC_BASE_URL).toBe('${APP__PUBLIC_BASE_URL:-http://localhost:${APP__PORT:-3030}}');
-  });
   it('config.ts falls back to the same default port as dev-env.mjs (3030)', () => {
     const src = read('services', 'app', 'lib', 'config.ts');
     expect(src).not.toMatch(/PUBLIC_BASE_URL[^\n]*\?\?\s*'http:\/\/localhost:3000'/);

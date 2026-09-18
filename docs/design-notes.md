@@ -150,19 +150,20 @@ cheapest signal there is. The Vitest projects run as their own sharded jobs; the
 described in [operations](operations.md). Maintainer agent evaluations live in a private repository, checked out at `evals/` for a run.
 `build` proves the production build compiles.
 
-Three jobs exist because a green unit suite does not prove a shippable artifact:
+Two jobs exist because a green unit suite does not prove a shippable artifact:
 
-- **`image`** builds the full `Dockerfile`, then *runs* the container and serves from it, and
-  drives one page-measuring gate against that container. The build step is where a
-  production-only break lives — the app's stylesheet once compiled to zero rules while every
-  unit test passed — and a dev server never executes it.
-- **`compose`** builds the lean per-service images, checks each one's contents and standalone
-  behaviour, then boots them together and walks the split shape end to end: health, publish,
-  serve, query, emit. It is the only check that the services still honour the same contracts
-  across an HTTP boundary rather than in one process.
 - **`cli`** runs the CLI suite and then builds and smoke-tests the standalone executable on every
   released OS and architecture. Its failures — a native helper, the PTY, executable discovery —
   are platform-shaped and invisible to a single-platform run.
+- **`reference-compatibility`** installs what people install: the packed npm packages and the
+  standalone executable, run from outside the checkout against a host built here, and `afbin serve`
+  on PGLite and on real PostgreSQL. A package the bundle left external and the published
+  distribution does not carry is invisible to every other job; that drift shipped once.
+
+There is no container job here, because there is no container distribution: the open-source
+distribution is the CLI, and `afbin serve` is the self-host path. The split per-service deployment —
+its images, and the compose shape that boots them together — is built and checked in the production
+server repository, which is what owns those deployments.
 
 ## Dynamic comment identity and interaction
 

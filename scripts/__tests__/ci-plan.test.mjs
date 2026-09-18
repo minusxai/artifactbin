@@ -64,7 +64,21 @@ describe('CI change selection', () => {
   it('selects the app without standalone service tests', () => {
     const plan = planCi(['services/app/components/AnnotationLayer.tsx']);
     expect(plan.nodeRoots).toEqual(['scripts/', 'services/app/']);
-    expect(plan.jobs).toMatchObject({ api: true, ui: true, build: true, gates: true, image: true, cli: false });
+    expect(plan.jobs).toMatchObject({ api: true, ui: true, build: true, gates: true, cli: false });
+    // THE CONTAINER DISTRIBUTION IS RETIRED: `afbin serve` is the self-host path, so there is no
+    // image to build and no job named for one — on this plan or in the job list at all.
+    expect(Object.keys(plan.jobs)).not.toContain('image');
+    expect(CI_JOBS).not.toContain('image');
+  });
+
+  // The gate shards run what `build` built, so a plan that wants gates must select the job that
+  // produces the artifact they download.
+  it('never selects the gates without the build that feeds them', () => {
+    for (const paths of [['services/app/components/AnnotationLayer.tsx'], ['services/sql/src/engine.ts'],
+      ['package-lock.json'], ['services/cli/src/runner.ts'], ['README.md']]) {
+      const { jobs } = planCi(paths);
+      if (jobs.gates) expect(jobs.build, paths.join()).toBe(true);
+    }
   });
 
   it('expands transitive test/composition dependents for a service', () => {
@@ -77,7 +91,7 @@ describe('CI change selection', () => {
   it('isolates CLI changes while retaining script contract tests', () => {
     const cli = planCi(['services/cli/src/runner.ts']);
     expect(cli.nodeRoots).toEqual(['scripts/']);
-    expect(cli.jobs).toMatchObject({ node: true, 'reference-compatibility': false, cli: false, api: false, ui: false, gates: false, image: false });
+    expect(cli.jobs).toMatchObject({ node: true, 'reference-compatibility': false, cli: false, api: false, ui: false, gates: false });
     expect(cli.cliTests).toBe(true);
   });
 
@@ -285,7 +299,7 @@ describe('GitHub CI adapter', () => {
       const release = planOutput(cwd, { CI__EVENT: 'push', CI__BEFORE_SHA: base, CI__HEAD_SHA: bumped });
       expect(release.checks).toBe('true');
       expect(release.cli).toBe('true');
-      for (const job of ['node', 'ui', 'build', 'api', 'gates', 'image', 'reference-compatibility']) {
+      for (const job of ['node', 'ui', 'build', 'api', 'gates', 'reference-compatibility']) {
         expect(release[job], job).toBe('false');
       }
       expect(release['cli-tests']).toBe('false');

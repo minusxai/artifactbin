@@ -112,9 +112,8 @@ let warned = false;
  *
  * The loud failure belongs earlier, where it can stop a deploy instead of a
  * reader: the build asserts the files it names exist
- * (scripts/build-story-runtime.mjs) and the image asserts the manifest survived
- * into it (Dockerfile), both mirroring the `test -f libduckdb.so` guard that
- * exists because a partial trace took every route down once already.
+ * (scripts/build-story-runtime.mjs), mirroring the `test -f libduckdb.so` guard
+ * that exists because a partial trace took every route down once already.
  */
 export function storyRuntimeAssets(file?: string): { entry: string | null; anchor: string | null; comment: string | null; lazy: string[] } {
   try {
