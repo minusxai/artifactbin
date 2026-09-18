@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,realpath,rm,writeFile} from 'node:fs/promises';
+import {mkdtemp,readFile,realpath,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {resolveReference} from '../src/reference';
@@ -59,7 +59,9 @@ function world(answers:Record<string,unknown>){
   const answer=answers[`${url.origin}${url.pathname}`]??answers[url.origin];
   if(answer===undefined)return new Response('not found',{status:404});
   if(typeof answer==='number')return new Response('refused',{status:answer});
-  if(typeof answer==='function')return (answer as ()=>Response)();
+  // A function answer may look at the REQUEST — one path answering two ways (a dry run and the
+  // act) is exactly the fork door's shape.
+  if(typeof answer==='function')return (answer as (call:{method:string;body:unknown})=>Response)({method:request.method,body:await request.clone().json().catch(()=>undefined)});
   return Response.json(answer);
  }) as typeof fetch;
  return {seen,fetch:fetcher};
@@ -297,6 +299,38 @@ for(const args of [['query'],['log'],['comment'],['open'],['export','--format','
   const [command,...rest]=args;
   const run=await cli([command,`${ALIAS}/a/abc123?$x=1`,...rest,'--server',CANONICAL,'--json'],home,net.fetch);
   assert.doesNotMatch(run.out.join('')+run.err.join(''),/wrong_server/);
+  assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS).map(call=>call.path),[]);
+ });
+});
+
+/*
+ * FORKING AN APP from an alias link is the one fork that talks to the server several times — the
+ * snapshot, the dry run, the fork itself, and the pull of the copy it made. The row above pins
+ * that the LINK is understood; this pins that every one of those calls, credential included, goes
+ * to the canonical origin and none of them to the alias.
+ */
+test('forking an app at a verified alias asks the canonical origin for every step',async()=>{
+ await withHome(async home=>{
+  await saveConnection({server:CANONICAL,token:'test-token'},home,{});
+  const app=(dataset:string)=>`<Helmet><Mutation name="join" source="ref:${dataset}">{\`insert into public.rows (who) select $_me\`}</Mutation></Helmet><div><Button run="$join">Join</Button></div>`;
+  const page={id:'abc123',version:1,edit_id:'one',state:'a'.repeat(64),format:'markup',title:'Tracker',markup:app('ds0001')};
+  const net=world({
+   [`${CANONICAL}/api/server`]:{origin:CANONICAL,aliases:[ALIAS]},
+   [`${CANONICAL}/api/artifacts/abc123`]:()=>Response.json(page,{headers:{'X-Artifactbin-Account':'usr_seed'}}),
+   [`${CANONICAL}/api/artifacts/abc123/fork`]:(call:{method:string;body:unknown})=>Response.json(
+    (call.body as {dry_run?:boolean})?.dry_run?{datasets:[{id:'ds0001',title:'tab'}]}
+     :{id:'cpy001',url:`${CANONICAL}/a/cpy001`,visibility:'unlisted',forked_from:'abc123',datasets:[{id:'ds0009',forked_from:'ds0001'}]},
+    {headers:{'X-Artifactbin-Account':'usr_seed'}}),
+   [`${CANONICAL}/api/artifacts/cpy001`]:()=>Response.json({...page,id:'cpy001',markup:app('ds0009')},{headers:{'X-Artifactbin-Account':'usr_seed'}}),
+  });
+  const run=await cli(['fork',`${ALIAS}/a/abc123?$x=1`,'--output','copy.jsx','--server',CANONICAL,'--json'],home,net.fetch);
+  assert.equal(run.code,0,run.err.join('')+run.out.join(''));
+  const file=await readFile(join(home,'copy.jsx'),'utf8');
+  assert.match(file,/ref:ds0009/);
+  assert.match(file,/id: cpy001/,'the local file tracks the copy the server made');
+  const api=net.seen.filter(call=>call.path!=='/api/server');
+  assert.deepEqual([...new Set(api.map(call=>call.origin))],[CANONICAL]);
+  assert.deepEqual(api.filter(call=>call.method==='DELETE'),[],'the page the server forked stays');
   assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS).map(call=>call.path),[]);
  });
 });

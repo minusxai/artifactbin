@@ -663,8 +663,11 @@ describe('the fork row', () => {
       const confirm = screen.getByLabelText('Confirm fork');
       act(() => { confirm.click(); confirm.click(); });
       await waitFor(() => expect(router.pushed.length).toBe(1));
+      // The dialog also DRY-RUNS the same door on open ("what would this copy?"),
+      // which creates nothing — what is counted is the calls that would copy.
       const forkCalls = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls
-        .filter((call) => String(call[0]).endsWith('/fork'));
+        .filter((call) => String(call[0]).endsWith('/fork'))
+        .filter((call) => !(JSON.parse(String((call[1] as RequestInit | undefined)?.body ?? '{}')) as { dry_run?: boolean }).dry_run);
       expect(forkCalls.length).toBe(1);
     });
   });

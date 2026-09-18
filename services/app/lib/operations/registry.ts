@@ -15,7 +15,7 @@ import { BROWSER_SESSION_OPERATIONS } from './browser-sessions';
 import { z } from 'zod';
 import { STORY_TEMPLATE_NAMES } from '@/lib/validation/atlas-schemas';
 import {
-  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
+  applyEditFor, canReadArtifact, findDependentsFor, forkArtifact, forkDatasetPreview, getArtifactById, getVersionFor, listArtifactPageFor, listVersionPageFor,
   revertArtifactFor, isVersionNotArchived, type ForkOverrides, type TokenActor
 } from '@/lib/artifacts';
 import { isParentRefusal, resolveParent } from '@/lib/folders';
@@ -541,9 +541,10 @@ const forkArtifactOp: Operation = {
   name: 'fork_artifact',
   title: 'Fork an artifact',
   http: { method: 'POST', path: '/api/artifacts/{id}/fork' },
-  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact when you are adapting a document that already exists: fork it, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document whose <Mutation> writes someone else\'s dataset, or that reads a private one, is refused by name instead of copied broken. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders and live Postgres datasets are not forkable: a folder source names the original children, while a Postgres secret remains bound to the original dataset. Answers the create reply plus forked_from.',
+  description: 'Copy an artifact you can READ — your own, one shared with your account, or any public/unlisted one — into a new artifact of your own at a new id and url. Use it instead of create_artifact to adapt an existing document, then edit the copy with edit_artifact. Content, title, theme, template and settings travel; version history, comments and shares do not (the copy is version 1, with its own edit_id). Every ref: image, dataset and recipe is re-validated AS YOU, so a document that reads a private one is refused by name instead of copied broken. Forking an APP copies the datasets its <Mutation> declarations WRITE — rows, columns, access and write policy — under your account and repoints the page at the copies; datasets it only READS keep their ref. Pass dry_run: true to be told which datasets that would copy, creating nothing. Optional title, visibility and parent_id land on the copy only — the original is never touched. Folders are not forkable, nor live Postgres datasets: a Postgres secret remains bound to the original dataset. Answers the create reply plus forked_from and datasets — the copies it made, each with its own forked_from.',
   input: {
     id: z.string(),
+    dry_run: z.boolean().optional().describe('answer { datasets } — the datasets a fork would copy under your account, in the order the page names them — and create nothing'),
     title: z.string().optional().describe('title for the COPY; omit to keep the original\'s'),
     // The same three values, but NOT the create door's defaults sentence: a
     // fork defaults to whatever the source is, which is the one thing about
@@ -592,9 +593,14 @@ const forkArtifactOp: Operation = {
       return reply({ error: 'not_found' }, 404);
     }
 
+    // Asked and answered: what a fork WOULD copy, before anything exists to
+    // undo. The overrides above are still parsed first, so a dry run refuses
+    // exactly what the real call would refuse.
+    if (input.dry_run === true) return { status: 200, body: { datasets: await forkDatasetPreview(ctx.actor, source) } };
+
     const copy = await forkArtifact(ctx.actor, source, overrides);
     if (copy instanceof Response) return fromResponse(copy);
-    return { status: 201, body: { ...createdArtifactWire(copy, ctx.base, undefined), forked_from: source.id } };
+    return { status: 201, body: { ...createdArtifactWire(copy.artifact, ctx.base, undefined), forked_from: source.id, datasets: copy.datasets } };
   },
 };
 

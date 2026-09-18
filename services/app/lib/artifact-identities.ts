@@ -18,6 +18,28 @@ export async function reserveIds(actor:TokenActor,batch:string):Promise<string[]
   if(ids.length!==100)throw new Error('ID allocation exhausted');return ids;
  });
 }
+/**
+ * Reserve `count` ids BEFORE a transaction opens, for a creation that writes
+ * several rows atomically (lib/artifacts forkArtifact's dataset copies).
+ *
+ * `createArtifact` normally mints inside its own transaction and retries the
+ * birthday collision by starting over; a row created inside somebody ELSE's
+ * transaction cannot do that, because the PK violation has already poisoned it.
+ * So the collision is paid out here, where a retry is just another statement,
+ * and the ids go in reserved-but-unconsumed — the state `claimArtifactId`
+ * already knows how to consume. A rolled-back creation leaves its reservations
+ * behind unconsumed, which costs one registry row and reveals nothing.
+ */
+export async function reserveArtifactIds(actor:TokenActor,count:number):Promise<string[]>{
+ const db=await getDb();const ids:string[]=[];
+ for(let attempt=0;ids.length<count&&attempt<count*20+20;attempt++){
+  const id=generateFileId();
+  const inserted=await db.query<{id:string}>('INSERT INTO artifact_id_registry(id,owner) SELECT $1,$2 WHERE NOT EXISTS(SELECT 1 FROM artifacts WHERE id=$1) ON CONFLICT(id) DO NOTHING RETURNING id',[id,owner(actor)]);
+  if(inserted.rows.length)ids.push(id);
+ }
+ if(ids.length!==count)throw new Error('ID allocation exhausted');
+ return ids;
+}
 export async function claimArtifactId(tx:Queryable,id:string,actor:TokenActor,reserved:boolean):Promise<void>{
  if(!reserved){await tx.query('INSERT INTO artifact_id_registry(id,owner,consumed) VALUES($1,$2,true)',[id,owner(actor)]);return;}
  const claimed=await tx.query('UPDATE artifact_id_registry SET consumed=true WHERE id=$1 AND owner=$2 AND consumed=false RETURNING id',[id,owner(actor)]);
