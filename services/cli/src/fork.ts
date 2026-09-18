@@ -32,7 +32,9 @@ const strippedFields=[...identityFields,'shares','folder','link'] as const;
 /** Folders have no content of their own and a Postgres dataset's secret stays bound to the original. */
 const NOT_FORKABLE_FIX='Fork a document, dataset rows or a file; a folder names its children and a Postgres dataset keeps its bound secret.';
 
-interface ForkOptions {type?:string;output?:string;dryRun?:boolean;server:string;/** Verified other addresses of `server`; a URL at one of them names the same artifact. */aliases?:readonly string[];client?:HttpClient}
+interface ForkOptions {type?:string;output?:string;dryRun?:boolean;server:string;/** Verified other addresses of `server`; a URL at one of them names the same artifact. */aliases?:readonly string[];client?:HttpClient;
+ /** `--as <testuser-id>`: the copy belongs to that test user, in its sandbox, and never to this workspace. */
+ as?:{testuser:string}}
 interface ForkFile {path:string;bytes:Buffer}
 interface ForkDraft {kind:'artifact'|'dataset'|'file';forkedFrom:string;base:string;extension:string;render:(paths:{draft:string;source?:string})=>Buffer;source?:{extension:string;bytes:Buffer};dependencies:string[];
  /** The datasets this fork copies: `{id,title}` on a dry run (what WOULD be copied), `{id,forked_from}` once they exist. */
@@ -62,6 +64,7 @@ export async function forkResources(workspace:Workspace,refs:string[],options:Fo
   if(ref.kind==='id'&&!options.client)return undefined;
   resolved.push({input,ref});
  }
+ if(options.as)return sandboxFork(resolved,options);
  const outputPath=options.output?await confinedPath(workspace.root,resolve(workspace.cwd,options.output)):undefined;
  const outputStat=outputPath?await stat(outputPath).catch(error=>{if((error as NodeJS.ErrnoException).code==='ENOENT')return null;throw error;}):null;
  if(refs.length>1&&!outputStat?.isDirectory())throw new CliError('invalid_output','Several fork sources require an existing --output directory.','Create the directory, or fork one source at a time.');
@@ -113,6 +116,33 @@ export async function forkResources(workspace:Workspace,refs:string[],options:Fo
    visibility:copy.visibility??'private',shares:[],dependencies:[],datasets:copy.datasets,status:'created'});
  }
  return {operations};
+}
+
+/**
+ * THE ONE DOOR FROM THE REAL WORLD INTO THE SANDBOX.
+ *
+ * `--as <testuser-id>` does not make a draft: the account asks the server to copy an artifact it
+ * can read into a test user's sandbox, and the copy is that test user's — published, owned by
+ * somebody who will be erased. So nothing is written into this workspace and nothing is tracked:
+ * this directory belongs to the account, and a tracked file pointing at a copy that `afbin
+ * testuser delete` erases would strand it. The ONE request is the fork door itself; the head
+ * snapshot a local draft needs is the server's business here, including whether the source is
+ * forkable at all.
+ */
+async function sandboxFork(resolved:Array<{input:string;ref:{kind:string;id?:string;version?:number}}>,options:ForkOptions):Promise<{dry_run?:true;operations:Record<string,unknown>[]}>{
+ const testuser=options.as!.testuser;
+ const operations:Record<string,unknown>[]=[];
+ for(const {input,ref} of resolved){
+  if(ref.kind!=='id')throw new CliError('invalid_reference',`${input} is a local file, and a test user can only be given a copy of a PUBLISHED artifact.`,`Publish it with afbin push ${input} first, then afbin fork <id> --as ${testuser}.`);
+  if(ref.version!==undefined)throw new CliError('unsupported_fork_version',`A sandbox copy of ${input} is taken from the published head.`,`Fork the head with afbin fork ${ref.id} --as ${testuser}.`);
+  const made=await options.client!.request<{id?:unknown;url?:unknown;visibility?:unknown;datasets?:Array<Record<string,unknown>>}>(
+   `/artifacts/${ref.id}/fork`,'POST',{...(options.dryRun?{dry_run:true}:{}),as:{testuser}});
+  if(!options.dryRun&&typeof made.id!=='string')throw new CliError('invalid_response','The server did not return the forked artifact.');
+  operations.push({ref:input,type:'artifact',...(typeof made.id==='string'?{id:made.id}:{}),...(typeof made.url==='string'?{url:made.url}:{}),
+   owner:{testuser},forked_from:ref.id!,visibility:typeof made.visibility==='string'?made.visibility:'private',
+   datasets:made.datasets??[],status:options.dryRun?'would_create':'created'});
+ }
+ return options.dryRun?{dry_run:true,operations}:{operations};
 }
 
 const existing=(path:string)=>new CliError('output_exists',`${path} already exists.`,'Choose a free --output path; fork never replaces a source or an existing draft.');

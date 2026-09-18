@@ -15,7 +15,7 @@ ACCOUNT. Never a typed name, never a seeded person, never a "Me" row.
 
 ## Contents
 
-The dataset · The page · Three mistakes · Before you hand it over.
+The dataset · The page · Three mistakes · Verifying with test users.
 
 ## The dataset: declared columns, no rows
 
@@ -140,12 +140,6 @@ Line by line, this is the whole pattern:
   they were.
 - **Balances are computed in SQL**, never typed. The page holds no arithmetic.
 
-## Forking one
-
-Forking a page copies the datasets it WRITES under your account — rows, columns,
-access and write policy — and repoints the page at your copies; datasets it only
-reads keep their `ref:`, because copying a live source would freeze it.
-
 ## Three mistakes to skip
 
 1. **Typed names.** A `person` column of strings, or a `<Select>` of names you
@@ -158,10 +152,35 @@ reads keep their `ref:`, because copying a live source would freeze it.
    `url={false}` is copied into the URL a reader shares, and arrives as somebody
    else's half-finished input.
 
-## Before you hand it over
+## Verifying with test users
 
 A push proves the markup and the read queries; it proves NOTHING about a button.
-Run each write once in a live session as yourself and once `--as guest`
-([live sessions](live-sessions.md)): join, add an expense, read the balances
-back, and check that the guest is offered a sign-in instead of an error. Fix and
-push again until one pass is clean.
+A join needs two people; the second is a TEST USER: a throwaway person your
+account mints (three at a time, gone in a day) and erases whole.
+
+```sh
+afbin testuser new --json                    # id, label, expiry
+afbin fork abc123 --as tu_9fA2b --json       # the copy is that person's
+afbin sessions script new --as tu_9fA2b --input join.js --json
+afbin sessions script new --input check.js --json   # you, same copy
+afbin testuser delete tu_9fA2b --json        # erases it and all it made
+```
+
+Forking copies the datasets the page WRITES under the new owner — rows, columns,
+access and write policy — and repoints the page at those copies; datasets it
+only reads keep their `ref:`, because copying a live source would freeze it.
+
+**The realism gap.** A test user verifies a COPY of your artifact. A clean pass
+proves that an artifact with this markup and these dataset policies works for
+two people — never that `abc123` works — and nothing a test user does reaches
+the original, its datasets or any account's rows. Fix the source, push, fork
+again.
+
+**What a test user cannot do.** On an artifact an account owns it is exactly a
+guest: it reads what the link grants and nothing else — no `$_me` write, like,
+follow, comment or fork. That refusal is `sandbox_only`, and the answer is never
+to press Join again on the real page: fork it to the test user and use the copy.
+
+Run each write as yourself and once `--as guest`
+([live sessions](live-sessions.md)): the guest must be offered a sign-in, not an
+error. Fix and push until every pass is clean.

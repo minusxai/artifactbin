@@ -29,15 +29,16 @@ The session is still yours: only you run scripts in it, read its status or close
 it, and it counts against your limit. Only the pages are anonymous. A write a
 signed-out reader could not make is refused exactly as it would be for a real
 guest; that refusal is the answer you came for, not a broken session.
-`--as test-user` browses as a fresh account that exists only for this session:
-open the link, press Join, and you are the second person (`$_me` is somebody
-else). It is never listed, invited or followed, reads only what the link grants,
-and closing the session ends it. One lives at a time; it needs your own account.
+`--as <testuser-id>` browses as a test user — a throwaway PERSON you minted with
+`afbin testuser new` — so `$_me` is somebody else. A session is a BROWSER and a
+test user is a person: several sessions may share one, and a session never mints
+one. A test user is a guest on an account's page, so give it its own copy first:
+`afbin fork <id> --as <testuser-id>` ([apps](apps.md)).
 
 Who a session browses as is fixed when it is created. `--as` on an existing
 session ID is refused locally, and resuming with `afbin sessions script
-SESSION_ID` keeps the viewer that session was created with. To compare the two
-views, open sessions as yourself, `--as guest` and `--as test-user`.
+SESSION_ID` keeps the viewer that session was created with. Compare views by
+opening sessions as yourself, `--as guest` and `--as <testuser-id>`.
 
 A script is a **strict async JavaScript function body**: use top-level `await`
 and `return`, without exporting or wrapping a function. Each call gets:
@@ -72,7 +73,6 @@ not-found. `afbin export <id>@2 --format png` shoots that same page.
 Images are `{mime, base64}` attachments. Scripts can open several artifacts,
 including multiple copies of one. Returned page IDs remain stable until
 those pages close. In the next script use `const page = pages['PAGE_ID']`.
-Resume with `sessions script SESSION_ID`, not `new`.
 Image attachments make JSON responses large: redirect `--json > result.json` and
 read the IDs/results from it rather than printing base64 into the agent's text
 context. A truncated display is not a failed execution; recover the saved response

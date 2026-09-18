@@ -13,7 +13,9 @@ interface HttpOptions {connection:Connection;home?:string;env?:NodeJS.ProcessEnv
  */
 const isForkPreflight=(pathname:string,method:string,body:unknown):boolean=>
  method==='POST'&&/^\/api\/artifacts\/[A-Za-z0-9]{6,12}\/fork$/.test(pathname)
- &&!!body&&typeof body==='object'&&JSON.stringify(body)==='{"dry_run":true}';
+ // `--as <testuser-id>` rides the same preflight: it names WHO would own the copy, and changes
+ // nothing about the request being a read-only "what would this copy".
+ &&!!body&&typeof body==='object'&&JSON.stringify({...(body as Record<string,unknown>),as:undefined})==='{"dry_run":true}';
 export class HttpClient {
  connection:Connection;
  account?:string;

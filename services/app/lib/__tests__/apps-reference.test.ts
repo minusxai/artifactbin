@@ -40,6 +40,34 @@ describe('references/apps.md', () => {
     expect(text).not.toMatch(/"name":\s*"Me"/);
   });
 
+  /**
+   * THE REALISM GAP. A test user verifies a COPY, and an agent that never reads that sentence
+   * hands over "artifact abc123 works for two people" when what it ran was a fork of it. The
+   * workflow is only safe to teach while the limit of what it proves is taught beside it.
+   */
+  it('teaches the whole test-user workflow in order, and what a pass with one does NOT prove', () => {
+    const text = reference();
+    const at = (needle: string | RegExp) => {
+      const index = typeof needle === 'string' ? text.indexOf(needle) : text.search(needle);
+      expect(index, String(needle)).toBeGreaterThan(-1);
+      return index;
+    };
+    // Mint, give the copy away, browse as that person, erase — in that order.
+    let previous = -1;
+    for (const step of ['afbin testuser new', 'afbin fork abc123 --as tu_', 'afbin sessions script new --as tu_', 'afbin testuser delete tu_']) {
+      expect(at(step), step).toBeGreaterThan(previous);
+      previous = at(step);
+    }
+    // A second session, as yourself, on the same copy: two people need two browsers.
+    expect(text).toMatch(/afbin sessions script new --input [^\n]*# you/);
+    // The gap itself: a COPY, what a clean pass proves, and that nothing reaches the original.
+    expect(text).toMatch(/A test user verifies a COPY/);
+    expect(text).toMatch(/never that `abc123` works/);
+    expect(text).toMatch(/nothing a test user does reaches\s+the original/);
+    // And the refusal that stops an agent pressing Join on the real page instead of forking.
+    expect(at('sandbox_only')).toBeGreaterThan(at('A test user verifies a COPY'));
+  });
+
   it('teaches only markup the publish door accepts', () => {
     const blocks = fences(reference()).filter((block) => block.includes('<Helmet>'));
     expect(blocks.length).toBeGreaterThan(0);
