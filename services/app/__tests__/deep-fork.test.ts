@@ -89,6 +89,31 @@ describe('forking a page that writes a dataset', () => {
     expect((await getArtifactById(w.written.id))!.version).toBe(1);
   });
 
+  it('copies rows that name other people in a self-constrained user column — the copy is a snapshot, not a write by the forker', async () => {
+    // The production shape that failed: a `person` column every writer may only set to
+    // themselves, whose rows name the ORIGINAL owner. The forker did not write them; they
+    // are carried, and re-judging them under the forker's id would make every such app unforkable.
+    const w = await world();
+    const tab = await create(w.ta.token, {
+      dataset: [{ id: 1, person: w.owner.id, item: 'Groceries' }],
+      columns: [{ name: 'id', type: 'number' }, { name: 'person', type: 'user', constraints: { self: true } }, { name: 'item', type: 'string' }],
+      access: 'readwrite', visibility: 'unlisted', title: 'people tab',
+    });
+    expect(await setDatasetPolicy({ tokenId: w.ta.id, userId: w.owner.id }, tab.id, viewersWritePolicy(), 0)).toMatchObject({ revision: 1 });
+    const page = await create(w.ta.token, {
+      visibility: 'unlisted', title: 'People',
+      markup: `<Helmet><Query name="rows" source="ref:${tab.id}">{\`select * from public.rows\`}</Query><Mutation name="join" source="ref:${tab.id}">{\`insert into public.rows (id, person, item) select 2, $_me, 'Taxi'\`}</Mutation></Helmet><div><Button run="$join">Join</Button><DataTable data="$rows" /></div>`,
+    });
+    const res = await forkRoute(jreq(`/api/my/artifacts/${page.id}/fork`, 'POST', undefined, undefined, w.cookie), params(page.id));
+    expect(res.status, await res.clone().text()).toBe(201);
+    const copy = (await getArtifactById((await res.json()).id))!;
+    const copied = copy.source!.match(/ref:([A-Za-z0-9]+)/)![1]!;
+    expect(copied).not.toBe(tab.id);
+    const ds = (await getArtifactById(copied))!;
+    expect(ds.user_id).toBe(w.bob.id);
+    expect(await loadDatasetRows(ds)).toEqual([{ id: 1, person: w.owner.id, item: 'Groceries' }]);
+  });
+
   it('copies nothing when the forker already owns the written dataset', async () => {
     const w = await world();
     sessionUser.id = w.owner.id; sessionUser.email = w.owner.email;
