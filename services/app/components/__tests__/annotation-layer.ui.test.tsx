@@ -15,8 +15,12 @@ import {
   STORY_ANNOTATION_LAYOUT_MESSAGE,
   STORY_ANNOTATION_PIN_MESSAGE,
 } from '@/lib/story-runtime/contract';
+import Avatar from '@/components/Avatar';
+import { personHue } from '@/lib/person-face';
 import {
+  ADA_IMAGE,
   ANN,
+  FACES,
   GENERIC_AGENT,
   MCP_AGENT,
   NONCE,
@@ -24,6 +28,7 @@ import {
   flush,
   fromFrame,
   installAnnotationFetch,
+  knobs,
   layer,
   makeFrame,
 } from '@/test/helpers/annotation-layer';
@@ -347,6 +352,49 @@ describe('AnnotationLayer', () => {
     expect(screen.queryByLabelText('Annotation thread')).toBeNull();
     const posted = postMessage.mock.calls.map((c) => c[0]).filter((m) => m?.type === STORY_ANNOTATIONS_MESSAGE);
     expect(posted.at(-1)).toMatchObject({ pins: [] });
+  });
+
+  it('draws each person as their own face — picture over the initial, colour from the account id — and agents as their marks', async () => {
+    const { frame, contentWindow } = makeFrame();
+    knobs.open = [FACES];
+    const view = render(layer(frame, { showViewComments: true }));
+    await flush();
+    fromFrame(contentWindow, {
+      type: STORY_ANNOTATION_LAYOUT_MESSAGE, nonce: NONCE,
+      positions: [{ id: FACES.id, rect: { x: 10, y: 220, width: 300, height: 40 } }],
+    });
+    const preview = await screen.findByLabelText('Open annotation conversation by ada, 4 messages');
+    const card = preview.closest<HTMLElement>('[data-annotation-id]')!;
+
+    // The compact mark: ada's picture, decorative.
+    const compact = card.querySelector<HTMLImageElement>(`img[src="${ADA_IMAGE}"]`);
+    expect(compact).not.toBeNull();
+    expect(compact!.getAttribute('alt')).toBe('');
+
+    fireEvent.mouseEnter(card);
+    await flush();
+    // The thread header: the named avatar holds her picture.
+    const header = within(card).getByLabelText('ada avatar');
+    expect(header.querySelector('img')?.getAttribute('src')).toBe(ADA_IMAGE);
+
+    // The participant stack: ada's picture, bob's initial on HIS id's colour, the agent's product mark.
+    const stack = within(card).getByLabelText('Reply participants: ada, bob, Codex');
+    expect(stack.children).toHaveLength(3);
+    const [adaMark, bobMark, agentMark] = [...stack.children] as HTMLElement[];
+    expect(adaMark.tagName === 'IMG' ? adaMark.getAttribute('src') : adaMark.querySelector('img')?.getAttribute('src')).toBe(ADA_IMAGE);
+    expect(bobMark.querySelector('img')).toBeNull();
+    expect(bobMark.textContent).toBe('B');
+    const faceOf = (el: HTMLElement) => ([el, ...el.querySelectorAll<HTMLElement>('*')].find((n) => n.style.backgroundColor)?.style.backgroundColor ?? '');
+    const standalone = render(<Avatar image={null} initial="bob" userId="usr_bob" size={18} />);
+    const expected = faceOf(standalone.container.firstElementChild as HTMLElement);
+    expect(expected).not.toBe('');
+    expect(faceOf(bobMark)).toBe(expected);
+    const byLabel = render(<Avatar image={null} initial="bob" userId="label:bob" size={18} />);
+    expect(personHue('usr_bob')).not.toBe(personHue('label:bob'));
+    expect(faceOf(bobMark)).not.toBe(faceOf(byLabel.container.firstElementChild as HTMLElement));
+    expect(agentMark.querySelector('img')).toBeNull();
+    expect(agentMark.querySelector('svg')).not.toBeNull();
+    view.unmount();
   });
 
   it('on a phone keeps only the compact marker, whose click opens the comments sheet', async () => {

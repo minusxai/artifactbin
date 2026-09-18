@@ -38,6 +38,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import {readAnnotationPages} from '@/lib/annotation-pages';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
+import Avatar from '@/components/Avatar';
 import { ChatGPTIcon, ClaudeAIIcon, ClaudeCodeIcon, CodexIcon } from '@/components/brand-icons';
 import { foldFromMeasure, isFolded, readFolds, toggleFold, unfold, type FoldKind, type Folds } from '@/lib/comment-folds';
 import { loginHref } from '@/lib/login-href';
@@ -226,6 +227,16 @@ function FoldingBody({ text, foldable }: { text: string; foldable: boolean }) {
 const authorLabel = (author: AnnotationCommentWire['author']) =>
   author.label?.trim() || (author.kind === 'human' ? 'You' : 'Agent');
 
+/**
+ * A person's face on a comment: their picture, else their initial on the
+ * colour their ACCOUNT id picks. Only a person with no account falls back to
+ * their label as the key — they have no colour anywhere else to agree with.
+ */
+function PersonFace({ author, size }: { author: AnnotationCommentWire['author']; size: number }) {
+  const label = authorLabel(author);
+  return <Avatar image={author.image} initial={label} userId={author.user_id ?? `label:${label}`} size={size} />;
+}
+
 function AgentMark({ label, compact = false, decorative = false, borderless = false }: {
   label: string;
   compact?: boolean;
@@ -259,11 +270,8 @@ function AuthorIdentity({ author }: { author: AnnotationCommentWire['author'] })
   return (
     <span className="flex min-w-0 items-center gap-2">
       {author.kind === 'human' ? (
-        <span
-          aria-label={`${label} avatar`}
-          className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-[10px] font-semibold uppercase text-accent"
-        >
-          {label.charAt(0).toUpperCase()}
+        <span aria-label={`${label} avatar`} className="inline-flex h-[22px] w-[22px] shrink-0 rounded-full">
+          <PersonFace author={author} size={22} />
         </span>
       ) : (
         <AgentMark label={label} />
@@ -312,12 +320,8 @@ function ParticipantMark({ author }: { author: AnnotationCommentWire['author'] }
   return author.kind === 'agent' ? (
     <AgentMark label={label} compact decorative />
   ) : (
-    <span
-      aria-hidden="true"
-      className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent-soft text-[8px] font-semibold uppercase text-accent"
-    >
-      {label.charAt(0).toUpperCase()}
-    </span>
+    // Bare, not wrapped: the stack's ring lands on its direct children.
+    <PersonFace author={author} size={18} />
   );
 }
 
@@ -345,12 +349,7 @@ function CompactAuthorMark({ author }: { author: AnnotationCommentWire['author']
   return author.kind === 'agent' ? (
     <AgentMark label={label} compact decorative borderless />
   ) : (
-    <span
-      aria-hidden="true"
-      className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full bg-accent text-[9px] font-semibold uppercase text-bg"
-    >
-      {label.charAt(0).toUpperCase()}
-    </span>
+    <PersonFace author={author} size={22} />
   );
 }
 

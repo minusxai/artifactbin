@@ -37,10 +37,10 @@ const LONG_BODY = Array.from({ length: 40 }, (_, i) => `line ${i + 1} of the age
 const SHORT_REPLY = 'thanks — shipping it';
 
 const human = (id: string, body: string, at: string) => ({
-  id, body, author: { kind: 'human' as const, label: 'vivek', transport: 'browser' as const }, created_at: at,
+  id, body, author: { kind: 'human' as const, label: 'vivek', transport: 'browser' as const, user_id: 'usr_vivek', image: null }, created_at: at,
 });
 const agent = (id: string, body: string, at: string) => ({
-  id, body, author: { kind: 'agent' as const, label: 'Claude Code', transport: 'mcp' as const }, created_at: at,
+  id, body, author: { kind: 'agent' as const, label: 'Claude Code', transport: 'mcp' as const, user_id: null, image: null }, created_at: at,
 });
 
 const BASE: AnnotationWire = {

@@ -139,6 +139,8 @@ it("delivers explicit human session mentions only to the commenting account, wit
       kind: "human" as const,
       label: "owner",
       transport: "browser" as const,
+      user_id: "a",
+      image: null,
     },
     created_at: new Date().toISOString(),
   };
