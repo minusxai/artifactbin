@@ -43,7 +43,9 @@ async function world() {
 
 describe('GET /api/page/session', () => {
   it('names nobody, then the account without duplicating shelf stats', async () => {
-    expect(await (await sessionPage(request('/api/page/session'))).json()).toEqual({ user: null, kind: 'none' });
+    // `onboarded` is true for nobody at all: there is no one to send to the
+    // welcome page (__tests__/welcome-pending.test.ts owns that bit).
+    expect(await (await sessionPage(request('/api/page/session'))).json()).toEqual({ user: null, kind: 'none', onboarded: true });
     const w = await world();
     asSession(w.owner);
     const body = await (await sessionPage(request('/api/page/session'))).json();
