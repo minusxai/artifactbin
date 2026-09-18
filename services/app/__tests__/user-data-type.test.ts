@@ -12,6 +12,8 @@ import {claimToken, createUser} from '@/lib/users';
 import {people} from '@/lib/datasets/user-fields';
 import {avatarUrl} from '@/lib/avatars';
 import {useAppHarness, request} from '@/__tests__/harness';
+import {GET as rawRoute} from '@/app/a/[id]/raw/route';
+import {personFaceBackground, personInitial} from '@/lib/person-face';
 
 useAppHarness();
 const ctx = (id:string)=>({params:Promise.resolve({id})});
@@ -137,6 +139,33 @@ describe('native user fields',()=>{
   // A face and a handle are the same person as a <User>, so they buy the card too.
   for(const tag of ['<UserImage id="$_me" />','<UserHandle id="$_me" />'])
    expect(await viewerIdentityFor({source:`<p>${tag}</p>`},reader.user.id)).toEqual({id:reader.user.id,card:{name:'reader',handle:null,image:null}});
+ });
+ /*
+  * THE SAME PERSON, NAMED TWICE. A person tag's `id` is the person, not the
+  * element: publish must not treat a second `id="$_me"` as a duplicate NODE id
+  * and re-mint it, which left the second tag naming nobody ("Unknown person").
+  * Through the real publish and the real served page, for every person tag.
+  */
+ it('resolves every person tag naming the viewer, however many, in the served page',async()=>{
+  const reader=await account('twice'), owner=await account('host');
+  const cases=[
+   '<p><User id="$_me" /> <UserImage id="$_me" size="lg" /></p>',
+   '<p><UserImage id="$_me" /> <UserImage id="$_me" size="lg" /></p>',
+   '<p><UserHandle id="$_me" /> <UserImage id="$_me" size="lg" /></p>',
+   '<Helmet><Value name="rows" type="table" value={[{"n":1},{"n":2}]} /></Helmet><p><User id="$_me" /></p><For each={$rows}><span><UserImage id="$_me" /></span></For>',
+  ];
+  for(const markup of cases){
+   const report=await create(owner.token,{markup,visibility:'public'});
+   const stored=(await getArtifactById(report.id))!.source ?? '';
+   expect(stored.match(/id="\$_me"/g),stored).toHaveLength(2);
+   const html=await (await rawRoute(request(`/a/${report.id}/raw`,{token:reader.token}),ctx(report.id))).text();
+   const body=html.slice(html.indexOf('class="mx-doc"'));
+   expect(body,markup).not.toContain('data-unknown');
+   expect(body,markup).not.toContain('Unknown person');
+   expect(body.match(/aria-label="twice"/g)?.length ?? 0,markup).toBeGreaterThanOrEqual(1);
+   expect(body,markup).toContain(`background-color:${personFaceBackground(reader.user.id)}`);
+   expect(body,markup).toContain(`>${personInitial('twice')}</span>`);
+  }
  });
  /*
   * THE CARD, WHOLE. A person is a name, a handle and a picture, and the picture

@@ -8,7 +8,7 @@
 import { parseJsx, type JsxElement, type JsxNode } from './jsx';
 import { commitNormalizedMarkup, publishMarkupForArtifact, type ArtifactRow } from './artifacts';
 import type { Db, Queryable } from './db';
-import { stampNodeIds } from './story/node-ids';
+import { carriesNodeId, stampNodeIds } from './story/node-ids';
 
 const NODE_IDENTITY_MIGRATION = 'source-node-ids';
 const NODE_IDENTITY_MIGRATION_VERSION = 1;
@@ -188,7 +188,8 @@ function identityFacts(source: string): { sourceIds: Set<string>; aliasOnlyKeys:
   const elements: JsxElement[] = [];
   const visit = (nodes: JsxNode[]) => nodes.forEach((node) => {
     if (node.type !== 'element' || node.tag === 'Helmet') return;
-    elements.push(node); visit(node.children);
+    if (carriesNodeId(node)) elements.push(node);
+    visit(node.children);
   });
   visit(parsed.nodes);
   const explicit = new Set(elements.flatMap((node) => staticId(node, 'id') ? [staticId(node, 'id')!] : []));

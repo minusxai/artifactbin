@@ -21,6 +21,7 @@ import { initialValues, initialTables } from '@/lib/story/dataflow';
 import type { DataflowState } from '@/lib/story/dataflow';
 import type { PersonCard } from '@artifactbin/contracts';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
+import { personFaceBackground, personInitial } from '@/lib/person-face';
 
 const HELMET =
   '<Helmet>' +
@@ -423,6 +424,33 @@ describe('the viewer in markup', () => {
     expect(view.container.textContent).toContain('Ada');
     expect(view.container.textContent).not.toContain('usr_');
     store.dispose();
+  });
+
+  /*
+   * THE SAME PERSON, TWICE. A document may name the viewer in more than one
+   * place — a byline and a big face beside it, a row of faces. Every one of
+   * them must resolve, on the server string itself (not only after hydration).
+   */
+  it.each([
+    ['a User and a UserImage', '<p><User id="$_me" /> <UserImage id="$_me" size="lg" /></p>'],
+    ['two UserImages', '<p><UserImage id="$_me" /> <UserImage id="$_me" size="lg" /></p>'],
+    ['a UserHandle and a UserImage', '<p><UserHandle id="$_me" /> <UserImage id="$_me" size="lg" /></p>'],
+  ])('resolves every $_me tag in one document to the viewer, on the server: %s', (_label, markup) => {
+    const html = renderToString(<StoryRuntimeApp nodes={bodyOf(markup)} refData={{}} viewer={MEL} colorMode="light" />);
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    expect(host.querySelectorAll('[data-unknown]')).toHaveLength(0);
+    expect(host.textContent).not.toContain('Unknown person');
+    // Every face is the viewer's: their initial on their colour — the named
+    // one alone, and the one inside a <User> beside its handle.
+    const faces = [...host.querySelectorAll('[data-slot="avatar"]')];
+    expect(faces.length).toBeGreaterThan(0);
+    expect(host.querySelector('[role="img"][aria-label="Mel"]')).toBeTruthy();
+    for (const face of faces) {
+      expect(face.textContent).toBe(personInitial('Mel'));
+      expect(face.getAttribute('style')).toContain(personFaceBackground('usr_mel'));
+    }
+    for (const handle of host.querySelectorAll('[data-slot="user-handle"]')) expect(handle.textContent).toBe('Mel');
   });
 
   it('shows the viewer their own name even before any query has answered', () => {

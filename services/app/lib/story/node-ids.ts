@@ -1,6 +1,7 @@
 /** Source identity policy only; storage reserves emitted ids in its write transaction. */
 import crypto from 'crypto';
 import { parseJsx, serializeJsx, type JsxAttribute, type JsxElement, type JsxNode } from '@/lib/jsx';
+import { PERSON_TAGS } from '@/lib/story-ui/component-names';
 
 interface NodeIdEntry { id: string; path: string; node: JsxElement; legacyKey: string | null }
 interface NodeIdRepair { path: string; from: string | null; to: string; reason: 'duplicate' | 'invalid' }
@@ -47,6 +48,16 @@ const reportedValue = (attribute: JsxAttribute | undefined): string | null => {
   return value?.static && typeof value.json === 'string' ? value.json : null;
 };
 
+/**
+ * Does this element's `id` attribute name the NODE? Not on a person tag
+ * (`<User>`, `<UserImage>`, `<UserHandle>`), where `id` is the PERSON — a
+ * `$_me`/`$name` reference or an account id that may repeat freely. Such a tag
+ * is not addressable (lib/story-ui/interpreter mints no element id for it), so
+ * it is neither stamped, nor repaired as a duplicate, nor indexed.
+ */
+export const carriesNodeId = (node: JsxElement): boolean =>
+  !node.control && !(node.isComponent && PERSON_TAGS.has(node.tag));
+
 /** Helmet is metadata/code, not part of the addressable document body. */
 function elements(nodes: JsxNode[]): Walked[] {
   const out: Walked[] = [];
@@ -55,7 +66,7 @@ function elements(nodes: JsxNode[]): Walked[] {
       const node = list[index];
       if (node.type !== 'element' || node.tag === 'Helmet') continue;
       const path = prefix ? `${prefix}.${index}` : String(index);
-      if (!node.control) out.push({ node, path });
+      if (carriesNodeId(node)) out.push({ node, path });
       visit(node.children, path);
     }
   };
