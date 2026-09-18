@@ -527,12 +527,14 @@ jobs:
           # build exits 1 without it and 0 with it, and against a reachable one
           # it still exports AND restores.
           cache-from: type=gha,ignore-error=true
-          # mode=min, not max. `max` exports EVERY intermediate layer of both
-          # stages, and this image is large — the export was a big share of the
-          # 339s the build step took, which was itself the whole reason this job
-          # ran 7.6m while nothing else passed 5m. `min` exports only what the
-          # final stage needs, so a rebuild whose dependencies did not change
-          # still restores; a dependency change pays for a colder builder.
+          # mode=max, and the comment that used to argue for `min` here had not
+          # been true of this line for some time. Measured rather than reasoned:
+          # two runs of this job on the same tree, one per mode, minutes apart —
+          # max 150s (run 35334961782), min 151s (run 35334964542). The export
+          # `min` was meant to save is not where this job's time goes any more;
+          # what `max` buys is the builder stage restoring too, so a colder
+          # runner does not recompile the whole install. Warm, the build step is
+          # ~90s of the job (run 35334091384), against 207s before this branch.
           cache-to: type=gha,mode=max,ignore-error=true
           # No provenance attestation: it is generated and attached during the
           # export, and nothing here consumes it.
@@ -738,6 +740,10 @@ jobs:
       # critical path of a release. Here the executable is already on disk and the three phases run
       # CONCURRENTLY: each builds its own temporary home, its own state directory and an
       # OS-allocated port (services/cli/scripts/test-preview.ts), so they do not meet.
+      #
+      # Measured on run 35334967117 (a version bump, all four platforms built): the three phases
+      # together take 131s inside this job, and the job is 343s. Before, this job was 301s and the
+      # three `CLI Intel <phase>` jobs behind it 154s/148s/230s — a 531s critical path for a release.
       - name: Intel preview and export proofs, from the executable just built
         if: matrix.os == 'macos-15-intel'
         working-directory: services/cli
@@ -815,9 +821,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BUDGET_S: '240'
-          # The release-only binary builds; see above. Measured on release run 35325636096 and
-          # re-measured on the first release that carries the folded Intel proofs.
-          SLOW_BUDGET_S: '480'
+          # The release-only binary builds; see above. Measured on run 35334967117, which built all
+          # four platforms from a version bump: Intel 343s (its three folded proofs 131s together),
+          # macOS arm64 191s, Linux 192s and 174s. 420s leaves the slowest of those room to be slow
+          # without turning a release red, and still catches a build that has doubled.
+          SLOW_BUDGET_S: '420'
         run: |
           set -euo pipefail
           # shellcheck disable=SC2016  # $slowest is a jq binding; the single quotes are what keep it one.
