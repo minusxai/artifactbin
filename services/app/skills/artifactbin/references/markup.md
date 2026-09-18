@@ -40,10 +40,10 @@ Skeleton · Vocabulary · Helmet · Images · Layout.
   <header className="max-w-4xl">
     <p className="animate-fade-in text-xs uppercase tracking-widest text-muted-foreground">Eyebrow</p>
     <h1 className="animate-fade-up mt-4 text-5xl @2xl:text-7xl font-bold tracking-tight leading-[1.05]">The headline states the finding</h1>
-    <p className="animate-fade-up [animation-delay:200ms] mt-6 text-lg text-muted-foreground max-w-prose">The standfirst earns the scroll in one sentence.</p>
+    <p className="animate-fade-up [animation-delay:200ms] mt-6 text-lg text-muted-foreground max-w-prose">The standfirst earns the scroll.</p>
   </header>
   <section className="py-16">
-    <h2 className="reveal-up text-2xl font-semibold tracking-tight">01 · A claim, never a topic</h2>
+    <h2 className="reveal-up text-2xl font-semibold tracking-tight">01 · A claim, not a topic</h2>
     <div className="reveal-up mt-6"><Question title="Revenue by month" data="$monthly" viz={{"kind":"vega-lite","spec":{"mark":"line","encoding":{"x":{"field":"month","type":"temporal"},"y":{"field":"revenue","type":"quantitative"}}}}} height="430px" /></div>
   </section>
 </div>

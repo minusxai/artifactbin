@@ -119,7 +119,7 @@ describe('the served document', () => {
     const doc = ((await (await create(t.token, { markup: '<p>Reading as <User id="$_me" /></p>', visibility: 'public' })).json()) as { id: string }).id;
 
     const signedIn = island(await (await rawRoute(request(`/a/${doc}/raw`, { cookie }), params({ id: doc }))).text());
-    expect(signedIn.viewer).toEqual({ id: user.id, label: 'Ada' });
+    expect(signedIn.viewer).toEqual({ id: user.id, card: { name: 'Ada', handle: null, image: null } });
     // The display name, never an email — the same rule a DataTable user cell follows.
     expect(JSON.stringify(signedIn.viewer)).not.toContain('@');
 

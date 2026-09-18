@@ -16,6 +16,8 @@ import { DELETE as deleteMineRoute } from '@/app/api/my/artifacts/[id]/route';
 import { PUT as putSharingRoute } from '@/app/api/my/artifacts/[id]/sharing/route';
 import { mintToken } from '@/lib/tokens';
 import { claimToken, createUser, ensureUsername, setUsername } from '@/lib/users';
+import { people } from '@/lib/datasets/user-fields';
+import { getDb } from '@/lib/db';
 
 const harness = useAppHarness();
 const sessionUser = { id: '', email: '' };
@@ -142,6 +144,22 @@ describe('a trailing segment that looks like a file id', () => {
     sessionUser.id = owner.id;
     sessionUser.email = owner.email;
     expect(await outcome(UserPage('@edgeowner', ['abc123']))).toBe('notFound');
+  });
+
+  /*
+   * A `<UserHandle>` is the one place a document becomes a DOOR to somebody's
+   * profile, and it builds that door from the card's handle alone. So the
+   * handle the server puts on a card and the address the profile page answers
+   * on must be the same string — a card that carried anything else would link
+   * every reader into the uniform 404.
+   */
+  it('the handle on a person card is the address the profile page serves', async () => {
+    const { owner } = await ownerFixture();
+    const cards = await people(await getDb(), [owner.id]);
+    expect(cards[owner.id]).toMatchObject({ handle: 'edgeowner' });
+    sessionUser.id = owner.id;
+    sessionUser.email = owner.email;
+    expect(await outcome(UserPage(`@${cards[owner.id]!.handle}`))).toBe('render');
   });
 
   it('a real file of that id resolves, and heals to its canonical address', async () => {
