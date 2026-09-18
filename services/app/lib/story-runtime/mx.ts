@@ -2,7 +2,7 @@ import { runtimeId } from './runtime-id';
 /** One capability implementation for the public page and the managed iframe transport. */
 import type { MxApi, MxSnapshot, MxReadOptions } from '@artifactbin/contracts';
 import { DECL_NAME_RE, scalarMatches, type Scalar } from '@/lib/story/dataflow';
-import type { DataflowStore } from './store';
+import { ACCESS_PENDING, type DataflowStore } from './store';
 
 export type { MxApi } from '@artifactbin/contracts';
 declare global { interface Window { mx?: MxApi } }
@@ -122,6 +122,10 @@ export function createMx(store: DataflowStore): MxApi {
         values._value = _value;
       }
       if (store.mutating().has(name)) throw fail('BUSY', `Mutation ${name} is already running`);
+      // The first query also answers WHO MAY WRITE; a script that calls mutate
+      // the moment `window.mx` exists would otherwise be refused with the
+      // placeholder. Wait for the answer, then refuse with the real reason.
+      if (store.mutationUnavailable(name) === ACCESS_PENDING) await store.accessSettled();
       if (!store.canMutate(name)) throw fail('FORBIDDEN', store.mutationUnavailable(name) ?? 'Mutation is unavailable');
       const operationId = runtimeId();
       await store.mutate(name, values, row);

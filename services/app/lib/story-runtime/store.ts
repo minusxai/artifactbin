@@ -30,6 +30,9 @@ import type { Row } from '@/lib/story/dataflow';
 import { SIGNALS_TABLE } from '@/lib/story/local-target';
 import { checkedLocalRows } from '@/lib/story/local-tables';
 
+/** What `mutationUnavailable` answers while the permission check is still in flight. */
+export const ACCESS_PENDING = 'Checking edit access…';
+
 export interface MutationAnswer { dataset: string; local?: LocalMutationResult }
 
 /** A window of one query's rows — what a table reads past the cap. */
@@ -100,6 +103,12 @@ export interface DataflowStore {
   /** Whether the attached document transport can perform writes. */
   canMutate(name?: string): boolean;
   mutationUnavailable(name: string): string | null;
+  /**
+   * Resolves once the permission check has landed: no queries in flight, none
+   * scheduled, and `mutationAccess` answered (or nothing to answer). A caller
+   * that would otherwise refuse with ACCESS_PENDING waits for the real answer.
+   */
+  accessSettled(): Promise<void>;
   /**
    * A dataset changed elsewhere (the live stream's `data` frame): mark every
    * query that reads it — and everything downstream — dirty, and re-run.
@@ -191,6 +200,8 @@ export function createDataflowStore(
   const dirty = new Set<string>();
   let permissionsDirty = !!flow.mutations?.length && !input.state?.mutationAccess;
   const inFlight = new Set<string>();
+  /** A transport run that has not answered yet, even one that names no query (a permission check alone). */
+  let running = false;
   const writing = new Set<string>();
   const writingCounts = new Map<string, number>();
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -242,9 +253,11 @@ export function createDataflowStore(
     commit({ ...state });
     const values = { ...state.values };
     const rows = localRows();
+    running = true;
     (rows ? transport.run(values, only, rows) : transport.run(values, only)).then(
       (result) => {
         if (seq !== runSeq) return; // superseded — the newer run will report
+        running = false;
         for (const n of only) inFlight.delete(n);
         pendingChanged();
         const tables = { ...state.tables };
@@ -257,6 +270,7 @@ export function createDataflowStore(
       },
       (e: unknown) => {
         if (seq !== runSeq) return;
+        running = false;
         for (const n of only) inFlight.delete(n);
         pendingChanged();
         const errors = { ...state.errors };
@@ -393,8 +407,14 @@ export function createDataflowStore(
     if (!transport?.mutate) return 'This view cannot save changes.';
     if (flow.mutations?.some(m => m.name === name && m.scope === 'local')) return null;
     return Object.hasOwn(state.mutationAccess ?? {}, name)
-      ? state.mutationAccess![name] : 'Checking edit access…';
+      ? state.mutationAccess![name] : ACCESS_PENDING;
   };
+  const accessSettled = (): Promise<void> => new Promise((resolve) => {
+    const settled = () => !transport || disposed || (!permissionsDirty && !timer && !running && inFlight.size === 0);
+    if (settled()) { resolve(); return; }
+    const listener = () => { if (settled()) { listeners.delete(listener); resolve(); } };
+    listeners.add(listener);
+  });
 
   /**
    * A successful write CLEARS the form it was typed into (`<Mutation reset>`).
@@ -497,6 +517,7 @@ export function createDataflowStore(
     mutating: () => writing,
     canMutate: (name) => name ? mutationUnavailable(name) === null : !!transport?.mutate,
     mutationUnavailable,
+    accessSettled,
     invalidateDatasets,
     getState: () => state,
     getValue: (name) => state.values[name] ?? null,
