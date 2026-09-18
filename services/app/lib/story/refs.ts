@@ -239,7 +239,7 @@ export function findExternalSubresources(source: string): ValidationError[] {
 const KIND_FOR_FORMAT: Record<string, RefUse['kind']> = { dataset: 'dataset', viz: 'viz', image: 'image', pdf: 'pdf', file:'file', folder: 'dataset' };
 
 const colKind = (t: DatasetColumn['type']): 'quantitative' | 'temporal' | 'nominal' =>
-  t === 'number' ? 'quantitative' : t === 'date' ? 'temporal' : 'nominal';
+  t === 'number' ? 'quantitative' : (t === 'date' || t === 'timestamp') ? 'temporal' : 'nominal';
 
 /**
  * Resolve + validate every ref. Returns the deduped ref list for meta.refs, or
@@ -400,7 +400,7 @@ const EMBED_DATA_PROP: Record<string, { required: string; usage: string; table?:
   Question: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet> — plus viz={{"kind":"vega-lite","spec":{…}}}', table: true },
   Number: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
   DataTable: { required: 'data', usage: 'Use data="$name" — a <Query> or table <Value> declared in <Helmet>', table: true },
-  Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (select * from ref_<folderId>)', table: true },
+  Files: { required: 'data', usage: 'Use data="$name" — a <Query> over a folder\'s children (source="ref:<folderId>", select * from public.rows)', table: true },
   Video: { required: 'src', usage: 'Use src="<YouTube/Vimeo/Loom link>" (+ optionally poster="ref:<image id>" for the thumbnail)' },
   File: { required: 'src', usage: 'Use src="ref:<pdf id>" — the id create_artifact returned for a pdf — or src="<public https link to a .pdf>" (+ optionally title="…")' },
 };

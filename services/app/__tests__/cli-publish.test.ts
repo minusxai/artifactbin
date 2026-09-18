@@ -53,6 +53,23 @@ describe('cli-sync-integration', () => {
     await cli.invoke(['push']);expect(calls).toHaveLength(5);
    }finally{await cli.cleanup();}
   });
+  it('reports source rewrites and duplicate node repairs, but not metadata-only changes',async()=>{
+   const cli=await cliWorkspace('rewrite-notice',{fetch:artifactTransport([])});
+   try{
+    await cli.connect('rewrite-notice');
+    await writeFile(join(cli.root,'doc.jsx'),'<div id="same"><p id="same">Hi</p></div>');
+    const pushed=await cli.invoke(['push','doc.jsx']);
+    expect(pushed.operations[0]).toMatchObject({source_rewritten:true});
+    expect(pushed.operations[0].hint).toMatch(/re-read/i);
+    expect(pushed.operations[0].source_repairs).toEqual(expect.arrayContaining([expect.objectContaining({code:'node_id',reason:'duplicate',from:'same'})]));
+    const local=parseDocument(await readFile(join(cli.root,'doc.jsx'),'utf8'));
+    local.metadata.title='Title only';
+    await writeFile(join(cli.root,'doc.jsx'),writeDocument(local));
+    const metadata=await cli.invoke(['push','doc.jsx']);
+    expect(metadata.operations[0].source_rewritten).toBeUndefined();
+    expect(metadata.operations[0].source_repairs).toBeUndefined();
+   }finally{await cli.cleanup();}
+  });
   it('bare push explicitly updates a changed tracked dataset while document references stay canonical',async()=>{
    const calls:CliCall[]=[];
    const cli=await cliWorkspace('handler-deps',{fetch:artifactTransport(calls)});const root=cli.root;

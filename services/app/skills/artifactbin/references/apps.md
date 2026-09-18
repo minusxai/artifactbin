@@ -24,12 +24,9 @@ definition as `tab.jsx` — it is not your page:
 
 ```jsx
 <Dataset kind="stored">
-  <Table schema="public" name="people" rows={[]}
-    columns={[{"name":"person","type":"user","constraints":{"self":true}},
-              {"name":"joined_on","type":"date"}]} />
   <Table schema="public" name="expenses" rows={[]}
     columns={[{"name":"id","type":"string"},
-              {"name":"paid_by","type":"user","constraints":{"self":true}},
+              {"name":"paid_by","type":"user","constraints":{"self":true,"memberOf":["_likes"]}},
               {"name":"spent_on","type":"date"},
               {"name":"item","type":"string"},
               {"name":"amount","type":"number"}]} />
@@ -57,88 +54,66 @@ write. Use the returned dataset id in place of `tab123` below.
 
 ## The page
 
+Liking is joining. The owner likes a new page automatically. `_likes` is the
+page's current participants: one `user` column. It is read-only. Unlike removes
+participation but never deletes expense rows already written. Owner likes do
+not inflate counts or appear in the owner's liked list.
+
 ```jsx
 <Helmet>
   <Value name="item" type="string" url={false} />
   <Value name="amount" type="number" url={false} />
   <Value name="spent_on" type="date" url={false} />
-  <Query name="balances" source="ref:tab123">{`
-    select p.person,
-           coalesce(sum(e.amount), 0)
-             - (select coalesce(sum(amount), 0) from public.expenses)
-               / (select count(*) from public.people) as net
-    from public.people p left join public.expenses e on e.paid_by = p.person
-    group by p.person order by net desc
-  `}</Query>
   <Query name="tab" source="ref:tab123">{`
     select id, spent_on, item, amount, paid_by from public.expenses
     order by spent_on desc
   `}</Query>
-  <Query name="to_join" source="ref:tab123">{`
-    select $_me as person where $_me is not null
-      and not exists (select 1 from public.people where person = $_me)
+  <Query name="balances">{`
+    select p."user" as person, coalesce(sum(e.amount), 0)
+      - (select coalesce(sum(amount), 0) from tab)
+        / nullif((select count(*) from _likes), 0) as net
+    from _likes p left join tab e on e.paid_by = p."user"
+    group by p."user" order by net desc
   `}</Query>
-  <Mutation name="join" source="ref:tab123">{`
-    insert into public.people (person, joined_on)
-    select $_me, current_date
-    where $_row.person = $_me
-      and not exists (select 1 from public.people where person = $_me)
-  `}</Mutation>
+  <Query name="participant">{`
+    select "user" as person from _likes where "user" = $_me
+  `}</Query>
   <Mutation name="add" source="ref:tab123" reset="item amount spent_on">{`
     insert into public.expenses (id, paid_by, spent_on, item, amount)
     select uuid(), $_me, coalesce($spent_on, current_date), $item, $amount
+    where $_row.person = $_me and exists (select 1 from _likes where "user" = $_me)
   `}</Mutation>
 </Helmet>
 <main className="mx-auto max-w-2xl space-y-6 p-8">
   <h1>Trip tab</h1>
-  {$_me ? <p>You are <User id="$_me" avatar />.</p>
+  {$_me ? <p>You are <User userId="$_me" />. Like this page to take part.</p>
         : <SignIn>Sign in to join this tab</SignIn>}
-  <For each={$to_join} keyBy="person"><Button run="$join">Join this tab</Button></For>
   <DataTable data="$balances" rowKey="person">
-    <Column col="person" title="Person"><User id="$_row.person" /></Column>
+    <Column col="person" title="Person"><User userId="$_row.person" /></Column>
     <Column col="net" title="Net" fmt="$,.2f" align="right" />
   </DataTable>
-  {$_me ? <Card><CardContent className="space-y-3">
-      <Input label="What it was for" value="$item" />
-      <Input label="Amount" type="number" min={0} value="$amount" />
-      <DatePicker label="Spent on" value="$spent_on" />
-      <Button run="$add">Add expense</Button>
-    </CardContent></Card>
-        : <SignIn className="w-full">Sign in to add an expense</SignIn>}
-  <DataTable data="$tab" rowKey="id">
-    <Column col="spent_on" title="Date" />
-    <Column col="item" title="Item" />
-    <Column col="amount" title="Amount" fmt="$,.2f" align="right" />
-    <Column col="paid_by" title="Paid by"><User id="$_row.paid_by" /></Column>
-  </DataTable>
+  {$_me ? <Card><CardContent className="space-y-3 p-4">
+      <Input value="$item" label="What was it?" />
+      <Input value="$amount" type="number" label="Amount" />
+      <DatePicker value="$spent_on" label="Spent on" />
+      <For each={$participant} keyBy="person"><Button run="$add">Add expense</Button></For>
+    </CardContent></Card> : null}
+  <DataTable data="$tab" />
 </main>
 ```
 
-Line by line, this is the whole pattern:
+`_likes` belongs to this page, even when several pages read the same dataset.
+Read it in a page query; join it to a named source-query result such as `tab`.
+A `source="ref:…"` Query still sees only its dataset's catalog. Mutations can
+read `_likes` as well as their own stored target. `memberOf:["_likes"]` freezes
+to the first owning page when attached to a dataset column, and the server
+checks assigned people at commit. A page Value may use it for a live user picker.
+Like participation does not itself grant a dataset write policy.
 
-- **Membership decides the UI.** The `to_join` Query returns ONE row — the
-  viewer — only for a signed-in person who has not joined (`$_me is not null`
-  first, or a guest gets a row with no key), and `<For>` over an empty result
-  renders nothing, so the button is there for a newcomer and gone for everyone
-  else. A `<Button run>` inside a `<For>` is a ROW action, so the Mutation reads
-  `$_row`; it still WRITES `$_me`, never the row — a row snapshot comes from the
-  browser, and `where $_row.person = $_me` is how the click is tied to the row it
-  came from. That is also what makes a guest's press answer `sign_in_required`
-  instead of a refusal about the data. `where not exists` keeps it idempotent.
-- **The form is kit controls**, one visual family: `<Input>` (with
-  `type="number"` where it is a number), `<Textarea>`, `<DatePicker>`,
-  `<Button>`. A native `<input value="$item">` still binds — and is themed now —
-  but the kit is what matches the rest of the page.
-- **Every row records its author** with `$_me`, and is READ back with
-  `<User id="$_row.paid_by" />` — the display name of an account, resolved for
-  whoever is looking.
-- **The form's scalars are `url={false}`** so a half-typed amount never travels
-  in the link the next person opens, and `reset="item amount spent_on"` clears
-  them on success only.
-- **`{$_me ? … : <SignIn>…</SignIn>}`** gives a guest the door instead of a
-  button that refuses. `<SignIn>` returns to this page, so they land back where
-  they were.
-- **Balances are computed in SQL**, never typed. The page holds no arithmetic.
+`$_me` is the signed-in account, or null. A mutation using it automatically
+offers Sign in to a guest; server checks still refuse a direct guest write.
+`<User userId="…" />` can display known people whether or not they still like
+the page. `id` always names the source node, never a person.
 
 ## Three mistakes to skip
 
@@ -155,7 +130,7 @@ Line by line, this is the whole pattern:
 ## Verifying with test users
 
 A push proves the markup and the read queries; it proves NOTHING about a button.
-A join needs two people; the second is a TEST USER: a throwaway person your
+An app needs two people; the second is a TEST USER: a throwaway person your
 account mints (three at a time, gone in a day) and erases whole.
 
 ```sh
@@ -181,6 +156,10 @@ guest: it reads what the link grants and nothing else — no `$_me` write, like,
 follow, comment or fork. That refusal is `sandbox_only`, and the answer is never
 to press Join again on the real page: fork it to the test user and use the copy.
 
-Run each write as yourself and once `--as guest`
-([live sessions](live-sessions.md)): the guest must be offered a sign-in, not an
-error. Fix and push until every pass is clean.
+Run each write on the test-user fork, once as its test user and once as yourself.
+On the original page, check each action `--as guest` ([live sessions](live-sessions.md)):
+$_me writes must offer Sign in and change no data. Check other actions against their intended permissions.
+Do not run successful test writes on the original page. Fix, push and fork again until every pass is clean.
+
+A Mutation can read only the stored table it writes, plus the page’s read-only `_likes`; a second stored table is not available.
+Put cross-table reads in Queries and bind their results to the action.

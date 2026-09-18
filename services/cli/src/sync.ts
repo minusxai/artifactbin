@@ -51,6 +51,11 @@ function declaredTables(source?:ResourceSource):Array<{schema:string;name:string
  }catch{return undefined;}
 }
 function metadataInput(metadata:DocumentMetadata):Record<string,unknown>{return Object.fromEntries(metadataFields.filter(key=>metadata[key]!==undefined).map(key=>[fieldMap[key]??key,metadata[key]]));}
+/** Compare body bytes, not metadata the CLI necessarily updates after publication. */
+function sourceRewrite(snapshot:Snapshot,source:unknown):Record<string,unknown>{
+ const rewritten=typeof source==='string'&&typeof snapshot.markup==='string'&&source!==snapshot.markup;
+ return {...(rewritten?{source_rewritten:true,hint:'Your file was rewritten; re-read it before editing.'}:{}),...(Array.isArray(snapshot.source_repairs)&&snapshot.source_repairs.length?{source_repairs:snapshot.source_repairs}:{})};
+}
 export async function planPush(workspace:Workspace,paths?:string[],options:PushOptions={}):Promise<PushPlan[]>{
  const localIds=await localIdentities(workspace);
  const ordered:LocalFile[]=[],active=new Set<string>(),done=new Set<string>();
@@ -210,7 +215,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.home,workspace.root);
   const operations:Array<Record<string,unknown>>=[];
-  if(pending){await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered'});workspace=await loadWorkspace(workspace.cwd,workspace.home);}
+  if(pending){const recovered=await recoverRequest(workspace,client,pending,true);operations.push({path:pending.file.path,status:'recovered',...sourceRewrite(recovered,pending.request.body.markup??pending.request.body.source)});workspace=await loadWorkspace(workspace.cwd,workspace.home);}
   try{
   const plans=await planPush(workspace,paths,options);
   for(let plan of plans){
@@ -223,7 +228,7 @@ export async function push(workspace:Workspace,paths:string[],client:HttpClient,
    let staged=await stageRequest(workspace.home,workspace.root,{server:client.connection.server,account:client.account,credential:digest(client.connection.token),request:{path,method,body:plan.body},file:{source:plan.source,path:plan.file.path,bytes:plan.file.bytes!.toString('base64'),tracked:plan.file.tracked,renamedFrom:plan.file.renamedFrom}});
    if(plan.confirmed)staged=await savePendingResponse(workspace.home,workspace.root,staged,plan.confirmed,client.account);
    const snapshot=await recoverRequest(workspace,client,staged);workspace=await loadWorkspace(workspace.cwd,workspace.home);
-   const operation:Record<string,unknown>={path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
+   const operation:Record<string,unknown>={path:plan.file.path,status:'published',id:snapshot.id,version:snapshot.version,...sourceRewrite(snapshot,plan.file.document?.body),...(snapshot.affected_dependents?{affected_dependents:snapshot.affected_dependents}:{}),...datasetColumns(plan.file.path,plan.file.bytes),...datasetAccess(snapshot,plan.body)};
    operations.push(operation);
    // The policy the content write could not carry, on the published dataset, inside the same command.
    if(plan.policy!==undefined){await writeDatasetPolicy(workspace,client,plan,snapshot);workspace=await loadWorkspace(workspace.cwd,workspace.home);}
@@ -313,6 +318,7 @@ async function acknowledgeSavedResponse(workspace:Workspace,pending:PendingReque
 function readSnapshot(response:Record<string,unknown>,pending:PendingRequest):Snapshot{
  const previous=pending.file.tracked?.snapshot;
  const result={...previous,...response};
+ if(!Object.hasOwn(response,'source_repairs'))delete result.source_repairs;
  if(pending.request.body.reserved_id!==undefined&&result.id!==pending.request.body.reserved_id)throw new CliError('invalid_response','The server returned a different artifact identity; recovery is retained.');
  if(typeof result.id!=='string'||!Number.isSafeInteger(result.version)||Number(result.version)<1||typeof result.edit_id!=='string'||typeof result.state!=='string'||!/^[a-f0-9]{64}$/.test(result.state))throw new CliError('invalid_response','The write response is incomplete; recovery is retained.');
  if(response.markup_changed===false){const source=pending.request.body.markup??pending.request.body.source??previous?.markup;if(typeof source==='string')result.markup=source;}
@@ -321,13 +327,13 @@ function readSnapshot(response:Record<string,unknown>,pending:PendingRequest):Sn
 }
 
 /** Persist a confirmed response using only its checksummed journal. */
-export async function finishSavedRequest(workspace:Workspace,server?:string,addresses:readonly string[]=[]):Promise<string|undefined>{
+export async function finishSavedRequest(workspace:Workspace,server?:string,addresses:readonly string[]=[]):Promise<{path:string;[key:string]:unknown}|undefined>{
  const initial=await readPendingRequest(workspace.home,workspace.root);if(!initial?.response)return;
  if(server&&!sameAddress(server,initial.server,addresses))throw new CliError('account_mismatch','Saved recovery belongs to another server.');
  return withLock(workspace.home,workspace.root,async()=>{
   await recoverFiles(workspace.home,workspace.root);workspace=await loadWorkspace(workspace.cwd,workspace.home);
   const pending=await readPendingRequest(workspace.home,workspace.root);if(!pending?.response)return;
-  await acknowledgeSavedResponse(workspace,pending,undefined,addresses);return pending.file.path;
+  const snapshot=await acknowledgeSavedResponse(workspace,pending,undefined,addresses);return {path:pending.file.path,...sourceRewrite(snapshot,pending.request.body.markup??pending.request.body.source)};
  });
 }
 

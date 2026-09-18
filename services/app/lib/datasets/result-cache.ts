@@ -108,7 +108,7 @@ export function createDatasetResultCache(db: Db, options: ResultCacheOptions = {
 
 const resultSchema: z.ZodType<CatalogResult> = z.object({
   rows:z.array(z.record(z.string(),z.unknown())),
-  columns:z.array(z.object({name:z.string(),type:z.enum(['string','number','boolean','date'])}).strict()),
+  columns:z.array(z.object({name:z.string(),type:z.enum(['string','number','boolean','date','timestamp'])}).strict()),
   refreshedAt:z.string(),truncated:z.boolean().optional(),totalRows:z.number().optional(),
 }).strict();
 function abortable<T>(promise:Promise<T>,signal?:AbortSignal):Promise<T> {

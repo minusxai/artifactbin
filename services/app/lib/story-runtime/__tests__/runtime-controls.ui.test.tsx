@@ -380,10 +380,10 @@ describe('the viewer in markup', () => {
   it('names a person by literal id, by $_me, and inside a For; nothing for a null id', () => {
     const source = '<Helmet><Value name="payer" type="user" default="usr_ada" />'
       + '<Value name="rows" type="table" value={[{"paid_by":"usr_grace"},{"paid_by":"usr_nobody"},{"paid_by":null}]} /></Helmet>'
-      + '<p id="literal"><User id="usr_ada" /></p>'
-      + '<p id="mine"><User id="$_me" /></p>'
-      + '<p id="bound"><User id="$payer" /></p>'
-      + '<For each={$rows}><span><User id="$_row.paid_by" fallback="nobody" /></span></For>';
+      + '<p id="literal"><User userId="usr_ada" /></p>'
+      + '<p id="mine"><User userId="$_me" /></p>'
+      + '<p id="bound"><User userId="$payer" /></p>'
+      + '<For each={$rows}><span><User userId="$_row.paid_by" fallback="nobody" /></span></For>';
     const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
     const flow = { values: content.values, queries: [] };
     const state: DataflowState = {
@@ -413,7 +413,7 @@ describe('the viewer in markup', () => {
    */
   it('names a row field inside a Column, and still names the user cells beside it', () => {
     const source = '<Helmet><Value name="tasks" type="table" value={[{"id":1,"paid_by":"usr_grace","who":"usr_ada"}]} /></Helmet>'
-      + '<DataTable data="$tasks" rowKey="id"><Column col="who" /><Column col="paid_by"><User id="$_row.paid_by" /></Column></DataTable>';
+      + '<DataTable data="$tasks" rowKey="id"><Column col="who" /><Column col="paid_by"><User userId="$_row.paid_by" /></Column></DataTable>';
     const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
     const flow = { values: content.values, queries: [] };
     const tables = { tasks: { columns: [{ name: 'id', type: 'number' as const }, { name: 'paid_by', type: 'string' as const }, { name: 'who', type: 'user' as const }], rows: [{ id: 1, paid_by: 'usr_grace', who: 'usr_ada' }] } };
@@ -432,9 +432,9 @@ describe('the viewer in markup', () => {
    * them must resolve, on the server string itself (not only after hydration).
    */
   it.each([
-    ['a User and a UserImage', '<p><User id="$_me" /> <UserImage id="$_me" size="lg" /></p>'],
-    ['two UserImages', '<p><UserImage id="$_me" /> <UserImage id="$_me" size="lg" /></p>'],
-    ['a UserHandle and a UserImage', '<p><UserHandle id="$_me" /> <UserImage id="$_me" size="lg" /></p>'],
+    ['a User and a UserImage', '<p><User userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>'],
+    ['two UserImages', '<p><UserImage userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>'],
+    ['a UserHandle and a UserImage', '<p><UserHandle userId="$_me" /> <UserImage userId="$_me" size="lg" /></p>'],
   ])('resolves every $_me tag in one document to the viewer, on the server: %s', (_label, markup) => {
     const html = renderToString(<StoryRuntimeApp nodes={bodyOf(markup)} refData={{}} viewer={MEL} colorMode="light" />);
     const host = document.createElement('div');
@@ -454,7 +454,7 @@ describe('the viewer in markup', () => {
   });
 
   it('shows the viewer their own name even before any query has answered', () => {
-    const view = render(<StoryRuntimeApp nodes={bodyOf('<p id="mine"><User id="$_me" avatar /></p>')} refData={{}} viewer={MEL} colorMode="light" />);
+    const view = render(<StoryRuntimeApp nodes={bodyOf('<p id="mine"><User userId="$_me" avatar /></p>')} refData={{}} viewer={MEL} colorMode="light" />);
     expect(view.container.querySelector('#mine')!.textContent).toContain('Mel');
     expect(view.container.querySelector('#mine')!.textContent).toContain('M');
   });
@@ -468,11 +468,11 @@ describe('the viewer in markup', () => {
   it('draws a face and a handle from the same card, and asks nobody about an id it was not given', () => {
     const ADA = { name: 'Ada', handle: 'ada', image: '/api/users/usr_ada/avatar?v=abc' };
     const source = '<Helmet><Value name="payer" type="user" default="usr_ada" /></Helmet>'
-      + '<p id="face"><UserImage id="$payer" size="lg" /></p>'
-      + '<p id="handle"><UserHandle id="$payer" /></p>'
-      + '<p id="mine"><UserHandle id="$_me" /></p>'
-      + '<p id="stranger"><UserImage id="usr_nobody" /><UserHandle id="usr_nobody" /></p>'
-      + '<p id="plain"><User id="$payer" avatar={false} /></p>';
+      + '<p id="face"><UserImage userId="$payer" size="lg" /></p>'
+      + '<p id="handle"><UserHandle userId="$payer" /></p>'
+      + '<p id="mine"><UserHandle userId="$_me" /></p>'
+      + '<p id="stranger"><UserImage userId="usr_nobody" /><UserHandle userId="usr_nobody" /></p>'
+      + '<p id="plain"><User userId="$payer" avatar={false} /></p>';
     const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
     const flow = { values: content.values, queries: [] };
     const state: DataflowState = { values: { payer: 'usr_ada' }, errors: {}, tables: initialTables(flow), people: { usr_ada: ADA } };
@@ -491,4 +491,19 @@ describe('the viewer in markup', () => {
     expect(view.container.querySelector('#plain [data-slot="avatar"]')).toBeNull();
     expect(view.container.querySelector('#plain')!.textContent).toBe('@ada');
   });
+});
+
+it('replaces a guest identity action with the login door instead of a disabled action',()=>{
+ const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Mutation name="add" source="ref:abc123">{`insert into public.rows values ($_me)`}</Mutation></Helmet><Button id="add1" run="$add">Add expense</Button>').nodes);
+ const flow={values:content.values,queries:content.queries,mutations:content.mutations};
+ const state={values:{},tables:{},errors:{},mutationAccess:{add:'sign_in_required'}};
+ const mutate=vi.fn();
+ const store=createDataflowStore({flow,state},{transport:{run:vi.fn(),page:vi.fn(),mutate}});
+ const view=render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{flow,state}} store={store} colorMode="light" chrome />);
+ expect(view.queryByRole('button',{name:'Add expense'})).toBeNull();
+ const login=view.getByRole('link',{name:'Sign in to do this'});
+ expect(login.getAttribute('href')).toMatch(/^\/login(?:\?callbackUrl=|$)/);
+ expect(login.id).toBe('add1');
+ expect(mutate).not.toHaveBeenCalled();
+ store.dispose();
 });

@@ -6,7 +6,7 @@ import { queryDeps, scalarMatches, type Dataflow } from './dataflow';
 
 /** Bump when declaration parsing or dependency semantics change. */
 const PARSED_ARTIFACT_COMPILER_REVISION = 'dataflow-user-1';
-const columnType = z.enum(['string', 'number', 'boolean', 'date', 'user']);
+const columnType = z.enum(['string', 'number', 'boolean', 'date', 'timestamp', 'user']);
 const constraints=z.object({memberOf:z.array(z.string()).optional(),self:z.boolean().optional()}).strict();
 const scalar = z.union([z.string(), z.number().finite(), z.boolean(), z.null()]);
 const name = z.string().regex(/^[A-Za-z][A-Za-z0-9_]*$/).refine(v => !v.startsWith('ref_'));

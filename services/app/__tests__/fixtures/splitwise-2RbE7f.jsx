@@ -33,11 +33,11 @@
       <p className="text-muted-foreground" id="fyXg">Log shared expenses with friends and see who owes what. Costs split evenly across everyone who has joined.</p>
     </header>
 
-    {$_me ? (<><p id="y6k4">You are <User id="$_me" avatar />. <Button run="$join" id="D6IP">Join this tab</Button></p></>) : (<><SignIn id="Yzbp">Sign in to join this tab</SignIn></>)}
+    {$_me ? (<><p id="y6k4">You are <User userId="$_me" avatar />. <Button run="$join" id="D6IP">Join this tab</Button></p></>) : (<><SignIn id="Yzbp">Sign in to join this tab</SignIn></>)}
 
     <h2 className="text-lg font-semibold" id="MXTF">Balances</h2>
     <DataTable data="$balances" rowKey="person" id="F5ep">
-      <Column col="person" title="Person" id="BvDc"><User id="$_row.person" /></Column>
+      <Column col="person" title="Person" id="BvDc"><User userId="$_row.person" /></Column>
       <Column col="net" title="Net" fmt="$,.2f" align="right" id="GsFJ" />
     </DataTable>
 
@@ -55,7 +55,7 @@
       <Column col="spent_on" title="Date" id="UGzc" />
       <Column col="item" title="Item" id="Hace" />
       <Column col="amount" title="Amount" fmt="$,.2f" align="right" id="HjQg" />
-      <Column col="paid_by" title="Paid by" id="FP0D"><User id="$_row.paid_by" /></Column>
+      <Column col="paid_by" title="Paid by" id="FP0D"><User userId="$_row.paid_by" /></Column>
     </DataTable>
   </main>
 </div>

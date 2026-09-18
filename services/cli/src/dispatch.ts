@@ -61,8 +61,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
  try{
   parsed=parseCommand(argv);json=!!parsed.flags.json;
   const {command,positionals,flags}=parsed;
-  let recoveredRequest:string|undefined;let markdownPlan:MarkdownPlan|undefined;let querySql:string|undefined;let secretBinding:Record<string,unknown>|undefined;
-  const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':highlightJson(JSON.stringify(value,null,2),style)+'\n');};
+  let recoveredRequest:Awaited<ReturnType<typeof finishSavedRequest>>;let markdownPlan:MarkdownPlan|undefined;let querySql:string|undefined;let secretBinding:Record<string,unknown>|undefined;
+  const emit=(value:unknown)=>{if(markdownPlan?.conversions.length&&value&&typeof value==='object')value={...value,conversions:markdownPlan.conversions.map(x=>({source:x.source,path:x.target}))};if(recoveredRequest&&value&&typeof value==='object')value={...value,recovered_request:recoveredRequest.path,recovered_source:recoveredRequest};stdout(json?JSON.stringify(value)+'\n':typeof value==='string'?value.endsWith('\n')?value:value+'\n':highlightJson(JSON.stringify(value,null,2),style)+'\n');};
   if(flags.version){emit(json?{version:CLI_VERSION,protocol:CLI_PROTOCOL_VERSION}:`${style.wordmark('afbin')} ${style.bold(CLI_VERSION)} ${style.dim(`(protocol ${CLI_PROTOCOL_VERSION})`)}`);return 0;}
   const home=context.home??homedir();const interactive=context.interactive??!!process.stdin.isTTY;
   if(command==='serve'&&!flags.help){
@@ -380,7 +380,7 @@ function refusalDetails(message:string,details:unknown):string[]{
  return lines.filter(line=>!message.includes(line));
 }
 /** Printed with every publish: the head is the file that was pushed, so checking it is a wasted turn. */
-export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
+export const PUBLISHED_NEXT='Published: the saved local file contains the published source. If source_rewritten is reported, re-read it before editing. Do not pull, diff, export or grep it to verify; to improve it, edit and push again. If you must look, one `afbin export <id> --output out.png` shows the whole document, every slide, in one image.';
 /**
  * A push proves markup and read queries. It never runs a write, so a page that declares one is
  * told so by name: the measured rule above is for documents, and an untested button is how a
@@ -388,7 +388,7 @@ export const PUBLISHED_NEXT='Published: the head is exactly the file you pushed.
  */
 function publishedNext(verified:Awaited<ReturnType<typeof verifiedSummary>>):string{
  const writes=[...new Set((verified??[]).flatMap(file=>file.writes??[]))];
- return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each once in a live session — as yourself, --as guest, and as a test user on a fork of this page (afbin help live-sessions, afbin help apps) — fix and push again before handing it over.`:PUBLISHED_NEXT;
+ return writes.length?`${PUBLISHED_NEXT} This page declares ${writes.length===1?'a write':'writes'} (${writes.join(', ')}) that the push did not run: run each in a live session on a test-user fork, once as that test user and once as yourself. On the original page, check actions --as guest: $_me writes offer Sign in and change no data; other actions follow their intended permissions. Do not run successful test writes on the original page (afbin help live-sessions, afbin help apps). Fix, push and fork again before handing it over.`:PUBLISHED_NEXT;
 }
 /** The pushed documents' title, queries, charts and markup — all checked by the server before it accepted them. */
 async function verifiedSummary(workspace:Workspace,paths:string[]):Promise<Array<{path:string;title:string|null;queries:string[];charts:number;checks:string[];writes?:string[]}>|undefined>{

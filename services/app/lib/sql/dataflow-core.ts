@@ -1,3 +1,4 @@
+import {LIKES_TABLE,LIKES_COLUMNS} from '@artifactbin/contracts';
 /**
  * One document's dataflow, materialised: the declared tables + the caller's
  * datasets go into the engine, every query runs in dependency order with the
@@ -11,7 +12,7 @@
  */
 import { isQueryFailure, type QueryPage, type SqlService, type TableResult } from '@artifactbin/contracts';
 import {
-  initialValues, selectedQueries, queryDeps, type Dataflow, type DataflowState, type Row, type Scalar,
+  scalarParamTypes,initialValues, selectedQueries, queryDeps, type Dataflow, type DataflowState, type Row, type Scalar,
 } from '@/lib/story/dataflow';
 import type { DatasetColumn } from '@/lib/story/dataset-shape';
 import { localTableOverrides } from '@/lib/story/local-tables';
@@ -22,6 +23,8 @@ interface DataflowEngine {run:SqlService['run'];queryRows:(table:{rows:Row[];col
 export type DatasetTables = Record<string, { rows: Row[]; columns: DatasetColumn[] }>;
 
 export interface RunDataflowOptions {
+  /** Server-resolved current page participants. */
+  likes?: string[];
   /** Trusted caller identity, set only by the server composition. */
   userId?:string|null;
   localTables?: Record<string, Row[]>;
@@ -54,7 +57,7 @@ export async function evaluateDataflow(engine:DataflowEngine,flow: Dataflow, dat
 
   const tables: DataflowState['tables'] = {};
   const errors: DataflowState['errors'] = {};
-  const inputs: Record<string, { rows: Row[]; columns: DatasetColumn[] }> = {};
+  const inputs: Record<string, { rows: Row[]; columns: DatasetColumn[] }> = {[LIKES_TABLE]:{columns:LIKES_COLUMNS,rows:(opts.likes??[]).map(user=>({user}))}};
   const local = localTableOverrides(flow, opts.localTables);
   for (const v of flow.values) {
     if (v.kind !== 'table') continue;
@@ -87,7 +90,7 @@ export async function evaluateDataflow(engine:DataflowEngine,flow: Dataflow, dat
       inputs[q.name]=input??result;tables[q.name]=result;
     }catch(error){errors[q.name]=error instanceof Error?error.message:'Dataset query failed';}
   }));
-  const out = localQueries.length ? await engine.run({ tables: inputs, queries:localQueries, params, limit: opts.limit, timeoutMs: opts.timeoutMs, page: opts.page }) : {};
+  const out = localQueries.length ? await engine.run({ tables: inputs, queries:localQueries, params,paramTypes:scalarParamTypes(flow), limit: opts.limit, timeoutMs: opts.timeoutMs, page: opts.page }) : {};
   for (const q of localQueries) {
     const o = out[q.name];
     if (!o) continue;

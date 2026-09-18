@@ -15,7 +15,7 @@ A connected dataset is a dataset resource whose `source` names a `.jsx` definiti
 - `afbin query dataset.yaml --name <cell>` runs one notebook cell and its dependencies before whitelisting; `afbin query dataset.yaml` reads the exposed tables.
 - `afbin pull <id> --type dataset` retrieves the current definition; `afbin push` publishes it conditionally.
 
-Dataset secret, discovery and notebook failures report `dataset_error` with a `details` array. `400` means invalid or refused input/query; `403` means credentials or access are outside the permitted scope; `404` means the dataset is unknown or unreadable.
+Failures report `dataset_error` with `details`: `400` invalid input/query, `403` credentials or access out of scope, `404` unknown or unreadable dataset.
 
 Postgres datasets cannot carry their bound password into a fork. Stored datasets remain forkable by readers.
 
@@ -25,7 +25,7 @@ Public deployments block private/loopback destinations. Self-hosted operators ma
 
 ## Publish a catalog
 
-The canonical definition is static dataset markup. Replace the example secret ID with the ID returned by the secret endpoint:
+Use static dataset markup with the secret ID returned by push:
 
 ```jsx
 <Dataset kind="postgres" defaultSchema="models" refreshSeconds={60}>
@@ -42,13 +42,13 @@ The canonical definition is static dataset markup. Replace the example secret ID
 </Dataset>
 ```
 
-Use the full markup string as `definition` in the normal artifact operations:
+Publish the definition:
 
 - Create: write `orders.yaml` with `type: dataset`, `source: orders.jsx` and `visibility: private`, then `afbin push orders.yaml`.
 - Read back: `afbin pull <id> --type dataset --output orders.yaml` writes the canonical definition beside the YAML for an authorized editor.
 - Update: edit `orders.jsx`, then `afbin push orders.yaml`; the push is conditional on the observed version and sends the complete replacement definition.
 
-The visual editor edits this same `dataset` string; read-back uses `markup`. Connection configuration contains only the secret ID, never the password.
+Connection configuration contains only the secret ID, never the password.
 
 Cells query qualified raw tables such as `public.events` and reference **earlier cells only** by name. Later references and cycles are rejected. Cell IDs must be stable and unique; names must be unique. Models are virtual, without warehouse tables.
 
@@ -56,7 +56,7 @@ The final whitelist selects physical columns or model output columns independent
 
 Structured `CatalogInput` objects remain accepted in `dataset`, including `kind:"stored"` tables with `rows`. Omit rows on an existing table to retain its data. Arrays/CSV remain the single-table `public.rows` case.
 
-The default schema is fixed after creation. A bare `events` resolves only there; adding another schema/table never changes its meaning. New catalog versions retain ordinary optimistic concurrency (`expectedVersion`) and artifact version history.
+The default schema is fixed: bare `events` always resolves there. Updates retain optimistic concurrency and version history.
 
 ## Queries and mutations
 
@@ -76,7 +76,7 @@ Stored writes use `<Mutation name="edit" source="ref:abc123">{\`update public.it
 
 ## Preview and freshness
 
-Create and update a dataset with `afbin push` ([datasets](publishing-datasets.md)); its page shows data actions, source & models and a data preview to a person who opens it. Run notebook cells before exposing outputs; edits invalidate downstream previews. Run SQL executes only on request. Saved data supports pagination and refresh; draft previews show up to 50 rows.
+Push datasets with `afbin push` ([datasets](publishing-datasets.md)). Run notebook cells before exposing outputs; edits invalidate downstream previews. Draft previews show up to 50 rows.
 
 `POST /a/<id>/tables` takes `{sql,limit?,offset?,refresh?}` and returns `{rows,columns,truncated?,refreshedAt}` after dataset read authorization, and queries only final-whitelist tables and columns. It cannot query hidden notebook helpers or unexposed raw sources. `refresh:true` bypasses cached results. `refreshSeconds:0` disables caching; otherwise it is the cache lifetime. External database writes do not emit Artifactbin live events: use Refresh or rerun the document query. Database edits never create dataset definition versions.
 
@@ -87,3 +87,13 @@ Use `source="ref:<id>"` to choose the dataset and its exposed table names in SQL
 Manual data migrations require server shell access (SSH or equivalent infrastructure access). Migration HTTP endpoints and remote clients are not available. No standalone migration command is shipped. Operators must back up and preview changes before using the retained database-level migration functions, validate document data, and pass reviewed snapshot fingerprints when applying dataset changes. Stop the app before opening its PGLite directory from a maintenance process. Automatic schema updates on startup remain separate from manual data migrations.
 
 Stored `Table.columns` accepts `{name,type,constraints?}` declarations, including native `user` fields. See [user fields](databases-users.md) for membership arrays, `self`, automatic pickers and server validation. Postgres whitelist columns remain strings.
+
+## Dates and timestamps
+
+`date` is a calendar date (`YYYY-MM-DD`). `timestamp` is an instant: values are
+stored and returned as UTC ISO 8601 with `Z`, at millisecond precision. Accept
+ISO dates/datetimes with or without an offset, or epoch milliseconds; a missing
+timezone means UTC and a date means midnight UTC. Invalid values name the column.
+Use SQL `now()` for the current instant. DataTable shows timestamps in the reader's
+timezone. A DatePicker bound to a timestamp selects a date and writes midnight
+UTC; selecting a new date discards the previous time of day.

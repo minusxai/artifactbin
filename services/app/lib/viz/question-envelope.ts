@@ -84,6 +84,7 @@ export function envelopeToVizProp(envelope: VizEnvelope): QuestionVizProp | unde
 export function datasetTypeToVizKind(type: string | undefined): VizColumnKind {
   switch (type) {
     case 'number': return 'quantitative';
+    case 'timestamp':
     case 'date': return 'temporal';
     case 'boolean': return 'boolean';
     case 'string': return 'nominal';

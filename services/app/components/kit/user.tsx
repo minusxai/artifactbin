@@ -1,7 +1,7 @@
 "use client"
 
 /**
- * `<User id="usr_…" />` — A PERSON, SHOWN WHOLE.
+ * `<User userId="usr_…" />` — A PERSON, SHOWN WHOLE.
  *
  * A `user` value is an account id (`usr_4hioqtx…`), and an id is not a person.
  * Before this component there was exactly one place an id became a name — a
@@ -41,7 +41,9 @@ export interface UserProps {
    * adapter resolves first; `null` is an unset field, and an unresolved
    * reference (no adapter) is treated as an id we cannot name.
    */
-  id?: unknown
+  userId?: unknown
+  /** Source node identity, independent of the account. */
+  id?: string
   /** The person, as this viewer may see them. Supplied by the adapter. */
   card?: PersonCard | null
   /**
@@ -58,15 +60,15 @@ export interface UserProps {
   [key: `data-${string}`]: unknown
 }
 
-export function User({ id, card, avatar, link, fallback, className, ...props }: UserProps) {
+export function User({ userId: id, card, avatar, link, fallback, className, ...props }: UserProps) {
   if (!hasPersonId(id)) {
     return fallback ? <span data-slot="user" className={cn("text-muted-foreground", className)} {...props}>{fallback}</span> : null
   }
   const showImage = avatar !== false && avatar !== "false"
   return (
     <span data-slot="user" className={cn("inline-flex items-center gap-1.5 align-middle", className)} {...props}>
-      {showImage ? <UserImage id={id} card={card} size="sm" decorative /> : null}
-      <UserHandle id={id} card={card} link={link} />
+      {showImage ? <UserImage userId={id} card={card} size="sm" decorative /> : null}
+      <UserHandle userId={id} card={card} link={link} />
     </span>
   )
 }

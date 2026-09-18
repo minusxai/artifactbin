@@ -350,3 +350,13 @@ describe('the engine module', () => {
     vi.resetModules();
   });
 });
+
+it('preserves timestamp time and offset through a second query',async()=>{
+ const out=await runQueries({tables:{},queries:[q('first',"select timestamptz '2026-09-18 15:30:45.123+05:30' as happened"),q('second','select happened from first')],params:{}});
+ for(const name of ['first','second']) expect(out[name]).toMatchObject({columns:[{name:'happened',type:'timestamp'}],rows:[{happened:'2026-09-18T10:00:45.123Z'}]});
+});
+
+it('keeps a timestamp Value typed in standalone reads',async()=>{
+ const result=await runQueries({tables:{},queries:[q('time','select $when as happened')],params:{when:'2026-09-18T15:30:00+05:30'},paramTypes:{when:'timestamp'}});
+ expect(result.time).toMatchObject({columns:[{name:'happened',type:'timestamp'}],rows:[{happened:'2026-09-18T10:00:00.000Z'}]});
+});

@@ -12,4 +12,4 @@ export { inferColumns } from '@artifactbin/utils/shape';
 import type { ColumnType } from '@artifactbin/contracts';
 
 export const columnVizKind = (t: ColumnType): 'quantitative' | 'temporal' | 'nominal' =>
-  t === 'number' ? 'quantitative' : t === 'date' ? 'temporal' : 'nominal';
+  t === 'number' ? 'quantitative' : (t === 'date' || t === 'timestamp') ? 'temporal' : 'nominal';

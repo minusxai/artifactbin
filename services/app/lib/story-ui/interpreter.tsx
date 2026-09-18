@@ -15,7 +15,6 @@ import React from 'react';
 import { keyedRowsError, validRowKey, commentMetadata, instanceDomId } from '@/lib/story/repeat-identity';
 import type { CommentTarget } from '@/lib/story/comment-target';
 import { DENIED_JSX_ATTRS } from '@/lib/jsx/denied-attrs';
-import { PERSON_TAGS } from '@/lib/story-ui/component-names';
 import { evaluateReactive, isReactiveExpression, REACTIVE_BOOLEAN_PROPS } from '@/lib/jsx/reactive';
 import { compileManagedIframe } from '@/lib/story/managed-iframe';
 import type { JsxNode, JsxElement } from '@/lib/jsx';
@@ -264,31 +263,6 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
       ...options, row, tableCommentScope: typeof props.id === 'string' ? {owner: props.id, index, rowKey: validRowKey(row[String(props.rowKey)]) ? row[String(props.rowKey)] as string | number : undefined, columnKey:template.col, ids:templateIds(template.nodes)} : undefined, cellScope: { table: options.keyFor?.(path) ?? path, key: row[String(props.rowKey)], column: template.col, tableName: refName(props.data) ?? undefined },
     }, `${template.path}.${i}`));
     const element = React.createElement(Component, { ...props, commentOwner: props.id, templates, renderCell, key: options.keyFor?.(path) ?? path });
-    return options.decorateElement ? options.decorateElement(element, node, path) : element;
-  }
-
-  /*
-   * `<User id=…>`, `<UserImage id=…>`, `<UserHandle id=…>` — the tags whose
-   * `id` names a PERSON rather than an element, so they need a seam of their own.
-   *
-   * Everywhere else `id` is a DOM id, and inside a `<For>`/`<Column>` it is
-   * deliberately the ONE attribute not substituted from the row and then
-   * rewritten per instance (scopeProps → instanceDomId), so labels, comment
-   * anchors and node identity survive repetition. Both of those are exactly
-   * wrong for a person: the value comes out of the row (`$_row.paid_by`) and
-   * nothing addresses it. So the attribute is taken out of the props here —
-   * it never reaches scopeProps, and no element id is minted for it — and
-   * handed to the component as the person it names. A `$name`/`$_me`
-   * reference is passed through verbatim; the runtime adapter resolves it
-   * against the store and the island (lib/story-runtime/StoryRuntimeApp).
-   */
-  if (PERSON_TAGS.has(node.tag) && Component) {
-    const authored = node.attributes.find((a) => a.name === 'id');
-    const person = authored?.value.static
-      ? (options.row ? substituteRow(authored.value.json, options.row) : authored.value.json)
-      : null;
-    const props = buildProps(node.attributes.filter((a) => a !== authored), true, node.tag, path, options.row, options.values);
-    const element = React.createElement(Component, { ...props, id: person, key: options.keyFor?.(path) ?? path });
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
   }
 

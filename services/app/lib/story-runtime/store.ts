@@ -1,3 +1,4 @@
+import {LIKES_TABLE} from '@artifactbin/contracts';
 /**
  * The document's DATA at runtime — one store per document, react-free.
  *
@@ -390,7 +391,7 @@ export function createDataflowStore(
   const invalidateDatasets: DataflowStore['invalidateDatasets'] = (datasetIds) => {
     const ids = [...datasetIds];
     const affected = queriesReadingDatasets(flow, ids);
-    if (flow.mutations?.some(m => ids.includes(m.target))) permissionsDirty = true;
+    if (ids.includes(LIKES_TABLE) || flow.mutations?.some(m => ids.includes(m.target))) permissionsDirty = true;
     if (!affected.length && !permissionsDirty) return;
     for (const q of affected) dirty.add(q);
     pendingChanged();

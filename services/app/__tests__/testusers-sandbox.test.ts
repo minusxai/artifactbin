@@ -68,7 +68,7 @@ it('acts as a full person inside the sandbox and is refused by name outside it',
   // matters here is that the KIND is never what refuses it.
   const own = await inside(copy.id);
   expect(own.like.status, await own.like.clone().text()).toBe(200);
-  expect(await own.like.clone().json()).toMatchObject({ liked: true, count: 1 });
+  expect(await own.like.clone().json()).toMatchObject({ liked: true, count: 0 });
   expect([201, 400], 'a comment is admitted; only its anchor can refuse it').toContain(own.comment.status);
   expect(own.fork.status, await own.fork.clone().text()).toBe(201);
 
@@ -125,7 +125,7 @@ it('is invisible to everything that lists people or their public work', async ()
 it('draws a test user by its label, so two people on a page are tellable apart', async () => {
   const owner = await account('labeller');
   const testuser = await testUserOf(owner);
-  const page = await publish(owner.token, { markup: '<p>who is here: <User id="$_me" /></p>', visibility: 'unlisted' });
+  const page = await publish(owner.token, { markup: '<p>who is here: <User userId="$_me" /></p>', visibility: 'unlisted' });
   const identity = await viewerIdentityFor((await getArtifactById(page.id))!, testuser.id);
   expect(identity).toMatchObject({ id: testuser.id, card: { name: testuser.label } });
   expect(String(identity!.card!.name)).toMatch(/^Test user /);

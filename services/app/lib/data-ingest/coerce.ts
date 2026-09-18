@@ -1,3 +1,4 @@
+import {isTimestamp} from '@artifactbin/utils/shape';
 /**
  * CSV cells are all strings. Deciding their types is ingest's job, because
  * `inferColumns` reads the types the caller already chose — correct for JSON,
@@ -9,7 +10,7 @@
  * than here, so one disagreeing cell demotes the whole column to text.
  */
 
-type ColumnType = 'number' | 'boolean' | 'date' | 'string';
+type ColumnType = 'number' | 'boolean' | 'date' | 'timestamp' | 'string';
 
 /** A type the uploader declared for a column, via the existing `columns` field. */
 export interface DeclaredColumn { name: string; type: string }
@@ -22,7 +23,7 @@ export interface DeclaredColumn { name: string; type: string }
  */
 const SAFE_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 /** ISO only. `03/04/2026` is March 4th or April 3rd depending on the reader. */
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?Z?)?$/;
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isBlank = (v: string) => v.trim() === '';
 
@@ -32,6 +33,7 @@ function columnType(values: string[]): ColumnType {
   if (present.every((v) => SAFE_NUMBER.test(v) && Number.isFinite(Number(v)))) return 'number';
   if (present.every((v) => /^(true|false)$/i.test(v))) return 'boolean';
   if (present.every((v) => ISO_DATE.test(v))) return 'date';
+  if (present.every((v) => /^[0-9]{4}-/.test(v) && isTimestamp(v))) return 'timestamp';
   return 'string';
 }
 
@@ -49,6 +51,7 @@ function convert(value: string, type: ColumnType): unknown {
     // Dates stay ISO strings: that is what the dataset tier stores and what
     // Vega's temporal encoding parses. Converting to Date would only be
     // re-serialised on the way to the database.
+    case 'timestamp':
     case 'date': return v;
     default: return value;
   }
@@ -71,7 +74,7 @@ export function coerceRows(
   const byName = new Map(declared.map((c) => [c.name, c.type]));
   const types = headers.map((header, col) => {
     const chosen = byName.get(header);
-    if (chosen === 'number' || chosen === 'boolean' || chosen === 'date' || chosen === 'string') return chosen;
+    if (chosen === 'number' || chosen === 'boolean' || chosen === 'date' || chosen === 'timestamp' || chosen === 'string') return chosen;
     return columnType(rows.map((r) => r[col] ?? ''));
   });
   return rows.map((row) => {

@@ -24,7 +24,7 @@ import {
   declarationsForRow, runDocumentMutation,
 } from '@/lib/artifacts';
 import { actOnAnnotationFor, annotationsWireForRow, countOpenAnnotations, type AnnotationAction, type AnnotationAuthor } from '@/lib/annotations';
-import { hasAmbiguousLegacyAliases, stampNodeIds } from '@/lib/story/node-ids';
+import { hasAmbiguousLegacyAliases, normalizeNodeIds } from '@/lib/story/node-ids';
 import { isMutationRefused, mutateDataset } from '@/lib/story/dataset-mutate';
 import type { SourceRepair } from '@/lib/jsx/repair';
 import type { Scalar } from '@/lib/story/dataflow';
@@ -377,12 +377,12 @@ export async function replaceArtifactWithBody(
   if(!annotationOps||annotationOps.length&&typeof sentMarkup!=='string')return json({error:'invalid_annotation_operations'},400);
   const expected = parseExpectedVersion(body);
   if (expected instanceof Response) return expected;
-  let normalizeMarkup: ((source: string) => string) | undefined;
+  let normalizeMarkup: ((source: string) => ReturnType<typeof normalizeNodeIds>) | undefined;
   if(typeof body.markup==='string') {
     if(hasAmbiguousLegacyAliases(body.markup)) return json({error:'ambiguous_node_alias'},409);
     const db=await getDb();
     const lifetime=await db.query<{source_id:string}>('SELECT source_id FROM artifact_source_ids WHERE artifact_id=$1',[current.id]);
-    normalizeMarkup = source => stampNodeIds(source,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false}).source;
+    normalizeMarkup = source => normalizeNodeIds(source,{previousSource:current.source,reservedIds:lifetime.rows.map(row=>row.source_id),retireLegacyAliases:false});
   }
   /*
    * A FOLDER HAS NO CONTENT, AND THE REPLACE DOOR IS WHERE THAT IS ENFORCED.
@@ -578,7 +578,7 @@ export async function createArtifactFromBody(
   const link=parseLinkRoleValue(body.linkRole);if(link instanceof Response)return link;
   const sentMarkup=body.markup;
   const prepared = await prepareContentInput(body, {
-    normalizeMarkup: source => stampNodeIds(source,{retireLegacyAliases:true}).source,
+    normalizeMarkup: source => normalizeNodeIds(source,{retireLegacyAliases:true}),
     creating: true,
     prepareDataset: (input,objects) => prepareCatalog(input,actor,undefined,objects),
     loadRef: refLoaderForActor(actor),

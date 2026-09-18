@@ -40,7 +40,7 @@ function datasetUsageExample(id: string, columns: DatasetColumn[], catalog?: Dat
     spec: {
       mark: 'bar',
       encoding: {
-        x: { field: x.name, type: x.type === 'date' ? 'temporal' : 'nominal' },
+        x: { field: x.name, type: (x.type === 'date' || x.type === 'timestamp') ? 'temporal' : 'nominal' },
         y: { field: y.name, type: 'quantitative' },
       },
     },

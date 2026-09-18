@@ -287,7 +287,7 @@ function DataRow({ people, commentOwner, commentRowKey, row, columns, style, mea
                 style={{ width: `${Math.round(bar * 100)}%`, background: typeof c.bar === 'object' && c.bar.color ? c.bar.color : 'var(--chart-1)' }}
               />
             )}
-            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? (c.type==='user'&&typeof value==='string'?<User id={value} card={people[value] ?? null} />:formatCell(value, c)); })()}</span>
+            <span className="relative">{(() => { const template = templates.find((t) => t.col === c.col); return template && template.nodes.some((n) => n.type !== 'text' || n.value.trim()) && renderCell ? renderCell(template, row, index) : imageCell(value, c, resolveSrc) ?? (c.type==='user'&&typeof value==='string'?<User userId={value} card={people[value] ?? null} />:c.type==='timestamp'&&typeof value==='string'?<TimestampCell value={value}/>:formatCell(value, c)); })()}</span>
           </td>
         )
       })}
@@ -314,4 +314,11 @@ function imageCell(value: unknown, c: ResolvedColumn, resolveSrc?: (url: string)
   const src = resolveSrc?.(value) ?? null
   if (!src) return null
   return <img src={src} alt="" loading="lazy" className="inline-block max-h-8 w-auto align-middle" />
+}
+
+/** Hydrate canonical UTC first, then display in the reader's locale/time zone. */
+function TimestampCell({value}:{value:string}) {
+  const [label,setLabel]=React.useState(value);
+  React.useEffect(()=>{const date=new Date(value);setLabel(Number.isNaN(date.getTime())?value:date.toLocaleString());},[value]);
+  return <time dateTime={value}>{label}</time>;
 }

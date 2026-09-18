@@ -77,6 +77,7 @@ function RuntimeRowAction({props, row, identity, children}: RowActionProps) {
   const state = useSyncExternalStore(actions?.subscribe ?? NO_SUBSCRIBE, () => actions?.get(identity), () => undefined);
   const unavailable = useSyncExternalStore(store?.subscribe ?? NO_SUBSCRIBE, () => name && store ? store.mutationUnavailable(name) : 'Checking edit access…', () => 'Checking edit access…');
   const {run: _run, ...rest} = props;
+  if(needsSignIn(unavailable))return <SignIn {...runtimeTargetIdentity(props)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   return <>
     <Button {...rest} type="button" disabled={!chrome || !actions || unavailable !== null || state?.pending || props.disabled === true}
       aria-busy={state?.pending || undefined} aria-description={refusalText(unavailable) ?? undefined}
@@ -112,6 +113,7 @@ function RuntimeCellControl({ tag, component: Component, props, row, identity, c
   const error = session?.error ? <span role="alert" className="mx-write-error">{session.error}</span> : null;
   const valueType = tableName ? ctx.state.tables[tableName]?.columns.find((c) => c.name === valueField)?.type : undefined;
   const selectValue = (next: string | null): Scalar => next === null ? null : valueType === 'number' ? next === '' ? null : Number(next) : valueType === 'boolean' ? next === 'true' : next;
+  if(needsSignIn(unavailable))return <SignIn {...runtimeTargetIdentity(props)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   if (tag === 'Select') {
     const optsName = refName(props.options);
     const options = (valueType==='user' ? ctx.state.userOptions?.[`${tableName}.${valueField}`]??[] : normalizeControlOptions(props.options, optsName ? ctx.state.tables[optsName] : undefined))
@@ -423,6 +425,7 @@ function useScalarControl(name: string | null) {
   const decl = name ? flow.values.find((v): v is ScalarValueDecl => v.kind === 'scalar' && v.name === name) : undefined;
   return {
     state,
+    type: decl?.type,
     nullable: name !== null && (decl?.default ?? null) === null,
     current: name !== null && state.values[name] !== null && state.values[name] !== undefined ? String(state.values[name]) : null,
     write: name === null ? undefined : (raw: string | null) => setValue(name, raw === null ? null : coerceScalarInput(decl?.type, raw)),
@@ -514,7 +517,7 @@ function DatePickerAdapter(props: Record<string, unknown>) {
     <DateControl
       label={str(props.label)} className={str(props.className)}
       min={str(props.min)} max={str(props.max)}
-      value={bind.current} nullable={bind.nullable} onChange={bind.write} rest={shellRest(props)}
+      value={bind.type==='timestamp'?bind.current?.slice(0,10)??null:bind.current} nullable={bind.nullable} onChange={bind.write} rest={shellRest(props)}
     />
   );
 }
@@ -577,6 +580,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
   );
   const { run: _run, children, ...rest } = props;
   if (!name || !store) return <Button {...(rest as Record<string, unknown>)} run={props.run}>{children as ReactNode}</Button>;
+  if (needsSignIn(unavailable)) return <SignIn {...runtimeTargetIdentity(props)} className={str(props.className)}>{SIGN_IN_TO_DO_THIS}</SignIn>;
   return (
     <>
       <Button
@@ -591,9 +595,7 @@ function ButtonAdapter(props: Record<string, unknown>) {
       >
         {children as ReactNode}
       </Button>
-      {needsSignIn(unavailable)
-        ? <SignIn className="ml-2">{SIGN_IN_TO_DO_THIS}</SignIn>
-        : unavailable ? <span className="text-xs text-muted-foreground">{unavailable}</span> : null}
+      {unavailable ? <span className="text-xs text-muted-foreground">{unavailable}</span> : null}
       {error ? <span role="alert" className="mx-write-error">{error}</span> : null}
     </>
   );
@@ -821,21 +823,21 @@ function usePerson(idProp: unknown): { id: string | null; card: PersonCard | nul
 }
 
 function UserImageAdapter(props: Record<string, unknown>) {
-  const { id, card } = usePerson(props.id);
-  const { id: _id, card: _card, ...rest } = props;
-  return <UserImage {...rest} id={id} card={card} />;
+  const { id, card } = usePerson(props.userId);
+  const { userId: _userId, card: _card, ...rest } = props;
+  return <UserImage {...rest} userId={id} card={card} />;
 }
 
 function UserHandleAdapter(props: Record<string, unknown>) {
-  const { id, card } = usePerson(props.id);
-  const { id: _id, card: _card, ...rest } = props;
-  return <UserHandle {...rest} id={id} card={card} />;
+  const { id, card } = usePerson(props.userId);
+  const { userId: _userId, card: _card, ...rest } = props;
+  return <UserHandle {...rest} userId={id} card={card} />;
 }
 
 function UserAdapter(props: Record<string, unknown>) {
-  const { id, card } = usePerson(props.id);
-  const { id: _id, card: _card, ...rest } = props;
-  return <User {...rest} id={id} card={card} />;
+  const { id, card } = usePerson(props.userId);
+  const { userId: _userId, card: _card, ...rest } = props;
+  return <User {...rest} userId={id} card={card} />;
 }
 
 /**

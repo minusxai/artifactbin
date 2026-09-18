@@ -1,3 +1,5 @@
+import {LIKES_TABLE,LIKES_COLUMNS} from '@artifactbin/contracts';
+import {normalizeTimestamp} from '@artifactbin/utils/shape';
 import {COLUMN_SQL_TYPES} from './column-types';
 import {prepareReadCatalog} from './read-catalog';
 import {userColumnLineage} from './user-column-lineage';
@@ -78,9 +80,10 @@ function columnType(T: DuckDBModule['DuckDBTypeId'], typeId: DuckDBTypeIdT): Col
       return 'number';
     case T.BOOLEAN:
       return 'boolean';
-    case T.DATE: case T.TIMESTAMP: case T.TIMESTAMP_TZ:
+    case T.DATE: return 'date';
+    case T.TIMESTAMP: case T.TIMESTAMP_TZ:
     case T.TIMESTAMP_S: case T.TIMESTAMP_MS: case T.TIMESTAMP_NS:
-      return 'date';
+      return 'timestamp';
     default:
       return 'string';
   }
@@ -95,6 +98,7 @@ function columnType(T: DuckDBModule['DuckDBTypeId'], typeId: DuckDBTypeIdT): Col
  */
 function jsonValue(v: unknown, type: ColumnType): unknown {
   if (v === null || v === undefined) return null;
+  if (type === 'timestamp') return normalizeTimestamp(typeof v === 'object' ? String(v) : v);
   if (typeof v === 'bigint') return Number(v);
   if (typeof v === 'number' || typeof v === 'boolean' || typeof v === 'string') return v;
   if (Array.isArray(v)) return v.map((x) => jsonValue(x, 'string'));
@@ -111,17 +115,24 @@ const quoteIdent = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 
 /**
  * Create an instance with the sandbox baked in. `lock_configuration` is set in
- * the SAME call, so no later `SET` can widen anything — and a `SET` cannot
+ * before returning the instance, so no later `SET` can widen anything — and a `SET` cannot
  * reach the engine anyway (guard 3), which is belt and braces on purpose.
  */
 async function createInstance(): Promise<DuckDBInstance> {
   const { DuckDBInstance } = await duckdb();
-  return DuckDBInstance.create(':memory:', {
+  const instance = await DuckDBInstance.create(':memory:', {
     enable_external_access: 'false',
     autoinstall_known_extensions: 'false',
     autoload_known_extensions: 'false',
-    lock_configuration: 'true',
   });
+  // ICU is bundled with DuckDB but its settings do not exist until LOAD. No
+  // authored SQL runs until this private bootstrap has locked configuration.
+  try {
+    const bootstrap = await instance.connect();
+    try { await bootstrap.run("LOAD icu; SET TimeZone='UTC'; SET lock_configuration=true"); }
+    finally { bootstrap.closeSync(); }
+    return instance;
+  } catch (error) { instance.closeSync(); throw error; }
 }
 
 /**
@@ -145,7 +156,7 @@ async function registerTable(
   const select = columns.map((c) => `r.${quoteIdent(c.name)}`).join(', ');
   await conn.run(
     `INSERT INTO ${qualified} SELECT ${select} FROM (SELECT unnest(from_json($rows, '${struct}')) r)`,
-    { rows: JSON.stringify(input.rows) },
+    { rows: JSON.stringify(input.rows.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[key,value!=null && columns.some(c=>c.name===key&&c.type==='timestamp')?normalizeTimestamp(value,key):value])))) },
   );
 }
 
@@ -200,7 +211,7 @@ function bindParams(prepared: { parameterCount: number; parameterName: (i: numbe
  * untyped one. A value the declared type cannot hold is an error naming the
  * parameter, not a statement DuckDB analyzes into something else.
  */
-async function bindMutationParams(
+async function bindTypedParams(
   conn: DuckDBConnection,
   prepared: DuckDBPreparedStatement,
   params: Record<string, Scalar>,
@@ -208,16 +219,19 @@ async function bindMutationParams(
   paramTypes?: Record<string, ColumnType>,
 ): Promise<void> {
   if (!row && !paramTypes) { bindParams(prepared, params); return; }
-  const { BOOLEAN, DATE, DOUBLE, STRUCT, VARCHAR } = await duckdb();
+  const { BOOLEAN, DATE, TIMESTAMPTZ, DOUBLE, STRUCT, VARCHAR } = await duckdb();
   const duckType = (type: ColumnType) =>
-    type === 'number' ? DOUBLE : type === 'boolean' ? BOOLEAN : type === 'date' ? DATE : VARCHAR;
+    type === 'number' ? DOUBLE : type === 'boolean' ? BOOLEAN : type === 'date' ? DATE : type === 'timestamp' ? TIMESTAMPTZ : VARCHAR;
   const asDate = async (value: Scalar): Promise<DuckDBValue> =>
     (await conn.runAndReadAll('SELECT CAST($value AS DATE) AS value', { value })).getRows()[0][0] as DuckDBValue;
+  const asTimestamp = async (value: Scalar, field:string): Promise<DuckDBValue> =>
+    (await conn.runAndReadAll('SELECT CAST($value AS TIMESTAMPTZ) AS value', {value:normalizeTimestamp(value,field)})).getRows()[0][0] as DuckDBValue;
   const rowType = row && STRUCT(Object.fromEntries(row.columns.map((column) => [column.name, duckType(column.type)])));
   const rowValues: Record<string, DuckDBValue> = Object.fromEntries((row?.columns ?? []).map((column) => [column.name, row!.values?.[column.name] ?? null]));
   for (const column of row?.columns ?? []) {
     const value = row!.values?.[column.name];
     if (column.type === 'date' && value != null) rowValues[column.name] = await asDate(value);
+    if (column.type === 'timestamp' && value != null) rowValues[column.name] = await asTimestamp(value,column.name);
   }
   for (let i = 1; i <= prepared.parameterCount; i++) {
     const name = prepared.parameterName(i);
@@ -228,6 +242,7 @@ async function bindMutationParams(
       else prepared.bindNull(i);
     } else if (declared && Object.hasOwn(COLUMN_SQL_TYPES, declared)) {
       if (value === undefined || value === null) prepared.bindValue(i, null, duckType(declared));
+      else if (declared === 'timestamp') prepared.bindValue(i, await asTimestamp(value,`parameter $${name}`), TIMESTAMPTZ);
       else if (declared === 'date') {
         let converted: DuckDBValue;
         try { converted = await asDate(value); }
@@ -310,8 +325,8 @@ export async function runQueries(input: RunInput, caps: SqlCaps): Promise<Record
       }
       const page = input.page && input.page.name === query.name ? input.page : null;
       out[query.name] = page
-        ? await runOne(conn, pagedQuery(query, page), input.params, queryBounds(input, caps, page).limit, timeoutMs, caps, page)
-        : await runOne(conn, query, input.params, limit, timeoutMs, caps);
+        ? await runOne(conn, pagedQuery(query, page), input.params, queryBounds(input, caps, page).limit, timeoutMs, caps, page, input.paramTypes??input.catalog?.paramTypes)
+        : await runOne(conn, query, input.params, limit, timeoutMs, caps, null, input.paramTypes??input.catalog?.paramTypes);
       const result = out[query.name];
       if (isQueryFailure(result)) continue;
       result.columns = await userColumnLineage(conn,query.sql,shapes,result.columns);
@@ -353,6 +368,7 @@ async function runOne(
   timeoutMs: number,
   caps: SqlCaps,
   page: QueryPage | null = null,
+  paramTypes?: Record<string,ColumnType>,
 ): Promise<QueryOutcome> {
   let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -370,7 +386,7 @@ async function runOne(
     }
     if (guarded.error !== undefined) return { error: guarded.error };
     const prepared = guarded.prepared;
-    bindParams(prepared, params);
+    await bindTypedParams(conn,prepared,params,undefined,paramTypes);
     // The ceiling is applied again AT the timer: `queryBounds` already did it,
     // but the bound belongs where the resource is taken, so no future caller
     // can reach this line around it (and CodeQL can see it here).
@@ -394,7 +410,7 @@ async function runOne(
     // — cheap for the engine (no rows cross into JS) and the honest number to
     // show a reader. For a window, count the UNWRAPPED query.
     const counter = await conn.prepare(`SELECT count(*) AS n FROM (${page ? unwrapPaged(query.sql) : query.sql}) AS _q`);
-    bindParams(counter, params);
+    await bindTypedParams(conn,counter,params,undefined,paramTypes);
     const counted = await counter.start().readAll();
     if (timer) { clearTimeout(timer); timer = null; }
     const n = counted.getRowObjects()[0]?.n;
@@ -434,24 +450,29 @@ export async function runMutation(input: MutationInput, caps: SqlCaps, extension
   let continuation:(()=>QueryFailure['continuation'])|void = undefined;
   try {
     continuation=extensions.setupMutation?.(conn,await duckdb(),{input,dryRun:false});
+    if(input.table.name===LIKES_TABLE)return {error:'_likes is read-only'};
+    if(input.likes!==undefined){
+      if(!Array.isArray(input.likes)||input.likes.some(id=>typeof id!=='string'))return {error:'Invalid trusted likes table'};
+      await registerTable(conn,LIKES_TABLE,{columns:LIKES_COLUMNS,rows:input.likes.map(user=>({user}))});
+    }
     await registerTable(conn, input.table.name, input.table);
     const guarded = await prepareGuarded(conn, input.sql, 'write');
     if (guarded.error !== undefined) return { error: guarded.error };
-    await bindMutationParams(conn, guarded.prepared, input.params, input.row, input.paramTypes);
+    await bindTypedParams(conn, guarded.prepared, input.params, input.row, input.paramTypes);
     // The ceiling is applied again AT the timer: `queryBounds` already did it,
     // but the bound belongs where the resource is taken, so no future caller
     // can reach this line around it (and CodeQL can see it here).
     timer = setTimeout(() => { timedOut = true; conn.interrupt(); }, Math.min(timeoutMs, caps.timeoutMs));
     const hasUsers = input.table.columns.some(c => c.type === 'user');
-    const checkedInput = hasUsers && !input.policy ? {...input, policy: {
+    const checkedInput = (hasUsers || input.likes!==undefined) && !input.policy ? {...input, policy: {
       role:'writer', session:{}, operations:['insert','update','delete'] as const,
       table:{table:{schema:'public',name:input.table.name},
         insert_permissions:[{role:'writer',permission:{columns:'*' as const,check:{}}}],
         update_permissions:[{role:'writer',permission:{columns:'*' as const,filter:{}}}],
         delete_permissions:[{role:'writer',permission:{filter:{}}}]}
     }} : input;
-    const applied = input.policy || hasUsers
-      ? await runPolicyMutation(conn,checkedInput as MutationInput,(statement,params)=>bindMutationParams(conn,statement,params,input.row,input.paramTypes))
+    const applied = input.policy || hasUsers || input.likes!==undefined
+      ? await runPolicyMutation(conn,checkedInput as MutationInput,(statement,params)=>bindTypedParams(conn,statement,params,input.row,input.paramTypes))
       : {affected:(await guarded.prepared.run()).rowsChanged};
     const {affected}=applied;
     if (input.expectedAffected !== undefined && affected !== input.expectedAffected) {
@@ -505,9 +526,10 @@ export async function dryRunMutations(input: DryRunMutationsInput, extensions:Sq
       const tableName = m.tableName ?? `ref_${m.target}`;
       const target = input.tables[tableName];
       if (target) await registerTable(conn, tableName, { rows: [], columns: target.columns });
+      if(tableName!==LIKES_TABLE && input.tables[LIKES_TABLE])await registerTable(conn,LIKES_TABLE,{rows:[],columns:LIKES_COLUMNS});
       const guarded = await prepareGuarded(conn, m.sql, 'write');
       if (guarded.error !== undefined) { errors.push({ name: m.name, error: guarded.error }); continue; }
-      await bindMutationParams(conn, guarded.prepared, params, m.row, {...input.paramTypes, ...m.paramTypes});
+      await bindTypedParams(conn, guarded.prepared, params, m.row, {...input.paramTypes, ...m.paramTypes});
       // Execute against the EMPTY table: binding alone leaves runtime casts
       // unchecked, and a write that fails on its first real click is the
       // failure an author cannot see coming.
@@ -546,7 +568,7 @@ export async function dryRunQueries(input: DryRunInput): Promise<DryRunResult> {
       try {
         const guarded = await prepareGuarded(conn, query.sql);
         if (guarded.error !== undefined) { errors.push({ name: query.name, error: guarded.error }); continue; }
-        bindParams(guarded.prepared, params);
+        await bindTypedParams(conn,guarded.prepared,params,undefined,input.paramTypes);
         // Bind and execute against EMPTY tables: binding alone leaves runtime
         // casts (a text default in a numeric comparison) unchecked, and those
         // are exactly the errors an author cannot see coming.
