@@ -42,6 +42,9 @@ describe('dataset image references',()=>{
    expect(result.headers.get('location')).toBe(`/a/${image.id}/raw?v=1`);
    const bytes=await raw(request(result.headers.get('location')!),params(image.id));
    expect(bytes.status).toBe(200);expect(bytes.headers.get('content-type')).toMatch(/^image\//);
+   const capture=await assets(request(`/a/${doc.id}/assets?key=${mintExportKey(doc.id)}&u=${encodeURIComponent(`ref:${image.id}`)}`),params(doc.id));
+   expect(capture.status).toBe(302);
+   expect(capture.headers.get('location')).toBe(result.headers.get('location'));
    const metadata=await assets(request(`/a/${doc.id}/assets?u=ref:${image.id}`,{headers:{accept:'application/json'}}),params(doc.id));
    expect(await metadata.json()).toMatchObject({image:{kind:'image',width:48,height:64,url:`/a/${image.id}/raw?v=1`}});
   }
