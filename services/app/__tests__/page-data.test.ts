@@ -49,7 +49,7 @@ describe('GET /api/page/session', () => {
     const w = await world();
     asSession(w.owner);
     const body = await (await sessionPage(request('/api/page/session'))).json();
-    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email });
+    expect(body.user).toEqual({ id: w.owner.id, email: w.owner.email, username: w.owner.username ?? null, image: null });
     expect(body.kind).toBe('account');
     // Library metrics belong to the dashboard, not duplicated in global chrome.
     expect(body).not.toHaveProperty('stats');
