@@ -301,10 +301,10 @@ describe('the fork credit line', () => {
     expect(await author()).toMatchObject({ username: null, forkedFrom: { href: expect.stringContaining(w.doc.id) } });
     for (const visibility of ['unlisted', 'private']) {
       await db.query('UPDATE artifacts SET visibility = $2 WHERE id = $1', [w.doc.id, visibility]);
-      expect(await author()).toEqual({ username: null, forkedFrom: { label: 'a document that is not public', href: null } });
+      expect(await author()).toEqual({ username: null, id: null, image: null, forkedFrom: { label: 'a document that is not public', href: null } });
     }
     await db.query('DELETE FROM artifacts WHERE id = $1', [w.doc.id]);
-    expect(await author()).toEqual({ username: null, forkedFrom: { label: 'a document that is not public', href: null } });
+    expect(await author()).toEqual({ username: null, id: null, image: null, forkedFrom: { label: 'a document that is not public', href: null } });
   });
   const served = async (id: string, query = '') =>
     (await rawRoute(new Request(`${BASE}/a/${id}/raw${query}`), params(id))).text();
