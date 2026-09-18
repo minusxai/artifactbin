@@ -38,6 +38,8 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     ...(input.mutateUrl ? { mutateUrl: input.mutateUrl } : {}),
     ...(input.assetsUrl ? { assetsUrl: input.assetsUrl } : {}),
     ...(input.managedAssets ? { managedAssets: input.managedAssets } : {}),
+    // A SNAPSHOT render refuses every write by name (StoryIslandData.readOnly).
+    ...(input.readOnly ? { readOnly: input.readOnly } : {}),
   };
   const baseCss = [
     ':root { --mx-vh: 100vh; } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS,

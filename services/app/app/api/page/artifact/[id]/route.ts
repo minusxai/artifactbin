@@ -7,6 +7,7 @@ import { compactSurface } from '@/lib/story/page-transport';
  * session kind, and ArtifactSurface's props (compiled CSS, design, the
  * server-run dataflow, the open-annotation count).
  */
+import { archivedReadOnly, archivedVersionFor, rowAtVersion } from '@/lib/archived-version';
 import { countOpenAnnotations } from '@/lib/annotations';
 import { canReadArtifact, getArtifactFor, declarationsForRow, getArtifactById, refDataForRow, viewerIdentityFor } from '@/lib/artifacts';
 import { folderPageFor } from '@/lib/folders';
@@ -84,7 +85,21 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
     }, 200, { 'Cache-Control': 'no-store' });
   }
 
-  const meta = (artifact.meta ?? {}) as {
+  /*
+   * `?version=N` — the page renders THAT version, read-only, for whoever may
+   * read the artifact's history. One decision with the served document's
+   * (lib/archived-version), so `/a/<id>?version=2` and `/a/<id>/raw?version=2`
+   * can never disagree about who may see it or about what it resolves to; a
+   * refusal is this route's own uniform 404, so a reader without history access
+   * does not learn the parameter exists.
+   */
+  const at = await archivedVersionFor(request, artifact, { capture: exporting });
+  if (at === 'not_found') return notFound();
+  // Everything below reads THIS row: the artifact wearing that version's bytes
+  // when one was asked for, the artifact itself otherwise.
+  const row = at ? rowAtVersion(artifact, at) : artifact;
+
+  const meta = (row.meta ?? {}) as {
     theme?: StoryThemeName | null; colorMode?: 'light' | 'dark' | null; compiledCss?: string | null;
     columns?: Array<{ name: string; type?: string }>; template?: string | null; refs?: Array<{ id: string; kind: string }>;
     cssCompileVersion?: string | null;
@@ -100,36 +115,47 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   // this request; no identity or permission answer is retained across requests.
   const [authorUsername, forkedFrom, compiledCss, refData, assetUrls, liked, likeCount, following, followCount, openAnnotations, content] = await Promise.all([
     ownerUsername(artifact.user_id), forkedFromCredit(artifact.forked_from),
-    isDoc ? currentStoryCss(meta, artifact.source) : Promise.resolve(meta.compiledCss ?? null),
-    isDoc ? refDataForRow(artifact) : Promise.resolve({}),
-    isDoc ? webAssetsForSource(artifact.source) : Promise.resolve(undefined),
+    isDoc ? currentStoryCss(meta, row.source) : Promise.resolve(meta.compiledCss ?? null),
+    isDoc ? refDataForRow(row) : Promise.resolve({}),
+    isDoc ? webAssetsForSource(row.source) : Promise.resolve(undefined),
     viewerId ? has(viewerId, 'like', artifact.id) : Promise.resolve(false),
     count('like', artifact.id),
     artifact.user_id && artifact.user_id !== viewerId && viewerId ? has(viewerId, 'follow', artifact.user_id) : Promise.resolve(false),
     artifact.user_id && artifact.user_id !== viewerId ? count('follow', artifact.user_id) : Promise.resolve(0),
     canAnnotate(role) && isDoc ? countOpenAnnotations(artifact.id) : Promise.resolve(0),
-    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : artifact.content),
+    artifact.format === 'dataset' ? loadDatasetRows(artifact).then(rows => JSON.stringify(rows)) : Promise.resolve(isDoc ? '' : row.content),
   ]);
-  const declared = isDoc && artifact.source ? declarationsForRow(artifact) : null;
+  const declared = isDoc && row.source ? declarationsForRow(row) : null;
   const dataflow = declared ? { ...declared, values: readUrlValues(new URL(request.url).search, declared.flow) } : null;
   const runtime = isDoc ? await prepareStoryRuntime({
-    source: artifact.source ?? '', compiledCss, theme: design.theme,
-    colorMode: design.colorMode, title: artifact.title, template: meta.template ?? null,
+    source: row.source ?? '', compiledCss, theme: design.theme,
+    colorMode: design.colorMode, title: row.title, template: meta.template ?? null,
     refData, assetUrls, dataflow,
+    // A snapshot render refuses every write by name, and carries no write door
+    // at all (below) — see lib/archived-version.
+    ...(at ? { readOnly: archivedReadOnly(at.version) } : {}),
     // WHO IS READING — the same answer the served document gets, so the shell's
     // inline render of a document shows its owner the signed-in branch too.
     viewer: await viewerIdentityFor(artifact, viewerId),
     queryUrl: queryPath(artifact.id), assetsUrl: assetsPath(artifact.id),
-    ...(declared?.flow.mutations?.length ? { mutateUrl: mutatePath(artifact.id) } : {}),
+    ...(!at && declared?.flow.mutations?.length ? { mutateUrl: mutatePath(artifact.id) } : {}),
     ...(ASSETS_ORIGIN ? { managedAssets: { origin: ASSETS_ORIGIN, resolveUrl: `${baseUrl(request)}${assetsPath(artifact.id)}` } } : {}),
   }) : undefined;
   const ownerScope = role === 'owner' ? actorForArtifacts(actor) : null;
   const hasInvitedUsers = ownerScope ? ((await getArtifactFor(ownerScope, id))?.shares?.length ?? 0) > 0 : false;
   return json({
     canonical: canonicalArtifactPath(artifact, authorUsername),
-    description: artifact.description,
+    description: row.description,
     role,
     kind,
+    /*
+     * WHICH VERSION THIS IS, beside `surface` rather than inside it — the
+     * surface's own props are what the DOCUMENT is, and this is what the RENDER
+     * is: the page draws the banner from it and shuts edit, comment, like, fork
+     * and share on it. Absent entirely for the head, so no page that did not
+     * ask for a version can accidentally read one.
+     */
+    ...(at ? { archived: { version: at.version, head: at.head } } : {}),
     like: { liked, count: likeCount },
     // The follow control is keyed by the AUTHOR's id. Null for an anonymous
     // document, and for the owner, who has nobody here to follow.
@@ -143,10 +169,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       format: artifact.format,
       visibility: artifact.visibility,
       ...(ownerScope ? { hasInvitedUsers } : {}),
-      title: artifact.title,
+      title: row.title,
       author: { username: authorUsername, forkedFrom },
       ...(runtime ? { runtime } : {}),
-      source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:artifact.source,
+      source: artifact.format==='dataset'&&role!=='owner'&&role!=='editor'?null:row.source,
       content,
       columns: meta.columns ?? [],
       ...(artifact.format==='dataset' && (artifact.meta as Record<string,unknown>).catalog ? {catalog:publicCatalogOf(artifact)!}:{}),
