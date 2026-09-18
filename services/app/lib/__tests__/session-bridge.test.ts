@@ -8,7 +8,8 @@
  * exercised against a real socket: the development one must reach the Vite-fronted
  * chain carrying a verifiable actor, and the deployment one must open no socket at all.
  */
-import http from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { withHttpServer, type RunningServer } from '@artifactbin/test-support/net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ACTOR_HEADER, ANONYMOUS, type Actor } from '@artifactbin/contracts';
 import { actorOf, verifyActor } from '@artifactbin/utils';
@@ -18,12 +19,12 @@ const SECRET = 'a-per-boot-secret-0000000000000000000000';
 const VITE_MODULE = 'export const hmr = true;\n';
 
 /** The dev shape in miniature: a Vite-ish middleware in FRONT of the app's listener. */
-let server: http.Server;
+let server: RunningServer;
 let port = 0;
 const seen: { url: string; actor: Actor | null }[] = [];
 
 beforeAll(async () => {
-  server = http.createServer((req, res) => {
+  server = await withHttpServer((req: IncomingMessage, res: ServerResponse) => {
     const actor = verifyActor(req.headers[ACTOR_HEADER] as string | undefined, SECRET);
     seen.push({ url: req.url!, actor });
     // Vite claims its own paths before anything else looks at the request.
@@ -34,12 +35,10 @@ beforeAll(async () => {
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(`<!doctype html><p>${actor ? actor.userId ?? 'anonymous' : 'no actor'}</p>`);
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const address = server.address();
-  port = typeof address === 'object' && address ? address.port : 0;
+  port = server.port;
 });
 
-afterAll(async () => { await new Promise<void>((resolve) => server.close(() => resolve())); });
+afterAll(async () => { await server.close(); });
 
 /** The app object, which in the deployment shape answers without a socket. */
 const app = {
