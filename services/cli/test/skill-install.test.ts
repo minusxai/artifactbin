@@ -4,6 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,readdir,lstat,realpath,rm,symlink,stat}
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {installSkills,restartHints,skillTargets,selectSkills} from '../src/skill-install';
+import {runCli} from '../src/dispatch';
 const bundle={'SKILL.md':'---\nname: artifactbin\ndescription: Publish artifacts.\n---\nHello','references/a.md':'A'};
 test('installation selects only requested harnesses, remembers opt-outs and backs up modified files',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-install-'));
@@ -141,4 +142,51 @@ test('a second backup of the same version replaces the earlier copy instead of f
   assert.deepEqual(await readdir(backups),['pi-1.0.0']);
   assert.equal(await readFile(join(backups,'pi-1.0.0','SKILL.md'),'utf8'),'second edit');
  }finally{await rm(home,{recursive:true,force:true});}
+});
+
+/**
+ * ARTIFACTBIN_SKILLS=off — the switch a checkout's dev loop runs the branch CLI under.
+ * Eager init runs before EVERY command, so without a switch `npm run afbin` rewrites the
+ * owner's real `~/.claude/skills/artifactbin` from an unreleased build (it happened twice).
+ * Off must hold at both boundaries: selection returns nothing even when a harness is named
+ * outright, and installation writes nothing if a caller reaches it anyway.
+ */
+test('ARTIFACTBIN_SKILLS=off selects no harness, even one requested by name, and installs nothing',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-skills-off-'));
+ try{
+  const off={ARTIFACTBIN_SKILLS:'off'};const targets=skillTargets(home,off);
+  assert.deepEqual(await selectSkills({home,env:off,interactive:false,detected:['claude','pi','codex','opencode']}),[]);
+  assert.deepEqual(await selectSkills({home,env:off,interactive:false,requested:['claude']}),[]);
+  assert.deepEqual(await selectSkills({home,env:off,interactive:true,yes:true,detected:['claude']}),[]);
+  const result=await installSkills(['claude','pi'],{home,env:off,files:bundle,version:'1.0.0'});
+  assert.deepEqual(result.installations,[]);
+  assert.deepEqual(result.harnesses,[]);
+  for(const target of Object.values(targets))await assert.rejects(stat(target),{code:'ENOENT'},target);
+  await assert.rejects(stat(join(home,'.artifactbin','settings.json')),{code:'ENOENT'},'an off run records no selection either');
+  // The same call without the switch does install — the assertion above is not vacuous.
+  const on=await installSkills(['claude'],{home,env:{},files:bundle,version:'1.0.0'});
+  assert.equal(on.installations.length,1);
+  assert.equal(await readFile(join(skillTargets(home,{}).claude,'SKILL.md'),'utf8'),bundle['SKILL.md']);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+test('eager init installs the saved harnesses, and installs nothing under ARTIFACTBIN_SKILLS=off',async()=>{
+ const base=await mkdtemp(join(tmpdir(),'afbin-init-skills-off-'));
+ const home=join(base,'home'),work=join(base,'work');await mkdir(home);await mkdir(work);
+ const run=async(env:NodeJS.ProcessEnv)=>{
+  const out:string[]=[];
+  const code=await runCli(['status','--json'],{cwd:work,home,env,interactive:false,stdout:x=>out.push(x),stderr:()=>{},fetch:async()=>{throw new Error('network during eager init');}});
+  assert.equal(code,0);
+  return out.join('');
+ };
+ try{
+  await mkdir(join(home,'.artifactbin'),{recursive:true});
+  await writeFile(join(home,'.artifactbin','settings.json'),JSON.stringify({harnesses:['claude','pi']}));
+  await run({ARTIFACTBIN_SKILLS:'off'});
+  for(const target of Object.values(skillTargets(home,{})))await assert.rejects(stat(target),{code:'ENOENT'},target);
+  // Without the switch the same invocation writes both skills: the guard is what stopped it.
+  await run({});
+  assert.equal((await stat(join(skillTargets(home,{}).claude,'SKILL.md'))).isFile(),true);
+  assert.equal((await stat(join(skillTargets(home,{}).pi,'SKILL.md'))).isFile(),true);
+ }finally{await rm(base,{recursive:true,force:true});}
 });

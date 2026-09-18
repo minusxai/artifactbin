@@ -19,6 +19,16 @@ export const skillHarnesses=['claude','codex','pi','opencode'] as const;
 export type SkillHarness=typeof skillHarnesses[number];
 export const harnessLabels:Record<SkillHarness,string>={claude:'Claude Code',codex:'Codex',pi:'pi',opencode:'OpenCode'};
 export interface SkillChoice {name:SkillHarness;path:string;selected:boolean}
+/**
+ * ARTIFACTBIN_SKILLS=off — install no skill into any harness, for anyone.
+ *
+ * Eager init runs before EVERY command, so a branch build run by hand rewrites the
+ * operator's real `~/.claude/skills/artifactbin` from unreleased teaching files. A
+ * development loop (`npm run afbin`) sets this; it is checked at BOTH boundaries —
+ * selection and installation — because selection has an early return for an
+ * explicitly requested harness, and a caller may reach installation directly.
+ */
+export function skillsDisabled(env:NodeJS.ProcessEnv=process.env):boolean{return env.ARTIFACTBIN_SKILLS==='off';}
 interface Settings {harnesses:SkillHarness[]}
 export function skillTargets(home:string,env:NodeJS.ProcessEnv=process.env):Record<SkillHarness,string>{
  return {
@@ -34,6 +44,8 @@ async function settings(home:string,env:NodeJS.ProcessEnv={}):Promise<Settings|u
  catch{throw new CliError('invalid_settings','Cannot read the saved harness selection.','Repair ~/.artifactbin/settings.json or move it aside, then run afbin update.');}
 }
 export async function selectSkills(options:{home:string;env?:NodeJS.ProcessEnv;interactive:boolean;yes?:boolean;requested?:string[];detected?:string[];choose?:(choices:SkillChoice[])=>Promise<SkillHarness[]>}):Promise<SkillHarness[]>{
+ // Ahead of the requested branch: `--harness claude` must not slip past the switch.
+ if(skillsDisabled(options.env))return [];
  if(options.requested){if(options.requested.some(x=>!([...skillHarnesses,'none'] as string[]).includes(x))||options.requested.includes('none')&&options.requested.length>1)throw new CliError('invalid_harness','Choose harness names or none.');return options.requested.filter(x=>x!=='none') as SkillHarness[];}
  const env=options.env??process.env;const targets=skillTargets(options.home,env);
  const saved=await settings(options.home,options.env);
@@ -136,6 +148,7 @@ export async function installSkills(selected:SkillHarness[],options:{home:string
  // Whichever bundle this is — the compiled one or a downloaded release — it
  // ships addressed to nobody; the skill an agent reads must name the server
  // THIS afbin uses, or the agent is taught to publish somewhere else.
+ if(skillsDisabled(options.env))return {installations:[],harnesses:[]};
  const origin=options.origin??DEFAULT_SERVER;
  const files=teachingFilesFor(options.files??localSkillFiles,origin),version=options.version??CLI_VERSION;
  if(!files['SKILL.md']||Object.keys(files).some(path=>!safeSkillPath(path)))throw new CliError('invalid_skill_bundle','Invalid skill bundle path or missing SKILL.md.');
