@@ -100,7 +100,12 @@ export async function can(actor: CapabilityActor, capability: Capability, target
   // that created it, which has no account to be judged by.
   if (ownsArtifact(target, actor)) return true;
 
-  if (kind === 'none' || kind === 'guest') return false;
+  // An ANONYMOUS TOKEN owns drafts — that is what `create` says — so it may own
+  // a FORK too, and the browser door's own "a fork needs an owner" refusal is
+  // what decides the cookie case. Everything else needs a person to attribute
+  // the act to, which a token is not.
+  if (kind === 'none') return capability === 'fork' && !!actor.tokenId;
+  if (kind === 'guest') return false;
   if (kind === 'testuser' && !(await isSandboxArtifact(target))) return false;
 
   // Inside the sandbox, and for an account anywhere: the KIND allows it. What

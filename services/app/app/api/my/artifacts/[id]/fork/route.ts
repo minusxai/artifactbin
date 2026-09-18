@@ -1,5 +1,6 @@
 import { forkArtifact, forkDatasetPreview, forkRefusal, getArtifactById } from '@/lib/artifacts';
 import { forkOwner } from '@/lib/operations/registry';
+import { capabilityGuard } from '@/lib/capabilities';
 import { browserActor } from '@/lib/auth';
 import { canRead } from '@/lib/share-roles';
 import { roleFor } from '@/lib/viewer';
@@ -45,6 +46,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   if (!row || !canRead(await roleFor(row, actor))) return json({ error: 'not_found' }, 404);
   const userId = actor.viewer?.userId;
   if (!userId) return json({ error: 'sign_in_required' }, 409);
+  // A guest is sent to sign in by the line above; a TEST USER holds an account
+  // id and is still refused — it forks inside its sandbox and nowhere else.
+  const sandbox = await capabilityGuard({ userId, tokenId: actor.tokenId }, 'fork', id);
+  if (sandbox) return sandbox;
   const tokenId = await ensureUserToken(userId);
   // A body is optional here (the control row sends none), so an unreadable one
   // is simply "no options" rather than a 400: this door has no overrides to

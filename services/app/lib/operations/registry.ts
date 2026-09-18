@@ -632,6 +632,11 @@ const forkArtifactOp: Operation = {
       return reply({ error: 'not_found' }, 404);
     }
 
+    // A TEST USER forks inside its sandbox and nowhere else: the account brings
+    // a page in for it (`as` below), and it copies within.
+    const sandbox = await capabilityGuard(ctx.actor, 'fork', String(input.id));
+    if (sandbox) return fromResponse(sandbox);
+
     // WHO WOULD OWN IT is resolved before the dry run as well as before the
     // copy: `as` naming a test user that is not yours, or one that has expired,
     // must refuse the PREFLIGHT too — otherwise a caller is told what a fork

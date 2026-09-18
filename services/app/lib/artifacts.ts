@@ -618,6 +618,15 @@ export async function forkArtifact(
   owner: TokenActor = actor,
 ): Promise<ForkResult | Response> {
   /*
+   * WHO CREATES vs WHO OWNS. The copy is created BY the forker's token and FOR
+   * the owner's account, which is how the artifact COUNT quota lands on the
+   * parent: the cap is per TOKEN, a test user has no quota of its own, and rows
+   * carrying the test user's token would have been free. Ownership is `user_id`
+   * (ownsArtifact reads it first), so the test user owns the copy outright —
+   * and erasing it takes the rows, and the parent's count, away again.
+   */
+  const creator: TokenActor = { tokenId: actor.tokenId, userId: owner.userId };
+  /*
    * A FOLDER IS NOT FORKABLE, and the refusal lives HERE so both doors — the
    * one a person clicks and the `fork_artifact` operation — inherit it from the
    * same place. A folder's source names its OWN children table by id, so a copy
@@ -630,10 +639,10 @@ export async function forkArtifact(
   // The page PLUS its dataset copies: one cap, counted against what this call
   // will really create rather than against the page alone.
   if (await artifactQuotaExceeded(actor.tokenId, copying.length + 1)) return json({ error: 'quota_exceeded', details: ['this token has hit its artifact COUNT quota — deleting does not free it (nothing is erased), so ask your user for another token'] }, 403);
-  if (copying.length) return deepFork(actor, source, overrides, copying, owner);
+  if (copying.length) return deepFork(actor, source, overrides, copying, creator);
   const input = await forkInput(actor, source, overrides);
   if (input instanceof Response) return input;
-  const row = await createArtifact(owner.tokenId, owner.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
+  const row = await createArtifact(creator.tokenId, creator.userId, input, { forkedFrom: source.id, linkRole: source.link_role });
   // Against the SOURCE: "this was forked" is a fact about the original, and the
   // forker is who did it. Never inside a transaction (PGLite deadlock).
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: row.id });
