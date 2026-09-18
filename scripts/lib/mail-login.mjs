@@ -92,18 +92,29 @@ export async function loginViaEmail(page, base, sink, email) {
  * sees the account the gate asked for and not one this helper decorated.
  *
  * `onboarded` is read FIRST rather than sampling the URL, because the redirect
- * is driven by the SPA's own session read and can land after the cookie check
- * above — a one-shot `page.url()` here would be a race. The bit is decisive: if
+ * is driven by the SPA's own session read and can land after the cookie is
+ * live — a one-shot `page.url()` here would be a race. The bit is decisive: if
  * it is false the shell WILL divert, so waiting for that is correct rather than
- * hopeful. An account already through the welcome page costs one request and
- * its login is otherwise untouched.
+ * hopeful. An account already through the welcome page returns at once and its
+ * login is otherwise untouched.
+ *
+ * The bit is read only once the session names THIS account, because a caller
+ * may arrive here straight after submitting the code (gate-fork drives the form
+ * where it already is), and a bit read before the cookie is live would read as
+ * "nothing to do".
  */
-async function passTheWelcomePage(page, email) {
+export async function passTheWelcomePage(page, email) {
   const onWelcome = (u) => u.pathname.replace(/\/+$/, '') === '/welcome';
-  const response = await page.request.get(new URL('/api/page/session', page.url()).href);
-  if (!response.ok()) return;
-  const session = await response.json();
-  if (session.onboarded !== false) return;
+  const state = await page.waitForFunction(async (expectedEmail) => {
+    try {
+      const response = await fetch('/api/page/session', { credentials: 'same-origin' });
+      if (!response.ok) return null;
+      const session = await response.json();
+      if (session.kind !== 'account' || session.user?.email !== expectedEmail) return null;
+      return session.onboarded === false ? 'welcome' : 'through';
+    } catch { return null; }
+  }, email, { timeout: 20_000 }).then((handle) => handle.jsonValue()).catch(() => 'through');
+  if (state !== 'welcome') return;
 
   await page.waitForURL(onWelcome, { timeout: 20_000 }).catch(() => {
     throw new Error(
