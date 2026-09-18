@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 import { type JsxNode } from '@/lib/jsx';
 import { collectRefNameUses, parseValueDecl, validateDataflow, type Dataflow } from '@/lib/story/dataflow';
-import { STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
+import { PERSON_TAGS, STORY_UI_COMPONENT_NAME_LIST } from '@/lib/story-ui/component-names';
 import { STORY_UI_COMPONENTS } from '@/lib/story-ui/registry';
 import { validateJsxSource } from '@/lib/jsx';
 import { JSX_STORY_COMPONENT_NAMES } from '@/lib/jsx/components';
@@ -38,16 +38,22 @@ describe('$_me in markup', () => {
 });
 
 describe('the kit can show a person and ask a guest to sign in', () => {
-  it('registers User and SignIn as author components', () => {
-    for (const name of ['User', 'SignIn']) {
+  it('registers every person tag and SignIn as author components', () => {
+    for (const name of ['User', 'UserImage', 'UserHandle', 'SignIn']) {
       expect(STORY_UI_COMPONENT_NAME_LIST).toContain(name);
       expect(Object.keys(STORY_UI_COMPONENTS)).toContain(name);
     }
+    // The interpreter's person seam and the vocabulary must name the same tags:
+    // a tag inside the set but outside the list could never be authored, and a
+    // person tag outside the set would mint a DOM id from somebody's account id.
+    for (const tag of PERSON_TAGS) expect(STORY_UI_COMPONENT_NAME_LIST).toContain(tag);
   });
 
   it('accepts them at publish', () => {
     const source = '<div data-design="tw">{$_me ? <p>Paid by <User id="$_me" /></p> : <SignIn>Sign in to add an expense</SignIn>}</div>';
     expect(validateJsxSource(source, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style')).toEqual([]);
+    const halves = '<div data-design="tw"><UserImage id="$_me" size="lg" /><UserHandle id="$_me" /></div>';
+    expect(validateJsxSource(halves, JSX_STORY_COMPONENT_NAMES, STORY_HTML_TAGS, 'no-inline-style')).toEqual([]);
   });
 });
 
@@ -63,6 +69,9 @@ describe('the publish door', () => {
   it('accepts reading the viewer and refuses binding or declaring it', () => {
     expect(refusals('<div>{$_me ? <p>in</p> : <SignIn>Join</SignIn>}</div>')).toEqual([]);
     expect(refusals('<div><User id="$_me" /></div>')).toEqual([]);
+    // `id` on a person tag READS its reference; the face and the handle are the
+    // same read-only position as the composition of the two.
+    expect(refusals('<div><UserImage id="$_me" /><UserHandle id="$_me" /></div>')).toEqual([]);
     expect(refusals('<div><input aria-label="Who" value="$_me" /></div>').join(' ')).toMatch(/\$_me/);
     expect(refusals('<Helmet><Value name="_me" type="user" /></Helmet><p>x</p>').join(' ')).toMatch(/_me/);
   });
