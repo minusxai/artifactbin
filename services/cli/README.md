@@ -250,12 +250,27 @@ The account and the app server can access the terminal content and input. Keep t
 CI builds and smoke-tests macOS/Linux on arm64/x64. A version bump publishes the exact
 assets from successful main CI; unrelated merges leave existing releases unchanged.
 
+**A release is a version and nothing else.** When the whole diff is the six version lines
+`npm run release:cli` and `npm run generate:teaching -w services/cli` write — in
+`services/cli/package.json`, `package-lock.json`, `services/app/public/chat/install.sh`,
+`services/app/public/chat/release.json` and `services/cli/src/generated/teaching.json` — CI selects
+only `checks` and the four binary builds, with their smoke and the Intel browser proofs that now run
+inside the Intel build (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
+already passed; what a release must prove is that the binaries build and run. Any other file in the
+same change makes it an ordinary run again.
+
+**A CLI source change without a bump is refused.** `checks` fails a pull request that touches
+`services/cli/src/**` or `services/cli/scripts/**` and carries no version bump, naming the two
+commands below. Prose and the CLI's own tests are exempt.
+
 1. Run `npm run release:cli -- [patch|minor|major]` from the repository root (patch by default).
    This updates the CLI package, lockfile, installer and release pointer together.
 2. Run `npm run generate:teaching -w services/cli` and merge the release PR after passing checks.
 3. Successful main CI triggers `Release tested afbin CLI`, which tags that exact commit and
    publishes all four tested executables, host runtimes, DuckDB/Chromium packages and checksums.
-   The release stays draft until every asset is attached. Published releases are immutable.
+   It publishes the bytes CI built: the run main CI's `tested-run` artifact names when the tree was
+   tested elsewhere, the main run itself otherwise. The release stays draft until every asset is
+   attached. Published releases are immutable.
 4. Deploy a matching server/installer only after publication succeeds. Rollback keeps the
    previous release available; installers also accept `--version` explicitly.
 
