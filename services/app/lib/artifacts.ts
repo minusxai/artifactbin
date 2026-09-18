@@ -461,7 +461,11 @@ async function insertArtifact(
 ): Promise<ArtifactRow> {
   if (atCreation.operation) await reserveCreation(tx,atCreation.operation);
   await claimArtifactId(tx,id,{tokenId,userId},!!atCreation.reservedId);
-  await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
+  // A FORK carries its source's rows verbatim — a snapshot the forker may read,
+  // not rows the forker wrote — so a user column's "must be the logged-in user"
+  // rule is not re-judged under the forker's id: that would make every app
+  // whose rows name its members unforkable by anyone but the one person named.
+  if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
   const catalog=catalogOf(input);
   if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
   const guestDefault = input.visibility === undefined && userId
@@ -671,7 +675,9 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
   });
   if (input instanceof Response) return input;
   const visibility = input.visibility ?? source.visibility;
-  const created = await (await getDb()).transaction(async (tx) => {
+  let created: { artifact: ArtifactRow; datasets: ArtifactRow[] };
+  try {
+    created = await (await getDb()).transaction(async (tx) => {
     const datasets: ArtifactRow[] = [];
     for (const copy of copies) {
       datasets.push(await createArtifact(actor.tokenId, actor.userId, {
@@ -698,7 +704,12 @@ async function deepFork(actor: TokenActor, source: ArtifactRow, overrides: ForkO
       }));
     }
     return { artifact: await createArtifact(actor.tokenId, actor.userId, input, { tx, forkedFrom: source.id, linkRole: source.link_role }), datasets };
-  });
+    });
+  } catch (error) {
+    // A dataset rule refusing a copy is the forker's answer, never a 500.
+    if (error instanceof DatasetError) return json({ error: 'dataset_error', details: [error.message] }, error.status);
+    throw error;
+  }
   // After the commit, never inside it (PGLite deadlock).
   for (const row of [...created.datasets, created.artifact]) await afterCreated(row, actor.userId);
   void trackEvent('fork', source.id, { userId: actor.userId, forkId: created.artifact.id });
