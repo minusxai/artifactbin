@@ -55,9 +55,12 @@ export const BROWSER_SESSION_OPERATIONS: Operation[] = [{
     // The session never started, so nothing will ever close it: end the
     // identity now rather than leaving it to the sweep.
     if (minted && result.error) await releaseTestUser(sessionId, actor);
-    // The identity's lifetime IS the session. Revoked after the close, so a
-    // refused close leaves the session and its second person as they were.
-    if (input.op === 'close' && !result.error) await releaseTestUser(sessionId, actor);
+    // The identity's lifetime IS the session, and `close` ends it whatever the
+    // service says — a session already lost answers SESSION_NOT_FOUND, and
+    // leaving the credential live until the sweep is the one outcome a caller
+    // who asked to close cannot want. Release is scoped to this owner's own
+    // record, so naming a session that was never theirs releases nothing.
+    if (input.op === 'close') await releaseTestUser(sessionId, actor);
     // `result` carries pages, receipts and errors — never the token or cookie
     // behind pageActor, which this operation is the only holder of.
     return { status: 200, body: { ...result } };

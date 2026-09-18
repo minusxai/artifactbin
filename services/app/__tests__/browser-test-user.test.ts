@@ -124,6 +124,21 @@ it('closes the identity with the session, and only for its owner', async () => {
   expect(await userRow(seen[0]!.pageActor!.userId!)).toMatchObject({ is_guest: true });
 });
 
+/** The likeliest close in practice: the agent disconnected, the session is already gone. */
+it('ends the identity even when the session it belonged to is already lost', async () => {
+  const seen = recordingSessions();
+  const owner = await account('disconnected');
+  expect((await operation.run(context(owner), script('s-gone', { viewer: 'test-user' }))).status).toBe(200);
+  const tokenId = seen[0]!.pageActor!.tokenId!;
+
+  // The service has forgotten the session; closing it is refused there.
+  recordingSessions({ code: 'SESSION_NOT_FOUND', message: 'Session is unavailable to this credential' });
+  const closed = await operation.run(context(owner), { op: 'close', session_id: 's-gone' });
+  expect(closed.body.error).toMatchObject({ code: 'SESSION_NOT_FOUND' });
+  expect(tokenStatus(await tokenRow(tokenId)), 'the credential does not outlive the close').toBe('revoked');
+  expect((await (await getDb()).query('SELECT 1 FROM browser_test_users')).rows).toHaveLength(0);
+});
+
 it('revokes an identity the session service never accepted, rather than waiting for the sweep', async () => {
   const seen = recordingSessions({ code: 'CAPACITY', message: 'Browser session capacity reached' });
   const owner = await account('refused');
