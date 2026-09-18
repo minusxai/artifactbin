@@ -148,7 +148,9 @@ Every job other than the planner is one of the plan's outputs, and each exists b
 of failure the others cannot see. `checks` is the type and name guard (`npm run validate`) — the
 cheapest signal there is. The Vitest projects run as their own sharded jobs; the browser set is
 described in [operations](operations.md). Maintainer agent evaluations live in a private repository, checked out at `evals/` for a run.
-`build` proves the production build compiles.
+`build` proves the production build compiles, and the run builds the application exactly once: it
+uploads what it built (with the CLI bundle) as one artifact, and each browser-gate shard downloads
+that instead of repeating the same two builds for itself.
 
 Two jobs exist because a green unit suite does not prove a shippable artifact:
 

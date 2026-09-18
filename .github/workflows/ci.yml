@@ -321,6 +321,43 @@ jobs:
         run: npm ci
       # Build the Vite SPA, document runtime and bundled Hono server.
       - run: npm run build
+      # …and the CLI bundle, here rather than in every gate shard: the gates drive `afbin` against
+      # the servers they boot, and this job is already the one that builds.
+      - run: npm run build -w services/cli
+      # ONE BUILD FOR THE WHOLE RUN. Each of the six gate shards used to rebuild these same bytes
+      # for itself (`npm run build` ~7s, `npm run build -w services/cli` ~22s, measured on run
+      # 35335620538) while this job produced them and threw them away. Compression is off: the
+      # payload is already-compressed assets, and both ends are on the same network.
+      #
+      # The exclusions are the HOST RUNTIME the CLI build assembles beside its bundle — measured
+      # locally at 154 MB of directory plus a 39 MB archive of those same bytes, against 4 MB for
+      # the bundle, its skills and its man page. `afbin serve` is what needs it and the release
+      # jobs build their own; the gates boot `dist/server.mjs` and drive `dist/afbin.mjs`, so
+      # shipping it here would be ~200 MB uploaded once and downloaded six times to run nothing.
+      # (A `#` inside the block below would be a glob, not a comment — the notes stay up here.)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: app-build
+          path: |
+            dist
+            services/app/dist
+            services/app/lib/story-runtime/dist
+            services/app/public/story
+            services/app/public/libraries
+            services/app/server/routes.generated.ts
+            services/cli/dist
+            !services/cli/dist/runtime
+            !services/cli/dist/runtime/**
+            !services/cli/dist/afbin-runtime-*.gz
+          compression-level: 0
+          # THE SPA'S MANIFEST IS A HIDDEN FILE. Vite writes `dist/web/.vite/manifest.json`, and
+          # that is what the server resolves every hashed asset and reader preload through
+          # (services/app/server/build-assets.ts, reader-preloads.ts). This action skips dotfiles
+          # unless told otherwise, and an artifact without it would serve pages with no assets.
+          include-hidden-files: true
+          # Nothing outlives the run that made it: the shards download it minutes later.
+          retention-days: 1
+          if-no-files-found: error
 
   api:
     needs: [ plan ]
@@ -385,8 +422,12 @@ jobs:
         run: npx playwright install chromium
       - run: npx vitest run --project=api --shard=${{ matrix.shard }}/5
 
+  # THE SHARDS RUN WHAT `build` BUILT. Every shard used to build the app and the CLI for itself —
+  # the same bytes, six times over, in a job that already had to wait for nothing. It waits for
+  # `build` now (21s of job, of which 8s is the build itself on run 35335620538) and downloads the
+  # one artifact instead.
   gates:
-    needs: [ plan ]
+    needs: [ plan, build ]
     if: needs.plan.outputs.gates == 'true'
     name: browser gates (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
@@ -445,12 +486,15 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.playwright.outputs.cache-hit == 'true'
         run: npx playwright install chromium
-      # 8s, measured on main runs 34697938970 and 34693741969 — so this stays a BUILD and not a
-      # downloaded artifact. Handing the shards the `build` job's output instead would mean
-      # uploading 40 MB (dist 12 MB, services/app/dist 14 MB, public/story 7.7 MB,
-      # lib/story-runtime/dist 6.3 MB, plus public/libraries) and downloading it three times,
-      # which costs more wall clock than the build it replaces and adds a cross-job dependency.
-      - run: npm run build
+      # WHAT `build` BUILT: the SPA, the document runtime and its public assets, the generated route
+      # table, the bundled server these shards boot (scripts/gates.mjs runs dist/server.mjs, not a
+      # dev server) and the CLI bundle the conformance gates drive. ~40 MB, stored uncompressed, in
+      # place of the 29s of `npm run build` + `npm run build -w services/cli` every shard used to
+      # repeat (7s + 22s, run 35335620538). It lands at the workspace root, which is where the
+      # builds would have written it.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: app-build
       # The runner boots the servers with one protected per-run mail outbox.
       # Two servers within the runner, six runners across the set. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
@@ -463,7 +507,6 @@ jobs:
       # before the run keeps that cost out of the gate's own timeout budget.
       - name: pull the Postgres image the datasets gate needs
         run: docker pull postgres:17-alpine
-      - run: npm run build -w services/cli
       - name: Prepare isolated browser session workers
         run: |
           sudo apt-get update

@@ -72,6 +72,49 @@ describe('OSS single-host ownership', () => {
   });
 });
 
+/**
+ * THE APPLICATION IS BUILT ONCE PER RUN. Every gate shard used to run `npm run build` and
+ * `npm run build -w services/cli` for itself — the same bytes, six times over. The `build` job
+ * already produces them, so it uploads them and the shards download them instead.
+ */
+describe('ci.yml: one build, shared with the gates', () => {
+  it('uploads the build from `build` and downloads it in `gates`, which rebuilds nothing', () => {
+    expect(ci.jobs.gates.needs).toEqual(expect.arrayContaining(['plan', 'build']));
+    const upload = ci.jobs.build.steps.find((step) => step.uses?.startsWith('actions/upload-artifact'));
+    expect(upload?.with?.name).toBe('app-build');
+    // The whole of what `npm run build` (and the CLI's) writes: the SPA, the document runtime and
+    // its public assets, the generated route table, the bundled server the gates boot, the CLI.
+    const uploaded = String(upload?.with?.path ?? '').split('\n').map((line) => line.trim()).filter(Boolean);
+    expect(uploaded).toEqual(expect.arrayContaining([
+      'dist',
+      'services/app/dist',
+      'services/app/lib/story-runtime/dist',
+      'services/app/public/story',
+      'services/app/public/libraries',
+      'services/app/server/routes.generated.ts',
+      'services/cli/dist',
+    ]));
+    // The CLI build also assembles the host runtime `afbin serve` ships — 154 MB of directory and
+    // a 39 MB archive of the same bytes, next to 4 MB of bundle. No gate boots it (they run
+    // dist/server.mjs), so it must not ride along six downloads.
+    expect(uploaded.filter((line) => line.startsWith('!'))).toEqual(expect.arrayContaining([
+      '!services/cli/dist/runtime',
+      '!services/cli/dist/runtime/**',
+      '!services/cli/dist/afbin-runtime-*.gz',
+    ]));
+    // Vite writes the SPA manifest to `dist/web/.vite/manifest.json`, and the server resolves every
+    // hashed asset through it; upload-artifact drops dotfiles unless this is set.
+    expect(upload?.with?.['include-hidden-files']).toBe(true);
+    const download = ci.jobs.gates.steps.find((step) => step.uses?.startsWith('actions/download-artifact'));
+    expect(download?.with?.name).toBe('app-build');
+    for (const command of ['npm run build', 'npm run build -w services/cli']) {
+      expect(ci.jobs.gates.steps.map((step) => step.run), command).not.toContain(command);
+    }
+    // The build the CLI job would repeat is still its own; only the gates read this artifact.
+    expect(ci.jobs.build.steps.map((step) => step.run)).toContain('npm run build -w services/cli');
+  });
+});
+
 describe('source host compatibility matrix', () => {
   it('runs source, installed package and standalone CLI against the ID-first host', () => {
     const steps = ci.jobs['reference-compatibility'].steps;
