@@ -4,6 +4,7 @@ import {previewFiles,type PreviewOptions} from './preview-options';
 import {serveTeam} from './host-runtime';
 import type {ServeOptions} from './serve-config';
 import { browserSessionCommand } from './browser-sessions';
+import {testUserCommand,viewerChoice} from './testuser';
 import {scheduleBackgroundUpdate} from './background-update';
 import {compareVersions,validVersion} from './version-order';
 import {accountPlan,listAccountCollection,localAccountCommand,remoteAccountCommand} from './account-workspace';
@@ -205,7 +206,8 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   const selectedServer=serverOrigin()??declaredServer;
   // Resolved once here, and only when a URL argument makes it necessary; the remote boundary below resolves it anyway.
   const selectedAddresses=await addresses();
-  const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses});
+  const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,
+   ...(typeof flags.as==='string'?{as:{testuser:flags.as}}:{})});
   const exportOptions=()=>({og:!!flags.og,refresh:!!flags.refresh,type:flags.type as string|undefined,format:flags.format as string|undefined,output:flags.output as string|undefined,name:typeof flags.name==='string'?flags.name:undefined,page:flags.page!==undefined?Number(flags.page):undefined,force:!!flags.force,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,emit,...(context.stdoutBytes?{bytes:context.stdoutBytes}:{})});
   if(command==='fork'){const result=await forkResources(workspace,positionals,forkOptions());if(result){emit(result);return 0;}}
   if(command==='open'){
@@ -265,9 +267,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
   if(command==='add'){emit(await addFiles(workspace,positionals,client));return 0;}
   if(command==='sessions'){
    const code=typeof flags.input==='string'?(flags.input==='-'?await readStdin():await readFile(resolve(workspace.cwd,flags.input),'utf8')):undefined;
-   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(flags.as==='guest'||flags.as==='test-user'?{viewer:flags.as as 'guest'|'test-user'}:{}),progress:stderr});
+   const result=await browserSessionCommand(client,positionals[0],positionals[1],{code,execution:typeof flags.execution==='string'?flags.execution:undefined,...(typeof flags.as==='string'?{viewer:viewerChoice(flags.as)}:{}),progress:stderr});
    emit(result);return result.error?1:0;
   }
+  if(command==='testuser'){emit(await testUserCommand(client,positionals[0],positionals[1],{all:!!flags.all}));return 0;}
   if(account){const result=await remoteAccountCommand(workspace,parsed,account,client);if(result.content!==undefined)stdout(result.content);else emit(result.value);return result.exitCode??0;}
   if(command==='fork'){emit(await forkResources(workspace,positionals,{...forkOptions(),client}));return 0;}
   if(command==='export'){await exportResources(workspace,positionals,{...exportOptions(),client});return 0;}
