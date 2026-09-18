@@ -9,22 +9,10 @@ it('keeps cloud deployment and paid smoke out of OSS', () => {
     expect(existsSync(resolve(root, '.github/workflows', name)), name).toBe(false);
   }
 });
-it('exposes usable manual-only runtime and CLI release maintenance', () => {
-  for (const name of ['cli-runtime.yml', 'publish-cli.yml']) {
-    const definition = workflow(name);
-    expect(Object.keys(definition.on)).toEqual(['workflow_dispatch']);
-    for (const job of Object.values(definition.jobs)) expect(job.if).toBeUndefined();
-  }
-});
-it('builds only the tag commit verified against successful CI', () => {
-  const definition = workflow('publish-cli.yml');
-  expect(definition.on.workflow_dispatch.inputs.tag.required).toBe(true);
-  const verify = definition.jobs.verify.steps.find(step => step.id === 'source');
-  expect(verify.env.RELEASE_TAG).toBe('${{ inputs.tag }}');
-  expect(verify.run).toContain('[[ "$RELEASE_TAG" =~ ^afbin-v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]');
-  expect(verify.run).toContain('--workflow ci.yml --commit "$sha" --status success');
-  const checkout = definition.jobs.build.steps.find(step => step.uses?.startsWith('actions/checkout@'));
-  expect(checkout.with.ref).toBe('${{ needs.verify.outputs.sha }}');
+it('exposes usable manual-only runtime maintenance', () => {
+  const definition = workflow('cli-runtime.yml');
+  expect(Object.keys(definition.on)).toEqual(['workflow_dispatch']);
+  for (const job of Object.values(definition.jobs)) expect(job.if).toBeUndefined();
 });
 it('does not schedule copied paid agent jobs in OSS CI', () => {
   const definition = workflow('ci.yml');

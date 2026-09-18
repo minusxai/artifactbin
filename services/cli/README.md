@@ -277,9 +277,6 @@ commands below. Prose and the CLI's own tests are exempt.
 4. Deploy a matching server/installer only after publication succeeds. Rollback keeps the
    previous release available; installers also accept `--version` explicitly.
 
-`Publish afbin CLI` remains a manual recovery path for an existing CI-tested main tag; it
-rebuilds and tests all four targets before creating a release, and never overwrites one.
-
 The separate `Build CLI Node runtimes` workflow is manual maintenance for a new pinned
 Node runtime revision. Ordinary CLI builds download and verify the existing runtime.
 

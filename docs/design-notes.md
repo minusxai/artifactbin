@@ -133,10 +133,29 @@ Script contract tests run with every code change because they read across module
 Workspace manifests, shared contracts/utils, build and CI configuration,
 unclassified paths or unavailable history select the full suite. Only explicitly
 classified repository prose skips runtime checks; shipped skill markdown belongs
-to the app. Pushes to main always run everything. Keep dependency edges current
-when adding cross-module consumers; the planner tests also check workspace edges.
+to the app. Keep dependency edges current when adding cross-module consumers;
+the planner tests also check workspace edges.
 The required `test` job accepts a skipped job only when the plan did not select it,
 and includes CLI results. Paid provider evaluations are explicit local maintainer operations.
+
+**A tree is tested once.** A green `test` job uploads a `tested-tree-<git tree hash>` artifact
+naming the tree it passed; on a pull request that tree is the merge commit's, which is the tree a
+squash merge produces. The push that merges it finds that artifact and selects no job at all,
+rather than repeating a full matrix on bytes CI has already proved. The artifact is written after
+the roll-up's own check, so it exists only for a green run, and it is kept longer than any merge
+window — an expired one is no evidence and selects the suite again.
+
+**A release is a version and nothing else.** When the whole diff is the version lines
+`npm run release:cli` and `npm run generate:teaching -w services/cli` write, the plan selects only
+`checks` and the four platform binary builds: the code under that version already passed, and what
+a release has to prove is that the binaries build and run. Any other file in the same change makes
+it an ordinary run. The converse is a refusal rather than a selection — `checks` fails a pull
+request that changes CLI source and carries no bump, because the publisher uploads nothing unless
+the version moved.
+
+**Nightly on main.** The binary matrix runs for no ordinary pull request, so a `17 9 * * *`
+schedule builds the four platforms on main: drift surfaces the next morning instead of inside a
+release, and the macOS/Linux install caches stay warm on the default branch.
 
 Run `npm test -- --files scripts/__tests__/ci-plan.test.mjs` for path,
 rename, dependency, workflow wiring and required-result checks. The CI plan is
@@ -144,19 +163,28 @@ printed in the Actions summary so each skipped job is reviewable.
 
 ### What each job is for
 
-Every job other than the planner is one of the plan's outputs, and each exists because of a class
-of failure the others cannot see. `checks` is the type and name guard (`npm run validate`) — the
-cheapest signal there is. The Vitest projects run as their own sharded jobs; the browser set is
+Every job but the planner, the roll-up and the timing report is one of the plan's outputs, and each
+exists because of a class of failure the others cannot see. `checks` is the type and name guard
+(`npm run validate`), and the workflow lint — the cheapest signals there are. The Vitest projects
+run as their own sharded jobs; the browser set is
 described in [operations](operations.md). Maintainer agent evaluations live in a private repository, checked out at `evals/` for a run.
 `build` proves the production build compiles, and the run builds the application exactly once: it
 uploads what it built (with the CLI bundle) as one artifact, and each browser-gate shard downloads
 that instead of repeating the same two builds for itself.
 
+`test` is the roll-up the merge gate requires: it accepts a skipped job only when the plan did not
+select it, and it records the tested tree described above. `timings` reports every job's wall clock
+against a budget — a gate on a pull request, a summary on main — and is deliberately absent from
+the roll-up's `needs`, so it can never block a merge on a slow runner.
+
 Two jobs exist because a green unit suite does not prove a shippable artifact:
 
-- **`cli`** runs the CLI suite and then builds and smoke-tests the standalone executable on every
-  released OS and architecture. Its failures — a native helper, the PTY, executable discovery —
-  are platform-shaped and invisible to a single-platform run.
+- **`cli`** builds and smoke-tests the standalone executable on every released OS and architecture,
+  and runs the macOS Intel preview and export proofs from the executable it just built. Its
+  failures — a native helper, the PTY, executable discovery — are platform-shaped and invisible to
+  a single-platform run. It is selected for a release and by the nightly schedule, not by an
+  ordinary CLI change: that is guarded by the bundle build and by the CLI source suite, which runs
+  on the release runtime inside the `node` job.
 - **`reference-compatibility`** installs what people install: the packed npm packages and the
   standalone executable, run from outside the checkout against a host built here, and `afbin serve`
   on PGLite and on real PostgreSQL. A package the bundle left external and the published

@@ -21,7 +21,7 @@
   a deferred suite into local batches. Focused TDD tests are allowed, not broad local reruns.
 - **On deferral: commit, push, open/update a PR with an empty body, and inspect CI.** A branch push
   alone does not start CI. Report deferral accurately; require selected checks before merging.
-  Full suites, Docker/Chromium integration, browser gates, production builds and agent smoke are
+  Full suites, Docker/Chromium integration, browser gates and production builds are
   CI-only. Collect CI failures and fix them together; never blindly retry unchanged code.
 - **Reuse handoff evidence:** in the same worktree, use `npm run validate -- --reuse` and
   `npm test -- --reuse` with the original test arguments. Successful receipts last one hour and
@@ -69,7 +69,7 @@ Run these from the repository root. Keep this list current.
   never widen. `-- <ref>` selects branch changes; `-- --files <paths>` selects TDD tests;
   `-- --reuse` reuses matching evidence. Config/package edits may defer everything; that is expected.
 - CI-only: `npm run test:all`, `test:api`, `test:node`, `test:ui`, `test:integration`, `build`,
-  `test:gates` and agent smoke. Do not invoke these locally to work around deferral.
+  `test:gates`. Do not invoke these locally to work around deferral.
 - `npm run generate:routes`, `generate-story-ui-classes`, `render:schema`, `build:runtime` —
   generated inputs.
 - `npm run generate:theme-previews`, `generate:og` — theme previews and unfurl images.
@@ -79,9 +79,10 @@ Run these from the repository root. Keep this list current.
 
 ## Change checks
 
-- CLI releases require `npm run release:cli`, then `npm run generate:teaching -w services/cli`;
-  `checks` refuses a CLI PR without it, a version-only diff builds only the binaries, and a tree PR
-  CI passed is not re-tested on merge. Steps: [services/cli/README.md](services/cli/README.md).
+- CLI releases: `npm run release:cli` + `npm run generate:teaching -w services/cli`, in the CLI's
+  PR or dispatched as `Release afbin` (version straight to main). `checks` refuses a CLI PR without
+  a bump, a version-only diff builds only the binaries, and a tree PR CI passed is not re-tested on
+  merge. [Steps](services/cli/README.md).
   Successful main CI publishes the tested assets; deploys must advance their source pin and verify
   the release before serving its installer.
 - Schema changes update `services/app/lib/schema.ts`, schema ownership tests, and generated SQL via
