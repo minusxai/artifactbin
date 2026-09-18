@@ -265,7 +265,10 @@ commands below. Prose and the CLI's own tests are exempt.
 
 1. Run `npm run release:cli -- [patch|minor|major]` from the repository root (patch by default).
    This updates the CLI package, lockfile, installer and release pointer together.
-2. Run `npm run generate:teaching -w services/cli` and merge the release PR after passing checks.
+2. Run `npm run generate:teaching -w services/cli` and land both in the pull request that changes
+   the CLI. For a bump-only release of what is already on main, dispatch `Release afbin` instead: it
+   commits the version straight to main (admin PAT), and that push selects only `checks` and the
+   four binary builds.
 3. Successful main CI triggers `Release tested afbin CLI`, which tags that exact commit and
    publishes all four tested executables, host runtimes, DuckDB/Chromium packages and checksums.
    It publishes the bytes CI built: the run main CI's `tested-run` artifact names when the tree was
