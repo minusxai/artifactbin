@@ -13,6 +13,8 @@ const root=await realpath(await mkdtemp(join(tmpdir(),'preview-browser-')));
 const source='<p>Draft</p>';
 await writeFile(join(root,'report.jsx'),source);await writeFile(join(root,'sales.csv'),'amount\n10\n20\n');
 await writeFile(join(root,'appendix.jsx'),'<p id="text">Unpublished appendix</p>');
+await writeFile(join(root,'covers.csv'),'id,title,cover_ref\na,Placeholder,\n');
+for(const color of ['red','blue'])await sharp({create:{width:48,height:64,channels:3,background:color}}).png().toFile(join(root,`${color}-cover.png`));
 await writeFile(join(root,'pixel.png'),Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4KsAAAAASUVORK5CYII=','base64'));
 await writeFile(join(root,'published.jsx'),'---\nid: abc123\nhead_version: 3\n---\n<p id="text">Published local draft</p>');
 const binary=resolve(process.argv[2]??`dist/afbin-${process.platform}-${process.arch}`);
@@ -31,12 +33,13 @@ const state=await State.open(root,{ARTIFACTBIN_HOME:privateHome});
 state.put(root,'workspace',root,{server:origin,account});
 state.put(HOME_SCOPE,'identity-pool',JSON.stringify([origin,account]),{ids:Array.from({length:100},(_,i)=>'P'+String(i).padStart(5,'0'))});state.close();
 await saveConnection({server:origin,token:'mxmx_test_offline_preview'},root,{ARTIFACTBIN_HOME:privateHome});
-const addArgs=['add','sales.csv','appendix.jsx','pixel.png','report.jsx','--json'];
+const addArgs=['add','sales.csv','appendix.jsx','pixel.png','report.jsx','covers.csv','red-cover.png','blue-cover.png','--json'];
 const ids=await new Promise<Record<string,string>>((resolve,reject)=>{
  const child=spawn(packaged?binary:process.execPath,packaged?addArgs:[binary,...addArgs],{cwd:root,env:{...process.env,ARTIFACTBIN_HOME:privateHome,CLI__AUTO_UPDATE:'0'},stdio:['ignore','pipe','pipe']});
  let out='',err='';child.stdout.on('data',chunk=>out+=chunk);child.stderr.on('data',chunk=>err+=chunk);child.on('error',reject);child.on('exit',code=>code===0?resolve(JSON.parse(out)):reject(Error(out+err)));
 });
 const registered=(await readFile(join(root,'report.jsx'),'utf8'));
+await writeFile(join(root,'covers.csv'),'id,title,cover_ref\n'+['red','blue'].map(color=>`${color},${color},ref:${ids[color+'-cover.png']}`).join('\n')+'\n');
 await writeFile(join(root,'report.jsx'),registered.replace('<p>Draft</p>',`<Helmet><Value name="minimum" type="number" default={0} /><Query name="sales" source="ref:${ids['sales.csv']}">{\`select sum(amount) as total from public.rows where amount > $minimum\`}</Query></Helmet><div><a href="/a/${ids['appendix.jsx']}">Local appendix</a><img src="ref:${ids['pixel.png']}" alt="Local image" /><p id="text">Draft paragraph</p><Select label="Minimum" value="$minimum" options={[{"label":"All","value":0},{"label":"Above fifteen","value":15}]} /><Number data="$sales" col="total" agg="sum" /></div>`));
 async function launch(port=0){
  const args=['preview',ids['report.jsx']!,'published.jsx','--port',String(port),'--json'];
@@ -133,6 +136,13 @@ try{
  const blue=await color('blue.jpg');assert.ok(blue[2]!>blue[0]!+60,`Latest blue local edit missing: ${blue}`);
  }else await writeFile(join(root,'capture.jsx'),red.replace('bg-red-500','bg-blue-500'));
  if(phase!=='export-basic'){
+ await writeFile(join(root,'gallery.jsx'),`<Helmet><Query name="books" source="ref:${ids['covers.csv']}">{\`select * from public.rows\`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
+ await imageExport(['gallery.jsx','--output','gallery.png']);
+ const pixels=await sharp(await readFile(join(root,'gallery.png'))).removeAlpha().raw().toBuffer({resolveWithObject:true});
+ let redPixels=0,bluePixels=0;
+ for(let i=0;i<pixels.data.length;i+=pixels.info.channels){if(pixels.data[i]!>220&&pixels.data[i+1]!<30&&pixels.data[i+2]!<30)redPixels++;if(pixels.data[i]!<30&&pixels.data[i+1]!<30&&pixels.data[i+2]!>220)bluePixels++;}
+ assert.ok(redPixels>100&&bluePixels>100,'Local export must contain both dataset image refs');
+ console.log('PASS local export resolves red and blue dataset image refs');
  // Warm-cache exports are independent. Two browser workers bound memory while
  // retaining the cold-cache proof and the ordered red -> edited blue assertion above.
  await writeFile(join(root,'pixel.png'),await sharp({create:{width:100,height:100,channels:3,background:'#ff0000'}}).png().toBuffer());

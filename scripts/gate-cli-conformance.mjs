@@ -1,6 +1,5 @@
 /** Portable CLI/HTTP acceptance against a real host. Mail login gives permission cases real accounts. */
 import assert from 'node:assert/strict';
-import sharp from 'sharp';
 import {createHash} from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, readdir, rm } from 'node:fs/promises';
@@ -158,19 +157,6 @@ try {
   const png = await readFile(join(workspace, 'report.png'));
   assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
   record('CLI export returns a real Chromium PNG');
-  });
-  await scenario(async () => {
-  for (const color of ['red','blue']) await sharp({create:{width:48,height:64,channels:3,background:color}}).png().toFile(join(workspace,`${color}.png`));
-  const images=await invoke(['add','red.png','blue.png']);
-  await writeFile(join(workspace,'covers.json'),JSON.stringify(['red','blue'].map(color=>({id:color,title:color,cover_ref:`ref:${images[color+'.png']}`}))));
-  const data=await invoke(['add','covers.json']);
-  await writeFile(join(workspace,'gallery.jsx'),`<Helmet><Query name="books" source="ref:${data['covers.json']}">{\`select * from public.rows\`}</Query></Helmet><For each={$books} keyBy="id"><img src="$_row.cover_ref" alt="$_row.title" loading="lazy" width={48} height={64}/></For>`);
-  await invoke(['export','gallery.jsx','--output','gallery.png']);
-  const pixels=await sharp(await readFile(join(workspace,'gallery.png'))).removeAlpha().raw().toBuffer({resolveWithObject:true});
-  let red=0,blue=0;
-  for(let i=0;i<pixels.data.length;i+=pixels.info.channels){if(pixels.data[i]>220&&pixels.data[i+1]<30&&pixels.data[i+2]<30)red++;if(pixels.data[i]<30&&pixels.data[i+1]<30&&pixels.data[i+2]>220)blue++;}
-  assert.ok(red>100&&blue>100,'local export must contain both dataset image refs');
-  record('CLI local export resolves selected dataset image refs');
   });
   if (failures.length) throw new AggregateError(failures, 'CLI host conformance failed');
   console.log(JSON.stringify({ suite: 'cli-host-conformance', checks: evidence, cli, base }));
