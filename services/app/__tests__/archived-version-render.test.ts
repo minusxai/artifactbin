@@ -9,6 +9,7 @@ import { GET as serveArtifact } from '@/app/a/[id]/raw/route';
 import { GET as pageData } from '@/app/api/page/artifact/[id]/route';
 import { POST as createArtifactRoute } from '@/app/api/artifacts/route';
 import { PUT as replaceRoute } from '@/app/api/artifacts/[id]/route';
+import { archivedReadOnly } from '@/lib/archived-version';
 import { artifactState } from '@/lib/artifact-state';
 import { getArtifactById, updateSharingFor } from '@/lib/artifacts';
 import { mintToken } from '@/lib/tokens';
@@ -112,5 +113,32 @@ describe('who may open an archived version', () => {
     expect(html).toMatch(/version 2 of 2/i);
     // Never cached, and never an address that could be mistaken for the head's.
     expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+
+  /*
+   * THE WORDS A REFUSED WRITE SHOWS, carried on the island itself. Dropping
+   * `mutateUrl` already disables every control; it disables them saying "This
+   * view cannot save changes", which is about the wrong thing — the reader may
+   * well be able to edit this document, just not this version of it. The
+   * control that draws the reason is pinned in
+   * lib/story-runtime/__tests__/runtime-button.ui.test.tsx; what belongs here
+   * is that the ROUTE puts it on the document.
+   */
+  it('tells a hydrating document why it can never write', async () => {
+    const owner = await mintToken('archived-readonly');
+    const created = await createArtifactRoute(request('/api/artifacts', { method: 'POST', token: owner.token, json: { markup: '<Helmet><Value name="n" type="number" default={1} /></Helmet><div><p>Version one</p></div>', visibility: 'public' } }));
+    expect(created.status, await created.clone().text()).toBe(201);
+    const id = (await created.json()).id as string;
+
+    const at = await serveArtifact(request(`/a/${id}/raw?version=1`, { token: owner.token }), params({ id }));
+    expect(at.status).toBe(200);
+    const html = await at.text();
+    expect(html).toContain(archivedReadOnly(1));
+    expect(archivedReadOnly(1)).toBe('Version 1 is read-only');
+    expect(html).not.toMatch(/mutateUrl|\/mutate/);
+
+    // The head of the same document carries neither.
+    const head = await serveArtifact(request(`/a/${id}/raw`, { token: owner.token }), params({ id }));
+    expect(await head.text()).not.toContain('read-only');
   });
 });
