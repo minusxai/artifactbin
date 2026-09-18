@@ -72,6 +72,31 @@ describe('the onboarding gate', () => {
     }
   });
 
+  it('lets a pending intent finish first — the same address without one is diverted', () => {
+    session.value = newAccount;
+    // Pressed Fork while signed out, sent through /login, handed back here. The
+    // instruction is consumed ON MOUNT, so diverting would silently lose it —
+    // and the first person ever to press Fork is by definition a new account.
+    at('/@someone/doc?intent=fork');
+    expect(screen.getByTestId('where')).toHaveTextContent('/@someone/doc?intent=fork');
+    cleanup();
+
+    // The same person on the same path with nothing pending: still owed the
+    // welcome page, so the exemption is about the ask and not about the route.
+    at('/@someone/doc');
+    expect(screen.getByTestId('where')).toHaveTextContent(
+      `/welcome?callbackUrl=${encodeURIComponent('/@someone/doc')}`,
+    );
+    cleanup();
+
+    // Outside lib/intent's allowlist is not an instruction: anyone may append
+    // anything to a shared link, and it must not defer the welcome page.
+    at('/@someone/doc?intent=whatever');
+    expect(screen.getByTestId('where')).toHaveTextContent(
+      `/welcome?callbackUrl=${encodeURIComponent('/@someone/doc?intent=whatever')}`,
+    );
+  });
+
   it('waits for the session rather than guessing at it', () => {
     session.value = null;
     at('/trash');
