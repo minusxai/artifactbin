@@ -10,6 +10,12 @@ import { PAGE_DATA_CHANGED } from '@/web/page-data-events';
 interface SessionState {
   user: { id: string; email: string | null } | null;
   kind: 'account' | 'anon' | 'none';
+  /**
+   * Has this person been through the welcome page? FALSE only for an account
+   * that has not; web/OnboardingGate is the one reader, and it insists on
+   * exactly `false` so a session that has not loaded never redirects anybody.
+   */
+  onboarded: boolean;
 }
 
 const Ctx = createContext<{ session: SessionState | null; reload: () => void; pages: PageDataStore | null; sessionError: Error | null }>({ session: null, reload: () => {}, pages: null, sessionError: null });

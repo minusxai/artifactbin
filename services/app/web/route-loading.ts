@@ -23,6 +23,8 @@ export function routeLoading(url: Pick<URL, 'pathname' | 'search'>): { identity:
     '/assets': { code: routePages.AssetsPage }, '/chat': { code: routePages.ChatPage },
     '/login': { code: routePages.LoginPage },
     '/start': { code: routePages.StartPage },
+    // Its data is /api/my/profile, which the page owns; only the code warms here.
+    '/welcome': { code: routePages.WelcomePage },
     '/docs-human': { code: routePages.DocsPage },
   };
   const match = app[path] ?? (path.startsWith('/datasets/') ? { code: routePages.DatasetEditorPage } : null);
