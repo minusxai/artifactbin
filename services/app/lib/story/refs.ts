@@ -22,6 +22,7 @@ import type { VizRecipeBinding, VizRecipeContent } from '@/lib/validation/atlas-
 import { isNumberFormat, NUMBER_FORMAT_HINT } from './number-format';
 import { NUMBER_AGGS } from './number-aggregation';
 import { ARTIFACT_REFERENCE_PATTERN } from '@artifactbin/contracts';
+import {parseRowRef} from './row-scope';
 
 interface RefUse {
   id: string;
@@ -209,7 +210,7 @@ export function findExternalSubresources(source: string): ValidationError[] {
          * undeclared or wrong-kind `$name` BY NAME, in the same always-on error
          * array, so nothing here is being waved through.
          */
-        if (!el.isComponent && el.tag.toLowerCase() === 'img' && name === 'src' && carriesRef(value)) continue;
+        if (!el.isComponent && el.tag.toLowerCase() === 'img' && name === 'src' && (carriesRef(value) || parseRowRef(value))) continue;
         if (el.tag === 'Video' && name === 'src') {
           if (videoEmbedUrl(value) === null) {
             errors.push({

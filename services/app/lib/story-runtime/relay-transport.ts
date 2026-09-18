@@ -1,3 +1,4 @@
+import type {ImageAssetAnswer} from '@/lib/story/ref-data';
 /**
  * The served document's QueryTransport INSIDE A PARENT: a postMessage relay
  * to the page (lib/story-runtime/contract.ts STORY_QUERY_MESSAGE). The page
@@ -91,7 +92,7 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
    * rejection here would only become an unhandled promise and an empty box.
    */
   let assetSeq = 0;
-  const importers = new Map<number, { settle: (r: { url: string } | { refused: string }) => void; clear: () => void }>();
+  const importers = new Map<number, { settle: (r: ImageAssetAnswer) => void; clear: () => void }>();
   source.addEventListener('message', (e: MessageEvent) => {
     if (e.source !== target || e.origin !== appOrigin) return;
     const data = e.data as StoryAssetResult | undefined;
@@ -100,11 +101,11 @@ export function createRelayTransport(target: Window, appOrigin: string, source: 
     if (!w) return;
     importers.delete(data.id);
     w.clear();
-    w.settle('url' in data ? { url: data.url } : { refused: data.refused });
+    w.settle('url' in data ? { url: data.url, image:data.image } : { refused: data.refused });
   });
 
   return {
-    importAsset: (url, kind, signal) => new Promise<{ url: string } | { refused: string }>((settle) => {
+    importAsset: (url, kind, signal) => new Promise<ImageAssetAnswer>((settle) => {
       const id = ++assetSeq;
       const post = () => target.postMessage({ type: STORY_ASSET_MESSAGE, id, url, ...(kind ? { kind } : {}) } satisfies StoryAssetRequest, appOrigin);
       /*

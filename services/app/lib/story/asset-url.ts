@@ -27,6 +27,7 @@
 import { sha256Hex } from '@/lib/sha256';
 import { IMAGE_SIZES } from '@/lib/story/ref-data';
 import type { JsxElement, JsxNode } from '@/lib/jsx';
+import {imageReferenceId} from './image-source';
 
 /**
  * What a `web_assets` row contributes to the markup: the box, the blur to show
@@ -206,6 +207,7 @@ export const isWebUrl = (value: string): boolean => WEB_URL.test(value);
  * it; that is the one case where this answers something it cannot serve.
  */
 export function runtimeAssetUrl(url: string, known: AssetLookup, endpoint: string | null | undefined): string | null {
+  if (imageReferenceId(url)) return endpoint ? `${endpoint}${endpoint.includes('?') ? '&' : '?'}u=${encodeURIComponent(url)}` : null;
   if (!isWebUrl(url)) return null;
   if (known(url)) return assetUrlFor(url);
   if (!endpoint) return url;

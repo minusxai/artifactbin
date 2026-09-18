@@ -82,6 +82,8 @@ export interface BoundSourceProps {
   props: Record<string, unknown>;
   /** The `src` the author wrote: `$pick`, or a string carrying `{$pick}`. */
   template: string;
+  /** Invocation-local row; never resolved from shared scalar state. */
+  row?: Record<string, unknown>;
 }
 
 export interface StoryInterpreterOptions {
@@ -292,7 +294,7 @@ function renderNode(node: JsxNode, options: StoryInterpreterOptions, path: strin
     const props = buildProps(node.attributes.filter((a) => a !== source.attr), false, node.tag, path, options.row, options.values);
     const Source = options.boundSource ?? StaticBoundSource;
     const element = React.createElement(Source, {
-      key: options.keyFor?.(path) ?? path, tag: 'img' as const, props, template: source.template,
+      key: options.keyFor?.(path) ?? path, tag: 'img' as const, props, template: source.template, row: options.row,
     });
     return options.decorateElement ? options.decorateElement(element, node, path) : element;
   }
@@ -354,7 +356,7 @@ function boundSourceAttr(node: JsxElement): { attr: JsxAttribute; template: stri
   if (node.tag.toLowerCase() !== 'img') return null;
   const attr = node.attributes.find((a) => a.name.toLowerCase() === 'src');
   if (!attr || !attr.value.static || typeof attr.value.json !== 'string') return null;
-  return carriesRef(attr.value.json) ? { attr, template: attr.value.json } : null;
+  return carriesRef(attr.value.json) || parseRowRef(attr.value.json) ? { attr, template: attr.value.json } : null;
 }
 
 /**

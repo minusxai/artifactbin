@@ -1,9 +1,10 @@
+import type {ImageAssetAnswer} from '@/lib/story/ref-data';
 import type {ManagedIframeContent} from '@/lib/story/managed-iframe';
 import {URL_ATTRS,URL_LIST_ATTRS,SVG_PAINT_ATTRS} from '@/lib/jsx/url-attrs';
 import {parsePing,parseSrcset} from '@/lib/story/managed-url-list';
 export interface ManagedAssetsConfig {origin: string; resolveUrl: string}
 export type ManagedAssetKind='image'|'font'|'pdf'|'script'|'binary';
-export type ManagedAssetRelay=(url:string,kind?:ManagedAssetKind,signal?:AbortSignal)=>Promise<{url:string}|{refused:string}>;
+export type ManagedAssetRelay=(url:string,kind?:ManagedAssetKind,signal?:AbortSignal)=>Promise<ImageAssetAnswer>;
 interface ManagedAssetResolver {
   resolve(url:string,kind:ManagedAssetKind):Promise<string>;
   dispose():void;

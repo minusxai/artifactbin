@@ -126,6 +126,12 @@ Social preview: `<Helmet>` metas `artifactbin:og-image` and
 <!--/bundle:skip-->
 ## Images and icons
 
+For fewer than 10 images, literal `src="ref:ID"` references are usually simplest.
+For 10 or more repeated items, upload their refs and metadata as a dataset and
+use `<For>` with `<img src="$_row.cover_ref" />`; see [dataset images](markup-repeat.md).
+Use a dataset sooner for filtering or shared detail views. This is a rule of
+thumb, not an image-count limit.
+
 - `<img src="ref:<imageId>" />` — an uploaded image
   ([publishing-datasets.md](publishing-datasets.md)) — or write the web URL
   itself: publish stores a copy, YOUR URL STAYS as written, readers are served

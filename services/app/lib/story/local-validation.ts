@@ -17,7 +17,7 @@ export function validateMarkupStructure(source:string):{errors:ValidationError[]
  return{split,errors:[
   ...localPathErrors(parsed.nodes),
   ...helmetErrors,
-  ...analyzeRowScopes(split.body).errors.map(message=>({message})),
+  ...analyzeRowScopes(split.body,split.content.queries.length ? undefined : Object.fromEntries(split.content.values.flatMap(value=>value.kind==='table'?[[value.name,value.columns]]:[]))).errors.map(message=>({message})),
   ...validateJsx(split.body,{components:JSX_STORY_COMPONENT_NAMES,allowedHtmlTags:STORY_HTML_TAGS,stylePolicy:'no-inline-style'}),
   ...managedIframeSourceErrors(split.body),...findExternalSubresources(source),...findBrokenEmbeds(source),
   ...(helmetErrors.length?[]:validateDataflow({values:split.content.values,queries:split.content.queries,mutations:split.content.mutations},collectRefNameUses(split.body))),
