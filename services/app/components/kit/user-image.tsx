@@ -73,7 +73,7 @@ export function UserImage({ id, card, size = "sm", decorative, fallback, classNa
   const key = typeof id === "string" ? id : null
   // The address that failed, not a flag: a NEW address gets its own chance.
   const [failed, setFailed] = useState<string | null>(null)
-  const box = cn("shrink-0 align-middle", BOX[size], className)
+  const box = cn("inline-flex shrink-0 align-middle", BOX[size], className)
   if (!card || key === null) {
     return (
       <Avatar size="default" data-unknown="" aria-hidden="true" className={box} {...props}>
