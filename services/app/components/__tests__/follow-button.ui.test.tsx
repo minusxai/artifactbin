@@ -34,6 +34,23 @@ describe('FollowButton', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /^follow$/i })).toBeTruthy());
     expect(calls[1]).toEqual({ url: '/api/users/usr_a/follow', method: 'DELETE', credentials: 'same-origin' });
   });
+  /**
+   * A GUEST is the case neither of the others covers: it holds a credential, so
+   * the page draws the BUTTON, and the door still refuses it by name. The
+   * answer has to be the same place the anonymous link points, or a guest press
+   * is a click that silently does nothing.
+   */
+  it('a guest whose press is refused lands on /login, returning to this profile', async () => {
+    window.history.replaceState(null, '', '/@sam?tab=stars');
+    const assign = vi.fn();
+    Object.defineProperty(window, 'location', { value: { ...window.location, assign, pathname: '/@sam', search: '?tab=stars', hash: '' }, writable: true });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'sign_in_required' }), { status: 401, headers: { 'content-type': 'application/json' } })));
+    render(<MemoryRouter><FollowButton userId="usr_a" following={false} count={7} signedIn /></MemoryRouter>);
+    fireEvent.click(screen.getByRole('button', { name: /^follow$/i }));
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(`/login?callbackUrl=${encodeURIComponent('/@sam?tab=stars')}`));
+    // The count is untouched: a refusal changed nothing about who follows whom.
+    expect(screen.getByRole('button', { name: /^follow$/i }).textContent).toContain('7');
+  });
   it('an anonymous viewer sees the count and a link to /login that returns here; the door is never asked', async () => {
     window.history.replaceState(null, '', '/@sam?tab=stars');
     render(<MemoryRouter><FollowButton userId="usr_a" following={false} count={7} signedIn={false} /></MemoryRouter>);

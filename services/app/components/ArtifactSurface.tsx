@@ -39,6 +39,7 @@ import ShareLink from '@/components/ShareLink';
 import type { AnnotationWire } from '@/lib/annotations';
 import { readIntent, stripIntent } from '@/lib/intent';
 import { loginHref } from '@/lib/login-href';
+import { refusedForSignIn } from '@/lib/story/sign-in-required';
 import PageChrome, { PageControls, PageMenu, requestPageChrome, type AppearanceMode } from '@/components/PageChrome';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 /* The editing bar's height is RESERVED by this page, never measured — and it
@@ -531,6 +532,11 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const next = want ?? !likeRef.current.liked;
     if (next === likeRef.current.liked) return;
     const res = await fetch(`/api/my/artifacts/${id}/like`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
+    // A GUEST holds a credential and is still not a person the heart can be
+    // attributed to. The door says so by name, and the answer is the same one
+    // an anonymous reader gets above: the login page, and back to here with the
+    // ask (lib/story/sign-in-required).
+    if (res && await refusedForSignIn(res)) { void navigate(loginHref(window.location, 'like')); return; }
     if (!res?.ok) return;
     likeRef.current = (await res.json()) as { liked: boolean; count: number };
     pageDataChanged();
@@ -546,6 +552,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     const next = want ?? !target.following;
     if (next === target.following) return;
     const res = await fetch(`/api/users/${target.userId}/follow`, { method: next ? 'POST' : 'DELETE', credentials: 'same-origin' }).catch(() => null);
+    if (res && await refusedForSignIn(res)) { void navigate(loginHref(window.location, 'follow')); return; }
     if (!res?.ok) return;
     const state = (await res.json()) as { following: boolean; count: number };
     followRef.current = { ...target, ...state };
