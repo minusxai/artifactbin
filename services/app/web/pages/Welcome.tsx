@@ -20,7 +20,7 @@ import { HANDLE_REFUSALS } from '@/components/UsernameCard';
 import { Button, Input, MicroLabel } from '@/components/ui';
 import { useRouter, useSearchParams } from '@/lib/navigation';
 import { internalRedirectTarget } from '@/lib/safe-redirect';
-import { pageDataChanged } from '@/web/page-data-events';
+import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 import { useSession } from '../session';
 
 interface Profile { username: string | null; image: string | null }
@@ -76,6 +76,7 @@ export function WelcomePage() {
 
     setLeaving(true);
     pageDataChanged();
+    profileChanged();
     // The session's `onboarded` bit is stale the moment this succeeds, and it
     // is what the gate reads — re-read it before anything navigates.
     reload();
