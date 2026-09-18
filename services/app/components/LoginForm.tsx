@@ -50,7 +50,6 @@ export default function LoginForm() {
     return (
       <>
         <p className="mt-2 text-xs text-muted">We’ll email you a 6-digit code. No password to remember.</p>
-        <p className="mt-2 text-xs text-muted">Your guest artifacts and connected agents will join this account. Those agents will also have access to the account’s other artifacts.</p>
         <form
           className="mt-5 flex flex-col gap-3"
           onSubmit={(e) => {
@@ -72,6 +71,7 @@ export default function LoginForm() {
           </Button>
         </form>
         {error && <p className="mt-3 text-xs text-danger">{error}</p>}
+        <p className="mt-10 text-xs text-muted"><b>Note:</b> Your guest artifacts and connected agents will join this account.</p>
       </>
     );
   }

@@ -27,3 +27,24 @@ describe('application home',()=>{
   expect(response.status).toBe(404);expect(response.headers.get('location')).toBeNull();
  });
 });
+
+ describe('signed-in login visits', () => {
+  it.each([
+    ['/login', '/'],
+    ['/login?callbackUrl=%2Fa%2Fabc%3Fx%3D1%23edit', '/a/abc?x=1#edit'],
+    ['/login?callbackUrl=https://evil.example', '/'],
+    ['/login?callbackUrl=%2Flogin%3FcallbackUrl%3D%252Faccount', '/'],
+  ])('redirects %s to %s before rendering', async (path, target) => {
+    for (const method of ['GET', 'HEAD']) {
+      const response = await app.request(request(path, { method, actor: { credential: 'session', userId: 'login-user', email: 'mxmx_test_login@example.test' } }));
+      expect(response.status).toBe(302);
+      expect(response.headers.get('location')).toBe(target);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+    }
+  });
+  it('keeps the login form available to guests', async () => {
+    const response = await app.request('/login?callbackUrl=/account');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
+  });
+ });

@@ -24,3 +24,9 @@ export function internalRedirectTarget(raw: string | null | undefined, origin: s
     return '/'; // unparseable — not a path we are willing to guess at
   }
 }
+
+/** Login destinations share origin validation and cannot loop back to login. */
+export function loginRedirectTarget(raw: string | null | undefined, origin: string): string {
+  const target = internalRedirectTarget(raw, origin);
+  return new URL(target, origin).pathname.replace(/\/+$/, '') === '/login' ? '/' : target;
+}
