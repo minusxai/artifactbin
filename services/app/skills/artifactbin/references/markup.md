@@ -56,16 +56,17 @@ Kit components ([[ components | length ]]):
 `[[ components | join(' ') ]]`
 
 Plus the embeds `Question` `Number` and the Helmet declarations `Value`
-`Query` `Mutation`; a name outside that list is rejected with the registry
-echoed back. Unknown props are ignored; data bindings and Column contracts are checked
-at publish.
+`Query` `Mutation`; a name outside it is rejected with the registry echoed
+back. Unknown props are ignored; bindings and Column contracts are checked at
+publish.
 
 [Conditions and dialogs](markup-state.md).
 
 **HTML tags: write the ordinary tag you mean** — [[ tags | length ]] are allowed
 (prose, headings, lists, tables, links, media, the bare controls `input`
-`select` `textarea` `button`, inline SVG): an unlisted tag returns `400` with `allowed_html_tags`. Only these are refused
-outright, with no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
+`select` `textarea` `button` (themed), SVG): an unlisted tag returns `400`
+with `allowed_html_tags`. Only these are refused
+outright, no list: [% for t in refusedTags %]`[[ t ]]` [% endfor %].
 
 ## `<Helmet>` — the document's own head
 

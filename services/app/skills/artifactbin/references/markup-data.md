@@ -54,9 +54,8 @@ Editable cells: [editing](markup-editing.md).
   too — use `source="ref:<folderId>"` and query `public.rows` for its children, which a document can list with
   `<Files data="$children" variant="icons|tiles" />`. Columns `id title format
   level visibility updated_at url thumbnail views sparkline`, computed per
-  VIEWER: a stranger gets the `public` children, `thumbnail` (a card) is null
-  for a private child AND for every folder, `views`/`sparkline` null unless you
-  may edit the folder.<!--/bundle:skip-->
+  VIEWER: a stranger gets the `public` children; `thumbnail` is null for a
+  private child and for folders, `views`/`sparkline` unless you may edit it.<!--/bundle:skip-->
 - `<Mutation name source="ref:abc123">{`insert into public.rows (a) values ($a)`}</Mutation>`
   — a `<Query>` that WRITES (push the dataset `--access readwrite`,
   [datasets](databases.md)). Exactly one INSERT | UPDATE | DELETE
@@ -123,16 +122,18 @@ First read [chart authoring](markup-data-authoring.md).
 
 - **Kit controls** — the themed way to bind scalars two-way. Each takes a
   `label` and `value="$name"` (`checked="$name"` on `Switch`); a change writes
-  the bound Value, typed by its declaration, and every query binding it re-runs:
+  the bound Value, typed, and every query binding it re-runs:
   - `<Select value="$region" options="$regions" placeholder="All regions" />`
-    — searchable. `options` is a table (column 1 the value, column 2 the
-    label) or an inline array (`["day","week"]`, `[{"value":"EU","label":"Europe"}]`);
-    a null-default scalar gets the "all" choice automatically.
-  - `<Segmented value="$grain" options={["day","week","month"]} />` — prefer
-    over Select when the options fit on one row.
-  - `<Slider value="$min_rev" min={0} max={5000} step={100} prefix="$" format=",.0f" />`.
+    — searchable. `options` is a table (column 1 the value, column 2 the label)
+    or an inline array (`["day","week"]`); a null-default scalar gets the "all"
+    choice.
+  - `<Segmented value="$grain" options={["day","week"]} />` — prefer over Select
+    when the options fit one row.
+  - `<Slider value="$min_rev" min={0} max={5000} prefix="$" format=",.0f" />`.
   - `<DatePicker value="$since" min max />` (a `date` Value), `<Switch checked="$flag" />` (a boolean).
-  Dropdowns belong in a control row, never inside a `<GridItem>`.
+  - `<Input value="$item" type="number" placeholder min max step />` and
+    `<Textarea value="$note" rows={3} />` — text fields.
+  Dropdowns belong in a control row, never in a `<GridItem>`.
 
 
 [Keyed templates](markup-repeat.md).

@@ -11,10 +11,13 @@ rows, and Queries to derive the view. Conditions are safe structural JSX, not
 JavaScript: they can read declared scalars but cannot call functions or run
 event handlers.
 
-Native controls bind scalars too: `<select value="$region" options="$regions" />`,
-`<input type="range|number|text|date" value="$x" />`, `checked="$flag"` on a
-checkbox, and `<textarea value="$note" />`. During a query re-run embeds keep
-their old rows and show “updating…”; failures show the engine message.
+Type into the kit's text fields — `<Input label="Title" value="$title" />`
+(`type="text|number|email|url|search|password"`, `placeholder`, `min`, `max`,
+`step`, `required`) and `<Textarea label="Note" value="$note" rows={3} />` —
+beside `Select`, `Segmented`, `Slider`, `DatePicker` and `Switch`; all of them
+share one frame. Native `<input>`/`<select>`/`<textarea>` still bind the same way
+(`checked="$flag"` on a checkbox) and are themed now too. During a query re-run
+embeds keep their old rows and show “updating…”; failures show the engine message.
 
 ```jsx
 <Helmet>
@@ -30,7 +33,7 @@ their old rows and show “updating…”; failures show the engine message.
 <Dialog open="$editing">
   <DialogTrigger>Edit</DialogTrigger>
   <DialogContent aria-label="Draft editor" run="$add">
-    <input aria-label="Title" value="$title" required autoFocus />
+    <Input label="Title" value="$title" required autoFocus />
     <button type="submit">Add draft</button>
     <DialogClose>Cancel</DialogClose>
   </DialogContent>
@@ -42,6 +45,7 @@ successful submit sets it false and restores focus to the trigger. A failed
 Mutation leaves the dialog open and shows the server message. `DialogContent`
 uses normal form validity before running its Mutation. The dialog is styled by
 default (your `className` wins); `Select` and `DatePicker` open inside it.
+Enter in a text field submits the enclosing `run=` form.
 
 Every scalar Value travels in the link unless it says otherwise, so a form field
 and a script-set flag declare `url={false}`: it stays out of the address in both
