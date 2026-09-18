@@ -77,9 +77,9 @@ Do not split comma-separated data blindly: embedded commas are ambiguous.
   level only; extract nested JSON with SQL. `_`-prefixed declaration names
   are reserved. `$_value` is the committed scalar in mutation SQL.
 - `run` editors: `<Select>`, `<input type="text">`, `<input type="number">`,
-  `<textarea>`, `<select>`. Other editor types are rejected.
+  `<textarea>`, `<select>` — native tags here, not `<Input>`; others rejected.
 - `<Button run="$complete">` captures `$_row` on click without `$_value`.
-  See [row actions](markup-repeat.md) for examples and pending/error behavior.
+  See [row actions](markup-repeat.md) for pending/error behavior.
 - Row mutations run inside a Column or keyed For. Cell editors capture the row
   when editing begins. Publish validates row fields/types against the query
   result; mutations reused across tables require compatible schemas.

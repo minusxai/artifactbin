@@ -74,7 +74,7 @@ import {
   PopoverDescription,
 } from '@/components/kit/popover';
 import { Grid, GridItem } from '@/components/kit/grid';
-import { Select, Slider, DatePicker, Segmented, Switch } from '@/components/kit/controls';
+import { Input, Textarea, Select, Slider, DatePicker, Segmented, Switch } from '@/components/kit/controls';
 import { Icon } from '@/components/kit/icon';
 import { SlideDeck, Slide } from '@/components/kit/slides';
 import { Video } from '@/components/kit/video';
@@ -157,6 +157,8 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   // The bound-control kit, registered as its STATIC faces (disabled, bindings
   // stamped); the runtime registry overrides them with live store adapters
   // (lib/story-runtime/StoryRuntimeApp).
+  Input,
+  Textarea,
   Select,
   Slider,
   DatePicker,

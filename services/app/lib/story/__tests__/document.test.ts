@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { buildStoryDocument, type StoryDocumentInput } from '@/lib/story/document';
 import { STORY_ISLAND_ID, STORY_ROOT_ID } from '@/lib/story-runtime/contract';
 import { criticalStoryFonts } from '@/lib/data/story/story-fonts';
+import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 
 const CSS = 'h1 { letter-spacing: -0.02em; }';
 const JS = 'document.body.dataset.ran = "1";';
@@ -146,6 +147,21 @@ describe('buildStoryDocument', () => {
     const author = html.indexOf(CSS);
     expect(compiled).toBeGreaterThan(-1);
     expect(author).toBeGreaterThan(compiled);
+  });
+
+  /**
+   * A bare `<input>` is left borderless and padding-less by preflight, which
+   * is how a published "add expense" form ended up as floating placeholder
+   * text beside a framed date picker. Every document carries the floor that
+   * frames it — captures included, since an export is a photograph of the page
+   * a reader sees — and the author's own sheet still comes after it.
+   */
+  it('frames a bare form control in every document, capture included, under the author\'s own CSS', async () => {
+    const html = await doc();
+    expect(html).toContain(STORY_BARE_CONTROLS_CSS);
+    expect(html.indexOf(CSS)).toBeGreaterThan(html.indexOf(STORY_BARE_CONTROLS_CSS));
+    const capture = await doc({ chrome: false });
+    expect(capture).toContain(STORY_BARE_CONTROLS_CSS);
   });
 
   it('strips `</style` from author CSS (the snapshot styleTag precedent)', async () => {

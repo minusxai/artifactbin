@@ -25,7 +25,10 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   // The bound-control kit (components/kit/controls.tsx): themed two-way
   // controls over Helmet `<Value>`s — the fancy siblings of the bindable
   // native `input`/`select`/`textarea` (lib/story/dataflow.ts REF_ATTRS).
-  'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch',
+  // `Input`/`Textarea` are the TEXT members: a bare `<input>` keeps binding,
+  // but preflight leaves it without a border or padding, so a form written
+  // from the native tags alone has no visual family at all.
+  'Input', 'Textarea', 'Select', 'Slider', 'DatePicker', 'Segmented', 'Switch',
   'SlideDeck', 'Slide',
   'Video',
   // A PDF the document links, as a card that opens it (components/kit/file.tsx).

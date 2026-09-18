@@ -32,6 +32,7 @@ import type { JsxNode } from '@/lib/jsx';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
+import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { STORY_ROOT_ATTR } from '@/lib/story-surface';
 import { escapeHtml, renderReaderChrome, type ReaderForkedFrom, type ReaderReactions } from '@/lib/story/reader-chrome';
 import { getStoryFontCss, storyFontFaceCss, STORY_FONTS_ATTR } from '@/lib/data/story/story-fonts';
@@ -418,6 +419,10 @@ export async function buildStoryDocument(input: StoryDocumentInput): Promise<str
     '<style>:root { --mx-vh: 100vh; } body { margin: 0; }</style>',
     compiledCss ? styleTag('data-mx-tw', compiledCss) : '',
     styleTag('data-mx-bare-type', STORY_BARE_TYPOGRAPHY_CSS),
+    // A bare form control looks like a form control: preflight strips its
+    // border and padding, and nothing else styles it back
+    // (lib/story-surface/bare-controls).
+    styleTag('data-mx-bare-controls', STORY_BARE_CONTROLS_CSS),
     chrome ? styleTag('data-mx-chrome', STORY_CHROME_CSS) : '',
     styleTag('data-mx-embed', STORY_EMBED_CSS),
     // Every table its own scroll box, every document, capture included: a
