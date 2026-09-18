@@ -30,8 +30,27 @@ interface ForkState {
   busy: boolean;
   /** The door's own words, when it refused. Null while nothing is wrong. */
   refusal: string[] | null;
+  /**
+   * What the fork would COPY, asked before it is offered. A page that WRITES
+   * datasets is copied together with them, under this account — a bigger act
+   * than the word "fork" promises on its own, so the dialog says it first. Null
+   * until the dry run answers, and if it never does the button still works: the
+   * note describes the fork, it does not authorize it.
+   */
+  datasets: Array<{ id: string; title: string | null }> | null;
   fork: () => void;
   dismiss: () => void;
+}
+
+/** The sentence a dialog says when forking would take datasets along. */
+export function copiedDatasetsNote(datasets: Array<{ id: string; title: string | null }>): string | null {
+  const first = datasets[0];
+  if (!first) return null;
+  // The singular NAMES it — one dataset is a thing a person recognizes. The
+  // plural counts, because five titles in a confirm dialog is a wall.
+  return datasets.length === 1
+    ? `Its dataset “${first.title ?? first.id}” will be copied too`
+    : `Its ${datasets.length} datasets will be copied too`;
 }
 
 /** The row and the dialog share this — see the note above the module. */
@@ -53,12 +72,34 @@ function useForkArtifact(id: string): ForkState {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string[] | null>(null);
+  const [datasets, setDatasets] = useState<ForkState['datasets']>(null);
   /** A navigation is in flight after a 201; nothing may set state into it. */
   const alive = useRef(true);
   const generation = useRef(0);
   useEffect(() => {
     alive.current = true;
     return () => { alive.current = false; generation.current += 1; };
+  }, [id]);
+  /*
+   * THE DRY RUN, once the dialog is open. It creates nothing, so it costs a
+   * request and no consequence, and its failure is deliberately silent: a fork
+   * that would copy datasets is still a fork this person may ask for, and a
+   * scary red line about a preview call is not the refusal they need to read.
+   */
+  useEffect(() => {
+    let current = true;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/my/artifacts/${id}/fork`, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dry_run: true }),
+        });
+        if (!res.ok) return;
+        const body = (await res.json().catch(() => ({}))) as { datasets?: Array<{ id: string; title: string | null }> };
+        if (current && Array.isArray(body.datasets)) setDatasets(body.datasets);
+      } catch { /* the note is an extra; its absence changes nothing */ }
+    })();
+    return () => { current = false; };
   }, [id]);
   /**
    * The re-entrancy guard is a REF, not the `busy` state, and that is the
@@ -93,7 +134,10 @@ function useForkArtifact(id: string): ForkState {
           router.push(loginBack());
           return;
         }
-        setRefusal(body.details?.length ? body.details : [body.error ?? `could not fork (${res.status})`]);
+        // ONCE EACH: a page naming the same unreachable ref from three
+        // positions is refused three times in identical words, and three
+        // copies of one sentence reads as three problems.
+        setRefusal([...new Set(body.details?.length ? body.details : [body.error ?? `could not fork (${res.status})`])]);
       } catch {
         if (current()) setRefusal(['could not fork — try again']);
       } finally {
@@ -109,7 +153,7 @@ function useForkArtifact(id: string): ForkState {
     })();
   }, [id, router]);
 
-  return { busy, refusal, fork, dismiss: useCallback(() => setRefusal(null), []) };
+  return { busy, refusal, datasets, fork, dismiss: useCallback(() => setRefusal(null), []) };
 }
 
 /** The refusal, said where the act was asked for. */
@@ -161,11 +205,16 @@ export default function ForkArtifact({ id, title = null, variant = 'menu' }: {
  * Escape is cancel — the house dialog contract (components/ConfirmDialog).
  */
 export function ForkConfirm({ id, title, onClose }: { id: string; title: string | null; onClose: () => void }) {
-  const { busy, refusal, fork, dismiss } = useForkArtifact(id);
+  const { busy, refusal, datasets, fork, dismiss } = useForkArtifact(id);
+  const note = datasets && copiedDatasetsNote(datasets);
   return <ConfirmDialog title="Fork this artifact?"
     description={`A copy of “${title ?? 'this artifact'}” will be added to your artifacts. You’ll open the new copy after forking. Comments, history and sharing stay with the original.`}
     action="Fork and open copy" confirmLabel="Confirm fork" cancelLabel="Cancel fork"
     busy={busy} onConfirm={fork} onCancel={onClose}>
+    {/* Before the one Fork button, never as a second choice: there is no fork
+        of an app that leaves its datasets behind, so this is what will happen
+        rather than something to opt into. */}
+    {note && <p aria-label="Datasets this fork copies" role="status" className="mt-3 rounded-[5px] border border-edge bg-raised px-2 py-2 font-mono text-[11px] text-muted">{note}</p>}
     {refusal && <ForkRefusal lines={refusal} onDismiss={dismiss} />}
   </ConfirmDialog>;
 }
