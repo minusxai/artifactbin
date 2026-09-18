@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       const token = await resolveTokenById(actor.tokenId);
       if (!token?.userId) return json({ error: 'invalid_guest' }, 403);
       const user = await getUserById(token.userId);
-      return json({ userId: token.userId, guest: user?.is_guest === true, tokenId: token.id });
+      return json({ userId: token.userId, guest: !!user && user.kind !== 'account', tokenId: token.id });
     }
     const owner = await createGuestOwner();
     const response = json({ userId: owner.userId, guest: true, tokenId: owner.tokenId });

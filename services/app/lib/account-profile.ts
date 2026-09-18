@@ -2,14 +2,14 @@ import {createHash} from 'node:crypto';
 import {parseAccountResource} from '@artifactbin/utils/account-resource';
 import type {ProfileResource} from '@artifactbin/contracts';
 import {getDb,type Queryable} from './db';
-import {getUserById,setUsername} from './users';
+import {getUserById,isAccountRow,setUsername} from './users';
 import {linked,replaceLinked} from './relations';
 import {readableArtifact} from './artifact-read';
 import type {TokenActor} from './artifacts';
 import {completeMutationReceipt,type MutationReceipt,type MutationReply} from './mutation-receipt';
 
 export async function accountProfile(userId:string,query?:Queryable):Promise<ProfileResource|null>{
- const user=await getUserById(userId,query);if(!user || user.is_guest || !user.email)return null;
+ const user=await getUserById(userId,query);if(!isAccountRow(user))return null;
  const value={type:'profile' as const,id:user.id,username:user.username,email:user.email,name:user.name,liked:(await linked(userId,'like',query)).sort(),following:(await linked(userId,'follow',query)).sort()};
  return {...value,state:createHash('sha256').update(JSON.stringify(value)).digest('hex')};
 }

@@ -7,6 +7,7 @@ import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
 import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
 import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
+import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/user-kinds';
 import type { MutationReceipt } from './mutation-receipt';
 import {sourceChanges} from './story/source-changes';
 import {reserveCreation,completeCreation,type CreationOperation} from './creation-ledger';
@@ -219,7 +220,11 @@ export async function roleWithoutLink(
   actor: RoleActor,
 ): Promise<ArtifactRole> {
   if (ownsArtifact(row, actor)) return 'owner';
-  if (await isGuestActor(actor)) return 'none';
+  // A NAMED share can never reach a guest or a test user: neither has an email
+  // for an invitation to be addressed to, and neither is the kind of identity
+  // an account invites. They reach a stranger's document through the LINK or
+  // not at all (lib/user-kinds).
+  if (await isLinkOnlyActor(actor.userId)) return 'none';
   if (row.format === 'markup' && hasDocumentEditorAccess(actor)) return 'editor';
   return namedRoleFor(row, actor);
 }
@@ -244,13 +249,23 @@ export async function effectiveRole(
   // THE ANONYMOUS CEILING applies to the LINK only, never to a named share:
   // being invited by address is itself an account-shaped act, while holding a
   // URL is not. Without an account there is nothing to attribute a write to.
-  const byLink = actor.userId && !await isGuestActor(actor) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
+  const byLink = actor.userId && await reachesAsAccount(row, actor) ? linkRoleOf(row) : capRole(linkRoleOf(row), ANONYMOUS_CEILING);
   return maxRole(byLink, held);
 }
 
-async function isGuestActor(actor: RoleActor): Promise<boolean> {
-  if (!actor.userId) return false;
-  return (await (await getDb()).query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [actor.userId])).rows.length > 0;
+/**
+ * Does the LINK grant this actor its full role, or only the anonymous ceiling?
+ *
+ * An ACCOUNT: yes. A guest: never — holding a URL is not an account-shaped act.
+ * A TEST USER: only inside the sandbox, toward an artifact another test user
+ * owns, which is what makes it a full user in there and a guest out here
+ * (lib/user-kinds, the same rule the SQL scopes read).
+ */
+async function reachesAsAccount(row: Pick<ArtifactRow, 'user_id'>, actor: RoleActor): Promise<boolean> {
+  const kind = await userKindOf(actor.userId);
+  if (kind === null || kind === 'account') return true;
+  if (kind !== 'testuser') return false;
+  return await userKindOf(row.user_id) === 'testuser';
 }
 
 /**
@@ -468,9 +483,21 @@ async function insertArtifact(
   if (!atCreation.forkedFrom) await validateUserContent(tx,input,userId,key=>loadDatasetRows({content:"",meta:{objectKey:key}}));
   const catalog=catalogOf(input);
   if(catalog?.kind==='postgres'&&catalog.connection)await claimPendingDatasetSecret(catalog.connection,{tokenId,userId},id,tx);
-  const guestDefault = input.visibility === undefined && userId
-    ? (await tx.query('SELECT 1 FROM users WHERE id = $1 AND is_guest = true', [userId])).rows.length > 0
-    : false;
+  const ownerKind = await userKindOf(userId, tx);
+  const guestDefault = input.visibility === undefined && ownerKind === 'guest';
+  /*
+   * THE SANDBOX CEILING. A test user's work never lists anywhere and is never
+   * `public`: it exists to be looked at by the account that minted it and by
+   * the other throwaway people in there, and it is ERASED with its owner. A
+   * `public` ask is stored as `unlisted` rather than refused — the copy is
+   * still reachable by link, which is what the asker wanted it for — and the
+   * create reply carries the visibility it really got.
+   */
+  const visibility = ownerKind === 'testuser'
+    ? (input.visibility === 'public' || input.visibility === undefined ? 'unlisted' : input.visibility)
+    : input.visibility ??
+      (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
+        : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private');
   const created = await tx.query<ArtifactRow>(
   // The genesis edit row makes the creation's edit_id resolvable like any
   // other: an agent that creates and then edits against that id is on an
@@ -504,10 +531,9 @@ async function insertArtifact(
     // accounts create private documents, except assets, born
     // unlisted: a public document reaches them at read time, and a
     // born-private ref bakes a 404 into every shared document that uses
-    // it. Routes validate an explicit ask upstream.
-    input.visibility ??
-      (!userId || guestDefault ? (ALLOW_PUBLIC_VISIBILITY ? 'public' : 'unlisted')
-        : input.format === 'image' || input.format === 'dataset' || input.format === 'pdf' || input.format === 'file' ? 'unlisted' : 'private'),
+    // it. Routes validate an explicit ask upstream. Decided above, because a
+    // test user's ceiling is part of the same one decision.
+    visibility,
     // NULL reads as 'viewer' (linkRoleOf), which is what every ordinary
     // creation grants whoever holds the link.
     atCreation.linkRole ?? null,
@@ -935,7 +961,7 @@ const LINK_PREDICATE = (min: ArtifactRole) =>
  */
 const scopeAtLeast = (actor: TokenActor, min: ArtifactRole): Scope =>
   actor.userId
-    ? live({ where: (p) => `(user_id = ${p} OR (NOT EXISTS (SELECT 1 FROM users WHERE id = ${p} AND is_guest = true) AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
+    ? live({ where: (p) => `(user_id = ${p} OR (${ACCOUNT_REACH_SQL(p)} AND (${SHARE_PREDICATE(shareRolesAtLeast(min), p)} OR ${LINK_PREDICATE(min)}${hasDocumentEditorAccess(actor) ? " OR artifacts.format = 'markup'" : ''})))`, val: actor.userId })
     : ownerScope(actor);
 
 export const editorScope = (actor: TokenActor): Scope => scopeAtLeast(actor, 'editor');
