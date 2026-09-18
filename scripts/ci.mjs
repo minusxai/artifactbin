@@ -124,7 +124,10 @@ if (mode === 'plan') {
   // from this run. Only after that does a tree we already tested get to select nothing at all.
   const testedRun = !nightly && !versionOnly && env.CI__EVENT === 'push' ? await testedRunFor(treeOf(head)) : null;
   const plan = planCi(paths ?? [], {
-    full: !nightly && !versionOnly && env.CI__EVENT !== 'pull_request',
+    // A push with diff evidence is judged like a PR: the modules it changed and their dependents
+    // (planCi still widens to everything for manifests, shared packages, CI config or unclassified
+    // paths). Only a push with no usable base — a first push, a forced one — runs the full suite.
+    full: !nightly && !versionOnly && !(env.CI__EVENT === 'pull_request' || (env.CI__EVENT === 'push' && usable)),
     cliRelease: cliVersionChanged(env),
     versionOnly,
     nightly,
