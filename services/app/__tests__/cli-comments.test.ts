@@ -24,7 +24,9 @@ it('creates agent comments by unambiguous quote without editing the document, an
  const made=await call({quote:'unique sentence',body:'Clarify this'});expect(made.status).toBe(201);expect((await made.json()).anchor.nodeId).toBe('first');
  const after=await getArtifactFor(actor,row.id);expect(after?.source).toBe(row.source);expect(after?.version).toBe(row.version);
  const ambiguous=await call({quote:'Repeated',body:'Which one?'});expect(ambiguous.status).toBe(400);expect((await ambiguous.json()).error).toBe('ambiguous_quote');
- const outsider=await mintToken('outsider');const denied=await post(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:outsider.token,json:{node_id:'first',body:'No'}}),{params:Promise.resolve({id:row.id})});expect(denied.status).toBe(404);
+ const outsider=await mintToken('outsider');const denied=await post(request(`/api/artifacts/${row.id}/annotations`,{method:'POST',token:outsider.token,json:{node_id:'first',body:'No'}}),{params:Promise.resolve({id:row.id})});
+ // The outsider can READ this (link-visible) document, so the answer is the sign-in door, not the uniform 404 an unreadable id keeps (lib/capabilities).
+ expect(denied.status).toBe(401);expect((await denied.json()).error).toBe('sign_in_required');
 });
 
 it('pages comment threads in creation order with a bounded database read',async()=>{

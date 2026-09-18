@@ -17,7 +17,7 @@
  * construction.
  */
 import { getDb } from './db';
-import { ensureUsername } from './users';
+import { ensureUsername, getUserById } from './users';
 
 /**
  * ONE ADDRESS, TWO IDS — the provisioning fault below, as a type callers can single out. A door that
@@ -63,8 +63,10 @@ export async function syncProfile(claims: { userId: string; email?: string }): P
     throw error;
   }
   writes++;
-  const row = (await db.query<{ id: string; email: string; name: string | null; username: string | null; created_at: string }>('SELECT id, email, name, username, created_at FROM users WHERE id = $1', [claims.userId])).rows[0];
-  if (row && !row.username) await ensureUsername(row as Parameters<typeof ensureUsername>[0]);
+  // Every column `ensureUsername` decides by — `kind` included: a row read
+  // without it reads as not-an-account and never gets its handle.
+  const row = (await getUserById(claims.userId)) ?? null;
+  if (row && !row.username) await ensureUsername(row);
   seen.set(claims.userId, hash);
   if (seen.size > LRU_MAX) seen.delete(seen.keys().next().value!);
 }
