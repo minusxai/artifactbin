@@ -61,6 +61,27 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
 
+      # WHICH RUN HOLDS THE TESTED BYTES. Main's CI no longer always builds them itself: when the
+      # merged tree was already tested on its pull request it selects no job at all and records, in a
+      # `tested-run` artifact, the id of the run that did the work (scripts/ci.mjs `record-tree`).
+      # Reading it keeps this workflow publishing exactly what CI built and proved. Absent — an older
+      # run, or a main build that did everything itself — the workflow_run's own id is still right.
+      - name: The run whose binaries this publishes
+        if: steps.release.outputs.tag != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name tested-run --dir tested-run 2> tested-run-error.txt; then
+            tested=$(jq -r '.run_id' tested-run/tested-run.json)
+            # Artifact content is data, never a command: it is one integer or this stops.
+            [[ "$tested" =~ ^[0-9]+$ ]]
+            echo "SOURCE_RUN=$tested" >> "$GITHUB_ENV"
+            echo "Publishing the binaries built by run $tested."
+          else
+            cat tested-run-error.txt >&2
+            echo "No tested-run artifact; publishing from run $SOURCE_RUN itself."
+          fi
+
       - name: Download the binaries tested by this CI run
         if: steps.release.outputs.tag != ''
         shell: bash
