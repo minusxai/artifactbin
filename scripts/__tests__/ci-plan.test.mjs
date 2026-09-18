@@ -306,9 +306,25 @@ describe('GitHub CI adapter', () => {
       // One more file in the same push and the push is an ordinary one again.
       writeFileSync(path.join(cwd, 'services/cli/src/runner.ts'), 'export const x = 1;\n');
       git('add', '.'); git('commit', '-q', '-m', 'and a source change');
+      // …and, since that push still carries the manifest bump, it is a full run — the same rule a PR gets.
       const mixed = planOutput(cwd, { CI__EVENT: 'push', CI__BEFORE_SHA: base, CI__HEAD_SHA: git('rev-parse', 'HEAD') });
       expect(mixed.api).toBe('true');
       expect(mixed.gates).toBe('true');
+      expect(JSON.parse(mixed.plan).full).toBe(true);
+      // An app change on a push selects the app's jobs and no more; a manifest change selects everything.
+      mkdirSync(path.join(cwd, 'services/app/lib'), { recursive: true });
+      // Explicit pathspecs: the planner's own outputs-* files live in this cwd and must not be committed.
+      writeFileSync(path.join(cwd, 'services/app/lib/x.ts'), 'export const y = 2;\n');
+      git('add', 'services/app/lib/x.ts'); git('commit', '-q', '-m', 'an app change');
+      const appPush = planOutput(cwd, { CI__EVENT: 'push', CI__BEFORE_SHA: git('rev-parse', 'HEAD~1'), CI__HEAD_SHA: git('rev-parse', 'HEAD') });
+      expect(appPush.gates).toBe('true');
+      expect(appPush.api).toBe('true');
+      expect(appPush.cli).toBe('false');
+      expect(JSON.parse(appPush.plan).full).toBe(false);
+      writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.1' }));
+      git('add', 'package.json'); git('commit', '-q', '-m', 'a manifest change');
+      const manifestPush = planOutput(cwd, { CI__EVENT: 'push', CI__BEFORE_SHA: git('rev-parse', 'HEAD~1'), CI__HEAD_SHA: git('rev-parse', 'HEAD') });
+      expect(JSON.parse(manifestPush.plan).full).toBe(true);
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
