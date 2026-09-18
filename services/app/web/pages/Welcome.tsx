@@ -85,10 +85,10 @@ export function WelcomePage() {
   return (
     <main className="mx-auto mt-16 max-w-xl px-6">
       <div className="mx-auto max-w-sm">
+        {/* The heading, then the three controls — nothing else. The circle and
+          * the handle field say what they are, and a screen somebody sees
+          * exactly once should be done with before it is read. */}
         <h1 className="text-base font-semibold"><span className="text-accent">&gt;</span> welcome</h1>
-        <p className="mt-2 font-mono text-xs leading-relaxed text-muted">
-          Two things people will see. Both are yours to change later, on the account page.
-        </p>
 
         <div className="mt-6">
           <AvatarCircle

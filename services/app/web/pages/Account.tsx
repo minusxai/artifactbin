@@ -19,10 +19,20 @@ export function AccountPage() {
         * order. Somebody who set both a minute ago finds them here in the shape
         * they already know, and there is ONE picture control in the product
         * rather than a second that behaves almost the same.
+        *
+        * NOT KEYED, and that is deliberately the opposite of the card below.
+        * The card seeds INTERNAL state from its prop once at mount, so it has
+        * to be re-keyed when the answer lands. This control holds no seeded
+        * state — it renders `image` straight through — so a key would only tear
+        * it down and build it again the instant the fetch returned: it would
+        * drop the busy/refusal state of an upload already in flight, and the
+        * one control on this page would momentarily be a DIFFERENT element,
+        * which is exactly what made a loaded CI shard fail to find it.
+        * Unkeyed, it is in the document from FIRST PAINT — no picture, neutral
+        * initial — and simply fills in when the data arrives.
         */}
       <div className="mt-6">
         <AvatarCircle
-          key={data?.image ?? 'no-picture'}
           image={data?.image ?? null}
           initial={data?.username ?? 'a'}
           userId={session?.user?.id ?? ''}
