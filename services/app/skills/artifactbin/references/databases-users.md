@@ -116,14 +116,23 @@ and never carried in the link.
 {!$_me && <SignIn>Sign in to claim one</SignIn>}
 ```
 
-`<User id=… />` shows a person by display name. `id` takes a literal account ID,
-`$_me`, a scalar `user` Value, or a row field inside `<For>`/`<Column>`. Add
-`avatar` for an initial avatar and `fallback` for what an unset field reads as;
-an ID this reader cannot see renders "Unknown person", never the raw ID.
+`<User id=… />` shows a person: their picture, then the handle they chose,
+linked to their profile. `id` takes a literal account ID, `$_me`, a scalar
+`user` Value, or a row field inside `<For>`/`<Column>`. `avatar={false}` drops
+the picture; `fallback` is what an unset field reads as. An ID this reader
+cannot see renders "Unknown person", never the raw ID.
+
+`<UserImage id=… />` and `<UserHandle id=… />` are those two halves on their
+own, for a row of faces or a name with no picture. `UserImage` takes
+`size="sm"`, `"md"` or `"lg"` (20, 32, 48px) and draws a generated initial for
+somebody with no picture; `UserHandle` takes `link={false}` for plain text.
+Both take `fallback`. All three read the SAME card the server computed, so none
+of them can look anybody up.
 
 ```jsx
-<p>Signed in as <User id="$_me" avatar /></p>
-<Column col="paid_by"><User id="$_row.paid_by" fallback="nobody" /></Column>
+<p>Signed in as <User id="$_me" /></p>
+<Column col="paid_by"><User id="$_row.paid_by" avatar={false} fallback="nobody" /></Column>
+<UserImage id="$_row.person" size="lg" /><UserHandle id="$_row.person" />
 ```
 
 `$_row.<field>` only resolves inside a `<For>` or a `<Column>`; written anywhere

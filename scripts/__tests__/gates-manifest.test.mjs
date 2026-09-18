@@ -114,9 +114,11 @@ describe('the shards are cut from those rows', () => {
     }
   });
 
-  it('10. every gate lands in exactly one shard, for one, two, three and four of them', () => {
+  // Six is what CI fans over (.github/workflows/ci.yml, `gates`); the set is DIVIDED, so a shard
+  // count the packing cannot serve would silently run a gate twice, or not at all.
+  it('10. every gate lands in exactly one shard, for one through six of them', () => {
     expect(shardOf(NAMES, { index: 1, total: 1 }, weight)).toEqual(NAMES);
-    for (const total of [2, 3, 4]) {
+    for (const total of [2, 3, 4, 5, 6]) {
       const seen = [];
       for (let index = 1; index <= total; index++) seen.push(...shardOf(NAMES, { index, total }, weight));
       expect(seen.slice().sort(), `${total} shards`).toEqual(NAMES.slice().sort());

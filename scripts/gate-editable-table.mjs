@@ -73,7 +73,13 @@ try {
     response=userPage.waitForResponse(r=>r.url().endsWith(`/a/${doc.id}/mutate`)&&r.request().method()==='POST');
     await page.getByRole('button',{name:'Finish user task',exact:true}).click();
     assert.equal((await response).status(),200);
-    await page.getByRole('cell',{name:label,exact:true}).last().waitFor();
+    // The user cell draws the PERSON now (components/kit/user.tsx): their
+    // picture, then the handle they chose — `@name`, linked to the profile —
+    // falling back to the display name for somebody with no handle. Either
+    // spelling is the person; the raw account id is the thing it may never be.
+    const personCell=page.getByRole('cell',{name:new RegExp(`^@?${label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}$`)}).last();
+    await personCell.waitFor();
+    assert.ok(!(await personCell.textContent()).includes('usr_'),'a user cell shows the person, never the account id');
     const persisted=await (await userPage.request.get(`${base}/api/my/artifacts/${dataset.id}`)).json();
     assert.match(persisted.rows[0].assignee,/^usr_/);
     assert.equal(persisted.rows[0].completed_by,persisted.rows[0].assignee);

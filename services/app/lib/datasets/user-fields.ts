@@ -1,5 +1,6 @@
 import {parseDatasetDefinition,serializeDatasetDefinition} from './definition';
-import type {DatasetColumn, Queryable, Row, UserOption} from '@artifactbin/contracts';
+import type {DatasetColumn, PersonCard, Queryable, Row, UserOption} from '@artifactbin/contracts';
+import {avatarUrl} from '@/lib/avatars';
 import {DatasetError} from './errors';
 
 /** Membership is explicit sharing plus ownership, never public-link readership. */
@@ -48,10 +49,21 @@ export async function validateUserContent(db:Queryable, input:{meta:Record<strin
  }
 }
 
-export async function userLabels(db:Queryable,ids:string[]):Promise<Record<string,string>> {
+/**
+ * THE PEOPLE A DOCUMENT MAY NAME, as cards rather than labels.
+ *
+ * One lookup, for ids the server ALREADY put in front of this viewer (their own
+ * id, the ids in a queried table) — never a directory, never an email. A card
+ * is the whole of what a document learns about a person: the display name under
+ * today's rule, the public handle when they chose one, and the ADDRESS of their
+ * picture, which only lib/avatars may compute (the stored key never leaves the
+ * server). An id nobody has is simply absent, and the client draws
+ * "Unknown person" for it.
+ */
+export async function people(db:Queryable,ids:string[]):Promise<Record<string,PersonCard>> {
  if(!ids.length)return {};
- const rows=(await db.query<{id:string;name:string|null;username:string|null}>('SELECT id,name,username FROM users WHERE id=ANY($1::text[])',[ids])).rows;
- return Object.fromEntries(rows.map(u=>[u.id,u.name||u.username||u.id]));
+ const rows=(await db.query<{id:string;name:string|null;username:string|null;image_key:string|null}>('SELECT id,name,username,image_key FROM users WHERE id=ANY($1::text[])',[ids])).rows;
+ return Object.fromEntries(rows.map(u=>[u.id,{name:u.name||u.username||u.id,handle:u.username,image:avatarUrl(u)}]));
 }
 
 /** Resolve shorthand consistently in both the executable catalog and authored source. */

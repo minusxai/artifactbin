@@ -26,6 +26,18 @@ describe('the inline document surface', () => {
   expect(screen.queryByLabelText('Loading document')).toBeNull();
  });
 
+ it('pins the top bar while comments are open and releases it when closed',async()=>{
+  const view=render(<ArtifactShell role="commenter"><ArtifactSurface {...surfaceProps()} /></ArtifactShell>);
+  await screen.findByText('Document body');
+  const chrome=view.container.querySelector('[data-mx-reader-chrome]');
+  expect(chrome).not.toHaveClass('mx-reader-chrome--pinned');
+  fireEvent.click(screen.getByRole('button',{name:'Comment'}));
+  expect(chrome).toHaveClass('mx-reader-chrome--pinned');
+  expect(chrome).toHaveAttribute('data-mx-reader-state','shown');
+  fireEvent.click(screen.getByRole('button',{name:'Comment'}));
+  expect(chrome).not.toHaveClass('mx-reader-chrome--pinned');
+ });
+
  it('keeps the document ground dark during and after runtime startup',async()=>{
   render(<ArtifactSurface {...surfaceProps({colorMode:'dark'})} />);
   const viewport=screen.getByLabelText('Artifact viewport');

@@ -31,6 +31,10 @@ export interface UserRow {
   name: string | null;
   /** Public handle for /@username URLs; null only until first login backfills it. */
   username: string | null;
+  /** Object-store key of the profile picture (lib/avatars); null = none uploaded. */
+  image_key: string | null;
+  /** A new person who has not yet confirmed the welcome page. */
+  welcome_pending: boolean;
   created_at: string;
 }
 
@@ -50,7 +54,7 @@ export type AnyUserRow = UserRow | GuestUserRow;
 export const isAccountRow = (user: AnyUserRow | null | undefined): user is UserRow =>
   !!user && user.kind === 'account' && !!user.email;
 
-const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, created_at';
+const USER_COLS = 'id, email, kind, parent_user_id, expires_at, name, username, image_key, welcome_pending, created_at';
 
 // ── Usernames ────────────────────────────────────────────────────────────────
 

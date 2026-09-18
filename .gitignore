@@ -55,5 +55,8 @@ services/app/public/libraries/
 # agent worktrees (local only)
 .claude/worktrees/
 
+# The install cache key CI derives from the lockfile (`node scripts/ci.mjs lock-fingerprint`).
+.ci-cache-key/
+
 # Finder metadata is never a project asset.
 .DS_Store

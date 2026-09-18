@@ -59,7 +59,7 @@ export interface StoryDocumentInput {
   dataflow?: StoryIslandDataflow | null;
   /**
    * WHO IS READING (lib/artifacts viewerIdentityFor): `$_me` and, when the
-   * document draws a `<User>`, their display name. Null or absent is a guest —
+   * document draws a person, their card. Null or absent is a guest —
    * which is also what a CAPTURE is, since the exporter's browser holds no
    * session, so every photographed render is the guest's.
    */

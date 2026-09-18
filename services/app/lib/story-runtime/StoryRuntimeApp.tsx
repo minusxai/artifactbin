@@ -36,6 +36,9 @@ import type { ColumnTemplate } from '@/components/kit/data-table';
 import { createDataflowStore, EMPTY_STATE, type DataflowStore } from './store';
 import { EMPTY_DATAFLOW, VIEWER_REF, coerceScalarInput, refName, resolveRefTemplate, type Dataflow, type DataflowState, type Row, type Scalar, type ScalarValueDecl, type TableResult } from '@/lib/story/dataflow';
 import { User } from '@/components/kit/user';
+import { UserImage } from '@/components/kit/user-image';
+import { UserHandle } from '@/components/kit/user-handle';
+import type { PersonCard } from '@artifactbin/contracts';
 import { SIGN_IN_TO_DO_THIS, needsSignIn, refusalText } from '@/lib/story/sign-in-required';
 import { SignIn } from '@/components/kit/sign-in';
 import { isWebUrl, runtimeAssetUrl } from '@/lib/story/asset-url';
@@ -746,7 +749,7 @@ function DataTableAdapter(props: Record<string, unknown>) {
         commentOwner={typeof props.id === 'string' ? props.id : undefined}
         rows={shown}
         columns={table.columns}
-        userLabels={ctx.state.userLabels}
+        people={ctx.state.people}
         spec={spec}
         rowKey={typeof props.rowKey === 'string' ? props.rowKey : undefined}
         templates={templates}
@@ -787,7 +790,7 @@ function FilesAdapter(props: Record<string, unknown>) {
 }
 
 /**
- * `<User id=…>` LIVE: the authored reference resolved, then named.
+ * A PERSON, LIVE: the authored reference resolved, then carded.
  *
  * Three shapes of `id` reach here, and they are resolved in this order because
  * only the first two are references at all:
@@ -796,23 +799,43 @@ function FilesAdapter(props: Record<string, unknown>) {
  *  - anything else — already a literal id, including a `$_row.field` the
  *    interpreter substituted inside a `<For>` or a `<Column>`.
  *
- * The NAME then comes from one map: `state.userLabels`, the same server-computed
- * labels a DataTable cell reads, plus the viewer's own from the island. Nothing
+ * The PERSON then comes from one map: `state.people`, the same server-computed
+ * cards a DataTable cell reads, plus the viewer's own from the island. Nothing
  * here can ask the server about an id, which is the point — an id the server did
  * not already put in front of this viewer stays "Unknown person".
+ *
+ * One hook for all three person tags, so a face, a handle and the composition
+ * of the two can never disagree about who they are showing.
  */
-function UserAdapter(props: Record<string, unknown>) {
+function usePerson(idProp: unknown): { id: string | null; card: PersonCard | null } {
   const ctx = useContext(RuntimeEmbedContext);
-  const reference = typeof props.id === 'string' ? refName(props.id) : null;
-  const id = reference === VIEWER_REF ? ctx.viewer?.id ?? null
+  const reference = typeof idProp === 'string' ? refName(idProp) : null;
+  const resolved = reference === VIEWER_REF ? ctx.viewer?.id ?? null
     : reference !== null ? ctx.state.values[reference] ?? null
-    : props.id ?? null;
-  const key = typeof id === 'string' ? id : null;
-  const label = key === null ? null
-    : key === ctx.viewer?.id ? ctx.viewer.label ?? ctx.state.userLabels?.[key] ?? null
-    : ctx.state.userLabels?.[key] ?? null;
-  const { id: _id, label: _label, ...rest } = props;
-  return <User {...rest} id={key} label={label} />;
+    : idProp ?? null;
+  const id = typeof resolved === 'string' ? resolved : null;
+  const card = id === null ? null
+    : id === ctx.viewer?.id ? ctx.viewer.card ?? ctx.state.people?.[id] ?? null
+    : ctx.state.people?.[id] ?? null;
+  return { id, card };
+}
+
+function UserImageAdapter(props: Record<string, unknown>) {
+  const { id, card } = usePerson(props.id);
+  const { id: _id, card: _card, ...rest } = props;
+  return <UserImage {...rest} id={id} card={card} />;
+}
+
+function UserHandleAdapter(props: Record<string, unknown>) {
+  const { id, card } = usePerson(props.id);
+  const { id: _id, card: _card, ...rest } = props;
+  return <UserHandle {...rest} id={id} card={card} />;
+}
+
+function UserAdapter(props: Record<string, unknown>) {
+  const { id, card } = usePerson(props.id);
+  const { id: _id, card: _card, ...rest } = props;
+  return <User {...rest} id={id} card={card} />;
 }
 
 /**
@@ -834,6 +857,8 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   ...STORY_UI_COMPONENTS,
   Dialog: DialogAdapter,
   User: UserAdapter,
+  UserImage: UserImageAdapter,
+  UserHandle: UserHandleAdapter,
   SignIn: SignInAdapter,
   DialogContent: DialogContentAdapter,
   Mermaid: props => {

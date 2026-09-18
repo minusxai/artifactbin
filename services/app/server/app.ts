@@ -1,3 +1,4 @@
+import { loginRedirectTarget } from '@/lib/safe-redirect';
 /**
  * THE APP SERVER — Hono, the whole app behind the proxy:
  *
@@ -411,6 +412,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     if (signedIn) return page(c);
     c.header('Cache-Control', 'no-store');
     return c.redirect('/login', 302);
+  });
+  app.on(['GET', 'HEAD'], '/login', async c => {
+    c.header('Cache-Control', 'no-store');
+    const actor = await runWithRequest(c.req.raw, () => sessionActor(c.req.raw));
+    if (actor.credential === 'session' && actor.viewer?.userId) {
+      const url = new URL(c.req.url);
+      return c.redirect(loginRedirectTarget(url.searchParams.get('callbackUrl'), baseUrl(c.req.raw)), 302);
+    }
+    return page(c);
   });
   // The tour for people.
   app.get('/docs-human', (c) => page(c));

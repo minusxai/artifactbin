@@ -4,6 +4,12 @@ on:
   pull_request:
   push:
     branches: [ main ]
+  # The release-only CLI matrix runs on NO ordinary pull request, so between releases nothing would
+  # notice a broken binary build — and its caches, unused, expire. Nightly on main it builds the four
+  # platforms: drift shows up the next morning instead of inside a release, and the macOS/Linux
+  # install caches stay warm on the default branch, which is most of what makes a release build fast.
+  schedule:
+    - cron: '17 9 * * *'
   # The "Release afbin" workflow dispatches this one on the release branch when it pushed with the
   # repository token, whose events start no workflow; the checks land on the PR. With a PAT its own
   # pull_request event starts this workflow and no dispatch happens.
@@ -32,6 +38,11 @@ jobs:
     name: affected modules
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # Finding the run that already tested this tree reads the repository's artifact list. A job-level
+    # block REPLACES the workflow's, so `contents: read` is restated rather than inherited.
+    permissions:
+      contents: read
+      actions: read
     outputs:
       plan: ${{ steps.select.outputs.plan }}
       checks: ${{ steps.select.outputs.checks }}
@@ -43,9 +54,12 @@ jobs:
       image: ${{ steps.select.outputs.image }}
       cli: ${{ steps.select.outputs.cli }}
       reference-compatibility: ${{ steps.select.outputs.reference-compatibility }}
-      cli-intel-preview: ${{ steps.select.outputs.cli-intel-preview }}
       # Not a job: whether the node job runs the CLI source suite (every CLI change, not only a release).
       cli-tests: ${{ steps.select.outputs.cli-tests }}
+      # Not a job either: whether `checks` must refuse this PR for shipping the CLI without a version.
+      cli-bump: ${{ steps.select.outputs.cli-bump }}
+      # The run that already tested this exact tree, when there is one; empty otherwise.
+      source-run: ${{ steps.select.outputs.source-run }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -59,6 +73,7 @@ jobs:
           CI__BASE_SHA: ${{ github.event.pull_request.base.sha }}
           CI__BEFORE_SHA: ${{ github.event.before }}
           CI__HEAD_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/ci.mjs plan
 
   # THE TYPE CHECK ANSWERS ON ITS OWN, because it is the fastest signal on the
@@ -84,6 +99,15 @@ jobs:
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
       # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -92,9 +116,20 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      # A CLI CHANGE THAT SHIPS NO VERSION SHIPS NOWHERE: the publisher only uploads when the version
+      # moved, so the source would sit on main, released to nobody, until someone noticed. The rule
+      # and its wording live in scripts/lib/ci-plan.mjs, where they are tested.
+      - name: The CLI ships with a version
+        if: needs.plan.outputs.cli-bump == 'true'
+        run: node scripts/ci.mjs cli-bump
+      # A WORKFLOW TYPO IS ONLY EXPENSIVE WHEN THE RUNNER FINDS IT. actionlint parses every workflow
+      # here (and shellcheck reads every `run:` block) in about a second, in a pinned image anyone can
+      # run locally: `docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color`.
+      - name: Lint the workflows
+        run: docker run --rm -v "$PWD":/repo --workdir /repo rhysd/actionlint:1.7.7 -color
       - run: npm run validate
 
   # THE NODE PROJECT SHARDS, like api and ui. It is the biggest project in the
@@ -132,6 +167,15 @@ jobs:
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
       # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -140,7 +184,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # Only shard 1 runs integration tests; the other shards need no browser or Docker.
@@ -207,6 +251,15 @@ jobs:
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
       # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -215,7 +268,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - run: npx vitest run --project=ui --shard=${{ matrix.shard }}/2
@@ -247,6 +300,15 @@ jobs:
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
       # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -255,7 +317,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # Build the Vite SPA, document runtime and bundled Hono server.
@@ -286,6 +348,15 @@ jobs:
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
       # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -294,7 +365,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       # The export tests drive real headless Chromium (lib/export.ts). The
@@ -318,13 +389,13 @@ jobs:
   gates:
     needs: [ plan ]
     if: needs.plan.outputs.gates == 'true'
-    name: browser gates (${{ matrix.shard }}/4)
+    name: browser gates (${{ matrix.shard }}/6)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [ 1, 2, 3, 4 ]
+        shard: [ 1, 2, 3, 4, 5, 6 ]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -340,6 +411,15 @@ jobs:
       # what forced a hand-run copy-assets step into all eight jobs, because on a cache HIT
       # `npm ci` — and therefore its postinstall — never runs at all. A partial restore is not
       # silent: lib/data/story/__tests__/story-fonts.test.ts reads the manifest and the bytes.
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -348,14 +428,17 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
+      # KEYED ON WHAT PINS THE BROWSER, not on the lockfile: browsers.json is where playwright-core
+      # records the Chromium revision it will download, so the entry survives every lockfile change
+      # that is not a Playwright upgrade — including the version line a release rewrites.
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: playwright
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
       # `--with-deps` apt-installs Chromium's system libraries on EVERY run (~30s) even when the
       # browser binary came from the cache. ubuntu-latest already ships those libraries, so the
       # deps pass is only worth paying for when the browser is actually being downloaded.
@@ -370,7 +453,7 @@ jobs:
       # which costs more wall clock than the build it replaces and adds a cross-job dependency.
       - run: npm run build
       # The runner boots the servers with one protected per-run mail outbox.
-      # Two servers within the runner, four runners across the set. The
+      # Two servers within the runner, six runners across the set. The
       # within-machine fan-out bottomed out at 192s on four vCPUs; the shard is
       # balanced by each gate's measured weight, not by count, so no one runner
       # ends up holding every slow gate (scripts/gates.shard.mjs). More than two
@@ -392,7 +475,7 @@ jobs:
           sudo chown -R "$USER" /sys/fs/cgroup/afbin-sessions
           sudo chown "$USER" /sys/fs/cgroup/cgroup.procs
       - name: every gate, two servers
-        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/4
+        run: node scripts/gates.mjs --servers=2 --shard=${{ matrix.shard }}/6
         env:
           AUTH__SECRET: gates-ci-${{ github.run_id }}
           DATASET__ALLOW_PRIVATE_NETWORKS: 'true'
@@ -444,12 +527,14 @@ jobs:
           # build exits 1 without it and 0 with it, and against a reachable one
           # it still exports AND restores.
           cache-from: type=gha,ignore-error=true
-          # mode=min, not max. `max` exports EVERY intermediate layer of both
-          # stages, and this image is large — the export was a big share of the
-          # 339s the build step took, which was itself the whole reason this job
-          # ran 7.6m while nothing else passed 5m. `min` exports only what the
-          # final stage needs, so a rebuild whose dependencies did not change
-          # still restores; a dependency change pays for a colder builder.
+          # mode=max, and the comment that used to argue for `min` here had not
+          # been true of this line for some time. Measured rather than reasoned:
+          # two runs of this job on the same tree, one per mode, minutes apart —
+          # max 150s (run 35334961782), min 151s (run 35334964542). The export
+          # `min` was meant to save is not where this job's time goes any more;
+          # what `max` buys is the builder stage restoring too, so a colder
+          # runner does not recompile the whole install. Warm, the build step is
+          # ~90s of the job (run 35334091384), against 207s before this branch.
           cache-to: type=gha,mode=max,ignore-error=true
           # No provenance attestation: it is generated and attached during the
           # export, and nothing here consumes it.
@@ -459,7 +544,7 @@ jobs:
       - name: the image boots and serves
         run: |
           docker run -d --name ab -p 3399:3000 \
-            -e DATABASE_URL=pglite://memory -e AUTH__SECRET=$(openssl rand -base64 32) \
+            -e DATABASE_URL=pglite://memory -e AUTH__SECRET="$(openssl rand -base64 32)" \
             -e APP__PUBLIC_BASE_URL=http://127.0.0.1:3399 \
             -e ARTIFACTS__ALLOW_PUBLIC=1 \
             artifactbin:ci
@@ -481,6 +566,15 @@ jobs:
       # The same two caches every other job here uses (see the `checks` job for what the
       # install entry holds). This job had neither, and paid `npm ci` plus a full `--with-deps`
       # Chromium install on every run to execute ONE gate: 47s of a job whose budget is 180s.
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -489,7 +583,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -510,6 +604,15 @@ jobs:
       - if: always()
         run: docker rm -f ab || true
 
+  # THE ROLL-UP, AND THE RECORD OF WHAT IT PASSED ON.
+  #
+  # A tree that passed here has been tested, and testing it again — which is exactly what the push
+  # that merges it used to do, eight minutes of full matrix on bytes PR CI had just proved — buys
+  # nothing and delays production by those eight minutes. So this job writes down the tree it
+  # passed, under a name any later run can look up: `tested-tree-<git tree hash>`. The push then
+  # finds it (scripts/ci.mjs `plan`) and selects nothing at all.
+  #
+  # The artifact IS the pass: it is written after `check`, so it only exists for a green run.
   test:
     name: test
     runs-on: ubuntu-latest
@@ -525,8 +628,7 @@ jobs:
         gates,
         image,
         cli,
-        reference-compatibility,
-        cli-intel-preview
+        reference-compatibility
       ]
     if: always()
     steps:
@@ -538,6 +640,30 @@ jobs:
         env:
           CI__NEEDS: ${{ toJSON(needs) }}
         run: node scripts/ci.mjs check
+      # On a pull request the checkout is refs/pull/N/merge — the tree a squash merge produces, which
+      # is the tree the push to main will carry.
+      - name: Record the tested tree
+        id: tree
+        env:
+          CI__SOURCE_RUN: ${{ needs.plan.outputs.source-run }}
+        run: node scripts/ci.mjs record-tree
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-tree-${{ steps.tree.outputs.tree }}
+          path: tested-tree/tested-tree.json
+          # Longer than any merge window: the lookup that reads this runs when the PR merges, and an
+          # expired artifact is no evidence (scripts/ci.mjs filters them out) — it is a full matrix.
+          retention-days: 14
+          overwrite: true
+      # WHICH RUN HOLDS THE BINARIES, for `release-cli.yml`: this run when it built them, the run
+      # this one reused when it did not. Only on main; a PR publishes nothing.
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tested-run
+          path: tested-run/tested-run.json
+          retention-days: 14
+          overwrite: true
 
   # RELEASE ONLY. Selected when the CLI version changed (scripts/lib/ci-plan.mjs `cliRelease`): the
   # four-platform build was 4.5 minutes on the Intel runner with the render proofs queued behind it,
@@ -558,6 +684,15 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 22.22.3
+      # A RELEASE MUST NOT COLD-START EVERY JOB. The key used to hash package-lock.json itself, and
+      # `npm run release:cli` rewrites one line of it — the CLI workspace's own version, which
+      # resolves no dependency. hashFiles() cannot tell that line from a real one, so every release
+      # missed this cache: run 35325636096, job `CLI (macos-15-intel)`, "Cache not found for input
+      # keys: install-v3-macOS-X64-node22-a979…", 50s of `npm ci` and 29s of cache-post, while the
+      # three caches beside it (Chromium, prebuilt Node, Chromium archive) restored on that same
+      # runner because they key on files a bump does not touch. The fingerprint is the lockfile with
+      # workspace versions normalised: a dependency that moved still changes it, a bump no longer does.
+      - run: node scripts/ci.mjs lock-fingerprint
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         id: install
         with:
@@ -566,7 +701,7 @@ jobs:
             services/*/node_modules
             services/app/public/fonts
             services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
       - if: steps.install.outputs.cache-hit != 'true'
         run: npm ci
       - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -598,6 +733,36 @@ jobs:
         run: |
           npx playwright install chromium
           node --import tsx scripts/test-preview.ts
+      # INTEL'S THREE PROOFS, WHERE THE BYTES ARE. They used to be three more macOS runners behind
+      # this one (`CLI Intel preview|export-basic|export-variants`), each paying ~90s of checkout,
+      # Node, install and cache restore, and an artifact round-trip to download the binary this job
+      # had just written — 90s of setup for 2 minutes of proof, three times over, all of it on the
+      # critical path of a release. Here the executable is already on disk and the three phases run
+      # CONCURRENTLY: each builds its own temporary home, its own state directory and an
+      # OS-allocated port (services/cli/scripts/test-preview.ts), so they do not meet.
+      #
+      # Measured on run 35334967117 (a version bump, all four platforms built): the three phases
+      # together take 131s inside this job, and the job is 343s. Before, this job was 301s and the
+      # three `CLI Intel <phase>` jobs behind it 154s/148s/230s — a 531s critical path for a release.
+      - name: Intel preview and export proofs, from the executable just built
+        if: matrix.os == 'macos-15-intel'
+        working-directory: services/cli
+        run: |
+          set -uo pipefail
+          npx playwright install chromium
+          pids=''
+          for phase in preview export-basic export-variants; do
+            node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 "--phase=$phase" > "$RUNNER_TEMP/$phase.log" 2>&1 &
+            pids="$pids $!:$phase"
+          done
+          status=0
+          for pid in $pids; do
+            wait "${pid%%:*}" || status=1
+          done
+          for phase in preview export-basic export-variants; do
+            echo "::group::$phase"; cat "$RUNNER_TEMP/$phase.log"; echo '::endgroup::'
+          done
+          exit "$status"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: afbin-${{ matrix.os }}
@@ -605,65 +770,25 @@ jobs:
             services/cli/dist/afbin-*
             services/cli/dist/afbin.1
           if-no-files-found: error
+          # The publisher downloads these from the run that built them, which is now a run that may
+          # predate the merge. Anything shorter than the merge window loses the release.
+          retention-days: 14
 
-  # Intel's browser proof is three minutes by itself. Keep it a required job
-  # consuming the exact built bytes, rather than stacking it after packaging.
-  cli-intel-preview:
-    needs: [ plan, cli ]
-    if: needs.plan.outputs.cli-intel-preview == 'true'
-    name: CLI Intel ${{ matrix.phase }}
-    strategy:
-      fail-fast: false
-      matrix:
-        phase: [preview, export-basic, export-variants]
-    runs-on: macos-15-intel
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22.22.3
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        id: install
-        with:
-          path: |
-            node_modules
-            services/*/node_modules
-            services/app/public/fonts
-            services/app/lib/data/story/story-font-manifest.json
-          key: install-v3-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('package-lock.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
-      - if: steps.install.outputs.cache-hit != 'true'
-        run: npm ci
-      # Export phases launch the CLI's downloaded browser, not this test driver's browser.
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
-        if: matrix.phase == 'preview'
-        with:
-          path: |
-            ~/.cache/ms-playwright
-            ~/Library/Caches/ms-playwright
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: afbin-macos-15-intel
-          path: services/cli/dist
-      - name: Preview and local export from the exact executable
-        working-directory: services/cli
-        run: |
-          chmod +x dist/afbin-darwin-x64
-          if [ "${{ matrix.phase }}" = preview ]; then npx playwright install chromium; fi
-          node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 --phase=${{ matrix.phase }}
-
-  # WHAT THIS RUN ACTUALLY COST, on the run's own summary page.
+  # WHAT THIS RUN ACTUALLY COST — and, on a pull request, whether it may cost that.
   #
-  # The budget is three minutes a job, and it is a GOAL MET BY FIXING CAUSES — not a cap and not a
-  # gate. So this job is deliberately toothless: it reads the durations GitHub already recorded,
-  # writes them to the step summary with anything over 180s marked, and cannot fail the run. It is
-  # absent from CI_JOBS and from the `test` roll-up's `needs`, so it can never block a merge, and
-  # `continue-on-error` means an API hiccup here costs a missing table and nothing else.
+  # The table was toothless on purpose, and that was right while the budget was a wish. It is not a
+  # wish any more: merge → production has to fit in seven minutes, and a job that runs long is what
+  # spends them. So on a PULL REQUEST a job over its budget fails this run, and the message names
+  # the step that took the longest, because "gates took 300s" is not something anyone can act on.
+  # On main it stays a summary: a push has nothing left to fix, and a slow runner there would turn
+  # this into a red merge button teaching everyone to re-run.
   #
-  # The alternative — `timeout-minutes: 180s` per job, or a step that exits 1 over budget — turns a
-  # slow runner into a red merge button and teaches everyone to re-run rather than to measure. A
-  # table in front of whoever opened the run is the pressure that actually works.
+  # Two budgets. 240s is the ordinary one, measured from what this branch achieves. The four-platform
+  # CLI build is the exception: it compiles a standalone executable and drives real browsers against
+  # it, it runs only for a release, and it is the whole reason the rest of the run had to get out of
+  # its way. Its allowance is named here rather than hidden in a slower default for everything.
+  #
+  # Never part of the merge gate itself: absent from CI_JOBS and from the `test` roll-up's `needs`.
   timings:
     name: job timings
     runs-on: ubuntu-latest
@@ -680,11 +805,11 @@ jobs:
         image,
         cli,
         test,
-        reference-compatibility,
-        cli-intel-preview
+        reference-compatibility
       ]
     if: always()
-    continue-on-error: true
+    # A summary on main, a gate on a pull request.
+    continue-on-error: ${{ github.event_name != 'pull_request' }}
     # This is the one job here that reads the Actions API rather than the repository. A job-level
     # block REPLACES the workflow's, so `contents: read` is restated rather than inherited.
     permissions:
@@ -692,39 +817,61 @@ jobs:
       actions: read
     steps:
       # No checkout: the run's own job list is the only input.
-      - name: every job's wall clock, over-budget marked
+      - name: every job's wall clock, over-budget named
         env:
           GH_TOKEN: ${{ github.token }}
-          BUDGET_S: '180'
+          BUDGET_S: '240'
+          # The release-only binary builds; see above. Measured on run 35334967117, which built all
+          # four platforms from a version bump: Intel 343s (its three folded proofs 131s together),
+          # macOS arm64 191s, Linux 192s and 174s. 420s leaves the slowest of those room to be slow
+          # without turning a release red, and still catches a build that has doubled.
+          SLOW_BUDGET_S: '420'
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2016  # $slowest is a jq binding; the single quotes are what keep it one.
           gh api --paginate \
             "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs?per_page=100" \
             --jq '.jobs[]
                   | select(.name != "job timings")
                   | select(.started_at != null and .completed_at != null)
+                  | ([ .steps[]?
+                       | select(.started_at != null and .completed_at != null)
+                       | { name: .name,
+                           seconds: ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) } ]
+                     | sort_by(.seconds) | last) as $slowest
                   | [ ((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)),
-                      .name, .conclusion ]
+                      .name, .conclusion,
+                      (($slowest.name // "-") + " " + (($slowest.seconds // 0) | tostring) + "s") ]
                   | @tsv' \
             | sort -rn > durations.tsv
+          over=0
+          : > over-budget.txt
           {
-            echo "## Job wall clock (budget ${BUDGET_S}s)"
+            echo "## Job wall clock (budget ${BUDGET_S}s, CLI binaries ${SLOW_BUDGET_S}s)"
             echo
-            echo '| | job | seconds | result |'
-            echo '| --- | --- | ---: | --- |'
-            over=0
-            while IFS=$'\t' read -r seconds name conclusion; do
+            echo '| | job | seconds | result | slowest step |'
+            echo '| --- | --- | ---: | --- | --- |'
+            while IFS=$'\t' read -r seconds name conclusion slowest; do
+              budget="$BUDGET_S"
+              case "$name" in "CLI ("*|"CLI distributions"*) budget="$SLOW_BUDGET_S";; esac
               mark=''
-              if [ "$seconds" -gt "$BUDGET_S" ]; then mark='OVER'; over=$((over + 1)); fi
-              printf '| %s | %s | %s | %s |\n' "$mark" "$name" "$seconds" "$conclusion"
+              if [ "$seconds" -gt "$budget" ]; then
+                mark='OVER'
+                over=$((over + 1))
+                # Collected, not printed: this block's stdout is the step summary file.
+                printf '%s took %ss (budget %ss); its slowest step was %s\n' "$name" "$seconds" "$budget" "$slowest" >> over-budget.txt
+              fi
+              printf '| %s | %s | %s | %s | %s |\n' "$mark" "$name" "$seconds" "$conclusion" "$slowest"
             done < durations.tsv
             echo
             if [ "$over" -eq 0 ]; then
-              echo "Every job finished inside ${BUDGET_S}s."
+              echo "Every job finished inside its budget."
             else
-              echo "${over} job(s) over ${BUDGET_S}s. This is a goal, not a gate: fix the cause, do not cap the job."
+              echo "${over} job(s) over budget. Fix the cause — do not raise the budget to meet the job."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do echo "::error::$line"; done < over-budget.txt
+          if [ "$over" -gt 0 ] && [ "${GITHUB_EVENT_NAME}" = pull_request ]; then exit 1; fi
 
   reference-compatibility:
     needs: [ plan ]
@@ -813,7 +960,7 @@ jobs:
         working-directory: candidate/services/cli
         run: |
           docker run -d --name afbin-serve-postgres -p 5432:5432 -e POSTGRES_PASSWORD=afbin -e POSTGRES_DB=afbin postgres:17-alpine
-          for attempt in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             if docker exec afbin-serve-postgres pg_isready -U postgres; then break; fi
             sleep 1
           done
@@ -831,3 +978,4 @@ jobs:
           path: ${{ runner.temp }}/afbin-packages/*.tgz
           compression-level: 0
           if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,7 @@
+# actionlint's list of GitHub-hosted labels ships with the linter, so a runner image newer than the
+# pinned actionlint reads as a typo. `macos-15-intel` is a real hosted label (the x64 macOS runner the
+# CLI's Intel binary is built and proved on); declaring it here is how actionlint is told about a
+# label it does not yet know, and it is the only such label this repository uses.
+self-hosted-runner:
+  labels:
+    - macos-15-intel

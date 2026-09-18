@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFile, execFileSync, spawnSync } from 'node:child_process';
+import { promisify } from 'node:util';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import yaml from 'yaml';
-import { CI_JOBS, CI_MODULES, checkCiResults, planCi } from '../lib/ci-plan.mjs';
+import { createServer } from 'node:http';
+import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
 
-/** Built and proved only for a release: the four-platform binaries, the Intel render proofs, the distributions gate. */
-const RELEASE_JOBS = ['cli', 'reference-compatibility', 'cli-intel-preview'];
+/** Built and proved only for a release: the four-platform binaries (the Intel proofs ride in that job) and the distributions gate. */
+const RELEASE_JOBS = ['cli', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const script = path.join(root, 'scripts/ci.mjs');
@@ -87,6 +89,90 @@ describe('CI change selection', () => {
   });
 });
 
+/**
+ * MERGE TO PRODUCTION IN SEVEN MINUTES rests on three selections that are not about affected
+ * modules at all: a release that is only a version, a tree this repository already tested, and a
+ * nightly that keeps the release-only matrix honest between releases.
+ */
+describe('a release is a version and nothing else', () => {
+  const bump = (path, from = '0.1.44', to = '0.1.45') => ({
+    path, hunks: [{ removed: [`  "version": "${from}",`], added: [`  "version": "${to}",`] }],
+  });
+
+  it('accepts exactly the files and lines `npm run release:cli` rewrites', () => {
+    expect(VERSION_BUMP_FILES).toContain('services/cli/package.json');
+    expect(isVersionOnlyBump(VERSION_BUMP_FILES.filter((path) => !path.endsWith('install.sh')).map((path) => bump(path)))).toBe(true);
+    // install.sh carries the version twice, in two shapes, and both move together.
+    expect(isVersionOnlyBump([bump('services/cli/package.json'), {
+      path: 'services/app/public/chat/install.sh',
+      hunks: [
+        { removed: ['  version=0.1.44'], added: ['  version=0.1.45'] },
+        { removed: ['Install afbin: sh install.sh [--version 0.1.44] [--dir PATH] [--yes]'], added: ['Install afbin: sh install.sh [--version 0.1.45] [--dir PATH] [--yes]'] },
+      ],
+    }])).toBe(true);
+  });
+
+  it('refuses anything that is not purely the number moving', () => {
+    expect(isVersionOnlyBump([]), 'no diff at all').toBe(false);
+    // The lockfile is on the list, and a dependency change writes the same file.
+    expect(isVersionOnlyBump([bump('services/cli/package.json'), {
+      path: 'package-lock.json',
+      hunks: [{ removed: ['      "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.0.tgz",'], added: ['      "resolved": "https://registry.npmjs.org/left-pad/-/left-pad-1.3.1.tgz",'] }],
+    }]), 'a dependency that moved').toBe(false);
+    expect(isVersionOnlyBump([bump('services/cli/package.json'), { path: 'services/cli/src/runner.ts', hunks: [{ removed: ['a'], added: ['b'] }] }]), 'a source file too').toBe(false);
+    expect(isVersionOnlyBump([{ path: 'package-lock.json', hunks: [{ removed: ['  "version": "0.1.44",'], added: ['  "version": "0.1.45",'] }] }]), 'no CLI package').toBe(false);
+    expect(isVersionOnlyBump([bump('services/cli/package.json'), { path: 'services/cli/package.json', hunks: [{ removed: [], added: ['  "sideEffects": false,'] }] }]), 'a line added').toBe(false);
+  });
+
+  it('selects the binaries and the typecheck, and nothing that tests an unchanged tree', () => {
+    const plan = planCi(VERSION_BUMP_FILES, { versionOnly: true });
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli']);
+    expect(plan.cliRelease).toBe(true);
+    expect(plan.cliTests).toBe(false);
+    expect(plan.nodeRoots).toEqual([]);
+    // Without the flag the very same file list is a full run: the lockfile is shared input.
+    expect(planCi(VERSION_BUMP_FILES).jobs.node).toBe(true);
+  });
+
+  it('runs the CLI matrix, and only that, on the nightly', () => {
+    const plan = planCi([], { nightly: true });
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['cli']);
+    expect(plan.full).toBe(false);
+  });
+});
+
+describe('a tree is tested once', () => {
+  it('selects no job at all — not even checks — when a green run already tested this tree', () => {
+    const plan = planCi(['services/app/components/AnnotationLayer.tsx'], { testedRun: '4242' });
+    expect(Object.values(plan.jobs).some(Boolean), 'every job is skipped').toBe(false);
+    expect(plan.testedRun).toBe('4242');
+    expect(plan.nodeRoots).toEqual([]);
+    // And the roll-up must accept that: every selected job (there are none) succeeded.
+    expect(checkCiResults(plan, Object.fromEntries(CI_JOBS.map((job) => [job, 'skipped'])))).toEqual([]);
+  });
+
+  it('plans normally when nothing tested this tree', () => {
+    expect(planCi(['services/app/x.ts'], { testedRun: null }).jobs.api).toBe(true);
+  });
+});
+
+describe('the CLI ships with a version or it does not ship', () => {
+  it('refuses CLI source and build scripts that carry no bump', () => {
+    expect(cliBumpRequired(['services/cli/src/runner.ts'])).toBe(true);
+    expect(cliBumpRequired(['services/cli/scripts/binary.mjs'])).toBe(true);
+    expect(cliBumpRequired(['services/cli/src/runner.ts'], { cliRelease: true })).toBe(false);
+    expect(CLI_BUMP_REFUSAL).toContain('npm run release:cli');
+    expect(CLI_BUMP_REFUSAL).toContain('npm run generate:teaching -w services/cli');
+  });
+
+  it('exempts prose, the CLI\'s own tests, and everything outside the CLI', () => {
+    expect(cliBumpRequired(['services/cli/src/README.md'])).toBe(false);
+    expect(cliBumpRequired(['services/cli/test/push.test.ts'])).toBe(false);
+    expect(cliBumpRequired(['services/cli/src/__tests__/runner.test.ts'])).toBe(false);
+    expect(cliBumpRequired(['services/app/lib/x.ts', 'docs/notes.md'])).toBe(false);
+  });
+});
+
 describe('GitHub CI adapter', () => {
   it('uses both sides of a real rename and falls back to full when history is unavailable', () => {
     const cwd = mkdtempSync(path.join(tmpdir(), 'artifactbin-ci-'));
@@ -144,6 +230,197 @@ describe('GitHub CI adapter', () => {
       expect(run({ CI__EVENT: 'push', CI__BEFORE_SHA: base, CI__HEAD_SHA: sourceOnly })).toContain('cli=false\n');
       // No base to compare with: build, because a skipped release costs more than a wasted build.
       expect(run({ CI__EVENT: 'push', CI__BEFORE_SHA: '0000000000000000000000000000000000000000', CI__HEAD_SHA: sourceOnly })).toContain('cli=true\n');
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  /** A repository whose five release files carry one version, bumped by `move`. */
+  const releaseFixture = (cwd, version) => {
+    const write = (file, text) => {
+      mkdirSync(path.join(cwd, path.dirname(file)), { recursive: true });
+      writeFileSync(path.join(cwd, file), text);
+    };
+    write('services/cli/package.json', `{\n  "name": "afbin",\n  "version": "${version}"\n}\n`);
+    write('package-lock.json', `{\n  "packages": {\n    "services/cli": {\n      "version": "${version}"\n    }\n  }\n}\n`);
+    write('services/app/public/chat/install.sh', `main() {\n  version=${version}\nInstall afbin: sh install.sh [--version ${version}] [--dir PATH] [--yes]\n}\n`);
+    write('services/app/public/chat/release.json', `{\n  "version": "${version}",\n  "protocol": 1\n}\n`);
+    write('services/cli/src/generated/teaching.json', `{\n  "version": "${version}",\n  "files": {}\n}\n`);
+  };
+
+  const readOutputs = (output) => Object.fromEntries(readFileSync(output, 'utf8').split('\n').filter(Boolean)
+    .map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
+
+  const planOutput = (cwd, env) => {
+    const output = path.join(cwd, `outputs-${Math.random()}`);
+    execFileSync(process.execPath, [script, 'plan'], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: '', ...env },
+    });
+    return readOutputs(output);
+  };
+
+  /** The same, without blocking this process — a test that SERVES the planner's API call must not
+   * hold the event loop while the planner waits on it. */
+  const planOutputServed = async (cwd, env) => {
+    const output = path.join(cwd, `outputs-${Math.random()}`);
+    await promisify(execFile)(process.execPath, [script, 'plan'], {
+      cwd, encoding: 'utf8',
+      env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: '', ...env },
+    });
+    return readOutputs(output);
+  };
+
+  it('reads a real bump as a release and anything beside it as a full run', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-version-only-'));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      releaseFixture(cwd, '0.1.44');
+      git('add', '.'); git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD');
+      releaseFixture(cwd, '0.1.45');
+      git('add', '.'); git('commit', '-q', '-m', 'Release afbin 0.1.45');
+      const bumped = git('rev-parse', 'HEAD');
+      const release = planOutput(cwd, { CI__EVENT: 'push', CI__BEFORE_SHA: base, CI__HEAD_SHA: bumped });
+      expect(release.checks).toBe('true');
+      expect(release.cli).toBe('true');
+      for (const job of ['node', 'ui', 'build', 'api', 'gates', 'image', 'reference-compatibility']) {
+        expect(release[job], job).toBe('false');
+      }
+      expect(release['cli-tests']).toBe('false');
+      // One more file in the same push and the push is an ordinary one again.
+      writeFileSync(path.join(cwd, 'services/cli/src/runner.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'and a source change');
+      const mixed = planOutput(cwd, { CI__EVENT: 'push', CI__BEFORE_SHA: base, CI__HEAD_SHA: git('rev-parse', 'HEAD') });
+      expect(mixed.api).toBe('true');
+      expect(mixed.gates).toBe('true');
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  it('selects nothing when a green run already tested this tree, and everything when the lookup cannot answer', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-tested-tree-'));
+    const asked = [];
+    let answer = { status: 200, body: { artifacts: [{ id: 7, expired: false, workflow_run: { id: 4242 } }] } };
+    const api = createServer((request, response) => {
+      asked.push(request.url);
+      response.writeHead(answer.status, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(answer.body));
+    });
+    await new Promise((resolve) => api.listen(0, '127.0.0.1', resolve));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      releaseFixture(cwd, '0.1.44');
+      git('add', '.'); git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD');
+      writeFileSync(path.join(cwd, 'services/app/x.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'an ordinary merge');
+      const head = git('rev-parse', 'HEAD');
+      const tree = git('rev-parse', 'HEAD^{tree}');
+      const env = {
+        CI__EVENT: 'push', CI__BEFORE_SHA: base, CI__HEAD_SHA: head,
+        GITHUB_REPOSITORY: 'minusxai/artifactbin', GH_TOKEN: 'mxmx_test_token',
+        GITHUB_API_URL: `http://127.0.0.1:${api.address().port}`,
+      };
+      const reused = await planOutputServed(cwd, env);
+      expect(asked[0]).toBe(`/repos/minusxai/artifactbin/actions/artifacts?name=tested-tree-${tree}&per_page=100`);
+      expect(reused['source-run']).toBe('4242');
+      for (const job of CI_JOBS) expect(reused[job], job).toBe('false');
+      // An expired artifact is not evidence, and neither is an API that will not answer.
+      answer = { status: 200, body: { artifacts: [{ id: 7, expired: true, workflow_run: { id: 4242 } }] } };
+      const expired = await planOutputServed(cwd, env);
+      expect(expired.checks).toBe('true');
+      expect(expired['source-run']).toBe('');
+      answer = { status: 500, body: { message: 'nope' } };
+      const fallback = await planOutputServed(cwd, env);
+      for (const job of CI_JOBS.filter((job) => !RELEASE_JOBS.includes(job))) expect(fallback[job], job).toBe('true');
+      // A pull request never reuses: it is the run that RECORDS the tree.
+      expect((await planOutputServed(cwd, { ...env, CI__EVENT: 'pull_request', CI__BASE_SHA: base })).api).toBe('true');
+    } finally {
+      api.close();
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('asks checks to refuse a CLI change that carries no bump, and prints the fix', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-cli-bump-'));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      releaseFixture(cwd, '0.1.44');
+      git('add', '.'); git('commit', '-q', '-m', 'base');
+      const base = git('rev-parse', 'HEAD');
+      writeFileSync(path.join(cwd, 'services/cli/src/runner.ts'), 'export const x = 1;\n');
+      git('add', '.'); git('commit', '-q', '-m', 'a CLI change with no bump');
+      const head = git('rev-parse', 'HEAD');
+      expect(planOutput(cwd, { CI__EVENT: 'pull_request', CI__BASE_SHA: base, CI__HEAD_SHA: head })['cli-bump']).toBe('true');
+      // The same change with the bump beside it is a release, not a refusal.
+      releaseFixture(cwd, '0.1.45');
+      git('add', '.'); git('commit', '-q', '-m', 'Release afbin 0.1.45');
+      expect(planOutput(cwd, { CI__EVENT: 'pull_request', CI__BASE_SHA: base, CI__HEAD_SHA: git('rev-parse', 'HEAD') })['cli-bump']).toBe('false');
+      const refusal = spawnSync(process.execPath, [script, 'cli-bump'], { encoding: 'utf8' });
+      expect(refusal.status).toBe(1);
+      expect(refusal.stderr).toContain(CLI_BUMP_REFUSAL);
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  it('records the tested tree and the run that holds its binaries', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-record-tree-'));
+    try {
+      const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.name', 'CI fixture');
+      git('config', 'user.email', 'mxmx_test_ci@example.com');
+      writeFileSync(path.join(cwd, 'file.txt'), 'one');
+      git('add', '.'); git('commit', '-q', '-m', 'base');
+      const tree = git('rev-parse', 'HEAD^{tree}');
+      const output = path.join(cwd, 'outputs');
+      const summary = path.join(cwd, 'summary');
+      writeFileSync(summary, '');
+      execFileSync(process.execPath, [script, 'record-tree'], {
+        cwd, encoding: 'utf8',
+        env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '99', GITHUB_SHA: 'a'.repeat(40) },
+      });
+      expect(JSON.parse(readFileSync(path.join(cwd, 'tested-tree/tested-tree.json'), 'utf8')))
+        .toEqual({ run_id: 99, head_sha: 'a'.repeat(40), tree });
+      expect(JSON.parse(readFileSync(path.join(cwd, 'tested-run/tested-run.json'), 'utf8'))).toEqual({ run_id: 99 });
+      expect(readFileSync(output, 'utf8')).toContain(`tree=${tree}\n`);
+      expect(readFileSync(summary, 'utf8')).toBe(`tree ${tree} tested by run 99\n`);
+      // On a reusing push the consumers must be pointed at the run that BUILT the bytes.
+      execFileSync(process.execPath, [script, 'record-tree'], {
+        cwd, encoding: 'utf8',
+        env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_STEP_SUMMARY: summary, GITHUB_RUN_ID: '100', CI__SOURCE_RUN: '4242' },
+      });
+      expect(JSON.parse(readFileSync(path.join(cwd, 'tested-run/tested-run.json'), 'utf8'))).toEqual({ run_id: 4242 });
+      expect(readFileSync(summary, 'utf8')).toContain(`tree ${tree} tested by run 4242\n`);
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  it('keeps the install cache key blind to the version a release moves', () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'ci-fingerprint-'));
+    try {
+      const fingerprint = (version) => {
+        writeFileSync(path.join(cwd, 'package-lock.json'), JSON.stringify({
+          name: 'artifactbin',
+          packages: { '': { version: '0.1.0' }, 'services/cli': { version }, 'node_modules/left-pad': { version: '1.3.0' } },
+        }));
+        execFileSync(process.execPath, [script, 'lock-fingerprint'], { cwd, encoding: 'utf8' });
+        return readFileSync(path.join(cwd, '.ci-cache-key/install.json'), 'utf8');
+      };
+      expect(fingerprint('0.1.44')).toBe(fingerprint('0.1.45'));
+      // A dependency that actually moved must still change the key.
+      const before = fingerprint('0.1.44');
+      writeFileSync(path.join(cwd, 'package-lock.json'), JSON.stringify({
+        name: 'artifactbin',
+        packages: { '': { version: '0.1.0' }, 'services/cli': { version: '0.1.44' }, 'node_modules/left-pad': { version: '1.3.1' } },
+      }));
+      execFileSync(process.execPath, [script, 'lock-fingerprint'], { cwd, encoding: 'utf8' });
+      expect(readFileSync(path.join(cwd, '.ci-cache-key/install.json'), 'utf8')).not.toBe(before);
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
@@ -228,18 +505,31 @@ describe('CI job shape', () => {
         expect(cache.with.path).toContain('node_modules');
         expect(cache.with.path).toContain('services/app/public/fonts');
         expect(cache.with.path).toContain('services/app/lib/data/story/story-font-manifest.json');
-        expect(cache.with.key).toMatch(/hashFiles\('(candidate\/)?package-lock\.json'/);
+        // Keyed on the lockfile, but not on the one line of it a release rewrites: the fingerprint
+        // is that file with workspace versions normalised, written by the step just above.
+        expect(cache.with.key).toMatch(/hashFiles\('(candidate\/package-lock\.json|\.ci-cache-key\/install\.json)'/);
+        if (cache.with.key.includes('.ci-cache-key')) {
+          const job = Object.values(workflow.jobs).find((entry) => (entry.steps ?? []).includes(cache));
+          expect(job.steps.indexOf(cache), 'the fingerprint is written first').toBeGreaterThan(
+            job.steps.findIndex((step) => step.run === 'node scripts/ci.mjs lock-fingerprint'));
+        }
       }
       for (const step of steps(workflow.jobs)) expect(step.run ?? '').not.toContain('copy-assets.mjs');
     }
   });
 
-  it('fans the gate set over four runners and pulls the Postgres image the datasets gate drives', () => {
+  it('fans the gate set over six runners and pulls the Postgres image the datasets gate drives', () => {
     const { jobs } = ci();
-    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4]);
+    expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
     const run = jobs.gates.steps.find((step) => /scripts\/gates\.mjs/.test(step.run ?? ''));
     expect(run.run).toContain('--servers=2');
-    expect(run.run).toContain('--shard=${{ matrix.shard }}/4');
+    expect(run.run).toContain('--shard=${{ matrix.shard }}/6');
+    // The browser is cached on what pins it — the Playwright version in browsers.json — so a warm
+    // runner skips `install --with-deps` entirely instead of apt-installing libraries it has.
+    const browser = jobs.gates.steps.find((step) => step.id === 'playwright');
+    expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
+    expect(jobs.gates.steps.find((step) => (step.run ?? '').includes('--with-deps')).if)
+      .toContain("steps.playwright.outputs.cache-hit != 'true'");
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
@@ -266,27 +556,75 @@ describe('CI job shape', () => {
     expect(cli.steps.some((step) => (step.run ?? '').includes('--import tsx --test'))).toBe(false);
   });
 
-  it('keeps the slower Intel browser proof mandatory against the built executable', () => {
-    const {jobs} = ci();
-    expect(jobs['cli-intel-preview']?.needs).toContain('cli');
-    expect(jobs['cli-intel-preview']?.steps.some(step => step.uses?.startsWith('actions/download-artifact') && step.with.name === 'afbin-macos-15-intel')).toBe(true);
-    expect(jobs.cli.steps.find(step => step.name === 'File preview from the actual executable').if).toBe("matrix.os != 'macos-15-intel'");
+  it('keeps the Intel browser proof mandatory, in the job that built the bytes', () => {
+    const { jobs } = ci();
+    // The three phases were three more macOS runners, each paying its own setup and an artifact
+    // round-trip to read back the binary the `cli` job had just written. They run here instead,
+    // concurrently, against the executable already on disk.
+    expect(jobs['cli-intel-preview'], 'the separate Intel job is gone').toBeUndefined();
+    expect(CI_JOBS).not.toContain('cli-intel-preview');
+    expect(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).not.toContain('afbin-macos-15-intel');
+    const intel = jobs.cli.steps.find((step) => step.name === 'Intel preview and export proofs, from the executable just built');
+    expect(intel.if).toBe("matrix.os == 'macos-15-intel'");
+    for (const phase of ['preview', 'export-basic', 'export-variants']) expect(intel.run).toContain(phase);
+    expect(intel.run).toContain('dist/afbin-darwin-x64');
+    // Ordered after the smoke, so a binary that cannot run fails before three browsers start.
+    expect(jobs.cli.steps.indexOf(intel)).toBeGreaterThan(jobs.cli.steps.findIndex((step) => step.run === 'npm run test:binary -w services/cli'));
+    expect(jobs.cli.steps.find((step) => step.name === 'File preview from the actual executable').if).toBe("matrix.os != 'macos-15-intel'");
   });
 
-  it('reports every job duration from a job that cannot fail the run', () => {
+  it('keeps a merged PR\'s binaries downloadable for a week after the merge', () => {
+    const uploads = Object.values(ci().jobs).flatMap((job) => job.steps ?? [])
+      .filter((step) => step.uses?.startsWith('actions/upload-artifact') && /^afbin-|^tested-/.test(step.with.name ?? ''));
+    expect(uploads.length).toBeGreaterThan(0);
+    for (const upload of uploads) expect(Number(upload.with['retention-days']), upload.with.name).toBeGreaterThanOrEqual(7);
+  });
+
+  it('reports every job duration, and on a pull request fails the run over budget', () => {
     const { jobs } = ci();
     const named = Object.keys(jobs).filter((job) => job !== 'timings');
     expect(jobs.timings.needs).toEqual(expect.arrayContaining(named));
     expect(jobs.timings.if).toBe('always()');
-    expect(jobs.timings['continue-on-error']).toBe(true);
+    // A summary on main, a gate on a pull request — where the branch can still be fixed.
+    expect(jobs.timings['continue-on-error']).toBe("${{ github.event_name != 'pull_request' }}");
     // Reading the run's own job list needs a scope the workflow does not grant by default.
     expect(jobs.timings.permissions.actions).toBe('read');
     const report = jobs.timings.steps.at(-1).run;
     expect(report).toContain('GITHUB_STEP_SUMMARY');
     expect(report).toContain('/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs');
-    // Never a gate: absent from the planner's job list and from the required roll-up's needs.
+    expect(report).toContain('exit 1');
+    // The slowest STEP is named, because "gates took 300s" is not something anyone can act on.
+    expect(report).toContain('.steps[]');
+    expect(Number(jobs.timings.steps.at(-1).env.BUDGET_S)).toBeLessThanOrEqual(240);
+    // Never part of the merge gate itself: absent from the planner's job list and the roll-up's needs.
     expect(CI_JOBS).not.toContain('timings');
     expect(jobs.test.needs).not.toContain('timings');
-    expect(jobs.timings.steps.some((step) => (step.run ?? '').includes('exit 1'))).toBe(false);
+  });
+
+  it('lints the workflows where a typo is cheap to find', () => {
+    const lint = ci().jobs.checks.steps.find((step) => (step.run ?? '').includes('actionlint'));
+    expect(lint, 'checks runs actionlint').toBeDefined();
+    expect(lint.run).toMatch(/actionlint:\d+\.\d+\.\d+/);
+  });
+
+  it('refuses a CLI change with no version bump, in checks, with the fix in the message', () => {
+    const refuse = ci().jobs.checks.steps.find((step) => (step.run ?? '').includes('scripts/ci.mjs cli-bump'));
+    expect(refuse.if).toBe("needs.plan.outputs.cli-bump == 'true'");
+    expect(ci().jobs.plan.outputs['cli-bump']).toBe('${{ steps.select.outputs.cli-bump }}');
+  });
+
+  it('records the tested tree from the roll-up, and lets a push find it', () => {
+    const { jobs } = ci();
+    // Reading the artifact list of another run is a scope; a job-level block REPLACES the workflow's.
+    expect(jobs.plan.permissions.actions).toBe('read');
+    expect(jobs.plan.outputs['source-run']).toBe('${{ steps.select.outputs.source-run }}');
+    const record = jobs.test.steps.find((step) => (step.run ?? '').includes('scripts/ci.mjs record-tree'));
+    expect(record.id).toBe('tree');
+    // Only after the roll-up said every selected job was green.
+    expect(jobs.test.steps.indexOf(record)).toBeGreaterThan(jobs.test.steps.findIndex((step) => (step.run ?? '').includes('scripts/ci.mjs check')));
+    const tree = jobs.test.steps.find((step) => (step.with?.name ?? '').startsWith('tested-tree-'));
+    expect(tree.with.name).toBe('tested-tree-${{ steps.tree.outputs.tree }}');
+    const run = jobs.test.steps.find((step) => step.with?.name === 'tested-run');
+    expect(run.if).toContain("github.event_name == 'push'");
   });
 });

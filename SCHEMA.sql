@@ -151,6 +151,8 @@ CREATE TABLE IF NOT EXISTS app.users (
   merged_into_user_id TEXT,
   name TEXT,
   username TEXT,
+  image_key TEXT,
+  welcome_pending BOOLEAN NOT NULL DEFAULT false,
   password_hash TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (id)
@@ -173,6 +175,10 @@ ALTER TABLE app.users ADD COLUMN IF NOT EXISTS merged_into_user_id TEXT;
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS name TEXT;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS username TEXT;
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS image_key TEXT;
+
+ALTER TABLE app.users ADD COLUMN IF NOT EXISTS welcome_pending BOOLEAN NOT NULL DEFAULT false;
 
 ALTER TABLE app.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 

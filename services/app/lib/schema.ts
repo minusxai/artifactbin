@@ -42,6 +42,15 @@ const USERS: Table = {
     // auto-assigned at login (localpart_xxxx), renameable. Nullable so the
     // additive ALTER is legal on non-empty tables; backfilled lazily at login.
     { name: 'username', type: 'TEXT' },
+    // The profile picture: an object-store key (`avatar/<sha256>`), one square
+    // WebP written by lib/avatars. NULL = no picture; the client draws a
+    // generated initial. Public by id, like the handle.
+    { name: 'image_key', type: 'TEXT' },
+    // TRUE from the moment the app first creates a row for a NEW person
+    // (lib/profiles) until they confirm the welcome page. Existing rows take the
+    // default and never see it; no backfill needed, which is why this is a flag
+    // set at insert rather than a timestamp that would have to be back-dated.
+    { name: 'welcome_pending', type: 'BOOLEAN', notNull: true, default: 'false' },
     // Retired: login is email + OTP, there are no passwords. Existing rows keep
     // their dead bcrypt hash; nothing reads or writes this.
     { name: 'password_hash', type: 'TEXT', retired: true },
