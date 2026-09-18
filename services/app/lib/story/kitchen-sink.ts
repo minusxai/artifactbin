@@ -32,6 +32,8 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   <Value name="min_rev" type="number" default={0} />
   <Value name="since" type="date" default="2026-01-01" />
   <Value name="compare" type="boolean" default={false} />
+  <Value name="note" type="string" default="" url={false} />
+  <Value name="title" type="string" default="" url={false} />
   <Query name="regions" source="${ds}">{\`select distinct region from public.rows order by 1\`}</Query>
   <Query name="sales" source="${ds}">{\`select * from public.rows where $region is null or region = $region\`}</Query>
 </Helmet>
@@ -147,6 +149,8 @@ export function kitchenSinkMarkup(refs: KitchenSinkRefs): string {
   <p className="mt-2 max-w-prose text-muted-foreground">A <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">&lt;Query&gt;</code> over a dataset (SQL, <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">source=&quot;ref:&lt;id&gt;&quot;</code>), a <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">&lt;Value&gt;</code> bound to a native select, a recipe and an image artifact by <code className="rounded bg-muted px-1 py-0.5 font-mono text-[0.9em]">ref:</code>.</p>
   <div className="mt-4"><label className="text-sm text-muted-foreground">Region <select aria-label="Region" className="ml-2 rounded-md border border-border bg-background px-2 py-1 text-sm" value="$region" options="$regions" /></label></div>
   <div className="mt-6 flex flex-wrap items-end gap-5">
+    <Input label="Title" value="$title" placeholder="A short title" />
+    <Textarea label="Note" value="$note" rows={2} />
     <Select label="Region (kit)" value="$region" options="$regions" placeholder="All regions" />
     <Segmented label="Region segments" value="$region" options="$regions" />
     <Slider label="Min revenue" value="$min_rev" min={0} max={200} step={10} prefix="$" format=",.0f" />

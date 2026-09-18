@@ -47,7 +47,7 @@ import { ManagedIframeView } from './managed-iframe';
 import type { ManagedIframeContent } from '@/lib/story/managed-iframe';
 import type { ManagedAssetRelay } from './managed-assets';
 import { GridItemContext } from '@/components/kit/grid';
-import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, normalizeControlOptions, num, shellRest, str } from '@/components/kit/controls';
+import { DateControl, SegmentedControl, SelectControl, SliderControl, SwitchControl, TextControl, attrScalar, fieldLabel, inputType, normalizeControlOptions, num, shellRest, str, textRest } from '@/components/kit/controls';
 import { parseColumnSpecs, parseSortSpec, parseTableHeight, type SortSpec } from '@/lib/story/data-table';
 import { createPreviewIdentityAllocator } from './preview-identity';
 import { Tooltip } from '@/components/Tooltip';
@@ -427,6 +427,39 @@ function useScalarControl(name: string | null) {
     isTrue: name !== null && state.values[name] === true,
     asNumber: name !== null && typeof state.values[name] === 'number' ? (state.values[name] as number) : null,
   };
+}
+
+/**
+ * The live `<Input>`/`<Textarea>`: a real text field showing the bound scalar
+ * and writing it back typed on every keystroke, which is what makes
+ * `<Mutation reset>` able to empty it — the control holds nothing of its own.
+ */
+function InputAdapter(props: Record<string, unknown>) {
+  const bind = useScalarControl(refName(props.value));
+  return (
+    <TextControl
+      label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
+      type={inputType(props.type)} placeholder={str(props.placeholder)}
+      min={attrScalar(props.min)} max={attrScalar(props.max)} step={attrScalar(props.step)}
+      required={props.required === true} autoFocus={props.autoFocus === true}
+      value={bind.current} disabled={props.disabled === true}
+      onChange={bind.write} rest={textRest(props)}
+    />
+  );
+}
+
+function TextareaAdapter(props: Record<string, unknown>) {
+  const bind = useScalarControl(refName(props.value));
+  return (
+    <TextControl
+      label={str(props.label)} ariaLabel={fieldLabel(props)} className={str(props.className)}
+      placeholder={str(props.placeholder)} multiline
+      rows={typeof props.rows === 'number' ? props.rows : undefined}
+      required={props.required === true} autoFocus={props.autoFocus === true}
+      value={bind.current} disabled={props.disabled === true}
+      onChange={bind.write} rest={textRest(props)}
+    />
+  );
 }
 
 function SelectAdapter(props: Record<string, unknown>) {
@@ -816,6 +849,8 @@ const RUNTIME_REGISTRY: Record<string, ComponentType<Record<string, unknown>>> =
   Number: NumberAdapter,
   DataTable: DataTableAdapter,
   // The kit controls, live: resolved from the store, writing back typed.
+  Input: InputAdapter,
+  Textarea: TextareaAdapter,
   Select: SelectAdapter,
   Segmented: SegmentedAdapter,
   Slider: SliderAdapter,

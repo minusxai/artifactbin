@@ -74,10 +74,15 @@ write. Use the returned dataset id in place of `tab123` below.
     select id, spent_on, item, amount, paid_by from public.expenses
     order by spent_on desc
   `}</Query>
+  <Query name="to_join" source="ref:tab123">{`
+    select $_me as person where $_me is not null
+      and not exists (select 1 from public.people where person = $_me)
+  `}</Query>
   <Mutation name="join" source="ref:tab123">{`
     insert into public.people (person, joined_on)
     select $_me, current_date
-    where not exists (select 1 from public.people where person = $_me)
+    where $_row.person = $_me
+      and not exists (select 1 from public.people where person = $_me)
   `}</Mutation>
   <Mutation name="add" source="ref:tab123" reset="item amount spent_on">{`
     insert into public.expenses (id, paid_by, spent_on, item, amount)
@@ -86,15 +91,16 @@ write. Use the returned dataset id in place of `tab123` below.
 </Helmet>
 <main className="mx-auto max-w-2xl space-y-6 p-8">
   <h1>Trip tab</h1>
-  {$_me ? <p>You are <User id="$_me" avatar />. <Button run="$join">Join this tab</Button></p>
+  {$_me ? <p>You are <User id="$_me" avatar />.</p>
         : <SignIn>Sign in to join this tab</SignIn>}
+  <For each={$to_join} keyBy="person"><Button run="$join">Join this tab</Button></For>
   <DataTable data="$balances" rowKey="person">
     <Column col="person" title="Person"><User id="$_row.person" /></Column>
     <Column col="net" title="Net" fmt="$,.2f" align="right" />
   </DataTable>
   {$_me ? <Card><CardContent className="space-y-3">
-      <input aria-label="What it was for" type="text" value="$item" />
-      <input aria-label="Amount" type="number" min={0} value="$amount" />
+      <Input label="What it was for" value="$item" />
+      <Input label="Amount" type="number" min={0} value="$amount" />
       <DatePicker label="Spent on" value="$spent_on" />
       <Button run="$add">Add expense</Button>
     </CardContent></Card>
@@ -110,10 +116,19 @@ write. Use the returned dataset id in place of `tab123` below.
 
 Line by line, this is the whole pattern:
 
-- **Joining is one button.** `where not exists` makes it idempotent, so the
-  second press adds nothing and nobody has to be invited by hand. A mutation
-  binding `$_me` needs a signed-in reader, so the person who clicks it IS the
-  person who joins.
+- **Membership decides the UI.** The `to_join` Query returns ONE row — the
+  viewer — only for a signed-in person who has not joined (`$_me is not null`
+  first, or a guest gets a row with no key), and `<For>` over an empty result
+  renders nothing, so the button is there for a newcomer and gone for everyone
+  else. A `<Button run>` inside a `<For>` is a ROW action, so the Mutation reads
+  `$_row`; it still WRITES `$_me`, never the row — a row snapshot comes from the
+  browser, and `where $_row.person = $_me` is how the click is tied to the row it
+  came from. That is also what makes a guest's press answer `sign_in_required`
+  instead of a refusal about the data. `where not exists` keeps it idempotent.
+- **The form is kit controls**, one visual family: `<Input>` (with
+  `type="number"` where it is a number), `<Textarea>`, `<DatePicker>`,
+  `<Button>`. A native `<input value="$item">` still binds — and is themed now —
+  but the kit is what matches the rest of the page.
 - **Every row records its author** with `$_me`, and is READ back with
   `<User id="$_row.paid_by" />` — the display name of an account, resolved for
   whoever is looking.
