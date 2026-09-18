@@ -9,7 +9,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { Actor, BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
+import type { BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { services, setServices } from '@/lib/services';
 
@@ -97,7 +97,7 @@ describe('browser_session viewer', () => {
     // `viewer` and `pageActor` ride on the union's `script` member, so the
     // recorder reads a request as one shape rather than making every assertion
     // below narrow the op first.
-    const seen: Array<BrowserSessionRequest & { viewer?: 'guest' | 'test-user'; pageActor?: Actor }> = [];
+    const seen: BrowserSessionRequest[] = [];
     setServices({ browser: { ...previous, sessions: {
       async request(input: BrowserSessionRequest): Promise<BrowserSessionResult> { seen.push(input); return { session_id: input.session_id, status: 'queued', pages: [], attachments: [] }; },
       async close() {},
@@ -106,7 +106,7 @@ describe('browser_session viewer', () => {
   };
   afterEach(() => setServices({ browser: previous }));
 
-  it('accepts only guest, and parses a script without a viewer', () => {
+  it('accepts guest and test-user, and parses a script without a viewer', () => {
     const input = z.object(operation.input);
     expect(input.safeParse({ ...script, viewer: 'guest' }).success).toBe(true);
     expect(input.safeParse(script).success).toBe(true);
