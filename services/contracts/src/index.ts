@@ -4,6 +4,7 @@ export type { Queryable } from './db';
 export * from './sql';
 export * from './browser';
 export * from './browser-sessions';
+export * from './testusers';
 export * from './mx';
 export * from './events';
 export * from './relations';
