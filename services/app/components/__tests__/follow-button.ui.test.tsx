@@ -18,7 +18,9 @@ beforeEach(() => {
     return new Response(JSON.stringify(answer), { status: 200, headers: { 'content-type': 'application/json' } });
   }));
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+/** Set by the case that stands in for `window.location`; nothing else touches it. */
+let restoreLocation: (() => void) | null = null;
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); restoreLocation?.(); restoreLocation = null; });
 
 describe('FollowButton', () => {
   it('a signed-in viewer sees the count, follows through the door, renders its answer, then unfollows', async () => {
@@ -42,8 +44,13 @@ describe('FollowButton', () => {
    */
   it('a guest whose press is refused lands on /login, returning to this profile', async () => {
     window.history.replaceState(null, '', '/@sam?tab=stars');
+    // The whole location is stood in for (jsdom's `assign` is not replaceable
+    // on its own) and PUT BACK afterwards: the anonymous case below reads the
+    // real one, and a clobbered location would make its pass an accident.
     const assign = vi.fn();
-    Object.defineProperty(window, 'location', { value: { ...window.location, assign, pathname: '/@sam', search: '?tab=stars', hash: '' }, writable: true });
+    const real = window.location;
+    Object.defineProperty(window, 'location', { value: { ...real, pathname: '/@sam', search: '?tab=stars', hash: '', assign }, configurable: true, writable: true });
+    restoreLocation = () => Object.defineProperty(window, 'location', { value: real, configurable: true, writable: true });
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'sign_in_required' }), { status: 401, headers: { 'content-type': 'application/json' } })));
     render(<MemoryRouter><FollowButton userId="usr_a" following={false} count={7} signedIn /></MemoryRouter>);
     fireEvent.click(screen.getByRole('button', { name: /^follow$/i }));
