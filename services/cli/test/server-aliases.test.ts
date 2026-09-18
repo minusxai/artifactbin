@@ -305,9 +305,9 @@ for(const args of [['query'],['log'],['comment'],['open'],['export','--format','
 
 /*
  * FORKING AN APP from an alias link is the one fork that talks to the server several times — the
- * snapshot, the dry run, the fork itself, and the removal of the page it made. The row above pins
- * that the LINK is understood; this pins that all four calls, credential included, go to the
- * canonical origin and none of them to the alias.
+ * snapshot, the dry run, the fork itself, and the pull of the copy it made. The row above pins
+ * that the LINK is understood; this pins that every one of those calls, credential included, goes
+ * to the canonical origin and none of them to the alias.
  */
 test('forking an app at a verified alias asks the canonical origin for every step',async()=>{
  await withHome(async home=>{
@@ -319,16 +319,18 @@ test('forking an app at a verified alias asks the canonical origin for every ste
    [`${CANONICAL}/api/artifacts/abc123`]:()=>Response.json(page,{headers:{'X-Artifactbin-Account':'usr_seed'}}),
    [`${CANONICAL}/api/artifacts/abc123/fork`]:(call:{method:string;body:unknown})=>Response.json(
     (call.body as {dry_run?:boolean})?.dry_run?{datasets:[{id:'ds0001',title:'tab'}]}
-     :{id:'cpy001',forked_from:'abc123',datasets:[{id:'ds0009',forked_from:'ds0001'}]},
+     :{id:'cpy001',url:`${CANONICAL}/a/cpy001`,visibility:'unlisted',forked_from:'abc123',datasets:[{id:'ds0009',forked_from:'ds0001'}]},
     {headers:{'X-Artifactbin-Account':'usr_seed'}}),
    [`${CANONICAL}/api/artifacts/cpy001`]:()=>Response.json({...page,id:'cpy001',markup:app('ds0009')},{headers:{'X-Artifactbin-Account':'usr_seed'}}),
   });
   const run=await cli(['fork',`${ALIAS}/a/abc123?$x=1`,'--output','copy.jsx','--server',CANONICAL,'--json'],home,net.fetch);
   assert.equal(run.code,0,run.err.join('')+run.out.join(''));
-  assert.match(await readFile(join(home,'copy.jsx'),'utf8'),/ref:ds0009/);
+  const file=await readFile(join(home,'copy.jsx'),'utf8');
+  assert.match(file,/ref:ds0009/);
+  assert.match(file,/id: cpy001/,'the local file tracks the copy the server made');
   const api=net.seen.filter(call=>call.path!=='/api/server');
   assert.deepEqual([...new Set(api.map(call=>call.origin))],[CANONICAL]);
-  assert.deepEqual(api.filter(call=>call.method==='DELETE').map(call=>call.path),['/api/artifacts/cpy001']);
+  assert.deepEqual(api.filter(call=>call.method==='DELETE'),[],'the page the server forked stays');
   assert.deepEqual(net.seen.filter(call=>call.origin===ALIAS).map(call=>call.path),[]);
  });
 });

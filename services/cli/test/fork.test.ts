@@ -1,25 +1,28 @@
 /**
  * FORKING SOMEBODY ELSE'S ARTIFACT FROM THE CLI.
  *
- * `afbin fork` means one thing — a local draft that `push` publishes — and two kinds of source
- * used to break it:
+ * `afbin fork` writes a local draft that `push` publishes, and two kinds of source used to break
+ * it:
  *
  *  - an APP: a page whose <Mutation> writes a dataset it does not own cannot be published by the
- *    forker at all, so the draft was a file push always refused. The server's fork door copies
- *    those datasets under this account and repoints the page; the CLI takes that copy's markup,
- *    strips the identity fields and removes the page the server made.
+ *    forker at all, so a draft keeping the original `ref:` was a file push always refused. The
+ *    server's fork door copies those datasets under this account and repoints the page — and
+ *    they are PUBLISHED the moment it answers, so that is the fork. The local file is the
+ *    server's copy, pulled with its identity and tracked, and the next push updates it.
  *  - a dataset defined by a <Dataset> DEFINITION rather than rows: the row parser refused it with
  *    `invalid_response: Dataset content is not JSON`. It forks as the typed YAML plus its .jsx
  *    definition, which is what `afbin pull <ref> --format yaml` writes.
  */
 import {test,describe} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,stat} from 'node:fs/promises';
+import {readFile,stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {cliHarness,type RecordedCall} from './harness';
 import {parseResourceFile} from '../src/resource-file';
 
+// A tracked pull needs the server's account identity, which the harness stamps on every answer.
 const harness=(prefix:string)=>cliHarness(prefix,{account:null});
+const trackedHarness=(prefix:string)=>cliHarness(prefix);
 const ORIGINAL='ds0001';
 const COPY='ds0009';
 const PAGE='abc123';
@@ -31,39 +34,64 @@ const snapshot=(id:string,markup:string)=>({id,version:1,edit_id:'e1',state:'a'.
 
 /** A server that forks the page deeply: the dry run names the dataset, the fork copies it. */
 function appServer(){
- const deleted:string[]=[];
+ const forks:unknown[]=[];
  const respond=async(call:RecordedCall)=>{
   if(call.pathname===`/api/artifacts/${PAGE}`&&call.method==='GET')return Response.json(snapshot(PAGE,APP(ORIGINAL)));
   if(call.pathname===`/api/artifacts/${PAGE}/fork`&&call.method==='POST'){
-   return (call.body as {dry_run?:boolean})?.dry_run
-    ? Response.json({datasets:[{id:ORIGINAL,title:'tab'}]})
-    : Response.json({id:SERVER_COPY,url:`https://example.com/a/${SERVER_COPY}`,forked_from:PAGE,datasets:[{id:COPY,forked_from:ORIGINAL}]},{status:201});
+   if((call.body as {dry_run?:boolean})?.dry_run)return Response.json({datasets:[{id:ORIGINAL,title:'tab'}]});
+   forks.push(call.body);
+   return Response.json({id:SERVER_COPY,url:`https://example.com/a/${SERVER_COPY}`,visibility:'unlisted',forked_from:PAGE,datasets:[{id:COPY,forked_from:ORIGINAL}]},{status:201});
   }
   if(call.pathname===`/api/artifacts/${SERVER_COPY}`&&call.method==='GET')return Response.json(snapshot(SERVER_COPY,APP(COPY)));
-  if(call.pathname===`/api/artifacts/${SERVER_COPY}`&&call.method==='DELETE'){deleted.push(SERVER_COPY);return Response.json({id:SERVER_COPY,deleted:true});}
   return new Response('not found',{status:404});
  };
- return {respond,deleted};
+ return {respond,forks};
 }
 
 describe('forking an app',()=>{
- test('the draft writes datasets this account owns, keeps no identity, and leaves no page on the server',async()=>{
-  const h=await harness('afbin-fork-app-');
+ test('the local file IS the server copy: tracked, repointed, and pushed as an update',async()=>{
+  const h=await trackedHarness('afbin-fork-app-');
   const server=appServer();
   try{
    assert.equal(await h.invoke(['fork',PAGE,'--output','tracker.jsx','--json'],server.respond),0,h.out.join(''));
-   const draft=await readFile(join(h.root,'tracker.jsx'),'utf8');
+   const file=await readFile(join(h.root,'tracker.jsx'),'utf8');
    // The whole point: the <Mutation> names a dataset of the forker's, not the original's.
-   assert.ok(draft.includes(`ref:${COPY}`),draft);
-   assert.ok(!draft.includes(`ref:${ORIGINAL}`),'no ref may still point at the original dataset');
-   for(const key of ['id:','edit_id:','head_version:','state:','version:'])assert.ok(!draft.includes(`\n${key}`),`${key} must be stripped`);
-   assert.match(draft,new RegExp(`forked_from: ${PAGE}`));
-   assert.match(draft,/visibility: private/);
-   // The datasets stay; the page the server made was only the way to reach the repointed markup.
-   assert.deepEqual(server.deleted,[SERVER_COPY]);
+   assert.ok(file.includes(`ref:${COPY}`),file);
+   assert.ok(!file.includes(`ref:${ORIGINAL}`),'no ref may still point at the original dataset');
+   // Registered, not a draft: the identity a HEAD pull writes is present and names the COPY.
+   // (`version:` is the historical-pull field; a head pull carries head_version alone.)
+   for(const key of ['id:','edit_id:','head_version:','state:'])assert.ok(file.includes(`\n${key}`),`${key} must be kept`);
+   assert.ok(!file.includes('\nforked_from:'),'lineage is the server copy\'s own row, not a draft field');
+   assert.match(file,new RegExp(`id: ${SERVER_COPY}`));
    const operation=h.last().operations[0];
+   assert.equal(operation.status,'created');
+   assert.equal(operation.id,SERVER_COPY);
+   assert.equal(operation.url,`https://example.com/a/${SERVER_COPY}`);
+   assert.equal(operation.forked_from,PAGE);
+   assert.equal(operation.visibility,'unlisted','whatever the server fork gave the copy');
    assert.deepEqual(operation.datasets,[{id:COPY,forked_from:ORIGINAL}]);
-   assert.equal(operation.server_copy,undefined);
+   assert.equal(operation.server_copy,undefined,'no page is left behind to name');
+   // Nothing was deleted, and the page was forked exactly once.
+   assert.deepEqual(h.calls.filter(call=>call.method==='DELETE'),[]);
+   assert.deepEqual(server.forks,[{}]);
+   // Tracked: the workspace knows this file is that artifact, so status is clean...
+   assert.equal(await h.invoke(['status','--json'],server.respond),0,h.out.join(''));
+   assert.deepEqual(h.last().files.filter((f:{status:string})=>f.status!=='unchanged'),[],JSON.stringify(h.last()));
+   // ...and a push after an edit UPDATES that id instead of publishing another page.
+   await writeFile(join(h.root,'tracker.jsx'),file.replace('<Button','<Button title="Join the tab"'));
+   const edited=APP(COPY).replace('<Button','<Button title="Join the tab"');
+   const pushed=await h.invoke(['push','tracker.jsx','--json'],async call=>{
+    if(call.pathname.startsWith(`/api/artifacts/${SERVER_COPY}`)&&['POST','PUT'].includes(call.method))
+     return Response.json({...snapshot(SERVER_COPY,edited),version:2,edit_id:'e2',state:'c'.repeat(64)});
+    return server.respond(call);
+   });
+   assert.equal(pushed,0,h.out.join(''));
+   // The write names the COPY, so nothing was published a second time.
+   const write=h.calls.filter(call=>['PUT','POST'].includes(call.method)&&call.pathname.startsWith('/api/artifacts')&&!call.pathname.endsWith('/fork')).pop()!;
+   assert.match(write.pathname,new RegExp(`^/api/artifacts/${SERVER_COPY}`));
+   assert.deepEqual(h.calls.filter(call=>call.method==='POST'&&call.pathname==='/api/artifacts'),[],'never a second create');
+   assert.equal(h.last().operations[0].id,SERVER_COPY);
+   assert.equal(h.last().operations[0].version,2);
   }finally{await h.cleanup();}
  });
 
@@ -76,7 +104,7 @@ describe('forking an app',()=>{
    assert.equal(result.dry_run,true);
    assert.deepEqual(result.operations[0].datasets,[{id:ORIGINAL,title:'tab'}]);
    await assert.rejects(stat(join(h.root,result.operations[0].path)));
-   assert.deepEqual(server.deleted,[]);
+   assert.deepEqual(server.forks,[],'a dry run forks nothing');
    // Only the read-only preflight reached the fork door.
    const forks=h.calls.filter(call=>call.pathname===`/api/artifacts/${PAGE}/fork`);
    assert.deepEqual(forks.map(call=>call.body),[{dry_run:true}]);
@@ -93,8 +121,11 @@ describe('forking an app',()=>{
    };
    assert.equal(await h.invoke(['fork',PAGE,'--output','plain.jsx','--json'],respond),0,h.out.join(''));
    assert.match(await readFile(join(h.root,'plain.jsx'),'utf8'),/<p>Hello<\/p>/);
-   assert.equal(h.last().operations[0].datasets,undefined);
-   assert.deepEqual(h.calls.filter(call=>call.method==='DELETE'),[]);
+   const operation=h.last().operations[0];
+   assert.equal(operation.datasets,undefined);
+   assert.equal(operation.id,undefined,'nothing is published: it is a draft push will create');
+   assert.match(await readFile(join(h.root,'plain.jsx'),'utf8'),/visibility: private/);
+   assert.deepEqual(h.calls.filter(call=>['PUT','DELETE'].includes(call.method)),[]);
   }finally{await h.cleanup();}
  });
 
@@ -109,7 +140,7 @@ describe('forking an app',()=>{
    };
    assert.notEqual(await h.invoke(['fork',`${PAGE}@1`,'--output','old.jsx','--json'],respond),0);
    assert.equal(h.last().error.code,'unsupported_fork_version');
-   assert.deepEqual(server.deleted,[]);
+   assert.deepEqual(server.forks,[],'nothing was forked server-side');
   }finally{await h.cleanup();}
  });
 });
