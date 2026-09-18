@@ -2,8 +2,9 @@
 
 /**
  * The bound-control kit: themed two-way controls over Helmet `<Value>`s —
- * `<Select>`, `<Slider>`, `<DatePicker>`, `<Segmented>`, `<Switch>` — the
- * fancy siblings of the bindable native `input`/`select`/`textarea`
+ * `<Input>`, `<Textarea>`, `<Select>`, `<Slider>`, `<DatePicker>`,
+ * `<Segmented>`, `<Switch>` — the fancy siblings of the bindable native
+ * `input`/`select`/`textarea`
  * (lib/story/dataflow.ts REF_ATTRS.components names their bound positions).
  *
  * Two faces share every pixel of chrome:
@@ -707,6 +708,83 @@ export function SwitchControl({ label, className, checked, disabled, onChange, b
   );
 }
 
+// ── Input / Textarea ────────────────────────────────────────────────────────
+
+/**
+ * The text-like `type`s a themed field accepts. The rest of the `input` type
+ * vocabulary is deliberately absent: `range` is `<Slider>`, `date` is
+ * `<DatePicker>`, `checkbox` is `<Switch>`, and `file`/`color`/`submit` are
+ * different controls wearing the same tag — none of them is a text box, and a
+ * text box's frame is the only thing this draws.
+ */
+const INPUT_TYPES: ReadonlySet<string> = new Set(['text', 'number', 'email', 'url', 'search', 'password']);
+export const inputType = (raw: unknown): string => (typeof raw === 'string' && INPUT_TYPES.has(raw) ? raw : 'text');
+
+/** `min`/`max`/`step` pass through as authored — a number or a string, or nothing. */
+export const attrScalar = (v: unknown): string | number | undefined =>
+  typeof v === 'number' || typeof v === 'string' ? v : undefined;
+
+/**
+ * The FRAME, shared with `DateControl`'s trigger token for token: an author who
+ * puts an `<Input>` beside a `<DatePicker>` gets one family, which is the whole
+ * reason this control exists (a bare `<input>` loses its border and padding to
+ * Tailwind's preflight and floats as naked placeholder text beside it).
+ */
+const FIELD_CLASS = 'w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-xs transition-colors outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+
+interface TextControlProps {
+  /** The micro-label above the field; also its accessible name unless `ariaLabel` says otherwise. */
+  label?: string;
+  ariaLabel?: string;
+  className?: string;
+  /** One of INPUT_TYPES; ignored (and `text`) for the multiline face. */
+  type?: string;
+  placeholder?: string;
+  min?: string | number;
+  max?: string | number;
+  step?: string | number;
+  required?: boolean;
+  autoFocus?: boolean;
+  /** Multiline: a `<textarea>` instead of an `<input>`. */
+  multiline?: boolean;
+  rows?: number;
+  /** Resolved current value; null (an unset Value) is an EMPTY box, never "null". */
+  value: string | null;
+  disabled?: boolean;
+  onChange?: (raw: string) => void;
+  bound?: string;
+  rest?: Record<string, unknown>;
+}
+
+export function TextControl({ label, ariaLabel, className, type, placeholder, min, max, step, required, autoFocus, multiline, rows, value, disabled, onChange, bound, rest }: TextControlProps) {
+  const inert = disabled || !onChange;
+  /*
+   * A real `<input>`/`<textarea>`, deliberately — not a div wearing a field's
+   * clothes. It is what makes Enter submit the enclosing `run=` form (the
+   * browser's implicit submission), what gives `required`/`min`/`max` their
+   * native validity, and what a phone reads to pick a keypad.
+   */
+  const shared = {
+    'aria-label': ariaLabel ?? label,
+    placeholder,
+    required: required || undefined,
+    autoFocus: autoFocus || undefined,
+    disabled: inert,
+    value: value ?? '',
+    // Controlled with no writer (the static face, a document with no store):
+    // React needs to be told the box is a picture of a value, not a bug.
+    readOnly: !onChange,
+    onChange: onChange ? (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(e.target.value) : undefined,
+  };
+  return (
+    <ControlShell label={label} bound={bound} className={className} rest={rest}>
+      {multiline
+        ? <textarea {...shared} rows={rows ?? 3} className={cn(FIELD_CLASS, 'min-w-64 resize-y py-2 leading-normal')} />
+        : <input {...shared} type={type ?? 'text'} min={min} max={max} step={step} className={cn(FIELD_CLASS, 'h-9 min-w-48', type === 'number' && 'tabular-nums')} />}
+    </ControlShell>
+  );
+}
+
 // ── The static faces the registry serves ────────────────────────────────────
 //
 // Authored props arrive verbatim (a binding is the literal string "$name").
@@ -717,6 +795,57 @@ export function SwitchControl({ label, className, checked, disabled, onChange, b
 type Authored = Record<string, unknown>;
 
 export const shellRest = ({ label, placeholder, className, value, options, multiple, allowCreate, valueFormat, checked, min, max, step, format, prefix, suffix, disabled, children, ...rest }: Authored): Record<string, unknown> => rest;
+
+/**
+ * `shellRest` for the text field, which consumes props the other controls
+ * never see. They must not ALSO reach the shell: `aria-label` on both the
+ * wrapper and the field is one control answering to a name twice, and `type`
+ * or `rows` on a `<div>` is a lie React would happily render.
+ */
+export const textRest = ({ type, required, autoFocus, rows, readOnly, name, 'aria-label': ariaLabel, ...rest }: Authored): Record<string, unknown> => shellRest(rest);
+
+/** The field's accessible name: the author's `aria-label`, else the visible label. */
+export const fieldLabel = (props: Authored): string | undefined => str(props['aria-label']) ?? str(props.label);
+
+export function Input(props: Authored) {
+  return (
+    <TextControl
+      label={str(props.label)}
+      ariaLabel={fieldLabel(props)}
+      className={str(props.className)}
+      type={inputType(props.type)}
+      placeholder={str(props.placeholder)}
+      min={attrScalar(props.min)}
+      max={attrScalar(props.max)}
+      step={attrScalar(props.step)}
+      required={props.required === true}
+      autoFocus={props.autoFocus === true}
+      value={literalString(props.value)}
+      disabled
+      bound={controlBoundStamp(props)}
+      rest={textRest(props)}
+    />
+  );
+}
+
+export function Textarea(props: Authored) {
+  return (
+    <TextControl
+      label={str(props.label)}
+      ariaLabel={fieldLabel(props)}
+      className={str(props.className)}
+      placeholder={str(props.placeholder)}
+      required={props.required === true}
+      autoFocus={props.autoFocus === true}
+      multiline
+      rows={typeof props.rows === 'number' ? props.rows : undefined}
+      value={literalString(props.value)}
+      disabled
+      bound={controlBoundStamp(props)}
+      rest={textRest(props)}
+    />
+  );
+}
 
 export function Select(props: Authored) {
   return (

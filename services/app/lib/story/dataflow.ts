@@ -264,6 +264,11 @@ export const REF_ATTRS: {
     // two-way scalar bindings the native controls carry, in themed chrome.
     // `options` is a table exactly like `<select options>` (column 1 the
     // value, column 2 the label when present).
+    // The TEXT fields. `value` only: a text box holds a scalar and nothing
+    // else, and Enter reaching a `run=` form is the browser's own implicit
+    // submission through the real `<input>` inside — not a binding of its own.
+    Input: { value: 'scalar' },
+    Textarea: { value: 'scalar' },
     Select: { value: 'scalar', options: 'table', run: 'mutation' },
     Slider: { value: 'scalar' },
     DatePicker: { value: 'scalar' },
