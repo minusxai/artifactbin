@@ -14,6 +14,7 @@ import type { JsxNode } from '@/lib/jsx';
 import type { GlyphMap } from '@/lib/story-ui/icon-contract';
 import type { RefDataMap } from '@/lib/story/ref-data';
 import type { Dataflow, DataflowState, Row, Scalar } from '@/lib/story/dataflow';
+import type { PersonCard } from '@artifactbin/contracts';
 import type { LocalMutationResult } from '@/lib/story/local-state';
 import type { ManagedAssetsConfig, ManagedAssetKind } from './managed-assets';
 
@@ -52,9 +53,10 @@ export interface RanDataflow extends StoryIslandDataflow {
 /**
  * WHO IS READING — the one fact about the reader a document is told.
  *
- * `id` is `$_me` (lib/story/dataflow VIEWER_REF), and `label` is the display
- * name the SAME visibility rules already let a DataTable cell show
- * (lib/datasets/user-fields userLabels) — never an email, never any other
+ * `id` is `$_me` (lib/story/dataflow VIEWER_REF), and `card` is the person the
+ * SAME visibility rules already let a DataTable cell show
+ * (lib/datasets/user-fields people): a display name, the public handle they
+ * chose, and the address of their picture — never an email, never any other
  * profile field. Both travel on the island so the SERVER render and hydration
  * agree: a guest must never flash the signed-in branch, and a signed-in reader
  * must never flash "Unknown person" while a query lands.
@@ -68,8 +70,8 @@ export interface RanDataflow extends StoryIslandDataflow {
  */
 export interface StoryViewer {
   id: string;
-  /** Absent when this render never needed a name (the source draws no <User>). */
-  label?: string | null;
+  /** Absent when this render never needed one (the source draws no person). */
+  card?: PersonCard | null;
 }
 
 /** What the document's JSON island carries — everything the entry needs to hydrate. */
@@ -379,7 +381,7 @@ export interface StoryQueryRequest {
 }
 
 export type StoryQueryResult =
-  | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; tables: DataflowState['tables']; errors: DataflowState['errors']; mutationAccess?: DataflowState['mutationAccess'];userOptions?:DataflowState['userOptions'];userLabels?:DataflowState['userLabels'] }
+  | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; tables: DataflowState['tables']; errors: DataflowState['errors']; mutationAccess?: DataflowState['mutationAccess'];userOptions?:DataflowState['userOptions'];people?:DataflowState['people'] }
   | { type: typeof STORY_QUERY_RESULT_MESSAGE; id: number; error: string };
 
 /**

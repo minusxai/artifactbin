@@ -19,6 +19,7 @@ import { createDataflowStore } from '../store';
 import type { StoryIslandDataflow } from '../contract';
 import { initialValues, initialTables } from '@/lib/story/dataflow';
 import type { DataflowState } from '@/lib/story/dataflow';
+import type { PersonCard } from '@artifactbin/contracts';
 import { parseJsxOrThrow } from '@/test/helpers/jsx';
 
 const HELMET =
@@ -309,11 +310,14 @@ describe('<Dialog> bound to the store', () => {
   });
 });
 
+/** A server-computed person, as `state.people` carries them. */
+const card=(name:string,extra:Partial<PersonCard>={}):PersonCard=>({name,handle:null,image:null,...extra});
+
 describe('native user controls',()=>{
  it('uses server-scoped choices and renders user labels without authored options',()=>{
   const {content,body}=splitHelmet(parseJsxOrThrow('<Helmet><Value name="person" type="user" /></Helmet><Select label="Assignee" value="$person" /><DataTable data="$tasks" />').nodes);
   const flow={values:content.values,queries:[]};
-  const state:DataflowState={values:{person:null},errors:{},tables:{tasks:{columns:[{name:'assigned_to',type:'user'}],rows:[{assigned_to:'usr_ada'}]}},userOptions:{person:[{value:'usr_ada',label:'Ada'},{value:'usr_grace',label:'Grace'}]},userLabels:{usr_ada:'Ada'}};
+  const state:DataflowState={values:{person:null},errors:{},tables:{tasks:{columns:[{name:'assigned_to',type:'user'}],rows:[{assigned_to:'usr_ada'}]}},userOptions:{person:[{value:'usr_ada',label:'Ada'},{value:'usr_grace',label:'Grace'}]},people:{usr_ada:card('Ada')}};
   const dataflow={flow,state};
   const store=createDataflowStore(dataflow,{transport:{run:vi.fn().mockResolvedValue({tables:{},errors:{}}),page:vi.fn()},debounceMs:0});
   const view=render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome={false}/>);
@@ -336,7 +340,7 @@ describe('native user controls',()=>{
 describe('the viewer in markup', () => {
   const bodyOf = (source: string): JsxNode[] => splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]).body;
   const BRANCH = '<div>{$_me ? <p>in</p> : <SignIn>Join</SignIn>}</div>';
-  const MEL = { id: 'usr_mel', label: 'Mel' };
+  const MEL = { id: 'usr_mel', card: card('Mel') };
 
   it('gives a guest the sign-in door, returning to the address they are on', () => {
     window.history.pushState({}, '', '/a/abc123?$team=LAL#notes');
@@ -383,12 +387,15 @@ describe('the viewer in markup', () => {
     const flow = { values: content.values, queries: [] };
     const state: DataflowState = {
       values: { payer: 'usr_ada' }, errors: {}, tables: initialTables(flow),
-      userLabels: { usr_ada: 'Ada', usr_grace: 'Grace' },
+      people: { usr_ada: card('Ada'), usr_grace: card('Grace') },
     };
     const view = render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{ flow, state }} viewer={MEL} colorMode="light" />);
-    expect(view.container.querySelector('#literal')!.textContent).toBe('Ada');
-    expect(view.container.querySelector('#mine')!.textContent).toBe('Mel');
-    expect(view.container.querySelector('#bound')!.textContent).toBe('Ada');
+    const named = (selector: string) => view.container.querySelector(`${selector} [data-slot="user-handle"]`)!.textContent;
+    expect(named('#literal')).toBe('Ada');
+    expect(named('#mine')).toBe('Mel');
+    expect(named('#bound')).toBe('Ada');
+    // The picture is part of a person now, so the composition draws one by default.
+    expect(view.container.querySelector('#literal [data-slot="avatar"]')).toBeTruthy();
     const cells = [...view.container.querySelectorAll('span')].map(s => s.textContent);
     expect(cells).toContain('Grace');
     // An id this viewer cannot name is a neutral person, never the raw id.
@@ -409,7 +416,7 @@ describe('the viewer in markup', () => {
     const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
     const flow = { values: content.values, queries: [] };
     const tables = { tasks: { columns: [{ name: 'id', type: 'number' as const }, { name: 'paid_by', type: 'string' as const }, { name: 'who', type: 'user' as const }], rows: [{ id: 1, paid_by: 'usr_grace', who: 'usr_ada' }] } };
-    const state: DataflowState = { values: {}, errors: {}, tables, userLabels: { usr_ada: 'Ada', usr_grace: 'Grace' } };
+    const state: DataflowState = { values: {}, errors: {}, tables, people: { usr_ada: card('Ada'), usr_grace: card('Grace') } };
     const store = createDataflowStore({ flow, state }, { transport: { run: vi.fn().mockResolvedValue({ tables: {}, errors: {} }), page: vi.fn() }, debounceMs: 0 });
     const view = render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{ flow, state }} store={store} viewer={MEL} colorMode="light" />);
     expect(view.container.textContent).toContain('Grace');
@@ -422,5 +429,38 @@ describe('the viewer in markup', () => {
     const view = render(<StoryRuntimeApp nodes={bodyOf('<p id="mine"><User id="$_me" avatar /></p>')} refData={{}} viewer={MEL} colorMode="light" />);
     expect(view.container.querySelector('#mine')!.textContent).toContain('Mel');
     expect(view.container.querySelector('#mine')!.textContent).toContain('M');
+  });
+
+  /*
+   * THE FACE AND THE HANDLE, SEPARATELY. The same three reference shapes, the
+   * same one card — a page that wants only a picture, or only a clickable
+   * handle, must not have to take the other, and neither may resolve an id the
+   * server did not already put in front of this viewer.
+   */
+  it('draws a face and a handle from the same card, and asks nobody about an id it was not given', () => {
+    const ADA = { name: 'Ada', handle: 'ada', image: '/api/users/usr_ada/avatar?v=abc' };
+    const source = '<Helmet><Value name="payer" type="user" default="usr_ada" /></Helmet>'
+      + '<p id="face"><UserImage id="$payer" size="lg" /></p>'
+      + '<p id="handle"><UserHandle id="$payer" /></p>'
+      + '<p id="mine"><UserHandle id="$_me" /></p>'
+      + '<p id="stranger"><UserImage id="usr_nobody" /><UserHandle id="usr_nobody" /></p>'
+      + '<p id="plain"><User id="$payer" avatar={false} /></p>';
+    const { content, body } = splitHelmet(parseJsxOrThrow(source).nodes as JsxNode[]);
+    const flow = { values: content.values, queries: [] };
+    const state: DataflowState = { values: { payer: 'usr_ada' }, errors: {}, tables: initialTables(flow), people: { usr_ada: ADA } };
+    const view = render(<StoryRuntimeApp nodes={body} refData={{}} dataflow={{ flow, state }} viewer={MEL} colorMode="light" />);
+    expect(view.container.querySelector('#face img')!.getAttribute('src')).toBe(ADA.image);
+    const link = view.container.querySelector('#handle a')!;
+    expect(link.textContent).toBe('@ada');
+    expect(link.getAttribute('href')).toBe('/@ada');
+    expect(link.getAttribute('target')).toBe('_top');
+    // The viewer's own card comes off the island, before any query answers.
+    expect(view.container.querySelector('#mine')!.textContent).toBe('Mel');
+    // An id nobody put in front of this viewer: neutral in BOTH halves.
+    expect(view.container.querySelector('#stranger')!.textContent).toBe('?Unknown person');
+    expect(view.container.textContent).not.toContain('usr_nobody');
+    // `avatar={false}` is how a page asks for the handle alone.
+    expect(view.container.querySelector('#plain [data-slot="avatar"]')).toBeNull();
+    expect(view.container.querySelector('#plain')!.textContent).toBe('@ada');
   });
 });

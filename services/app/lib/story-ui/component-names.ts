@@ -35,14 +35,24 @@ export const STORY_UI_COMPONENT_NAME_LIST = [
   'File',
   'Icon',
   // WHO IS READING, and what to do about it (components/kit/user.tsx,
+  // components/kit/user-image.tsx, components/kit/user-handle.tsx,
   // components/kit/sign-in.tsx). `<User id="$_me">` names a person from the
-  // same labels a DataTable cell uses; `<SignIn>` is the guest's door.
-  'User', 'SignIn',
+  // same cards a DataTable cell uses — the face and the handle it composes are
+  // also tags of their own; `<SignIn>` is the guest's door.
+  'User', 'UserImage', 'UserHandle', 'SignIn',
   'DataTable', 'Column', 'For',
   // A folder's listing (components/kit/files.tsx). Bound like every other data
   // embed — `data="$children"` — over the children table lib/folders computes.
   'Files',
 ] as const;
+
+/**
+ * The tags whose `id` names a PERSON rather than an element — the seam
+ * lib/story-ui/interpreter takes `id` out at, and the set lib/artifacts
+ * `drawsPeople` and lib/story/dataflow REF_ATTRS answer for. Names only, so
+ * server-side validation still pulls in no React.
+ */
+export const PERSON_TAGS: ReadonlySet<string> = new Set(['User', 'UserImage', 'UserHandle']);
 
 /**
  * The inline-SVG DRAWING subset (canonical casing — SVG tags are case-sensitive

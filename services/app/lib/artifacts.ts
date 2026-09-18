@@ -5,7 +5,7 @@ import {isQueryFailure} from '@artifactbin/contracts';
 import {resolveUserValues} from '@/lib/story/user-values';
 import type {DataflowState} from '@/lib/story/dataflow';
 import {parseDatasetDefinition,serializeDatasetDefinition} from '@/lib/datasets/definition';
-import {validateUserContent,validateUserWrites,userOptions,userLabels,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
+import {validateUserContent,validateUserWrites,userOptions,people,retainUserScope,resolveUserColumnScope} from '@/lib/datasets/user-fields';
 import { SIGN_IN_REQUIRED } from '@/lib/story/sign-in-required';
 import { ACCOUNT_REACH_SQL, isLinkOnlyActor, userKindOf } from '@/lib/user-kinds';
 // A CYCLE, deliberately: the capability table reads `effectiveRole` from here
@@ -2548,7 +2548,7 @@ export async function dataflowForRow(
       if(typeof result.state.values[value.name]==='string')ids.add(result.state.values[value.name] as string);
     }
     result.state.userOptions=options;
-    result.state.userLabels=await userLabels(db,[...ids]);
+    result.state.people=await people(db,[...ids]);
   }
   if (result?.flow.mutations?.length) result.state.mutationAccess = await mutationAccessFor(row, result.flow, opts.viewer ?? null);
   return result;
@@ -2612,20 +2612,21 @@ export function declarationsForRow(row: Pick<ArtifactRow, 'source'> & Partial<Pi
 /**
  * A document DRAWS A PERSON — a conservative hint, not a parse.
  *
- * `<User …>` is the only spelling the markup validator admits for the
- * component, so a document that draws one always matches; a match inside a
- * string or a comment costs exactly one indexed lookup and nothing else. It is
- * deliberately a hint rather than a parse because the answer is only used to
- * decide whether to SPEND a query, never to decide what a viewer may see.
+ * `<User …>`, `<UserImage …>` and `<UserHandle …>` are the only spellings the
+ * markup validator admits for the three person components, so a document that
+ * draws one always matches; a match inside a string or a comment costs exactly
+ * one indexed lookup and nothing else. It is deliberately a hint rather than a
+ * parse because the answer is only used to decide whether to SPEND a query,
+ * never to decide what a viewer may see.
  */
-const drawsPeople = (source: string | null | undefined): boolean => /<User[\s/>]/.test(source ?? '');
+const drawsPeople = (source: string | null | undefined): boolean => /<User(?:Image|Handle)?[\s/>]/.test(source ?? '');
 
 /**
  * WHO IS READING, as the document may show them (lib/story-runtime/contract
  * StoryViewer): the viewer's own account id — `$_me` — and, only for a document
- * that draws a `<User>`, their display name.
+ * that draws a person, their card.
  *
- * The name comes from the SAME `userLabels` lookup a DataTable cell has always
+ * The card comes from the SAME `people` lookup a DataTable cell has always
  * used, so nothing new about anyone is exposed: one row, by id, for the person
  * who is already logged in and asking. A guest gets null and no query at all,
  * and a document that never names a person pays nothing beyond the id it
@@ -2638,8 +2639,8 @@ export async function viewerIdentityFor(
   if (!userId) return null;
   if (!drawsPeople(row.source)) return { id: userId };
   try {
-    const labels = await userLabels(await getDb(), [userId]);
-    return { id: userId, label: labels[userId] ?? null };
+    const cards = await people(await getDb(), [userId]);
+    return { id: userId, card: cards[userId] ?? null };
   } catch { return { id: userId }; }
 }
 

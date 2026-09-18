@@ -81,6 +81,8 @@ import { Video } from '@/components/kit/video';
 import { File } from '@/components/kit/file';
 import { DataTable } from '@/components/kit/data-table';
 import { User } from '@/components/kit/user';
+import { UserImage } from '@/components/kit/user-image';
+import { UserHandle } from '@/components/kit/user-handle';
 import { SignIn } from '@/components/kit/sign-in';
 import {Dialog, DialogTrigger, DialogContent, DialogClose} from '@/components/kit/dialog';
 import { Files } from '@/components/kit/files';
@@ -169,10 +171,13 @@ export const STORY_UI_COMPONENTS: Record<string, React.ComponentType<any>> = {
   Video,
   File,
   Icon,
-  // A person and the guest's door. `User` is registered as its STATIC face —
-  // it resolves nothing without the runtime adapter's labels — while `SignIn`
-  // needs nothing but the address it is on.
+  // A person, the two halves they are made of, and the guest's door. All
+  // three person tags are registered as their STATIC faces — they resolve
+  // nothing without the runtime adapter's cards — while `SignIn` needs nothing
+  // but the address it is on.
   User,
+  UserImage,
+  UserHandle,
   SignIn,
   // The data-bound table. Registered bare for completeness; StoryRuntimeApp
   // supplies rows through its store adapter, while preview/inert rendering
