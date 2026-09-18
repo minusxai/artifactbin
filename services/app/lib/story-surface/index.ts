@@ -10,6 +10,7 @@
  */
 export { remapViewportHeightUnits, STORY_VH_VAR, STORY_VH_FALLBACK } from './viewport-units';
 export { STORY_BARE_TYPOGRAPHY_CSS, BARE_TYPOGRAPHY_ELEMENTS } from './bare-typography';
+export { STORY_BARE_CONTROLS_CSS, BARE_CONTROL_EXCLUDED_TYPES } from './bare-controls';
 
 /** Marks the story root element — the element a document's body renders into. */
 export const STORY_ROOT_ATTR = 'data-mx-story-root';

@@ -9,6 +9,7 @@ import { documentFonts, documentFontCss } from './document-fonts';
 import { webFontAssets } from '@/lib/webfonts';
 import { criticalStoryFonts, getStoryFontCss, storyFontFaceCss } from '@/lib/data/story/story-fonts';
 import { STORY_BARE_TYPOGRAPHY_CSS } from '@/lib/story-surface/bare-typography';
+import { STORY_BARE_CONTROLS_CSS } from '@/lib/story-surface/bare-controls';
 import { STORY_CHROME_CSS, STORY_COLUMN_CSS, STORY_EMBED_CSS, STORY_TABLE_CSS } from '@/lib/story-runtime/chrome-css';
 import type { StoryIslandData } from '@/lib/story-runtime/contract';
 
@@ -42,7 +43,7 @@ export async function prepareStoryParts(input: StoryDocumentInput) {
     ...(input.readOnly ? { readOnly: input.readOnly } : {}),
   };
   const baseCss = [
-    ':root { --mx-vh: 100vh; } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS,
+    ':root { --mx-vh: 100vh; } body { margin: 0; }', STORY_BARE_TYPOGRAPHY_CSS, STORY_BARE_CONTROLS_CSS,
     chrome ? STORY_CHROME_CSS : '', STORY_EMBED_CSS, STORY_TABLE_CSS, STORY_COLUMN_CSS,
     getStoryFontCss(input.theme ?? undefined), storyFontFaceCss(importedFaces), documentFontCss(docFonts),
   ].join('\n');
