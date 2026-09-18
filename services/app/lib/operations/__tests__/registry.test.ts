@@ -9,7 +9,7 @@
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import type { BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
+import type { Actor, BrowserSessionRequest, BrowserSessionResult } from '@artifactbin/contracts';
 import { OPERATIONS, type OpContext } from '@/lib/operations/registry';
 import { services, setServices } from '@/lib/services';
 
@@ -94,7 +94,10 @@ describe('browser_session viewer', () => {
   const context = { actor: { tokenId: 'tok_owner', userId: 'usr_owner' }, base: 'http://app', request: new Request('http://app/api/browser-sessions', { method: 'POST' }), author: {} } as unknown as OpContext;
   const previous = services().browser;
   const record = () => {
-    const seen: BrowserSessionRequest[] = [];
+    // `viewer` and `pageActor` ride on the union's `script` member, so the
+    // recorder reads a request as one shape rather than making every assertion
+    // below narrow the op first.
+    const seen: Array<BrowserSessionRequest & { viewer?: 'guest' | 'test-user'; pageActor?: Actor }> = [];
     setServices({ browser: { ...previous, sessions: {
       async request(input: BrowserSessionRequest): Promise<BrowserSessionResult> { seen.push(input); return { session_id: input.session_id, status: 'queued', pages: [], attachments: [] }; },
       async close() {},

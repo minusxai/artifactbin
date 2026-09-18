@@ -35,7 +35,9 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
 
 /** A session service that only records: these tests are about what the APP decides. */
 function recordingSessions(fail?: { code: string; message: string }) {
-  const seen: BrowserSessionRequest[] = [];
+  // `viewer` and `pageActor` ride on the union's `script` member; the recorder
+  // reads a request as one shape so the assertions below stay direct.
+  const seen: Array<BrowserSessionRequest & { viewer?: 'guest' | 'test-user'; pageActor?: Actor }> = [];
   setServices({ browser: { ...services().browser, sessions: {
     async request(input: BrowserSessionRequest): Promise<BrowserSessionResult> {
       seen.push(structuredClone(input));
