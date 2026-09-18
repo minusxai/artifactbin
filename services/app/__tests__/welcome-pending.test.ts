@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET as sessionPage } from '@/app/api/page/session/route';
 import { syncProfile } from '@/lib/profiles';
 import { claimToken, createUser, getUserById } from '@/lib/users';
-import { setAvatar } from '@/lib/avatars';
+import { avatarUrl, setAvatar } from '@/lib/avatars';
 import { objectStore, ObjectUnavailable } from '@/lib/object-store';
 import { createTestUser, eraseTestUser } from '@/lib/testusers';
 import { mintToken } from '@/lib/tokens';
@@ -82,6 +82,43 @@ describe('GET /api/page/session — onboarded', () => {
 
   it('stays uncacheable', async () => {
     expect((await sessionPage(request('/api/page/session'))).headers.get('Cache-Control')).toBe('no-store');
+  });
+});
+
+describe('GET /api/page/session — user', () => {
+  const body = async (cookie?: string) =>
+    (await (await sessionPage(request('/api/page/session', cookie ? { cookie } : {}))).json()) as {
+      user: { id: string; email: string | null; username: string | null; image: string | null } | null;
+      kind: string;
+    };
+
+  it('carries the handle and picture address, reading the row without writing it', async () => {
+    const user = await createUser({ email: 'mxmx_test_sessionpic@example.com' });
+    await (await getDb()).query('UPDATE users SET username = NULL WHERE id = $1', [user.id]);
+    sessionUser.id = user.id; sessionUser.email = user.email;
+
+    // No handle yet and no picture: the route reports both as null and does
+    // NOT assign a handle — a hot no-store read never writes.
+    expect((await body()).user).toEqual({ id: user.id, email: user.email, username: null, image: null });
+    expect((await getUserById(user.id))?.username).toBeNull();
+
+    await (await getDb()).query("UPDATE users SET username = 'sessionpic' WHERE id = $1", [user.id]);
+    await setAvatar(user.id, await png(), 'image/png');
+    const row = await getUserById(user.id);
+    const image = avatarUrl(row!);
+    expect(image).toMatch(/^\/api\/users\//);
+    expect((await body()).user).toEqual({ id: user.id, email: user.email, username: 'sessionpic', image });
+  });
+
+  it('is null for nobody and for a browser holding only a token', async () => {
+    const none = await body();
+    expect(none.kind).toBe('none');
+    expect(none.user).toBeNull();
+
+    const token = await mintToken('anon-session-user');
+    const anon = await body(await agentCookie([token.id]));
+    expect(anon.kind).toBe('anon');
+    expect(anon.user).toBeNull();
   });
 });
 
