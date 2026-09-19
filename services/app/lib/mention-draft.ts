@@ -1,8 +1,10 @@
+import { sessionMentions } from './session-mentions';
+
 /** Keep session IDs in the wire value, while the textarea shows only @name. */
 export function mentionDraft(raw: string) {
   const spans: Array<{ start: number; end: number; from: number; to: number }> = [];
   let text = '', cursor = 0;
-  for (const match of raw.matchAll(/\[(@[^\]\n]+)\]\(\/chat\?session=[a-f0-9-]{36}\)/g)) {
+  for (const match of sessionMentions(raw)) {
     text += raw.slice(cursor, match.index);
     const from = text.length;
     text += match[1];

@@ -1,3 +1,4 @@
+import { sessionMentions } from "../session-mentions";
 import type { AnnotationCommentWire } from "../annotations";
 import { remoteSessions, RemoteError, type RemoteRegistry } from "./registry";
 /** Explicit session links are stable mentions. A bare @claude never picks an arbitrary machine. */
@@ -9,13 +10,7 @@ export function notifyRemoteComment(
   registry: RemoteRegistry = remoteSessions,
 ): void {
   if (!userId || comment.author.kind !== "human") return;
-  const targets = new Set(
-    [
-      ...comment.body.matchAll(
-        /\[@[^\]\n]+\]\(\/chat\?session=([a-f0-9-]{36})\)/g,
-      ),
-    ].map((m) => m[1]),
-  );
+  const targets = new Set([...sessionMentions(comment.body)].map((match) => match[2]));
   const data =
     JSON.stringify({
       type: "artifactbin.comment",

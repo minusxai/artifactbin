@@ -128,10 +128,10 @@ describe("remote session relay", () => {
 });
 
 import { notifyRemoteComment } from "@/lib/remote/mentions";
-it("delivers explicit human session mentions only to the commenting account, without control characters or repeated delivery", async () => {
+it.each([undefined, "a".repeat(64)])("delivers explicit human session mentions only to the commenting account, without control characters or repeated delivery (%s)", async (recoveryKey) => {
   const r = new RemoteRegistry();
-  const own = r.create("a", registration),
-    other = r.create("b", registration);
+  const own = r.create("a", { ...registration, recoveryKey }),
+    other = r.create("b", { ...registration, recoveryKey });
   const comment = {
     id: "c1",
     body: `[@Dashboard](/chat?session=${own.id}) fix this\n\x03 [@Other](/chat?session=${other.id})`,
@@ -170,14 +170,14 @@ it("delivers explicit human session mentions only to the commenting account, wit
 import { POST as createArtifact } from "@/app/api/artifacts/route";
 import { POST as createComment } from "@/app/api/my/artifacts/[id]/annotations/route";
 import { POST as replyComment } from "@/app/api/my/artifacts/[id]/annotations/[annId]/route";
-it("the real comment and reply routes notify the selected session after saving", async () => {
+it.each([undefined, "b".repeat(64)])("the real comment and reply routes notify the selected session after saving (%s)", async (recoveryKey) => {
   const t = await mintToken("remote");
   const user = await createUser({
     email: "mxmx_test_comment_remote@example.com",
   });
   await claimToken(user.id, t.token);
   const cookie = await agentCookie([t.id]);
-  const session = remoteSessions.create(user.id, registration);
+  const session = remoteSessions.create(user.id, { ...registration, recoveryKey });
   const created = await createArtifact(
     request("/api/artifacts", {
       method: "POST",
