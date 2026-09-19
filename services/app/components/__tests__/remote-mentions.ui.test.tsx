@@ -34,8 +34,8 @@ it("lets the user select an online session with a stable mention ID", async () =
   expect(screen.queryByLabelText("Mention Old (codex)")).toBeNull();
 });
 
-it('renders a session mention as a badge without displaying its URL', () => {
-  const href = '/chat?session=7d545566-1a47-4aaf-be61-cffcb7b8e8f2';
+it.each(['7d545566-1a47-4aaf-be61-cffcb7b8e8f2', 'a'.repeat(64)])('renders session %s as a badge without displaying its URL', (id) => {
+  const href = `/chat?session=${id}`;
   render(<MarkdownLite text={`Please ask [@Claude](${href})`} />);
   const badge = screen.getByRole('link', { name: '@Claude' });
   expect(badge.getAttribute('href')).toBe(href);
@@ -43,9 +43,9 @@ it('renders a session mention as a badge without displaying its URL', () => {
   expect(screen.queryByText(href)).toBeNull();
 });
 
-it('selects with the keyboard without submitting and Escape dismisses only the picker', async () => {
+it.each(['7d545566-1a47-4aaf-be61-cffcb7b8e8f2', 'b'.repeat(64)])('selects session %s with the keyboard without submitting and Escape dismisses only the picker', async (id) => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sessions: [
-    { id: '7d545566-1a47-4aaf-be61-cffcb7b8e8f2', name: 'Claude', harness: 'claude', online: true, machine: 'laptop' },
+    { id, name: 'Claude', harness: 'claude', online: true, machine: 'laptop' },
   ] }) }));
   const submit = vi.fn();
   const escape = vi.fn();
@@ -63,7 +63,7 @@ it('selects with the keyboard without submitting and Escape dismisses only the p
   expect((field as HTMLTextAreaElement).value).toBe('@Claude ');
   expect(submit).not.toHaveBeenCalled();
   fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true });
-  expect(submit).toHaveBeenCalledWith('[@Claude](/chat?session=7d545566-1a47-4aaf-be61-cffcb7b8e8f2) ');
+  expect(submit).toHaveBeenCalledWith(`[@Claude](/chat?session=${id}) `);
   fireEvent.change(field, { target: { value: '@', selectionStart: 1 } });
   await screen.findByLabelText('Mention Claude (claude)');
   escape.mockClear();
