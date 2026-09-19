@@ -18,6 +18,7 @@ import { routePages } from '../route-pages';
 import { canEdit } from '@/lib/share-roles';
 import { NotFoundPage } from './NotFound';
 import { useArtifactView } from '../use-artifact-view';
+import { artifactAppPath } from '@/lib/artifact-pwa';
 
 /**
  * ONE ADDRESS, TWO PAGES, and `folder` is the discriminator.
@@ -63,10 +64,10 @@ function ArtifactDocument({ id }: { id: string }) {
   useArtifactView(id, page?.surface?.format === 'markup' && !page.surface.captureKey && (!editingRoute || canEdit(page.role)));
   useEffect(() => {
     // The address heals to the canonical one — after the ACL, which the fetch already passed.
-    if (page && !page.surface?.captureKey && page.canonical + (editingRoute ? '/edit' : '') !== location.pathname) {
+    if (page && location.pathname !== artifactAppPath(id) && !page.surface?.captureKey && page.canonical + (editingRoute ? '/edit' : '') !== location.pathname) {
       void navigate(page.canonical + (editingRoute ? '/edit' : '') + search + location.hash, { replace: true, state: location.state });
     }
-  }, [page, editingRoute, search, location.pathname, location.hash, location.state, navigate]);
+  }, [id, page, editingRoute, search, location.pathname, location.hash, location.state, navigate]);
   if (page === null) return error ? <NotFoundPage /> : <PageLoading />;
   if (editingRoute && !canEdit(page.role)) return <NotFoundPage />;
   if (editingRoute && page.surface?.format === 'dataset') {

@@ -33,6 +33,7 @@ export function App() {
           <Route path="*" element={<NotFoundPage />} />
         </Route>
         <Route path="/a/:id/edit" element={<ProfilePage />} />
+        <Route path="/a/:id/app/" element={<ProfilePage />} />
         <Route path="/a/:id" element={<ProfilePage />} />
         <Route path="/:user/*" element={<ProfilePage />} />
       </Routes>
