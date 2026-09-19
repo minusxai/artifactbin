@@ -24,6 +24,15 @@ actor on the request. The app owns live document streams. Construct fresh
 response headers: the Node adapter may add headers.
 
 The app shell is Vite/React (`web/`), served by `server/app.ts`; there is no Next runtime.
+Artifact installation uses `/a/<id>/app/` as its manifest identity, launch URL and
+navigation scope. This route preserves the stable address instead of healing to a
+pretty URL. `lib/artifact-pwa.server.ts` owns manifest metadata, generated PNG icons
+and normal reader admission; export keys do not admit an app. Manifests and icons
+are served with `no-store`, and no service worker or offline content cache is installed.
+The install action loads a fresh document so browser discovery cannot reuse another
+artifact's manifest. Browser prompts are captured before lazy reader code loads and
+are bound to the originating app path; platforms without a prompt get manual instructions.
+
 `web/NavigationBoundary.tsx` coordinates navigation with pending edits. Reader documents use the
 shared story runtime for SSR and hydration. Author scripts do not run in the app's origin.
 

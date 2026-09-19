@@ -52,7 +52,7 @@ export default function ConfirmDialog({ title, description, action, confirmLabel
     };
   }, []);
   return createPortal(
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]" onMouseDown={event => {
+    <div className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]" onMouseDown={event => {
       if (event.target === event.currentTarget && !busy) onCancel();
     }}>
       <div ref={panel} role="dialog" aria-modal="true" aria-labelledby={heading} aria-describedby={detail} aria-busy={busy}

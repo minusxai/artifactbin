@@ -35,6 +35,7 @@ import type { FolderPage as FolderPageData } from '@/lib/folders';
 import { STORY_DATA_EVENT } from '@/lib/story-runtime/contract';
 import type { AccountWorkspace } from '@/lib/workspace';
 import { pageDataChanged } from '@/web/page-data-events';
+import { InstallArtifact, InstallArtifactLink } from '@/components/InstallArtifact';
 
 interface FolderPageProps {
   folder: FolderPageData;
@@ -177,6 +178,7 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace, own
   const summary = summarise(folder.count);
   const contents = (
     <>
+      <InstallArtifact id={id} title={folder.title ?? 'Untitled folder'} />
       <header className="mb-6 border-b border-edge pb-4">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <nav aria-label="Folder trail" className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 font-mono">
@@ -198,6 +200,7 @@ export function FolderPage({ folder: given, role, workspace: givenWorkspace, own
             </h1>
           </nav>
           {summary && <p className="m-0 shrink-0 font-sans text-sm text-muted">{summary}</p>}
+          <InstallArtifactLink id={id} className="flex items-center gap-2 text-sm text-muted hover:text-accent" />
         </div>
       </header>
 

@@ -5,7 +5,9 @@ import { configureTrustedUiStyles } from '@/components/TrustedUi';
 import { App } from './App';
 import { captureInitialStory, clearInitialStoryOnRoute } from './initial-story';
 import { NavigationBoundary } from './NavigationBoundary';
+import { captureInstallPrompt } from '@/lib/pwa-install';
 
+captureInstallPrompt(window);
 captureInitialStory();
 configureTrustedUiStyles(trustedCss);
 const router = createBrowserRouter([{ path: '*', element: <NavigationBoundary><App /></NavigationBoundary> }]);

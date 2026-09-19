@@ -52,6 +52,8 @@ import { AUTHOR_FRAME_PATH } from '@/lib/story-runtime/author-frame';
 import { GITHUB_EXTERNAL_URL } from '@/lib/github-star';
 import { createReaderPreloader } from './reader-preloads';
 import { mountBuildAssets } from './build-assets';
+import { artifactAppPath } from '@/lib/artifact-pwa';
+import { readableApp, artifactManifest, artifactAppIcon } from '@/lib/artifact-pwa.server';
 
 /**
  * The `<link rel="help">` and `<meta name="afbin">` an agent that fetched any page reads, on the caller's
@@ -277,7 +279,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
    */
   const page = async (c: { req: { raw: Request; url: string } }, status?: 200 | 404) => {
     const html = await index(c.req.url);
-    const data = await bootstrapFor(c.req.raw);
+    const data = status === 404 ? null : await bootstrapFor(c.req.raw);
     // An @-address whose profile resolves to NOTHING is a miss, and a miss is
     // 404 as a STATUS (the rule documents already live by) — the SPA is still
     // the body, so the person sees the app's own 404 page rather than a
@@ -293,9 +295,14 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     // The agent pointer is injected here, on the request base, for EVERY shell
     // — the static index.html carries none, so there is one source (lib/agent-discovery).
     const discovered = withAgentDiscovery(html, baseUrl(c.req.raw));
-    const shell = surface?.surface?.runtime
+    let shell = surface?.surface?.runtime
       ? withInitialStory(preloadReader(discovered), surface.surface.runtime, surface.surface.id, surface.description, baseUrl(c.req.raw), isStartPlaceholder(surface.surface.source, surface.surface.version))
       : withGenericSocial(discovered, baseUrl(c.req.raw));
+    const appId = /^\/a\/([a-zA-Z0-9]{6,12})\/app\/$/.exec(new URL(c.req.url).pathname)?.[1];
+    if (appId && data?.artifact && code === 200) {
+      const base = artifactAppPath(appId);
+      shell = shell.replace('</head>', () => `<link rel="manifest" href="${base}manifest.webmanifest" crossorigin="use-credentials"><link rel="apple-touch-icon" href="${base}icon-192.png"><meta name="theme-color" content="#ffffff"></head>`);
+    }
     // Last, so the pointer is the page's final line whatever else was inlined.
     return new Response(withAgentDiscoveryTail(data ? withBootstrap(shell, data) : shell, agentDiscovery(baseUrl(c.req.raw))), { status: code, headers: {
       'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...APP_SECURITY_HEADERS,
@@ -322,7 +329,7 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
       const res = await runWithRequest(request, () => fn(request, { params: Promise.resolve(params) }));
       return res.ok ? await res.json() : null;
     };
-    if (segments.at(-1) === 'edit') segments.pop();
+    if (segments.at(-1) === 'edit' || (segments[0] === 'a' && segments.length === 3 && segments[2] === 'app')) segments.pop();
     if (segments[0] === 'a' && segments.length === 2) {
       const artifact = await call(artifactData, { id: segments[1] });
       return artifact ? { path: url.pathname, artifact } : null;
@@ -454,6 +461,24 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     return page(c, status === 404 ? 404 : undefined);
   };
 
+  // App launches bypass pretty-URL healing, but never the artifact ACL.
+  app.get('/a/:id/app/', async c => {
+    const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
+    return page(c, row ? 200 : 404);
+  });
+  app.get('/a/:id/app', async c => {
+    const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
+    return row ? c.redirect(artifactAppPath(row.id) + new URL(c.req.url).search, 302) : page(c, 404);
+  });
+  app.get('/a/:id/app/:asset', async c => {
+    const row = await runWithRequest(c.req.raw, () => readableApp(c.req.raw, c.req.param('id')));
+    if (!row) return c.notFound();
+    const asset = c.req.param('asset');
+    if (asset === 'manifest.webmanifest') return new Response(JSON.stringify(artifactManifest(row)), { headers: { 'content-type': 'application/manifest+json', 'cache-control': 'no-store' } });
+    const size = asset === 'icon-192.png' ? 192 : asset === 'icon-512.png' ? 512 : null;
+    if (!size) return c.notFound();
+    return new Response(new Uint8Array(await artifactAppIcon(row.id, size)), { headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } });
+  });
   app.get('/a/:id/edit', documentAddress);
   app.get('/a/:id', documentAddress);
   // A handle is `@name` in ONE segment — Hono's params are whole segments, so the shape is a regex param.
