@@ -7,12 +7,13 @@ import {fixtureFetch as fetch} from './lib/fixture-http.mjs';
 import {startDocument,becomeOwner} from './lib/start-doc.mjs';
 import {openArtifactControls} from './lib/reveal-chrome.mjs';
 const base=process.argv[2]??'http://localhost:3030';
-const seed=await startDocument(base);
-const published=await fetch(`${base}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({title:'Screenshot capture gate',markup:'<Helmet><style>{`#capturebox{width:400px;height:240px;background:rgb(220,30,30);margin:100px 40px}`}</style></Helmet><div id="capturebox"><p>Screenshot capture fixture</p></div>',visibility:'unlisted'})});
-assert(published.ok,`publish: ${published.status}`);
 const input=await sharp({create:{width:200,height:100,channels:3,background:{r:220,g:30,b:30}}}).png().toBuffer();
 const failures=[];
 for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chromium,1,200,100],['chromium',chromium,2.2,235,235],['firefox',firefox,1,200,100],['webkit',webkit,1,200,100]]){
+ // Each case needs an unannotated pixel reference; prior comments paint overlays.
+ const seed=await startDocument(base);
+ const published=await fetch(`${base}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({title:'Screenshot capture gate',markup:'<Helmet><style>{`#capturebox{width:400px;height:240px;background:rgb(220,30,30);margin:100px 40px}`}</style></Helmet><div id="capturebox"><p>Screenshot capture fixture</p></div>',visibility:'unlisted'})});
+ assert(published.ok,`publish: ${published.status}`);
  const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:['--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:{});
  try{
   const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:dpr});const page=await context.newPage();
