@@ -2,7 +2,7 @@ import {validVersion} from './version-order';
 import { readFile } from "node:fs/promises";
 import { atomicWrite, digest, privateDirectory } from "./files";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 import { DEFAULT_SERVER, normalizeOrigin } from "@artifactbin/contracts";
 
@@ -176,6 +176,11 @@ export function remoteContext(env:NodeJS.ProcessEnv=process.env){
 }
 export function remoteChildEnv(id:string,proof:string,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
  return {...env,ARTIFACTBIN__REMOTE_SESSION:id,ARTIFACTBIN__REMOTE_PROOF:proof};
+}
+/** Harness permission defaults belong only to the managed child process. */
+export function remotePermissionEnv(command:string,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
+ if(basename(command).replace(/\.exe$/i,'')!=='opencode')return {...env};
+ return {...env,OPENCODE_PERMISSION:env.OPENCODE_PERMISSION??'{"*":"allow"}'};
 }
 export function remoteWorkerEnv(directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
  return {...env,PATH:directory+separator+(env.PATH??''),ARTIFACTBIN_URL:connection.server,ARTIFACTBIN_TOKEN:connection.token,ARTIFACTBIN__REMOTE_REFRESH_TOKEN:connection.refreshToken,ARTIFACTBIN__REMOTE_CLIENT_ID:connection.clientId};

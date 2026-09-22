@@ -4,7 +4,7 @@ import {remoteStateKey,type RemoteLocalState} from './remote-state';
 import {mkdtemp,writeFile,rm} from 'node:fs/promises';
 import {join,delimiter} from 'node:path';
 import {isSea} from 'node:sea';
-import {configDir,remoteChildEnv,remoteWorkerEnv} from './config';
+import {configDir,remoteChildEnv,remoteWorkerEnv,remotePermissionEnv} from './config';
 import {privateDirectory} from './files';
 import {HttpClient} from './http';
 import {runRemote} from './runner';
@@ -32,7 +32,7 @@ export async function remoteWorkerMain():Promise<void>{
    prepare:async session=>{
     const context=join(directory,'context.md');
     await writeFile(context,`${REMOTE_REVIEW_POLICY}\n\nThe exact CLI executable for this session is ${JSON.stringify(join(directory,'afbin'))}. Use this absolute executable for EVERY afbin command in this policy; login shells can replace PATH.\n\nAfter reading this context, run: ${quote(join(directory,'afbin'))} remote --ready ${session.id}\nThen wait for tagged comments. If the operator enters a manual terminal task, run that readiness command again only after the manual task is finished and no approval is pending.\n\n## Handoff (context)\n${input.history??'No additional history supplied.'}\n`,{mode:0o600});
-    return {args:remoteArguments(input.command,input.args,`Read the private handoff at ${JSON.stringify(context)} and follow its remote-review workflow. Do not edit anything until a tagged request arrives.`),env:remoteChildEnv(session.id,session.runnerKey,remoteWorkerEnv(directory,delimiter,client.connection))};
+    return {args:remoteArguments(input.command,input.args,`Read the private handoff at ${JSON.stringify(context)} and follow its remote-review workflow. Do not edit anything until a tagged request arrives.`),env:remotePermissionEnv(input.command,remoteChildEnv(session.id,session.runnerKey,remoteWorkerEnv(directory,delimiter,client.connection)))};
    },
    onStarted:session=>{stateKey=remoteStateKey(client.connection.server,session.id);state.put(HOME_SCOPE,'remote-agent',stateKey,{id:session.id,server:client.connection.server,pid:process.pid,directory,historyDigest:createHash('sha256').update(input.history??'').digest('hex'),stopRequested:false} satisfies RemoteLocalState);started=true;process.send?.({id:session.id,name:input.name,url:`${client.connection.server}/chat?session=${session.id}`,status:'starting',pid:process.pid});},
   });
