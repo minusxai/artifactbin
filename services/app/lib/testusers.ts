@@ -235,7 +235,7 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
   // After the commit, and never able to fail the erase: an object the store has
   // already lost is housekeeping nobody can do, not a reason to keep the row.
   if (picture) await objectStore().delete(picture).catch(() => {});
-  await sweepCommentImages();
+  await sweepCommentImages(db).catch(()=>{});
   return erased;
 }
 

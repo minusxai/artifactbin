@@ -1,7 +1,15 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {beginCapture, captureAvailable, clipCaptureRect} from '../screen';
 
-afterEach(()=>{vi.unstubAllGlobals();vi.restoreAllMocks();});
+const originalFrame=Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype,'requestVideoFrameCallback');
+const originalCancel=Object.getOwnPropertyDescriptor(HTMLVideoElement.prototype,'cancelVideoFrameCallback');
+afterEach(()=>{
+ vi.unstubAllGlobals();vi.restoreAllMocks();
+ for(const [name,descriptor] of [['requestVideoFrameCallback',originalFrame],['cancelVideoFrameCallback',originalCancel]] as const){
+  if(descriptor)Object.defineProperty(HTMLVideoElement.prototype,name,descriptor);
+  else Reflect.deleteProperty(HTMLVideoElement.prototype,name);
+ }
+});
 describe('screen capture resource contract',()=>{
  it('clips a cross-block screenshot to the viewport, independently of its anchor',()=>{
   expect(clipCaptureRect({x:-5,y:20,width:200,height:100},{width:100,height:80})).toEqual({x:0,y:20,width:100,height:60});

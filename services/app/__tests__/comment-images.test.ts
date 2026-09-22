@@ -1,3 +1,4 @@
+import {claimToken,createUser} from '@/lib/users';
 import {GET as readImageRoute} from '@/app/api/my/artifacts/[id]/comment-images/[imageId]/route';
 import {getDb} from '@/lib/db';
 import {describe,expect,it} from 'vitest';
@@ -69,4 +70,14 @@ it('rejects another actor consuming a private stage and malformed stroke coordin
  const s=await setup();
  const invalid=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,{...s.metadata,strokes:[{color:'#ff0000',width:2,points:[[200,5]]}]});expect((invalid as Response).status).toBe(400);
  const stranger=await mintToken('agent');const result=await stageCommentImage({tokenId:stranger.id,userId:null},s.doc.id,s.image,s.image,s.metadata);expect((result as Response).status).toBe(404);
+});
+
+it('carries a staged image and its quota into a claimed account',async()=>{
+ const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);if(stage instanceof Response)throw new Error(await stage.text());
+ const user=await createUser({email:'mxmx_test_imageclaim@example.com',name:'Image claim'});
+ await claimToken(user.id,s.token.token);
+ const row=(await (await getDb()).query<{user_id:string}>('SELECT user_id FROM comment_images WHERE id=$1',[stage.id])).rows[0];
+ expect(row.user_id).toBe(user.id);
+ const response=await createComment(request(`/api/my/artifacts/${s.doc.id}/annotations`,{method:'POST',cookie:s.cookie,json:{path:'0',edit_id:s.doc.edit_id,body:'Claimed screenshot',attachment_id:stage.id}}),params(s.doc.id));
+ expect(response.status,await response.clone().text()).toBe(201);
 });

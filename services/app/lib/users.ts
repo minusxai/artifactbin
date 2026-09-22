@@ -255,6 +255,7 @@ async function claimWhere(
         'UPDATE artifacts SET user_id = $1 WHERE token_id = $2 AND user_id IS NULL',
         [userId, token.id],
       );
+      await tx.query('UPDATE comment_images SET user_id=$1 WHERE token_id=$2 AND user_id IS NULL',[userId,token.id]);
       return { tokenId: token.id, claimedArtifacts: backfilled.rowCount, name: token.name };
     });
     if (!claimed) return null;

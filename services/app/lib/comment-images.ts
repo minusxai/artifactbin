@@ -30,8 +30,8 @@ export const commentImageWire=(row:ImageRow):CommentImageWire=>{
  return {id:row.id,width:row.metadata.width,height:row.metadata.height,capturedEditId:row.metadata.capturedEditId,capturedAt:row.metadata.capturedAt,originalUrl:`${url}?variant=original`,previewUrl:`${url}?variant=preview`,thumbnailUrl:`${url}?variant=thumbnail`};
 };
 /** Opportunistic bounded sweep on upload. Rows remain charged until every object was removed. */
-export async function sweepCommentImages():Promise<void>{
- const db=await getDb();
+export async function sweepCommentImages(database?:Queryable):Promise<void>{
+ const db=database??await getDb();
  const expired=await db.query<ImageRow>('SELECT * FROM comment_images WHERE annotation_id IS NULL AND expires_at < now() LIMIT 20');
  for(const row of expired.rows){
   try{for(const variant of variants)await objectStore().delete(key(row.id,variant));await db.query('DELETE FROM comment_images WHERE id=$1 AND annotation_id IS NULL AND expires_at < now()',[row.id]);}catch{/* Retry on a later upload; never forget charged objects. */}

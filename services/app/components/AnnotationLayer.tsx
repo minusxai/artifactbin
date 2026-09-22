@@ -40,8 +40,6 @@ import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef 
 import dynamic from '@/lib/dynamic';
 import {useCommentCapture} from '@/lib/capture/use-comment-capture';
 import CommentScreenshot,{BlobImage} from './CommentScreenshot';
-// The brush loads only after capture; native permission remains in the eager capture module.
-const ScreenshotEditor=dynamic(()=>import('./ScreenshotEditor'));
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import {readAnnotationPages} from '@/lib/annotation-pages';
@@ -62,6 +60,10 @@ import {
   STORY_SELECTION_MESSAGE, STORY_SELECT_MESSAGE, STORY_SELECTION_ACTION_MESSAGE,
   type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
+
+// The brush loads only after capture; native permission remains in the eager capture module.
+const ScreenshotEditor=dynamic(()=>import('./ScreenshotEditor'));
+
 
 interface AnnotationLayerProps {
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count can follow it. */
@@ -913,6 +915,8 @@ export default function AnnotationLayer({
    * thread and its newest comment open together, in one write.
    */
   const openThread = useCallback((annId: string) => {
+    captureRef.current.reset();
+    setPick(null);
     setOpenId(annId);
     setJustOpenedId(annId);
     setSelection(null);
@@ -1015,7 +1019,7 @@ export default function AnnotationLayer({
     if (sheetAwayForPickRef.current) { sheetAwayForPickRef.current = false; return; }
     setPick(null);
   }, [railOpen, pickOnOpen, phoneRail]);
-  useEffect(() => { if (!pickOnOpen) setPick(null); }, [pickOnOpen]);
+  useEffect(() => { if (!pickOnOpen) {setPick(null);captureRef.current.reset();} }, [pickOnOpen]);
 
   // A selection handed down by the page — the view-mode bubble's Comment, or
   // the editor toolbar's — opens the composer on those exact words, so nobody

@@ -35,6 +35,21 @@ describe('picking a block from the rail', () => {
     postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === STORY_ANNOTATIONS_MESSAGE);
   const pill = () => screen.queryByRole('status', { name: 'Select tool active' });
 
+  it('requires a screenshot by default on a versioned document and makes text-only fallback explicit', async () => {
+    const {frame,contentWindow}=makeFrame();
+    render(layer(frame,{railOpen:true,editId:'edit-current'}));
+    await flush();
+    expect(pill()).toBeNull();
+    fireEvent.click(screen.getByLabelText('Select'));await flush();
+    expect(pill()).not.toBeNull();
+    await fromFrame(contentWindow,{type:STORY_SELECTION_MESSAGE,nonce:NONCE,selection:PICKED});
+    fireEvent.change(screen.getByLabelText('Annotation comment'),{target:{value:'Explicit fallback'}});
+    expect(screen.getByLabelText('Save annotation')).toBeDisabled();
+    expect(screen.getByLabelText('Upload screenshot')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Continue without screenshot'}));
+    expect(screen.getByLabelText('Save annotation')).toBeEnabled();
+  });
+
   it('keeps the Select prompt below the app and editor bars when the document starts at zero', async () => {
     const { frame } = makeFrame();
     frame.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 } as DOMRect);
