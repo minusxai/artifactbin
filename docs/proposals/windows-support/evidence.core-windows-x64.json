@@ -1,0 +1,28 @@
+{
+  "run": "https://github.com/minusxai/artifactbin/actions/runs/35750672420",
+  "commit": "6005b470d9d9d99c6746359336051b5d70ab8885",
+  "status": "passed",
+  "platform": "win32",
+  "node": "v22.22.3",
+  "evidence": [
+    "Installer and CLI run as a separate standard user, not administrator",
+    "PowerShell 5.1 install: download, checksum, private state and configuration",
+    "Standalone afbin.exe runs outside checkout without Node on PATH",
+    "Fresh PowerShell process resolves executable from persisted user PATH",
+    "Corrupt download refused; installed executable unchanged",
+    "Reinstall succeeds with closed executable and does not duplicate PATH",
+    "Disposable real auth/app host starts on Windows",
+    "Installed executable completes real OAuth device approval and saves credentials",
+    "Saved credential works in a second CLI process",
+    "Saved credential ACL contains only installer identity and SYSTEM",
+    "Validate and push a new artifact through real handlers",
+    "Pull, edit, validate and republish in another workspace",
+    "Open command returns published URL; real viewer serves edited artifact",
+    "Disposable artifact cleaned up"
+  ],
+  "limitations": [
+    "Hosted Windows Server 2022 runner, not clean Windows 11 desktop",
+    "Browser-launch process invoked; approval posted by harness to real consent route",
+    "Local SQL/Chromium/preview service packages not included in this core candidate"
+  ]
+}

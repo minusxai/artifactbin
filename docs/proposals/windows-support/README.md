@@ -15,14 +15,16 @@ Install → sign in → create or pull → edit → validate → push → open t
 
 Also check a path containing spaces or Unicode, a fresh terminal finding afbin, and a failed checksum leaving the existing installation untouched.
 
-## What we already know
+## Validation
 
-[Native Windows tests](https://github.com/minusxai/artifactbin/actions/runs/35733978760) confirmed that Node executable packaging, SQLite, DuckDB, image generation, Chromium and basic terminal spawning work in isolation. The complete packaged CLI and installer still need the test above.
+[Windows CI passed](https://github.com/minusxai/artifactbin/actions/runs/35750672420): the real CLI core, packaged as an executable, installed under a standard user and completed device authentication → create → pull → edit → validate → push. The viewer served the edited artifact. No Node on PATH or checkout dependencies; spaces and Unicode paths passed. So did fresh-process PATH lookup, checksum rejection, reinstall and credential ACL inspection.
+
+**Still required before release:** clean Windows 11 desktop installation and human browser approval, skill setup, and packaging/checking optional SQL, Chromium and preview services. CI used Windows Server 2022 and automated anonymous device approval against the real local host. It proves the core approach, not a finished Windows release.
 
 ## Keep the first version focused
 
 Leave ARM64, background remote agents and enterprise deployment for later. Use installer-based upgrades with afbin closed; disable automatic self-updates on Windows initially. This avoids adding a new launcher or update system.
 
-This replaces the longer proposal and its estimate. Implementation has not started.
+The research prototype is validated; production integration remains to be implemented.
 
 [Proposal artifact](https://app.artifactbin.dev/a/vKhNMU) · [Research PR #63](https://github.com/minusxai/artifactbin/pull/63). Detailed research and probes remain in Git history and alongside this file.
