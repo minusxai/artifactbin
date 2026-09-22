@@ -93,3 +93,8 @@ export async function readCommentImage(actor:TokenActor,artifactId:string,id:str
  const row=(await db.query<ImageRow>('SELECT i.* FROM comment_images i JOIN annotations a ON a.id=i.annotation_id WHERE i.id=$1 AND i.artifact_id=$2 AND a.deleted_at IS NULL AND i.ready=true',[id,artifactId])).rows[0];
  if(!row)return null;return {buffer:await objectStore().get(key(id,variant as Variant))};
 }
+
+/** Preserve a cleanup record after disposable-user erasure, until object deletion succeeds. */
+export async function expireCommentImagesFor(tx:Queryable,userId:string,artifactIds:string[]):Promise<void>{
+ await tx.query('UPDATE comment_images SET annotation_id=NULL,ready=false,expires_at=now() WHERE user_id=$1 OR artifact_id=ANY($2::text[])',[userId,artifactIds]);
+}

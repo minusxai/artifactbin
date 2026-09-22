@@ -1,3 +1,4 @@
+import {expireCommentImagesFor,sweepCommentImages} from './comment-images';
 /**
  * TEST USERS — the throwaway second people an account mints to verify an app,
  * and the erase that makes them safe to mint at all.
@@ -215,6 +216,7 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
     picture = user.rows[0]!.image_key;
     const owned = await tx.query<{ id: string }>('SELECT id FROM artifacts WHERE user_id = $1', [testUserId]);
     const ids = owned.rows.map((row) => row.id);
+    await expireCommentImagesFor(tx,testUserId,ids);
     if (ids.length) {
       for (const { table, key } of ERASE_BY_ARTIFACT) await tx.query(`DELETE FROM ${table} WHERE ${key} = ANY($1::text[])`, [ids]);
       await tx.query("DELETE FROM relations WHERE object_kind = 'artifact' AND object_id = ANY($1::text[])", [ids]);
@@ -233,6 +235,7 @@ export async function eraseTestUser(testUserId: string, database?: Database): Pr
   // After the commit, and never able to fail the erase: an object the store has
   // already lost is housekeeping nobody can do, not a reason to keep the row.
   if (picture) await objectStore().delete(picture).catch(() => {});
+  await sweepCommentImages();
   return erased;
 }
 

@@ -22,3 +22,23 @@ describe('screen capture resource contract',()=>{
   await expect(beginCapture()).rejects.toMatchObject({code:'cancelled'});
  });
 });
+
+it('accepts the sole cropped frame of a static tab even when presented before cropTo resolves',async()=>{
+ let handle='',callback:VideoFrameRequestCallback|undefined,video:HTMLVideoElement|undefined;
+ let cropped=false;
+ const stop=vi.fn();const track=Object.assign(new EventTarget(),{stop,readyState:'live',getSettings:()=>({displaySurface:'browser'}),getCaptureHandle:()=>({handle}),cropTo:async()=>{
+  cropped=true;Object.defineProperty(video!,'videoWidth',{configurable:true,value:200});Object.defineProperty(video!,'videoHeight',{configurable:true,value:100});
+  callback?.(performance.now(),{width:200,height:100} as VideoFrameCallbackMetadata);callback=undefined;
+ }});
+ vi.stubGlobal('navigator',{mediaDevices:{setCaptureHandleConfig:(config:{handle:string})=>{handle=config.handle;},getDisplayMedia:vi.fn().mockResolvedValue({getTracks:()=>[track],getVideoTracks:()=>[track]})}});
+ vi.stubGlobal('CropTarget',{fromElement:async()=>({})});
+ vi.spyOn(HTMLMediaElement.prototype,'play').mockImplementation(function(this:HTMLVideoElement){video=this;Object.defineProperty(this,'videoWidth',{configurable:true,value:window.innerWidth});Object.defineProperty(this,'videoHeight',{configurable:true,value:window.innerHeight});return Promise.resolve();});
+ vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+ Object.defineProperty(HTMLVideoElement.prototype,'requestVideoFrameCallback',{configurable:true,value:function(cb:VideoFrameRequestCallback){callback=cb;if(!cropped)queueMicrotask(()=>{if(callback===cb){callback=undefined;cb(performance.now(),{} as VideoFrameCallbackMetadata);}});return 1;}});
+ Object.defineProperty(HTMLVideoElement.prototype,'cancelVideoFrameCallback',{configurable:true,value:()=>{callback=undefined;}});
+ vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as unknown as CanvasRenderingContext2D);
+ vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(cb=>cb(new Blob(['pixels'],{type:'image/png'})));
+ const session=await beginCapture();
+ const result=await session.capture({x:5,y:5,width:200,height:100});
+ expect(result).toMatchObject({method:'region',width:200,height:100});expect(stop).toHaveBeenCalledOnce();
+},7000);

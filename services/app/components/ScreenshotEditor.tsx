@@ -43,7 +43,7 @@ export default function ScreenshotEditor({image,initialStrokes,onDone,onCancel}:
    <label className="text-xs">Thickness <input aria-label="Brush thickness" type="range" min="1" max="16" value={width} onChange={e=>setWidth(Number(e.target.value))}/></label>
    <button type="button" disabled={!count||busy} onClick={undo} aria-label="Undo stroke">Undo</button>
   </div>
-  <canvas ref={canvas} width={image.width} height={image.height} aria-label="Screenshot drawing canvas" className="block h-auto max-h-[65vh] max-w-full touch-none" style={{cursor:'crosshair',objectFit:'contain'}}
+  <canvas ref={canvas} width={image.width} height={image.height} aria-label="Screenshot drawing canvas" className="block h-auto max-w-full touch-none" style={{cursor:'crosshair',width:`min(100%, ${image.width/image.height*65}vh, ${image.width}px)`}}
    onPointerDown={event=>{if(!ready||busy||event.button!==0||active.current)return;event.preventDefault();if(strokes.current.length>=COMMENT_IMAGE_LIMITS.strokes){setError('Drawing limit reached. Undo a stroke to continue.');return;}event.currentTarget.setPointerCapture(event.pointerId);const scale=image.width/event.currentTarget.getBoundingClientRect().width;const stroke:BrushStroke={color,width:Math.min(128,width*scale),points:[point(event)]};active.current=stroke;strokes.current.push(stroke);setCount(strokes.current.length);schedule();}}
    onPointerMove={event=>{if(!active.current)return;if(strokes.current.reduce((sum,s)=>sum+s.points.length,0)>=COMMENT_IMAGE_LIMITS.points){finish();setError('Drawing limit reached. Undo a stroke to continue.');return;}active.current.points.push(point(event));schedule();}}
    onPointerUp={finish} onPointerCancel={finish} onLostPointerCapture={finish}/>

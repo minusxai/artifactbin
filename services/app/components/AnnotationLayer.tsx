@@ -1022,6 +1022,7 @@ export default function AnnotationLayer({
   // has to click the same text twice.
   useEffect(() => {
     if (!initialSelection) return;
+    captureRef.current.reset();
     setSelection(initialSelection);
     setOpenId(null);
     setFailure(null);
@@ -1045,7 +1046,7 @@ export default function AnnotationLayer({
       type: STORY_ANNOTATIONS_MESSAGE,
       // Annotations are ambient whenever this capability exists. The frame
       // decides how pins/tints coexist with view and edit mode.
-      mode: 'on',
+      mode: capture.busy ? 'off' : 'on',
       pins: [...annotations, ...(openResolved ? [openResolved] : [])]
         .filter((a) => !a.orphaned && a.anchor)
         // The range travels with the pin so the frame can paint the words
@@ -1063,7 +1064,7 @@ export default function AnnotationLayer({
       pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, pick, resolvedList, selection, sessionNonce, postToFrame]);
+  }, [annotations, hoverId, openId, pick, resolvedList, selection, sessionNonce, postToFrame, capture.busy]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) setOpenId(null);
@@ -1346,7 +1347,7 @@ export default function AnnotationLayer({
   return (
     <>
       {confirmation}
-      <style>{`.mx-taking-screenshot [data-capture-chrome],.mx-taking-screenshot [data-mx-selection-actions],.mx-taking-screenshot [data-mx-annotate-band],.mx-taking-screenshot [data-mx-annotation-area]{visibility:hidden!important}.mx-taking-screenshot [data-mx-annotated],.mx-taking-screenshot [data-mx-annotate-selected],.mx-taking-screenshot [data-mx-annotate-pick-hover]{outline:none!important;background-color:transparent!important;box-shadow:none!important}`}</style>
+      <style>{`.mx-taking-screenshot [data-capture-chrome],.mx-taking-screenshot [data-mx-selection-actions],.mx-taking-screenshot [data-mx-annotate-band],.mx-taking-screenshot [data-mx-annotation-area]{visibility:hidden!important}`}</style>
       {capture.busy&&!selection&&<div data-capture-chrome role="status" className="fixed bottom-4 left-4 z-50 rounded bg-panel p-3 shadow">Preparing screenshot… <button type="button" onClick={capture.reset}>Cancel capture</button></div>}
       {capture.editing&&capture.draft&&<ScreenshotEditor image={capture.draft.image} initialStrokes={capture.draft.strokes} onDone={capture.done} onCancel={capture.cancelEdit}/>}
 
@@ -1372,7 +1373,7 @@ export default function AnnotationLayer({
       {pick && (
         <div
           role="status"
-          aria-label="Select tool active"
+          data-capture-chrome aria-label="Select tool active"
           className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
           style={{ left: frameRect.left + frameRect.width / 2, top: Math.max(topOffset, frameRect.top, phoneRail ? APP_BAR_H : 0) + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
         >
@@ -1609,7 +1610,7 @@ function RailChrome({ phone, topOffset, rightInset, onClose, header, children }:
   }
   return (
     <aside
-      aria-label="Annotation sidebar"
+      data-capture-chrome aria-label="Annotation sidebar"
       className="fixed bottom-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
       style={{ top: topOffset, right: rightInset, width: RIGHT_RAIL_W }}
     >

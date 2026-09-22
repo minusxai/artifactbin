@@ -26,12 +26,21 @@ async function bounded<T>(promise: Promise<T>, ms = 5000): Promise<T> {
   try { return await Promise.race([promise, new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new CaptureError('timeout')),ms);})]); }
   finally { clearTimeout(timer!); }
 }
-function frame(video: HTMLVideoElement): Promise<void> {
-  return new Promise((resolve,reject)=>{
-    let callback = 0;
-    const timer = setTimeout(()=>{video.cancelVideoFrameCallback(callback);reject(new CaptureError('timeout'));},5000);
-    callback=video.requestVideoFrameCallback(()=>{clearTimeout(timer);resolve();});
+function observeFrame(video: HTMLVideoElement, accept: () => boolean = () => true) {
+  let callback = 0;
+  let timer: ReturnType<typeof setTimeout>;
+  const cancel = () => {clearTimeout(timer);video.cancelVideoFrameCallback(callback);};
+  const promise = new Promise<void>((resolve,reject)=>{
+    timer=setTimeout(()=>{cancel();reject(new CaptureError('timeout'));},5000);
+    const next: VideoFrameRequestCallback = () => {
+      if(accept()){cancel();resolve();}
+      else callback=video.requestVideoFrameCallback(next);
+    };
+    callback=video.requestVideoFrameCallback(next);
   });
+  // The initiating browser operation may fail before this promise is awaited.
+  void promise.catch(()=>{});
+  return {promise,cancel};
 }
 /** Call directly in the initiating gesture. No import, timer or await before getDisplayMedia. */
 export async function beginCapture(): Promise<CaptureSession> {
@@ -60,8 +69,10 @@ export async function beginCapture(): Promise<CaptureSession> {
   };
   window.addEventListener('pagehide',dispose);track.addEventListener('ended',dispose);track.addEventListener('capturehandlechange',dispose);
   timer=setTimeout(dispose,120000);
-  try {await bounded(video.play());await frame(video);}
+  const initialFrame=observeFrame(video);
+  try {await bounded(video.play());await initialFrame.promise;}
   catch(error){dispose();throw error;}
+  finally{initialFrame.cancel();}
   return {dispose,async capture(input){
     if(disposed || taking)throw new CaptureError('ended');taking=true;
     const bounds=viewport();
@@ -79,10 +90,16 @@ export async function beginCapture(): Promise<CaptureSession> {
         target=document.createElement('div');
         Object.assign(target.style,{position:'fixed',left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`,pointerEvents:'none',background:'transparent'});
         document.body.appendChild(target);
-        await bounded(track.cropTo!(await bounded(crop!.fromElement(target))));
+        const cropTarget=await bounded(crop!.fromElement(target));
+        // A static tab may present its only cropped frame before cropTo resolves.
+        // Subscribe first, and ignore any full-tab frames still in flight.
+        const croppedFrame=observeFrame(video,()=>Math.abs(video.videoWidth/video.videoHeight/(rect.width/rect.height)-1)<=.015);
+        try{await bounded(track.cropTo!(cropTarget));await croppedFrame.promise;}
+        finally{croppedFrame.cancel();}
+      }else{
+        const freshFrame=observeFrame(video);
+        try{await freshFrame.promise;}finally{freshFrame.cancel();}
       }
-      // Multiple fresh presented frames allow the caller's overlay-free paint to arrive.
-      await frame(video);await frame(video);
       if(disposed || track.readyState==='ended')throw new CaptureError('ended');
       if(!verified())throw new CaptureError('wrong-source');
       if(moved || bounds.width!==innerWidth || bounds.height!==innerHeight || scroll.x!==scrollX || scroll.y!==scrollY)throw new CaptureError('geometry');

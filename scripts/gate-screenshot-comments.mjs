@@ -25,7 +25,7 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
    await expect(page.getByLabel('Save annotation',{exact:true})).toBeDisabled();
    await page.getByLabel('Upload screenshot',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:input});
   }
-  const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});await editor.waitFor({timeout:20000});
+  const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,await page.locator('body').innerText());throw error;}
   const canvas=editor.getByLabel('Screenshot drawing canvas');
   await expect(editor.getByRole('button',{name:'Done drawing',exact:true})).toBeEnabled();
   // Exact crop corner must contain content, not a selection outline or app panel.

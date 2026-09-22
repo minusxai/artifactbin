@@ -44,6 +44,7 @@ try {
     if(await button.getAttribute('aria-pressed')!=='true')await button.click();
   };
   const save=async(body)=>{
+    await page.getByRole('dialog',{name:'Annotation composer',exact:true}).waitFor();
     const fallback=page.getByRole('button',{name:'Continue without screenshot',exact:true});
     if(await fallback.isVisible())await fallback.click();
     await page.getByLabel('Annotation comment',{exact:true}).fill(body);
