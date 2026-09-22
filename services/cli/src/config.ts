@@ -94,7 +94,7 @@ export async function loadConnection(
   const selected = normalizeServer(selectedHost);
   if (env.ARTIFACTBIN_TOKEN) {
     const explicitServer = normalizeHost(env.ARTIFACTBIN_URL ?? DEFAULT_SERVER);
-    return explicitServer === selected ? { server: selected, token: env.ARTIFACTBIN_TOKEN } : null;
+    return explicitServer === selected ? { server: selected, token: env.ARTIFACTBIN_TOKEN, ...(remoteContext(env)&&env.ARTIFACTBIN__REMOTE_REFRESH_TOKEN&&env.ARTIFACTBIN__REMOTE_CLIENT_ID?{refreshToken:env.ARTIFACTBIN__REMOTE_REFRESH_TOKEN,clientId:env.ARTIFACTBIN__REMOTE_CLIENT_ID}: {}) } : null;
   }
   const saved = await readEnvFile(credentialPath(selected, home, env));
   if (saved.ARTIFACTBIN_URL !== selected) return null;
@@ -167,4 +167,16 @@ export function servicePackageUrl(releaseUrl:string,env:NodeJS.ProcessEnv=proces
 export function autoUpdatePolicy(env:NodeJS.ProcessEnv=process.env):{enabled:boolean;pin?:string} {
  const pin=env.CLI__VERSION_PIN;
  return {enabled:!['0','false','off'].includes((env.CLI__AUTO_UPDATE??'').toLowerCase())&&!pin,...(pin?{pin:validVersion(pin)?pin:'invalid'}:{})};
+}
+
+/** Managed remote children inherit scoped proof; never serialize these values into documents or logs. */
+export function remoteContext(env:NodeJS.ProcessEnv=process.env){
+ const id=env.ARTIFACTBIN__REMOTE_SESSION,proof=env.ARTIFACTBIN__REMOTE_PROOF;
+ return id&&proof?{id,proof}:undefined;
+}
+export function remoteChildEnv(id:string,proof:string,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
+ return {...env,ARTIFACTBIN__REMOTE_SESSION:id,ARTIFACTBIN__REMOTE_PROOF:proof};
+}
+export function remoteWorkerEnv(directory:string,separator:string,connection:Connection,env:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv{
+ return {...env,PATH:directory+separator+(env.PATH??''),ARTIFACTBIN_URL:connection.server,ARTIFACTBIN_TOKEN:connection.token,ARTIFACTBIN__REMOTE_REFRESH_TOKEN:connection.refreshToken,ARTIFACTBIN__REMOTE_CLIENT_ID:connection.clientId};
 }

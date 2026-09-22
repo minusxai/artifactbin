@@ -24,6 +24,7 @@ import {isMissing} from './files';
 
 export const HOME_SCOPE = 'home';
 export type StateKind =
+  | 'remote-agent'      // key: server/session; private launch metadata and pending exit receipt (no credentials)
   | 'identity-pool'
   | 'draft-identity'
   | 'identity-move'

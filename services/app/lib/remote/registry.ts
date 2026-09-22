@@ -1,3 +1,4 @@
+import {REMOTE_NAME,remoteColor} from '../../../contracts/src/remote';
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import headless from "@xterm/headless";
 import serialize from "@xterm/addon-serialize";
@@ -12,7 +13,7 @@ import type {
 export type Registration = Pick<
   RemoteSessionInfo,
   "name" | "harness" | "cwd" | "machine" | "cols" | "rows"
-> & { recoveryKey?: string };
+> & { recoveryKey?: string; managed?: boolean };
 export class RemoteError extends Error {
   constructor(
     message: string,
@@ -57,7 +58,7 @@ export class RemoteRegistry {
     for (const [id, entry] of this.removed)
       if (this.now() - entry.seen > 60 * 60 * 1000) this.removed.delete(id);
     for (const [id, s] of this.sessions)
-      if (this.now() - s.seen > 60 * 60 * 1000) {
+      if ((!s.info.managed||s.info.exitCode!==null) && this.now() - s.seen > 60 * 60 * 1000) {
         s.terminal.dispose();
         this.sessions.delete(id);
       }
@@ -80,6 +81,9 @@ export class RemoteRegistry {
   private live(s: Session) {
     if (!this.info(s).online) throw new RemoteError("Session is offline", 409);
   }
+  restore(owner:string,id:string,info:RemoteSessionInfo):void { const s=this.get(owner,id);s.info={...info}; }
+  ready(owner:string,id:string,proof:string):void { const s=this.get(owner,id);if(s.key!==proof)throw new RemoteError("Invalid runner credential",403);if(s.info.activity==='starting')s.info.activity='listening'; }
+  stop(owner:string,id:string):void { const s=this.get(owner,id);if(!s.info.managed)throw new RemoteError("This session is not managed; use Disconnect.");if(s.info.exitCode===null)s.info.activity='stopping'; }
   list(userId: string): RemoteSessionInfo[] {
     this.prune();
     return [...this.sessions.values()]
@@ -127,7 +131,11 @@ export class RemoteRegistry {
     if (this.removed.has(id)) throw new RemoteError("Session disconnected", 410);
     const existing = this.sessions.get(id);
     if (existing) return { ...this.info(existing), runnerKey: existing.key };
-    if (this.list(userId).length >= 10 || this.sessions.size >= 200)
+    if(registration.managed){
+      if(!REMOTE_NAME.test(registration.name))throw new RemoteError('Invalid agent name: use lowercase letters, digits, underscores or hyphens, starting with a letter.');
+      if(this.list(userId).some(s=>s.name===registration.name&&s.exitCode===null))throw new RemoteError(`${registration.name} already running. Use --name ${registration.name}2 to create another agent.`,409);
+    }
+    if (this.list(userId).filter(s=>s.exitCode===null).length >= 10 || this.sessions.size >= 200)
       throw new RemoteError(
         "Session limit reached; disconnect an old session",
         429,
@@ -142,13 +150,14 @@ export class RemoteRegistry {
     terminal.loadAddon(serializer);
     const info: RemoteSessionInfo = {
       ...details,
+      ...(registration.managed?{color:remoteColor(id),activity:'starting' as const}:{}),
       id,
       online: true,
       exitCode: null,
       controller: "local",
       createdAt: new Date(this.now()).toISOString(),
     };
-    const key = randomBytes(32).toString("hex");
+    const key = recoveryKey ? createHash("sha256").update(JSON.stringify(["runner",userId,recoveryKey])).digest("hex") : randomBytes(32).toString("hex");
     this.sessions.set(info.id, {
       info,
       owner: userId,
@@ -167,6 +176,7 @@ export class RemoteRegistry {
     });
     return { ...info, runnerKey: key };
   }
+  acknowledgedRequests(owner:string,id:string,ack:number):string[]{return this.get(owner,id).inputs.filter(i=>i.id<=ack&&i.requestId).map(i=>i.requestId!);}
   async exchange(
     userId: string,
     id: string,
@@ -216,9 +226,10 @@ export class RemoteRegistry {
           );
       });
     }
-    if (body.exitCode !== undefined) s.info.exitCode = body.exitCode;
+    if (body.exitCode !== undefined) {s.info.exitCode = body.exitCode;if(s.info.managed)s.info.activity='stopped';}
     await s.pending;
     return {
+      ...(s.info.activity==='stopping'?{stop:true}:{}),
       inputs: s.inputs.map((i) => ({ ...i })),
       controller: s.info.controller,
     };
@@ -254,13 +265,14 @@ export class RemoteRegistry {
     data: string,
     source: "keyboard" | "comment" = "keyboard",
     eventId?: string,
+    requestId?: string,
   ): void {
     const s = this.get(userId, id);
     this.live(s);
     if (typeof data !== "string" || !data || data.length > 32768)
       throw new RemoteError("Invalid input");
     if (eventId && s.events.has(eventId)) return;
-    this.queue(s, { kind: "input", data, source });
+    this.queue(s, { kind: "input", data, source, ...(requestId?{requestId}:{}) });
     if (eventId) {
       s.events.add(eventId);
       if (s.events.size > 1000)
@@ -287,6 +299,7 @@ export class RemoteRegistry {
     if (controller === "local")
       s.inputs = s.inputs.filter((i) => i.kind !== "resize");
   }
+  discard(userId:string,id:string):void {const s=this.get(userId,id);s.terminal.dispose();this.sessions.delete(id);}
   remove(userId: string, id: string): void {
     const s = this.get(userId, id);
     s.terminal.dispose();

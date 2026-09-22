@@ -41,7 +41,7 @@ import {validateMarkupStructure} from '../../app/lib/story/local-validation';
 import type {JsxNode} from '../../app/lib/jsx';
 import {helpScreen} from './help-screen';
 import {colorSupport,createStyle,highlightJson,type Style,type StyleOptions} from './style';
-import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault} from './config';
+import {DEFAULT_SERVER,loadConnectionFor,exportedServer,saveDefaultServer,readClientDefaults,setClientDefault,remoteContext} from './config';
 import {sameServer,serverAddresses,serverIdentity,type ServerIdentity} from './server-identity';
 import {browserAuthenticate,openBrowser,ApprovalRequired,type AuthOptions} from './browser-auth';
 import {HttpClient} from './http';
@@ -212,6 +212,10 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const result=await localQuery(workspace,parsed,querySql,workspace.tracking?.server??serverOrigin()??declaredServer,await addresses());if(result){await resultOutput(result,parsed,workspace.cwd,emit,stdout,style);return 0;}
   }
   const selectedServer=serverOrigin()??declaredServer;
+  if(command==='remote'&&typeof flags.stop==='string'){
+   const {stopLocalRemote}=await import('./remote-state');
+   if(await stopLocalRemote(home,selectedServer,flags.stop,context.env)){emit({id:flags.stop,status:'stopping',local:true});return 0;}
+  }
   // Resolved once here, and only when a URL argument makes it necessary; the remote boundary below resolves it anyway.
   const selectedAddresses=await addresses();
   const forkOptions=()=>({type:flags.type as string|undefined,output:flags.output as string|undefined,dryRun:!!flags['dry-run'],server:selectedServer,aliases:selectedAddresses,
@@ -311,6 +315,13 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    const verified=published?await verifiedSummary(workspace,positionals):undefined;
    emit({...result,...(verified?{verified}:{}),...(published?{next:publishedNext(verified)}:{}),...(secretBinding?{secret_binding:secretBinding}:{})});return 0;
   }
+  if(command==='remote'&&!flags.ready||command==='list'&&flags.type==='session'){const {reconcileRemoteExits}=await import('./remote-state');await reconcileRemoteExits(home,client,context.env);}
+  if(command==='remote'&&(flags.stop||flags.ready)){
+   const id=String(flags.stop??flags.ready);if(!/^[a-zA-Z0-9_-]+$/.test(id))throw new CliError('invalid_session','Use the session ID returned by afbin remote.');
+   const proof=remoteContext(context.env);
+   if(flags.ready&&proof?.id!==id)throw new CliError('invalid_session','Readiness must be acknowledged by the managed agent.');
+   await client.request(`/remote/sessions/${id}`,'POST',flags.stop?{type:'stop'}:{type:'ready',proof:proof!.proof});emit({id,status:flags.stop?'stopping':'listening'});return 0;
+  }
   if(command==='remote'&&typeof flags.session==='string'){
    const {attachRemote}=await import('./attach');
    return attachRemote({client,id:flags.session,interactive,stdout,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
@@ -319,7 +330,11 @@ export async function runCli(argv:string[],context:CliContext={}):Promise<number
    // The PTY graph is loaded only after the user selects remote execution.
    const {chooseLaunch}=await import('./launcher');const {runRemote}=await import('./runner');
    const launch=positionals.length?{command:positionals[0],args:positionals.slice(1)}:await chooseLaunch();
-   return runRemote({client,...launch,name:typeof flags.name==='string'?flags.name:undefined,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
+   if(flags.foreground)return runRemote({client,...launch,cwd:context.cwd,name:typeof flags.name==='string'?flags.name:undefined,onSession:url=>stderr(`Remote session: ${style.cyan(url)}\n`)});
+   // Keep the process graph lazy: ordinary authoring commands do not load PTY lifecycle code.
+   const {launchRemote}=await import('./remote-launch');
+   const receipt=await launchRemote({connection:client.connection,...launch,name:typeof flags.name==='string'?flags.name:undefined,history:typeof flags.history==='string'?flags.history:undefined,cwd:context.cwd??process.cwd(),home,env:context.env});
+   emit(json?receipt:`Started ${receipt.name} · loading context\nMention @${receipt.name} in artifact comments.\nOpen session: ${receipt.url}`);return 0;
   }
   throw new CliError('command_integration_pending',`The ${command} command is still being integrated.`);
  }catch(error){

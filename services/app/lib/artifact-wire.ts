@@ -1,3 +1,5 @@
+import {RemoteError} from './remote/registry';
+import type {ReviewReceipt} from './remote/agents';
 import type {MutationReceipt} from './mutation-receipt';
 import {parseSharingEntries} from '@artifactbin/utils';
 import {creationOperation,lookupCreation,CreationReplay} from '@/lib/creation-ledger';
@@ -740,11 +742,14 @@ export async function respondToAnnotationAction(
   id: string,
   annId: string,
   receipt?:MutationReceipt,
+  review?:ReviewReceipt,
 ): Promise<Response> {
   if (!body) return json({ error: 'invalid_json' }, 400);
   const action = parseAnnotationAction(body);
   if (!action) return json({ error: 'invalid_annotation_action' }, 400);
-  const wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt);
+  let wire;
+  try{wire = await actOnAnnotationFor(actor, id, annId, action, author,receipt,review);}
+  catch(error){if(error instanceof RemoteError)return json({error:'remote_review_refused',message:error.message},error.status);throw error;}
   if (!wire) return json({ error: 'not_found' }, 404);
   if (action.reply && author.kind === 'human') notifyRemoteComment(actor.userId, id, annId, wire.thread[wire.thread.length - 1]);
   return json(wire);

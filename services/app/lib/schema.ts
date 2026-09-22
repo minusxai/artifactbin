@@ -327,6 +327,7 @@ const ANNOTATIONS: Table = {
     { name: 'author_kind', type: 'TEXT', notNull: true }, // 'human' | 'agent' (legacy rows may say 'owner')
     { name: 'author_token_id', type: 'TEXT' },
     { name: 'author_user_id', type: 'TEXT' },
+    { name: 'author_remote', type: 'JSONB' },
     { name: 'author_label', type: 'TEXT' }, // display snapshot; survives token revocation
     // Per-comment provenance: a token may use the browser for one reply and raw
     // HTTP for the next. Stored rows may also carry 'mcp'; nothing writes it now.
@@ -574,6 +575,25 @@ const EXPORT_IMAGE_CACHE: Table = {
 };
 
 /** At-most-once mutation admission, before the content transaction. */
+/** Managed identity and request receipts outlive the ephemeral terminal relay. */
+const REMOTE_AGENTS: Table = {
+ name:'remote_agents',columns:[
+  {name:'id',type:'TEXT',notNull:true},{name:'owner',type:'TEXT',notNull:true},
+  {name:'name',type:'TEXT',notNull:true},{name:'active',type:'BOOLEAN',notNull:true,default:'true'},
+  {name:'proof_hash',type:'TEXT',notNull:true},{name:'info',type:'JSONB',notNull:true},
+  {name:'seen_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ ],primaryKey:['id'],indexes:[{name:'idx_remote_agent_name',columns:['owner','name'],unique:true,where:'active'}],
+};
+const REMOTE_WORK: Table = {
+ name:'remote_work',columns:[
+  {name:'id',type:'TEXT',notNull:true},{name:'seq',type:'BIGSERIAL',notNull:true},
+  {name:'owner',type:'TEXT',notNull:true},{name:'session_id',type:'TEXT',notNull:true},
+  {name:'artifact_id',type:'TEXT',notNull:true},{name:'thread_id',type:'TEXT',notNull:true},
+  {name:'comment_id',type:'TEXT',notNull:true},{name:'phase',type:'TEXT',notNull:true},
+  {name:'data',type:'JSONB',notNull:true},{name:'updated_at',type:'TIMESTAMPTZ',notNull:true,default:'now()'},
+ ],primaryKey:['id'],indexes:[{name:'idx_remote_work_comment',columns:['session_id','comment_id'],unique:true},{name:'idx_remote_work_thread',columns:['artifact_id','thread_id']}],
+};
+
 const MUTATION_RECEIPTS: Table = {
  name:'mutation_receipts',
  columns:[
@@ -661,7 +681,7 @@ const BROWSER_TEST_USERS: Table = {
  * re-qualify (a rename's DO block names its own schema twice) is exactly what
  * such an indirection cannot survive.
  */
-export const TABLES: Table[] = [EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
+export const TABLES: Table[] = [REMOTE_AGENTS, REMOTE_WORK, EXPORT_IMAGES, EXPORT_IMAGE_CACHE, MUTATION_RECEIPTS, DATASET_POLICY_AUDIT, DATASET_USAGE, USERS, TOKENS, ARTIFACTS, ARTIFACT_VERSIONS, ARTIFACT_EDITS, ARTIFACT_SOURCE_IDS, ARTIFACT_NODE_ALIASES, NODE_IDENTITY_MIGRATION_JOBS, ARTIFACT_SHARES, ANNOTATIONS, CODES, ANALYTICS_EVENTS, RELATIONS, WEBFONTS, WEB_ASSETS, DATASET_SECRETS, DATASET_RESULT_CACHE, ARTIFACT_CREATION_OPERATIONS, ID_RESERVATION_BATCHES, ARTIFACT_ID_REGISTRY, BROWSER_TEST_USERS];
 
 /** Ordered, individually-executable DDL statements (no splitting needed) — rendered by utils. */
 export const SCHEMA_STATEMENTS: string[] = renderSchema(TABLES);

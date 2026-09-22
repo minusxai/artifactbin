@@ -20,6 +20,10 @@ export interface RunOptions {
   onOutput?: (data: string) => void;
   onSession?: (url: string) => void;
   signal?: AbortSignal;
+  managed?: boolean;
+  env?: NodeJS.ProcessEnv;
+  prepare?:(session:{id:string;runnerKey:string})=>Promise<{args:string[];env?:NodeJS.ProcessEnv}>;
+  onStarted?:(session:{id:string;runnerKey:string},pid:number)=>void;
 }
 /** Owns the PTY lifecycle; usable from another CLI without installing global commands. */
 export async function runRemote(options: RunOptions): Promise<number> {
@@ -34,23 +38,25 @@ export async function runRemote(options: RunOptions): Promise<number> {
   const register = (signal?: AbortSignal) => client.request<{ id: string; runnerKey: string }>(
     "/remote/sessions", "POST", {
       name: options.name ?? command, harness: command, cwd,
-      machine: hostname(), cols, rows, recoveryKey,
+      machine: hostname(), cols, rows, recoveryKey, ...(options.managed?{managed:true}:{}),
     }, {}, { signal, timeoutMs: 10000 },
   );
   let session = await register(signal);
   let child: import("node-pty").IPty;
   try {
-    child = pty.spawn(command, args, {
+    const prepared=options.prepare?await options.prepare(session):{args,env:options.env};
+    child = pty.spawn(command, prepared.args, {
       cwd,
       cols,
       rows,
       name: "xterm-256color",
-      env: { ...process.env },
+      env: { ...(prepared.env??options.env??process.env) },
     });
   } catch (error) {
     await client.request(`/remote/sessions/${session.id}`, "DELETE", undefined, {}, { timeoutMs: 10000 }).catch(() => {});
     throw error;
   }
+  options.onStarted?.(session,child.pid);
   const history = new headless.Terminal({ cols, rows, scrollback: 1000, allowProposedApi: true });
   const serializer = new serialize.SerializeAddon();
   history.loadAddon(serializer);
@@ -82,8 +88,17 @@ export async function runRemote(options: RunOptions): Promise<number> {
   });
   const shutdown = new AbortController();
   let shutdownTimer: ReturnType<typeof setTimeout> | undefined;
+  let killTimer: ReturnType<typeof setTimeout> | undefined;
+  const killManaged=(signal:NodeJS.Signals)=>{try{process.kill(-child.pid,signal);}catch{try{child.kill(signal);}catch{/* already exited */}}};
+  const stopChild=()=>{
+    if(exitCode!==undefined)return;
+    if(!options.managed){child.kill();return;}
+    killManaged('SIGTERM');
+    if(!killTimer)killTimer=setTimeout(()=>killManaged('SIGKILL'),500);
+  };
   const exited = child.onExit((event) => {
     exitCode = event.exitCode;
+    clearTimeout(killTimer);if(options.managed)killManaged('SIGKILL');
     detachTerminal();
     if (interactive)
       process.stderr.write(`\r\n[afbin: Closing session… sending final output (up to 1 second)]\r\n`);
@@ -114,7 +129,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
   const onResize = () => {
     if (controller === "local") resize();
   };
-  const abort = () => { if (exitCode === undefined) child.kill(); };
+  const abort = () => { stopChild(); };
   const wasRaw = process.stdin.isRaw;
   let terminalAttached = false;
   const detachTerminal = () => {
@@ -181,6 +196,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
             {},
             { signal: shutdown.signal, timeoutMs: 10000 },
           );
+          if(result.stop)stopChild();
           controller = result.controller;
           if (controller === "local" && interactive) resize();
           for (const item of result.inputs) {
@@ -217,11 +233,13 @@ export async function runRemote(options: RunOptions): Promise<number> {
           const status = httpStatus(error);
           if (status === 410) {
             remote = false;
+            if(options.managed)stopChild();
             buffer = "";
             replay = "";
             batch = undefined;
             if (interactive) process.stderr.write("\r\n[afbin: Remote session disconnected. Your command is still running locally.]\r\n");
           } else if (status === 401 || status === 403) {
+            if(options.managed)stopChild();
             remote = false;
             if (interactive)
               process.stderr.write(`\r\n[afbin: Remote authentication failed (HTTP ${status}). ${command} is still running locally. Start afbin remote --server ${client.connection.server} in another terminal to sign in and launch a new remote session.]\r\n`);
@@ -248,7 +266,8 @@ export async function runRemote(options: RunOptions): Promise<number> {
   } finally {
     clearTimeout(shutdownTimer);
     shutdown.abort();
-    if (exitCode === undefined) child.kill();
+    clearTimeout(killTimer);
+    if (exitCode === undefined) {if(options.managed)killManaged('SIGKILL');else child.kill();}
     history.dispose();
     out.dispose();
     exited.dispose();

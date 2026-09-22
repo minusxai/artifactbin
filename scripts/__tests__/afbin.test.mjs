@@ -121,6 +121,14 @@ describe('npm run afbin', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
+  it('places the dev server before a remote executable and preserves its arguments', async () => {
+    const root = await fakeCheckout(); const run = recorder();
+    try {
+      await runAfbin({argv:['remote','--name','claude2','claude','--server','agent-server'],env:{APP__PORT:'7601'},root,home:'/home/owner',...run.options});
+      expect(run.spawned[0].args.slice(1)).toEqual(['remote','--server','http://localhost:7601','--name','claude2','claude','--server','agent-server']);
+    } finally { await rm(root,{recursive:true,force:true}); }
+  });
+
   it('builds first when the dist is stale, and forwards the child exit code', async () => {
     const root = await fakeCheckout({ distAge: 10, srcAge: 0 });
     const run = recorder();

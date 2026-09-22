@@ -295,7 +295,7 @@ const annotateOp: Operation = {
   title: 'Answer an annotation',
   http: { method: 'POST', path: '/api/artifacts/{id}/annotations/{annotation_id}' },
   description: 'Answer an annotation on a document you own: reply, resolve, or reopen it. A reply may accompany one state transition. Annotations arrive inlined on get_artifact — reply when you act on one, resolve when it is done.',
-  input: { id: z.string(), annotation_id: z.string(), reply: z.string().optional(), resolve: z.boolean().optional(), reopen: z.boolean().optional() },
+  input: { id: z.string(), annotation_id: z.string(), request_id:z.string().optional(),phase:z.enum(['acknowledged','completed','blocked']).optional(), reply: z.string().optional(), resolve: z.boolean().optional(), reopen: z.boolean().optional() },
   annotations: {},
   example: { input: { id: 'aB3xK9', annotation_id: 'ann_123', reply: 'done — tightened the intro', resolve: true } },
   errors: [
@@ -307,7 +307,11 @@ const annotateOp: Operation = {
     // a test user is held inside its sandbox (lib/capabilities).
     const refusal = await capabilityGuard(ctx.actor, 'comment', String(input.id));
     if (refusal) return fromResponse(refusal);
-    return fromResponse(await respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt));
+    const sessionId=ctx.request.headers.get('X-Artifactbin-Remote-Session');
+    const proof=ctx.request.headers.get('X-Artifactbin-Remote-Proof');
+    const reviewing=input.request_id!==undefined||input.phase!==undefined;
+    if(reviewing&&(!input.request_id||!input.phase||!input.reply||!sessionId||!proof||ctx.author.kind!=='agent'))return reply({error:'invalid_review_receipt'},400);
+    return fromResponse(await respondToAnnotationAction(input, ctx.actor, ctx.author, String(input.id), String(input.annotation_id),ctx.mutationReceipt,reviewing?{id:String(input.request_id),phase:input.phase as 'acknowledged'|'completed'|'blocked',sessionId:sessionId!,proof:proof!}:undefined));
   },
 };
 

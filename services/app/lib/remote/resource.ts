@@ -1,7 +1,7 @@
 import type { SessionResource } from "../../../contracts/src/account-resource";
 import type { RemoteSessionInfo } from "../../../contracts/src/remote";
 import type { TokenActor } from "../artifacts";
-import { remoteSessions } from "./registry";
+import { remoteAgents } from "./agents";
 
 /**
  * The relay's live session, projected into the editable-resource vocabulary the
@@ -12,6 +12,7 @@ import { remoteSessions } from "./registry";
 export function sessionResource(info: RemoteSessionInfo): SessionResource {
   return {
     type: "session",
+    ...(info.managed?{managed:true,activity:info.activity,color:info.color}:{}),
     id: info.id,
     name: info.name,
     harness: info.harness,
@@ -30,6 +31,6 @@ export function sessionResource(info: RemoteSessionInfo): SessionResource {
  * session: a terminate that is retried under the same operation identity must
  * still authorize after the row is gone, so an owned tombstone counts.
  */
-export function sessionOwnedBy(actor: TokenActor, id: string): boolean {
-  return !!actor.userId && remoteSessions.owns(actor.userId, id);
+export async function sessionOwnedBy(actor: TokenActor, id: string): Promise<boolean> {
+  return !!actor.userId && await remoteAgents.owns(actor.userId, id);
 }

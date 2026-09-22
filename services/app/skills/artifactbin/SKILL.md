@@ -23,6 +23,10 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 `afbin -h` and `afbin help <topic>` work offline and print the references in `references/` beside it; bare `afbin help` prints this file's absolute location, so never search the filesystem.
 
+## Remote review
+
+Start `afbin remote --history history.md claude` (or codex, pi, opencode) to listen in the background. Use `--name claude2` for another instance; stop with `afbin remote --stop <id>`. Users select @agent in comments. Follow the private handoff: acknowledge each request in its thread before work, verify, then reply completed or blocked; resolve only when fully addressed. Correlate replies with `--thread <id> --request <id> --phase acknowledged|completed|blocked`. Never infer success from terminal output.
+
 ## Example
 
 Before writing, read design, markup, template and theme; a template's frame keeps content from sitting flush to the viewport edge. `afbin help <template>` prints every reference that kind needs.

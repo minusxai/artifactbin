@@ -64,7 +64,7 @@ export async function commentCommand(workspace:Workspace,parsed:ParsedCommand,cl
  const mutate=(target:string,input:unknown)=>recoverableOperation(workspace,client,{path:target,method:'POST',body:input,prepare:async()=>{const head=await client.request<{capabilities?:{comment_receipts?:boolean}}>(`/artifacts/${ref.id}`);if(!head.capabilities?.comment_receipts)throw new CliError('unsupported_server','This server does not support recoverable comments.');}});
  if(flags.thread){
   if(!/^[A-Za-z0-9_-]+$/.test(String(flags.thread)))throw new CliError('invalid_thread','Use the thread id returned by afbin comment.');
-  return mutate(`${path}/${flags.thread}`, {...(body!==undefined?{reply:body}:{}),...(flags.state?flags.state==='resolved'?{resolve:true}:{reopen:true}:{})});
+  return mutate(`${path}/${flags.thread}`, {...(flags.request?{request_id:flags.request,phase:flags.phase}:{}),...(body!==undefined?{reply:body}:{}),...(flags.state?flags.state==='resolved'?{resolve:true}:{reopen:true}:{})});
  }
  if(body!==undefined)return mutate(path,{body,...(flags.node?{node_id:flags.node}:{quote:flags.quote})});
  const query=new URLSearchParams(pageQuery(flags));

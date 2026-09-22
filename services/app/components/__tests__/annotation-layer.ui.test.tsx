@@ -445,3 +445,16 @@ describe('AnnotationLayer', () => {
     expect(posted.at(-1)).toMatchObject({ pins: [] });
   });
 });
+
+it('prefills the linked agent, permits removing it, and retains a failed reply',async()=>{
+ const {frame,contentWindow}=makeFrame();const mention=`[@claude](/chat?session=${'a'.repeat(64)})`;
+ const tagged={...ANN,thread:[{...ANN.thread[0],body:mention+' help'}]};
+ knobs.open=[tagged];
+ render(layer(frame,{railOpen:true,liveAnnotations:[tagged]}));
+ await screen.findByText('help',{exact:false});fromFrame(contentWindow,{type:STORY_ANNOTATION_PIN_MESSAGE,nonce:NONCE,id:ANN.id});
+ const field=await screen.findByPlaceholderText('reply…');expect(field).toHaveValue('@claude ');expect(screen.getByLabelText('Send reply')).toBeDisabled();
+ fireEvent.change(field,{target:{value:'my draft'}});expect(field).toHaveValue('my draft');
+ vi.stubGlobal('fetch',vi.fn(async()=>new Response('{}',{status:500})));
+ fireEvent.click(screen.getByLabelText('Send reply'));
+ await screen.findByRole('alert');expect(field).toHaveValue('my draft');
+});

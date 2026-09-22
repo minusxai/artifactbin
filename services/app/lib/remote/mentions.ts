@@ -20,11 +20,11 @@ export function notifyRemoteComment(
       author: comment.author.label,
       body: comment.body,
       instruction:
-        "A user mentioned this session. Read the artifact and comment, then respond using afbin and the installed artifactbin skill. Run afbin comment with the artifact ID to read threads, then --reply with the annotation ID.",
+        "A user mentioned this session. Read the artifact and comment, then respond using afbin and the installed artifactbin skill. Run afbin comment with the artifact ID to read threads, then --thread with the annotation ID.",
     }) + "\r";
   for (const id of targets) {
     try {
-      registry.input(userId, id, data, "comment", comment.id);
+      if(!registry.read(userId,id).managed)registry.input(userId, id, data, "comment", comment.id);
     } catch (error) {
       if (!(error instanceof RemoteError))
         throw error; /* A disconnected agent must not prevent saving the comment. */
