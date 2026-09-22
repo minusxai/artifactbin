@@ -20,7 +20,7 @@ const clientEnv={...process.env,TEMP:join(root,'temp'),TMP:join(root,'temp'),PAT
 delete clientEnv.NODE_PATH;delete clientEnv.NODE_OPTIONS;delete clientEnv.ARTIFACTBIN_TOKEN;delete clientEnv.ARTIFACTBIN_REFRESH_TOKEN;
 const evidence=[];let stage='start',host,hostLog='',corrupt=false;
 const record=name=>{evidence.push(name);console.log('ok '+name);};
-const ps=async(script)=>exec(powershell,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{env:clientEnv,timeout:30000});
+const ps=async(script)=>exec(powershell,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; '+script,'utf16le').toString('base64')],{env:clientEnv,timeout:30000});
 const oldPath=(await ps("[Environment]::GetEnvironmentVariable('Path','User')")).stdout.trimEnd();
 const release=createServer(async(req,res)=>{
  try {if(req.url==='/SHA256SUMS')res.end(await readFile(join(out,'SHA256SUMS')));
