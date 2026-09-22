@@ -16,8 +16,8 @@ const profile=join(root,'profile'),workspace=join(root,'workspace with spaces'),
 await mkdir(workspace,{recursive:true});await mkdir(profile,{recursive:true});await mkdir(join(root,'temp'));process.env.TEMP=join(root,'temp');process.env.TMP=join(root,'temp');
 const powershell=join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
 const systemPath=[join(process.env.SystemRoot,'System32'),join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0')].join(';');
-const clientEnv={...process.env,TEMP:join(root,'temp'),TMP:join(root,'temp'),PATH:systemPath,Path:systemPath,PSModulePath:join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','Modules'),USERPROFILE:profile,HOME:profile,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'off'};
-delete clientEnv.NODE_PATH;delete clientEnv.NODE_OPTIONS;delete clientEnv.ARTIFACTBIN_TOKEN;delete clientEnv.ARTIFACTBIN_REFRESH_TOKEN;
+const clientEnv={...process.env,TEMP:join(root,'temp'),TMP:join(root,'temp'),PATH:systemPath,Path:systemPath,PSModulePath:join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','Modules'),USERPROFILE:profile,HOME:profile,ARTIFACTBIN_HOME:state,CODEX_HOME:join(profile,'.codex'),CLI__AUTO_UPDATE:'off'};
+delete clientEnv.ARTIFACTBIN_SKILLS;delete clientEnv.NODE_PATH;delete clientEnv.NODE_OPTIONS;delete clientEnv.ARTIFACTBIN_TOKEN;delete clientEnv.ARTIFACTBIN_REFRESH_TOKEN;
 const evidence=[];let stage='start',host,hostLog='',corrupt=false;
 const record=name=>{evidence.push(name);console.log('ok '+name);};
 const ps=async(script)=>exec(powershell,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; '+script,'utf16le').toString('base64')],{env:clientEnv,timeout:30000});
@@ -35,7 +35,7 @@ clientEnv.CLI__SERVICE_BASE_URL=releaseBase;
 const installerFile=join(root,'install.ps1');
 const installerSource=await readFile(join(repo,'services/app/public/chat/install.ps1'),'utf8');
 await writeFile(installerFile,installerSource.replace(/^\$Origin = .*$/m,()=>`$Origin = '${base}'`).replace(/^\$ReleaseRoot = .*$/m,()=>`$ReleaseRoot = '${releaseBase}'`));
-const installer=()=>exec(powershell,['-NoProfile','-NonInteractive','-File',installerFile,'-Dir',install,'-Yes','-Harness','codex'],{env:clientEnv,timeout:180000,maxBuffer:1048576});
+const installer=(shell=powershell)=>exec(shell,['-NoProfile','-NonInteractive','-File',installerFile,'-Dir',install,'-Yes','-Harness','codex'],{env:clientEnv,timeout:180000,maxBuffer:1048576});
 async function cli(args,{approve=false,cwd=workspace}={}){
  const child=spawn(exe,[...args,'--server',base,'--yes','--json'],{cwd,env:clientEnv,stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='',approved=false,checking=false,approvalError;
@@ -67,6 +67,7 @@ try{
  stage='reinstall';await installer();
  const count=await ps(`[int](@(([Environment]::GetEnvironmentVariable('Path','User') -split ';') | Where-Object { $_ -eq '${install.replace(/'/g,"''")}' }).Count)`);
  assert.equal(count.stdout.trim(),'1');record('Reinstall succeeds with closed executable and does not duplicate PATH');
+ await installer(join(process.env.ProgramFiles,'PowerShell','7','pwsh.exe'));record('PowerShell 7 reinstalls the same verified release');
  stage='host boot';
  host=spawn(exe,['serve','--dir',join(root,'host'),'--port',String(port)],{cwd:workspace,env:clientEnv,stdio:['ignore','pipe','pipe']});
  host.stdout.on('data',c=>hostLog+=c);host.stderr.on('data',c=>hostLog+=c);
