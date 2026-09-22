@@ -1,0 +1,51 @@
+name: Windows research probe
+on:
+  pull_request:
+    paths:
+      - 'docs/proposals/windows-support/**'
+      - '.github/workflows/windows-research.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+      - name: Isolate exact direct dependency versions from the repository lock
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'windows-evidence'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $lock = Get-Content package-lock.json -Raw | ConvertFrom-Json -AsHashtable
+          $deps = @{}
+          foreach ($name in @('node-pty','@duckdb/node-api','sharp','playwright','postject')) {
+            $deps[$name] = $lock.packages["node_modules/$name"].version
+            if (!$deps[$name]) { throw "Missing lock version for $name" }
+          }
+          @{name='afbin-windows-research';version='0.0.0';private=$true;dependencies=$deps} | ConvertTo-Json | Set-Content (Join-Path $out 'package.json')
+          "PROBE_OUTPUT=$out" >> $env:GITHUB_ENV
+      - name: Install isolated native dependencies
+        continue-on-error: true
+        shell: pwsh
+        run: npm install --prefix "$env:PROBE_OUTPUT" --no-audit --no-fund
+      - name: Install pinned Chromium
+        continue-on-error: true
+        shell: pwsh
+        run: node "$env:PROBE_OUTPUT/node_modules/playwright/cli.js" install chromium
+      - name: Run bounded research observations
+        shell: pwsh
+        run: node docs/proposals/windows-support/probe.mjs "$env:PROBE_OUTPUT"
+      - name: Preserve observed results and resolved dependency lock
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-research-evidence
+          path: |
+            ${{ runner.temp }}/windows-evidence/observations.json
+            ${{ runner.temp }}/windows-evidence/package.json
+            ${{ runner.temp }}/windows-evidence/package-lock.json
+          if-no-files-found: error
