@@ -2,17 +2,20 @@
 [CmdletBinding()]
 param([Parameter(Mandatory=$true)][string]$ReleaseBase,[Parameter(Mandatory=$true)][string]$InstallDir,[Parameter(Mandatory=$true)][string]$StateDir)
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $release = [Uri]$ReleaseBase
 if ($release.Scheme -ne 'https' -and !($release.Scheme -eq 'http' -and $release.IsLoopback)) { throw 'HTTPS or local research server required' }
 $staging = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
 New-Item -ItemType Directory $staging | Out-Null
 try {
   $checksumFile = Join-Path $staging 'SHA256SUMS'
+  Write-Output "Downloading candidate component"
   Invoke-WebRequest -UseBasicParsing "$ReleaseBase/SHA256SUMS" -OutFile $checksumFile
   $checksums = Get-Content -LiteralPath $checksumFile -Raw -Encoding UTF8
   $match = [regex]::Match($checksums, '(?m)^([a-f0-9]{64})  afbin-win32-x64\.exe\r?$')
   if (!$match.Success) { throw 'Missing Windows checksum' }
   $download = Join-Path $staging 'afbin.exe'
+  Write-Output "Downloading candidate component"
   Invoke-WebRequest -UseBasicParsing "$ReleaseBase/afbin-win32-x64.exe" -OutFile $download
   if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant() -ne $match.Groups[1].Value) { throw 'Checksum mismatch; existing installation unchanged' }
   New-Item -ItemType Directory -Force $InstallDir,$StateDir | Out-Null
