@@ -535,6 +535,9 @@ jobs:
       matrix:
         os: [ ubuntu-24.04, ubuntu-24.04-arm, macos-14, macos-15-intel, windows-2022 ]
     steps:
+      - name: Preserve source bytes on Windows
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:

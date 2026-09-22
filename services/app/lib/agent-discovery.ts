@@ -29,7 +29,7 @@ export function agentBlurb():string{return llmsSource().split('\n')[0]!.trim();}
 export function llmsText(base:string):string{return llmsSource().split(BASE_TAG).join(origin(base));}
 export function agentDiscovery(base:string):AgentDiscovery{
  const o=origin(base);
- return {url:`${o}/llms.txt`,instruction:`afbin: a CLI to operate artifacts. Install: curl -fsSL ${o}/chat/install.sh | sh`};
+ return {url:`${o}/llms.txt`,instruction:`afbin: a CLI to operate artifacts. Install: curl -fsSL ${o}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)`};
 }
 export function agentDiscoveryHead(help:AgentDiscovery):string{
  return `<link rel="help" href="${escapeHtml(help.url)}" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="${escapeHtml(help.instruction)}">`;

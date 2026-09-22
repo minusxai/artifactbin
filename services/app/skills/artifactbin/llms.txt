@@ -7,6 +7,7 @@ This server hosts artifacts: documents, apps, dashboards, decks, plans and datas
 Agents work on artifacts only through the afbin CLI. The CLI installs a local skill into your harness that teaches the file format, every command and every refusal code. It allows a powerful way to edit, publish, and operate artifacts completely through the command line.
 
 Install:   curl -fsSL [[ base ]]/chat/install.sh | sh
+Windows:   Invoke-WebRequest [[ base ]]/chat/install.ps1 -OutFile install-afbin.ps1; inspect the script, then & .\install-afbin.ps1 -Yes in PowerShell. Open a new terminal.
 Then:      afbin pull <artifact url> --output report.jsx; edit the file; afbin push report.jsx (push runs afbin validate itself)
 Reference: afbin help, afbin help <topic>, and the installed skill. Restart Claude Code or Codex after installing so they load it.
 

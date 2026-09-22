@@ -1,3 +1,4 @@
+import {toHonoPath} from '../../services/app/scripts/generate-routes.mjs';
 import {it,expect} from 'vitest';
 import {mkdtemp,writeFile,readFile,mkdir,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
@@ -9,6 +10,7 @@ import {archiveDirectory} from '../../services/cli/scripts/runtime-archive.mjs';
 import {runtimePin} from '../../services/cli/scripts/runtime.mjs';
 import {downloadRuntime} from '../../services/cli/scripts/runtime-package.mjs';
 it('matches Windows engine paths and retains PGLite Windows runtime paths',()=>{
+ expect(toHonoPath('api\\artifacts\\[id]')).toBe('/api/artifacts/:id');
  let filter;standaloneSqlPlugin().setup({onLoad:options=>{filter=options.filter;},onResolve:()=>{}});
  expect(filter.test('C:\\repo\\services\\sql\\src\\engine.ts')).toBe(true);
  expect(runtimePackageFile('@electric-sql/pglite','dist\\pglite.wasm')).toBe(true);

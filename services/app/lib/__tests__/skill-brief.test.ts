@@ -52,7 +52,7 @@ describe('llms.txt and the discovery head', () => {
     expect(text.split('\n')[0]).toBe(agentBlurb());
     const help = agentDiscovery(BASE);
     expect(help.url).toBe(`${BASE}/llms.txt`);
-    expect(help.instruction).toBe(`afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh`);
+    expect(help.instruction).toBe(`afbin: a CLI to operate artifacts. Install: curl -fsSL ${BASE}/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)`);
     expect(help.instruction.length).toBeLessThanOrEqual(150);
     expect(help.instruction).toContain('afbin');
     // The blurb is still line 1 of the one-pager, still used elsewhere; the meta no longer repeats it.
@@ -90,6 +90,6 @@ describe('llms.txt and the discovery head', () => {
   it('the head titles the help link for afbin and carries the afbin meta on the caller base', () => {
     expect(AGENT_HELP_TITLE).toBe('Agents: read this to create, edit, or operate artifacts on the CLI using afbin');
     const head = agentDiscoveryHead(agentDiscovery('https://x.test/'));
-    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh">`);
+    expect(head).toBe(`<link rel="help" href="https://x.test/llms.txt" title="${AGENT_HELP_TITLE}"><meta name="afbin" content="afbin: a CLI to operate artifacts. Install: curl -fsSL https://x.test/chat/install.sh | sh; Windows: /chat/install.ps1 (PowerShell)">`);
   });
 });

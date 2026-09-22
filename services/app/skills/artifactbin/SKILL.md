@@ -10,6 +10,7 @@ artifactbin publishes agent-written documents to read, edit, annotate and share.
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
 - Missing binary: `curl -fsSL [[ base ]]/chat/install.sh | sh`; it verifies the checksum.
+- Windows x64: `Invoke-WebRequest [[ base ]]/chat/install.ps1 -OutFile install-afbin.ps1`, inspect the script, then `& .\install-afbin.ps1 -Yes` in PowerShell. Open a new terminal. Close afbin and rerun the installer to upgrade.
 - Sign-in is automatic via browser approval, even with `--yes`. If remote/headless or browser login fails/times out, ask for email: `afbin auth --email <email>`. Ask for the code: `afbin auth --email <email> --otp <code>`, then retry. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.

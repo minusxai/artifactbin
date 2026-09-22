@@ -11,7 +11,7 @@ import { DEFAULT_SERVER } from '@artifactbin/contracts';
 const B = 'https://x.test';
 const ID = 'ab3cd9';
 const STARTER =
-  'Edit my artifact at https://x.test/a/ab3cd9 in place. Install afbin if needed: curl -fsSL https://x.test/chat/install.sh | sh -s -- --yes. Run afbin help first, then afbin auth https://x.test/a/ab3cd9 --server https://x.test. Approve in the browser that created this artifact; guest access is fine. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet\'s build an artifact for ';
+  'Edit my artifact at https://x.test/a/ab3cd9 in place. Install afbin if needed: curl -fsSL https://x.test/chat/install.sh | sh -s -- --yes. Windows: https://x.test/chat/install.ps1 (PowerShell). Run afbin help first, then afbin auth https://x.test/a/ab3cd9 --server https://x.test. Approve in the browser that created this artifact; guest access is fine. Pass --server https://x.test to every afbin server command.\n\n---\n\nLet\'s build an artifact for ';
 
 describe('the tokenless paste', () => {
   it('existing: the link plus how to reach afbin, and never a token', () => {
