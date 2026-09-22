@@ -2,7 +2,8 @@
 $ErrorActionPreference = 'Stop'
 $name = 'mxmx_test_windows'
 $password = ConvertTo-SecureString ('aA1!'+[Guid]::NewGuid().ToString()+[Guid]::NewGuid().ToString()) -AsPlainText -Force
-$sandbox = Join-Path $env:PUBLIC ('afbin-research-'+[Guid]::NewGuid().ToString())
+# Keep native DLL paths below MAX_PATH while the child still exercises spaces and Unicode.
+$sandbox = Join-Path $env:PUBLIC ('afbin-ci-'+[Guid]::NewGuid().ToString('N').Substring(0,8))
 New-Item -ItemType Directory $sandbox | Out-Null
 $user = New-LocalUser -Name $name -Password $password -PasswordNeverExpires
 try {

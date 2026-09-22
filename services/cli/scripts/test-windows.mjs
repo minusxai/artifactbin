@@ -51,7 +51,7 @@ async function cli(args,{approve=false,cwd=workspace}={}){
   }catch(error){approvalError=error;child.kill();}finally{checking=false;}
  },100):null;
  const deadline=setTimeout(()=>child.kill(),60000);
- try {const [code]=await once(child,'exit');if(approvalError)throw approvalError;assert.equal(code,0,args.join(' ')+' failed: '+stdout.slice(-1800)+' '+stderr.slice(-1000));if(approve)assert.ok(approved);return JSON.parse(stdout);}
+ try {const [code]=await once(child,'exit');if(approvalError)throw approvalError;assert.equal(code,0,args.join(' ')+' failed: '+stdout.slice(0,3500)+' '+stderr.slice(0,1500)+' '+stderr.slice(-1000));if(approve)assert.ok(approved);return JSON.parse(stdout);}
  finally{clearTimeout(deadline);if(timer)clearInterval(timer);}
 }
 try{
