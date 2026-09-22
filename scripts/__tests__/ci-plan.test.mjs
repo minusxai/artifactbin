@@ -115,7 +115,7 @@ describe('a release is a version and nothing else', () => {
 
   it('accepts exactly the files and lines `npm run release:cli` rewrites', () => {
     expect(VERSION_BUMP_FILES).toContain('services/cli/package.json');
-    expect(isVersionOnlyBump(VERSION_BUMP_FILES.filter((path) => !path.endsWith('install.sh')).map((path) => bump(path)))).toBe(true);
+    expect(isVersionOnlyBump(VERSION_BUMP_FILES.filter((path) => !path.endsWith('install.sh')&&!path.endsWith('install.ps1')).map((path) => bump(path)))).toBe(true);
     // install.sh carries the version twice, in two shapes, and both move together.
     expect(isVersionOnlyBump([bump('services/cli/package.json'), {
       path: 'services/app/public/chat/install.sh',
@@ -256,6 +256,7 @@ describe('GitHub CI adapter', () => {
     write('services/cli/package.json', `{\n  "name": "afbin",\n  "version": "${version}"\n}\n`);
     write('package-lock.json', `{\n  "packages": {\n    "services/cli": {\n      "version": "${version}"\n    }\n  }\n}\n`);
     write('services/app/public/chat/install.sh', `main() {\n  version=${version}\nInstall afbin: sh install.sh [--version ${version}] [--dir PATH] [--yes]\n}\n`);
+    write('services/app/public/chat/install.ps1', `  [string]$Version = '${version}',\n`);
     write('services/app/public/chat/release.json', `{\n  "version": "${version}",\n  "protocol": 1\n}\n`);
   };
 
@@ -582,7 +583,7 @@ describe('CI job shape', () => {
     expect(suite).toHaveLength(1);
     expect(suite[0].if).toBe("matrix.shard == 1 && needs.plan.outputs.cli-tests == 'true'");
     // What is genuinely per-platform is the compiled binary; nothing else repeats per row.
-    for (const command of ['npm run build:binary -w services/cli', 'npm run test:binary -w services/cli']) {
+    for (const command of ['npm run build:binary -w services/cli']) {
       expect(cli.steps.find((step) => step.run === command).if).toBeUndefined();
     }
     expect(cli.steps.some((step) => (step.run ?? '').includes('--import tsx --test'))).toBe(false);
@@ -593,7 +594,11 @@ describe('CI job shape', () => {
     // One invocation per platform still shares its verified runtime cache across
     // preview and every export phase; Intel consumes the packaging artifact.
     const proof = jobs.cli.steps.find((step) => step.name === 'File preview from the actual executable');
-    expect(proof.if).toBe("matrix.os != 'macos-15-intel'");
+    expect(proof.if).toBe("matrix.os != 'macos-15-intel' && runner.os != 'Windows'");
+    expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
+    const windows=jobs.cli.steps.find(step=>step.name==='Windows installed release acceptance');
+    expect(windows.if).toBe("runner.os == 'Windows'");
+    expect(windows.run).toBe('./services/cli/scripts/test-windows.ps1');
     const intel = jobs['cli-preview'].steps.find((step) => step.name === 'File preview from the uploaded executable');
     expect(CI_JOBS).toContain('cli-preview');
     for (const step of [proof, intel]) {

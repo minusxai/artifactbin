@@ -12,7 +12,7 @@ export async function archiveDirectory(root,{prefix,out,url,cache}){
    if(entry.isDirectory()){await visit(path);continue;}
    const link=entry.isSymbolicLink()?await readlink(source):undefined;
    const bytes=link===undefined?await readFile(source):Buffer.from(link);
-   const mode=((await lstat(source)).mode&0o111)?0o700:0o600;
+   const mode=(((await lstat(source)).mode&0o111)||/\.exe$/i.test(path))?0o700:0o600;
    files.push({path:posix.join(prefix,path.split('\\').join('/')),size:bytes.length,sha256:hash(bytes),mode,...(link!==undefined?{link}:{})});chunks.push(bytes);
   }
  }

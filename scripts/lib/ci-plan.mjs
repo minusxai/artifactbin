@@ -10,6 +10,7 @@ export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 
  * the source under that version has already passed the suites.
  */
 const VERSION_LINE = {
+  'services/app/public/chat/install.ps1': /^\s*\[string\]\$Version = '\d+\.\d+\.\d+',$/,
   'services/cli/package.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'package-lock.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'services/app/public/chat/release.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,

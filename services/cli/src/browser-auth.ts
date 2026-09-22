@@ -1,3 +1,4 @@
+import {browserCommand} from './platform';
 import {configDir} from './config';
 import {CliError} from './commands';
 import {HttpClient,transportFailure} from './http';
@@ -50,7 +51,8 @@ export interface AuthOptions {
 }
 export async function openBrowser(url: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    execFile(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], {timeout:10000}, error => error ? reject(new Error('Could not open the browser; use the displayed approval URL.')) : resolve());
+    const command=browserCommand(url);
+    execFile(command.file, command.args, {timeout:10000}, error => error ? reject(new Error('Could not open the browser; use the displayed approval URL.')) : resolve());
   });
 }
 export async function browserAuthenticate(origin:string,options:AuthOptions):Promise<Connection>{

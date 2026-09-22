@@ -103,6 +103,7 @@ export const UPDATE_SCOPE='@cli-update';
 export async function updateCli(options:UpdateOptions&{dryRun:true}):Promise<UpdatePreview>;
 export async function updateCli(options:UpdateOptions):Promise<UpdatePreview|UpdateResult>;
 export async function updateCli(options:UpdateOptions){
+ if((options.platform??process.platform)==='win32')throw new CliError('installer_update_required','Close all afbin processes and rerun the PowerShell installer to update Windows.','Download /chat/install.ps1 from your artifactbin server and run it in PowerShell.');
  if(options.dryRun)return previewUpdate(options,options.platform??process.platform,options.arch??process.arch);
  return withLock(options.home,UPDATE_SCOPE,()=>updateLocked(options),{waitMs:options.background?0:undefined,reentrant:false},options.env);
 }

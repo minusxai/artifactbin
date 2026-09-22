@@ -19,6 +19,7 @@ import {standaloneSqlPlugin} from '../services/cli/scripts/sql-native-plugin.mjs
  * by construction and NOT true of a scratch directory.
  */
 import esbuild from 'esbuild';
+import {dirname} from 'node:path';
 import { generateTeaching } from './lib/generate-teaching.mjs';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -27,9 +28,9 @@ import { EXTERNALS } from './runtime-externals.mjs';
 generateTeaching();
 const out = process.argv[2] ?? 'dist/server.mjs';
 const entry = process.argv[3] ?? 'server.ts';
-mkdirSync(out.slice(0, out.lastIndexOf('/')), { recursive: true });
+mkdirSync(dirname(out), { recursive: true });
 const require = createRequire(import.meta.url);
-const tailwindDir = require.resolve('tailwindcss/index.css').replace(/\/index\.css$/, '');
+const tailwindDir = dirname(require.resolve('tailwindcss/index.css'));
 const tailwindDefine = Object.fromEntries([
   ['__MX_TAILWIND_INDEX_CSS__', 'index.css'],
   ['__MX_TAILWIND_THEME_CSS__', 'theme.css'],

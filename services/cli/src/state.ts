@@ -14,13 +14,13 @@
  * an OS-level SQLite lock that is released even after SIGKILL.
  */
 import {createHash} from 'node:crypto';
-import {chmod, lstat, mkdir, stat} from 'node:fs/promises';
+import {chmod, lstat, stat} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import type {DatabaseSync} from 'node:sqlite';
 import type * as SQLite from 'node:sqlite';
 import {configDir} from './config';
-import {isMissing} from './files';
+import {isMissing,privateDirectory} from './files';
 
 export const HOME_SCOPE = 'home';
 export type StateKind =
@@ -60,7 +60,7 @@ function loadSqlite():typeof SQLite {
 }
 
 async function privateFile(path: string): Promise<void> {
-  await mkdir(dirname(path), {recursive: true, mode: 0o700});
+  await privateDirectory(dirname(path));
   try { if (!(await lstat(path)).isFile()) throw new Error(`Expected a private file: ${path}`); }
   catch (error) { if (!isMissing(error)) throw error; }
 }

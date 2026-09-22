@@ -98,3 +98,16 @@ describe('GET /chat/releases', () => {
     expect((await app(path.join(os.tmpdir(), 'afbin-no-such-dir')).request(`/chat/releases/afbin-v${pinned}/afbin-darwin-arm64`)).status).toBe(404);
   });
 });
+
+describe('GET /chat/install.ps1',()=>{
+ it.each([false,true])('serves Windows installation for this origin (local build: %s)',async local=>{
+  const response=await app(local?localBuild():path.join(os.tmpdir(),'afbin-no-such-dir')).request('/chat/install.ps1',{headers:{'x-forwarded-proto':'https','x-forwarded-host':'artifacts.example.test'}});
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+  expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+  const body=await response.text();
+  expect(body).toContain("$Origin = 'https://artifacts.example.test'");
+  expect(body).toContain(`$Version = '${pinned}'`);
+  expect(body).toContain(`$ReleaseRoot = '${local?'https://artifacts.example.test/chat/releases':'https://github.com/minusxai/artifactbin/releases/download'}'`);
+ });
+});

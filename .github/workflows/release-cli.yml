@@ -95,9 +95,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir bundle
-          for mapping in macos-14:darwin-arm64 macos-15-intel:darwin-x64 ubuntu-24.04:linux-x64 ubuntu-24.04-arm:linux-arm64; do
+          for mapping in macos-14:darwin-arm64 macos-15-intel:darwin-x64 ubuntu-24.04:linux-x64 ubuntu-24.04-arm:linux-arm64 windows-2022:win32-x64; do
             runner=${mapping%%:*}
             binary=afbin-${mapping#*:}
+            if [ "$runner" = windows-2022 ]; then binary="$binary.exe"; fi
             gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "afbin-$runner" --dir "downloads/$runner"
             test -f "downloads/$runner/$binary"
             test ! -L "downloads/$runner/$binary"

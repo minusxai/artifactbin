@@ -10,7 +10,7 @@ import {runtimePackageFile} from './runtime-package-files.mjs';
 import {archiveDirectory} from './runtime-archive.mjs';
 const cli=resolve(dirname(fileURLToPath(import.meta.url)),'..'),repo=resolve(cli,'../..');
 const runtime=join(cli,'dist/runtime'),app=join(repo,'services/app');
-execFileSync('npm',['run','build','-w','services/app'],{cwd:repo,stdio:'inherit'});
+execFileSync(process.execPath,[process.env.npm_execpath??join(dirname(process.execPath),'node_modules/npm/bin/npm-cli.js'),'run','build','-w','services/app'],{cwd:repo,stdio:'inherit'});
 await rm(runtime,{recursive:true,force:true});await mkdir(runtime,{recursive:true});
 execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'host.mjs'),join(cli,'src/team-entry.ts'),'sharp','--standalone-sql'],{cwd:repo,stdio:'inherit'});
 execFileSync(process.execPath,[join(repo,'scripts/build-server.mjs'),join(runtime,'preview.mjs'),join(cli,'src/preview-entry.ts'),'sharp','--standalone-sql'],{cwd:repo,stdio:'inherit'});
@@ -28,7 +28,7 @@ async function install(name,from,parent=runtime){
  if(installed.has(destination))throw new Error('Runtime dependency collision: '+name);
  installed.set(destination,pkg.version);
  await mkdir(dirname(destination),{recursive:true});
- await cp(directory,destination,{recursive:true,verbatimSymlinks:true,filter:source=>!source.slice(directory.length).split('/').includes('node_modules')&&runtimePackageFile(name,source.slice(directory.length).replace(/^\//,''))});
+ await cp(directory,destination,{recursive:true,verbatimSymlinks:true,filter:source=>!source.slice(directory.length).split(/[\\/]/).includes('node_modules')&&runtimePackageFile(name,source.slice(directory.length).replace(/^[\\/]/,''))});
  for(const dependency of Object.keys(pkg.dependencies??{}))await install(dependency,directory,destination);
  for(const dependency of Object.keys(pkg.optionalDependencies??{})){
   try{await packageRoot(dependency,directory);}catch(error){if(error.code==='MODULE_NOT_FOUND')continue;throw error;}

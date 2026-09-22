@@ -185,7 +185,7 @@ const GITHUB_RELEASES = 'https://github.com/minusxai/artifactbin/releases/downlo
 function localCliRelease(dir: string): string | null {
   try {
     for (const file of readdirSync(dir)) {
-      if (!/^afbin-[a-z0-9]+-[a-z0-9]+\.manifest\.json$/.test(file)) continue;
+      if (!/^afbin-[a-z0-9]+-[a-z0-9]+(?:\.exe)?\.manifest\.json$/.test(file)) continue;
       const version: unknown = JSON.parse(readFileSync(path.join(dir, file), 'utf8')).version;
       if (typeof version === 'string') return version;
     }
@@ -393,6 +393,15 @@ export function createAppServer(opts: AppServerOptions = {}): Hono {
     const origin = baseUrl(c.req.raw);
     const addressed = script.replace(/^ {2}origin=''$/m, () => `  origin='${origin}'`);
     return c.text(local ? addressed.replace(GITHUB_RELEASES, () => `${origin}/chat/releases/afbin-v$version`) : addressed);
+  });
+  app.get('/chat/install.ps1', c => {
+    const script=readFileSync(path.join(publicDir,'chat','install.ps1'),'utf8');
+    const pinned=script.match(/\$Version = '(\d+\.\d+\.\d+)'/)?.[1];
+    const origin=baseUrl(c.req.raw),literal=(value:string)=>value.replace(/'/g,"''");
+    let body=script.replace(/^\$Origin = '[^']*'$/m,()=>`$Origin = '${literal(origin)}'`);
+    if(pinned&&localCliRelease(cliReleaseDir)===pinned)body=body.replace(/^\$ReleaseRoot = '[^']*'$/m,()=>`$ReleaseRoot = '${literal(origin)}/chat/releases'`);
+    c.header('content-type','text/plain; charset=utf-8');c.header('cache-control','public, max-age=300');c.header('x-content-type-options','nosniff');
+    return c.body(body);
   });
   app.use('/chat/releases/*', async (c, next) => {
     const [release = '', file = '', ...rest] = c.req.path.split('/').slice(3);
