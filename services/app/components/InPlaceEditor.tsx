@@ -127,6 +127,7 @@ export default function InPlaceEditor({
   rightInset = 0,
   onDone = () => {},
   onLeftInsetChange,
+  onRightInsetChange,
 }: {
   art: EditorArtifact;
   /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
@@ -149,6 +150,8 @@ export default function InPlaceEditor({
   onDone?: () => void | Promise<void>;
   /** How far the page must inset the document for the left rail and its open panel. */
   onLeftInsetChange?: (px: number) => void;
+  /** The RIGHT width the editor needs reserved — its embed inspector, which used to overlay. */
+  onRightInsetChange?: (px: number) => void;
 }) {
   const [title, setTitle] = useState(art.title ?? '');
   const [theme, setTheme] = useState<StoryThemeName | null>((art.theme as StoryThemeName) ?? null);
@@ -671,6 +674,17 @@ export default function InPlaceEditor({
   }, [leftInset, onLeftInsetChange]);
   // Leaving edit mode gives the width back; the page must not keep a gap for a rail that has gone.
   useEffect(() => () => onLeftInsetChange?.(0), [onLeftInsetChange]);
+  /*
+   * The inspector RESERVES now, like the comments rail, instead of covering the
+   * chart it edits. The page takes the MAX of the two rather than the sum: they
+   * deliberately share one column (same width, higher layer), so two open
+   * panels must not push the document twice.
+   */
+  const rightReserve = phone || preview || !(inspector && mode === 'design') ? 0 : RIGHT_RAIL_W;
+  useEffect(() => {
+    onRightInsetChange?.(rightReserve);
+  }, [rightReserve, onRightInsetChange]);
+  useEffect(() => () => onRightInsetChange?.(0), [onRightInsetChange]);
   /** "edit in queries" from an inspector: the selection goes (the inspector holds the rail), the notebook lands on the cell. */
   const onOpenQuery = useCallback(
     (name: string) => {
