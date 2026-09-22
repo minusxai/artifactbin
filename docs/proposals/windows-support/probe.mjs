@@ -69,6 +69,16 @@ await observe('playwright-chromium',async()=>{
   try {const page=await browser.newPage();await page.setContent('<h1>Windows probe</h1>');return {heading:await page.locator('h1').innerText(),executable:chromium.executablePath()};}
   finally {await browser.close();}
 });
+await observe('minimal-sea-executable',async()=>{
+  if(process.platform!=='win32')return {status:'not run; Windows-only CI build'};
+  const main=join(directory,'main.cjs'),blob=join(directory,'sea.blob'),config=join(directory,'sea.json'),exe=join(directory,'sea.exe');
+  await writeFile(main,'console.log(JSON.stringify({sea:require("node:sea").isSea(),sqlite:!!require("node:sqlite").DatabaseSync}));');
+  await writeFile(config,JSON.stringify({main,output:blob,disableExperimentalSEAWarning:true,useCodeCache:false,useSnapshot:false}));
+  execFileSync(process.execPath,['--experimental-sea-config',config],{timeout:30000});
+  await copyFile(process.execPath,exe);
+  await require('postject').inject(exe,'NODE_SEA_BLOB',await readFile(blob),{sentinelFuse:'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'});
+  return JSON.parse(execFileSync(exe,[],{encoding:'utf8',timeout:15000,cwd:directory}));
+});
 await observe('installed-dependency-versions',async()=>Object.fromEntries(['node-pty','@duckdb/node-api','sharp','playwright','postject'].map(name=>[name,require(name+'/package.json').version])));
 const report={platform:process.platform,arch:process.arch,node:process.version,kind:'research observations; not full CLI validation',observations};
 await writeFile(join(output,'observations.json'),JSON.stringify(report,null,2)+'\n');
