@@ -16,12 +16,17 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
  const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:['--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:{});
  try{
   const context=await browser.newContext({viewport:{width:1280,height:900}});const page=await context.newPage();
-  await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
+  await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});const reference=document.createElement('video');reference.muted=true;reference.srcObject=stream;window.__captureReference=reference;void reference.play();return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
   await becomeOwner(page,base,seed.token);await page.goto(`${base}/a/${seed.id}`);await page.locator('#capturebox').waitFor();
   await openArtifactControls(page);await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
   await page.getByRole('button',{name:'Select',exact:true}).click();
   await page.getByRole('status',{name:'Select tool active'}).waitFor({timeout:20000});
   const box=await page.locator('#capturebox').boundingBox();assert(box);
+  let referencePixel=[220,30,30];
+  if(name==='chromium'){
+   await expect.poll(()=>page.evaluate(()=>window.__captureReference?.readyState??0)).toBeGreaterThanOrEqual(2);
+   referencePixel=await page.evaluate(({x,y})=>{const v=window.__captureReference,c=document.createElement('canvas');c.width=innerWidth;c.height=innerHeight;c.getContext('2d').drawImage(v,0,0,c.width,c.height);return Array.from(c.getContext('2d').getImageData(x+35,y+65,1,1).data).slice(0,3);},box);
+  }
   await page.mouse.move(box.x+30,box.y+60);await page.mouse.down();await page.mouse.move(box.x+230,box.y+160,{steps:12});await page.mouse.up();
   if(name!=='chromium'){
    await expect(page.getByLabel('Save annotation',{exact:true})).toBeDisabled();
@@ -32,7 +37,7 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   await expect(editor.getByRole('button',{name:'Done drawing',exact:true})).toBeEnabled();
   // Exact crop corner must contain content, not a selection outline or app panel.
   const pixel=await canvas.evaluate(c=>Array.from(c.getContext('2d').getImageData(5,5,1,1).data));
-  assert(Math.abs(pixel[0]-220)<=3&&Math.abs(pixel[1]-30)<=3&&Math.abs(pixel[2]-30)<=3,`${name}: content pixel ${pixel}`);
+  assert(pixel.slice(0,3).every((value,i)=>Math.abs(value-referencePixel[i])<=3),`${name}: content pixel ${pixel}; unmarked reference ${referencePixel}`);
   await editor.getByLabel('Brush color').fill('#00ff00');
   await editor.getByLabel('Brush thickness').fill('8');
   const drawing=await canvas.boundingBox();assert(drawing);
