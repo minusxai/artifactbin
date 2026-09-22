@@ -56,3 +56,31 @@ jobs:
             ${{ runner.temp }}/windows-evidence/package.json
             ${{ runner.temp }}/windows-evidence/package-lock.json
           if-no-files-found: error
+  candidate:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+      - name: Install the repository lock on Windows
+        shell: pwsh
+        run: npm.cmd ci
+      - name: Build real CLI core as a standalone candidate
+        run: node docs/proposals/windows-support/candidate-build.mjs
+      - name: Build reader assets for the disposable real host
+        run: npm.cmd run build:runtime
+      - name: Exercise installer and CLI against the real local host
+        timeout-minutes: 8
+        run: node docs/proposals/windows-support/candidate-check.mjs
+      - name: Preserve candidate scope and verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-candidate-evidence
+          path: |
+            .agent/windows-candidate/scope.json
+            .agent/windows-candidate/results.json
+            .agent/windows-candidate/host.log
+          if-no-files-found: warn

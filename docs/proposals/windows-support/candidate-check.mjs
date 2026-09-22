@@ -1,0 +1,93 @@
+/** Windows-only CI acceptance of the research core candidate against real host handlers. */
+import assert from 'node:assert/strict';
+import {spawn,execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {once} from 'node:events';
+import {createServer} from 'node:http';
+import {mkdtemp,mkdir,readFile,writeFile,readdir,rm} from 'node:fs/promises';
+import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {createHash,randomBytes} from 'node:crypto';
+import {setTimeout as delay} from 'node:timers/promises';
+const exec=promisify(execFile),repo=resolve('.'),out=resolve('.agent/windows-candidate');
+const root=await mkdtemp(join(tmpdir(),'afbin candidate é '));
+const profile=join(root,'profile'),workspace=join(root,'workspace with spaces'),state=join(profile,'.artifactbin'),install=join(root,'installed cli');
+await mkdir(workspace,{recursive:true});await mkdir(profile,{recursive:true});
+const powershell=join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
+const systemPath=[join(process.env.SystemRoot,'System32'),join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0')].join(';');
+const clientEnv={...process.env,PATH:systemPath,Path:systemPath,USERPROFILE:profile,HOME:profile,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'off'};
+delete clientEnv.ARTIFACTBIN_TOKEN;delete clientEnv.ARTIFACTBIN_REFRESH_TOKEN;
+const evidence=[];let stage='start',host,hostLog='',corrupt=false;const secrets=[];
+const record=name=>{evidence.push(name);console.log('ok '+name);};
+const ps=async(script)=>exec(powershell,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{env:clientEnv,timeout:30000});
+const oldPath=(await ps("[Environment]::GetEnvironmentVariable('Path','User')")).stdout.trimEnd();
+const release=createServer(async(req,res)=>{
+ try {if(req.url==='/SHA256SUMS')res.end(await readFile(join(out,'SHA256SUMS')));
+ else if(req.url==='/afbin-win32-x64.exe')res.end(corrupt?'invalid candidate':await readFile(join(out,'afbin-win32-x64.exe')));
+ else {res.statusCode=404;res.end();}}
+ catch {res.statusCode=500;res.end();}
+});
+await new Promise(r=>release.listen(0,'127.0.0.1',r));
+const releaseBase=`http://127.0.0.1:${release.address().port}`;
+const reserve=createServer();await new Promise(r=>reserve.listen(0,'127.0.0.1',r));const port=reserve.address().port;await new Promise(r=>reserve.close(r));
+const base=`http://127.0.0.1:${port}`,exe=join(install,'afbin.exe');
+const installer=()=>exec(powershell,['-NoProfile','-NonInteractive','-File',join(repo,'docs/proposals/windows-support/install-candidate.ps1'),'-ReleaseBase',releaseBase,'-InstallDir',install,'-StateDir',state],{env:clientEnv,timeout:90000,maxBuffer:1048576});
+async function cli(args,{approve=false,cwd=workspace}={}){
+ const child=spawn(exe,[...args,'--server',base,'--yes','--json'],{cwd,env:clientEnv,stdio:['ignore','pipe','pipe']});
+ let stdout='',stderr='',approved=false,checking=false,approvalError;
+ child.stdout.on('data',c=>stdout+=c);child.stderr.on('data',c=>stderr+=c);
+ const timer=approve?setInterval(async()=>{
+  if(approved||checking)return;checking=true;
+  try{
+   const name=(await readdir(state).catch(()=>[])).find(n=>/^pairing-.*\.json$/.test(n));if(!name)return;
+   const pending=JSON.parse(await readFile(join(state,name),'utf8'));
+   const response=await fetch(base+'/oauth/device/approve',{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded',origin:base},body:new URLSearchParams({user_code:pending.userCode,decision:'anonymous'})});
+   assert.equal(response.status,200,'real device approval');approved=true;
+  }catch(error){approvalError=error;child.kill();}finally{checking=false;}
+ },100):null;
+ const deadline=setTimeout(()=>child.kill(),60000);
+ try {const [code]=await once(child,'exit');if(approvalError)throw approvalError;assert.equal(code,0,args.join(' ')+' failed: '+stdout.slice(-1800)+' '+stderr.slice(-1000));if(approve)assert.ok(approved);return JSON.parse(stdout);}
+ finally{clearTimeout(deadline);if(timer)clearInterval(timer);}
+}
+try{
+ stage='install';await installer();record('PowerShell 5.1 install: download, checksum, private state and configuration');
+ assert.rejects; // Assertions below execute the installed bytes, never the source entry.
+ const version=await cli(['--version']);assert.equal(version.version,JSON.parse(await readFile('services/cli/package.json')).version);record('Standalone afbin.exe runs outside checkout without Node on PATH');
+ stage='PATH';
+ const found=await ps(`$env:Path = [Environment]::GetEnvironmentVariable('Path','User')+';'+$env:SystemRoot+'\\System32'; (Get-Command afbin.exe).Source`);
+ assert.equal(found.stdout.trim(),exe);record('Fresh PowerShell process resolves executable from persisted user PATH');
+ stage='checksum negative control';const before=createHash('sha256').update(await readFile(exe)).digest('hex');corrupt=true;
+ await assert.rejects(installer(),e=>String(e.stderr).includes('Checksum mismatch'));
+ assert.equal(createHash('sha256').update(await readFile(exe)).digest('hex'),before);corrupt=false;record('Corrupt download refused; installed executable unchanged');
+ stage='reinstall';await installer();
+ const count=await ps(`[int](@(([Environment]::GetEnvironmentVariable('Path','User') -split ';') | Where-Object { $_ -eq '${install.replace(/'/g,"''")}' }).Count)`);
+ assert.equal(count.stdout.trim(),'1');record('Reinstall succeeds with closed executable and does not duplicate PATH');
+ stage='host boot';
+ host=spawn(process.execPath,['--import','tsx','-r',join(repo,'scripts/register-yaml.cjs'),join(repo,'server.ts')],{cwd:join(repo,'services/app'),env:{...process.env,NODE_ENV:'development',TSX_TSCONFIG_PATH:join(repo,'tsconfig.json'),APP__PORT:String(port),APP__HMR_PORT:String(port+1),APP__PUBLIC_BASE_URL:base,DATABASE_URL:'pglite://memory',OBJECT_STORE__LOCAL_DIR:join(root,'objects'),AUTH__SECRET:randomBytes(32).toString('hex'),BROWSER__SANDBOX:'none',EMAIL__DEV_OUTBOX_PATH:join(root,'mail.jsonl')},stdio:['ignore','pipe','pipe']});
+ host.stdout.on('data',c=>hostLog+=c);host.stderr.on('data',c=>hostLog+=c);
+ let healthy=false;
+ for(let n=0;n<90;n++){if(host.exitCode!==null)throw Error('Real host exited; inspect host.log');try{if((await fetch(base+'/api/health')).ok){healthy=true;break;}}catch{}await delay(1000);}
+ assert.ok(healthy,'real host starts');record('Disposable real auth/app host starts on Windows');
+ stage='auth';await cli(['auth'],{approve:true});record('Installed executable completes real OAuth device approval and saves credentials');
+ await cli(['auth']);record('Saved credential works in a second CLI process');
+ stage='credential ACL';
+ const acl=await ps(`$file=Get-ChildItem -LiteralPath '${state.replace(/'/g,"''")}' -Filter credentials.env -Recurse | Select-Object -First 1; if (!$file) { throw 'No saved credential' }; (Get-Acl -LiteralPath $file.FullName).Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }`);
+ const sid=(await ps('[Security.Principal.WindowsIdentity]::GetCurrent().User.Value')).stdout.trim();
+ const allowed=acl.stdout.trim().split(/\r?\n/);assert.ok(allowed.includes(sid));assert.ok(allowed.every(s=>s===sid||s==='S-1-5-18'));record('Saved credential ACL contains only installer identity and SYSTEM');
+ stage='publish';await writeFile(join(workspace,'report.jsx'),'---\ntitle: mxmx_test_windows_candidate\nvisibility: unlisted\n---\n<h1>Windows candidate first version</h1>\n');
+ await cli(['validate','report.jsx']);const pushed=await cli(['push','report.jsx']);const id=pushed.operations?.find(o=>o.id)?.id;assert.ok(id);record('Validate and push a new artifact through real handlers');
+ const second=join(root,'second workspace');await mkdir(second);await cli(['pull',id,'--output','copy.jsx'],{cwd:second});
+ const path=join(second,'copy.jsx');const original=await readFile(path,'utf8');assert.match(original,/Windows candidate first version/);await writeFile(path,original.replace('Windows candidate first version','Windows candidate edited version'));await cli(['validate','copy.jsx'],{cwd:second});await cli(['push','copy.jsx'],{cwd:second});record('Pull, edit, validate and republish in another workspace');
+ stage='read';const opened=await cli(['open',id]);assert.equal(opened.operations?.[0]?.url,base+'/a/'+id);const page=await fetch(base+'/a/'+id);assert.equal(page.status,200);assert.match(await page.text(),/Windows candidate edited version/);record('Open command returns published URL; real viewer serves edited artifact');
+ await cli(['delete',id,'--force']);record('Disposable artifact cleaned up');
+}catch(error){
+ await writeFile(join(out,'results.json'),JSON.stringify({status:'failed',stage,message:error.message,evidence},null,2));throw error;
+}finally{
+ if(host){host.kill();await Promise.race([once(host,'exit'),delay(3000)]);}
+ await writeFile(join(out,'host.log'),hostLog);
+ await ps(`[Environment]::SetEnvironmentVariable('Path','${oldPath.replace(/'/g,"''")}','User')`);
+ await new Promise(r=>release.close(r));
+ await rm(root,{recursive:true,force:true,maxRetries:3,retryDelay:200}).catch(()=>{});
+}
+await writeFile(join(out,'results.json'),JSON.stringify({status:'passed',platform:process.platform,node:process.version,evidence,limitations:['Hosted Windows Server 2022 runner, not clean Windows 11 desktop','Runner identity, not yet a separate standard user','Browser-launch process invoked; approval posted by harness to real consent route','Local SQL/Chromium/preview service packages not included in this core candidate']},null,2));
+process.exit(0);
