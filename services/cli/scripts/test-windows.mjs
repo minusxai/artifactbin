@@ -23,7 +23,7 @@ const record=name=>{evidence.push(name);console.log('ok '+name);};
 const ps=async(script)=>exec(powershell,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from('[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding; '+script,'utf16le').toString('base64')],{env:clientEnv,timeout:30000});
 const oldPath=(await ps("[Environment]::GetEnvironmentVariable('Path','User')")).stdout.trimEnd();
 const release=createServer(async(req,res)=>{
- try {const file=req.url.split('/').at(-1);if(!/^(SHA256SUMS|afbin-[A-Za-z0-9._-]+)$/.test(file)) {res.statusCode=404;res.end();return;}
+ try {if(req.url==='/chat/install.ps1'){res.setHeader('content-type','text/plain');res.end(installerText);return;}const file=req.url.split('/').at(-1);if(!/^(SHA256SUMS|afbin-[A-Za-z0-9._-]+)$/.test(file)) {res.statusCode=404;res.end();return;}
  res.end(corrupt&&file==='afbin-win32-x64.exe.gz'?'corrupt':await readFile(join(dist,file)));}
  catch {res.statusCode=500;res.end();}
 });
@@ -34,7 +34,8 @@ const base=`http://127.0.0.1:${port}`,exe=join(install,'afbin.exe');
 clientEnv.CLI__SERVICE_BASE_URL=releaseBase;
 const installerFile=join(root,'install.ps1');
 const installerSource=await readFile(join(repo,'services/app/public/chat/install.ps1'),'utf8');
-await writeFile(installerFile,installerSource.replace(/^\$Origin = .*$/m,()=>`$Origin = '${base}'`).replace(/^\$ReleaseRoot = .*$/m,()=>`$ReleaseRoot = '${releaseBase}'`));
+const installerText=installerSource.replace(/^\$Origin = .*$/m,()=>`$Origin = '${base}'`).replace(/^\$ReleaseRoot = .*$/m,()=>`$ReleaseRoot = '${releaseBase}'`);
+await ps(`Invoke-WebRequest -UseBasicParsing '${releaseBase}/chat/install.ps1' -OutFile '${installerFile.replace(/'/g,"''")}'`);
 const installer=(shell=powershell)=>exec(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',installerFile,'-Dir',install,'-Yes','-Harness','codex'],{env:clientEnv,timeout:180000,maxBuffer:1048576});
 async function cli(args,{approve=false,cwd=workspace}={}){
  const child=spawn(exe,[...args,'--server',base,'--yes','--json'],{cwd,env:clientEnv,stdio:['ignore','pipe','pipe']});

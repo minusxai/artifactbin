@@ -56,6 +56,7 @@ try {
   if ($PSVersionTable.PSVersion.Major -ge 7) { [IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]::new($Dir), $acl) }
   else { [IO.Directory]::SetAccessControl($Dir, $acl) }
   $exe = Join-Path $Dir 'afbin.exe'
+  if (Get-Process -Name afbin -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }) { throw 'Close all afbin processes and rerun this installer; the existing executable is unchanged.' }
   if ((Test-Path -LiteralPath $exe) -and ((Get-Item -LiteralPath $exe -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Refusing a linked executable.' }
   $stagedExe = Join-Path $Dir ('afbin-'+[Guid]::NewGuid().ToString()+'.exe')
   Copy-Item -LiteralPath $download -Destination $stagedExe

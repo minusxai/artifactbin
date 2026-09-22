@@ -29,7 +29,7 @@ For a shared host see [team on a network](../../docs/extraction/team.md#team-on-
 Windows 11 x64 (PowerShell 5.1 or 7):
 
 ```powershell
-Invoke-WebRequest https://app.artifactbin.dev/chat/install.ps1 -OutFile install-afbin.ps1
+Invoke-WebRequest -UseBasicParsing https://app.artifactbin.dev/chat/install.ps1 -OutFile install-afbin.ps1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-afbin.ps1
 ```
 
