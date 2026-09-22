@@ -411,12 +411,12 @@ jobs:
           BROWSERS: ${{ steps.gate-browsers.outputs.browsers }}
           CACHE_HIT: ${{ steps.playwright.outputs.cache-hit }}
         run: |
-          read -ra browsers <<< "$BROWSERS"
+          read -ra selected_engines <<< "$BROWSERS"
           deps=()
           if [[ "$CACHE_HIT" != true || "$BROWSERS" != chromium ]]; then
             deps+=(--with-deps)
           fi
-          npx playwright install "${deps[@]}" "${browsers[@]}"
+          npx playwright install "${deps[@]}" "${selected_engines[@]}"
       # WHAT `build` BUILT: the SPA, the document runtime and its public assets, the generated route
       # table, the bundled server these shards boot (scripts/gates.mjs runs dist/server.mjs, not a
       # dev server) and the CLI bundle the conformance gates drive. ~40 MB, stored uncompressed, in

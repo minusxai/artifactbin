@@ -561,7 +561,7 @@ describe('CI job shape', () => {
     expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
     expect(install.run).toContain('"$BROWSERS" != chromium');
     expect(install.run).toContain('"$CACHE_HIT" != true');
-    expect(install.run).toContain('npx playwright install "${deps[@]}" "${browsers[@]}"');
+    expect(install.run).toContain('npx playwright install "${deps[@]}" "${selected_engines[@]}"');
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);
