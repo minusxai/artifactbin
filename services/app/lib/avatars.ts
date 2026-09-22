@@ -19,6 +19,7 @@
  * invent a second address for one.
  */
 import sharp from 'sharp';
+import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import { getDb } from './db';
 import { objectKey, objectStore, type ObjectStore } from './object-store';
 import { sniffImageType } from './web-ingest/sniff';
@@ -44,7 +45,7 @@ export function avatarUrl(row: { id: string; image_key: string | null }): string
  * decode, not the stored object: past it the door answers 413 without reading
  * the rest of the body, and nothing reaches sharp.
  */
-export const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
+export const AVATAR_MAX_BYTES = DEFAULT_UPLOAD_MAX_BYTES;
 
 /** Why a picture was refused. Each code is a sentence the client already knows how to say. */
 export type AvatarErrorCode = 'unsupported_image' | 'image_too_large' | 'image_unreadable';

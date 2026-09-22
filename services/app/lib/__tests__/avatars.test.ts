@@ -37,6 +37,15 @@ describe('avatarUrl (pure)', () => {
 });
 
 describe('setAvatar', () => {
+  it('accepts a 50 MB picture and rejects one byte more', async () => {
+    const store = await scratchStore();
+    const user = await createUser({ email: 'mxmx_test_avatar_limit@example.com' });
+    const bytes = Buffer.alloc(50_000_000);
+    (await png(8, 8)).copy(bytes);
+    await expect(setAvatar(user.id, bytes, 'image/png', store)).resolves.toHaveProperty('key');
+    await expect(setAvatar(user.id, Buffer.alloc(50_000_001), 'image/png', store)).rejects.toMatchObject({ code: 'image_too_large' });
+  });
+
   it('re-encodes whatever arrives to a 256x256 WebP and records the key on the row', async () => {
     const store = await scratchStore();
     const user = await createUser({ email: 'mxmx_test_avatar@example.com' });

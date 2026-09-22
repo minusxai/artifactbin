@@ -127,7 +127,7 @@ describe('the welcome page', () => {
     const file = container.querySelector('input[type="file"]') as HTMLInputElement;
     fireEvent.change(file, { target: { files: [new File([new Uint8Array([1])], 'huge.png', { type: 'image/png' })] } });
 
-    expect(await screen.findByText(/5 MB/)).toBeInTheDocument();
+    expect(await screen.findByText(/50 MB/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirm' })).toBeInTheDocument();
   });
 

@@ -1,7 +1,7 @@
 import {isIP} from 'node:net';
 
 import { parseAssetsOrigin } from '@artifactbin/utils';
-import { normalizeOrigin } from '@artifactbin/contracts';
+import { DEFAULT_UPLOAD_MAX_BYTES, normalizeOrigin } from '@artifactbin/contracts';
 
 /**
  * The ONLY file that reads process.env, which keeps runtime configuration
@@ -123,7 +123,7 @@ export const ARTIFACT_QUOTA_PER_TOKEN = Number(env('QUOTA', 'ARTIFACTS_PER_TOKEN
  * is the importer's, once — a second document naming an already-cached URL
  * fetches nothing and stores nothing (lib/asset-quota).
  */
-export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TOKEN') ?? '536870912');
+export const ASSETS_MAX_BYTES_PER_TOKEN = Number(env('ASSETS', 'MAX_BYTES_PER_TOKEN') ?? '10000000000');
 
 /**
  * How many proxies sit in front of this app — which is to say, how much of
@@ -210,20 +210,15 @@ export const MAX_EXTERNAL_ASSETS_PER_PUBLISH = Number(env('WEB_INGEST', 'MAX_ASS
  * ~2 MB JSON-body cap) because an image rides its own object in the store and a
  * raw-body upload, not a base64 string in a JSON document.
  */
-export const MAX_IMAGE_BYTES = Number(env('IMAGES', 'MAX_BYTES') ?? '5000000');
+export const MAX_IMAGE_BYTES = Number(env('IMAGES', 'MAX_BYTES') ?? DEFAULT_UPLOAD_MAX_BYTES);
 
 /**
- * The biggest PDF an artifact may hold — its own cap, five times the image
- * one, because a PDF is a document somebody wrote rather than a picture we may
- * shrink: nothing re-encodes it, so the number here is the number stored.
- *
- * 25 MB is the size the spike measured the serving path against, and it is
- * affordable only because that path STREAMS (lib/object-store getStream): a
- * whole read of one of these would be +25 MB of RSS per response and would
- * evict the store's entire read cache.
+ * PDFs and files share the 50 MB upload default. Downloads stream through
+ * object-store getStream so each reader does not buffer an entire upload.
+ * PDFs are not re-encoded, so uploaded bytes are also the stored bytes.
  */
-export const MAX_PDF_BYTES = Number(env('PDF', 'MAX_BYTES') ?? '25000000');
-export const MAX_FILE_BYTES = Number(env('FILES', 'MAX_BYTES') ?? '50000000');
+export const MAX_PDF_BYTES = Number(env('PDF', 'MAX_BYTES') ?? DEFAULT_UPLOAD_MAX_BYTES);
+export const MAX_FILE_BYTES = Number(env('FILES', 'MAX_BYTES') ?? DEFAULT_UPLOAD_MAX_BYTES);
 
 /**
  * Public deployments require Resend credentials for login-code email. A

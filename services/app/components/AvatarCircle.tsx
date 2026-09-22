@@ -22,13 +22,14 @@
  * profile page is not something a person can act on.
  */
 import { useRef, useState } from 'react';
+import { DEFAULT_UPLOAD_MAX_BYTES } from '@artifactbin/contracts';
 import Avatar from '@/components/Avatar';
 import { pageDataChanged, profileChanged } from '@/web/page-data-events';
 
 /** The three refusals `lib/avatars` makes, as sentences. */
 const REFUSALS: Record<string, string> = {
   unsupported_image: 'that file is not a picture this can use — PNG, JPEG, WebP, GIF or AVIF',
-  image_too_large: 'that picture is over 5 MB — pick a smaller one',
+  image_too_large: `that picture is over ${DEFAULT_UPLOAD_MAX_BYTES / 1_000_000} MB — pick a smaller one`,
   image_unreadable: 'that picture could not be read — try exporting it again',
 };
 
