@@ -750,17 +750,17 @@ function DataTableAdapter(props: Record<string, unknown>) {
   const cap = parseTableHeight(props.height);
   const wrapper: CSSProperties = inGridItem ? { width: '100%', height: '100%' } : { width: '100%' };
 
-  const [extra, setExtra] = useState<{ base: TableResult | undefined; rows: Row[]; sort: SortSpec | null; loading: boolean }>({ base: table, rows: [], sort: authoredSort, loading: false });
-  const paged = extra.base === table ? extra : { base: table, rows: [], sort: authoredSort, loading: false };
+  const [extra, setExtra] = useState<{ base: TableResult | undefined; rows: Row[]; sort: SortSpec | null; loading: boolean; replaced: boolean }>({ base: table, rows: [], sort: authoredSort, loading: false, replaced: false });
+  const paged = extra.base === table ? extra : { base: table, rows: [], sort: authoredSort, loading: false, replaced: false };
   // Two quick header clicks are two window reads; only the LATEST may land.
   const readSeq = useRef(0);
 
   const readWindow = (offset: number, sort: SortSpec | null, replace: boolean) => {
     if (!name || !table) return;
     const seq = ++readSeq.current;
-    setExtra({ base: table, rows: replace ? [] : paged.rows, sort, loading: true });
+    setExtra({ base: table, rows: replace ? [] : paged.rows, sort, loading: true, replaced: replace || paged.replaced });
     ctx.fetchPage(name, { offset, limit: TABLE_PAGE, sort: sort ?? undefined }).then(
-      (win) => { if (seq === readSeq.current) setExtra((prev) => (prev.base === table ? { base: table, rows: replace ? win.rows : [...prev.rows, ...win.rows], sort, loading: false } : prev)); },
+      (win) => { if (seq === readSeq.current) setExtra((prev) => (prev.base === table ? { base: table, rows: replace ? win.rows : [...prev.rows, ...win.rows], sort, loading: false, replaced: replace || prev.replaced } : prev)); },
       () => { if (seq === readSeq.current) setExtra((prev) => (prev.base === table ? { ...prev, loading: false } : prev)); },
     );
   };
@@ -783,9 +783,12 @@ function DataTableAdapter(props: Record<string, unknown>) {
     );
   }
   const truncated = !!table.truncated;
-  // Unsorted windows APPEND to the sample; a sorted read REPLACES it, so the
-  // rows on screen are exactly the engine's order for that sort.
-  const shown = paged.sort && paged.rows.length ? paged.rows : [...table.rows, ...paged.rows];
+  // A load-more window APPENDS to the sample; a re-read REPLACES it, so the rows
+  // on screen are exactly the engine's order for that read. Which one happened is
+  // carried on the window itself — the SORT cannot stand in for it, because
+  // cycling a sort back off (asc -> desc -> none) is a replacing read whose sort
+  // is null, and appending that window to the sample duplicates every row.
+  const shown = paged.replaced && paged.rows.length ? paged.rows : [...table.rows, ...paged.rows];
   const busy = name !== null && ctx.pending.has(name);
   // Cell sessions already indicate saving and retain drafts during refresh.
   // Keep the rest of an editable table visually stable and available to edit.

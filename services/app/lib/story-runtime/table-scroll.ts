@@ -19,7 +19,7 @@ const SCROLLABLE_ATTR = 'data-mx-scrollable';
 /** Mark now, and keep the marks honest on scroll and resize. Returns a disposer. */
 export function markScrollableTables(doc: Document, root: Document | HTMLElement = doc): () => void {
   const win = doc.defaultView;
-  const tables = () => [...root.querySelectorAll<HTMLTableElement>('table')];
+  const tables = () => [...root.querySelectorAll<HTMLTableElement>('table:not([data-mx-kit-table])')];
 
   const measure = (table: HTMLTableElement) => {
     const overflows = table.scrollWidth > table.clientWidth + 1;

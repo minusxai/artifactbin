@@ -170,6 +170,10 @@ describe('StoryRuntimeApp — dataflow', () => {
       <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome={false} />,
     );
     const grid = getByLabelText('Data grid');
+    // The marker the document-wide table scroll box opts out on (reading-css):
+    // without it the table becomes its own scroll container and the sticky
+    // header pins to the rows instead of the box.
+    expect(grid.querySelector('table')?.hasAttribute('data-mx-kit-table')).toBe(true);
     expect([...grid.querySelectorAll('thead th')].map((th) => th.textContent?.trim())).toEqual(['Region', 'revenue']);
     expect(grid.textContent).toContain('$20');
     expect(getByLabelText('Row count').textContent).toMatch(/3 of 5,000/);
@@ -181,6 +185,46 @@ describe('StoryRuntimeApp — dataflow', () => {
     await waitFor(() => expect(pages).toHaveLength(2));
     expect(pages[1]).toEqual({ name: 'sales', page: { offset: 0, limit: 500, sort: { col: 'revenue', dir: 'asc' } } });
     await findByLabelText('Row count');
+  });
+
+  it('<DataTable rowKey> cycling a sort back OFF replaces the window, it does not re-append the sample', async () => {
+    // Three clicks is one full cycle: asc, desc, then back to unsorted. The last
+    // one is still a REPLACING read of window 0 — the rows it returns ARE the
+    // sample, so appending them to it duplicates every row and the table dies on
+    // its own rowKey check.
+    const base = [
+      { id: 'f001', region: 'R0', revenue: 0 },
+      { id: 'f002', region: 'R1', revenue: 10 },
+      { id: 'f003', region: 'R2', revenue: 20 },
+    ];
+    const columns = [{ name: 'id', type: 'string' as const }, ...STATE.tables.sales.columns];
+    const big = { rows: base, columns, truncated: true, totalRows: 5000 };
+    const { nodes, dataflow } = build('<DataTable data="$sales" rowKey="id" height="300px" />');
+    const pages: { sort?: unknown }[] = [];
+    const store = createDataflowStore(
+      { flow: dataflow.flow, state: { ...STATE, tables: { ...STATE.tables, sales: big } } },
+      { transport: {
+        run: async () => ({ tables: {}, errors: {} }),
+        page: async (_v, _name, page) => {
+          pages.push(page);
+          return { rows: page.sort ? [...base].reverse() : base, columns, truncated: true, totalRows: 5000 };
+        },
+      } },
+    );
+    const { container, getByLabelText } = render(
+      <StoryRuntimeApp nodes={nodes} refData={{}} dataflow={dataflow} store={store} colorMode="light" chrome={false} />,
+    );
+    fireEvent.click(getByLabelText('Sort by revenue'));
+    await waitFor(() => expect(pages).toHaveLength(1));
+    fireEvent.click(getByLabelText('Sort by revenue'));
+    await waitFor(() => expect(pages).toHaveLength(2));
+    fireEvent.click(getByLabelText('Sort by revenue'));
+    await waitFor(() => expect(pages).toHaveLength(3));
+    expect(pages[2].sort).toBeUndefined();
+    // The window IS the table: three rows, not the sample plus itself.
+    await waitFor(() => expect(getByLabelText('Row count').textContent).toMatch(/3 of 5,000/));
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(container.textContent).not.toContain('rowKey must be unique');
   });
 
   it('<DataTable> marks itself busy while its query re-runs', async () => {

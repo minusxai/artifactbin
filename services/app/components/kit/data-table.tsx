@@ -191,7 +191,7 @@ export function DataTable({
         className="relative min-h-0 w-full flex-1 overflow-auto"
         style={{ maxHeight: `${boxHeight}px` }}
       >
-        <table className="w-full border-collapse text-sm" style={virtual ? { display: 'block' } : undefined}>
+        <table data-mx-kit-table="" className="w-full border-collapse text-sm" style={virtual ? { display: 'block' } : undefined}>
           <thead className={cn("bg-card text-left text-muted-foreground", sticky && "sticky top-0 z-10")} style={virtual ? { display: 'block' } : undefined}>
             <tr className="border-b border-border" style={rowGrid}>
               {resolved.map((c) => {
