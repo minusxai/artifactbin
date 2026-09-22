@@ -27,11 +27,12 @@ export function useCommentCapture(id:string,editId:string|undefined){
   const current=session.current;session.current=null;
   if(!current){setError(value=>value||messages.unsupported);return;}
   const mine=generation.current,capturedEditId=revision.current!;setBusy(true);
+  const started=performance.now();
   // Selection chrome is not part of the image. Global class is removed in every exit path.
   document.documentElement.classList.add('mx-taking-screenshot');
   try{const image=await current.capture(rect);if(mine!==generation.current)return;if(revision.current!==capturedEditId)throw new CaptureError('geometry');setDraft({image,preview:image.blob,strokes:[],editId:capturedEditId});setEditing(true);setError('');}
   catch(e){if(mine===generation.current)setError(messages[e instanceof CaptureError?e.code:'unsupported']);}
-  finally{current.dispose();document.documentElement.classList.remove('mx-taking-screenshot');if(mine===generation.current)setBusy(false);}
+  finally{performance.measure('comment-screenshot:capture',{start:started,end:performance.now()});current.dispose();document.documentElement.classList.remove('mx-taking-screenshot');if(mine===generation.current)setBusy(false);}
  };
  const upload=async(file:File)=>{
   if(!editId)return;const mine=++generation.current;session.current?.dispose();session.current=null;setBusy(true);setError('');

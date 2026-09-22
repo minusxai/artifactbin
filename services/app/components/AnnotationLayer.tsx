@@ -41,7 +41,7 @@ import dynamic from '@/lib/dynamic';
 import {useCommentCapture} from '@/lib/capture/use-comment-capture';
 import CommentScreenshot,{BlobImage} from './CommentScreenshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, LoaderCircle, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import {readAnnotationPages} from '@/lib/annotation-pages';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import Avatar from '@/components/Avatar';
@@ -61,8 +61,11 @@ import {
   type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
 
-// The brush loads only after capture; native permission remains in the eager capture module.
-const ScreenshotEditor=dynamic(()=>import('./ScreenshotEditor'));
+// Keep the brush in its own chunk, preloaded when selection starts. Native permission
+// remains in the eager capture module so it retains the user gesture.
+let screenshotEditorModule: Promise<typeof import('./ScreenshotEditor')> | undefined;
+const loadScreenshotEditor=()=>screenshotEditorModule??=(import('./ScreenshotEditor').catch(error=>{screenshotEditorModule=undefined;throw error;}));
+const ScreenshotEditor=dynamic(loadScreenshotEditor);
 
 
 interface AnnotationLayerProps {
@@ -1314,7 +1317,11 @@ export default function AnnotationLayer({
    * closing it does not cancel a pick for the same reason.
    */
   const beginPick = async (mode: 'select') => {
-    if(editId && !await capture.start())return;
+    if(editId){
+      const preparation=capture.start(); // Native permission still starts in this gesture.
+      void loadScreenshotEditor().catch(()=>{}); // Overlap the lazy chunk with permission/selection.
+      if(!await preparation)return;
+    }
     setPick(mode);
     setOpenId(null);
     if (phoneRail && railOpenRef.current) {
@@ -1424,9 +1431,9 @@ export default function AnnotationLayer({
             </button>
           </div>
           <div className="p-3">
-            {capture.busy&&<p role="status">Preparing screenshot…</p>}
-            {capture.draft&&<div className="mb-3"><BlobImage blob={capture.draft.preview} alt="Screenshot for this comment" className="max-h-48 w-full object-contain"/><button type="button" onClick={capture.edit}>Draw on screenshot</button> <button type="button" onClick={()=>void beginPick('select')}>Retake screenshot</button></div>}
-            {capture.required&&!capture.draft&&!capture.busy&&<div className="mb-3 space-y-2 text-xs"><p role="alert">{capture.error||'A screenshot is required for this selection.'}</p><button type="button" onClick={()=>void beginPick('select')}>Retry screenshot</button><label className="block">Upload screenshot<input type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload screenshot" onChange={event=>{const file=event.target.files?.[0];if(file)void capture.upload(file);event.target.value='';}}/></label><button type="button" onClick={capture.skip}>Continue without screenshot</button></div>}
+            {capture.busy&&<div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} className="animate-spin"/>Preparing screenshot…</div>}
+            {capture.draft&&<div className="mb-4 overflow-hidden rounded-lg border border-edge bg-surface"><button type="button" aria-label="Draw on screenshot" onClick={capture.edit} className="block w-full p-2"><BlobImage blob={capture.draft.preview} alt="Screenshot for this comment" className="max-h-48 w-full rounded object-contain"/></button><div className="flex items-center justify-between border-t border-edge px-3 py-2 text-xs"><button type="button" onClick={capture.edit} className="font-medium text-accent hover:underline">Edit drawing</button><button type="button" onClick={()=>void beginPick('select')} className="text-muted hover:text-fg">Retake screenshot</button></div></div>}
+            {capture.required&&!capture.draft&&!capture.busy&&<div className="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs"><p role="alert" className="leading-relaxed text-muted">{capture.error||'A screenshot is required for this selection.'}</p><button type="button" className="rounded-lg border border-edge bg-panel px-3 py-2 font-medium hover:border-accent" onClick={()=>void beginPick('select')}>Retry screenshot</button><label className="block space-y-2 font-medium">Upload screenshot<input className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-panel file:px-3 file:py-2 file:text-fg" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload screenshot" onChange={event=>{const file=event.target.files?.[0];if(file)void capture.upload(file);event.target.value='';}}/></label><button type="button" className="text-muted underline underline-offset-4 hover:text-fg" onClick={capture.skip}>Continue without screenshot</button></div>}
             <MarkdownField
               label="Annotation comment"
               previewLabel="Comment preview"

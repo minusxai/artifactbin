@@ -35,10 +35,9 @@ export const COMMENT_PRESENTATION = {
           'm15 5 4 4',
         ], annotate: ['M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z']},
   annotationCss: [
-  `[data-mx-annotated] { background: rgba(245, 158, 11, 0.10); border-radius: 3px; transition: background 120ms; }`,
-  `[data-mx-annotated]:hover { background: rgba(245, 158, 11, 0.20); }`,
-  `[data-mx-annotation-open] { background: rgba(245, 158, 11, 0.26); border-radius: 3px; }`,
-  `[data-mx-annotation-hover] { background: rgba(245, 158, 11, 0.18); ${SELECTION_PRESENTATION.selectedCss} }`,
+  // Annotation paint must never replace an authored background or image.
+  `[data-mx-annotated]:not([data-mx-annotation-ranged]) { outline: 1px solid rgba(245, 158, 11, .45); outline-offset: 3px; }`,
+  `[data-mx-annotation-open]:not([data-mx-annotation-ranged]), [data-mx-annotation-hover]:not([data-mx-annotation-ranged]) { ${SELECTION_PRESENTATION.selectedCss} }`,
   `[data-mx-annotate-selected] { ${SELECTION_PRESENTATION.selectedCss} }`,
   // The pick: a crosshair everywhere, and an outline on the block under it. The
   // doubled attribute is deliberate — it out-specifies the edit session's own
@@ -46,13 +45,7 @@ export const COMMENT_PRESENTATION = {
   `[data-mx-annotate-picking], [data-mx-annotate-picking] * { cursor: crosshair !important; }`,
   // A finger drawing an area must draw, not scroll; and nothing under a band selects.
   `[data-mx-annotate-picking="area"], [data-mx-annotate-picking="area"] *, [data-mx-annotate-picking="select"], [data-mx-annotate-picking="select"] * { touch-action: none !important; user-select: none !important; }`,
-  `[data-mx-annotate-pick-hover][data-mx-annotate-pick-hover] { ${SELECTION_PRESENTATION.hoverCss} }`,
-  // A node whose words are painted gives up its own background — the tint is
-  // what a comment looks like when we cannot find the words, not as well as.
-  `[data-mx-annotated][data-mx-annotation-ranged],`
-    + `[data-mx-annotated][data-mx-annotation-ranged]:hover,`
-    + `[data-mx-annotation-open][data-mx-annotation-ranged],`
-    + `[data-mx-annotation-hover][data-mx-annotation-ranged] { background: transparent; }`,
+  `[data-mx-annotate-pick-hover][data-mx-annotate-pick-hover] { ${SELECTION_PRESENTATION.selectedCss} }`,
 ].join('\n'),
   highlightFill: {
   base: 'rgba(245, 158, 11, 0.28)',

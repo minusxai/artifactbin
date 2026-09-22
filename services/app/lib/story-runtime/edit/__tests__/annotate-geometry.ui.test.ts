@@ -14,6 +14,21 @@ beforeEach(installAnnotateSession);
 afterEach(disposeAnnotateSession);
 
 describe('view-mode annotation geometry', () => {
+  it('preserves authored backgrounds for node, ranged and hovered comments', () => {
+    const css=document.createElement('style');css.textContent='main p { background: rgb(220, 30, 30); }';document.head.appendChild(css);
+    const anchor=document.querySelector('main p')!;
+    try {
+      env.session.update(state('on'));
+      expect(getComputedStyle(anchor).backgroundColor).toBe('rgb(220, 30, 30)');
+      anchor.setAttribute('data-mx-annotation-ranged','');
+      anchor.setAttribute('data-mx-annotation-open','');
+      anchor.setAttribute('data-mx-annotation-hover','');
+      expect(getComputedStyle(anchor).backgroundColor).toBe('rgb(220, 30, 30)');
+      anchor.setAttribute('data-mx-annotate-pick-hover','');
+      expect(getComputedStyle(anchor).backgroundColor).toBe('rgb(220, 30, 30)');
+    } finally {css.remove();}
+  });
+
   it('owns its stylesheet by reference and restricts picking to the inline artifact root', () => {
     env.session.dispose();
     const root=document.querySelector('main')!;

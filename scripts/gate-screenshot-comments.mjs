@@ -27,6 +27,7 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
    await expect.poll(()=>page.evaluate(()=>window.__captureReference?.readyState??0)).toBeGreaterThanOrEqual(2);
    referencePixel=await page.evaluate(({x,y})=>{const v=window.__captureReference,c=document.createElement('canvas');c.width=innerWidth;c.height=innerHeight;c.getContext('2d').drawImage(v,0,0,c.width,c.height);return Array.from(c.getContext('2d').getImageData(x+35,y+65,1,1).data).slice(0,3);},box);
   }
+  const selectionStarted=Date.now();
   await page.mouse.move(box.x+30,box.y+60);await page.mouse.down();await page.mouse.move(box.x+230,box.y+160,{steps:12});await page.mouse.up();
   if(name!=='chromium'){
    await expect(page.getByLabel('Save annotation',{exact:true})).toBeDisabled();
@@ -34,7 +35,8 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   }
   const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,{alerts:await page.getByRole('alert').allTextContents(),status:await page.getByRole('status').allTextContents(),trace:await page.evaluate(()=>window.__captureTrace),composer:await page.getByRole('dialog',{name:'Annotation composer'}).count()});throw error;}
   const canvas=editor.getByLabel('Screenshot drawing canvas');
-  await expect(editor.getByRole('button',{name:'Done drawing',exact:true})).toBeEnabled();
+  await expect(editor.getByRole('button',{name:'Use screenshot',exact:true})).toBeEnabled();
+  if(name==='chromium')console.log(`chromium: selection-to-editor ${Date.now()-selectionStarted}ms; crop/encode ${await page.evaluate(()=>performance.getEntriesByName('comment-screenshot:capture').at(-1)?.duration.toFixed(1))}ms`);
   // Exact crop corner must contain content, not a selection outline or app panel.
   const pixel=await canvas.evaluate(c=>Array.from(c.getContext('2d').getImageData(5,5,1,1).data));
   assert(pixel.slice(0,3).every((value,i)=>Math.abs(value-referencePixel[i])<=3),`${name}: content pixel ${pixel}; unmarked reference ${referencePixel}`);
@@ -45,13 +47,14 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   await expect(editor.getByRole('button',{name:'Undo stroke'})).toBeEnabled();
   // Strokes paint on requestAnimationFrame; wait for the pixels, not just the undo button.
   await expect.poll(()=>canvas.evaluate(c=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let count=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<30&&pixels[i+1]>200&&pixels[i+2]<30)count++;return count;})).toBeGreaterThan(100);
-  await editor.getByRole('button',{name:'Done drawing'}).click();
+  await editor.getByRole('button',{name:'Use screenshot'}).click();
   await expect(editor).toHaveCount(0);
   await page.getByLabel('Annotation comment',{exact:true}).pressSequentially(`Screenshot from ${name}`);
   await page.getByLabel('Save annotation',{exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Annotation composer'})).toHaveCount(0);
   await page.reload();
   await openArtifactControls(page);await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
+  await expect(page.locator('#capturebox')).toHaveCSS('background-color','rgb(220, 30, 30)');
   const thumbnail=page.getByRole('img',{name:'Screenshot attached to comment'}).last();await thumbnail.waitFor();
   assert(await thumbnail.evaluate(img=>img.complete&&img.naturalWidth>0),`${name}: persisted thumbnail`);
   await page.getByRole('button',{name:'Open comment screenshot'}).last().click();

@@ -7,6 +7,8 @@ it('offers only a brush, color, thickness, undo and completion',()=>{
  const close=vi.fn();
  render(<ScreenshotEditor image={{blob:new Blob(),width:100,height:50,rect:{x:0,y:0,width:100,height:50},viewport:{width:100,height:50},capturedAt:new Date().toISOString(),method:'region'}} initialStrokes={[]} onDone={vi.fn()} onCancel={close}/>);
  expect(screen.getByLabelText('Brush color')).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Blue brush'})).toBeTruthy();
+ expect(screen.getByRole('button',{name:'Use screenshot'})).toBeDisabled();
  fireEvent.change(screen.getByLabelText('Brush thickness'),{target:{value:'8'}});
  expect((screen.getByLabelText('Brush thickness') as HTMLInputElement).value).toBe('8');
  expect(screen.getByRole('button',{name:'Undo stroke'})).toHaveProperty('disabled',true);
