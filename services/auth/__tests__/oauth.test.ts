@@ -151,9 +151,9 @@ describe('the oauth provider routes', () => {
     const first = await tokenResponse.json() as { access_token: string; refresh_token: string; expires_in: number; scope: string };
     expect(first.access_token).toMatch(/^mx_/);
     expect(first.refresh_token).toMatch(/^mxr_/);
-    expect(first.expires_in).toBe(30 * 24 * 60 * 60);
+    expect(first.expires_in).toBe(24 * 60 * 60);
     const minted = (await testDb().query<{expires_at: string}>('SELECT expires_at FROM tokens WHERE token_hash=$1',[hashToken(first.access_token)])).rows[0]!;
-    expect(new Date(minted.expires_at).getTime()-Date.now()).toBeGreaterThan(29 * 24 * 60 * 60 * 1000);
+    expect(new Date(minted.expires_at).getTime()-Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
     expect(first.scope).toBe('artifacts');
     const { query } = testDb();
     expect(await createTokenReader({ db: { query } }).byToken(first.access_token)).toMatchObject({ userId: 'usr_1', audience: RESOURCE, scope: 'artifacts' });
@@ -168,7 +168,7 @@ describe('the oauth provider routes', () => {
     });
     expect(refreshed.status, await refreshed.clone().text()).toBe(200);
     const second = await refreshed.json() as { access_token: string; refresh_token: string; expires_in: number };
-    expect(second.expires_in).toBe(30 * 24 * 60 * 60);
+    expect(second.expires_in).toBe(24 * 60 * 60);
     expect(second.access_token).toMatch(/^mx_/);
     expect(second.refresh_token).not.toBe(first.refresh_token);
 
@@ -311,7 +311,7 @@ it('offers a logged-out visitor both a login and an anonymous path, and the anon
   expect(token.status).toBe(200);
   const credentials = await token.json() as { access_token: string; refresh_token: string; client_id: string; expires_in: number };
   expect(credentials).toMatchObject({ access_token: expect.stringMatching(/^mx_/), refresh_token: expect.stringMatching(/^mxr_/), client_id: expect.any(String) });
-  expect(credentials.expires_in).toBe(30 * 24 * 60 * 60);
+  expect(credentials.expires_in).toBe(24 * 60 * 60);
   expect((await poll()).status).toBe(400);
   // Guest browser and CLI share a user without a registered login identity.
   const row = await pg.query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE token_hash = $1', [hashToken(credentials.access_token)]);
