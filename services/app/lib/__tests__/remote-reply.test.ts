@@ -26,3 +26,10 @@ it('agent name colors meet normal-text contrast on light and dark comment surfac
   expect(dark).toBeDefined();expect(contrast(dark,'#202020')).toBeGreaterThanOrEqual(4.5);
  }
 });
+
+it('marks awaiting acknowledgment as pending while keeping acknowledged and completed labels distinct',()=>{
+ const work={id:'request',sessionId:'session',artifactId:'doc',threadId:'thread',commentId:'comment',name:'codex',color:'blue' as const,updatedAt:'now'};
+ expect(remoteWorkLabel({...work,phase:'delivered'})).toBe('Sent · awaiting acknowledgment…');
+ expect(remoteWorkLabel({...work,phase:'acknowledged'})).toBe('Working');
+ expect(remoteWorkLabel({...work,phase:'completed'})).toBe('Answered');
+});

@@ -1,5 +1,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { Check, Copy } from "lucide-react";
+import { Tooltip } from "./Tooltip";
 import {REMOTE_COLOR_CSS,remoteColor,type RemoteSessionInfo } from "../../contracts/src/remote";
+const connectionRequest = "Connect to afbin remote so I can @mention you in artifact comments.";
 export interface MentionPickerHandle { keyDown: (key: string) => boolean }
 const agentLabel = (name: string) => (({ claude: "Claude Code", codex: "Codex", pi: "Pi", opencode: "OpenCode" } as Record<string, string>)[name] ?? name);
 export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text: string) => void }>(function RemoteMentionPicker({
@@ -13,6 +16,15 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
   const [active, setActive] = useState(0);
   useEffect(() => setActive(0), [query]);
   const [loaded, setLoaded] = useState(false);
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'error'>('idle');
+  const copyRequest = async () => {
+    try {
+      await navigator.clipboard.writeText(connectionRequest);
+      setCopyState('copied');
+    } catch {
+      setCopyState('error');
+    }
+  };
   useEffect(() => {
     const abort = new AbortController();
     void fetch("/api/remote/sessions", {
@@ -67,11 +79,24 @@ export default forwardRef<MentionPickerHandle, { query: string; onSelect: (text:
         </button>
       ))}
       {!matches.length && (
-        <p className="text-muted">
-          {loaded
-            ? "No matching online sessions. Start one with afbin remote."
-            : "Loading sessions…"}
-        </p>
+        <div className="px-2 py-1.5 text-muted">
+          <p>{loaded ? "No matching online sessions." : "Loading sessions…"}</p>
+          {loaded && <>
+            <p className="mt-2">Ask your agent to connect:</p>
+            <div className="mt-2 flex items-start gap-2 rounded-md border border-edge bg-bg p-2">
+              <p className="min-w-0 flex-1 text-xs text-fg">{connectionRequest}</p>
+              <Tooltip content={copyState === 'copied' ? 'Copied' : 'Copy request'}>
+                <button type="button" aria-label="Copy connection request"
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => void copyRequest()}
+                  className="shrink-0 cursor-pointer rounded-md p-1 text-muted hover:text-fg">
+                  {copyState === 'copied' ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                </button>
+              </Tooltip>
+            </div>
+            <p role="status" className="mt-1 text-xs">{copyState === 'copied' ? 'Copied — paste into your agent.' : copyState === 'error' ? 'Could not copy. Select and copy the request above.' : ''}</p>
+          </>}
+        </div>
       )}
     </div>
   );

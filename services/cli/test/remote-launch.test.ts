@@ -99,3 +99,29 @@ test('failure to persist the startup receipt kills the spawned PTY and releases 
   assert.equal(removed,true,'failed startup must release the reserved session');
  }finally{if(pid)try{process.kill(-pid,'SIGKILL');}catch{}}
 });
+
+test('managed harness defaults avoid routine permission prompts without changing caller arguments',()=>{
+ const supplied=['--model','chosen'];
+ assert.deepEqual(remoteArguments('/usr/local/bin/claude',supplied,'context'),[...supplied,'--permission-mode','auto','context']);
+ assert.deepEqual(remoteArguments('codex',supplied,'context'),[...supplied,'--yolo','context']);
+ assert.deepEqual(remoteArguments('pi',supplied,'context'),[...supplied,'context']);
+ assert.deepEqual(supplied,['--model','chosen']);
+});
+test('explicit permission modes and Codex profiles override managed defaults',()=>{
+ for(const args of [['--permission-mode','plan'],['--permission-mode=default'],['--dangerously-skip-permissions']]){
+  assert.deepEqual(remoteArguments('claude',args,'context'),[...args,'context']);
+ }
+ for(const args of [['--yolo'],['--dangerously-bypass-approvals-and-sandbox'],['--sandbox','read-only'],['--sandbox=workspace-write'],['-s','read-only'],['--ask-for-approval','on-request'],['-a','never'],['--approve-for-me'],['--full-auto'],['--profile','restricted'],['-p','restricted'],['-c','sandbox_mode="read-only"'],['--config=approval_policy="on-request"']]){
+  assert.deepEqual(remoteArguments('codex',args,'context'),[...args,'context']);
+ }
+ assert.deepEqual(remoteArguments('codex',['-c','model="chosen"'],'context'),['-c','model="chosen"','--yolo','context']);
+});
+
+import {remotePermissionEnv} from '../src/config';
+test('OpenCode receives per-process automatic permissions and preserves explicit environment overrides',()=>{
+ const env={PATH:'/bin',OPENCODE_CONFIG_CONTENT:'{"model":"chosen"}'};
+ assert.deepEqual(remotePermissionEnv('/bin/opencode',env),{...env,OPENCODE_PERMISSION:'{"*":"allow"}'});
+ assert.deepEqual(remotePermissionEnv('opencode',{...env,OPENCODE_PERMISSION:'{"*":"ask"}'}),{...env,OPENCODE_PERMISSION:'{"*":"ask"}'});
+ for(const harness of ['claude','codex','pi','sh'])assert.deepEqual(remotePermissionEnv(harness,env),env);
+ assert.equal('OPENCODE_PERMISSION' in env,false);
+});

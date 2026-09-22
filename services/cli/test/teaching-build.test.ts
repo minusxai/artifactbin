@@ -28,6 +28,8 @@ test('teaching bootstraps without its output and repairs stale output determinis
   const content=readFileSync(target,'utf8');
   const bundle=JSON.parse(content);
   assert.ok(bundle.files['SKILL.md']);assert.ok(bundle.files['references/remote-review.md']);
+  const remoteGuide=bundle.files['references/remote-review.md'];
+  for(const text of ['--permission-mode auto','--yolo','OPENCODE_PERMISSION','Pi has no built-in tool approval prompts','Explicit permission flags'])assert.ok(remoteGuide.includes(text),text);
   const before=statSync(target).mtimeMs;
   assert.equal(generate('--check').status,0);
   assert.equal(generate().status,0);

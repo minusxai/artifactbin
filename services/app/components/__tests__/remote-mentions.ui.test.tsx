@@ -71,3 +71,29 @@ it.each(['7d545566-1a47-4aaf-be61-cffcb7b8e8f2', 'b'.repeat(64)])('selects sessi
   expect(screen.queryByLabelText('Agent sessions')).toBeNull();
   expect(escape).not.toHaveBeenCalled();
 });
+
+it('offers a copyable connection request without selecting a mention or submitting the comment', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sessions: [] }) }));
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal('navigator', { clipboard: { writeText } });
+  const select = vi.fn();
+  const submit = vi.fn(event => event.preventDefault());
+  render(<form onSubmit={submit}><RemoteMentionPicker query="" onSelect={select} /></form>);
+  expect(screen.queryByRole('button', { name: 'Copy connection request' })).toBeNull();
+  const copy = await screen.findByRole('button', { name: 'Copy connection request' });
+  expect(screen.getByText('Ask your agent to connect:')).toBeTruthy();
+  fireEvent.click(copy);
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('Connect to afbin remote so I can @mention you in artifact comments.'));
+  expect(await screen.findByRole('status')).toHaveTextContent('Copied');
+  expect(select).not.toHaveBeenCalled();
+  expect(submit).not.toHaveBeenCalled();
+});
+
+it('keeps the connection request available when clipboard access fails', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ sessions: [] }) }));
+  vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('Denied')) } });
+  render(<RemoteMentionPicker query="" onSelect={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Copy connection request' }));
+  expect(await screen.findByRole('status')).toHaveTextContent('Could not copy. Select and copy the request above.');
+  expect(screen.getByText('Connect to afbin remote so I can @mention you in artifact comments.')).toBeTruthy();
+});
