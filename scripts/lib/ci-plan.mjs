@@ -2,7 +2,7 @@
  * Dependencies include test/composition edges, not just package dependencies.
  * Unknown paths and shared configuration must select everything.
  */
-export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 'reference-compatibility'];
+export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 'cli-preview', 'reference-compatibility'];
 
 /**
  * THE FILES `npm run release:cli` (and the `generate:teaching` that follows it) REWRITE, and nothing
@@ -97,10 +97,10 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   if (testedRun) return { full: false, cliRelease, cliTests: false, jobs: nothing, nodeRoots: [], testedRun, selection: 'tested tree' };
   // The nightly exists so the release-only CLI matrix cannot rot unseen between releases (and so its
   // caches stay warm on the default branch, which is what makes a release build fast).
-  if (nightly) return { full: false, cliRelease: true, cliTests: false, jobs: { ...nothing, cli: true }, nodeRoots: [], testedRun: null, selection: 'nightly CLI matrix' };
+  if (nightly) return { full: false, cliRelease: true, cliTests: false, jobs: { ...nothing, cli: true, 'cli-preview': true }, nodeRoots: [], testedRun: null, selection: 'nightly CLI matrix' };
   // A VERSION BUMP AND NOTHING ELSE: the code under it is the code that just passed. Build the
   // binaries (with their smoke), typecheck, and skip the suite the unchanged tree already answered.
-  if (versionOnly) return { full: false, cliRelease: true, cliTests: false, jobs: { ...nothing, checks: true, cli: true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
+  if (versionOnly) return { full: false, cliRelease: true, cliTests: false, jobs: { ...nothing, checks: true, cli: true, 'cli-preview': true }, nodeRoots: [], testedRun: null, selection: 'version-only release' };
   const changed = new Set();
   full ||= paths.length === 0;
   for (const path of paths) {
@@ -137,6 +137,7 @@ export function planCi(paths, { full = false, cliRelease = false, versionOnly = 
   }
   // Release-only, full run or not: the binaries are proved where they are published.
   jobs.cli = cliRelease;
+  jobs['cli-preview'] = cliRelease;
   jobs['reference-compatibility'] = cliRelease;
   // The CLI source suite (node job, shard 1) still guards every CLI change.
   const cliTests = full || affected.has('cli');

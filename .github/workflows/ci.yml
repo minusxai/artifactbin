@@ -49,6 +49,7 @@ jobs:
       api: ${{ steps.select.outputs.api }}
       gates: ${{ steps.select.outputs.gates }}
       cli: ${{ steps.select.outputs.cli }}
+      cli-preview: ${{ steps.select.outputs.cli-preview }}
       reference-compatibility: ${{ steps.select.outputs.reference-compatibility }}
       # Not a job: whether the node job runs the CLI source suite (every CLI change, not only a release).
       cli-tests: ${{ steps.select.outputs.cli-tests }}
@@ -473,6 +474,7 @@ jobs:
         api,
         gates,
         cli,
+        cli-preview,
         reference-compatibility
       ]
     if: always()
@@ -566,10 +568,10 @@ jobs:
       - name: Build compact standalone CLI
         run: npm run build:binary -w services/cli
       - run: npm run test:binary -w services/cli
-      # One home reuses verified runtime/SQL/Chromium caches across all proofs.
-      # Intel's three separate cold homes took 290s sequentially (run 35376111509);
-      # concurrent cold exports timed out. The harness closes preview before export.
+      # Intel acceptance consumes this exact artifact in cli-preview below. The other
+      # platforms fit packaging and acceptance together inside the release-job budget.
       - name: File preview from the actual executable
+        if: matrix.os != 'macos-15-intel'
         working-directory: services/cli
         run: |
           npx playwright install chromium
@@ -586,6 +588,54 @@ jobs:
           # The publisher downloads these from the run that built them, which is now a run that may
           # predate the merge. Anything shorter than the merge window loses the release.
           retention-days: 14
+
+  # Packaging and acceptance are separate bounded jobs on Intel: run 35691844063
+  # spent 561s combining them (249s in acceptance). Keep every proof, the same
+  # binary, and the existing 420s job budget. A failed proof blocks the tested-tree
+  # receipt and release through the test roll-up, including nightly/bump-only runs.
+  cli-preview:
+    needs: [ plan, cli ]
+    if: needs.plan.outputs.cli-preview == 'true'
+    name: CLI (macos-15-intel preview)
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.3
+      # The whole-install cache, and why its key is a normalised lockfile rather than the lockfile
+      # itself: see the `checks` job above, which carries the full note.
+      - run: node scripts/ci.mjs lock-fingerprint
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        id: install
+        with:
+          path: |
+            node_modules
+            services/*/node_modules
+            services/app/public/fonts
+            services/app/lib/data/story/story-font-manifest.json
+          key: install-v4-${{ runner.os }}-${{ runner.arch }}-node22-${{ hashFiles('.ci-cache-key/install.json', 'services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs') }}
+      - if: steps.install.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('node_modules/playwright-core/browsers.json') }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: afbin-macos-15-intel
+          path: services/cli/dist
+      # Artifact transport does not preserve executable permissions. Runtime/SQL/
+      # Chromium archives are consumed by the binary's normal verified downloader.
+      - name: File preview from the uploaded executable
+        working-directory: services/cli
+        run: |
+          chmod +x dist/afbin-darwin-x64
+          npx playwright install chromium
+          node --import tsx scripts/test-preview.ts
 
   # WHAT THIS RUN ACTUALLY COST — and, on a pull request, whether it may cost that.
   #
@@ -616,6 +666,7 @@ jobs:
         api,
         gates,
         cli,
+        cli-preview,
         test,
         reference-compatibility
       ]

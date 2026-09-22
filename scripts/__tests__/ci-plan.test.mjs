@@ -9,8 +9,8 @@ import yaml from 'yaml';
 import { createServer } from 'node:http';
 import { CI_JOBS, CI_MODULES, CLI_BUMP_REFUSAL, VERSION_BUMP_FILES, checkCiResults, cliBumpRequired, isVersionOnlyBump, planCi } from '../lib/ci-plan.mjs';
 
-/** Built and proved only for a release: the four-platform binaries (the Intel proofs ride in that job) and the distributions gate. */
-const RELEASE_JOBS = ['cli', 'reference-compatibility'];
+/** Built and proved only for a release: the four-platform binaries (the Intel proofs consume its artifact) and the distributions gate. */
+const RELEASE_JOBS = ['cli', 'cli-preview', 'reference-compatibility'];
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const script = path.join(root, 'scripts/ci.mjs');
@@ -140,7 +140,7 @@ describe('a release is a version and nothing else', () => {
 
   it('selects the binaries and the typecheck, and nothing that tests an unchanged tree', () => {
     const plan = planCi(VERSION_BUMP_FILES, { versionOnly: true });
-    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['checks', 'cli', 'cli-preview']);
     expect(plan.cliRelease).toBe(true);
     expect(plan.cliTests).toBe(false);
     expect(plan.nodeRoots).toEqual([]);
@@ -150,7 +150,7 @@ describe('a release is a version and nothing else', () => {
 
   it('runs the CLI matrix, and only that, on the nightly', () => {
     const plan = planCi([], { nightly: true });
-    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['cli']);
+    expect(Object.entries(plan.jobs).filter(([, run]) => run).map(([job]) => job)).toEqual(['cli', 'cli-preview']);
     expect(plan.full).toBe(false);
   });
 });
@@ -588,17 +588,17 @@ describe('CI job shape', () => {
 
   it('keeps preview and export proofs mandatory on every executable platform', () => {
     const { jobs } = ci();
-    // One invocation shares its verified runtime cache across preview and exports.
-    expect(jobs['cli-intel-preview'], 'the separate Intel job is gone').toBeUndefined();
-    expect(CI_JOBS).not.toContain('cli-intel-preview');
-    expect(readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')).not.toContain('afbin-macos-15-intel');
+    // One invocation per platform still shares its verified runtime cache across
+    // preview and every export phase; Intel consumes the packaging artifact.
     const proof = jobs.cli.steps.find((step) => step.name === 'File preview from the actual executable');
-    expect(proof).toBeDefined();
-    expect(proof.if).toBeUndefined();
-    expect(proof['working-directory']).toBe('services/cli');
-    expect(proof.run).toContain('node --import tsx scripts/test-preview.ts');
-    // Omitting --phase runs preview and both export phases, including on Intel.
-    expect(proof.run).not.toContain('--phase');
+    expect(proof.if).toBe("matrix.os != 'macos-15-intel'");
+    const intel = jobs['cli-preview'].steps.find((step) => step.name === 'File preview from the uploaded executable');
+    expect(CI_JOBS).toContain('cli-preview');
+    for (const step of [proof, intel]) {
+      expect(step['working-directory']).toBe('services/cli');
+      expect(step.run).toContain('node --import tsx scripts/test-preview.ts');
+      expect(step.run).not.toContain('--phase');
+    }
     expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex((step) => step.run === 'npm run test:binary -w services/cli'));
   });
 
@@ -656,4 +656,13 @@ describe('CI job shape', () => {
     const run = jobs.test.steps.find((step) => step.with?.name === 'tested-run');
     expect(run.if).toContain("github.event_name == 'push'");
   });
+});
+
+it('never accepts an unproved Intel release binary',()=>{
+ for(const options of [{cliRelease:true},{versionOnly:true},{nightly:true}]){
+  const plan=planCi(['services/cli/package.json'],options);
+  expect(plan.jobs['cli-preview']).toBe(true);
+  const results=Object.fromEntries(CI_JOBS.map(job=>[job,plan.jobs[job]?'success':'skipped']));
+  for(const conclusion of ['failure','skipped'])expect(checkCiResults(plan,{...results,'cli-preview':conclusion})).toContain('cli-preview');
+ }
 });

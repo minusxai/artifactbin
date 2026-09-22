@@ -171,6 +171,17 @@ The first command that needs the server opens browser authentication automatical
 connection with owner-only permissions and resumes the command. Run `afbin auth` to sign in
 deliberately; local skills install eagerly on first use and update with `afbin update`.
 
+On remote/headless machines, skip the browser with `afbin auth --email <email>`. It sends an
+email OTP and returns `otp_required` (exit 2); ask the user for the code, then run
+`afbin auth --email <email> --otp <code>` to finish without opening a browser or resending the code.
+Pass the same `--server <origin>` to both commands for another server. This explicitly selects the
+email account, replacing saved credentials only after successful authentication.
+
+If browser launch fails, authentication exits immediately with `browser_unavailable`. Browser
+approval waits at most 45 seconds in automation, or the five-minute pairing window interactively.
+The waiting message and timeout errors recommend email login; retry the original command after
+signing in. Email login does not transfer artifacts owned by a guest browser.
+
 For an artifact created in the browser, run `afbin auth <artifact-url>` (plus `--server <origin>`
 for another server). A connection that can already edit continues immediately. Otherwise the
 owning browser approves connecting the CLI to its identity; guests can choose **Continue as guest**
@@ -257,8 +268,8 @@ assets from successful main CI; unrelated merges leave existing releases unchang
 `npm run release:cli` and `npm run generate:teaching -w services/cli` write — in
 `services/cli/package.json`, `package-lock.json`, `services/app/public/chat/install.sh`,
 `services/app/public/chat/release.json` and `services/cli/src/generated/teaching.json` — CI selects
-only `checks` and the four binary builds, with their smoke and the Intel browser proofs that now run
-inside the Intel build (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
+only `checks`, the four binary builds with their smoke tests, and Intel browser proofs in a
+dependent job consuming the exact uploaded executable (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
 already passed; what a release must prove is that the binaries build and run. Any other file in the
 same change makes it an ordinary run again.
 

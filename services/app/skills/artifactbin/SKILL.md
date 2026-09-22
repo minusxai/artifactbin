@@ -10,7 +10,7 @@ artifactbin publishes agent-written documents people read, edit, annotate and sh
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
 - Missing binary: `curl -fsSL [[ base ]]/chat/install.sh | sh`; it verifies the checksum.
-- Authentication is automatic: afbin signs you in when a command first needs the server — browser approval. With `--yes --json` it prints the approval URL to open, then continues once approved. Credentials are saved in `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
+- Sign-in is automatic via browser approval, even with `--yes`. If remote/headless or browser login fails/times out, ask for email: `afbin auth --email <email>`. Ask for the code: `afbin auth --email <email> --otp <code>`, then retry. Credentials: `~/.artifactbin/hosts/<origin-id>/credentials.env`; never mint or print tokens.
 - For a supplied artifact: `afbin pull <url-or-id> --output report.jsx`, edit the file, `afbin push report.jsx`. For a new artifact, write the file and push it. Share its returned URL.
 - Several people — shared, friends, a team, each person, sign-up, vote, RSVP, who did what: read `afbin help apps` BEFORE picking a data shape: accounts, never typed names.
 - Few turns: `afbin help <template>`, then push a FIRST version within three calls of the pull — title and section headings, one line each — and fill the sections in later pushes; a person is waiting on a blank page. A successful push IS the verification: the head is your file. Skip pulling, diffing, exporting, screenshotting or grepping it afterwards; filling sections is not re-checking.

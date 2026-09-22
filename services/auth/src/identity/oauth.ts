@@ -3,7 +3,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import {API_RESOURCE_PATH,ARTIFACT_SCOPE,type Queryable} from '@artifactbin/contracts';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000;
-export const ACCESS_TOKEN_TTL_SECONDS = 6 * 60 * 60;
+// Daily access tokens; longer-lived rotating refresh credentials preserve the connection.
+export const ACCESS_TOKEN_TTL_SECONDS = 24 * 60 * 60;
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export {ARTIFACT_SCOPE} from '@artifactbin/contracts';
 
