@@ -61,24 +61,42 @@ function SqlField({ name, sql, onCommit, onFocus, onBlur }: {
 /** The embeds a query powers, as chips; hovering one points at it alone. */
 function Powers({ bound, onSpotlight }: { bound: BoundEmbed[]; onSpotlight: (paths: string[] | null) => void }) {
   if (bound.length === 0) return <span className="font-mono text-[11px] text-faint">powers nothing yet</span>;
+  /*
+   * A TITLED embed is worth naming — "Bug, feature or polish chart" tells you
+   * what the query is for. Six chips all reading "number" tell you nothing six
+   * times, so untitled ones collapse to a count of their kind. Hover still
+   * points at them, now all at once, which is the useful half of the chip.
+   */
+  const titled = bound.filter((b) => b.label);
+  const rest = bound.filter((b) => !b.label);
+  const byKind = new Map<string, string[]>();
+  for (const b of rest) {
+    const kind = kindOf(b.tag);
+    byKind.set(kind, [...(byKind.get(kind) ?? []), b.path]);
+  }
+  const chip = (key: string, text: string, sub: string | null, paths: string[]) => (
+    <span
+      key={key}
+      aria-label={`Spotlight ${text}`}
+      onMouseEnter={() => onSpotlight(paths)}
+      onMouseLeave={() => onSpotlight(null)}
+      className="inline-flex cursor-default items-baseline gap-1 rounded-[4px] border border-edge bg-raised px-1.5 py-0.5 text-fg hover:border-edge-bright"
+    >
+      <span>{text}</span>
+      {sub && <span className="text-faint">{sub}</span>}
+    </span>
+  );
   return (
     <div className="flex flex-wrap items-center gap-1 font-mono text-[11px]">
       <span className="text-faint">powers</span>
-      {bound.map((b) => (
-        <span
-          key={b.path}
-          aria-label={`Spotlight ${b.label ?? kindOf(b.tag)}`}
-          onMouseEnter={() => onSpotlight([b.path])}
-          onMouseLeave={() => onSpotlight(null)}
-          className="inline-flex cursor-default items-baseline gap-1 rounded-[4px] border border-edge bg-raised px-1.5 py-0.5 text-fg hover:border-edge-bright"
-        >
-          <span>{b.label ?? kindOf(b.tag)}</span>
-          {b.label && <span className="text-faint">{kindOf(b.tag)}</span>}
-        </span>
-      ))}
+      {titled.map((b) => chip(b.path, b.label!, kindOf(b.tag), [b.path]))}
+      {[...byKind].map(([kind, paths]) =>
+        chip(kind, paths.length === 1 ? kind : `${paths.length} ${kind}s`, null, paths),
+      )}
     </div>
   );
 }
+
 
 const cellText = (value: unknown): string =>
   value === null || value === undefined ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
@@ -148,16 +166,18 @@ function Cell({ cell, onSqlChange, onSpotlight, land, selected }: {
     <section
       ref={section}
       aria-label={`Query $${cell.name}`}
+      /*
+       * The header wears the accent because a query IS one of the named, live
+       * things the accent marks everywhere else — the active view, the current
+       * version. Which cell is CURRENT then needs a different signal, or every
+       * header saying "current" says nothing: that is the left stripe.
+       */
       className={`my-3 overflow-hidden rounded-[6px] border bg-surface ${
-        selected ? 'border-accent/40' : 'border-edge'
+        selected ? 'border-accent border-l-[3px]' : 'border-edge'
       }`}
     >
-      <header
-        className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-3 py-1.5 ${
-          selected ? 'border-accent/30 bg-accent-soft' : 'border-edge bg-raised'
-        }`}
-      >
-        <span className={`font-mono text-xs font-medium ${selected ? 'text-accent' : 'text-fg'}`}>${cell.name}</span>
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-accent/20 bg-accent-soft px-3 py-1.5">
+        <span className="font-mono text-xs font-medium text-accent">${cell.name}</span>
         <Powers bound={cell.bound} onSpotlight={point} />
       </header>
 
@@ -298,8 +318,8 @@ export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, fo
                 the server and a run over rows already in the page. */}
             <p className="mb-1.5 font-sans text-[10px] leading-snug text-faint">
               {group.key === LOCAL
-                ? 'no source — runs in the page over other queries'
-                : 'stored — runs on the server'}
+                ? 'runs in the page over other queries'
+                : 'runs on the server'}
             </p>
             <div className="flex items-baseline justify-between gap-2 border-b border-edge px-1.5 pb-0.5 font-mono text-[10px] uppercase tracking-wide text-faint">
               <span>query</span>
