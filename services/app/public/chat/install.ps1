@@ -60,9 +60,9 @@ try {
   $stagedExe = Join-Path $Dir ('afbin-'+[Guid]::NewGuid().ToString()+'.exe')
   Copy-Item -LiteralPath $download -Destination $stagedExe
   try {
-    if (Test-Path -LiteralPath $exe) { [IO.File]::Replace($stagedExe, $exe, $null) }
+    if (Test-Path -LiteralPath $exe) { [IO.File]::Replace($stagedExe, $exe, [System.Management.Automation.Language.NullString]::Value) }
     else { [IO.File]::Move($stagedExe, $exe) }
-  } catch { throw 'Could not replace afbin. Close all afbin processes and rerun this installer; the existing executable is unchanged.' }
+  } catch { throw ('Could not replace afbin. Close all afbin processes and rerun this installer; the existing executable is unchanged. ' + $_.Exception.Message) }
   $userPath = [Environment]::GetEnvironmentVariable('Path','User')
   $parts = @($userPath -split ';' | Where-Object { $_ -and $_.TrimEnd('\') -ine $Dir.TrimEnd('\') })
   [Environment]::SetEnvironmentVariable('Path', (($parts + $Dir) -join ';'), 'User')

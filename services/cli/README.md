@@ -30,7 +30,7 @@ Windows 11 x64 (PowerShell 5.1 or 7):
 
 ```powershell
 Invoke-WebRequest https://app.artifactbin.dev/chat/install.ps1 -OutFile install-afbin.ps1
-& .\install-afbin.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install-afbin.ps1
 ```
 
 This installs for the current user in `%LOCALAPPDATA%\artifactbin\bin`, verifies both download
@@ -38,8 +38,8 @@ and executable checksums, adds the directory to user PATH and installs selected 
 No administrator or Node installation is needed. Open a new terminal afterward. Use `-Yes`
 for unattended installation, `-Harness codex` to select a skill, `-Dir` for another destination,
 and `-Version X.Y.Z` for a specific release. Use your own server's `/chat/install.ps1` URL for
-self-hosted installations. If your PowerShell policy blocks downloaded scripts, follow your
-organization's script policy; inspect the script before unblocking it with `Unblock-File`.
+self-hosted installations. The command allows this script for one process without changing your
+saved execution policy; organization-enforced policies still apply.
 
 To upgrade Windows, close every afbin process and rerun the installer. `afbin update` explains
 this requirement; background self-updates are disabled. Windows ARM64 and background remote

@@ -105,7 +105,7 @@ export default function GetStarted({ heading = true, frame = true }: { heading?:
             label="Copy the CLI install command"
           />
           <p className="mt-3 text-xs text-muted">Windows x64 · PowerShell</p>
-          <CopyBlock className="mt-2" text={`Invoke-WebRequest ${origin || DEFAULT_SERVER}/chat/install.ps1 -OutFile install-afbin.ps1\n& .\\install-afbin.ps1`} label="Copy the Windows CLI install command" />
+          <CopyBlock className="mt-2" text={`Invoke-WebRequest ${origin || DEFAULT_SERVER}/chat/install.ps1 -OutFile install-afbin.ps1\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File .\\install-afbin.ps1`} label="Copy the Windows CLI install command" />
           <p className="mt-2 text-xs text-muted">Open a new terminal after installation.</p>
           {/* WHICH AGENTS, as badges — mark left, name right — under the
             * install command that puts their skills there. The marks stay in

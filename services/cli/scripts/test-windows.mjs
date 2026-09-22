@@ -35,7 +35,7 @@ clientEnv.CLI__SERVICE_BASE_URL=releaseBase;
 const installerFile=join(root,'install.ps1');
 const installerSource=await readFile(join(repo,'services/app/public/chat/install.ps1'),'utf8');
 await writeFile(installerFile,installerSource.replace(/^\$Origin = .*$/m,()=>`$Origin = '${base}'`).replace(/^\$ReleaseRoot = .*$/m,()=>`$ReleaseRoot = '${releaseBase}'`));
-const installer=(shell=powershell)=>exec(shell,['-NoProfile','-NonInteractive','-File',installerFile,'-Dir',install,'-Yes','-Harness','codex'],{env:clientEnv,timeout:180000,maxBuffer:1048576});
+const installer=(shell=powershell)=>exec(shell,['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',installerFile,'-Dir',install,'-Yes','-Harness','codex'],{env:clientEnv,timeout:180000,maxBuffer:1048576});
 async function cli(args,{approve=false,cwd=workspace}={}){
  const child=spawn(exe,[...args,'--server',base,'--yes','--json'],{cwd,env:clientEnv,stdio:['ignore','pipe','pipe']});
  let stdout='',stderr='',approved=false,checking=false,approvalError;
@@ -55,7 +55,9 @@ async function cli(args,{approve=false,cwd=workspace}={}){
 }
 try{
  stage='privilege check';const elevated=await ps('([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)');assert.equal(elevated.stdout.trim(),'False');record('Installer and CLI run as a separate standard user, not administrator');
- stage='install';await installer();record('PowerShell 5.1 install: download, checksum, private state and configuration');
+ await ps('Set-ExecutionPolicy -Scope CurrentUser Restricted -Force');
+ stage='install';await installer();
+ assert.equal((await ps('Get-ExecutionPolicy -Scope CurrentUser')).stdout.trim(),'Restricted');record('Install command works under Restricted policy without changing it');record('PowerShell 5.1 install: download, checksum, private state and configuration');
  assert.ok((await readFile(join(profile,'.codex/skills/artifactbin/SKILL.md'),'utf8')).includes('artifactbin'));record('Installer installs the selected Codex skill');
  const version=await cli(['--version']);assert.equal(version.version,JSON.parse(await readFile('services/cli/package.json')).version);record('Standalone afbin.exe runs outside checkout without Node on PATH');
  stage='PATH';
