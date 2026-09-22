@@ -27,7 +27,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { Check, Code, Database, Undo2, Redo2, Paintbrush } from 'lucide-react';
+import { Check, Code, Database, History, Undo2, Redo2, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
@@ -191,6 +191,8 @@ export default function InPlaceEditor({
   const [dataflowPending, setDataflowPending] = useState(false);
   /** An older version, shown in the document itself. Read-only while it is up. */
   const [preview, setPreview] = useState<ArtifactVersionSnapshot | null>(null);
+  /** PHONE ONLY: there is no rail to list versions in, so they keep the drawer. */
+  const [historyOpen, setHistoryOpen] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   /** Read by callbacks that run after an await, when `source` may have moved on. */
@@ -1056,7 +1058,23 @@ export default function InPlaceEditor({
           <span role="status" className="hidden text-xs text-muted md:inline">
             {live.status || (live.pending ? 'Saving…' : `v${live.version} · Saved`)}
           </span>
-          {/* version history moved to the left rail, beside the document's other parts. */}
+          {/* Version history lives in the left rail — except on a phone, which
+              draws no rail, so the drawer and its switch stay for that width. */}
+          {phone && (
+            <Tooltip content="version history">
+              <button
+                type="button"
+                aria-label="Open version history"
+                aria-expanded={historyOpen}
+                onClick={() => setHistoryOpen((v) => !v)}
+                className={`inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
+                  historyOpen ? 'border-accent/40 bg-accent-soft text-accent' : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
+                }`}
+              >
+                <History size={12} className="shrink-0" />
+              </button>
+            </Tooltip>
+          )}
           {/* The way out is offered TWICE on purpose — here and at the foot of
               the rail — because it is the one action you may want from
               wherever you are. They share an accessible name, which is honest
@@ -1320,6 +1338,19 @@ export default function InPlaceEditor({
         </aside>
       )}
 
+      {phone && historyOpen && (
+        <VersionHistory
+          topOffset={barTop + barH}
+          versions={history.versions ?? []}
+          currentVersion={live.version}
+          previewing={preview?.version ?? null}
+          onPreview={(v: number) => void previewVersion(v)}
+          onRestore={(v: number) => void restoreVersion(v)}
+          onBackToCurrent={backToCurrent}
+          onClose={() => setHistoryOpen(false)}
+          busy={history.busy}
+        />
+      )}
     </div>
   );
 }
