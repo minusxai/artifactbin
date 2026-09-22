@@ -16,7 +16,7 @@ const profile=join(root,'profile'),workspace=join(root,'workspace with spaces'),
 await mkdir(workspace,{recursive:true});await mkdir(profile,{recursive:true});await mkdir(join(root,'temp'));process.env.TEMP=join(root,'temp');process.env.TMP=join(root,'temp');
 const powershell=join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
 const systemPath=[join(process.env.SystemRoot,'System32'),join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0')].join(';');
-const clientEnv={...process.env,TEMP:join(root,'temp'),TMP:join(root,'temp'),PATH:systemPath,Path:systemPath,USERPROFILE:profile,HOME:profile,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'off'};
+const clientEnv={...process.env,TEMP:join(root,'temp'),TMP:join(root,'temp'),PATH:systemPath,Path:systemPath,PSModulePath:join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','Modules'),USERPROFILE:profile,HOME:profile,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'off'};
 delete clientEnv.NODE_PATH;delete clientEnv.NODE_OPTIONS;delete clientEnv.ARTIFACTBIN_TOKEN;delete clientEnv.ARTIFACTBIN_REFRESH_TOKEN;
 const evidence=[];let stage='start',host,hostLog='',corrupt=false;
 const record=name=>{evidence.push(name);console.log('ok '+name);};
