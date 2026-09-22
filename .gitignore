@@ -60,3 +60,7 @@ services/app/public/libraries/
 
 # Finder metadata is never a project asset.
 .DS_Store
+
+# Built from authored references and command registries.
+/services/cli/src/generated/teaching.json
+/services/cli/src/generated/teaching.json.*.tmp

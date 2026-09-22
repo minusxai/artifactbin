@@ -89,10 +89,11 @@ Run these from the repository root. Keep this list current.
 
 ## Change checks
 
-- CLI releases: `npm run release:cli` + `npm run generate:teaching -w services/cli`, in the CLI's
+- CLI releases: `npm run release:cli` in the CLI's
   PR or dispatched as `Release afbin` (version straight to main). `checks` refuses a CLI PR without
   a bump, a version-only diff builds only the binaries, and a tree PR CI passed is not re-tested on
   merge. [Steps](services/cli/README.md).
+  Teaching is generated before install/check/dev/build consumers; never commit `services/cli/src/generated/teaching.json`.
   Successful main CI publishes the tested assets; deploys must advance their source pin and verify
   the release before serving its installer.
 - Schema changes update `services/app/lib/schema.ts`, schema ownership tests, and generated SQL via

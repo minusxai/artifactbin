@@ -17,7 +17,9 @@
     "postinstall": "node scripts/copy-assets.mjs",
     "generate-story-ui-classes": "tsx scripts/generate-story-ui-classes.ts",
     "generate:theme-previews": "tsx -r ../../scripts/register-yaml.cjs scripts/generate-theme-previews.ts",
-    "generate:og": "tsx scripts/generate-og-image.ts"
+    "generate:og": "tsx scripts/generate-og-image.ts",
+    "prebuild": "node ../cli/scripts/generate-teaching.mjs",
+    "prevalidate": "node ../cli/scripts/generate-teaching.mjs"
   },
   "dependencies": {
     "@artifactbin/contracts": "0.1.0",

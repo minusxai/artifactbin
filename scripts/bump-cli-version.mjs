@@ -25,4 +25,4 @@ await writeFile(pkgPath, pkgText.replace(`"version": "${pkg.version}"`, `"versio
 await writeFile('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
 await writeFile(installerPath, installer.replace(`version=${pkg.version}\n`, `version=${next}\n`).replace(`--version ${pkg.version}`, `--version ${next}`));
 await writeFile(pointerPath, pointerText.replace(`"version": "${pkg.version}"`, `"version": "${next}"`));
-console.log(`afbin ${pkg.version} → ${next}. Run \`npm run generate:teaching -w services/cli\` and land both with the change that needs them; successful main CI publishes the tested release assets.`);
+console.log(`afbin ${pkg.version} → ${next}. Land the version files with the change that needs them; teaching is generated at build time; successful main CI publishes the tested release assets.`);

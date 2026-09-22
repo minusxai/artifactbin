@@ -266,23 +266,23 @@ The account and the app server can access the terminal content and input. Keep t
 CI builds and smoke-tests macOS/Linux on arm64/x64. A version bump publishes the exact
 assets from successful main CI; unrelated merges leave existing releases unchanged.
 
-**A release is a version and nothing else.** When the whole diff is the six version lines
-`npm run release:cli` and `npm run generate:teaching -w services/cli` write — in
+**A release is a version and nothing else.** When the whole diff is the version lines
+`npm run release:cli` writes — in
 `services/cli/package.json`, `package-lock.json`, `services/app/public/chat/install.sh`,
-`services/app/public/chat/release.json` and `services/cli/src/generated/teaching.json` — CI selects
+`services/app/public/chat/release.json` — CI selects
 only `checks`, the four binary builds with their smoke tests, and Intel browser proofs in a
 dependent job consuming the exact uploaded executable (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
 already passed; what a release must prove is that the binaries build and run. Any other file in the
 same change makes it an ordinary run again.
 
 **A CLI source change without a bump is refused.** `checks` fails a pull request that touches
-`services/cli/src/**` or `services/cli/scripts/**` and carries no version bump, naming the two
-commands below. Prose and the CLI's own tests are exempt.
+`services/cli/src/**` or `services/cli/scripts/**` and carries no version bump, naming the release
+command below. Prose and the CLI's own tests are exempt.
 
 1. Run `npm run release:cli -- [patch|minor|major]` from the repository root (patch by default).
    This updates the CLI package, lockfile, installer and release pointer together.
-2. Run `npm run generate:teaching -w services/cli` and land both in the pull request that changes
-   the CLI. For a bump-only release of what is already on main, dispatch `Release afbin` instead: it
+2. Land the version files in the pull request that changes the CLI. Teaching is generated
+   automatically from authored references and command registries; do not commit `src/generated/teaching.json`. For a bump-only release of what is already on main, dispatch `Release afbin` instead: it
    commits the version straight to main (admin PAT), and that push selects only `checks` and the
    four binary builds.
 3. Successful main CI triggers `Release tested afbin CLI`, which tags that exact commit and

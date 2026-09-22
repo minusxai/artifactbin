@@ -1,12 +1,13 @@
 /** Build-only projection: authoring references + executable command/operation registries. */
-import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
+import {readFileSync,mkdirSync,writeFileSync,existsSync,renameSync,rmSync} from 'node:fs';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {commands,commandHelp} from '../src/commands';
 import {diagnosticsHelp} from '../src/diagnostics';
 import {manPage} from '../src/man';
-import {skillExample,skillFileWithFrontmatter,skillTree} from '../../app/lib/skills';
-import {renderSkill,condenseForBundle,stripBundleMarkers} from '../../app/lib/skills/render';
+import {buildSkillTree,loadSkillSources} from '../../app/lib/skills/tree';
+import {skillFileWithFrontmatter} from '../../app/lib/skills/serve';
+import {skillExample,renderSkill,condenseForBundle,stripBundleMarkers} from '../../app/lib/skills/render';
 import {CLI_PROTOCOL_VERSION} from '@artifactbin/contracts';
 import {TEACHING_BASE} from '../src/teaching-origin';
 const root=fileURLToPath(new URL('../',import.meta.url));
@@ -16,7 +17,9 @@ const root=fileURLToPath(new URL('../',import.meta.url));
 // to talk to one particular deployment.
 const BASE=TEACHING_BASE;
 const example=skillExample();
-const brief=skillTree().get('artifactbin/SKILL.md');
+// The authoring compiler must never import the index that consumes its output.
+const tree=buildSkillTree(loadSkillSources());
+const brief=tree.get('artifactbin/SKILL.md');
 if(!brief)throw new Error('skills/artifactbin/SKILL.md is missing');
 // The brief keeps its frontmatter: the harness preloads the name and description, then loads the body on trigger.
 const files:Record<string,string>={'SKILL.md':skillFileWithFrontmatter(brief,renderSkill(brief,{base:BASE}))};
@@ -26,7 +29,7 @@ const files:Record<string,string>={'SKILL.md':skillFileWithFrontmatter(brief,ren
  * actually mark something appear here, so the bundle carries no duplicate of an unmarked file.
  */
 const condensed:Record<string,string>={};
-for(const file of skillTree().files){
+for(const file of tree.files){
  if(!file.ref||file.file.startsWith('publishing'))continue;
  const path=`references/${file.file}`;
  files[path]=renderSkill(file,{base:BASE});
@@ -71,6 +74,13 @@ for(const [path,text] of Object.entries(files)){
 const version=JSON.parse(readFileSync(join(root,'package.json'),'utf8')).version;
 const contents=JSON.stringify({version,protocol:CLI_PROTOCOL_VERSION,files,condensed,example,man:manPage()},null,2)+'\n';
 const target=join(root,'src/generated/teaching.json');
-if(process.argv.includes('--check')){if(readFileSync(target,'utf8')!==contents)throw new Error('Bundled teaching is stale; run npm run generate:teaching -w services/cli.');}
-else{mkdirSync(dirname(target),{recursive:true});writeFileSync(target,contents);}
+const previous=existsSync(target)?readFileSync(target,'utf8'):null;
+if(process.argv.includes('--check')){if(previous!==contents)throw new Error('Bundled teaching is missing or stale; run npm run generate:teaching -w services/cli.');}
+else if(previous!==contents){
+ mkdirSync(dirname(target),{recursive:true});
+ // Readers see a complete bundle; unchanged runs leave watcher timestamps alone.
+ const temporary=`${target}.${process.pid}.tmp`;
+ try{writeFileSync(temporary,contents);renameSync(temporary,target);}
+ finally{rmSync(temporary,{force:true});}
+}
 console.log(`Generated local teaching: ${Object.keys(files).length} files, ${Buffer.byteLength(contents)} bytes.`);

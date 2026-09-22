@@ -1,6 +1,6 @@
 {
   "name": "@artifactbin/cli",
-  "version": "0.1.54",
+  "version": "0.1.55",
   "type": "module",
   "license": "Apache-2.0",
   "description": "Local files, published artifacts and agent authoring",
@@ -31,7 +31,8 @@
     "build:binary": "node scripts/binary.mjs",
     "postinstall": "node scripts/prepare-pty.mjs",
     "test:binary": "node scripts/test-local-binary.mjs && node scripts/test-binary.mjs",
-    "generate:teaching": "node scripts/generate-teaching.mjs"
+    "generate:teaching": "node scripts/generate-teaching.mjs",
+    "pretest": "node scripts/generate-teaching.mjs"
   },
   "dependencies": {
     "@xterm/addon-serialize": "0.14.0",
