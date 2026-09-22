@@ -10,8 +10,10 @@ and an independently captured rectangle; cross-block drags are not clipped to th
 ## Boundaries
 
 - `lib/capture/screen.ts`: browser resources behind `beginCapture`, `capture`, `dispose`.
-  Capture Handle verifies the exact tab. Region Capture crops a transparent rectangle;
-  canvas cropping is the fallback only on a verified tab. Frames use actual source
+  Capture Handle verifies the exact tab. ImageCapture reads a fresh full-tab bitmap
+  and canvas crops the selected rectangle; a video reader remains for verified-tab
+  browsers without ImageCapture. Native Region Capture is avoided: real Chrome
+  probes returned successful crop promises but then stopped delivering frames. Frames use actual source
   dimensions, not devicePixelRatio. Streams stop on completion, failure, navigation,
   source change or timeout. Capture is invoked before asynchronous imports.
 - `use-comment-capture.ts`: draft lifecycle, explicit retry/upload/text-only recovery,
@@ -46,3 +48,15 @@ CI-only `screenshot-comments` gate exercises Chromium native tab capture and the
 Firefox/WebKit upload path, including brush markup, comment save, thumbnail loading
 and reload. It is run by the normal gate manifest. Real Chrome picker acceptance
 requires a person; an automated chooser in CI tests a separate permission setup.
+
+## Capture timeout investigation (22 September 2026)
+
+Repeated native Region Capture probes on local Chrome at a fractional pixel ratio
+produced two frames, then stalled despite successful crop promises and a live,
+unmuted track. Both video-frame callbacks and ImageCapture reads stalled; retaining
+all crop targets did not prevent it. The precise Chromium internal cause is unknown.
+A full-tab ImageCapture probe completed 12/12 local canvas crops without a timeout.
+Only the cropped image is encoded/uploaded; full-tab bitmaps are released after use,
+including results arriving after a timeout. Existing `region` metadata remains readable.
+Per-stage performance measures distinguish permission, playback, painting, frame
+readout and encoding. They contain timing/outcome/dimensions, never screenshot pixels.

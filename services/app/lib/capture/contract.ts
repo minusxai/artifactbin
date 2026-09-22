@@ -15,7 +15,7 @@ export interface CaptureSession {
   dispose(): void;
 }
 export type CaptureFailure = 'unsupported' | 'cancelled' | 'wrong-source' | 'ended' | 'timeout' | 'geometry';
-export type CaptureStage = 'permission' | 'playback' | 'initial-frame' | 'crop-target' | 'crop-apply' | 'cropped-frame' | 'full-frame' | 'encode';
+export type CaptureStage = 'permission' | 'playback' | 'initial-frame' | 'paint' | 'track-frame' | 'full-frame' | 'encode';
 export class CaptureError extends Error {
   constructor(public readonly code: CaptureFailure, public readonly stage?: CaptureStage) { super(code); this.name = 'CaptureError'; }
 }
