@@ -12,6 +12,7 @@ import { artifactToWireWithAnnotations, replaceArtifactFromRequest } from '@/lib
 import { getArtifactFor } from '@/lib/artifacts';
 import {updateMetadataFromBody} from '@/lib/metadata-wire';
 import { browserActor } from '@/lib/auth';
+import { canReadArtifact, getArtifactById } from '@/lib/artifacts';
 import { trashArtifactFor } from '@/lib/trash';
 import { actorForArtifacts } from '@/lib/viewer';
 import { baseUrl, json, readJson, unauthorized } from '@/lib/http';
@@ -30,7 +31,27 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const row = await getArtifactFor(scoped, id);
   if (!row) return json({ error: 'not_found' }, 404);
-  return json(await artifactToWireWithAnnotations(row, baseUrl(request)));
+  const browser = await browserActor(request);
+  const viewer = browser instanceof Response ? null : browser.viewer ?? null;
+  const wire = await artifactToWireWithAnnotations(row, baseUrl(request));
+  // The EDITOR loads through here, and it names a dataset in the data view —
+  // "C1kWy2" names nothing to a person. artifactToWire has no viewer to check
+  // access with, so the join happens where one exists: a ref the viewer may
+  // not read keeps its id alone rather than leaking what it is called.
+  const refs = (wire as { refs?: Array<{ id: string; kind: string }> }).refs;
+  if (Array.isArray(refs)) {
+    (wire as { refs?: unknown }).refs = await Promise.all(refs.map(async (ref) => {
+      // DATASETS only. The data view is the one place a ref is named, and it
+      // names datasets; an image-heavy document would otherwise pay a lookup
+      // per picture on every editor load to answer a question nobody asks.
+      if (ref.kind !== 'dataset') return ref;
+      const target = await getArtifactById(ref.id);
+      return target && (await canReadArtifact(target, viewer))
+        ? { ...ref, title: target.title ?? null }
+        : ref;
+    }));
+  }
+  return json(wire);
 }
 
 /**

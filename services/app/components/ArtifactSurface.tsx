@@ -98,7 +98,7 @@ export interface ArtifactSurfaceProps {
   source: string | null;
   /** meta scalars the editor needs, so entering edit mode costs no round trip. */
   template: string | null;
-  refs: Array<{ id: string; kind: string }>;
+  refs: Array<{ id: string; kind: string; title?: string | null }>;
   /** The document's server-run dataflow (lib/artifacts dataflowForRow) — seeds the editor's canvas. */
   dataflow?: StoryIslandDataflow | null;
   /**
@@ -646,7 +646,13 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
     exitEdit();
   }, [exitEdit]);
 
-  const railInset = railOpen && !phone ? RIGHT_RAIL_W : 0;
+  /*
+   * ONE reservation for the right edge. Comments and the editor's inspector
+   * share that column by design — same width, higher layer — so the page takes
+   * the larger of the two, never the sum.
+   */
+  const [editorRightInset, setEditorRightInset] = useState(0);
+  const railInset = Math.max(railOpen && !phone ? RIGHT_RAIL_W : 0, phone ? 0 : editorRightInset);
   /*
    * The EDITOR's left rail and whichever panel it has open. Reserved exactly as
    * the comments rail is on the right: the document narrows rather than being
@@ -858,6 +864,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             initialSelectionPath={initialEditSelectionPath}
             onComment={canEdit ? commentOnSelection : undefined}
             onLeftInsetChange={setEditorLeftInset}
+            onRightInsetChange={setEditorRightInset}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}

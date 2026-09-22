@@ -186,6 +186,9 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
       theme: design.theme,
       colorMode: design.colorMode,
       template: meta.template ?? null,
+      // Ids only: the data view that names a dataset is EDIT-only, and it
+      // loads through /api/my/artifacts/:id where the join happens. A reader
+      // never sees a ref's title, so nobody's page pays for the lookups.
       refs: meta.refs ?? [],
       // Paint first: the DECLARATIONS, not the rows. The page's copy exists to
       // seed the editor, and the editor runs a draft's queries itself — so

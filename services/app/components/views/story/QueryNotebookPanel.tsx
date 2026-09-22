@@ -25,6 +25,8 @@ export interface QueryNotebookPanelProps {
   onSpotlight?: (paths: string[]) => void;
   /** The cell to land on (the chart inspector's "edit in queries"): scrolled to, its SQL focused. */
   focus?: string | null;
+  /** Dataset id -> its title, from the document's refs. A raw id names nothing to a person. */
+  titles?: Record<string, string | null>;
 }
 
 /** What a reader calls the thing: the kit's tags in plain words, the rest as written. */
@@ -280,7 +282,7 @@ function useDatasetShapes(ids: string[]): Record<string, DatasetShape> {
   return shapes;
 }
 
-export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, focus }: QueryNotebookPanelProps) {
+export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, focus, titles = {} }: QueryNotebookPanelProps) {
   const groups = sourcesOf(cells).map((key) => ({
     key,
     cells: cells.filter((c) => (c.source ?? LOCAL) === key),
@@ -311,7 +313,7 @@ export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, fo
         {groups.map((group) => (
           <div key={group.key} className="mb-5">
             <p className="font-mono text-[11px] uppercase tracking-wide text-faint">
-              {group.key === LOCAL ? 'derived' : `dataset · ${group.key}`}
+              {group.key === LOCAL ? 'derived' : `dataset · ${titles[group.key] ?? group.key}`}
             </p>
             {/* A bare group of names does not say what KIND of query is in it;
                 one line does, and it is the difference between a round trip to
@@ -350,7 +352,16 @@ export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, fo
             <div className="flex flex-col gap-2">
               {datasets.map((group) => (
                 <div key={group.key} className="rounded-[4px] border border-edge p-3">
-                  <p className="font-mono text-[12px] text-accent">{group.key}</p>
+                  {/* The dataset is a REFERENCE, so it behaves like one: it opens. */}
+                  <a
+                    href={`/a/${group.key}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[12px] text-accent underline-offset-2 hover:underline"
+                  >
+                    {titles[group.key] ?? group.key}
+                  </a>
+                  {titles[group.key] && <p className="font-mono text-[10px] text-faint">{group.key}</p>}
                   <p className="mt-1 font-sans text-[11px] text-muted">
                     read by {group.cells.length} {group.cells.length === 1 ? 'query' : 'queries'} ·{' '}
                     {group.cells.map((c) => c.name).join(', ')}
