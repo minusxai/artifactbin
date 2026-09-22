@@ -73,7 +73,8 @@ jobs:
         run: npm.cmd run build:runtime
       - name: Exercise installer and CLI against the real local host
         timeout-minutes: 8
-        run: node docs/proposals/windows-support/candidate-check.mjs
+        shell: pwsh
+        run: ./docs/proposals/windows-support/run-candidate.ps1
       - name: Preserve candidate scope and verification evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -83,4 +84,5 @@ jobs:
             .agent/windows-candidate/scope.json
             .agent/windows-candidate/results.json
             .agent/windows-candidate/host.log
+            .agent/windows-candidate/standard-user*.log
           if-no-files-found: warn

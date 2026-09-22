@@ -6,18 +6,17 @@ import {once} from 'node:events';
 import {createServer} from 'node:http';
 import {mkdtemp,mkdir,readFile,writeFile,readdir,rm} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
-import {tmpdir} from 'node:os';
 import {createHash,randomBytes} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 const exec=promisify(execFile),repo=resolve('.'),out=resolve('.agent/windows-candidate');
-const root=await mkdtemp(join(tmpdir(),'afbin candidate é '));
+const root=await mkdtemp(join(out,'afbin candidate é '));
 const profile=join(root,'profile'),workspace=join(root,'workspace with spaces'),state=join(profile,'.artifactbin'),install=join(root,'installed cli');
-await mkdir(workspace,{recursive:true});await mkdir(profile,{recursive:true});
+await mkdir(workspace,{recursive:true});await mkdir(profile,{recursive:true});await mkdir(join(root,'temp'));
 const powershell=join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe');
 const systemPath=[join(process.env.SystemRoot,'System32'),join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0')].join(';');
-const clientEnv={...process.env,PATH:systemPath,Path:systemPath,USERPROFILE:profile,HOME:profile,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'off'};
+const clientEnv={...process.env,TEMP:join(root,'temp'),TMP:join(root,'temp'),PATH:systemPath,Path:systemPath,USERPROFILE:profile,HOME:profile,ARTIFACTBIN_HOME:state,ARTIFACTBIN_SKILLS:'off',CLI__AUTO_UPDATE:'off'};
 delete clientEnv.ARTIFACTBIN_TOKEN;delete clientEnv.ARTIFACTBIN_REFRESH_TOKEN;
-const evidence=[];let stage='start',host,hostLog='',corrupt=false;const secrets=[];
+const evidence=[];let stage='start',host,hostLog='',corrupt=false;
 const record=name=>{evidence.push(name);console.log('ok '+name);};
 const ps=async(script)=>exec(powershell,['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{env:clientEnv,timeout:30000});
 const oldPath=(await ps("[Environment]::GetEnvironmentVariable('Path','User')")).stdout.trimEnd();
@@ -50,8 +49,8 @@ async function cli(args,{approve=false,cwd=workspace}={}){
  finally{clearTimeout(deadline);if(timer)clearInterval(timer);}
 }
 try{
+ stage='privilege check';const elevated=await ps('([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)');assert.equal(elevated.stdout.trim(),'False');record('Installer and CLI run as a separate standard user, not administrator');
  stage='install';await installer();record('PowerShell 5.1 install: download, checksum, private state and configuration');
- assert.rejects; // Assertions below execute the installed bytes, never the source entry.
  const version=await cli(['--version']);assert.equal(version.version,JSON.parse(await readFile('services/cli/package.json')).version);record('Standalone afbin.exe runs outside checkout without Node on PATH');
  stage='PATH';
  const found=await ps(`$env:Path = [Environment]::GetEnvironmentVariable('Path','User')+';'+$env:SystemRoot+'\\System32'; (Get-Command afbin.exe).Source`);
@@ -89,5 +88,5 @@ try{
  await new Promise(r=>release.close(r));
  await rm(root,{recursive:true,force:true,maxRetries:3,retryDelay:200}).catch(()=>{});
 }
-await writeFile(join(out,'results.json'),JSON.stringify({status:'passed',platform:process.platform,node:process.version,evidence,limitations:['Hosted Windows Server 2022 runner, not clean Windows 11 desktop','Runner identity, not yet a separate standard user','Browser-launch process invoked; approval posted by harness to real consent route','Local SQL/Chromium/preview service packages not included in this core candidate']},null,2));
+await writeFile(join(out,'results.json'),JSON.stringify({status:'passed',platform:process.platform,node:process.version,evidence,limitations:['Hosted Windows Server 2022 runner, not clean Windows 11 desktop','Browser-launch process invoked; approval posted by harness to real consent route','Local SQL/Chromium/preview service packages not included in this core candidate']},null,2));
 process.exit(0);

@@ -7,7 +7,9 @@ if ($release.Scheme -ne 'https' -and !($release.Scheme -eq 'http' -and $release.
 $staging = Join-Path ([IO.Path]::GetTempPath()) ([Guid]::NewGuid().ToString())
 New-Item -ItemType Directory $staging | Out-Null
 try {
-  $checksums = (Invoke-WebRequest -UseBasicParsing "$ReleaseBase/SHA256SUMS").Content
+  $checksumFile = Join-Path $staging 'SHA256SUMS'
+  Invoke-WebRequest -UseBasicParsing "$ReleaseBase/SHA256SUMS" -OutFile $checksumFile
+  $checksums = Get-Content -LiteralPath $checksumFile -Raw -Encoding UTF8
   $match = [regex]::Match($checksums, '(?m)^([a-f0-9]{64})  afbin-win32-x64\.exe\r?$')
   if (!$match.Success) { throw 'Missing Windows checksum' }
   $download = Join-Path $staging 'afbin.exe'
