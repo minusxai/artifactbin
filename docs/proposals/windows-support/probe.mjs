@@ -107,7 +107,7 @@ await observe('minimal-sea-executable',async()=>{
   await require('postject').inject(exe,'NODE_SEA_BLOB',await readFile(blob),{sentinelFuse:'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'});
   return JSON.parse(execFileSync(exe,[],{encoding:'utf8',timeout:15000,cwd:directory}));
 });
-await observe('installed-dependency-versions',async()=>Object.fromEntries(['node-pty','@duckdb/node-api','sharp','playwright','postject','esbuild'].map(name=>[name,require(name+'/package.json').version])));
+await observe('installed-dependency-versions',async()=>Object.fromEntries(await Promise.all(['node-pty','@duckdb/node-api','sharp','playwright','postject','esbuild'].map(async name=>[name,JSON.parse(await readFile(join(output,'node_modules',name,'package.json'),'utf8')).version]))));
 const report={platform:process.platform,arch:process.arch,node:process.version,kind:'research observations; not full CLI validation',observations};
 await writeFile(join(output,'observations.json'),JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report,null,2));

@@ -1,0 +1,97 @@
+{
+  "platform": "win32",
+  "arch": "x64",
+  "node": "v22.22.3",
+  "kind": "research observations; not full CLI validation",
+  "observations": [
+    {
+      "name": "mode-roundtrip",
+      "result": {
+        "requested": "600",
+        "actual": "666",
+        "currentCacheCheckAccepts": false
+      }
+    },
+    {
+      "name": "ordinary-file-replacement",
+      "result": {
+        "bytes": "new"
+      }
+    },
+    {
+      "name": "running-executable-replacement",
+      "result": {
+        "replacement": "blocked while running",
+        "code": "EPERM"
+      }
+    },
+    {
+      "name": "running-executable-rename-aside",
+      "result": {
+        "replacement": "rename aside and replace succeeded",
+        "afterExit": "replacement succeeded"
+      }
+    },
+    {
+      "name": "esbuild-native-path-filter",
+      "result": {
+        "matched": false,
+        "observedPath": "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\afbin windows é CzMg4o\\sql\\src\\engine.ts"
+      }
+    },
+    {
+      "name": "windows-path-shapes",
+      "result": {
+        "sqlPluginMatches": false,
+        "ptyPluginMatches": false,
+        "relative": "node_modules\\runtime",
+        "currentLinkCheckAccepts": false,
+        "binaryFilename": "afbin-win32-x64.exe",
+        "currentManifestFilename": "afbin-win32-x64"
+      }
+    },
+    {
+      "name": "duckdb-query",
+      "result": [
+        {
+          "answer": 42
+        }
+      ]
+    },
+    {
+      "name": "sharp-png",
+      "result": {
+        "bytes": 92,
+        "format": "png"
+      }
+    },
+    {
+      "name": "pty-smoke",
+      "result": {
+        "exitCode": 0,
+        "marker": true
+      }
+    },
+    {
+      "name": "playwright-chromium",
+      "result": {
+        "heading": "Windows probe",
+        "executable": "C:\\Users\\runneradmin\\AppData\\Local\\ms-playwright\\chromium-1234\\chrome-win64\\chrome.exe"
+      }
+    },
+    {
+      "name": "minimal-sea-executable",
+      "result": {
+        "sea": true,
+        "sqlite": true
+      }
+    },
+    {
+      "name": "installed-dependency-versions",
+      "error": {
+        "code": "ERR_PACKAGE_PATH_NOT_EXPORTED",
+        "message": "Package subpath './package.json' is not defined by \"exports\" in D:\\a\\_temp\\windows-evidence\\node_modules\\sharp\\package.json"
+      }
+    }
+  ]
+}

@@ -4,6 +4,9 @@ on:
     paths:
       - 'docs/proposals/windows-support/**'
       - '.github/workflows/windows-research.yml'
+concurrency:
+  group: windows-research-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
