@@ -27,14 +27,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
-import { Check, Code, Database, History, Undo2, Redo2, Paintbrush } from 'lucide-react';
+import { Check, Code, Database, Undo2, Redo2, Paintbrush } from 'lucide-react';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
-import { APP_BAR_H, EDIT_BAR_H, QUERY_RAIL_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
+import { APP_BAR_H, EDIT_BAR_H, EDIT_BAR_ROW_H, LEFT_RAIL_W, RIGHT_RAIL_W } from '@/lib/story/edit-bar';
 import { useIsPhoneViewport } from '@/components/MobileSheet';
 import VersionHistory from '@/components/VersionHistory';
-import { TrustedUi } from '@/components/TrustedUi';
 import VizEditorPanel from '@/components/views/story/VizEditorPanel';
 import NumberEditorPanel from '@/components/views/story/NumberEditorPanel';
 import MermaidEditorPanel from '@/components/views/story/MermaidEditorPanel';
@@ -126,6 +125,7 @@ export default function InPlaceEditor({
   onComment,
   rightInset = 0,
   onDone = () => {},
+  onLeftInsetChange,
 }: {
   art: EditorArtifact;
   /** Optional standalone document frame compatibility ref; the active page uses runtimeRef. */
@@ -146,6 +146,8 @@ export default function InPlaceEditor({
   rightInset?: number;
   /** Drain-and-exit belongs to the page, because browser back uses the same contract. */
   onDone?: () => void | Promise<void>;
+  /** How far the page must inset the document for the left rail and its open panel. */
+  onLeftInsetChange?: (px: number) => void;
 }) {
   const [title, setTitle] = useState(art.title ?? '');
   const [theme, setTheme] = useState<StoryThemeName | null>((art.theme as StoryThemeName) ?? null);
@@ -181,7 +183,6 @@ export default function InPlaceEditor({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onComment]);
-  const [historyOpen, setHistoryOpen] = useState(false);
   /** The right rail's query notebook (components/views/story/QueryNotebookPanel). */
   const [queriesOpen, setQueriesOpen] = useState(false);
   /** The cell the notebook lands on when opened FROM an embed's inspector; null once the rail has gone. */
@@ -647,6 +648,26 @@ export default function InPlaceEditor({
     spotlight([]);
     setQueryFocus(null);
   }, [notebookVisible, spotlight]);
+  /*
+   * WHAT THE PAGE MUST RESERVE on the left: the rail, plus its open panel. The
+   * page owns the document's padding (ArtifactSurface's Artifact viewport), the
+   * editor owns which panel is open, so the number crosses that boundary rather
+   * than either side guessing. A phone gets none — the rail is a sheet there.
+   */
+  const leftInset = phone ? 0 : LEFT_RAIL_W;
+  /*
+   * "Select an element to format" is an instruction you cannot follow from the
+   * source or the query notebook — there is no page there to select on. So the
+   * app view draws both rows and every other view draws one, and the panes
+   * below start at whichever height the bar actually is.
+   */
+  const formattingRow = mode === 'design' && !notebookVisible;
+  const barH = formattingRow ? EDIT_BAR_H : EDIT_BAR_ROW_H;
+  useEffect(() => {
+    onLeftInsetChange?.(leftInset);
+  }, [leftInset, onLeftInsetChange]);
+  // Leaving edit mode gives the width back; the page must not keep a gap for a rail that has gone.
+  useEffect(() => () => onLeftInsetChange?.(0), [onLeftInsetChange]);
   /** "edit in queries" from an inspector: the selection goes (the inspector holds the rail), the notebook lands on the cell. */
   const onOpenQuery = useCallback(
     (name: string) => {
@@ -770,7 +791,6 @@ export default function InPlaceEditor({
       // The restored state IS the document now; the live stream delivers it on
       // the same path an agent's edit arrives on.
       setPreview(null);
-      setHistoryOpen(false);
       await history.refresh();
     },
     [history],
@@ -972,8 +992,10 @@ export default function InPlaceEditor({
       )}
       <header
         aria-label="Editor toolbar"
-        className="fixed left-0 z-30 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[44px_44px] items-center gap-x-2 bg-surface px-3"
-        style={{ top: barTop, height: EDIT_BAR_H, right: rightInset }}
+        className={`fixed z-30 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 bg-surface px-3 ${
+          formattingRow ? 'grid-rows-[44px_44px]' : 'grid-rows-[44px]'
+        }`}
+        style={{ top: barTop, height: barH, left: leftInset, right: rightInset }}
       >
         {/* Settings scroll independently; mode, history and Done stay visible.
             The formatting row below owns its own overflow and portalled menus. */}
@@ -1027,72 +1049,18 @@ export default function InPlaceEditor({
         </div>
 
         <div aria-label="Document actions" className="flex shrink-0 items-center gap-2">
-          <div
-            className="flex h-6 items-center overflow-hidden rounded-[4px] border border-edge"
-            role="group"
-            aria-label="View"
-          >
-            {(
-              [
-                ['design', 'Edit on the page'],
-                ['code', 'Edit the source'],
-              ] as const
-            ).map(([m, label]) => (
-              <button
-                key={m}
-                type="button"
-                aria-label={label}
-                aria-pressed={mode === m}
-                onClick={() => setMode(m)}
-                className={`inline-flex h-full cursor-pointer items-center gap-1 px-1.5 font-mono text-[11px] ${
-                  mode === m ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
-                }`}
-              >
-                {m === 'design' ? <Paintbrush size={12} /> : <Code size={12} />}
-                <span className="hidden sm:inline">{m}</span>
-              </button>
-            ))}
-          </div>
-          {queryNotebook.length > 0 && (
-            <Tooltip content="queries">
-              <button
-                type="button"
-                aria-label="Show queries"
-                aria-pressed={queriesOpen}
-                onClick={() => {
-                  setQueriesOpen((v) => !v);
-                  // The notebook wants the rail; a selected embed's inspector would keep it.
-                  if (!queriesOpen) edit.select(null);
-                }}
-                className={`inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
-                  queriesOpen
-                    ? 'border-accent/40 bg-accent-soft text-accent'
-                    : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
-                }`}
-              >
-                <Database size={12} className="shrink-0" />
-                <span className="hidden sm:inline">queries</span>
-              </button>
-            </Tooltip>
-          )}
+          {/* View switching lives in the left rail: app, code and queries are
+              three views of one document, and two controls with one accessible
+              name is a bug for anyone driving by keyboard or by name. */}
+          {/* queries moved to the left rail, beside the other things the artifact is made of. */}
           <span role="status" className="hidden text-xs text-muted md:inline">
             {live.status || (live.pending ? 'Saving…' : `v${live.version} · Saved`)}
           </span>
-          <Tooltip content="version history">
-            <button
-              type="button"
-              aria-label="Open version history"
-              aria-expanded={historyOpen}
-              onClick={() => setHistoryOpen((v) => !v)}
-              className={`inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[4px] border px-1.5 font-mono text-[11px] ${
-                historyOpen
-                  ? 'border-accent/40 bg-accent-soft text-accent'
-                  : 'border-edge text-muted hover:border-edge-bright hover:text-fg'
-              }`}
-            >
-              <History size={12} className="shrink-0" />
-            </button>
-          </Tooltip>
+          {/* version history moved to the left rail, beside the document's other parts. */}
+          {/* The way out is offered TWICE on purpose — here and at the foot of
+              the rail — because it is the one action you may want from
+              wherever you are. They share an accessible name, which is honest
+              (one action, two doors) but does mean a test must say which. */}
           <Tooltip content="done editing">
             <button
               type="button"
@@ -1108,6 +1076,7 @@ export default function InPlaceEditor({
             </button>
           </Tooltip>
         </div>
+        {formattingRow && (
         <div className="col-span-2 min-w-0 self-start">
           {selection && mode === 'design' ? (
             <StoryFormatToolbar
@@ -1144,13 +1113,14 @@ export default function InPlaceEditor({
             </div>
           )}
         </div>
+        )}
       </header>
 
       {imageError && (
         <div
           aria-label="Image upload error"
-          className="fixed inset-x-0 z-30 flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-1.5 font-mono text-[11px] text-red-800"
-          style={{ top: barTop + EDIT_BAR_H }}
+          className="fixed right-0 z-30 flex items-center justify-between gap-3 border-b border-red-300 bg-red-50 px-4 py-1.5 font-mono text-[11px] text-red-800"
+          style={{ top: barTop + barH, left: leftInset }}
         >
           <span>{imageError}</span>
           <button
@@ -1167,7 +1137,7 @@ export default function InPlaceEditor({
       {/* Editing the source: an overlay over the document, not a second pane —
           the document IS the preview, and one click away is close enough. */}
       {mode === 'code' && (
-        <div className="fixed inset-x-0 bottom-0 z-20" style={{ top: barTop + EDIT_BAR_H }} aria-label="Source pane">
+        <div className="fixed right-0 bottom-0 z-20" style={{ top: barTop + barH, left: leftInset }} aria-label="Source pane">
           <SourceEditor
             value={source}
             revision={sourceRevision}
@@ -1187,11 +1157,111 @@ export default function InPlaceEditor({
           comments rail can be up at the same time. It takes the rail while a
           chart is selected: same width, higher layer, so the two read as one
           column rather than two panels fighting for an edge. */}
+      {/*
+        * THE LEFT RAIL — what this artifact is made of, as a strip rather than
+        * as buttons scattered through the toolbar. Two pairs, not four peers:
+        * app/code are two renderings of the DOCUMENT, queries is the DATA it
+        * reads, and history is a dimension over either. Grouping them by that
+        * is the whole point; a flat row of four said they were the same kind
+        * of thing, which is what made the old bar hard to read.
+        *
+        * Left means structure, right means annotation. Nothing here ever takes
+        * the comments rail, so opening a panel and opening a comment are no
+        * longer a fight over one edge.
+        */}
+      {!phone && (
+        <nav
+          aria-label="Artifact parts"
+          className="fixed left-0 bottom-0 z-40 flex flex-col border-r border-edge bg-surface"
+          style={{ top: barTop, width: LEFT_RAIL_W }}
+        >
+          <div className="flex flex-col gap-0.5 p-2">
+            {(
+              [
+                ['design', 'app', <Paintbrush key="d" size={14} />, mode === 'design' && !queriesOpen],
+                ['code', 'code', <Code key="c" size={14} />, mode === 'code'],
+              ] as const
+            ).map(([m, label, icon, active]) => (
+              <button
+                key={m}
+                type="button"
+                aria-label={m === 'design' ? 'Edit on the page' : 'Edit the source'}
+                aria-pressed={active}
+                onClick={() => {
+                  // app, code and queries are three views of ONE document, so
+                  // choosing any of them leaves the other two. Clearing this
+                  // only for code left "app" setting the mode under a queries
+                  // view that stayed on top of it.
+                  setMode(m);
+                  setQueriesOpen(false);
+                }}
+                className={`inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] px-2 font-mono text-[11px] ${
+                  active ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                }`}
+              >
+                {icon}
+                <span>{label}</span>
+              </button>
+            ))}
+            {queryNotebook.length > 0 && (
+              <button
+                type="button"
+                aria-label="Show data"
+                aria-pressed={queriesOpen}
+                onClick={() => {
+                  setQueriesOpen((v) => !v);
+                  setMode('design');
+                  // The notebook wants the rail; a selected embed's inspector would keep it.
+                  if (!queriesOpen) edit.select(null);
+                }}
+                className={`inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] px-2 font-mono text-[11px] ${
+                  queriesOpen ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                }`}
+              >
+                <Database size={14} />
+                <span>data</span>
+              </button>
+            )}
+          </div>
+          {/* Versions are LISTED, not behind a switch: the rail is wide enough to
+              hold them, and "which version am I looking at" is a question the
+              editor should answer without being asked. */}
+          <div className="flex min-h-0 flex-1 flex-col border-t border-edge">
+            <p className="px-3 py-2 font-mono text-[11px] uppercase tracking-wide text-faint">versions</p>
+            <VersionHistory
+              embedded
+              versions={history.versions}
+              currentVersion={live.version}
+              previewing={preview?.version ?? null}
+              onPreview={(v: number) => void previewVersion(v)}
+              onRestore={(v: number) => void restoreVersion(v)}
+              onBackToCurrent={backToCurrent}
+              onClose={() => {}}
+              busy={history.busy}
+            />
+          </div>
+          <div className="border-t border-edge p-2">
+            <button
+              type="button"
+              aria-label="Exit edit mode"
+              onClick={(event) => {
+                event.currentTarget.blur();
+                void onDone();
+              }}
+              className="inline-flex h-8 w-full cursor-pointer items-center gap-2 rounded-[4px] border border-accent/40 bg-accent-soft px-2 font-mono text-[11px] text-accent hover:border-accent"
+            >
+              <Check size={13} />
+              <span>done editing</span>
+            </button>
+          </div>
+        </nav>
+      )}
+
       {inspector && mode === 'design' && (
         <aside
           aria-label={INSPECTOR_LABEL[inspector]}
           className="fixed right-0 bottom-0 z-30 overflow-y-auto border-l border-edge bg-surface p-3"
-          style={{ top: barTop + EDIT_BAR_H, width: RIGHT_RAIL_W }}
+          style={{ top: barTop + barH, width: RIGHT_RAIL_W }}
         >
           {/* No delete here: the selection toolbar offers it for EVERY
               selection (lib/story/selection-toolbar ALWAYS_OFFERED), and a
@@ -1234,41 +1304,14 @@ export default function InPlaceEditor({
           tables are column-shaped. Design mode only: in code mode the SQL is already on screen. */}
       {notebookVisible && (
         <aside
-          aria-label="Queries"
-          className="fixed right-0 bottom-0 z-30 overflow-y-auto border-l border-edge bg-surface p-3"
-          style={{ top: barTop + EDIT_BAR_H, width: QUERY_RAIL_W }}
+          aria-label="Data"
+          className="fixed right-0 bottom-0 z-20 overflow-y-auto bg-surface p-4"
+          style={{ top: barTop + barH, left: leftInset }}
         >
-          <div className="mb-3 flex items-center justify-between">
-            <span className="font-mono text-[11px] uppercase tracking-wide text-faint">queries</span>
-            <button
-              type="button"
-              aria-label="Close queries"
-              onClick={() => setQueriesOpen(false)}
-              className="cursor-pointer font-mono text-[11px] text-muted hover:text-fg"
-            >
-              close
-            </button>
-          </div>
           <QueryNotebookPanel cells={queryNotebook} onSqlChange={onQuerySqlChange} onSpotlight={edit.spotlight} focus={queryFocus} />
         </aside>
       )}
 
-      {historyOpen && (
-        // The open history panel must receive clicks above the reader's navigation rail.
-        <TrustedUi overlay layer="navigation">
-          <VersionHistory
-            topOffset={barTop + EDIT_BAR_H}
-            versions={history.versions}
-            currentVersion={live.version}
-            previewing={preview?.version ?? null}
-            onPreview={(v: number) => void previewVersion(v)}
-            onRestore={(v: number) => void restoreVersion(v)}
-            onBackToCurrent={backToCurrent}
-            onClose={() => setHistoryOpen(false)}
-            busy={history.busy}
-          />
-        </TrustedUi>
-      )}
     </div>
   );
 }

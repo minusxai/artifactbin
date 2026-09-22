@@ -48,7 +48,7 @@ function SqlField({ name, sql, onCommit, onFocus, onBlur }: {
       spellCheck={false}
       wrap="off"
       rows={Math.min(12, Math.max(3, sql.split('\n').length + 1))}
-      className="w-full resize-y overflow-auto rounded-[4px] border border-edge bg-surface p-2 font-mono text-[11px] leading-[1.5] text-fg"
+      className="w-full resize-y overflow-auto border-0 bg-surface px-3 py-2 font-mono text-[11px] leading-[1.5] text-fg focus:outline-none"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
       onFocus={onFocus}
@@ -88,8 +88,8 @@ function ResultTable({ name, result }: { name: string; result: TableResult }) {
   const total = result.totalRows ?? result.rows.length;
   const count = shown.length < total ? `${shown.length} of ${total} rows` : `${total} ${total === 1 ? 'row' : 'rows'}`;
   return (
-    <div aria-label={`Query $${name} result`} className="flex flex-col gap-1">
-      <div className="max-h-64 overflow-auto rounded-[4px] border border-edge">
+    <div aria-label={`Query $${name} result`} className="flex flex-col">
+      <div className="max-h-64 overflow-auto">
         <table className="w-full border-collapse font-mono text-[11px] leading-[1.4]">
           <thead className="sticky top-0 bg-raised">
             <tr>
@@ -116,13 +116,13 @@ function ResultTable({ name, result }: { name: string; result: TableResult }) {
           </tbody>
         </table>
       </div>
-      <span className="font-mono text-[11px] text-faint">{count}</span>
+      <span className="px-3 py-1.5 font-mono text-[11px] text-faint">{count}</span>
     </div>
   );
 }
 
-function Cell({ cell, onSqlChange, onSpotlight, land }: {
-  cell: QueryCell; onSqlChange: QueryNotebookPanelProps['onSqlChange']; onSpotlight?: (paths: string[]) => void; land: boolean;
+function Cell({ cell, onSqlChange, onSpotlight, land, selected }: {
+  cell: QueryCell; onSqlChange: QueryNotebookPanelProps['onSqlChange']; onSpotlight?: (paths: string[]) => void; land: boolean; selected: boolean;
 }) {
   const [focused, setFocused] = useState(false);
   const section = useRef<HTMLElement>(null);
@@ -136,17 +136,31 @@ function Cell({ cell, onSqlChange, onSpotlight, land }: {
   const all = cell.bound.map((b) => b.path);
   /** A chip's hover narrows to one; leaving it goes back to everything the focused SQL powers, or nothing. */
   const point = (paths: string[] | null) => onSpotlight?.(paths ?? (focused ? all : []));
+  /*
+   * A NOTEBOOK CELL, not a run of stacked fragments. The old shape put the
+   * name, the SQL, what it powers and the result in one undifferentiated
+   * column with a hairline between cells, so nothing said where a cell began,
+   * which half was the question and which was the answer. Three bands do:
+   * a header that names it, IN, and OUT — and the gutter labels mean you can
+   * tell input from output at a glance rather than by reading.
+   */
   return (
-    <section ref={section} aria-label={`Query $${cell.name}`} className="flex flex-col gap-1.5 py-4 first:pt-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono text-xs text-fg">${cell.name}</span>
-        <span className="flex items-baseline gap-2 font-mono text-[11px] text-faint">
-          {cell.source && <span>ref:{cell.source}</span>}
-          {cell.params.length > 0 && <span>{cell.params.map((p) => `$${p}`).join(' ')}</span>}
-        </span>
-      </div>
-      {/* Keyed by the declared SQL (the TitleField precedent): an edit landing from
-          OUTSIDE — code mode, an agent — replaces the draft rather than fighting it. */}
+    <section
+      ref={section}
+      aria-label={`Query $${cell.name}`}
+      className={`my-3 overflow-hidden rounded-[6px] border bg-surface ${
+        selected ? 'border-accent/40' : 'border-edge'
+      }`}
+    >
+      <header
+        className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b px-3 py-1.5 ${
+          selected ? 'border-accent/30 bg-accent-soft' : 'border-edge bg-raised'
+        }`}
+      >
+        <span className={`font-mono text-xs font-medium ${selected ? 'text-accent' : 'text-fg'}`}>${cell.name}</span>
+        <Powers bound={cell.bound} onSpotlight={point} />
+      </header>
+
       <SqlField
         key={cell.sql}
         name={cell.name}
@@ -155,30 +169,218 @@ function Cell({ cell, onSqlChange, onSpotlight, land }: {
         onFocus={() => { setFocused(true); onSpotlight?.(all); }}
         onBlur={() => { setFocused(false); onSpotlight?.([]); }}
       />
-      <Powers bound={cell.bound} onSpotlight={point} />
-      {cell.pending ? (
-        <span className="font-mono text-[11px] text-faint">running…</span>
-      ) : cell.error ? (
-        <p aria-label={`Query $${cell.name} error`} className="rounded-[4px] border border-red-300 bg-red-50 px-2 py-1 font-mono text-[11px] text-red-800">
-          {cell.error}
-        </p>
-      ) : cell.result ? (
-        <ResultTable name={cell.name} result={cell.result} />
-      ) : (
-        <span className="font-mono text-[11px] text-faint">not run yet</span>
-      )}
+
+      <div className="border-t border-edge">
+        {cell.error ? (
+          <p aria-label={`Query $${cell.name} error`} className="m-3 rounded-[4px] border border-red-300 bg-red-50 px-2 py-1 font-mono text-[11px] text-red-800">
+            {cell.error}
+          </p>
+        ) : cell.result ? (
+          <ResultTable name={cell.name} result={cell.result} />
+        ) : (
+          <span className="block px-3 py-2 font-mono text-[11px] text-muted">{cell.pending ? 'running…' : 'not run yet'}</span>
+        )}
+      </div>
     </section>
   );
 }
 
+/** A query with no `source` runs in the page itself; the index says so rather than leaving a blank group. */
+const LOCAL = 'computed in the page';
+
+/** The datasets this document reads, in the order its queries first name them. */
+function sourcesOf(cells: QueryCell[]): string[] {
+  const seen: string[] = [];
+  for (const cell of cells) {
+    const key = cell.source ?? LOCAL;
+    if (!seen.includes(key)) seen.push(key);
+  }
+  return seen;
+}
+
+/** The row count is the first question anyone asks a query, so the index answers it unprompted. */
+function countOf(cell: QueryCell): string {
+  if (cell.error) return 'failed';
+  if (cell.pending) return '…';
+  if (!cell.result) return '—';
+  const n = cell.result.totalRows ?? cell.result.rows.length;
+  return new Intl.NumberFormat().format(n);
+}
+
+/**
+ * The dataset's OWN shape, read from the dataset — not inferred from what its
+ * queries happened to select. A union of query results mixes real columns with
+ * aliases the SQL invented (`pct_open`, `avg_days`), which describes the
+ * queries, not the data.
+ *
+ * `/a/<id>/tables` is the same door DatasetCatalogView uses, and it authorizes
+ * dataset READ: a viewer who may not see the data gets nothing here either.
+ */
+interface DatasetShape {
+  columns: string[];
+  rows: number | null;
+  error: string | null;
+}
+
+function useDatasetShapes(ids: string[]): Record<string, DatasetShape> {
+  const [shapes, setShapes] = useState<Record<string, DatasetShape>>({});
+  const key = ids.join(',');
+  useEffect(() => {
+    let live = true;
+    for (const id of key ? key.split(',') : []) {
+      void (async () => {
+        try {
+          const response = await fetch(`/a/${encodeURIComponent(id)}/tables`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sql: 'select * from public.rows', limit: 1, offset: 0 }),
+          });
+          const data = await response.json();
+          if (!live) return;
+          if (!response.ok) {
+            setShapes((prev) => ({ ...prev, [id]: { columns: [], rows: null, error: data.details?.[0] ?? data.error ?? 'unavailable' } }));
+            return;
+          }
+          setShapes((prev) => ({
+            ...prev,
+            [id]: {
+              columns: (data.columns ?? []).map((c: { name: string }) => c.name),
+              rows: typeof data.totalRows === 'number' ? data.totalRows : null,
+              error: null,
+            },
+          }));
+        } catch {
+          if (live) setShapes((prev) => ({ ...prev, [id]: { columns: [], rows: null, error: 'unavailable' } }));
+        }
+      })();
+    }
+    return () => { live = false; };
+  }, [key]);
+  return shapes;
+}
+
 export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, focus }: QueryNotebookPanelProps) {
+  const groups = sourcesOf(cells).map((key) => ({
+    key,
+    cells: cells.filter((c) => (c.source ?? LOCAL) === key),
+  }));
+  const datasets = groups.filter((g) => g.key !== LOCAL);
+  // Clicking the index SELECTS as well as scrolls: a list that moves the page
+  // without marking what it moved to leaves you re-finding your place.
+  const [picked, setPicked] = useState<string | null>(null);
+  /*
+   * Refs, not document.getElementById: this panel renders inside a SHADOW ROOT,
+   * so a document-wide lookup finds nothing and the click silently did not scroll.
+   */
+  const cellEls = useRef<Record<string, HTMLDivElement | null>>({});
+  const shapes = useDatasetShapes(sourcesOf(cells).filter((k) => k !== LOCAL));
+  const jump = (name: string) => {
+    cellEls.current[name]?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
   return (
-    // One column, a rule between cells (and above the hint): the notebook's page breaks.
-    <div className="flex flex-col divide-y divide-edge" aria-label="Query notebook">
-      {cells.map((cell) => (
-        <Cell key={cell.name} cell={cell} onSqlChange={onSqlChange} onSpotlight={onSpotlight} land={focus === cell.name} />
-      ))}
-      <p className="pt-3 font-sans text-[11px] text-faint">Edits apply when you leave a cell or press ⌘⏎; the document re-runs and charts bound to the query redraw.</p>
+    <div className="flex gap-8" aria-label="Data and queries">
+      {/*
+        * THE INDEX — every dataset and every query on one screen, which is the
+        * thing the old notebook could not do: it was a scroll of cells with no
+        * way to see what was in it. Queries sit UNDER the dataset they read,
+        * because a query is a view of a dataset the way code is a view of the
+        * app, and a flat list hid that.
+        */}
+      <nav aria-label="Data index" className="sticky top-0 hidden w-60 shrink-0 self-start lg:block">
+        {groups.map((group) => (
+          <div key={group.key} className="mb-5">
+            <p className="font-mono text-[11px] uppercase tracking-wide text-faint">
+              {group.key === LOCAL ? 'derived' : `dataset · ${group.key}`}
+            </p>
+            {/* A bare group of names does not say what KIND of query is in it;
+                one line does, and it is the difference between a round trip to
+                the server and a run over rows already in the page. */}
+            <p className="mb-1.5 font-sans text-[10px] leading-snug text-faint">
+              {group.key === LOCAL
+                ? 'no source — runs in the page over other queries'
+                : 'stored — runs on the server'}
+            </p>
+            <div className="flex items-baseline justify-between gap-2 border-b border-edge px-1.5 pb-0.5 font-mono text-[10px] uppercase tracking-wide text-faint">
+              <span>query</span>
+              <span>rows</span>
+            </div>
+            {group.cells.map((cell) => (
+              <button
+                key={cell.name}
+                type="button"
+                onClick={() => { setPicked(cell.name); jump(cell.name); }}
+                title={`Go to ${cell.name} — ${countOf(cell)} rows`}
+                className={`flex w-full cursor-pointer items-baseline justify-between gap-2 rounded-[3px] px-1.5 py-0.5 text-left font-mono text-[11px] ${
+                  (picked ?? focus) === cell.name ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-raised hover:text-fg'
+                }`}
+              >
+                <span className="truncate">{cell.name}</span>
+                <span className="shrink-0 tabular-nums text-faint">{countOf(cell)}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      <div className="min-w-0 flex-1">
+        {datasets.length > 0 && (
+          <section aria-label="Datasets" className="mb-6">
+            <h2 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-faint">datasets</h2>
+            <div className="flex flex-col gap-2">
+              {datasets.map((group) => (
+                <div key={group.key} className="rounded-[4px] border border-edge p-3">
+                  <p className="font-mono text-[12px] text-accent">{group.key}</p>
+                  <p className="mt-1 font-sans text-[11px] text-muted">
+                    read by {group.cells.length} {group.cells.length === 1 ? 'query' : 'queries'} ·{' '}
+                    {group.cells.map((c) => c.name).join(', ')}
+                  </p>
+                  {(() => {
+                    const shape = shapes[group.key];
+                    if (!shape) return <p className="mt-2 font-mono text-[11px] text-faint">reading its shape…</p>;
+                    if (shape.error) return <p className="mt-2 font-mono text-[11px] text-faint">shape unavailable — {shape.error}</p>;
+                    return (
+                      <div className="mt-2">
+                        <p className="font-mono text-[10px] uppercase tracking-wide text-faint">
+                          public.rows · {shape.columns.length} columns
+                          {shape.rows !== null && ` · ${new Intl.NumberFormat().format(shape.rows)} rows`}
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {shape.columns.map((c) => (
+                            <span key={c} className="rounded-[3px] bg-raised px-1.5 py-0.5 font-mono text-[10px] text-muted">{c}</span>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section aria-label="Queries">
+          <h2 className="mb-2 font-mono text-[11px] uppercase tracking-wide text-faint">queries</h2>
+          <div className="flex flex-col">
+            {cells.map((cell) => (
+              <div
+                key={cell.name}
+                ref={(el) => { cellEls.current[cell.name] = el; }}
+                className="scroll-mt-4"
+              >
+                <Cell
+                  cell={cell}
+                  onSqlChange={onSqlChange}
+                  onSpotlight={onSpotlight}
+                  land={focus === cell.name}
+                  selected={(picked ?? focus) === cell.name}
+                />
+              </div>
+            ))}
+            <p className="pt-3 font-sans text-[11px] text-faint">Edits apply when you leave a cell or press ⌘⏎; the document re-runs and charts bound to the query redraw.</p>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
