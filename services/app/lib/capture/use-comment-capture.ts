@@ -8,9 +8,9 @@ const messages:Record<string,string>={unsupported:'This browser cannot verify ca
 export function useCommentCapture(id:string,editId:string|undefined){
  const session=useRef<CaptureSession|null>(null),generation=useRef(0),revision=useRef(editId);
  revision.current=editId;
- const staged=useRef<{draft:ScreenshotDraft;id:string}|null>(null);
- const [draft,setDraft]=useState<ScreenshotDraft|null>(null),[editing,setEditing]=useState(false),[busy,setBusy]=useState(false),[required,setRequired]=useState(false),[error,setError]=useState('');
- const reset=useCallback(()=>{generation.current++;session.current?.dispose();session.current=null;setDraft(null);setEditing(false);setBusy(false);setRequired(false);setError('');},[]);
+ const staged=useRef<{draft:ScreenshotDraft;preview:Blob;id:string}|null>(null);
+ const [draft,setDraft]=useState<ScreenshotDraft|null>(null),[busy,setBusy]=useState(false),[required,setRequired]=useState(false),[error,setError]=useState('');
+ const reset=useCallback(()=>{generation.current++;session.current?.dispose();session.current=null;setDraft(null);setBusy(false);setRequired(false);setError('');},[]);
  useEffect(()=>{reset();return ()=>{generation.current++;session.current?.dispose();};},[id,reset]);
  const start=async()=>{
   reset();if(!editId)return true;
@@ -30,7 +30,7 @@ export function useCommentCapture(id:string,editId:string|undefined){
   const started=performance.now();
   // Selection chrome is not part of the image. Global class is removed in every exit path.
   document.documentElement.classList.add('mx-taking-screenshot');
-  try{const image=await current.capture(rect);if(mine!==generation.current)return;if(revision.current!==capturedEditId)throw new CaptureError('geometry');setDraft({image,preview:image.blob,strokes:[],editId:capturedEditId});setEditing(true);setError('');}
+  try{const image=await current.capture(rect);if(mine!==generation.current)return;if(revision.current!==capturedEditId)throw new CaptureError('geometry');setDraft({image,preview:image.blob,strokes:[],editId:capturedEditId});setError('');}
   catch(e){if(mine===generation.current)setError(messages[e instanceof CaptureError?e.code:'unsupported']);}
   finally{performance.measure('comment-screenshot:capture',{start:started,end:performance.now()});current.dispose();document.documentElement.classList.remove('mx-taking-screenshot');if(mine===generation.current)setBusy(false);}
  };
@@ -39,21 +39,20 @@ export function useCommentCapture(id:string,editId:string|undefined){
   try{
    if(file.size>8*1024*1024||!['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('Use a PNG, JPEG or WebP up to 8 MB.');
    const bitmap=await createImageBitmap(file);
-   try{const scale=Math.min(1,2048/Math.max(bitmap.width,bitmap.height),Math.sqrt(4000000/(bitmap.width*bitmap.height)));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);const blob=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/png'));if(!blob)throw new Error('Could not read this image.');const image:CapturedImage={blob,width:canvas.width,height:canvas.height,rect:{x:0,y:0,width:canvas.width,height:canvas.height},viewport:{width:canvas.width,height:canvas.height},method:'upload',capturedAt:new Date().toISOString()};if(mine!==generation.current)return;setDraft({image,preview:blob,strokes:[],editId});setRequired(true);setEditing(true);}finally{bitmap.close();}
+   try{const scale=Math.min(1,2048/Math.max(bitmap.width,bitmap.height),Math.sqrt(4000000/(bitmap.width*bitmap.height)));const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));canvas.getContext('2d')!.drawImage(bitmap,0,0,canvas.width,canvas.height);const blob=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/png'));if(!blob)throw new Error('Could not read this image.');const image:CapturedImage={blob,width:canvas.width,height:canvas.height,rect:{x:0,y:0,width:canvas.width,height:canvas.height},viewport:{width:canvas.width,height:canvas.height},method:'upload',capturedAt:new Date().toISOString()};if(mine!==generation.current)return;setDraft({image,preview:blob,strokes:[],editId});setRequired(true);}finally{bitmap.close();}
   }catch(e){if(mine===generation.current)setError(e instanceof Error?e.message:'Could not read this image.');}finally{if(mine===generation.current)setBusy(false);}
  };
- const stage=async()=>{
+ const stage=async(drawing?:{preview:Blob;strokes:BrushStroke[]})=>{
   if(!draft)return undefined;
-  if(staged.current?.draft===draft)return staged.current.id;
-  const metadata:CommentImageMetadata={v:1,capturedEditId:draft.editId,capturedAt:draft.image.capturedAt,method:draft.image.method,width:draft.image.width,height:draft.image.height,rect:draft.image.rect,viewport:draft.image.viewport,strokes:draft.strokes};
-  const form=new FormData();form.set('original',draft.image.blob,'original.png');form.set('preview',draft.preview,'preview.png');form.set('metadata',JSON.stringify(metadata));
+  const current=drawing?{...draft,...drawing}:draft;
+  if(staged.current?.draft===draft&&staged.current.preview===current.preview)return staged.current.id;
+  const metadata:CommentImageMetadata={v:1,capturedEditId:draft.editId,capturedAt:draft.image.capturedAt,method:draft.image.method,width:draft.image.width,height:draft.image.height,rect:draft.image.rect,viewport:draft.image.viewport,strokes:current.strokes};
+  const form=new FormData();form.set('original',draft.image.blob,'original.png');form.set('preview',current.preview,'preview.png');form.set('metadata',JSON.stringify(metadata));
   const response=await fetch(`/api/my/artifacts/${id}/comment-images`,{method:'POST',body:form});
   if(!response.ok){const result=await response.json();throw new Error(result.error==='stale'?'The document changed. Your draft is preserved; retake the screenshot.':result.error==='quota_exceeded'?'Image storage quota reached.':'Could not upload the screenshot. Please retry.');}
-  const result=await response.json() as {id:string};staged.current={draft,id:result.id};return result.id;
+  const result=await response.json() as {id:string};staged.current={draft,preview:current.preview,id:result.id};return result.id;
  };
- return {draft,editing,busy,required,error,reset,start,capture,upload,stage,
-  edit:()=>setEditing(true),cancelEdit:()=>setEditing(false),
-  done:(preview:Blob,strokes:BrushStroke[])=>{setDraft(value=>value?{...value,preview,strokes}:null);setEditing(false);},
+ return {draft,busy,required,error,reset,start,capture,upload,stage,
   skip:()=>{reset();},
  };
 }

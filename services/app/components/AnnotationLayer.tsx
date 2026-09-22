@@ -38,8 +38,9 @@ import { useConfirmation } from './ConfirmDialog';
 import { CommentTimestamp } from './CommentTimestamp';
 import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import dynamic from '@/lib/dynamic';
+import type {ScreenshotDrawing} from './ScreenshotEditor';
 import {useCommentCapture} from '@/lib/capture/use-comment-capture';
-import CommentScreenshot,{BlobImage} from './CommentScreenshot';
+import CommentScreenshot from './CommentScreenshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, LoaderCircle, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import {readAnnotationPages} from '@/lib/annotation-pages';
@@ -125,6 +126,7 @@ function positionedComposer(
   frameRect: Pick<DOMRect, 'left' | 'top' | 'width'>,
   viewportWidth: number,
   viewportHeight: number,
+  screenshot = false,
 ) {
   const viewportInset = VIEW_COMMENT_INSET;
   const narrowDocument = frameRect.width < 280;
@@ -132,14 +134,14 @@ function positionedComposer(
   const maxRight = narrowDocument
     ? viewportWidth - viewportInset
     : Math.min(viewportWidth - viewportInset, frameRect.left + frameRect.width - viewportInset);
-  const width = Math.max(0, Math.min(COMPOSER_W, maxRight - minLeft));
+  const width = Math.max(0, Math.min(screenshot ? 680 : COMPOSER_W, maxRight - minLeft));
   const anchorRight = frameRect.left + selection.rect.x + selection.rect.width;
   const left = Math.max(minLeft, Math.min(anchorRight + COMPOSER_GAP, maxRight - width));
 
-  const minTop = frameRect.top + viewportInset;
+  const minTop = Math.max(frameRect.top, screenshot ? APP_BAR_H : 0) + viewportInset;
   const preferredTop = frameRect.top + selection.rect.y
     + Math.min(selection.rect.height + COMPOSER_GAP, 56);
-  const maxTop = Math.max(minTop, viewportHeight - COMPOSER_ESTIMATED_H - viewportInset);
+  const maxTop = Math.max(minTop, viewportHeight - (screenshot ? 720 : COMPOSER_ESTIMATED_H) - viewportInset);
   return { left, top: Math.max(minTop, Math.min(preferredTop, maxTop)), width };
 }
 
@@ -823,6 +825,7 @@ export default function AnnotationLayer({
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
 }: AnnotationLayerProps) {
   const capture=useCommentCapture(id,editId);
+  const screenshotExport=useRef<(()=>Promise<ScreenshotDrawing>)|null>(null);
   const captureRef=useRef(capture);captureRef.current=capture;
   const startPickRef=useRef<()=>void>(()=>{});
   const mutationRef=useRef({signature:'',key:''});
@@ -1214,7 +1217,8 @@ export default function AnnotationLayer({
     setBusy(true);
     setFailure(null);
     try {
-      const attachmentId=await capture.stage();
+      if(capture.draft&&!screenshotExport.current)throw new Error('The screenshot is still loading. Please try again.');
+      const attachmentId=await capture.stage(capture.draft?await screenshotExport.current!():undefined);
       const signature=JSON.stringify([selection,draft,attachmentId]);
       if(mutationRef.current.signature!==signature)mutationRef.current={signature,key:crypto.randomUUID()};
       const res = await fetch(`/api/my/artifacts/${id}/annotations`, {
@@ -1279,7 +1283,7 @@ export default function AnnotationLayer({
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       // A pick in progress is what escape cancels first; the draft stays.
-      if (pickingRef.current || captureRef.current.editing) return;
+      if (pickingRef.current) return;
       event.stopPropagation();
       cancelCompose();
     };
@@ -1352,7 +1356,7 @@ export default function AnnotationLayer({
     ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth) }
     : { left: 0, top: topOffset, width: window.innerWidth - railWidth };
   const composerPosition = selection
-    ? positionedComposer(selection, frameRect, window.innerWidth, window.innerHeight)
+    ? positionedComposer(selection, frameRect, window.innerWidth, window.innerHeight, capture.required)
     : null;
 
   return (
@@ -1360,7 +1364,7 @@ export default function AnnotationLayer({
       {confirmation}
       <style>{`:host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}`}</style>
       {capture.busy&&!selection&&<div data-capture-chrome role="status" className="fixed bottom-4 left-4 z-50 rounded bg-panel p-3 shadow">Preparing screenshot… <button type="button" onClick={capture.reset}>Cancel capture</button></div>}
-      {capture.editing&&capture.draft&&<ScreenshotEditor image={capture.draft.image} initialStrokes={capture.draft.strokes} onDone={capture.done} onCancel={capture.cancelEdit}/>}
+
 
       {/* The ambient surface: tiny open-thread identities over the document's
           right edge, at their anchors. Present in view mode AND while editing. */}
@@ -1432,7 +1436,7 @@ export default function AnnotationLayer({
           </div>
           <div className="p-3">
             {capture.busy&&<div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} className="animate-spin"/>Preparing screenshot…</div>}
-            {capture.draft&&<div className="mb-4 overflow-hidden rounded-lg border border-edge bg-surface"><button type="button" aria-label="Draw on screenshot" onClick={capture.edit} className="block w-full p-2"><BlobImage blob={capture.draft.preview} alt="Screenshot for this comment" className="max-h-48 w-full rounded object-contain"/></button><div className="flex items-center justify-between border-t border-edge px-3 py-2 text-xs"><button type="button" onClick={capture.edit} className="font-medium text-accent hover:underline">Edit drawing</button><button type="button" onClick={()=>void beginPick('select')} className="text-muted hover:text-fg">Retake screenshot</button></div></div>}
+            {capture.draft&&<ScreenshotEditor image={capture.draft.image} initialStrokes={capture.draft.strokes} exportRef={screenshotExport} busy={busy} onRetake={()=>void beginPick('select')}/>}
             {capture.required&&!capture.draft&&!capture.busy&&<div className="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs"><p role="alert" className="leading-relaxed text-muted">{capture.error||'A screenshot is required for this selection.'}</p><button type="button" className="rounded-lg border border-edge bg-panel px-3 py-2 font-medium hover:border-accent" onClick={()=>void beginPick('select')}>Retry screenshot</button><label className="block space-y-2 font-medium">Upload screenshot<input className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-panel file:px-3 file:py-2 file:text-fg" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload screenshot" onChange={event=>{const file=event.target.files?.[0];if(file)void capture.upload(file);event.target.value='';}}/></label><button type="button" className="text-muted underline underline-offset-4 hover:text-fg" onClick={capture.skip}>Continue without screenshot</button></div>}
             <MarkdownField
               label="Annotation comment"

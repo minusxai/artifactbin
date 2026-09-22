@@ -34,9 +34,12 @@ for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chrom
    await expect(page.getByLabel('Save annotation',{exact:true})).toBeDisabled();
    await page.getByLabel('Upload screenshot',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:input});
   }
-  const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,{alerts:await page.getByRole('alert').allTextContents(),status:await page.getByRole('status').allTextContents(),trace:await page.evaluate(()=>window.__captureTrace),timings:await page.evaluate(()=>performance.getEntriesByType('measure').filter(e=>e.name.startsWith('comment-screenshot:')).map(e=>e.toJSON())),composer:await page.getByRole('dialog',{name:'Annotation composer'}).count()});throw error;}
+  const editor=page.getByRole('dialog',{name:'Annotation composer',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,{alerts:await page.getByRole('alert').allTextContents(),status:await page.getByRole('status').allTextContents(),trace:await page.evaluate(()=>window.__captureTrace),timings:await page.evaluate(()=>performance.getEntriesByType('measure').filter(e=>e.name.startsWith('comment-screenshot:')).map(e=>e.toJSON())),composer:await page.getByRole('dialog',{name:'Annotation composer'}).count()});throw error;}
   const canvas=editor.getByLabel('Screenshot drawing canvas');
-  await expect(editor.getByRole('button',{name:'Use screenshot',exact:true})).toBeEnabled();
+  await expect(canvas).toHaveAttribute('aria-busy','false');
+  await editor.getByLabel('Annotation comment',{exact:true}).pressSequentially(`Screenshot from ${name} at DPR ${dpr}`);
+  await expect(page.getByRole('dialog')).toHaveCount(1);
+  await expect(page.getByRole('button',{name:'Use screenshot'})).toHaveCount(0);
   if(name==='chromium')console.log(`chromium (DPR ${dpr}): release-to-editor ${Date.now()-selectionFinished}ms; crop/encode ${await page.evaluate(()=>performance.getEntriesByName('comment-screenshot:capture').at(-1)?.duration.toFixed(1))}ms`);
   // Exact crop corner must contain content, not a selection outline or app panel.
   const pixel=await canvas.evaluate(c=>Array.from(c.getContext('2d').getImageData(5,5,1,1).data));
@@ -48,9 +51,7 @@ for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chrom
   await expect(editor.getByRole('button',{name:'Undo stroke'})).toBeEnabled();
   // Strokes paint on requestAnimationFrame; wait for the pixels, not just the undo button.
   await expect.poll(()=>canvas.evaluate(c=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let count=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<30&&pixels[i+1]>200&&pixels[i+2]<30)count++;return count;})).toBeGreaterThan(100);
-  await editor.getByRole('button',{name:'Use screenshot'}).click();
-  await expect(editor).toHaveCount(0);
-  await page.getByLabel('Annotation comment',{exact:true}).pressSequentially(`Screenshot from ${name} at DPR ${dpr}`);
+  await expect(editor.getByLabel('Annotation comment',{exact:true})).toHaveValue(`Screenshot from ${name} at DPR ${dpr}`);
   await page.getByLabel('Save annotation',{exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Annotation composer'})).toHaveCount(0);
   await page.reload();
