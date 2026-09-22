@@ -22,6 +22,13 @@ async function setup(){
  return {token,doc,image,metadata,actor:{tokenId:token.id,userId:null},cookie:await agentCookie([token.id])};
 }
 describe('comment image attachment ownership',()=>{
+ it('accepts an individual 50 MB image and refuses one byte more',async()=>{
+  const s=await setup();const bytes=Buffer.alloc(50_000_000);s.image.copy(bytes);
+  const accepted=await stageCommentImage(s.actor,s.doc.id,bytes,s.image,s.metadata);
+  expect(accepted).not.toBeInstanceOf(Response);
+  const refused=await stageCommentImage(s.actor,s.doc.id,Buffer.alloc(50_000_001),s.image,s.metadata);
+  expect(refused).toBeInstanceOf(Response);expect((refused as Response).status).toBe(413);
+ });
  it('stages privately, atomically attaches to a root and charges all variants',async()=>{
   const s=await setup();const stage=await stageCommentImage(s.actor,s.doc.id,s.image,s.image,s.metadata);
   expect(stage).not.toBeInstanceOf(Response);if(stage instanceof Response)return;

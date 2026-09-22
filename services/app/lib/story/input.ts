@@ -259,11 +259,11 @@ export async function parseContentInput(body: Record<string, unknown>, ctx: Cont
   /*
    * THE ONE PLACE THE BYTE QUOTA IS CHARGED at this door, and it guards both
    * PDF shapes at once — the upload and the import — because the cost is the
-   * same 25 MB either way. Asked BEFORE the fetch, so a caller over their cap
+   * same upload cap either way. Asked BEFORE the fetch, so a caller over their cap
    * cannot spend our bandwidth either.
    *
    * NO HOOK, NO TIER, for the reason written out over the image tier above —
-   * at 25 MB a time rather than a few. The two tiers refuse identically
+   * with the same per-upload default. The two tiers refuse identically
    * because they are the same failure: an object stored with no artifact row
    * naming it, in an app where THE DB IS THE ONLY INDEX.
    */

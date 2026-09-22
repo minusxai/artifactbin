@@ -612,16 +612,21 @@ jobs:
           # predate the merge. Anything shorter than the merge window loses the release.
           retention-days: 14
 
-  # Packaging and acceptance are separate bounded jobs on Intel: run 35691844063
-  # spent 561s combining them (249s in acceptance). Keep every proof, the same
-  # binary, and the existing 420s job budget. A failed proof blocks the tested-tree
-  # receipt and release through the test roll-up, including nightly/bump-only runs.
+  # Intel acceptance also splits its existing phases: run 35761410997 spent
+  # 447s on combined acceptance (277s proofs, ~170s setup/downloads). Every
+  # phase consumes the same tested binary and retains the 420s job budget.
+  # Any failed phase blocks the tested-tree receipt and release through the
+  # test roll-up, including nightly/bump-only runs.
   cli-preview:
     needs: [ plan, cli ]
     if: needs.plan.outputs.cli-preview == 'true'
-    name: CLI (macos-15-intel preview)
+    name: CLI (macos-15-intel ${{ matrix.phase }})
     runs-on: macos-15-intel
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: [preview, export-basic, export-variants]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -658,7 +663,7 @@ jobs:
         run: |
           chmod +x dist/afbin-darwin-x64
           npx playwright install chromium
-          node --import tsx scripts/test-preview.ts
+          node --import tsx scripts/test-preview.ts dist/afbin-darwin-x64 --phase=${{ matrix.phase }}
 
   # WHAT THIS RUN ACTUALLY COST — and, on a pull request, whether it may cost that.
   #

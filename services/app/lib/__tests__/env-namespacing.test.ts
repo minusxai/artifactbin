@@ -28,6 +28,14 @@ describe('lib/config.ts', () => {
 describe('env()', () => {
   afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
+  it('defaults every artifact upload to 50 MB and account assets to 10 GB', async () => {
+    for (const name of ['IMAGES__MAX_BYTES', 'PDF__MAX_BYTES', 'FILES__MAX_BYTES', 'ASSETS__MAX_BYTES_PER_TOKEN']) vi.stubEnv(name, undefined);
+    vi.resetModules();
+    const config = await import('../config');
+    expect([config.MAX_IMAGE_BYTES, config.MAX_PDF_BYTES, config.MAX_FILE_BYTES]).toEqual([50_000_000, 50_000_000, 50_000_000]);
+    expect(config.ASSETS_MAX_BYTES_PER_TOKEN).toBe(10_000_000_000);
+  });
+
   it('reads the namespaced name and nothing else', async () => {
     const { env } = await import('../config');
     vi.stubEnv('QUOTA__ARTIFACTS_PER_TOKEN', '7');
