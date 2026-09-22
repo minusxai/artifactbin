@@ -352,7 +352,15 @@ export default function QueryNotebookPanel({ cells, onSqlChange, onSpotlight, fo
             <div className="flex flex-col gap-2">
               {datasets.map((group) => (
                 <div key={group.key} className="rounded-[4px] border border-edge p-3">
-                  <p className="font-mono text-[12px] text-accent">{titles[group.key] ?? group.key}</p>
+                  {/* The dataset is a REFERENCE, so it behaves like one: it opens. */}
+                  <a
+                    href={`/a/${group.key}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-[12px] text-accent underline-offset-2 hover:underline"
+                  >
+                    {titles[group.key] ?? group.key}
+                  </a>
                   {titles[group.key] && <p className="font-mono text-[10px] text-faint">{group.key}</p>}
                   <p className="mt-1 font-sans text-[11px] text-muted">
                     read by {group.cells.length} {group.cells.length === 1 ? 'query' : 'queries'} ·{' '}

@@ -98,7 +98,7 @@ export interface ArtifactSurfaceProps {
   source: string | null;
   /** meta scalars the editor needs, so entering edit mode costs no round trip. */
   template: string | null;
-  refs: Array<{ id: string; kind: string }>;
+  refs: Array<{ id: string; kind: string; title?: string | null }>;
   /** The document's server-run dataflow (lib/artifacts dataflowForRow) — seeds the editor's canvas. */
   dataflow?: StoryIslandDataflow | null;
   /**
