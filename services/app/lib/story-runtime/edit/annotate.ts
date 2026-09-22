@@ -364,7 +364,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const fill = state.openId === pin.id
         ? HIGHLIGHT_FILL.open
         : state.hoverId === pin.id ? HIGHLIGHT_FILL.hover : HIGHLIGHT_FILL.base;
-      rules.push(`::highlight(${name}) { background-color: ${fill}; }`);
+      rules.push(`::highlight(${name}) { background-color: ${fill}; } :root.mx-taking-screenshot ::highlight(${name}) { background-color: transparent; }`);
     }
     return rules;
   };

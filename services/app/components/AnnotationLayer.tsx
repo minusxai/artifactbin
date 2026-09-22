@@ -1358,7 +1358,7 @@ export default function AnnotationLayer({
   return (
     <>
       {confirmation}
-      <style>{`:host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome],.mx-taking-screenshot [data-mx-selection-actions],.mx-taking-screenshot [data-mx-annotate-band],.mx-taking-screenshot [data-mx-annotation-area]{visibility:hidden!important}`}</style>
+      <style>{`:host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}`}</style>
       {capture.busy&&!selection&&<div data-capture-chrome role="status" className="fixed bottom-4 left-4 z-50 rounded bg-panel p-3 shadow">Preparing screenshot… <button type="button" onClick={capture.reset}>Cancel capture</button></div>}
       {capture.editing&&capture.draft&&<ScreenshotEditor image={capture.draft.image} initialStrokes={capture.draft.strokes} onDone={capture.done} onCancel={capture.cancelEdit}/>}
 

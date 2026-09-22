@@ -35,6 +35,9 @@ export const COMMENT_PRESENTATION = {
           'm15 5 4 4',
         ], annotate: ['M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z']},
   annotationCss: [
+  // This stylesheet lives with the document; app shadow-root CSS cannot hide these nodes.
+  `.mx-taking-screenshot [data-mx-selection-actions], .mx-taking-screenshot [data-mx-annotate-band], .mx-taking-screenshot [data-mx-annotation-area] { visibility: hidden !important; }`,
+  `.mx-taking-screenshot [data-mx-annotated], .mx-taking-screenshot [data-mx-annotate-selected], .mx-taking-screenshot [data-mx-annotate-pick-hover] { outline: none !important; }`,
   // Annotation paint must never replace an authored background or image.
   `[data-mx-annotated]:not([data-mx-annotation-ranged]) { outline: 1px solid rgba(245, 158, 11, .45); outline-offset: 3px; }`,
   `[data-mx-annotation-open]:not([data-mx-annotation-ranged]), [data-mx-annotation-hover]:not([data-mx-annotation-ranged]) { ${SELECTION_PRESENTATION.selectedCss} }`,
