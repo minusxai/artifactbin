@@ -27,8 +27,8 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
    await expect.poll(()=>page.evaluate(()=>window.__captureReference?.readyState??0)).toBeGreaterThanOrEqual(2);
    referencePixel=await page.evaluate(({x,y})=>{const v=window.__captureReference,c=document.createElement('canvas');c.width=innerWidth;c.height=innerHeight;c.getContext('2d').drawImage(v,0,0,c.width,c.height);return Array.from(c.getContext('2d').getImageData(x+35,y+65,1,1).data).slice(0,3);},box);
   }
-  const selectionStarted=Date.now();
   await page.mouse.move(box.x+30,box.y+60);await page.mouse.down();await page.mouse.move(box.x+230,box.y+160,{steps:12});await page.mouse.up();
+  const selectionFinished=Date.now();
   if(name!=='chromium'){
    await expect(page.getByLabel('Save annotation',{exact:true})).toBeDisabled();
    await page.getByLabel('Upload screenshot',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:input});
@@ -36,11 +36,11 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,{alerts:await page.getByRole('alert').allTextContents(),status:await page.getByRole('status').allTextContents(),trace:await page.evaluate(()=>window.__captureTrace),composer:await page.getByRole('dialog',{name:'Annotation composer'}).count()});throw error;}
   const canvas=editor.getByLabel('Screenshot drawing canvas');
   await expect(editor.getByRole('button',{name:'Use screenshot',exact:true})).toBeEnabled();
-  if(name==='chromium')console.log(`chromium: selection-to-editor ${Date.now()-selectionStarted}ms; crop/encode ${await page.evaluate(()=>performance.getEntriesByName('comment-screenshot:capture').at(-1)?.duration.toFixed(1))}ms`);
+  if(name==='chromium')console.log(`chromium: release-to-editor ${Date.now()-selectionFinished}ms; crop/encode ${await page.evaluate(()=>performance.getEntriesByName('comment-screenshot:capture').at(-1)?.duration.toFixed(1))}ms`);
   // Exact crop corner must contain content, not a selection outline or app panel.
   const pixel=await canvas.evaluate(c=>Array.from(c.getContext('2d').getImageData(5,5,1,1).data));
   assert(pixel.slice(0,3).every((value,i)=>Math.abs(value-referencePixel[i])<=3),`${name}: content pixel ${pixel}; unmarked reference ${referencePixel}`);
-  await editor.getByLabel('Brush color').fill('#00ff00');
+  await editor.getByLabel('Brush color',{exact:true}).fill('#00ff00');
   await editor.getByLabel('Brush thickness').fill('8');
   const drawing=await canvas.boundingBox();assert(drawing);
   await page.mouse.move(drawing.x+30,drawing.y+30);await page.mouse.down();await page.mouse.move(drawing.x+130,drawing.y+50,{steps:10});await page.mouse.up();
