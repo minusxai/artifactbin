@@ -108,6 +108,13 @@ const anonToken = async () => {
 const allowLocal = () => setWebIngestPolicyForTests({ allowPrivate: true, allowHttp: true });
 
 describe('importWebAsset', () => {
+  it('concurrent first readers fetch a source image once', async()=>{
+    allowLocal();hits=[];
+    const actor=await anonToken();
+    const rows=await Promise.all(Array.from({length:3},()=>importWebAsset(`${base}/photo.png`,actor)));
+    expect(new Set(rows.map(row=>row.object_key)).size).toBe(1);
+    expect(hits.filter(path=>path==='/photo.png')).toHaveLength(1);
+  });
   it('stores one object per URL, however many documents name it', async () => {
     allowLocal();
     hits = [];
