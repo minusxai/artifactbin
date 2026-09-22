@@ -30,7 +30,9 @@ session's comments. Colors derive consistently from the session ID.
   implemented. An app restart restores the same session, proof and color.
 - Annotation transactions enqueue human mentions atomically. Only the mentioning
   account's sessions are addressed. Agent replies cannot trigger themselves.
-  Artifact access is checked again before queued input is dispatched.
+  Artifact access is checked again before queued input is dispatched. Pending work
+  is bounded to 100 requests and 128 KiB per session; overflow and unauthorized
+  targets retain visible refusal receipts without losing the comment.
 
 ## Request protocol
 
@@ -51,7 +53,8 @@ afbin comment <artifact> --thread <thread> --body 'Updated and verified.' \
   --request <request> --phase completed --state resolved
 ```
 
-Use `--phase blocked` with a question when help is needed. Use the absolute
+Use `--phase blocked` with a question when help is needed. That request stays
+open while the agent can handle queued requests from other threads. Use the absolute
 executable specified in the handoff in place of `afbin`. Session proof is sent
 in headers, not the recoverable operation body. The server validates account,
 session, artifact, thread and transition together with the comment write.
@@ -73,7 +76,9 @@ retain the draft; a mention-only reply cannot be submitted.
 Each addressed session has one latest-request line, a stable color, and a link
 to its terminal. Status changes reuse annotation notifications; an open managed
 thread also refreshes every 15 seconds for heartbeat/offline information. Raw
-terminal text never establishes working, approval or completion status.
+terminal text never establishes working, approval or completion status. Manual
+terminal input invalidates idle readiness; the agent must repeat its readiness
+command after that task finishes before queued comments can be dispatched.
 
 `afbin remote --stop <session>` requests stop. On the launching machine it uses
 SQLite cancellation metadata, so it works during relay outages without signaling

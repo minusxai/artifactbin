@@ -58,6 +58,8 @@ export interface RemoteView {
 /** Managed agents keep a stable identity independently of terminal connectivity. */
 export const REMOTE_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 export const REMOTE_HISTORY_BYTES = 128 * 1024;
+export const REMOTE_WORK_LIMIT = 100;
+export const REMOTE_WORK_BYTES = 128 * 1024;
 export const REMOTE_COLORS = ['blue', 'violet', 'teal', 'amber', 'rose', 'slate'] as const;
 export type RemoteColor = typeof REMOTE_COLORS[number];
 export type RemoteActivity = 'starting' | 'listening' | 'working' | 'blocked' | 'unknown' | 'stopping' | 'stopped';
@@ -65,6 +67,7 @@ export type RemoteWorkPhase = 'queued' | 'dispatching' | 'superseded' | 'deliver
 export interface RemoteWork {
  id:string; sessionId:string; artifactId:string; threadId:string; commentId:string;
  name:string; color:RemoteColor; phase:RemoteWorkPhase; updatedAt:string;
+ reason?:'queue_full'|'unauthorized';
  activity?:RemoteActivity;connection?:'online'|'offline'|'stopped';
 }
 

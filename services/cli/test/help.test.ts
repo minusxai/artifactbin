@@ -171,6 +171,7 @@ describe('the command registry', () => {
    assert.deepEqual(parseCommand(['update','--harness','pi','--harness=opencode','-y']).flags,{harness:['pi','opencode'],yes:true});
    assert.deepEqual(parseCommand(['remote','--name','Work','pi','--model','deepseek','-h']).positionals,['pi','--model','deepseek','-h']);
    assert.deepEqual(parseCommand(['push','--','-report.jsx']).positionals,['-report.jsx']);
+   assert.deepEqual(parseCommand(['remote','--history','history.md','--json','pi','--model','example']).flags,{history:'history.md',json:true});
   });
   test('refuses inapplicable flags and malformed requests before any auth or network',()=>{
    for(const args of [['status','--force'],['help','--dry-run'],['push','--fix'],['pull','--output','one','--output','two'],['list','--limit','0'],['list','--limit','no'],['api'],['comment','a','--state','resolved'],['comment','a','--body','x','--input','x'],['update','--harness','none','--harness','pi'],['auth','--harness','pi'],['push','--froce'],['push','--json=false']]) assert.throws(()=>parseCommand(args),Error,args.join(' '));
@@ -178,7 +179,7 @@ describe('the command registry', () => {
    for(const args of [
     ['comment','abc123','--body','text','--node','heading','--limit','3'],
     ['comment','abc123','--thread','thread','--state','resolved','--cursor','next'],
-    ['remote','--json','pi'],
+    ['remote','--foreground','--json','pi'],
    ])assert.throws(()=>parseCommand(args),Error,args.join(' '));
   });
   test('fixed choices ignore ASCII case but commands, flags and user arguments retain exact spelling',()=>{

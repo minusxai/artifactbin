@@ -86,3 +86,16 @@ test('every request repeats the exact CLI executable so a login shell or compact
  assert.equal(data.at(-1),'\r');const payload=JSON.parse(data.trim());
  assert.equal(payload.cli_executable,"/private/context's/afbin");assert.equal(payload.body,'a "quote"');assert.match(payload.instruction,/absolute/);
 });
+
+import {runRemote} from '../src/runner';
+import type {HttpClient} from '../src/http';
+test('failure to persist the startup receipt kills the spawned PTY and releases the registration',async()=>{
+ let pid:number|undefined;let removed=false;
+ const client={connection:{server:'http://localhost:5401'},request:async(_path:string,method:string)=>{if(method==='DELETE')removed=true;return {id:'startup-failure',runnerKey:'test-proof'};}} as unknown as HttpClient;
+ try{
+  await assert.rejects(runRemote({client,command:'/bin/sh',args:['-c','sleep 20'],interactive:false,managed:true,onStarted:(_session,childPid)=>{pid=childPid;throw new Error('state write failed');}}),/state write failed/);
+  let alive=true;for(let i=0;i<20&&alive;i++){await delay(50);try{process.kill(pid!,0);}catch{alive=false;}}
+  assert.equal(alive,false,'a failed startup receipt must not leave a running agent');
+  assert.equal(removed,true,'failed startup must release the reserved session');
+ }finally{if(pid)try{process.kill(-pid,'SIGKILL');}catch{}}
+});

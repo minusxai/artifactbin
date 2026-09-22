@@ -44,9 +44,10 @@ export async function runRemote(options: RunOptions): Promise<number> {
     }, {}, { signal, timeoutMs: 10000 },
   );
   let session = await register(signal);
-  let child: import("node-pty").IPty;
+  let child!: import("node-pty").IPty;
   try {
     const prepared=options.prepare?await options.prepare(session):{args,env:options.env};
+    signal?.throwIfAborted();
     child = pty.spawn(command, prepared.args, {
       cwd,
       cols,
@@ -54,11 +55,14 @@ export async function runRemote(options: RunOptions): Promise<number> {
       name: "xterm-256color",
       env: { ...(prepared.env??options.env??process.env) },
     });
+    options.onStarted?.(session,child.pid);
   } catch (error) {
+    // Registration, context and durable startup receipt form one launch boundary.
+    // A failed state write must not strand a child after the launcher reports failure.
+    if(child){try{if(options.managed)process.kill(-child.pid,"SIGKILL");else child.kill();}catch{try{child.kill();}catch{/* already exited */}}}
     await client.request(`/remote/sessions/${session.id}`, "DELETE", undefined, {}, { timeoutMs: 10000 }).catch(() => {});
     throw error;
   }
-  options.onStarted?.(session,child.pid);
   const history = new headless.Terminal({ cols, rows, scrollback: 1000, allowProposedApi: true });
   const serializer = new serialize.SerializeAddon();
   history.loadAddon(serializer);

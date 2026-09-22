@@ -36,7 +36,8 @@ it('queues only once, waits for ready, and marks interrupted delivery uncertain 
  expect((await b.exchange(owner,s.id,exchange(s.runnerKey))).inputs).toEqual([]);
  expect((await b.work(db,artifactId,'thread'))[0].phase).toBe('uncertain');
  await db.transaction(tx=>b.enqueue(tx,'other',artifactId,'thread',{...comment,id:'other'}));
- expect(await b.work(db,artifactId,'thread')).toHaveLength(1);
+ expect((await b.work(db,artifactId,'thread')).at(-1)).toMatchObject({phase:'unavailable',reason:'unauthorized'});
+ expect((await b.exchange(owner,s.id,exchange(s.runnerKey))).inputs).toEqual([]);
 });
 import {request,agentCookie} from './harness';
 import {mintToken} from '@/lib/tokens';
@@ -64,4 +65,34 @@ it('commits mention delivery with the comment, authenticates receipts, and refus
  expect((await remoteAgents.work(db,doc.id,thread.id))[0].phase).toBe('acknowledged');
  expect((await answer('completed',s.runnerKey)).status).toBe(200);
  expect((await remoteAgents.work(db,doc.id,thread.id))[0].phase).toBe('completed');
+});
+
+it('bounds pending work while preserving a visible overflow receipt and the saved comment',async()=>{
+ const a=fresh(),s=await a.create('owner',registration),db=await getDb();
+ await db.transaction(async tx=>{for(let i=0;i<101;i++)await a.enqueue(tx,'owner','artifact','thread',{id:`limit-${i}`,body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}});});
+ const work=await a.work(db,'artifact','thread');
+ expect(work.filter(w=>w.phase==='queued')).toHaveLength(100);
+ expect(work.at(-1)).toMatchObject({phase:'unavailable',reason:'queue_full'});
+});
+
+it('manual terminal input invalidates idle readiness until the agent explicitly becomes ready again',async()=>{
+ const a=fresh(),s=await a.create('owner',registration);
+ await a.ready('owner',s.id,s.runnerKey);
+ await a.input('owner',s.id,'manual task\r');
+ expect((await a.read('owner',s.id)).activity).toBe('unknown');
+ await a.ready('owner',s.id,s.runnerKey);
+ expect((await a.read('owner',s.id)).activity).toBe('listening');
+});
+
+it('a blocked request releases the agent to handle another thread while preserving the question',async()=>{
+ const token=await mintToken('blocked');const user=await createUser({email:'mxmx_test_blocked@example.com'});await claimToken(user.id,token.token);
+ const made=await publish(request('/api/artifacts',{method:'POST',token:token.token,json:{markup:'<p>blocked review</p>'}}));const artifactId=(await made.json()).id;
+ const a=fresh(),s=await a.create(user.id,registration),db=await getDb();
+ const add=(thread:string)=>db.transaction(tx=>a.enqueue(tx,user.id,artifactId,thread,{id:thread,body:`[@claude](/chat?session=${s.id}) check`,author:{kind:'human',label:'Owner'}}));
+ await add('first');await add('second');await a.ready(user.id,s.id,s.runnerKey);
+ const sent=await a.exchange(user.id,s.id,exchange(s.runnerKey));const input=sent.inputs[0];
+ for(const phase of ['acknowledged','blocked'] as const)await db.transaction(tx=>a.receipt(tx,user.id,artifactId,'first',{id:input.requestId!,sessionId:s.id,proof:s.runnerKey,phase},false));
+ const next=await a.exchange(user.id,s.id,{...exchange(s.runnerKey),ack:input.id});
+ expect(next.inputs).toHaveLength(1);expect(next.inputs[0].requestId).not.toBe(input.requestId);
+ expect((await a.work(db,artifactId,'first'))[0].phase).toBe('blocked');
 });

@@ -76,7 +76,7 @@ export async function remoteRoute(
     if(body.type==='ready')await remoteAgents.ready(owner,id,body.proof);
     else if(body.type==='stopped')await remoteAgents.stopped(owner,id,body.exitCode);
     else if(body.type==='stop')await remoteAgents.stop(owner,id);
-    else if (body.type === "input") remoteSessions.input(owner, id, body.data);
+    else if (body.type === "input") await remoteAgents.input(owner, id, body.data);
     else if (body.type === "control")
       remoteSessions.control(owner, id, body.controller, body.cols, body.rows);
     else throw new RemoteError("Invalid operation");
