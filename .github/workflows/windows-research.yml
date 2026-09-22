@@ -31,7 +31,10 @@ jobs:
       - name: Install isolated native dependencies
         continue-on-error: true
         shell: pwsh
-        run: npm install --prefix "$env:PROBE_OUTPUT" --no-audit --no-fund
+        run: |
+          Set-Location $env:PROBE_OUTPUT
+          & npm.cmd install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Install pinned Chromium
         continue-on-error: true
         shell: pwsh
