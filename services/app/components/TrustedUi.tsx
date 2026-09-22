@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 
 const PortalContainer = createContext<HTMLElement | undefined>(undefined);
@@ -116,4 +116,23 @@ export function TrustedUi({ children, overlay = false, layer = 'discussion' }: T
 /** Dialogs and popovers must inherit this destination instead of escaping into author CSS. */
 export function useTrustedPortalContainer(): HTMLElement | undefined {
   return useContext(PortalContainer);
+}
+
+/** Temporarily place active composition above navigation without remounting its draft. */
+export function useForegroundComposer(active: boolean): void {
+  const container = useTrustedPortalContainer();
+  useEffect(() => {
+    const root = container?.parentElement;
+    const previous = root ? overlays.get(root) : undefined;
+    if (!active || !root || previous === undefined) return;
+    const focused = (root.getRootNode() as ShadowRoot).activeElement;
+    root.hidePopover();
+    openOverlay(root, 3);
+    if (focused instanceof HTMLElement) focused.focus({ preventScroll: true });
+    return () => {
+      if (!overlays.has(root)) return;
+      root.hidePopover();
+      openOverlay(root, previous);
+    };
+  }, [active, container]);
 }

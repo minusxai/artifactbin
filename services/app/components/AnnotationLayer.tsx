@@ -38,6 +38,7 @@ import { useConfirmation } from './ConfirmDialog';
 import { CommentTimestamp } from './CommentTimestamp';
 import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
 import dynamic from '@/lib/dynamic';
+import {useForegroundComposer} from './TrustedUi';
 import type {ScreenshotDrawing} from './ScreenshotEditor';
 import {useCommentCapture} from '@/lib/capture/use-comment-capture';
 import CommentScreenshot from './CommentScreenshot';
@@ -859,6 +860,7 @@ export default function AnnotationLayer({
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const threadsRoot = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
+  useForegroundComposer(selection !== null);
   /**
    * Select outlines blocks under the pointer: a tap takes one, while a
    * drag draws an area anchored to the blocks' common ancestor. Its next `mx:selection` is the composer's
@@ -1414,8 +1416,6 @@ export default function AnnotationLayer({
           aria-label="Annotation composer"
           className={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
           style={{
-            // Reader navigation uses 2147483003; the composer must stay interactive above it.
-            zIndex: 2147483006,
             left: composerPosition.left,
             top: composerPosition.top,
             width: composerPosition.width,
