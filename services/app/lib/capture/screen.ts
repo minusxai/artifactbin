@@ -1,4 +1,4 @@
-import {CaptureError, type CaptureRect, type CaptureSession} from './contract';
+import {CaptureError, type CaptureRect, type CaptureSession, type CaptureStage} from './contract';
 
 interface CaptureTrack extends MediaStreamTrack {
   getCaptureHandle?: () => {handle?: string} | null;
@@ -21,19 +21,22 @@ export function clipCaptureRect(rect: CaptureRect, bounds: {width:number;height:
   return {x,y,width,height};
 }
 /** Bounded waits, including encoders and browser promises that can otherwise hang. */
-async function bounded<T>(promise: Promise<T>, ms = 5000): Promise<T> {
+async function bounded<T>(promise: Promise<T>, stage: CaptureStage, ms = 5000): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
-  try { return await Promise.race([promise, new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new CaptureError('timeout')),ms);})]); }
-  finally { clearTimeout(timer!); }
+  const started=performance.now();let outcome='success';
+  try { return await Promise.race([promise, new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new CaptureError('timeout',stage)),ms);})]); }
+  catch(error){outcome='error';throw error;}
+  finally { clearTimeout(timer!);const name=`comment-screenshot:${stage}`;performance.clearMeasures(name);performance.measure(name,{start:started,end:performance.now(),detail:{outcome}}); }
 }
-function observeFrame(video: HTMLVideoElement, accept: () => boolean = () => true) {
-  let callback = 0;
+function observeFrame(video: HTMLVideoElement, stage: CaptureStage, accept: () => boolean = () => true) {
+  let callback = 0;const started=performance.now();let frames=0;
+  const record=(outcome:string)=>{const name=`comment-screenshot:${stage}`;performance.clearMeasures(name);performance.measure(name,{start:started,end:performance.now(),detail:{outcome,frames,width:video.videoWidth,height:video.videoHeight}});};
   let timer: ReturnType<typeof setTimeout>;
   const cancel = () => {clearTimeout(timer);video.cancelVideoFrameCallback(callback);};
   const promise = new Promise<void>((resolve,reject)=>{
-    timer=setTimeout(()=>{cancel();reject(new CaptureError('timeout'));},5000);
+    timer=setTimeout(()=>{record('timeout');cancel();reject(new CaptureError('timeout',stage));},5000);
     const next: VideoFrameRequestCallback = () => {
-      if(accept()){cancel();resolve();}
+      frames++;if(accept()){record('success');cancel();resolve();}
       else callback=video.requestVideoFrameCallback(next);
     };
     callback=video.requestVideoFrameCallback(next);
@@ -52,7 +55,7 @@ export async function beginCapture(): Promise<CaptureSession> {
   let timedOut=false;
   void requested.then(stream=>{if(timedOut)stream.getTracks().forEach(track=>track.stop());},()=>{});
   let stream: MediaStream;
-  try { stream=await bounded(requested,600000); }
+  try { stream=await bounded(requested,'permission',600000); }
   catch(error) { timedOut=true;if(error instanceof DOMException && error.name==='NotAllowedError')throw new CaptureError('cancelled');throw error; }
   const track=stream.getVideoTracks()[0] as CaptureTrack | undefined;
   const verified=()=>track?.getSettings().displaySurface==='browser' && track.getCaptureHandle?.()?.handle===handle;
@@ -69,8 +72,8 @@ export async function beginCapture(): Promise<CaptureSession> {
   };
   window.addEventListener('pagehide',dispose);track.addEventListener('ended',dispose);track.addEventListener('capturehandlechange',dispose);
   timer=setTimeout(dispose,120000);
-  const initialFrame=observeFrame(video);
-  try {await bounded(video.play());await initialFrame.promise;}
+  const initialFrame=observeFrame(video,'initial-frame');
+  try {await bounded(video.play(),'playback');await initialFrame.promise;}
   catch(error){dispose();throw error;}
   finally{initialFrame.cancel();}
   return {dispose,async capture(input){
@@ -91,14 +94,14 @@ export async function beginCapture(): Promise<CaptureSession> {
         target=document.createElement('div');
         Object.assign(target.style,{position:'fixed',left:`${rect.x}px`,top:`${rect.y}px`,width:`${rect.width}px`,height:`${rect.height}px`,pointerEvents:'none',background:'transparent'});
         document.body.appendChild(target);
-        const cropTarget=await bounded(crop!.fromElement(target));
+        const cropTarget=await bounded(crop!.fromElement(target),'crop-target');
         // A static tab may present its only cropped frame before cropTo resolves.
         // Subscribe first, and ignore any full-tab frames still in flight.
-        const croppedFrame=observeFrame(video,()=>Math.abs(video.videoWidth/video.videoHeight/(rect.width/rect.height)-1)<=.015);
-        try{await bounded(track.cropTo!(cropTarget));await croppedFrame.promise;}
+        const croppedFrame=observeFrame(video,'cropped-frame',()=>Math.abs(video.videoWidth/video.videoHeight/(rect.width/rect.height)-1)<=.015);
+        try{await bounded(track.cropTo!(cropTarget),'crop-apply');await croppedFrame.promise;}
         finally{croppedFrame.cancel();}
       }else{
-        const freshFrame=observeFrame(video);
+        const freshFrame=observeFrame(video,'full-frame');
         try{await freshFrame.promise;}finally{freshFrame.cancel();}
       }
       if(disposed || track.readyState==='ended')throw new CaptureError('ended');
@@ -113,7 +116,7 @@ export async function beginCapture(): Promise<CaptureSession> {
       const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(source.width*scale));canvas.height=Math.max(1,Math.round(source.height*scale));
       const ctx=canvas.getContext('2d');if(!ctx)throw new CaptureError('unsupported');
       ctx.drawImage(video,source.x,source.y,source.width,source.height,0,0,canvas.width,canvas.height);
-      const blob=await bounded(new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new CaptureError('geometry')),'image/png')));
+      const blob=await bounded(new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new CaptureError('geometry')),'image/png')),'encode');
       return {blob,width:canvas.width,height:canvas.height,rect,viewport:bounds,capturedAt:new Date().toISOString(),method};
     } finally {window.removeEventListener('scroll',invalidate,true);window.removeEventListener('resize',resize);dispose();}
   }};

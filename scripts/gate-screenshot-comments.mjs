@@ -12,10 +12,10 @@ const published=await fetch(`${base}/api/artifacts/${seed.id}`,{method:'PUT',hea
 assert(published.ok,`publish: ${published.status}`);
 const input=await sharp({create:{width:200,height:100,channels:3,background:{r:220,g:30,b:30}}}).png().toBuffer();
 const failures=[];
-for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',webkit]]){
+for(const [name,engine,dpr,selectionWidth,selectionHeight] of [['chromium',chromium,1,200,100],['chromium',chromium,2.2,235,235],['firefox',firefox,1,200,100],['webkit',webkit,1,200,100]]){
  const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:['--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:{});
  try{
-  const context=await browser.newContext({viewport:{width:1280,height:900}});const page=await context.newPage();
+  const context=await browser.newContext({viewport:{width:1280,height:900},deviceScaleFactor:dpr});const page=await context.newPage();
   await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});const reference=document.createElement('video');reference.muted=true;reference.srcObject=stream;window.__captureReference=reference;void reference.play();return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
   await becomeOwner(page,base,seed.token);await page.goto(`${base}/a/${seed.id}`);await page.locator('#capturebox').waitFor();
   await openArtifactControls(page);await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
@@ -27,16 +27,16 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
    await expect.poll(()=>page.evaluate(()=>window.__captureReference?.readyState??0)).toBeGreaterThanOrEqual(2);
    referencePixel=await page.evaluate(({x,y})=>{const v=window.__captureReference,c=document.createElement('canvas');c.width=innerWidth;c.height=innerHeight;c.getContext('2d').drawImage(v,0,0,c.width,c.height);return Array.from(c.getContext('2d').getImageData(x+35,y+65,1,1).data).slice(0,3);},box);
   }
-  await page.mouse.move(box.x+30,box.y+60);await page.mouse.down();await page.mouse.move(box.x+230,box.y+160,{steps:12});await page.mouse.up();
+  await page.mouse.move(box.x+30,box.y+60);await page.mouse.down();await page.mouse.move(box.x+30+selectionWidth,box.y+60+selectionHeight,{steps:12});await page.mouse.up();
   const selectionFinished=Date.now();
   if(name!=='chromium'){
    await expect(page.getByLabel('Save annotation',{exact:true})).toBeDisabled();
    await page.getByLabel('Upload screenshot',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:input});
   }
-  const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,{alerts:await page.getByRole('alert').allTextContents(),status:await page.getByRole('status').allTextContents(),trace:await page.evaluate(()=>window.__captureTrace),composer:await page.getByRole('dialog',{name:'Annotation composer'}).count()});throw error;}
+  const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,{alerts:await page.getByRole('alert').allTextContents(),status:await page.getByRole('status').allTextContents(),trace:await page.evaluate(()=>window.__captureTrace),timings:await page.evaluate(()=>performance.getEntriesByType('measure').filter(e=>e.name.startsWith('comment-screenshot:')).map(e=>e.toJSON())),composer:await page.getByRole('dialog',{name:'Annotation composer'}).count()});throw error;}
   const canvas=editor.getByLabel('Screenshot drawing canvas');
   await expect(editor.getByRole('button',{name:'Use screenshot',exact:true})).toBeEnabled();
-  if(name==='chromium')console.log(`chromium: release-to-editor ${Date.now()-selectionFinished}ms; crop/encode ${await page.evaluate(()=>performance.getEntriesByName('comment-screenshot:capture').at(-1)?.duration.toFixed(1))}ms`);
+  if(name==='chromium')console.log(`chromium (DPR ${dpr}): release-to-editor ${Date.now()-selectionFinished}ms; crop/encode ${await page.evaluate(()=>performance.getEntriesByName('comment-screenshot:capture').at(-1)?.duration.toFixed(1))}ms`);
   // Exact crop corner must contain content, not a selection outline or app panel.
   const pixel=await canvas.evaluate(c=>Array.from(c.getContext('2d').getImageData(5,5,1,1).data));
   assert(pixel.slice(0,3).every((value,i)=>Math.abs(value-referencePixel[i])<=3),`${name}: content pixel ${pixel}; unmarked reference ${referencePixel}`);
@@ -49,7 +49,7 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   await expect.poll(()=>canvas.evaluate(c=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let count=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<30&&pixels[i+1]>200&&pixels[i+2]<30)count++;return count;})).toBeGreaterThan(100);
   await editor.getByRole('button',{name:'Use screenshot'}).click();
   await expect(editor).toHaveCount(0);
-  await page.getByLabel('Annotation comment',{exact:true}).pressSequentially(`Screenshot from ${name}`);
+  await page.getByLabel('Annotation comment',{exact:true}).pressSequentially(`Screenshot from ${name} at DPR ${dpr}`);
   await page.getByLabel('Save annotation',{exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Annotation composer'})).toHaveCount(0);
   await page.reload();
@@ -59,7 +59,7 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   assert(await thumbnail.evaluate(img=>img.complete&&img.naturalWidth>0),`${name}: persisted thumbnail`);
   await page.getByRole('button',{name:'Open comment screenshot'}).last().click();
   await expect(page.getByRole('dialog',{name:'Comment screenshot'})).toBeVisible();
-  console.log(`${name}: capture/fallback → brush → upload → comment → reload passed`);
+  console.log(`${name} (DPR ${dpr}): capture/fallback → brush → upload → comment → reload passed`);
  }catch(error){failures.push(new Error(`${name}: ${error.message}`));}finally{await browser.close();}
 }
 if(failures.length)throw new AggregateError(failures,'Screenshot browser checks failed');
