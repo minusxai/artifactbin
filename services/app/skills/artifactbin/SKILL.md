@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes agent-written documents people read, edit, annotate and share at a URL. An artifact is one `.jsx` file: a YAML fence for metadata, then self-contained static JSX — HTML prose and kit components styled with Tailwind via `className` — under a theme and a template. It queries datasets (CSV or JSON), embeds images and PDFs, and holds reader-changeable values, controls and charts; datasets and media are artifacts too.
+artifactbin publishes agent-written documents to read, edit, annotate and share. An artifact is one `.jsx` file: a YAML fence for metadata, then self-contained static JSX — HTML prose and kit components styled with Tailwind via `className` — under a theme and a template. It supports datasets (CSV/JSON), images, PDFs, reader-changeable values, controls and charts; datasets and media are artifacts too.
 
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 
@@ -25,7 +25,7 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 ## Example
 
-Read design, markup, template and theme before writing. The template provides spacing. `afbin help <template>` prints every reference that kind needs.
+Before writing, read design, markup, template and theme; a template's frame keeps content from sitting flush to the viewport edge. `afbin help <template>` prints every reference that kind needs.
 
 ```jsx
 [[ example ]]
