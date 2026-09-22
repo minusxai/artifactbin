@@ -14,6 +14,33 @@ beforeEach(installAnnotateSession);
 afterEach(disposeAnnotateSession);
 
 describe('view-mode annotation geometry', () => {
+  it('hides document-side selection chrome synchronously during capture', () => {
+    env.session.update(state('on'));
+    const band=document.createElement('div');band.setAttribute('data-mx-annotate-band','');document.body.appendChild(band);
+    try {
+      expect(getComputedStyle(band).visibility).toBe('visible');
+      document.documentElement.classList.add('mx-taking-screenshot');
+      expect(getComputedStyle(band).visibility).toBe('hidden');
+      document.documentElement.classList.remove('mx-taking-screenshot');
+      expect(getComputedStyle(band).visibility).toBe('visible');
+    } finally {document.documentElement.classList.remove('mx-taking-screenshot');band.remove();}
+  });
+
+  it('preserves authored backgrounds for node, ranged and hovered comments', () => {
+    const css=document.createElement('style');css.textContent='main p { background: rgb(220, 30, 30); }';document.head.appendChild(css);
+    const anchor=document.querySelector('main p')!;
+    try {
+      env.session.update(state('on'));
+      expect(getComputedStyle(anchor).backgroundColor).toBe('rgb(220, 30, 30)');
+      anchor.setAttribute('data-mx-annotation-ranged','');
+      anchor.setAttribute('data-mx-annotation-open','');
+      anchor.setAttribute('data-mx-annotation-hover','');
+      expect(getComputedStyle(anchor).backgroundColor).toBe('rgb(220, 30, 30)');
+      anchor.setAttribute('data-mx-annotate-pick-hover','');
+      expect(getComputedStyle(anchor).backgroundColor).toBe('rgb(220, 30, 30)');
+    } finally {css.remove();}
+  });
+
   it('owns its stylesheet by reference and restricts picking to the inline artifact root', () => {
     env.session.dispose();
     const root=document.querySelector('main')!;

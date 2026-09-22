@@ -12,7 +12,8 @@ afterEach(async()=>{ cleanup(); await vi.dynamicImportSettled(); });
 
 // These page-contract tests inspect controls without CSS. Real shadow/top-layer
 // placement is tested in artifact-trusted-portals and the browser gate.
-vi.mock('@/components/TrustedUi', () => ({
+vi.mock(import('@/components/TrustedUi'), async (importOriginal) => ({
+  ...await importOriginal(),
   TrustedUi: ({children}:{children:ReactNode}) => children,
   useTrustedPortalContainer: () => undefined,
 }));

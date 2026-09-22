@@ -40,7 +40,7 @@ describe('picking a block to comment on', () => {
     expect(document.head.querySelector('style[data-mx-annotate-css]')!.textContent).toContain('data-mx-annotate-pick-hover');
     anchor().dispatchEvent(new MouseEvent('pointerover', { bubbles: true }));
     expect(anchor()).toHaveAttribute('data-mx-annotate-pick-hover');
-    expect(window.getComputedStyle(anchor()).outline).toBe('1px solid rgba(245, 158, 11, 0.9)');
+    expect(window.getComputedStyle(anchor()).outline).toBe('1px solid rgba(245, 158, 11, 0.85)');
     anchor().dispatchEvent(new MouseEvent('pointerout', { bubbles: true }));
     expect(anchor()).not.toHaveAttribute('data-mx-annotate-pick-hover');
 
@@ -206,6 +206,11 @@ describe('drawing an area to comment on', () => {
     expect(picked.quote).toBeUndefined();
     expect(document.getElementById('sec')).toHaveAttribute('data-mx-annotate-selected');
     // The drawn area stays visible while its comment is composed…
+    expect(band()).not.toBeNull();
+    // Capture temporarily suppresses paint, including the composing band.
+    env.session.update({...state('off'),pins:[]});
+    expect(band()).toBeNull();
+    env.session.update({...state('on'),pins:[],selectedPath:picked.path});
     expect(band()).not.toBeNull();
     // …and leaves when the page says the selection is gone.
     env.session.update({ ...state('on'), pins: [], pick: null, selectedPath: null });

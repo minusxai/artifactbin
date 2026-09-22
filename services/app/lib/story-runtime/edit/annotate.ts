@@ -68,8 +68,8 @@ const ANNOTATE_SELECTED_ATTR = 'data-mx-annotate-selected';
 /**
  * Marks a node whose comment's own WORDS are painted instead of the whole
  * node. The behaviour attributes above stay exactly as they were — a click on
- * the paragraph still opens the thread — this only takes the node's background
- * away, because the highlight underneath it is more precise.
+ * the paragraph still opens the thread — this suppresses the whole-node outline
+ * because the range highlight is more precise. Authored backgrounds stay intact.
  */
 const ANNOTATION_RANGED_ATTR = 'data-mx-annotation-ranged';
 /** One CSS highlight per thread: `mx-annotation-<id>`, so a rule can name it. */
@@ -83,15 +83,10 @@ const ANNOTATE_BAND_ATTR = 'data-mx-annotate-band';
 /** One painted overlay per AREA thread, by thread id — the area's own box, where a text thread has its highlight. */
 const ANNOTATION_AREA_ATTR = 'data-mx-annotation-area';
 
-// Persistent annotation chrome is a tint, while the transient cross-surface
-// hover gets an outline so the relationship is unmistakable without shifting
-// layout. The composing selection keeps its stronger cursor outline.
-//
-// The tint shows while the document is EDITABLE too, where it shares a node
-// with the edit selection's own outline — so it is deliberately quieter than
-// the hover and the composing states, which are the ones a person is currently
-// pointing at. `cursor: pointer` is not part of the base rule for the same
-// reason: over an editable host the caret must still read as a caret.
+// Persistent comments use a quiet outline; hover and composition strengthen it.
+// Paint never replaces an authored background. Range highlights and area overlays
+// provide their own emphasis without changing the underlying node's styling.
+// Keep editable hosts' caret cursor intact.
 const ANNOTATE_CSS = COMMENT_PRESENTATION.annotationCss;
 
 /** What a thread's own words look like, by the state the page put it in. */
@@ -110,7 +105,7 @@ const AREA_FILL = COMMENT_PRESENTATION.areaFill;
  * touching the DOM, which is the whole reason a comment can highlight the
  * exact words at all: a wrapping span would be read straight back into the
  * source by the editor's write-back. Where it is missing (jsdom, an older
- * browser) every thread simply keeps the whole-node tint.
+ * browser) every thread simply keeps the whole-node outline.
  */
 interface HighlightRegistry {
   set(name: string, highlight: object): void;
@@ -357,7 +352,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const ranges = resolveParts(el, range.parts);
       // EVERY part or none — the same rule the wire's `quote_found` answers by.
       // Not found is not an error: the words were edited away, and the node
-      // tint says "there is a comment here" just as it always did, while a
+      // outline says "there is a comment here" just as it always did, while a
       // highlight over the surviving half would point at a fragment nobody
       // commented on.
       if (ranges.length !== range.parts.length) continue;
@@ -369,7 +364,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const fill = state.openId === pin.id
         ? HIGHLIGHT_FILL.open
         : state.hoverId === pin.id ? HIGHLIGHT_FILL.hover : HIGHLIGHT_FILL.base;
-      rules.push(`::highlight(${name}) { background-color: ${fill}; }`);
+      rules.push(`::highlight(${name}) { background-color: ${fill}; } :root.mx-taking-screenshot ::highlight(${name}) { background-color: transparent; }`);
     }
     return rules;
   };
@@ -403,7 +398,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   const paintsInChild = (pin: StoryAnnotationsMessage['pins'][number]): boolean =>
     isTargetRange(pin.range) && pin.range.target.kind === 'iframe' && managedRects.has(pin.id);
 
-  /** Stamp idempotent state: all annotate-mode tints, or only the transient view-mode hover. */
+  /** Stamp idempotent state: all annotate-mode outlines, or only the transient view-mode hover. */
   const applyState = () => {
     for (const el of scope.querySelectorAll(`[${ANNOTATED_ATTR}], [${ANNOTATION_OPEN_ATTR}], [${ANNOTATION_HOVER_ATTR}], [${ANNOTATE_SELECTED_ATTR}], [${ANNOTATION_RANGED_ATTR}]`)) {
       el.removeAttribute(ANNOTATED_ATTR);
@@ -414,6 +409,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     }
     if (!state || state.mode === 'off') {
       clearHighlights();
+      removeBand();
       return;
     }
     for (const pin of state.pins) {
@@ -465,10 +461,11 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
   };
 
   /** Report a selection: stamp the node so the owner sees what they picked, tell the page. */
-  const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire } = {}) => {
+  const reportSelection = (el: Element | null, extra: { range?: AnnotationRangeOnWire; captureRect?: AnnotationRect } = {}) => {
     managedSelection = null;
     const selection = el ? describeCommentSelection(el, nodes) : null;
     if (selection && extra.range && (selection.tag !== 'For' || isTargetRange(selection.range))) selection.range = isTargetRange(selection.range) && !isTargetRange(extra.range) ? {...selection.range, range:extra.range} : extra.range;
+    if(selection && extra.captureRect)selection.captureRect=extra.captureRect;
     selectedPath = selection?.path ?? null;
     applyState();
     post({ type: STORY_SELECTION_MESSAGE, selection });
@@ -641,7 +638,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
       const bounds = runtime.getBoundingClientRect();
       if (rect.x >= bounds.x && rect.y >= bounds.y && rect.x+rect.width <= bounds.right && rect.y+rect.height <= bounds.bottom) {
         const box = boxFromRects(bounds,rect);
-        if (box) {reportSelection(runtime,{range:{v:1,kind:'area',box}});return;}
+        if (box) {reportSelection(runtime,{range:{v:1,kind:'area',box},captureRect:rect});return;}
       }
     }
     const path = areaTarget(areaCandidates(), rect);
@@ -650,7 +647,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     const box = boxFromRects(el.getBoundingClientRect(), rect);
     if (!box) return;
     composingArea = { path, box };
-    reportSelection(el, { range: { v: 1, kind: 'area', box } });
+    reportSelection(el, { range: { v: 1, kind: 'area', box }, captureRect:rect });
   };
 
   const cancelDrawing = () => { if (!drawing) return; swallowSelectionClick = false; drawing = null; removeBand(); setPickHovered(null); };

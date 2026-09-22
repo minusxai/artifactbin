@@ -1,3 +1,5 @@
+import {consumeCommentImage,commentImagesFor} from './comment-images';
+import type {CommentImageWire} from '../../contracts/src/comment-image';
 import {remoteAgents,type ReviewReceipt} from './remote/agents';
 import type {RemoteWork,RemoteColor} from '../../contracts/src/remote';
 import {completeMutationReceipt,type MutationReceipt} from './mutation-receipt';
@@ -90,6 +92,7 @@ export interface AnnotationCommentWire {
 }
 
 export interface AnnotationWire {
+  image?: CommentImageWire;
   remote_work?:RemoteWork[];
   id: string;
   status: 'open' | 'resolved';
@@ -122,6 +125,7 @@ export interface AnnotationWire {
 }
 
 export interface CreateAnnotationInput {
+  attachmentId?: string;
   /** Stable source identity; preferred by all new callers. */
   nodeId?: string;
   /** BODY path the frame reported for the selected node. */
@@ -137,7 +141,7 @@ export interface CreateAnnotationInput {
 
 type CreateAnnotationRefusal =
   | { refused: 'not_markup' }
-  | { refused: 'bad_path' }
+  | { refused: 'bad_path' | 'invalid_attachment' }
   | { refused: 'quote_not_found' | 'ambiguous_quote' }
   /** The document moved under the click — retry with fresh coords (the page is live). */
   | { refused: 'stale'; head: { editId: string; version: number } };
@@ -379,6 +383,7 @@ export async function createAnnotationFor(
     const anchorKey = anchorKeyOf(node);
     if (!anchorKey) return { refused: 'bad_path' };
     if (isTargetRange(input.range) && !targetBelongsTo(node, input.range.target)) return { refused: 'bad_path' };
+    if (input.attachmentId && (!input.baseEditId || !await consumeCommentImage(tx,actor,artifactId,input.attachmentId,id,row.edit_id))) return {refused:'invalid_attachment'};
     await tx.query(
     `INSERT INTO annotations
        (id, artifact_id, root_id, body, author_kind, author_token_id, author_user_id, author_label, author_transport,
@@ -430,6 +435,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     byRoot.set(r.root_id!, list);
   }
 
+  const images = await commentImagesFor(db,head.id);
   const source = head.source ?? '';
   const anchors = anchorIndex(source);
 
@@ -440,6 +446,7 @@ async function wireFor(db: Queryable, head: ArtifactRow, roots: AnnotationRowDb[
     const range = storedRange(root.range);
     return {
       id: root.id,
+      ...(images.has(root.id) ? {image:images.get(root.id)} : {}),
       status: root.status,
       anchor: anchored
         ? { key: root.anchor_key!, nodeId: root.anchor_key!, path: bodyPath!, spanStart: found.node.start, spanEnd: found.node.end }

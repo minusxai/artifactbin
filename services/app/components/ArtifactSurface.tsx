@@ -824,6 +824,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
         {canAnnotate && (
           <AnnotationLayer
             id={id}
+            editId={live?.editId ?? editId}
             runtimeRef={runtimeRef}
             sessionNonce={sessionNonce}
             railOpen={railOpen}

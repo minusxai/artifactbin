@@ -37,8 +37,13 @@ import {REMOTE_COLOR_CSS,remoteColor} from '../../contracts/src/remote';
 import { useConfirmation } from './ConfirmDialog';
 import { CommentTimestamp } from './CommentTimestamp';
 import { sendDocument, subscribeDocument, documentRect, type DocumentRuntimeRef } from '@/lib/story-runtime/document-endpoint';
+import dynamic from '@/lib/dynamic';
+import {useForegroundComposer} from './TrustedUi';
+import type {ScreenshotDrawing} from './ScreenshotEditor';
+import {useCommentCapture} from '@/lib/capture/use-comment-capture';
+import CommentScreenshot from './CommentScreenshot';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, EllipsisVertical, MessageSquare, LoaderCircle, SquareDashedMousePointer, Trash2, X } from 'lucide-react';
 import {readAnnotationPages} from '@/lib/annotation-pages';
 import type { AnnotationCommentWire, AnnotationWire } from '@/lib/annotations';
 import Avatar from '@/components/Avatar';
@@ -58,10 +63,18 @@ import {
   type StoryAnnotationsMessage, type StoryEditRect, type StoryEditSelection,
 } from '@/lib/story-runtime/contract';
 
+// Keep the brush in its own chunk, preloaded when selection starts. Native permission
+// remains in the eager capture module so it retains the user gesture.
+let screenshotEditorModule: Promise<typeof import('./ScreenshotEditor')> | undefined;
+const loadScreenshotEditor=()=>screenshotEditorModule??=(import('./ScreenshotEditor').catch(error=>{screenshotEditorModule=undefined;throw error;}));
+const ScreenshotEditor=dynamic(loadScreenshotEditor);
+
+
 interface AnnotationLayerProps {
   /** Every change to the list this layer holds — creates, replies, resolves — so the page's count can follow it. */
   onAnnotationsChange?: (annotations: AnnotationWire[]) => void;
   id: string;
+  editId?: string;
   frameRef?: { current: HTMLIFrameElement | null };
   runtimeRef?: DocumentRuntimeRef;
   sessionNonce: string | null;
@@ -114,6 +127,7 @@ function positionedComposer(
   frameRect: Pick<DOMRect, 'left' | 'top' | 'width'>,
   viewportWidth: number,
   viewportHeight: number,
+  screenshot = false,
 ) {
   const viewportInset = VIEW_COMMENT_INSET;
   const narrowDocument = frameRect.width < 280;
@@ -121,14 +135,14 @@ function positionedComposer(
   const maxRight = narrowDocument
     ? viewportWidth - viewportInset
     : Math.min(viewportWidth - viewportInset, frameRect.left + frameRect.width - viewportInset);
-  const width = Math.max(0, Math.min(COMPOSER_W, maxRight - minLeft));
+  const width = Math.max(0, Math.min(screenshot ? 680 : COMPOSER_W, maxRight - minLeft));
   const anchorRight = frameRect.left + selection.rect.x + selection.rect.width;
   const left = Math.max(minLeft, Math.min(anchorRight + COMPOSER_GAP, maxRight - width));
 
-  const minTop = frameRect.top + viewportInset;
+  const minTop = Math.max(frameRect.top, screenshot ? APP_BAR_H : 0) + viewportInset;
   const preferredTop = frameRect.top + selection.rect.y
     + Math.min(selection.rect.height + COMPOSER_GAP, 56);
-  const maxTop = Math.max(minTop, viewportHeight - COMPOSER_ESTIMATED_H - viewportInset);
+  const maxTop = Math.max(minTop, viewportHeight - (screenshot ? 720 : COMPOSER_ESTIMATED_H) - viewportInset);
   return { left, top: Math.max(minTop, Math.min(preferredTop, maxTop)), width };
 }
 
@@ -736,6 +750,7 @@ function Thread({
               : open
                 ? <FoldingBody text={c.body} foldable={!(justOpened && newest)} />
                 : <p className="line-clamp-2 font-sans leading-snug text-fg/90">{previewText(c.body)}</p>}
+            {index===0&&a.image&&<CommentScreenshot image={a.image}/>}
           </li>
           );
         })}
@@ -807,9 +822,14 @@ function Thread({
 }
 
 export default function AnnotationLayer({
-  id, frameRef, runtimeRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
+  id, editId, frameRef, runtimeRef, sessionNonce, railOpen, liveAnnotations, showViewComments,
   onRailOpenChange, initialSelection = null, topOffset, onAnnotationsChange, pickOnOpen = true, rightInset = 0,
 }: AnnotationLayerProps) {
+  const capture=useCommentCapture(id,editId);
+  const screenshotExport=useRef<(()=>Promise<ScreenshotDrawing>)|null>(null);
+  const captureRef=useRef(capture);captureRef.current=capture;
+  const startPickRef=useRef<()=>void>(()=>{});
+  const mutationRef=useRef({signature:'',key:''});
   const [annotations, setAnnotations] = useState<AnnotationWire[]>([]);
   // The page's own count (the badge on the comment glyph) follows THIS list:
   // a thread resolved or opened here is reflected at once, not when the live
@@ -840,6 +860,7 @@ export default function AnnotationLayer({
   const [anchorRects, setAnchorRects] = useState<Record<string, StoryEditRect>>({});
   const threadsRoot = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState<StoryEditSelection | null>(null);
+  useForegroundComposer(selection !== null);
   /**
    * Select outlines blocks under the pointer: a tap takes one, while a
    * drag draws an area anchored to the blocks' common ancestor. Its next `mx:selection` is the composer's
@@ -902,6 +923,8 @@ export default function AnnotationLayer({
    * thread and its newest comment open together, in one write.
    */
   const openThread = useCallback((annId: string) => {
+    captureRef.current.reset();
+    setPick(null);
     setOpenId(annId);
     setJustOpenedId(annId);
     setSelection(null);
@@ -998,19 +1021,20 @@ export default function AnnotationLayer({
     if (railOpen) {
       const forThread = openedForThreadRef.current;
       openedForThreadRef.current = false;
-      if (!forThread && !composingRef.current && pickOnOpen && !phoneRail) setPick('select');
+      if (!editId && !forThread && !composingRef.current && pickOnOpen && !phoneRail) setPick('select');
       return;
     }
     if (sheetAwayForPickRef.current) { sheetAwayForPickRef.current = false; return; }
     setPick(null);
   }, [railOpen, pickOnOpen, phoneRail]);
-  useEffect(() => { if (!pickOnOpen) setPick(null); }, [pickOnOpen]);
+  useEffect(() => { if (!pickOnOpen) {setPick(null);captureRef.current.reset();} }, [pickOnOpen]);
 
   // A selection handed down by the page — the view-mode bubble's Comment, or
   // the editor toolbar's — opens the composer on those exact words, so nobody
   // has to click the same text twice.
   useEffect(() => {
     if (!initialSelection) return;
+    captureRef.current.reset();
     setSelection(initialSelection);
     setOpenId(null);
     setFailure(null);
@@ -1034,7 +1058,7 @@ export default function AnnotationLayer({
       type: STORY_ANNOTATIONS_MESSAGE,
       // Annotations are ambient whenever this capability exists. The frame
       // decides how pins/tints coexist with view and edit mode.
-      mode: 'on',
+      mode: capture.busy ? 'off' : 'on',
       pins: [...annotations, ...(openResolved ? [openResolved] : [])]
         .filter((a) => !a.orphaned && a.anchor)
         // The range travels with the pin so the frame can paint the words
@@ -1052,7 +1076,7 @@ export default function AnnotationLayer({
       pick,
     };
     postToFrame(message);
-  }, [annotations, hoverId, openId, pick, resolvedList, selection, sessionNonce, postToFrame]);
+  }, [annotations, hoverId, openId, pick, resolvedList, selection, sessionNonce, postToFrame, capture.busy]);
   // Closing the rail drops what only the rail was showing; the pins stay.
   useEffect(() => {
     if (!railOpen) setOpenId(null);
@@ -1071,12 +1095,7 @@ export default function AnnotationLayer({
       if (!nonce || !isEditFrameMessage(event.data, nonce)) return;
       if (event.data.type === STORY_SELECTION_ACTION_MESSAGE && event.data.action === 'select') {
         if (!pickOnOpen) return;
-        setPick('select');
-        setOpenId(null);
-        if (phoneRail && railOpenRef.current) {
-          sheetAwayForPickRef.current = true;
-          onRailOpenChangeRef.current(false);
-        }
+        startPickRef.current();
         return;
       }
       if (event.data.type === STORY_ANNOTATION_LAYOUT_MESSAGE) {
@@ -1106,13 +1125,17 @@ export default function AnnotationLayer({
         setPick(null);
         if (picked) {
           setSelection(picked);
+          const origin=runtimeRef?{left:0,top:0}:frameRef?.current?.getBoundingClientRect();
+          const rect=picked.captureRect??picked.rect;
+          void captureRef.current.capture({...rect,x:rect.x+(origin?.left??0),y:rect.y+(origin?.top??0)});
           setOpenId(null);
           setFailure(null);
-        }
+        } else captureRef.current.reset();
         return;
       }
       if (event.data.type === STORY_SELECTION_MESSAGE && composingRef.current) {
         const reported = event.data.selection;
+        if(captureRef.current.draft || captureRef.current.busy)return;
         /*
          * The frame re-reports the composing node's GEOMETRY on every scroll,
          * resize and re-render, and that report carries no quote — the words
@@ -1188,7 +1211,7 @@ export default function AnnotationLayer({
   }, [id]);
 
   const save = useCallback(async () => {
-    if (!selection || !draft.trim()) return;
+    if (!selection || !draft.trim() || capture.busy || (capture.required&&!capture.draft)) return;
     if (!selection.nodeId) {
       setFailure('Wait for this change to save before commenting. Your draft is still here.');
       return;
@@ -1196,13 +1219,18 @@ export default function AnnotationLayer({
     setBusy(true);
     setFailure(null);
     try {
+      if(capture.draft&&!screenshotExport.current)throw new Error('The screenshot is still loading. Please try again.');
+      const attachmentId=await capture.stage(capture.draft?await screenshotExport.current!():undefined);
+      const signature=JSON.stringify([selection,draft,attachmentId]);
+      if(mutationRef.current.signature!==signature)mutationRef.current={signature,key:crypto.randomUUID()};
       const res = await fetch(`/api/my/artifacts/${id}/annotations`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key':mutationRef.current.key },
         // The exact words ride along when there are any: the frame captured
         // them from the live Range, and the page is the only side that can
         // store them. A caret comment simply carries neither key.
         body: JSON.stringify({
           path: selection.path, node_id: selection.nodeId, body: draft,
+          ...(attachmentId?{attachment_id:attachmentId,edit_id:capture.draft!.editId}:{}),
           ...(selection.quote ? { quote: selection.quote } : {}),
           ...(selection.range ? { range: selection.range } : {}),
         }),
@@ -1219,17 +1247,19 @@ export default function AnnotationLayer({
         return;
       }
       const wire = (await res.json()) as AnnotationWire;
-      setAnnotations((prev) => [...prev, wire]);
+      capture.reset();
+      setAnnotations((prev) => [...prev.filter(item=>item.id!==wire.id), wire]);
       setSelection(null);
       setDraft('');
       setPreviewing(false);
       setOpenId(wire.id);
       setJustOpenedId(wire.id);
       postToFrame({ type: STORY_SELECT_MESSAGE, path: null });
-    } finally { setBusy(false); }
-  }, [id, selection, draft, postToFrame]);
+    } catch(error){setFailure(error instanceof Error?error.message:'Could not save the comment. Your draft is still here.');} finally { setBusy(false); }
+  }, [id, selection, draft, postToFrame,capture]);
 
   const cancelCompose = useCallback(() => {
+    captureRef.current.reset();
     setSelection(null);
     setDraft('');
     setPreviewing(false);
@@ -1271,6 +1301,7 @@ export default function AnnotationLayer({
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.stopPropagation();
+      captureRef.current.reset();
       setPick(null);
     };
     window.addEventListener('keydown', onKey);
@@ -1291,7 +1322,12 @@ export default function AnnotationLayer({
    * then the only chrome, and carries the way out. On desktop the rail stays;
    * closing it does not cancel a pick for the same reason.
    */
-  const beginPick = (mode: 'select') => {
+  const beginPick = async (mode: 'select') => {
+    if(editId){
+      const preparation=capture.start(); // Native permission still starts in this gesture.
+      void loadScreenshotEditor().catch(()=>{}); // Overlap the lazy chunk with permission/selection.
+      if(!await preparation)return;
+    }
     setPick(mode);
     setOpenId(null);
     if (phoneRail && railOpenRef.current) {
@@ -1299,7 +1335,8 @@ export default function AnnotationLayer({
       onRailOpenChangeRef.current(false);
     }
   };
-  const endPick = () => setPick(null);
+  startPickRef.current=()=>{void beginPick('select');};
+  const endPick = () => {capture.reset();setPick(null);};
   /** The header tool: pressing it while it is active is the way out. */
   const toggleTool = (mode: 'select') => (pick === mode ? endPick() : beginPick(mode));
 
@@ -1321,16 +1358,20 @@ export default function AnnotationLayer({
     ? { left: measured.left, top: measured.top, width: Math.max(0, measured.width - railWidth) }
     : { left: 0, top: topOffset, width: window.innerWidth - railWidth };
   const composerPosition = selection
-    ? positionedComposer(selection, frameRect, window.innerWidth, window.innerHeight)
+    ? positionedComposer(selection, frameRect, window.innerWidth, window.innerHeight, capture.required)
     : null;
 
   return (
     <>
       {confirmation}
+      <style>{`:host-context(.mx-taking-screenshot) [data-capture-chrome],.mx-taking-screenshot [data-capture-chrome]{visibility:hidden!important}`}</style>
+      {capture.busy&&!selection&&<div data-capture-chrome role="status" className="fixed bottom-4 left-4 z-50 rounded bg-panel p-3 shadow">Preparing screenshot… <button type="button" onClick={capture.reset}>Cancel capture</button></div>}
+
+
       {/* The ambient surface: tiny open-thread identities over the document's
           right edge, at their anchors. Present in view mode AND while editing. */}
       {floating && (
-        <div aria-label="Open annotation comments" className="pointer-events-none fixed inset-0 z-20">
+        <div data-capture-chrome aria-label="Open annotation comments" className="pointer-events-none fixed inset-0 z-20">
           {placed.map(({ annotation, top }) => (
             <ThreadPreview
               key={annotation.id}
@@ -1349,7 +1390,7 @@ export default function AnnotationLayer({
       {pick && (
         <div
           role="status"
-          aria-label="Select tool active"
+          data-capture-chrome aria-label="Select tool active"
           className={`${cardClass} fixed z-30 flex items-center gap-2 border-edge-bright px-3 py-1.5 font-mono text-[11px] text-muted shadow-xl`}
           style={{ left: frameRect.left + frameRect.width / 2, top: Math.max(topOffset, frameRect.top, phoneRail ? APP_BAR_H : 0) + VIEW_COMMENT_INSET, transform: 'translateX(-50%)' }}
         >
@@ -1370,6 +1411,7 @@ export default function AnnotationLayer({
           moves to the stable right rail after creation. */}
       {selection && composerPosition && (
         <section
+          data-capture-chrome
           role="dialog"
           aria-label="Annotation composer"
           className={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
@@ -1395,6 +1437,9 @@ export default function AnnotationLayer({
             </button>
           </div>
           <div className="p-3">
+            {capture.busy&&<div role="status" className="mb-3 flex items-center gap-2 rounded-lg border border-edge bg-surface p-4 text-sm text-muted"><LoaderCircle size={16} className="animate-spin"/>Preparing screenshot…</div>}
+            {capture.draft&&<ScreenshotEditor image={capture.draft.image} initialStrokes={capture.draft.strokes} exportRef={screenshotExport} busy={busy} onRetake={()=>void beginPick('select')}/>}
+            {capture.required&&!capture.draft&&!capture.busy&&<div className="mb-3 space-y-3 rounded-lg border border-edge bg-surface p-3 text-xs"><p role="alert" className="leading-relaxed text-muted">{capture.error||'A screenshot is required for this selection.'}</p><button type="button" className="rounded-lg border border-edge bg-panel px-3 py-2 font-medium hover:border-accent" onClick={()=>void beginPick('select')}>Retry screenshot</button><label className="block space-y-2 font-medium">Upload screenshot<input className="block w-full text-xs text-muted file:mr-2 file:rounded-md file:border-0 file:bg-panel file:px-3 file:py-2 file:text-fg" type="file" accept="image/png,image/jpeg,image/webp" aria-label="Upload screenshot" onChange={event=>{const file=event.target.files?.[0];if(file)void capture.upload(file);event.target.value='';}}/></label><button type="button" className="text-muted underline underline-offset-4 hover:text-fg" onClick={capture.skip}>Continue without screenshot</button></div>}
             <MarkdownField
               label="Annotation comment"
               previewLabel="Comment preview"
@@ -1405,7 +1450,7 @@ export default function AnnotationLayer({
               previewing={previewing}
               onPreviewingChange={setPreviewing}
               rows={4}
-              autoFocus
+              autoFocus={!capture.busy}
               placeholder="Add a comment for your agent…"
             >
               <div className="mb-2 flex min-w-0 flex-wrap items-center gap-1 font-mono text-[11px] text-muted">
@@ -1419,7 +1464,7 @@ export default function AnnotationLayer({
                         <button
                           type="button"
                           aria-label={`Select ${crumb.tag}`}
-                          onClick={() => postToFrame({ type: STORY_SELECT_MESSAGE, path: crumb.path })}
+                          disabled={!!capture.draft||capture.busy} onClick={() => postToFrame({ type: STORY_SELECT_MESSAGE, path: crumb.path })}
                           className="cursor-pointer truncate underline decoration-dotted hover:text-accent"
                         >
                           {crumb.tag}
@@ -1442,7 +1487,7 @@ export default function AnnotationLayer({
                 cancel
               </button>
               <button
-                type="button" aria-label="Save annotation" disabled={busy || !draft.trim()}
+                type="button" aria-label="Save annotation" disabled={busy || capture.busy || (capture.required&&!capture.draft) || !draft.trim()}
                 onClick={submitDraft}
                 className="cursor-pointer rounded-[4px] border border-accent bg-accent px-2 py-1 font-semibold text-bg hover:brightness-110 disabled:cursor-default disabled:opacity-40"
               >
@@ -1582,7 +1627,7 @@ function RailChrome({ phone, topOffset, rightInset, onClose, header, children }:
   }
   return (
     <aside
-      aria-label="Annotation sidebar"
+      data-capture-chrome aria-label="Annotation sidebar"
       className="fixed bottom-0 z-20 flex flex-col gap-2.5 border-l border-edge bg-bg p-2.5"
       style={{ top: topOffset, right: rightInset, width: RIGHT_RAIL_W }}
     >

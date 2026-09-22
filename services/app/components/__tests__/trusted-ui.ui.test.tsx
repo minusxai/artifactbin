@@ -2,7 +2,7 @@ import { render, cleanup, act, fireEvent, waitFor, within } from '@testing-libra
 import { StrictMode, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TrustedUi, useTrustedPortalContainer, configureTrustedUiStyles } from '../TrustedUi';
+import { TrustedUi, useForegroundComposer, useTrustedPortalContainer, configureTrustedUiStyles } from '../TrustedUi';
 import AnchoredPanel from '../AnchoredPanel';
 import MobileSheet from '../MobileSheet';
 import { SelectMenu } from '../SelectMenu';
@@ -189,4 +189,22 @@ describe('real overlays inside the trusted root', () => {
     await waitFor(() => expect(shadow.querySelector('[role="dialog"]')).not.toBeNull());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
+});
+
+it('raises active composition above navigation and restores ordering without remounting',()=>{
+ const order:HTMLElement[]=[];
+ const show=vi.spyOn(HTMLElement.prototype,'showPopover').mockImplementation(function(this:HTMLElement){if(!order.includes(this))order.push(this);});
+ const hide=vi.spyOn(HTMLElement.prototype,'hidePopover').mockImplementation(function(this:HTMLElement){const index=order.indexOf(this);if(index>=0)order.splice(index,1);});
+ function Composer({active}:{active:boolean}){useForegroundComposer(active);return <input aria-label="Draft" defaultValue="preserved"/>;}
+ const tree=(active:boolean)=><><TrustedUi overlay><Composer active={active}/></TrustedUi><TrustedUi overlay layer="navigation"><button>Navigation</button></TrustedUi></>;
+ const view=render(tree(false));
+ const root=view.container.querySelector('[data-trusted-ui]')!.shadowRoot!;
+ const input=root.querySelector('input')!;
+ expect(order.at(-1)?.textContent).toContain('Navigation');
+ view.rerender(tree(true));
+ expect(order.at(-1)?.contains(input)).toBe(true);
+ view.rerender(tree(false));
+ expect(order.at(-1)?.textContent).toContain('Navigation');
+ expect(root.querySelector('input')).toBe(input);expect(input.value).toBe('preserved');
+ view.unmount();show.mockRestore();hide.mockRestore();
 });

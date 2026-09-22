@@ -32,6 +32,41 @@ create unique index "account_issuer_accountId_uidx" on "auth"."account" ("issuer
 
 -- schema "app" — owned by the app role; tables declared by lib/schema.ts
 
+CREATE TABLE IF NOT EXISTS app.comment_images (
+  id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  annotation_id TEXT,
+  token_id TEXT NOT NULL,
+  user_id TEXT,
+  metadata JSONB NOT NULL,
+  bytes BIGINT NOT NULL,
+  ready BOOLEAN NOT NULL DEFAULT false,
+  expires_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (id)
+);
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS id TEXT NOT NULL;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS artifact_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS annotation_id TEXT;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS token_id TEXT NOT NULL;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS user_id TEXT;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS bytes BIGINT NOT NULL;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS ready BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE app.comment_images ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_comment_images_annotation ON app.comment_images (annotation_id);
+
+CREATE INDEX IF NOT EXISTS idx_comment_images_expiry ON app.comment_images (expires_at);
+
 CREATE TABLE IF NOT EXISTS app.remote_agents (
   id TEXT NOT NULL,
   owner TEXT NOT NULL,

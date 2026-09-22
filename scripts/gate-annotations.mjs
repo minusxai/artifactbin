@@ -759,6 +759,7 @@ async function pickLeg(browser) {
 
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
+  await page.addInitScript(()=>{if(navigator.mediaDevices)Object.defineProperty(navigator.mediaDevices,'setCaptureHandleConfig',{value:undefined,configurable:true});});
   await becomeOwner(page, BASE, token);
   await page.goto(`${BASE}/a/${id}`, { waitUntil: 'load' });
   const frame = page.locator('[data-mx-inline-story]');
@@ -770,10 +771,13 @@ async function pickLeg(browser) {
   await page.locator('[aria-label="Toggle comments"]').click();
   await page.locator('[aria-label="Annotation sidebar"]').waitFor({ timeout: 8000 });
 
-  // Opening the rail opened the pick: nothing to press before the first click.
+  // Capture needs an explicit user gesture; opening the rail does not start it.
   const tool = page.locator('[aria-label="Select"]');
   check(await tool.count() === 1, 'the rail header offers the pick tool');
-  check(await tool.getAttribute('aria-pressed') === 'true', 'opening the rail put the pick on: the tool reads as pressed');
+  check(await tool.getAttribute('aria-pressed') === 'false', 'opening the rail leaves capture idle');
+  await tool.click();
+  await page.locator('[aria-label="Select tool active"]').waitFor();
+  check(await tool.getAttribute('aria-pressed') === 'true', 'Select starts the pick');
   check(await page.locator('[aria-label="Select tool active"]').isVisible(), 'a pill over the document says what to do next');
   const promptBox = await page.locator('[aria-label="Select tool active"]').boundingBox();
   check(promptBox.y >= 44, 'the Select prompt sits below the app topbar');
@@ -796,6 +800,7 @@ async function pickLeg(browser) {
   check(await frame.locator('[data-mx-annotate-pick-hover]').count() === 0, 'and the hover outline went with the pick');
 
   await page.locator('[aria-label="Annotation comment"]').fill('picked, not selected');
+  await page.getByRole('button',{name:'Continue without screenshot',exact:true}).click();
   await page.locator('[aria-label="Save annotation"]').click();
   const thread = await until(() => page.locator('[aria-label="Annotation thread"]').count(), (n) => n === 1, 10000);
   check(thread === 1, 'the comment lands as a rail thread');
@@ -809,6 +814,7 @@ async function pickLeg(browser) {
   // A second pick — explicit this time, the tool is still the way in — stood
   // down by escape: the outline goes with it.
   await tool.click();
+  await page.locator('[aria-label="Select tool active"]').waitFor();
   check(await tool.getAttribute('aria-pressed') === 'true', 'the tool starts a pick again after the first ended');
   await frame.locator('#figure').hover();
   await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
@@ -839,6 +845,7 @@ async function pickLeg(browser) {
   check(crumb === 'section', `the anchor is the lowest common ancestor of what was drawn over (got ${crumb})`);
   check(await frame.locator('[data-mx-annotate-band]').count() === 1, 'the drawn area stays visible while composing');
   await page.locator('[aria-label="Annotation comment"]').fill('this whole region');
+  await page.getByRole('button',{name:'Continue without screenshot',exact:true}).click();
   await page.locator('[aria-label="Save annotation"]').click();
   const areaWire = await until(read, (w) => (w?.annotations?.length ?? 0) === 2, 15000);
   const areaAnn = areaWire?.annotations?.find((a) => a.range?.kind === 'area');

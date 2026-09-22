@@ -38,6 +38,7 @@ export async function mergeGuestUsers(userId: string, heldTokenIds: string[]): P
     for (const guest of guests.rows) {
       await tx.query('UPDATE artifacts SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
       await tx.query('UPDATE tokens SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
+      await tx.query('UPDATE comment_images SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
       await tx.query('UPDATE dataset_secrets SET user_id = $1 WHERE user_id = $2', [userId, guest.id]);
       await tx.query('UPDATE users SET merged_into_user_id = $1 WHERE id = $2', [userId, guest.id]);
       // Keep the empty guest row for historical author attribution. No live
