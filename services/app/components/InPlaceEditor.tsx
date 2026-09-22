@@ -28,6 +28,7 @@ import SourceEditor from '@/components/SourceEditorPane';
 import { editBlock } from '@/lib/editor-v2/block-edit';
 import { SourceHistory } from '@/lib/editor-v2/history';
 import { Check, Code, Database, History, Undo2, Redo2, Paintbrush } from 'lucide-react';
+import { TrustedUi } from '@/components/TrustedUi';
 
 import ThemePicker, { ModeChip, TemplateChip } from '@/components/ThemePicker';
 import { Tooltip } from '@/components/Tooltip';
@@ -1339,6 +1340,9 @@ export default function InPlaceEditor({
       )}
 
       {phone && historyOpen && (
+        // The open panel must receive clicks ABOVE the reader's navigation
+        // rail; without this wrapper a trusted-ui layer swallows them.
+        <TrustedUi overlay layer="navigation">
         <VersionHistory
           topOffset={barTop + barH}
           versions={history.versions ?? []}
@@ -1350,6 +1354,7 @@ export default function InPlaceEditor({
           onClose={() => setHistoryOpen(false)}
           busy={history.busy}
         />
+        </TrustedUi>
       )}
     </div>
   );
