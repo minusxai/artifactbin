@@ -73,4 +73,4 @@ export interface RemoteWork {
 
 /** Stable across reloads and usable by mention renderers without private session lookups. */
 export function remoteColor(id:string):RemoteColor {let value=0;for(const char of id)value=(value*31+char.charCodeAt(0))>>>0;return REMOTE_COLORS[value%REMOTE_COLORS.length]!;}
-export const REMOTE_COLOR_CSS:Record<RemoteColor,string>={blue:'#518bda',violet:'#a07ce3',teal:'#36a695',amber:'#c68a28',rose:'#d67396',slate:'#8894aa'};
+export const REMOTE_COLOR_CSS:Record<RemoteColor,string>={blue:'light-dark(#1d4ed8, #93c5fd)',violet:'light-dark(#6d28d9, #c4b5fd)',teal:'light-dark(#0f766e, #5eead4)',amber:'light-dark(#92400e, #fcd34d)',rose:'light-dark(#be185d, #f9a8d4)',slate:'light-dark(#475569, #cbd5e1)'};
