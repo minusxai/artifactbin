@@ -28,7 +28,7 @@ export const flags: Record<string,Flag> = {
  for:{value:'TEMPLATE',description:'Print every reference a document of this template needs, in reading order, as one output.'},
  version:{description:'Show the installed CLI version.'},
  help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
- server:{value:'URL',description:'Use this server origin for this command.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; browser approval is still required.'},
+ server:{value:'URL',description:'Use this server origin for this command.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; never bypass authentication.'},
  'dry-run':{short:'n',description:'Validate the operation without changing local or remote state.'},force:{short:'f',description:'Overwrite local changes on pull, or observe and conditionally replace a stale head on push. On delete, allow referenced assets.'},
  remote:{description:'Fetch current remote state; comparison still runs locally.'},fix:{description:'Apply mechanical local fixes. Push never fixes source.'},
  body:{value:'TEXT',description:'Post this comment text.'},thread:{value:'ID',description:'Select an existing thread for a reply or state change.'},state:{value:'STATE',description:'Set the selected thread to open or resolved; fixed names ignore case.'},
