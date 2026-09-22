@@ -31,6 +31,8 @@ interface VersionHistoryProps {
   busy: boolean;
   /** Space reserved above the desktop drawer by the caller's toolbars. */
   topOffset?: number;
+  /** Render as a SECTION of a surrounding panel (the editor's left rail) rather than as a fixed drawer. */
+  embedded?: boolean;
 }
 
 /**
@@ -44,7 +46,7 @@ const ROW = (selected: boolean) =>
   }`;
 
 export default function VersionHistory({
-  versions, currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy, topOffset = 0,
+  versions = [], currentVersion, previewing, onPreview, onRestore, onBackToCurrent, onClose, busy, topOffset = 0, embedded = false,
 }: VersionHistoryProps) {
   const phone = useIsPhoneViewport();
   // Escape closes, like any transient panel.
@@ -183,6 +185,13 @@ export default function VersionHistory({
       <MobileSheet label="Version history" onClose={onClose} size="half" header={head}>
         <div className="flex flex-col">{content}</div>
       </MobileSheet>
+    );
+  }
+  if (embedded) {
+    return (
+      <section aria-label="Version history" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {content}
+      </section>
     );
   }
   return (

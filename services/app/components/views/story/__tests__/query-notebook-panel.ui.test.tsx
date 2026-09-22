@@ -28,7 +28,10 @@ describe('reading the cells', () => {
     expect(sqlField('sales').value).toBe('select region, revenue from "public"."rows"');
     expect(sqlField('costs').value).toBe('select 1 as spend');
     const sales = screen.getByLabelText('Query $sales');
-    expect(within(sales).getByText('ref:ds1234')).toBeTruthy();
+    // The source is no longer repeated on every cell: the index groups each
+    // query under the dataset it reads, so the header carries the name and
+    // what it powers instead.
+    expect(within(sales).queryByText('ref:ds1234')).toBeNull();
     expect(within(screen.getByLabelText('Query $costs')).queryByText(/^ref:/)).toBeNull();
   });
 

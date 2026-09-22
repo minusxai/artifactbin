@@ -610,7 +610,14 @@ body[data-mx-story-root] { padding-top: var(--mx-chrome-inset, 0px) !important; 
  * once the reader reaches the last column, where nothing is hidden any more.
  */
 export const STORY_TABLE_CSS = `
-:where([data-mx-story-root]) table {
+/*
+ * The kit's own <DataTable> opts OUT by its marker. A scroll box here is not
+ * just redundant — the kit already wraps the table in one — it is breaking: a
+ * sticky <thead> pins to its nearest SCROLLING ancestor, so an overflow on the
+ * table makes the table itself that ancestor and the header scrolls away with
+ * the rows instead of holding at the top of the box.
+ */
+:where([data-mx-story-root]) table:not([data-mx-kit-table]) {
   display: block; width: fit-content; max-width: 100%; overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }

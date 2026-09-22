@@ -62,18 +62,26 @@ describe('the editor bar', () => {
     expect(lastQueued()).toMatchObject({ source: '<p>rewritten</p>' });
   });
 
-  it('opens version history', () => {
+  it('lists the versions in the rail rather than behind a switch', () => {
     mount();
-    fireEvent.click(screen.getByLabelText('Open version history'));
-    expect(screen.getByLabelText('Open version history').getAttribute('aria-expanded')).toBe('true');
+    // "which version am I looking at" is answered without being asked, so
+    // there is no longer an expand control to press.
+    expect(screen.queryByLabelText('Open version history')).toBeNull();
+    expect(screen.getByLabelText('Version history')).toBeTruthy();
   });
 });
 
 describe('leaving', () => {
-  it('keeps the single done action in the contextual editor toolbar', () => {
+  it('offers the way out twice — in the toolbar and at the foot of the rail — and each leaves once', () => {
     const onDone = vi.fn();
     mount({ onDone });
-    fireEvent.click(screen.getByLabelText('Exit edit mode'));
+    // Two doors, two NAMES: sharing one would make every locator that says
+    // "Exit edit mode" match both (the browser gates do).
+    const bar = screen.getByLabelText('Exit edit mode');
+    const rail = screen.getByLabelText('Done editing');
+    expect(screen.getByLabelText('Document actions')).toContainElement(bar);
+    expect(screen.getByLabelText('Artifact parts')).toContainElement(rail);
+    fireEvent.click(rail);
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -141,22 +149,25 @@ describe('the query notebook', () => {
 
   it('offers the notebook only when the document declares a query', () => {
     mount();
-    expect(screen.queryByLabelText('Show queries')).toBeNull();
+    expect(screen.queryByLabelText('Show data')).toBeNull();
     expect(screen.queryByLabelText('Queries')).toBeNull();
   });
 
-  it('opens the rail with each query as a cell showing its SQL', () => {
+  it('opens data as a VIEW with each query as a cell, and the rail switches away from it', () => {
     withQuery();
-    fireEvent.click(screen.getByLabelText('Show queries'));
-    expect(screen.getByLabelText('Queries')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Show data'));
+    expect(screen.getByLabelText('Data')).toBeTruthy();
     expect((screen.getByLabelText('Query $sales SQL') as HTMLTextAreaElement).value).toBe('select 1 as x');
-    fireEvent.click(screen.getByLabelText('Close queries'));
-    expect(screen.queryByLabelText('Queries')).toBeNull();
+    // app, code and data are three views of one document: a view does not close
+    // itself, the rail picks another — so there is no close button to press.
+    expect(screen.queryByLabelText('Close queries')).toBeNull();
+    fireEvent.click(screen.getByLabelText('Edit on the page'));
+    expect(screen.queryByLabelText('Data')).toBeNull();
   });
 
   it('an edited cell rewrites that declaration through the SAME queue', () => {
     withQuery();
-    fireEvent.click(screen.getByLabelText('Show queries'));
+    fireEvent.click(screen.getByLabelText('Show data'));
     const field = screen.getByLabelText('Query $sales SQL');
     fireEvent.change(field, { target: { value: 'select 2 as x' } });
     fireEvent.blur(field);
@@ -166,7 +177,7 @@ describe('the query notebook', () => {
 
   it('asks the document to spotlight what a query powers while its cell has focus', () => {
     withQuery();
-    fireEvent.click(screen.getByLabelText('Show queries'));
+    fireEvent.click(screen.getByLabelText('Show data'));
     const field = screen.getByLabelText('Query $sales SQL');
     fireEvent.focus(field);
     expect(sentToFrame(STORY_SPOTLIGHT_MESSAGE).at(-1)).toMatchObject({ paths: ['0.0'] });

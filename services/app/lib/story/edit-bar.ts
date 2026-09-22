@@ -9,6 +9,13 @@
  */
 export const EDIT_BAR_H = 88;
 
+/**
+ * Just the document-actions row. The formatting row below it belongs to the
+ * APP view — there is nothing on a page to select while you are reading SQL or
+ * source — so those views draw the bar one row tall and start this much lower.
+ */
+export const EDIT_BAR_ROW_H = 44;
+
 /** The page's own bar, drawn above the editor bar in edit mode (components/PageChrome AppBar). */
 export const APP_BAR_H = 44;
 
@@ -32,3 +39,17 @@ export const RIGHT_RAIL_W = 320;
  * the document for it), so it shares the rail's edge and layer, not its number.
  */
 export const QUERY_RAIL_W = 480;
+
+/**
+ * The LEFT RAIL's width — the icon strip that names what the artifact is made
+ * of (app, code, queries, history).
+ *
+ * It exists to give the two edges MEANINGS: left is the document's own
+ * structure, right is annotation about it. That reverses the inspector rule
+ * above for the left side only — a left panel RESERVES like the comments rail
+ * rather than overlaying, because a panel that covers the document it edits is
+ * the thing readers kept reporting. Comments keep the right edge to themselves,
+ * so the two surfaces never negotiate for it.
+ */
+export const LEFT_RAIL_W = 232;
+

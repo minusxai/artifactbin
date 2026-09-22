@@ -647,6 +647,12 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
   }, [exitEdit]);
 
   const railInset = railOpen && !phone ? RIGHT_RAIL_W : 0;
+  /*
+   * The EDITOR's left rail and whichever panel it has open. Reserved exactly as
+   * the comments rail is on the right: the document narrows rather than being
+   * covered, so the two edges behave the same way and neither hides what it edits.
+   */
+  const [editorLeftInset, setEditorLeftInset] = useState(0);
 
   /*
    * WHAT THE EDITOR IS GIVEN. Ownership is decided once, on the server, for
@@ -790,6 +796,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             // Edit/annotation controls change the inset, not runtime identity.
             paddingTop: (phone ? 0 : APP_BAR_H) + (editing ? EDIT_BAR_H : 0),
             paddingRight: railInset,
+            paddingLeft: editing ? editorLeftInset : 0,
             right: 0,
             // The starter uses the app's existing dotted body background.
             background: showStarter ? 'transparent' : readerMode === 'dark' ? DOCUMENT_GROUND.dark : DOCUMENT_GROUND.light,
@@ -850,6 +857,7 @@ export default function ArtifactSurface(props: ArtifactSurfaceProps) {
             sessionNonce={sessionNonce}
             initialSelectionPath={initialEditSelectionPath}
             onComment={canEdit ? commentOnSelection : undefined}
+            onLeftInsetChange={setEditorLeftInset}
           />
         )}
         {forkAsked && <ForkConfirm id={id} title={shownTitle} onClose={() => setForkAsked(false)} />}

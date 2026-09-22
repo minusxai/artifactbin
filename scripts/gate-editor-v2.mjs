@@ -461,25 +461,32 @@ try {
     check((await humanPage.mainFrame().locator('svg.marks, canvas').count()) > 0, 'embeds render inside the editor');
     check((await humanPage.locator('[aria-label="Save"]').count()) === 0, 'the editor has no Save button');
 
-    // History must start below both fixed bars, including after a resize.
-    await humanPage.getByRole('button', { name: 'Open version history', exact: true }).click();
+    // Versions are LISTED in the left rail on a desktop — no drawer to open,
+    // so what must hold is that the list clears the toolbar and stays reachable
+    // as the window narrows. The phone case below still uses the sheet.
     for (const viewport of [{ width: 1400, height: 950 }, { width: 900, height: 700 }]) {
       await humanPage.setViewportSize(viewport);
-      const history = humanPage.getByRole('complementary', { name: 'Version history' });
+      const rail = humanPage.getByRole('navigation', { name: 'Artifact parts' });
+      const history = rail.getByRole('region', { name: 'Version history' });
       const toolbar = await humanPage.getByRole('banner', { name: 'Editor toolbar' }).boundingBox();
-      const drawer = await history.boundingBox();
+      const list = await history.boundingBox();
+      check(!!toolbar && !!list && list.y >= toolbar.y,
+        `the version list clears the toolbar at ${viewport.width}px`);
       const current = await history.getByRole('button', { name: 'Show the current version' }).boundingBox();
-      check(!!toolbar && !!drawer && drawer.y >= toolbar.y + toolbar.height,
-        `history clears both toolbars at ${viewport.width}px`);
-      check(!!current && !!drawer && current.y >= drawer.y && drawer.y + drawer.height <= viewport.height + 1,
-        `current version and drawer fit below the bars at ${viewport.width}px`);
-      const close = history.getByRole('button', { name: 'Close version history' });
-      check(await close.click({ trial: true, timeout: 2000 }).then(() => true, () => false),
-        `history close button is not covered at ${viewport.width}px`);
+      check(!!current && !!list && current.y >= list.y && current.y <= viewport.height,
+        `the current version is in view at ${viewport.width}px`);
+      check((await humanPage.getByRole('button', { name: 'Open version history' }).count()) === 0,
+        `no drawer switch on a desktop at ${viewport.width}px`);
     }
     await humanPage.setViewportSize({ width: 390, height: 844 });
+    // The rail is gone at this width, so the drawer switch is back — press it.
+    await humanPage.getByRole('button', { name: 'Open version history', exact: true }).click();
     const sheet = humanPage.getByRole('dialog', { name: 'Version history' });
     await sheet.waitFor({ state: 'visible' });
+    // The sheet SLIDES in. Opening it after the resize (the rail owns versions
+    // on a desktop, so there is nothing to press until this width) means its
+    // header is still moving when the checks below reach for it.
+    await humanPage.waitForTimeout(600);
     check(await sheet.getByRole('button', { name: 'Show the current version' }).isVisible(),
       'phone history keeps the current version visible in its bottom sheet');
     await sheet.getByRole('button', { name: 'Close version history' }).click();

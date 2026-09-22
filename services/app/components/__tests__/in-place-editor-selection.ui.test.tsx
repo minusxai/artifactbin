@@ -35,8 +35,10 @@ describe('the chrome the selection drives', () => {
     mount();
     expect(screen.getByLabelText('Editor toolbar')).toHaveStyle({ height: '88px' });
     const actions = screen.getByLabelText('Document actions');
+    // Exit is offered in the toolbar AND at the foot of the rail; this case is
+    // about the toolbar's half staying put. View switching and version history
+    // both live in the rail now, so neither is asserted here.
     expect(actions).toContainElement(screen.getByLabelText('Exit edit mode'));
-    expect(actions).toContainElement(screen.getByLabelText('Open version history'));
     const title = screen.getByLabelText('Title');
     await fromFrame({ type: STORY_SELECTION_MESSAGE, selection: selection() });
     expect(screen.getByLabelText('Title')).toBe(title);
