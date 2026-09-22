@@ -5,7 +5,7 @@ description: >-
 ---
 ## Read first
 
-artifactbin publishes editable documents. Each `.jsx` file has YAML metadata and self-contained JSX: HTML and kit components styled with Tailwind `className`, under a theme and template. Datasets and media are artifacts too. Use controls and charts.
+artifactbin publishes editable documents. Each `.jsx` file has a YAML fence and self-contained JSX: HTML and kit components styled with Tailwind `className`, under a theme and template. Datasets and media are artifacts too. Use controls and charts.
 
 Every action goes through the `afbin` CLI; the site's HTTP API is not for agents.
 

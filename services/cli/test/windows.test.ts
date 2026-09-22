@@ -16,7 +16,7 @@ test('Windows browser handoff treats URL shell characters as literal data',()=>{
  assert.equal(command.file,'powershell.exe');
  assert.ok(command.args.includes('-EncodedCommand'));
  const script=Buffer.from(command.args.at(-1)!,'base64').toString('utf16le');
- assert.equal(script,`Start-Process -FilePath '${url.replace(/'/g,"''")}'`);
+ assert.equal(script,`$env:PSModulePath=$PSHOME+'\\Modules'; Start-Process -FilePath '${url.replace(/'/g,"''")}'`);
  assert.deepEqual(browserCommand(url,'darwin'),{file:'open',args:[url]});
  assert.deepEqual(browserCommand(url,'linux'),{file:'xdg-open',args:[url]});
 });

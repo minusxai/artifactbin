@@ -1,4 +1,4 @@
-/** Windows-only CI acceptance of the research core candidate against real host handlers. */
+/** Windows-only CI acceptance of the installed release against real host handlers. */
 import assert from 'node:assert/strict';
 import {spawn,execFile} from 'node:child_process';
 import {promisify} from 'node:util';
@@ -77,13 +77,14 @@ try{
  stage='running executable replacement';const runningHash=createHash('sha256').update(await readFile(exe)).digest('hex');
  await assert.rejects(installer(),e=>String(e.stderr).includes('Close all afbin'));assert.equal(createHash('sha256').update(await readFile(exe)).digest('hex'),runningHash);record('Installer refuses a running executable without changing it');
  stage='auth';await cli(['auth'],{approve:true});record('Installed executable completes real OAuth device approval and saves credentials');
- await cli(['auth']);record('Saved credential works in a second CLI process');
+ const modulePath=clientEnv.PSModulePath;clientEnv.PSModulePath=join(profile,'no modules');
+ await cli(['auth']);clientEnv.PSModulePath=modulePath;record('Saved credential works in a second process even with a foreign PowerShell module path');
  stage='credential ACL';
  const acl=await ps(`$file=Get-ChildItem -LiteralPath '${state.replace(/'/g,"''")}' -Filter credentials.env -Recurse | Select-Object -First 1; if (!$file) { throw 'No saved credential' }; (Get-Acl -LiteralPath $file.FullName).Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }`);
  const sid=(await ps('[Security.Principal.WindowsIdentity]::GetCurrent().User.Value')).stdout.trim();
  const allowed=acl.stdout.trim().split(/\r?\n/);assert.ok(allowed.includes(sid));assert.ok(allowed.every(s=>s===sid||s==='S-1-5-18'));record('Saved credential ACL contains only installer identity and SYSTEM');
  stage='publish';await writeFile(join(workspace,'report.jsx'),'---\ntitle: mxmx_test_windows_candidate\nvisibility: unlisted\n---\n<h1>Windows candidate first version</h1>\n');
- await cli(['validate','report.jsx']);const pushed=await cli(['push','report.jsx']);const id=pushed.operations?.find(o=>o.id)?.id;assert.ok(id);record('Validate and push a new artifact through real handlers');
+ await cli(['validate',join(workspace,'report.jsx')]);const pushed=await cli(['push',join(workspace,'report.jsx')]);const id=pushed.operations?.find(o=>o.id)?.id;assert.ok(id);record('Validate and push a new artifact through real handlers');
  const second=join(root,'second workspace');await mkdir(second);await cli(['pull',id,'--output','copy.jsx'],{cwd:second});
  const path=join(second,'copy.jsx');const original=await readFile(path,'utf8');assert.match(original,/Windows candidate first version/);await writeFile(path,original.replace('Windows candidate first version','Windows candidate edited version'));await cli(['validate','copy.jsx'],{cwd:second});await cli(['push','copy.jsx'],{cwd:second});record('Pull, edit, validate and republish in another workspace');
  stage='read';const opened=await cli(['open',id]);assert.equal(opened.operations?.[0]?.url,base+'/a/'+id);const page=await fetch(base+'/a/'+id);assert.equal(page.status,200);assert.match(await page.text(),/Windows candidate edited version/);record('Open command returns published URL; real viewer serves edited artifact');

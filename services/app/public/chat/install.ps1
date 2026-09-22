@@ -47,13 +47,14 @@ try {
     if ((Test-Path -LiteralPath $parent) -and ((Get-Item -LiteralPath $parent -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Refusing a linked installation directory.' }
   }
   New-Item -ItemType Directory -Force $Dir | Out-Null
-  $acl = Get-Acl -LiteralPath $Dir
+  # Write only access rules; preserving an entire descriptor can require admin audit privileges.
+  $acl = New-Object Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true, $false)
-  foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRuleSpecific($rule) }
   foreach ($sid in @([Security.Principal.WindowsIdentity]::GetCurrent().User, (New-Object Security.Principal.SecurityIdentifier('S-1-5-18')))) {
     $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow')))
   }
-  Set-Acl -LiteralPath $Dir -AclObject $acl
+  if ($PSVersionTable.PSVersion.Major -ge 7) { [IO.FileSystemAclExtensions]::SetAccessControl([IO.DirectoryInfo]::new($Dir), $acl) }
+  else { [IO.Directory]::SetAccessControl($Dir, $acl) }
   $exe = Join-Path $Dir 'afbin.exe'
   if ((Test-Path -LiteralPath $exe) -and ((Get-Item -LiteralPath $exe -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Refusing a linked executable.' }
   $stagedExe = Join-Path $Dir ('afbin-'+[Guid]::NewGuid().ToString()+'.exe')
