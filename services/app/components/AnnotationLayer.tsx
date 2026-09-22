@@ -1414,6 +1414,8 @@ export default function AnnotationLayer({
           aria-label="Annotation composer"
           className={`${cardClass} fixed z-30 overflow-y-auto border-edge-bright shadow-xl`}
           style={{
+            // Reader navigation uses 2147483003; the composer must stay interactive above it.
+            zIndex: 2147483006,
             left: composerPosition.left,
             top: composerPosition.top,
             width: composerPosition.width,
