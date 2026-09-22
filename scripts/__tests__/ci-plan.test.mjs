@@ -591,8 +591,8 @@ describe('CI job shape', () => {
 
   it('keeps preview and export proofs mandatory on every executable platform', () => {
     const { jobs } = ci();
-    // One invocation per platform still shares its verified runtime cache across
-    // preview and every export phase; Intel consumes the packaging artifact.
+    // Intel splits the existing phases while consuming the same packaging artifact;
+    // every other platform retains its combined proof and verified runtime cache.
     const proof = jobs.cli.steps.find((step) => step.name === 'File preview from the actual executable');
     expect(proof.if).toBe("matrix.os != 'macos-15-intel' && runner.os != 'Windows'");
     expect(jobs.cli.strategy.matrix.os).toContain('windows-2022');
@@ -604,8 +604,10 @@ describe('CI job shape', () => {
     for (const step of [proof, intel]) {
       expect(step['working-directory']).toBe('services/cli');
       expect(step.run).toContain('node --import tsx scripts/test-preview.ts');
-      expect(step.run).not.toContain('--phase');
     }
+    expect(proof.run).not.toContain('--phase');
+    expect(intel.run).toContain('dist/afbin-darwin-x64 --phase=${{ matrix.phase }}');
+    expect(jobs['cli-preview'].strategy.matrix.phase).toEqual(['preview','export-basic','export-variants']);
     expect(jobs.cli.steps.indexOf(proof)).toBeGreaterThan(jobs.cli.steps.findIndex((step) => step.run === 'npm run test:binary -w services/cli'));
   });
 
