@@ -483,6 +483,10 @@ try {
     await humanPage.getByRole('button', { name: 'Open version history', exact: true }).click();
     const sheet = humanPage.getByRole('dialog', { name: 'Version history' });
     await sheet.waitFor({ state: 'visible' });
+    // The sheet SLIDES in. Opening it after the resize (the rail owns versions
+    // on a desktop, so there is nothing to press until this width) means its
+    // header is still moving when the checks below reach for it.
+    await humanPage.waitForTimeout(600);
     check(await sheet.getByRole('button', { name: 'Show the current version' }).isVisible(),
       'phone history keeps the current version visible in its bottom sheet');
     await sheet.getByRole('button', { name: 'Close version history' }).click();
