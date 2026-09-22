@@ -207,6 +207,11 @@ describe('drawing an area to comment on', () => {
     expect(document.getElementById('sec')).toHaveAttribute('data-mx-annotate-selected');
     // The drawn area stays visible while its comment is composed…
     expect(band()).not.toBeNull();
+    // Capture temporarily suppresses paint, including the composing band.
+    env.session.update({...state('off'),pins:[]});
+    expect(band()).toBeNull();
+    env.session.update({...state('on'),pins:[],selectedPath:picked.path});
+    expect(band()).not.toBeNull();
     // …and leaves when the page says the selection is gone.
     env.session.update({ ...state('on'), pins: [], pick: null, selectedPath: null });
     expect(band()).toBeNull();

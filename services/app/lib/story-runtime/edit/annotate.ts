@@ -414,6 +414,7 @@ export function createFrameAnnotateSession({ win, channel, isEditing, root }: Fr
     }
     if (!state || state.mode === 'off') {
       clearHighlights();
+      removeBand();
       return;
     }
     for (const pin of state.pins) {

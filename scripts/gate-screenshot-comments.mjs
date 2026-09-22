@@ -32,16 +32,17 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   await expect(editor.getByRole('button',{name:'Done drawing',exact:true})).toBeEnabled();
   // Exact crop corner must contain content, not a selection outline or app panel.
   const pixel=await canvas.evaluate(c=>Array.from(c.getContext('2d').getImageData(5,5,1,1).data));
-  assert(pixel[0]>180&&pixel[1]<65&&pixel[2]<65,`${name}: content pixel ${pixel}`);
+  assert(Math.abs(pixel[0]-220)<=3&&Math.abs(pixel[1]-30)<=3&&Math.abs(pixel[2]-30)<=3,`${name}: content pixel ${pixel}`);
   await editor.getByLabel('Brush color').fill('#00ff00');
   await editor.getByLabel('Brush thickness').fill('8');
   const drawing=await canvas.boundingBox();assert(drawing);
   await page.mouse.move(drawing.x+30,drawing.y+30);await page.mouse.down();await page.mouse.move(drawing.x+130,drawing.y+50,{steps:10});await page.mouse.up();
   await expect(editor.getByRole('button',{name:'Undo stroke'})).toBeEnabled();
-  const greenPixels=await canvas.evaluate(c=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let count=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<30&&pixels[i+1]>200&&pixels[i+2]<30)count++;return count;});
-  assert(greenPixels>100,`${name}: brush color produced ${greenPixels} green pixels`);
+  // Strokes paint on requestAnimationFrame; wait for the pixels, not just the undo button.
+  await expect.poll(()=>canvas.evaluate(c=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let count=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<30&&pixels[i+1]>200&&pixels[i+2]<30)count++;return count;})).toBeGreaterThan(100);
   await editor.getByRole('button',{name:'Done drawing'}).click();
-  await page.getByLabel('Annotation comment',{exact:true}).fill(`Screenshot from ${name}`);
+  await expect(editor).toHaveCount(0);
+  await page.getByLabel('Annotation comment',{exact:true}).pressSequentially(`Screenshot from ${name}`);
   await page.getByLabel('Save annotation',{exact:true}).click();
   await expect(page.getByRole('dialog',{name:'Annotation composer'})).toHaveCount(0);
   await page.reload();
