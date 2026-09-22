@@ -81,7 +81,8 @@ export async function beginCapture(): Promise<CaptureSession> {
     const scroll={x:window.scrollX,y:window.scrollY};
     let moved=false;
     const invalidate=()=>{moved=true;};
-    window.addEventListener('scroll',invalidate,true);window.addEventListener('resize',invalidate);
+    const resize=()=>{if(bounds.width!==innerWidth||bounds.height!==innerHeight)moved=true;};
+    window.addEventListener('scroll',invalidate,true);window.addEventListener('resize',resize);
     try {
       if(!verified())throw new CaptureError('wrong-source');
       const crop=(globalThis as typeof globalThis & {CropTarget?:{fromElement(element:Element):Promise<unknown>}}).CropTarget;
@@ -114,7 +115,7 @@ export async function beginCapture(): Promise<CaptureSession> {
       ctx.drawImage(video,source.x,source.y,source.width,source.height,0,0,canvas.width,canvas.height);
       const blob=await bounded(new Promise<Blob>((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(new CaptureError('geometry')),'image/png')));
       return {blob,width:canvas.width,height:canvas.height,rect,viewport:bounds,capturedAt:new Date().toISOString(),method};
-    } finally {window.removeEventListener('scroll',invalidate,true);window.removeEventListener('resize',invalidate);dispose();}
+    } finally {window.removeEventListener('scroll',invalidate,true);window.removeEventListener('resize',resize);dispose();}
   }};
 }
 

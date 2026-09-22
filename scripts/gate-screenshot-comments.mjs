@@ -13,7 +13,7 @@ assert(published.ok,`publish: ${published.status}`);
 const input=await sharp({create:{width:200,height:100,channels:3,background:{r:220,g:30,b:30}}}).png().toBuffer();
 const failures=[];
 for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',webkit]]){
- const browser=await engine.launch(name==='chromium'?{args:['--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:{});
+ const browser=await engine.launch(name==='chromium'?{channel:'chromium',args:['--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:{});
  try{
   const context=await browser.newContext({viewport:{width:1280,height:900}});const page=await context.newPage();
   await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
@@ -38,6 +38,8 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   const drawing=await canvas.boundingBox();assert(drawing);
   await page.mouse.move(drawing.x+30,drawing.y+30);await page.mouse.down();await page.mouse.move(drawing.x+130,drawing.y+50,{steps:10});await page.mouse.up();
   await expect(editor.getByRole('button',{name:'Undo stroke'})).toBeEnabled();
+  const greenPixels=await canvas.evaluate(c=>{const pixels=c.getContext('2d').getImageData(0,0,c.width,c.height).data;let count=0;for(let i=0;i<pixels.length;i+=4)if(pixels[i]<30&&pixels[i+1]>200&&pixels[i+2]<30)count++;return count;});
+  assert(greenPixels>100,`${name}: brush color produced ${greenPixels} green pixels`);
   await editor.getByRole('button',{name:'Done drawing'}).click();
   await page.getByLabel('Annotation comment',{exact:true}).fill(`Screenshot from ${name}`);
   await page.getByLabel('Save annotation',{exact:true}).click();

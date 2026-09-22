@@ -31,11 +31,13 @@ describe('screen capture resource contract',()=>{
  });
 });
 
-it('accepts the sole cropped frame of a static tab even when presented before cropTo resolves',async()=>{
+it.each([false,true])('handles a static crop frame and rejects only a real viewport change (changed=%s)',async(changed)=>{
  let handle='',callback:VideoFrameRequestCallback|undefined,video:HTMLVideoElement|undefined;
  let cropped=false;
  const stop=vi.fn();const track=Object.assign(new EventTarget(),{stop,readyState:'live',getSettings:()=>({displaySurface:'browser'}),getCaptureHandle:()=>({handle}),cropTo:async()=>{
   cropped=true;Object.defineProperty(video!,'videoWidth',{configurable:true,value:200});Object.defineProperty(video!,'videoHeight',{configurable:true,value:100});
+  if(changed)vi.stubGlobal('innerWidth',window.innerWidth+10);
+  window.dispatchEvent(new Event('resize')); // Chrome can notify without changing the viewport when cropping.
   callback?.(performance.now(),{width:200,height:100} as VideoFrameCallbackMetadata);callback=undefined;
  }});
  vi.stubGlobal('navigator',{mediaDevices:{setCaptureHandleConfig:(config:{handle:string})=>{handle=config.handle;},getDisplayMedia:vi.fn().mockResolvedValue({getTracks:()=>[track],getVideoTracks:()=>[track]})}});
@@ -47,6 +49,8 @@ it('accepts the sole cropped frame of a static tab even when presented before cr
  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:vi.fn()} as unknown as CanvasRenderingContext2D);
  vi.spyOn(HTMLCanvasElement.prototype,'toBlob').mockImplementation(cb=>cb(new Blob(['pixels'],{type:'image/png'})));
  const session=await beginCapture();
- const result=await session.capture({x:5,y:5,width:200,height:100});
- expect(result).toMatchObject({method:'region',width:200,height:100});expect(stop).toHaveBeenCalledOnce();
+ const pending=session.capture({x:5,y:5,width:200,height:100});
+ if(changed)await expect(pending).rejects.toMatchObject({code:'geometry'});
+ else expect(await pending).toMatchObject({method:'region',width:200,height:100});
+ expect(stop).toHaveBeenCalledOnce();
 },7000);
