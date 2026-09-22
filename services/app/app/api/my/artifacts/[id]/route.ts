@@ -41,6 +41,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ id: string 
   const refs = (wire as { refs?: Array<{ id: string; kind: string }> }).refs;
   if (Array.isArray(refs)) {
     (wire as { refs?: unknown }).refs = await Promise.all(refs.map(async (ref) => {
+      // DATASETS only. The data view is the one place a ref is named, and it
+      // names datasets; an image-heavy document would otherwise pay a lookup
+      // per picture on every editor load to answer a question nobody asks.
+      if (ref.kind !== 'dataset') return ref;
       const target = await getArtifactById(ref.id);
       return target && (await canReadArtifact(target, viewer))
         ? { ...ref, title: target.title ?? null }
