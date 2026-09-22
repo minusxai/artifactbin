@@ -11,10 +11,12 @@ const seed=await startDocument(base);
 const published=await fetch(`${base}/api/artifacts/${seed.id}`,{method:'PUT',headers:{Authorization:`Bearer ${seed.token}`,'Content-Type':'application/json'},body:JSON.stringify({title:'Screenshot capture gate',markup:'<Helmet><style>{`#capturebox{width:400px;height:240px;background:rgb(220,30,30);margin:100px 40px}`}</style></Helmet><div id="capturebox"><p>Screenshot capture fixture</p></div>',visibility:'unlisted'})});
 assert(published.ok,`publish: ${published.status}`);
 const input=await sharp({create:{width:200,height:100,channels:3,background:{r:220,g:30,b:30}}}).png().toBuffer();
+const failures=[];
 for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',webkit]]){
  const browser=await engine.launch(name==='chromium'?{args:['--enable-usermedia-screen-capturing','--auto-select-tab-capture-source-by-title=Screenshot capture gate','--allow-http-screen-capture','--autoplay-policy=no-user-gesture-required']}:{});
  try{
   const context=await browser.newContext({viewport:{width:1280,height:900}});const page=await context.newPage();
+  await page.addInitScript(()=>{window.__captureTrace=[];const native=navigator.mediaDevices?.getDisplayMedia?.bind(navigator.mediaDevices);if(native)navigator.mediaDevices.getDisplayMedia=async(...args)=>{try{const stream=await native(...args);window.__captureTrace.push({event:'stream',surface:stream.getVideoTracks()[0]?.getSettings().displaySurface});return stream;}catch(e){window.__captureTrace.push({event:'error',message:e.message});throw e;}};});
   await becomeOwner(page,base,seed.token);await page.goto(`${base}/a/${seed.id}`);await page.locator('#capturebox').waitFor();
   await openArtifactControls(page);await page.getByRole('button',{name:'Toggle comments',exact:true}).click();
   await page.getByRole('button',{name:'Select',exact:true}).click();
@@ -25,7 +27,7 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
    await expect(page.getByLabel('Save annotation',{exact:true})).toBeDisabled();
    await page.getByLabel('Upload screenshot',{exact:true}).setInputFiles({name:'fixture.png',mimeType:'image/png',buffer:input});
   }
-  const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,await page.locator('body').innerText());throw error;}
+  const editor=page.getByRole('dialog',{name:'Draw on screenshot',exact:true});try{await editor.waitFor({timeout:20000});}catch(error){console.error(name,{alerts:await page.getByRole('alert').allTextContents(),status:await page.getByRole('status').allTextContents(),trace:await page.evaluate(()=>window.__captureTrace),composer:await page.getByRole('dialog',{name:'Annotation composer'}).count()});throw error;}
   const canvas=editor.getByLabel('Screenshot drawing canvas');
   await expect(editor.getByRole('button',{name:'Done drawing',exact:true})).toBeEnabled();
   // Exact crop corner must contain content, not a selection outline or app panel.
@@ -47,5 +49,6 @@ for(const [name,engine] of [['chromium',chromium],['firefox',firefox],['webkit',
   await page.getByRole('button',{name:'Open comment screenshot'}).last().click();
   await expect(page.getByRole('dialog',{name:'Comment screenshot'})).toBeVisible();
   console.log(`${name}: capture/fallback → brush → upload → comment → reload passed`);
- }finally{await browser.close();}
+ }catch(error){failures.push(new Error(`${name}: ${error.message}`));}finally{await browser.close();}
 }
+if(failures.length)throw new AggregateError(failures,'Screenshot browser checks failed');

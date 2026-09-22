@@ -52,7 +52,7 @@ export async function beginCapture(): Promise<CaptureSession> {
   let timedOut=false;
   void requested.then(stream=>{if(timedOut)stream.getTracks().forEach(track=>track.stop());},()=>{});
   let stream: MediaStream;
-  try { stream=await bounded(requested,120000); }
+  try { stream=await bounded(requested,600000); }
   catch(error) { timedOut=true;if(error instanceof DOMException && error.name==='NotAllowedError')throw new CaptureError('cancelled');throw error; }
   const track=stream.getVideoTracks()[0] as CaptureTrack | undefined;
   const verified=()=>track?.getSettings().displaySurface==='browser' && track.getCaptureHandle?.()?.handle===handle;

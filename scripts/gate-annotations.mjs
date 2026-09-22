@@ -814,6 +814,7 @@ async function pickLeg(browser) {
   // A second pick — explicit this time, the tool is still the way in — stood
   // down by escape: the outline goes with it.
   await tool.click();
+  await page.locator('[aria-label="Select tool active"]').waitFor();
   check(await tool.getAttribute('aria-pressed') === 'true', 'the tool starts a pick again after the first ended');
   await frame.locator('#figure').hover();
   await until(() => frame.locator('#figure[data-mx-annotate-pick-hover]').count(), (n) => n === 1, 5000);
