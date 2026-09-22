@@ -5,16 +5,14 @@
 export const CI_JOBS = ['checks', 'node', 'ui', 'build', 'api', 'gates', 'cli', 'cli-preview', 'reference-compatibility'];
 
 /**
- * THE FILES `npm run release:cli` (and the `generate:teaching` that follows it) REWRITE, and nothing
- * else. Measured by running both against 0.1.44 → 0.1.45: five files, six changed lines, every one of
- * them a version. A push whose whole diff is those lines is a release and needs no suite: the tree was
- * already tested at the version before it, and what a release must prove is that the binaries build.
+ * The four tracked release files carry only version changes. Teaching is generated
+ * during the build, not committed. A version-only push needs packaging proofs:
+ * the source under that version has already passed the suites.
  */
 const VERSION_LINE = {
   'services/cli/package.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'package-lock.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   'services/app/public/chat/release.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
-  'services/cli/src/generated/teaching.json': /^\s*"version": "\d+\.\d+\.\d+",?$/,
   // Twice, in two shapes: the installer's own default and the line of usage that quotes it.
   'services/app/public/chat/install.sh': /^\s*version=\d+\.\d+\.\d+$|--version \d+\.\d+\.\d+/,
 };
@@ -22,7 +20,7 @@ const VERSION_LINE = {
 export const VERSION_BUMP_FILES = Object.keys(VERSION_LINE);
 
 /** The refusal a CLI change without a version bump earns, in `checks`. */
-export const CLI_BUMP_REFUSAL = 'This PR changes the CLI without bumping its version — run `npm run release:cli` (then `npm run generate:teaching -w services/cli`) in this branch.';
+export const CLI_BUMP_REFUSAL = 'This PR changes the CLI without bumping its version — run `npm run release:cli` in this branch.';
 
 /**
  * Is this diff nothing but the version bump?

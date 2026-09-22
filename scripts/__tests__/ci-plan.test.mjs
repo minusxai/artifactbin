@@ -176,7 +176,6 @@ describe('the CLI ships with a version or it does not ship', () => {
     expect(cliBumpRequired(['services/cli/scripts/binary.mjs'])).toBe(true);
     expect(cliBumpRequired(['services/cli/src/runner.ts'], { cliRelease: true })).toBe(false);
     expect(CLI_BUMP_REFUSAL).toContain('npm run release:cli');
-    expect(CLI_BUMP_REFUSAL).toContain('npm run generate:teaching -w services/cli');
   });
 
   it('exempts prose, the CLI\'s own tests, and everything outside the CLI', () => {
@@ -247,8 +246,9 @@ describe('GitHub CI adapter', () => {
     } finally { rmSync(cwd, { recursive: true, force: true }); }
   });
 
-  /** A repository whose five release files carry one version, bumped by `move`. */
+  /** A repository whose four release files carry one version, bumped by `move`. */
   const releaseFixture = (cwd, version) => {
+    mkdirSync(path.join(cwd, 'services/cli/src'), { recursive: true });
     const write = (file, text) => {
       mkdirSync(path.join(cwd, path.dirname(file)), { recursive: true });
       writeFileSync(path.join(cwd, file), text);
@@ -257,7 +257,6 @@ describe('GitHub CI adapter', () => {
     write('package-lock.json', `{\n  "packages": {\n    "services/cli": {\n      "version": "${version}"\n    }\n  }\n}\n`);
     write('services/app/public/chat/install.sh', `main() {\n  version=${version}\nInstall afbin: sh install.sh [--version ${version}] [--dir PATH] [--yes]\n}\n`);
     write('services/app/public/chat/release.json', `{\n  "version": "${version}",\n  "protocol": 1\n}\n`);
-    write('services/cli/src/generated/teaching.json', `{\n  "version": "${version}",\n  "files": {}\n}\n`);
   };
 
   const readOutputs = (output) => Object.fromEntries(readFileSync(output, 'utf8').split('\n').filter(Boolean)

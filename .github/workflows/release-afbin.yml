@@ -46,7 +46,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Bump the CLI, its installer, its release pointer and its teaching
+      - name: Bump the CLI, its installer and its release pointer
         id: bump
         env:
           LEVEL: ${{ inputs.level }}
@@ -54,7 +54,6 @@ jobs:
           set -euo pipefail
           case "$LEVEL" in patch|minor|major) ;; *) echo "::error::unknown level $LEVEL"; exit 1;; esac
           npm run release:cli -- "$LEVEL"
-          npm run generate:teaching -w services/cli
           version=$(node -p "require('./services/cli/package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Commit the version to main

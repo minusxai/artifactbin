@@ -1,3 +1,4 @@
+import { generateTeaching } from './generate-teaching.mjs';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,7 @@ const APP_ROOT = path.join(ROOT, 'services', 'app');
  * @param {{ appOnly: boolean, args?: string[] }} options
  */
 export async function runDev({ appOnly, args = [] }) {
+  generateTeaching();
   loadDotEnv();
   const port = resolvePort();
   const hmrPort = resolveHmrPort(port);

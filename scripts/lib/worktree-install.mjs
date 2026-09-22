@@ -25,7 +25,7 @@ export function ensureDependencies(root, run = spawnSync) {
   };
   if (receipt?.key === key && existsSync(path.join(root, 'node_modules/.package-lock.json')) && receipt.installed === installed()) {
     console.log('[worktree] Reusing pinned dependencies; refreshing checkout assets.');
-    for (const script of ['services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs']) {
+    for (const script of ['services/app/scripts/copy-assets.mjs', 'services/cli/scripts/prepare-pty.mjs', 'services/cli/scripts/generate-teaching.mjs']) {
       if (existsSync(path.join(root, script))) checked(process.execPath, [script]);
     }
     return;

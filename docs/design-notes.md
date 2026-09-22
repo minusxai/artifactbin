@@ -146,7 +146,7 @@ the roll-up's own check, so it exists only for a green run, and it is kept longe
 window — an expired one is no evidence and selects the suite again.
 
 **A release is a version and nothing else.** When the whole diff is the version lines
-`npm run release:cli` and `npm run generate:teaching -w services/cli` write, the plan selects only
+`npm run release:cli` writes, the plan selects only
 `checks` and the four platform binary builds: the code under that version already passed, and what
 a release has to prove is that the binaries build and run. Any other file in the same change makes
 it an ordinary run. The converse is a refusal rather than a selection — `checks` fails a pull
