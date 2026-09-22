@@ -268,8 +268,8 @@ assets from successful main CI; unrelated merges leave existing releases unchang
 `npm run release:cli` and `npm run generate:teaching -w services/cli` write — in
 `services/cli/package.json`, `package-lock.json`, `services/app/public/chat/install.sh`,
 `services/app/public/chat/release.json` and `services/cli/src/generated/teaching.json` — CI selects
-only `checks` and the four binary builds, with their smoke and the Intel browser proofs that now run
-inside the Intel build (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
+only `checks`, the four binary builds with their smoke tests, and Intel browser proofs in a
+dependent job consuming the exact uploaded executable (`scripts/lib/ci-plan.mjs`). The code under that version is the code that
 already passed; what a release must prove is that the binaries build and run. Any other file in the
 same change makes it an ordinary run again.
 

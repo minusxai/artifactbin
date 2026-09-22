@@ -126,3 +126,21 @@ describe('source host compatibility matrix', () => {
     expect(readFileSync(ciPath, 'utf8')).not.toContain('build-public-packages.mjs');
   });
 });
+
+describe('Intel release acceptance consumes the tested binary',()=>{
+  it('keeps packaging and browser acceptance bounded without dropping either release gate',()=>{
+    const proof=ci.jobs['cli-preview'];
+    expect(proof).toBeDefined();
+    expect(proof.needs).toEqual(expect.arrayContaining(['plan','cli']));
+    expect(proof['runs-on']).toBe('macos-15-intel');
+    expect(proof.if).toContain('needs.plan.outputs.cli-preview');
+    const download=proof.steps.find(step=>step.uses?.startsWith('actions/download-artifact'));
+    expect(download?.with).toMatchObject({name:'afbin-macos-15-intel',path:'services/cli/dist'});
+    expect(proof.steps.some(step=>step.run?.includes('chmod +x dist/afbin-darwin-x64'))).toBe(true);
+    expect(proof.steps.some(step=>step.run?.includes('scripts/test-preview.ts'))).toBe(true);
+    expect(proof.steps.some(step=>/npm run build/.test(step.run??''))).toBe(false);
+    const bundledProof=ci.jobs.cli.steps.find(step=>step.name==='File preview from the actual executable');
+    expect(bundledProof.if).toContain("matrix.os != 'macos-15-intel'");
+    for(const job of ['test','timings'])expect(ci.jobs[job].needs).toContain('cli-preview');
+  });
+});
