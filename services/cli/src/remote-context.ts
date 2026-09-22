@@ -11,3 +11,10 @@ export function remoteArguments(command:string,args:string[],context:string):str
  if(['claude','codex','pi'].includes(harness))return [...args,context];
  return [...args];
 }
+/** Repeat the executable identity on every turn, including after model compaction. */
+export function remoteRequestInput(data:string,executable:string):string{
+ let payload:Record<string,unknown>;
+ try{payload=JSON.parse(data.trim()) as Record<string,unknown>;}catch{return data;}
+ if(!payload||payload.type!=='artifactbin.comment')return data;
+ return JSON.stringify({...payload,cli_executable:executable,instruction:`Use the absolute cli_executable for every afbin command; do not rely on PATH. ${String(payload.instruction??'Read the artifact and thread, acknowledge before work, verify and reply with the correlated request phase. Resolve only if fully addressed.')}`})+'\r';
+}

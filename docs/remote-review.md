@@ -99,8 +99,12 @@ also runs detached startup from the packaged executable outside the checkout.
 
 Live provider checks are separate from deterministic CI. On this development
 machine Claude completed an acknowledgment → file task → verified final reply,
-and handled a blocked request followed by a tagged follow-up. Codex/OpenCode
-canary results are recorded in the implementation handoff. Pi starts its PTY but
+and handled a blocked request followed by a tagged follow-up and resolution.
+Codex and OpenCode each acknowledged a shared tagged comment, read the named
+canary file, and posted a correlated completed reply with its actual contents.
+Their normal approval prompts were handled through the web terminal, using
+one-time approvals. Multi-agent reply prefills and status/attribution were
+verified on the same disposable local artifact. Pi starts its PTY but
 has no authenticated models configured locally; live-model Pi behavior remains
 unverified. Optional lifecycle hooks are not installed: unsupported approval and
 turn states remain unknown, and the web terminal exposes the harness's normal

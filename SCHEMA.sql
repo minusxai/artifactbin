@@ -565,7 +565,6 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   author_kind TEXT NOT NULL,
   author_token_id TEXT,
   author_user_id TEXT,
-  author_remote JSONB,
   author_label TEXT,
   author_transport TEXT NOT NULL DEFAULT 'unknown',
   status TEXT NOT NULL DEFAULT 'open',
@@ -577,6 +576,7 @@ CREATE TABLE IF NOT EXISTS app.annotations (
   quote TEXT,
   range TEXT,
   deleted_at TIMESTAMPTZ,
+  author_remote JSONB,
   PRIMARY KEY (id)
 );
 
@@ -595,8 +595,6 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_kind TEXT NOT NULL;
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_token_id TEXT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_user_id TEXT;
-
-ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_label TEXT;
 
@@ -619,6 +617,8 @@ ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS quote TEXT;
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS range TEXT;
 
 ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE app.annotations ADD COLUMN IF NOT EXISTS author_remote JSONB;
 
 CREATE INDEX IF NOT EXISTS idx_annotations_artifact_seq ON app.annotations (artifact_id, seq);
 

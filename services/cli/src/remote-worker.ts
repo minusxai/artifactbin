@@ -28,7 +28,7 @@ export async function remoteWorkerMain():Promise<void>{
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
   await writeFile(join(directory,'afbin'),`#!/bin/sh\nexec ${invocation.map(quote).join(' ')} "$@"\n`,{mode:0o700});
   const client=new HttpClient({connection:input.connection,home:input.home});
-  const code=await runRemote({client,command:input.command,args:input.args,name:input.name,cwd:input.cwd,interactive:false,managed:true,signal:controller.signal,
+  const code=await runRemote({client,command:input.command,args:input.args,name:input.name,cwd:input.cwd,interactive:false,managed:true,commentCommand:join(directory,'afbin'),signal:controller.signal,
    prepare:async session=>{
     const context=join(directory,'context.md');
     await writeFile(context,`${REMOTE_REVIEW_POLICY}\n\nThe exact CLI executable for this session is ${JSON.stringify(join(directory,'afbin'))}. Use this absolute executable for EVERY afbin command in this policy; login shells can replace PATH.\n\nAfter reading this context, run: ${quote(join(directory,'afbin'))} remote --ready ${session.id}\nThen wait for tagged comments.\n\n## Handoff (context)\n${input.history??'No additional history supplied.'}\n`,{mode:0o600});

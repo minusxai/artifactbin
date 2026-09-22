@@ -1,6 +1,7 @@
+'use client';
+
 import {replyMentionPrefix,hasReplyText,remoteWorkLabel} from '../lib/remote-reply';
 import {REMOTE_COLOR_CSS,remoteColor} from '../../contracts/src/remote';
-'use client';
 
 /**
  * THE PAGE HALF OF ANNOTATIONS — the Google-Docs shape.
@@ -868,7 +869,7 @@ export default function AnnotationLayer({
   useEffect(()=>{
     if(!railOpen||!hasRemoteWork||busy)return;
     const controller=new AbortController();
-    const timer=setInterval(()=>{void fetch(`/api/my/artifacts/${id}/annotations`,{signal:controller.signal}).then(r=>r.ok?r.json():null).then(data=>{if(data&&!controller.signal.aborted)setAnnotations(data.annotations);}).catch(()=>{});},15000);
+    const timer=setInterval(()=>{void readAnnotationPages(`/api/my/artifacts/${id}/annotations`,{signal:controller.signal}).then(list=>{if(!controller.signal.aborted)setAnnotations(list);}).catch(()=>{});},15000);
     return ()=>{clearInterval(timer);controller.abort();};
   },[id,railOpen,hasRemoteWork,busy]);
 

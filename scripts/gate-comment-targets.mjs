@@ -179,8 +179,9 @@ try {
   await outsideMenu.waitFor();
   const outsideStyle=await outsideMenu.evaluate(el=>({font:getComputedStyle(el).font,borderRadius:getComputedStyle(el).borderRadius,background:getComputedStyle(el).backgroundColor}));
   await prose.click({clickCount:3});await menu.waitFor();
-  const insideStyle=await menu.evaluate(el=>({font:getComputedStyle(el).font,borderRadius:getComputedStyle(el).borderRadius,background:getComputedStyle(el).backgroundColor}));
-  assert.deepEqual(insideStyle,outsideStyle);
+  // selectionchange replaces the iframe toolbar; a handle can detach between
+  // lookup and evaluation, returning empty computed styles. Wait for its current node.
+  await expect.poll(()=>menu.evaluate(el=>({font:getComputedStyle(el).font,borderRadius:getComputedStyle(el).borderRadius,background:getComputedStyle(el).backgroundColor}))).toEqual(outsideStyle);
   console.log('PASS repeated iframe node/text commenting, native selection and shared menu appearance');
 
   await outside.evaluate(node=>node.ownerDocument.defaultView.getSelection().removeAllRanges());

@@ -12,6 +12,8 @@ const exchange=(runnerKey:string)=>({runnerKey,cols:80,rows:24,ack:0,outputSeq:0
 it('reserves names across relays, keeps stable proof and color on reconnect, and persists stop',async()=>{
  const a=fresh(),b=fresh();const s=await a.create('owner',registration);
  await expect(b.create('owner',{...registration,recoveryKey:'b'.repeat(64)})).rejects.toThrow(/already running/);
+ const offline=await b.view('owner',s.id,0);expect(offline.session).toMatchObject({id:s.id,name:'claude',online:false,color:s.color});expect(offline.frames).toEqual([]);
+ await expect(b.view('another-owner',s.id,0)).rejects.toThrow(/not found/);
  const recovered=await b.create('owner',registration);expect(recovered.runnerKey).toBe(s.runnerKey);expect(recovered.color).toBe(s.color);
  await b.stop('owner',s.id);
  const c=fresh();await c.create('owner',registration);

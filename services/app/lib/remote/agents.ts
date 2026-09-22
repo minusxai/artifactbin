@@ -40,7 +40,8 @@ export class RemoteAgents {
   const db=await getDb();const saved=(await db.query<AgentRow>('SELECT * FROM remote_agents WHERE owner=$1 ORDER BY seen_at DESC LIMIT 100',[owner])).rows;
   const live=this.relay.list(owner);return [...live.filter(s=>!s.managed),...saved.map(r=>({...r.info,online:live.some(s=>s.id===r.id&&s.online)}))];
  }
- async read(owner:string,id:string){const r=(await this.list(owner)).find(s=>s.id===id);if(!r)throw new RemoteError('Session not found',404);return r;}
+ async read(owner:string,id:string){const saved=await this.row(await getDb(),owner,id);if(saved){let online=false;try{online=this.relay.read(owner,id).online;}catch{/* absent relay */}return {...saved.info,online};}return this.relay.read(owner,id);}
+ async view(owner:string,id:string,since:number){try{return await this.relay.view(owner,id,since);}catch(error){if(!(error instanceof RemoteError)||error.status!==404)throw error;const session=await this.read(owner,id);return {session,seq:0,frames:[],snapshot:'',generation:`offline-${id}`};}}
  async owns(owner:string,id:string){return this.relay.owns(owner,id)||!!await this.row(await getDb(),owner,id);}
  async ready(owner:string,id:string,proof:string){
   const db=await getDb();await db.transaction(async tx=>{
@@ -104,7 +105,7 @@ export class RemoteAgents {
  async enqueue(tx:Queryable,owner:string|null|undefined,artifactId:string,threadId:string,comment:{id:string;body:string;author:{kind:string;label:string|null}}){
   if(!owner||comment.author.kind!=='human')return;
   for(const id of new Set([...sessionMentions(comment.body)].map(m=>m[2]!))){
-   const r=await this.row(tx,owner,id);if(!r)continue;
+   const r=await this.row(tx,owner,id,true);if(!r)continue;
    if(r.active){
     const superseded=await tx.query("UPDATE remote_work SET phase='superseded',updated_at=now() WHERE session_id=$1 AND thread_id=$2 AND phase IN ('blocked','uncertain') RETURNING id",[id,threadId]);
     if(superseded.rows.length){const busy=await tx.query("SELECT id FROM remote_work WHERE session_id=$1 AND phase IN ('dispatching','delivered','acknowledged','uncertain') LIMIT 1",[id]);if(!busy.rows.length){r.info.activity='listening';await this.save(tx,r);}}

@@ -33,7 +33,7 @@ export async function remoteRoute(
         new URL(request.url).searchParams.get("since") ?? -1,
       );
       if (!Number.isSafeInteger(since)) throw new RemoteError("Invalid cursor");
-      return json(await remoteSessions.view(owner, id, since));
+      return json(await remoteAgents.view(owner, id, since));
     }
     if (request.method === "DELETE" && id) {
       await remoteAgents.remove(owner, id);

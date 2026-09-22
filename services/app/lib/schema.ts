@@ -327,7 +327,6 @@ const ANNOTATIONS: Table = {
     { name: 'author_kind', type: 'TEXT', notNull: true }, // 'human' | 'agent' (legacy rows may say 'owner')
     { name: 'author_token_id', type: 'TEXT' },
     { name: 'author_user_id', type: 'TEXT' },
-    { name: 'author_remote', type: 'JSONB' },
     { name: 'author_label', type: 'TEXT' }, // display snapshot; survives token revocation
     // Per-comment provenance: a token may use the browser for one reply and raw
     // HTTP for the next. Stored rows may also carry 'mcp'; nothing writes it now.
@@ -351,6 +350,7 @@ const ANNOTATIONS: Table = {
     // `deleteAnnotationFor` stamps it on a root and its replies together. There
     // is no restore door — taking your words back is meant to read as final.
     { name: 'deleted_at', type: 'TIMESTAMPTZ' },
+    { name: 'author_remote', type: 'JSONB' }, // managed session attribution, appended on upgrade
   ],
   primaryKey: ['id'],
   indexes: [{ name: 'idx_annotations_artifact_seq', columns: ['artifact_id', 'seq'] }],

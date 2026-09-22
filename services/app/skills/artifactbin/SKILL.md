@@ -23,10 +23,6 @@ Every action goes through the `afbin` CLI; the site's HTTP API is not for agents
 
 `afbin -h` and `afbin help <topic>` work offline and print the references in `references/` beside it; bare `afbin help` prints this file's absolute location, so never search the filesystem.
 
-## Remote review
-
-Start `afbin remote --history history.md claude` (or codex, pi, opencode) to listen in the background. Use `--name claude2` for another instance; stop with `afbin remote --stop <id>`. Users select @agent in comments. Follow the private handoff: acknowledge each request in its thread before work, verify, then reply completed or blocked; resolve only when fully addressed. Correlate replies with `--thread <id> --request <id> --phase acknowledged|completed|blocked`. Never infer success from terminal output.
-
 ## Example
 
 Before writing, read design, markup, template and theme; a template's frame keeps content from sitting flush to the viewport edge. `afbin help <template>` prints every reference that kind needs.
@@ -42,7 +38,7 @@ Before writing, read design, markup, template and theme; a template's frame keep
 - `afbin help templates` and `afbin help themes` list them; then `references/templates-<name>.md` and `references/themes-<name>.md` for the one picked.
 - [sync and recovery](references/publishing.md) — status, diff, dry-run, force, uncertain writes.
 - [errors](references/errors.md) — every refusal code and its fix.
-- [comments](references/publishing-annotations.md) — `afbin comment` lists, answers and resolves threads.
+- [comments](references/publishing-annotations.md) — `afbin comment` lists, answers and resolves threads; `afbin help remote-review`.
 - [apps](references/apps.md) — a page several people use.
 - [datasets and media](references/publishing-datasets.md), [catalogs](references/databases.md), [user fields](references/databases-users.md), [queries](references/publishing-query.md).
 - [history](references/publishing-versions.md) — `afbin log`, `afbin delete`, restore, export.

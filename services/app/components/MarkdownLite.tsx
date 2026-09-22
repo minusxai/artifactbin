@@ -1,6 +1,7 @@
+'use client';
+
 import {Tooltip} from './Tooltip';
 import {REMOTE_COLOR_CSS,remoteColor} from '../../contracts/src/remote';
-'use client';
 
 /**
  * THE RENDERER for `lib/markdown-lite` — React elements, and only ever React

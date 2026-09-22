@@ -79,3 +79,10 @@ test('local stop is server scoped and uses a worker request instead of signaling
   assert.equal(state.get<{stopRequested:boolean}>(HOME_SCOPE,'remote-agent',remoteStateKey(server,'test'))?.value.stopRequested,true);
  }finally{state.close();await rm(home,{recursive:true,force:true});}
 });
+
+import {remoteRequestInput} from '../src/remote-context';
+test('every request repeats the exact CLI executable so a login shell or compaction cannot select an old installation',()=>{
+ const data=remoteRequestInput(JSON.stringify({type:'artifactbin.comment',body:'a "quote"',request_id:'request'})+'\r',"/private/context's/afbin");
+ assert.equal(data.at(-1),'\r');const payload=JSON.parse(data.trim());
+ assert.equal(payload.cli_executable,"/private/context's/afbin");assert.equal(payload.body,'a "quote"');assert.match(payload.instruction,/absolute/);
+});

@@ -1,3 +1,4 @@
+import {remoteRequestInput} from './remote-context';
 import { randomBytes } from "node:crypto";
 import headless from "@xterm/headless";
 import serialize from "@xterm/addon-serialize";
@@ -21,6 +22,7 @@ export interface RunOptions {
   onSession?: (url: string) => void;
   signal?: AbortSignal;
   managed?: boolean;
+  commentCommand?:string;
   env?: NodeJS.ProcessEnv;
   prepare?:(session:{id:string;runnerKey:string})=>Promise<{args:string[];env?:NodeJS.ProcessEnv}>;
   onStarted?:(session:{id:string;runnerKey:string},pid:number)=>void;
@@ -207,7 +209,7 @@ export async function runRemote(options: RunOptions): Promise<number> {
                 rows = item.rows!;
                 resizePty();
               } else if (item.kind === "input") {
-                const data = item.data!;
+                const data = item.source==='comment'&&options.commentCommand?remoteRequestInput(item.data!,options.commentCommand):item.data!;
                 if (data.length > 1 && data.endsWith("\r")) {
                   // TUIs can interpret text plus Enter in one burst as a multiline paste.
                   child.write(data.slice(0, -1));
