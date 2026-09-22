@@ -82,7 +82,7 @@ try{
  stage='read';const opened=await cli(['open',id]);assert.equal(opened.operations?.[0]?.url,base+'/a/'+id);const page=await fetch(base+'/a/'+id);assert.equal(page.status,200);assert.match(await page.text(),/Windows candidate edited version/);record('Open command returns published URL; real viewer serves edited artifact');
  await cli(['delete',id,'--force']);record('Disposable artifact cleaned up');
 }catch(error){
- await writeFile(join(out,'results.json'),JSON.stringify({status:'failed',stage,message:error.message,evidence},null,2));throw error;
+ await writeFile(join(out,'results.json'),JSON.stringify({status:'failed',stage,message:error.message,details:{stdout:error.stdout,stderr:error.stderr,signal:error.signal},evidence},null,2));throw error;
 }finally{
  if(host){host.kill();await Promise.race([once(host,'exit'),delay(3000)]);}
  await writeFile(join(out,'host.log'),hostLog);

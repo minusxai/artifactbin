@@ -18,6 +18,7 @@ try {
   Write-Output "Downloading candidate component"
   Invoke-WebRequest -UseBasicParsing "$ReleaseBase/afbin-win32-x64.exe" -OutFile $download
   if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash.ToLowerInvariant() -ne $match.Groups[1].Value) { throw 'Checksum mismatch; existing installation unchanged' }
+  Write-Output "Checksum verified; preparing private directories"
   New-Item -ItemType Directory -Force $InstallDir,$StateDir | Out-Null
   foreach ($dir in @($InstallDir,$StateDir)) {
     if ((Get-Item -LiteralPath $dir).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Refusing a linked directory' }
@@ -31,6 +32,7 @@ try {
   Copy-Item -LiteralPath $download -Destination $stagedExe
   Move-Item -LiteralPath $stagedExe -Destination $exe -Force
   $env:ARTIFACTBIN_HOME = $StateDir
+  Write-Output "Executable installed; writing initial configuration"
   & $exe config set updates false --json
   if ($LASTEXITCODE -ne 0) { throw 'CLI initial configuration failed' }
   $userPath = [Environment]::GetEnvironmentVariable('Path','User')
