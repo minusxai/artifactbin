@@ -20,12 +20,13 @@
  * @property {string} name            `gate-<name>.mjs`
  * @property {boolean} needsMail      reads a login code from the mail sink
  * @property {string} [serialGroup]   gates in the same group never run concurrently, even across servers
+ * @property {string[]} [browsers]    engines required by the default gate invocation; defaults to Chromium
  * @property {number} timeoutMs       the runner kills the gate past this (integer > 0)
  */
 
 /** @type {readonly GateSpec[]} */
 export const GATE_SPECS = Object.freeze([
-  { name: 'screenshot-comments', needsMail: false, timeoutMs: 150_000 },
+  { name: 'screenshot-comments', browsers: ['chromium', 'firefox', 'webkit'], needsMail: false, timeoutMs: 150_000 },
   { name: 'cli-conformance', needsMail: true, timeoutMs: 180_000 },
   { name: 'browser-sessions', needsMail: false, timeoutMs: 150_000 },
   { name: 'testusers', needsMail: true, timeoutMs: 60_000 },
@@ -98,4 +99,19 @@ export function specFor(name) {
   const spec = GATE_SPECS.find((candidate) => candidate.name === name);
   if (!spec) throw new Error(`Gate manifest has no row for: ${name}`);
   return spec;
+}
+
+/** Browser installation plan for exactly the gates this runner will execute. */
+export function browsersFor(names) {
+  return [...new Set(names.flatMap(name => specFor(name).browsers ?? ['chromium']))].sort();
+}
+
+/**
+ * Cross-browser system setup measured 91s on CI run 35740918148. Match the
+ * timeout-based balancer's 3x scale (90s × 3) without changing gate deadlines.
+ * Charging each cross-browser gate is conservative if several share a shard.
+ */
+export function shardWeight(name) {
+  const spec = specFor(name);
+  return spec.timeoutMs + (browsersFor([name]).some(browser => browser !== 'chromium') ? 270_000 : 0);
 }

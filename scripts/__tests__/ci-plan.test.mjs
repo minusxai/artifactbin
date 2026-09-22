@@ -550,15 +550,18 @@ describe('CI job shape', () => {
   it('fans the gate set over six runners and pulls the Postgres image the datasets gate drives', () => {
     const { jobs } = ci();
     expect(jobs.gates.strategy.matrix.shard).toEqual([1, 2, 3, 4, 5, 6]);
-    const run = jobs.gates.steps.find((step) => /scripts\/gates\.mjs/.test(step.run ?? ''));
+    const run = jobs.gates.steps.find((step) => step.name === 'every gate, two servers');
     expect(run.run).toContain('--servers=2');
     expect(run.run).toContain('--shard=${{ matrix.shard }}/6');
-    // The browser is cached on what pins it — the Playwright version in browsers.json — so a warm
-    // runner skips `install --with-deps` entirely instead of apt-installing libraries it has.
     const browser = jobs.gates.steps.find((step) => step.id === 'playwright');
     expect(browser.with.key).toContain("hashFiles('node_modules/playwright-core/browsers.json')");
-    expect(jobs.gates.steps.find((step) => (step.run ?? '').includes('--with-deps')).if)
-      .toContain("steps.playwright.outputs.cache-hit != 'true'");
+    const selection = jobs.gates.steps.find(step => step.id === 'gate-browsers');
+    expect(selection.run).toContain('--browsers --shard=${{ matrix.shard }}/6');
+    const install = jobs.gates.steps.find(step => step.name === 'Install selected gate browsers');
+    expect(install.env.BROWSERS).toBe('${{ steps.gate-browsers.outputs.browsers }}');
+    expect(install.run).toContain('"$BROWSERS" != chromium');
+    expect(install.run).toContain('"$CACHE_HIT" != true');
+    expect(install.run).toContain('npx playwright install "${deps[@]}" "${browsers[@]}"');
     // postgres-datasets stays a browser gate (it boots the whole app); the image is pulled once, before the run.
     const pulls = jobs.gates.steps.filter((step) => /docker pull postgres:17-alpine/.test(step.run ?? ''));
     expect(pulls).toHaveLength(1);

@@ -26,7 +26,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GATE_SPECS, checkManifest, specFor } from './gates.manifest.mjs';
+import { GATE_SPECS, checkManifest, specFor, browsersFor, shardWeight } from './gates.manifest.mjs';
 import { resolveServers, runSecret } from './gates.servers.mjs';
 import { parseShard, shardOf } from './gates.shard.mjs';
 import { loadDotEnv } from './lib/dev-env.mjs';
@@ -77,13 +77,19 @@ const chosen = only ? GATES.filter((g) => only.includes(g.name)) : GATES;
 // those two" rather than "whichever of them fell in shard 1 of the whole set".
 const selected = shard
   ? (() => {
-      const names = shardOf(chosen.map((g) => g.name), shard, (name) => specFor(name).timeoutMs);
+      const names = shardOf(chosen.map((g) => g.name), shard, shardWeight);
       return chosen.filter((g) => names.includes(g.name));
     })()
   : chosen;
 if (selected.length === 0) {
   console.error(`No gate matched --only=${only?.join(',')}. Known: ${GATES.map((g) => g.name).join(', ')}`);
   process.exit(2);
+}
+
+// Provisioning uses the same discovery and shard selection as execution, without booting hosts.
+if (args.includes('--browsers')) {
+  console.log(browsersFor(selected.map(gate => gate.name)).join(' '));
+  process.exit(0);
 }
 
 /** A port nothing holds right now — asked of the OS, not guessed. */
