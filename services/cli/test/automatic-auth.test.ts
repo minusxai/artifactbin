@@ -77,25 +77,25 @@ test('an agent operation resumes after rejected refresh and browser approval',as
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
-test('unavailable browser still waits without a TTY; approval is never implied by defaults',async()=>{
+test('unavailable browser fails immediately with email recovery',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-unavailable-browser-'));let now=0;
  try{
-  await assert.rejects(deviceAuthenticate(origin,{home,interactive:false,now:()=>now,sleep:async ms=>{now+=ms;},notify:()=>{},open:async()=>{throw new Error('browser unavailable');},fetch:async input=>String(input).endsWith('/oauth/device')?pairing():Response.json({error:'authorization_pending'},{status:400})}),error=>(error as {code:string}).code==='approval_expired');
-  assert.equal(now,10000);assert.equal(await loadConnection(origin,home,{}),null);
+  await assert.rejects(deviceAuthenticate(origin,{home,interactive:false,now:()=>now,sleep:async ms=>{now+=ms;},notify:()=>{},open:async()=>{throw new Error('browser unavailable');},fetch:async input=>String(input).endsWith('/oauth/device')?pairing():Response.json({error:'authorization_pending'},{status:400})}),error=>(error as {code:string;fix:string}).code==='browser_unavailable'&&/--email/.test((error as {fix:string}).fix));
+  assert.equal(now,0);assert.equal(await loadConnection(origin,home,{}),null);
  }finally{await rm(home,{recursive:true,force:true});}
 });
 
 test('an unattended agent fails fast with approval_required and keeps the pairing for a retry',async()=>{
  const home=await mkdtemp(join(tmpdir(),'afbin-fastfail-'));let now=0;let approved=false;
  const bigPairing=()=>Response.json({device_code:'d'.repeat(43),user_code:'ABCD',verification_uri_complete:origin+'/oauth/device?user_code=ABCD',expires_in:300,interval:5});
- const opts=()=>({home,interactive:false,now:()=>now,sleep:async(ms:number)=>{now+=ms;},notify:()=>{},open:async()=>{throw new Error('browser unavailable');},
+ const opts=()=>({home,interactive:false,now:()=>now,sleep:async(ms:number)=>{now+=ms;},notify:()=>{},open:async()=>{},
   fetch:(async(input:unknown)=>{const u=String(input);
    if(u.endsWith('/oauth/device'))return bigPairing();
    if(u.endsWith('/oauth/device/token'))return approved?credentials():Response.json({error:'authorization_pending'},{status:400});
    return Response.json({},{status:404});}) as unknown as typeof fetch});
  try{
   // No approver: give up at the ~45s bound with an actionable error, not the full 300s window.
-  await assert.rejects(deviceAuthenticate(origin,opts()),error=>(error as {code:string}).code==='approval_required');
+  await assert.rejects(deviceAuthenticate(origin,opts()),error=>(error as {code:string}).code==='approval_required'&&/timed out/.test((error as Error).message)&&/--email/.test((error as Error).message));
   assert.equal(now,45000);
   assert.equal(await loadConnection(origin,home,{}),null);
   // The pairing was kept: a retry (approved out of band) reuses it and completes.

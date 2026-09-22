@@ -17,7 +17,12 @@ const root = await mkdtemp(join(tmpdir(), 'afbin-conformance-'));
 const home = join(root, '.artifactbin');
 const workspace = join(root, 'author');
 await mkdir(workspace);
-const env = { ...process.env, HOME: root, ARTIFACTBIN_HOME: home, ARTIFACTBIN_URL: base, CLI__AUTO_UPDATE: '0' };
+// This gate owns consent below. Supply a successful launcher on headless runners;
+// an unavailable OS browser now correctly fails authentication before polling.
+const launcher = join(root, 'browser-launcher');
+await mkdir(launcher);
+for (const command of ['open', 'xdg-open']) await writeFile(join(launcher, command), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+const env = { ...process.env, PATH: `${launcher}:${process.env.PATH ?? ''}`, HOME: root, ARTIFACTBIN_HOME: home, ARTIFACTBIN_URL: base, CLI__AUTO_UPDATE: '0' };
 delete env.ARTIFACTBIN_TOKEN;
 delete env.ARTIFACTBIN_REFRESH_TOKEN;
 const evidence = [];

@@ -1,3 +1,9 @@
+import {mkdtemp,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {emailAuthenticate} from '../../cli/src/email-auth';
+import {loadConnection,saveConnection} from '../../cli/src/config';
+import {runCli} from '../../cli/src/dispatch';
 import { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { assemble, createTokenReader, hashToken } from '@artifactbin/utils';
@@ -28,12 +34,13 @@ const optionsOf = async (): Promise<AuthOptions> => {
     upstream: async (request, actor) => {
       if (new URL(request.url).pathname === INTERNAL_ARTIFACT_APPROVAL_PATH) return Response.json({ userId: 'usr_guest', tokenId: 'tok_guest_browser', guest: true });
       if (new URL(request.url).pathname === INTERNAL_MINT_PATH && actor.credential === 'session' && actor.userId) {
-        const requested = await request.json() as { audience?: string; scope?: string };
+        const requested = await request.json() as { audience?: string; scope?: string; expiresInHours: number };
         const serial = String(++mintedCount);
         const token = `mx_${serial.padStart(40, 'x')}`;
         const id = `tok_oauth_${serial}`;
-        await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope) VALUES ($1, $2, $3, $4, $5, $6)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null]);
-        return new Response(JSON.stringify({ id, token, expiresAt: new Date(Date.now() + 21_600_000).toISOString() }), { status: 201, headers: { 'content-type': 'application/json' } });
+        const expiresAt = new Date(Date.now() + requested.expiresInHours * 3600_000).toISOString();
+        await query('INSERT INTO tokens (id, name, token_hash, user_id, audience, scope, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7)', [id, 'oauth', hashToken(token), actor.userId, requested.audience ?? null, requested.scope ?? null, expiresAt]);
+        return new Response(JSON.stringify({ id, token, expiresAt }), { status: 201, headers: { 'content-type': 'application/json' } });
       }
       // The anonymous mint the app serves to a non-session actor: an unowned,
       // claimable token, with no audience/scope binding.
@@ -144,7 +151,9 @@ describe('the oauth provider routes', () => {
     const first = await tokenResponse.json() as { access_token: string; refresh_token: string; expires_in: number; scope: string };
     expect(first.access_token).toMatch(/^mx_/);
     expect(first.refresh_token).toMatch(/^mxr_/);
-    expect(first.expires_in).toBe(21_600);
+    expect(first.expires_in).toBe(24 * 60 * 60);
+    const minted = (await testDb().query<{expires_at: string}>('SELECT expires_at FROM tokens WHERE token_hash=$1',[hashToken(first.access_token)])).rows[0]!;
+    expect(new Date(minted.expires_at).getTime()-Date.now()).toBeGreaterThan(23 * 60 * 60 * 1000);
     expect(first.scope).toBe('artifacts');
     const { query } = testDb();
     expect(await createTokenReader({ db: { query } }).byToken(first.access_token)).toMatchObject({ userId: 'usr_1', audience: RESOURCE, scope: 'artifacts' });
@@ -158,7 +167,8 @@ describe('the oauth provider routes', () => {
       body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId, refresh_token: first.refresh_token, resource: RESOURCE }),
     });
     expect(refreshed.status, await refreshed.clone().text()).toBe(200);
-    const second = await refreshed.json() as { access_token: string; refresh_token: string };
+    const second = await refreshed.json() as { access_token: string; refresh_token: string; expires_in: number };
+    expect(second.expires_in).toBe(24 * 60 * 60);
     expect(second.access_token).toMatch(/^mx_/);
     expect(second.refresh_token).not.toBe(first.refresh_token);
 
@@ -301,7 +311,7 @@ it('offers a logged-out visitor both a login and an anonymous path, and the anon
   expect(token.status).toBe(200);
   const credentials = await token.json() as { access_token: string; refresh_token: string; client_id: string; expires_in: number };
   expect(credentials).toMatchObject({ access_token: expect.stringMatching(/^mx_/), refresh_token: expect.stringMatching(/^mxr_/), client_id: expect.any(String) });
-  expect(credentials.expires_in).toBeGreaterThan(0);
+  expect(credentials.expires_in).toBe(24 * 60 * 60);
   expect((await poll()).status).toBe(400);
   // Guest browser and CLI share a user without a registered login identity.
   const row = await pg.query<{ user_id: string | null }>('SELECT user_id FROM tokens WHERE token_hash = $1', [hashToken(credentials.access_token)]);
@@ -315,4 +325,64 @@ it('requires same-origin browser consent and denial issues no authorization code
  const form=approveForm(client);form.set('action','deny');
  const denied=await app.request('/oauth/authorize/approve',{method:'POST',headers:{...cookie,origin:BASE,'content-type':'application/x-www-form-urlencoded'},body:form});
  expect(denied.status).toBe(303);const location=new URL(denied.headers.get('location')!);expect(location.searchParams.get('error')).toBe('access_denied');expect(location.searchParams.has('code')).toBe(false);expect(location.searchParams.get('state')).toBe('st');
+});
+
+
+it('CLI email login uses real OTP and device approval handlers, revokes its web session, and retains a refreshable CLI grant',async()=>{
+ const home=await mkdtemp(join(tmpdir(),'afbin-email-handlers-'));let otp='';
+ try{
+  const human=await createHumanAuth({pglite:pg,secret:'oauth-routes-secret'.padEnd(32,'0'),baseURL:BASE,mail:{send:async message=>{otp=message.otp??'';}}});
+  const options=await optionsOf();
+  const emailApp=assemble(authParts({...options,sessions:{...human.sessions,handler:human.handler}}));
+  const email='mxmx_test_cli_remote@example.com';
+  const request:typeof fetch=async(input,init)=>emailApp.fetch(new Request(input,init));
+  await expect(emailAuthenticate(BASE,email,undefined,{home,fetch:request})).rejects.toMatchObject({code:'otp_required'});
+  expect(otp).toMatch(/^\d{6}$/);
+  const connection=await emailAuthenticate(BASE,email,otp,{home,fetch:request});
+  expect(await loadConnection(BASE,home,{})).toEqual(connection);
+  const owner=(await testDb().query('SELECT user_id FROM tokens WHERE token_hash=$1',[hashToken(connection.token)])).rows[0]?.user_id;
+  expect(owner).toBeTruthy();
+  expect((await testDb().query('SELECT email FROM auth.user WHERE id=$1',[owner])).rows[0]?.email).toBe(email);
+  expect((await testDb().query('SELECT id FROM auth.session WHERE "userId"=$1',[owner])).rows).toHaveLength(0);
+  await expect(emailAuthenticate(BASE,email,otp,{home,fetch:request})).rejects.toMatchObject({code:'otp_rejected'});
+  expect(await loadConnection(BASE,home,{})).toEqual(connection);
+  const refresh=await emailApp.request(BASE+'/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'refresh_token',refresh_token:connection.refreshToken,client_id:connection.clientId})});
+  expect(refresh.status).toBe(200);
+ }finally{await rm(home,{recursive:true,force:true});}
+});
+
+
+it('a new CLI session refreshes expired saved credentials without opening a browser', async () => {
+ const home=await mkdtemp(join(tmpdir(),'afbin-next-day-'));
+ try {
+  const clientId=await register();
+  const code=await approve(clientId);
+  const response=await app.request('/oauth/token',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({grant_type:'authorization_code',client_id:clientId,code,code_verifier:verifier,redirect_uri:REDIRECT,resource:RESOURCE})});
+  expect(response.status).toBe(200);
+  const initial=await response.json() as {access_token:string;refresh_token:string};
+  await saveConnection({server:BASE,token:initial.access_token,refreshToken:initial.refresh_token,clientId,expiresAt:Date.now()-86400_000},home,{});
+  await testDb().query("UPDATE tokens SET expires_at=now()-interval '1 day' WHERE token_hash=$1",[hashToken(initial.access_token)]);
+  session=null;
+  const options=await optionsOf();
+  const host=assemble(authParts({...options,upstream:async(request,actor)=>{
+   const path=new URL(request.url).pathname;
+   if(path==='/api/server')return new Response('',{status:404});
+   if(path==='/api/artifacts')return actor.credential==='bearer'?Response.json({artifacts:[]}):Response.json({error:'unauthorized'},{status:401});
+   return options.upstream(request,actor);
+  }}));
+  let refreshes=0,opened=0;
+  const request:typeof fetch=async(input,init)=>{
+   const req=new Request(input,init);
+   if(new URL(req.url).pathname==='/oauth/token')refreshes++;
+   return host.fetch(req);
+  };
+  // Separate dispatches reread the persisted credential, as new processes do.
+  for(const command of ['auth','list'])expect(await runCli([command,'--server',BASE,'--json'],{home,cwd:home,env:{},interactive:false,stdout:()=>{},stderr:()=>{},fetch:request,auth:{open:async()=>{opened++;throw new Error('Unexpected browser');}}})).toBe(0);
+  expect(opened).toBe(0);
+  expect(refreshes).toBe(1);
+  const saved=await loadConnection(BASE,home,{});
+  expect(saved?.token).not.toBe(initial.access_token);
+  expect(saved?.refreshToken).not.toBe(initial.refresh_token);
+  expect(saved?.expiresAt).toBeGreaterThan(Date.now());
+ } finally {await rm(home,{recursive:true,force:true});}
 });

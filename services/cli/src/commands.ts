@@ -34,7 +34,7 @@ export const flags: Record<string,Flag> = {
  for:{value:'TEMPLATE',description:'Print every reference a document of this template needs, in reading order, as one output.'},
  version:{description:'Show the installed CLI version.'},
  help:{short:'h',description:'Show local command help.'}, json:{description:'Write one JSON document to stdout; diagnostics go to stderr.'},
- server:{value:'URL',description:'Use this server origin for this command.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; browser approval is still required.'},
+ server:{value:'URL',description:'Use this server origin for this command.'},yes:{short:'y',description:'Accept confirmation defaults for this operation; never bypass authentication.'},
  'dry-run':{short:'n',description:'Validate the operation without changing local or remote state.'},force:{short:'f',description:'Overwrite local changes on pull, or observe and conditionally replace a stale head on push. On delete, allow referenced assets.'},
  remote:{description:'Fetch current remote state; comparison still runs locally.'},fix:{description:'Apply mechanical local fixes. Push never fixes source.'},
  body:{value:'TEXT',description:'Post this comment text.'},thread:{value:'ID',description:'Select an existing thread for a reply or state change.'},state:{value:'STATE',description:'Set the selected thread to open or resolved; fixed names ignore case.'},
@@ -46,6 +46,8 @@ export const flags: Record<string,Flag> = {
  policy:{value:'POLICY',description:'Grant dataset row writes: viewers-write lets everyone who can view it insert, update and delete rows; none removes the grant.'},
  write:{description:'Execute a dataset row mutation explicitly; otherwise queries only read.'},
  param:{value:'NAME=VALUE',repeat:true,description:'Bind a named scalar parameter; repeat for distinct names.'},
+ email:{value:'EMAIL',description:'Sign in by email OTP without opening a browser; use on remote or headless machines.'},
+ otp:{value:'CODE',description:'Complete email login with the six-digit code; requires --email and does not send another code.'},
  name:{value:'NAME',description:'Select a named query/table, or name a remote terminal session.'},
 };
 /** Resource kinds are one vocabulary; each command accepts the subset it can address. */
@@ -84,7 +86,7 @@ export const commands: Command[] = [
  {name:'help',usage:'[topic]',description:'Read the bundled example, markup, data, themes, templates, schemas or command help; --for <template> prints everything a document of that kind needs in one call.',min:0,max:1,flags:['format','output','for'],examples:['afbin help --for deck','afbin help markup','afbin help dashboard']},
  {name:'serve',description:'Run a persistent authenticated server in the foreground.',usage:'[--dir <path>] [--config <path>] [--port <port>] [--db-url <url>]',min:0,max:0,flags:['config','dir','db-url','port'],examples:['afbin serve --dir ~/team-artifacts --port 7445','afbin serve --dir ~/team-artifacts --db-url postgres://localhost/artifactbin']},
  {name:'config',usage:'get <key> | set <key> <value>',description:'Read or change client defaults without starting a server.',min:2,max:3,flags:[],examples:['afbin config set host http://127.0.0.1:7445','afbin config get host']},
- {name:'auth',usage:'[<artifact>]',description:'Connect this machine to the browser identity that owns your artifacts.',min:0,max:1,flags:[],examples:['afbin auth','afbin auth --json']},
+ {name:'auth',usage:'[<artifact>]',description:'Sign in through browser approval, or use --email when a browser is unavailable.',min:0,max:1,flags:['email','otp'],examples:['afbin auth','afbin auth --email you@example.com','afbin auth --email you@example.com --otp 123456']},
  {name:'setup',usage:'',description:'Choose and install local agent skills; remember your choices without signing in. Set ARTIFACTBIN_SKILLS=off in the environment to install no skill at all and leave every harness folder untouched \u2014 what a checkout\u2019s development loop (npm run afbin) runs under.',min:0,max:0,flags:['harness','service'],examples:['afbin setup --service sql','afbin setup','afbin setup --yes','afbin setup --harness codex --harness pi']},
 
  {name:'update',usage:'',description:'Update the compatible CLI and selected local skill bundles.',min:0,max:0,flags:['harness','dry-run'],examples:['afbin update --yes --json']},
@@ -150,6 +152,12 @@ export function parseCommand(argv:string[]):ParsedCommand {
  if(result.flags.help||result.flags.version)return result;
  if(result.positionals.length<command.min||result.positionals.length>command.max)throw new CliError('invalid_arguments',`Usage: afbin ${command.name} ${command.usage}`.trim());
  const f=result.flags;
+ if(command.name==='auth'){
+  if(f.otp&&!f.email)throw new CliError('invalid_arguments','--otp requires --email.');
+  if(f.email&&result.positionals.length)throw new CliError('invalid_arguments','Sign in with --email first, then run the artifact command.');
+  if(f.email){f.email=String(f.email).trim().toLowerCase();if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email))throw new CliError('invalid_arguments','--email requires a valid email address.');}
+  if(f.otp&&!/^\d{6}$/.test(String(f.otp)))throw new CliError('invalid_arguments','--otp requires the six-digit email code.');
+ }
  if(f.type!==undefined){const choices=COMMAND_TYPES[command.name];if(!choices)throw new CliError('unsupported_flag',`afbin ${command.name} does not accept --type.`,`Run afbin ${command.name} -h.`);f.type=enumArgument(f.type,choices,'type');}
  if(f.filter)collectionFilters(command.name,f.filter as string[]);
  if(f.format!==undefined){const choices=FORMATS[command.name];if(!choices)throw new CliError('unsupported_flag',`afbin ${command.name} does not accept --format.`,`Run afbin ${command.name} -h.`);
